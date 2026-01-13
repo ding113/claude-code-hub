@@ -149,6 +149,7 @@ function createFallbackSettings(): SystemSettings {
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
+    enableCodexSessionIdCompletion: true,
     enableResponseFixer: true,
     responseFixerConfig: {
       fixTruncatedJson: true,
@@ -182,6 +183,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableHttp2: systemSettings.enableHttp2,
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+      enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableResponseFixer: systemSettings.enableResponseFixer,
       responseFixerConfig: systemSettings.responseFixerConfig,
       createdAt: systemSettings.createdAt,
@@ -319,6 +321,11 @@ export async function updateSystemSettings(
       updates.enableThinkingSignatureRectifier = payload.enableThinkingSignatureRectifier;
     }
 
+    // Codex Session ID 补全开关（如果提供）
+    if (payload.enableCodexSessionIdCompletion !== undefined) {
+      updates.enableCodexSessionIdCompletion = payload.enableCodexSessionIdCompletion;
+    }
+
     // 响应整流开关（如果提供）
     if (payload.enableResponseFixer !== undefined) {
       updates.enableResponseFixer = payload.enableResponseFixer;
@@ -350,6 +357,7 @@ export async function updateSystemSettings(
         enableHttp2: systemSettings.enableHttp2,
         interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+        enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
         enableResponseFixer: systemSettings.enableResponseFixer,
         responseFixerConfig: systemSettings.responseFixerConfig,
         createdAt: systemSettings.createdAt,

@@ -753,6 +753,8 @@ export const UpdateSystemSettingsSchema = z.object({
   interceptAnthropicWarmupRequests: z.boolean().optional(),
   // thinking signature 整流器（可选）
   enableThinkingSignatureRectifier: z.boolean().optional(),
+  // Codex Session ID 补全（可选）
+  enableCodexSessionIdCompletion: z.boolean().optional(),
   // 响应整流（可选）
   enableResponseFixer: z.boolean().optional(),
   responseFixerConfig: z

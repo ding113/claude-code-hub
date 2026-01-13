@@ -4,6 +4,56 @@
 
 ---
 
+## [v0.4.2](https://github.com/ding113/claude-code-hub/releases/tag/v0.4.2) - 2026-01-12
+
+### 新增
+
+- Codex 会话标识符自动补全功能，提升会话管理效率 (#599)
+- 供应商分组字段长度扩展至 200 字符，支持更复杂的分组配置 (#591) [@Hwwwww-dev](https://github.com/Hwwwww-dev)
+
+### 优化
+
+- i18n 设置模块拆分优化，引入翻译质量门禁机制 (#588) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- OpenCode 使用文档更新，添加 GPT-5.2 和 Gemini v1beta 配置示例 (#597)
+
+### 修复
+
+- 修复 Codex 会话完成响应中错误注入元数据的问题 (#601)
+- 修复供应商自定义模型白名单无法移除的问题 (#592, #593)
+- 修复 Edge Runtime 下 AsyncTaskManager 导致的 process.once 构建警告 (#589) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 修复 Thinking 签名整流器对 "signature: Field required" 错误的检测和触发逻辑 (#594)
+
+---
+
+## [v0.4.1](https://github.com/ding113/claude-code-hub/releases/tag/v0.4.1) - 2026-01-11
+
+### 新增
+
+- 价格表 UI 支持自定义模型价格和缓存价格配置 (#583) [@NieiR](https://github.com/NieiR)
+- 手动模型价格管理功能，支持添加/编辑/删除自定义模型定价 (#573) [@NieiR](https://github.com/NieiR)
+- 按成本倍数自动排序供应商优先级功能 (#555, #569) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 个人使用页面统计摘要卡片，支持自动刷新和可折叠日志 (#559) [@miraserver](https://github.com/miraserver)
+- Thinking signature 整流器，自动处理跨渠道 thinking block 签名兼容问题 (#576)
+- FluxFix 响应修复器，修复上游返回的截断 JSON、异常编码和 SSE 格式问题 (#570)
+- 新增 "Too much media" 错误规则，识别媒体内容超限错误 (#572)
+- TOML 云端价格表支持，计费查询失败时采用 fail-open 策略 (#580)
+- OpenCode 使用指南文档 (#582, #586)
+- 稳定版本发布工作流支持 (v0.4.0+)
+
+### 优化
+
+- 统一请求特殊设置命中的展示方式，改进日志可读性 (#574)
+- 移除本地 seed 价格表，强制使用云端同步确保价格数据实时性 (#584)
+
+### 修复
+
+- 修复 thinking 启用时 tool_use 作为首个 block 导致请求失败的问题 (#577)
+- 修复日志页面供应商链徽章溢出显示问题 (#581) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 修复 Drizzle 数据库迁移幂等性问题 (#578) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 修复密钥表单供应商分组选择时 default 未自动移除的问题 [@NieiR](https://github.com/NieiR)
+
+---
+
 ## [v0.3.42](https://github.com/ding113/claude-code-hub/releases/tag/v0.3.42) - 2026-01-07
 
 ### 新增

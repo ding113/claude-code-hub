@@ -543,8 +543,8 @@
         "important": "重要",
         "importantPoints": [
           "cch の管理画面で API Key を作成し、環境変数 CCH_API_KEY を設定してください",
-          "3 つの provider すべてで baseURL は ${resolvedOrigin}/v1（cch の v1 API ベース URL）",
-          "モデル選択は provider_id/model_id 形式（例：cchClaude/claude-sonnet-4-5-20250929）"
+          "cchClaude/openai は ${resolvedOrigin}/v1、cchGemini は ${resolvedOrigin}/v1beta を baseURL に使用します",
+          "モデル選択は provider_id/model_id 形式（例：openai/gpt-5.2 または cchClaude/claude-sonnet-4-5-20250929）"
         ]
       },
 

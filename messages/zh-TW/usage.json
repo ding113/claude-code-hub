@@ -539,8 +539,8 @@
         "important": "重要說明",
         "importantPoints": [
           "請先在 cch 後台創建 API Key，並設置環境變量 CCH_API_KEY",
-          "三個 provider 的 baseURL 都使用 ${resolvedOrigin}/v1（cch v1 API 地址）",
-          "模型選擇時使用 provider_id/model_id 格式（例如 cchClaude/claude-sonnet-4-5-20250929）"
+          "cchClaude/openai 使用 ${resolvedOrigin}/v1，cchGemini 使用 ${resolvedOrigin}/v1beta",
+          "模型選擇時使用 provider_id/model_id 格式（例如 openai/gpt-5.2 或 cchClaude/claude-sonnet-4-5-20250929）"
         ]
       },
 

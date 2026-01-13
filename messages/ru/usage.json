@@ -543,8 +543,8 @@
         "important": "Важно",
         "importantPoints": [
           "Создайте API key в панели cch и задайте переменную окружения CCH_API_KEY",
-          "Все provider используют ${resolvedOrigin}/v1 как baseURL (базовый URL cch v1 API)",
-          "При выборе модели используйте provider_id/model_id (например, cchClaude/claude-sonnet-4-5-20250929)"
+          "cchClaude/openai используют ${resolvedOrigin}/v1; cchGemini использует ${resolvedOrigin}/v1beta",
+          "При выборе модели используйте provider_id/model_id (например, openai/gpt-5.2 или cchClaude/claude-sonnet-4-5-20250929)"
         ]
       },
 

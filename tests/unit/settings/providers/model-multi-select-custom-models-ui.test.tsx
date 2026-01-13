@@ -66,7 +66,7 @@ describe("ModelMultiSelect: 自定义白名单模型应可在列表中取消选�
   });
 
   test("已选中但不在 availableModels 的模型应出现在列表中，并可取消选中删除", async () => {
-    const messages = loadMessages();
+    const messages = loadTestMessages("en");
     const onChange = vi.fn();
 
     const { unmount } = render(
