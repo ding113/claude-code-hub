@@ -44,6 +44,19 @@ export {
   getDistinctProviderGroups,
   updateProvider,
 } from "./provider";
+
+export {
+  createProviderEndpoint,
+  findProviderEndpointById,
+  findProviderEndpointProbeLogs,
+  findProviderEndpointsByVendorAndType,
+  findProviderVendorById,
+  findProviderVendors,
+  recordProviderEndpointProbeResult,
+  softDeleteProviderEndpoint,
+  updateProviderEndpoint,
+  updateProviderVendor,
+} from "./provider-endpoints";
 // Statistics related exports
 export {
   getActiveKeysForUserFromDB,

@@ -13,10 +13,16 @@ import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overr
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
+import {
+  isVendorTypeCircuitOpen,
+  recordVendorTypeAllEndpointsTimeout,
+} from "@/lib/vendor-type-circuit-breaker";
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
@@ -211,6 +217,45 @@ export class ProxyForwarder {
       );
       let thinkingSignatureRectifierRetried = false;
 
+      const requestPath = session.requestUrl.pathname;
+      const isMcpRequest =
+        currentProvider.providerType !== "gemini" &&
+        currentProvider.providerType !== "gemini-cli" &&
+        !STANDARD_ENDPOINTS.includes(requestPath);
+
+      const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
+
+      if (isMcpRequest) {
+        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+      } else if (currentProvider.providerVendorId > 0) {
+        try {
+          const preferred = await getPreferredProviderEndpoints({
+            vendorId: currentProvider.providerVendorId,
+            providerType: currentProvider.providerType,
+          });
+          endpointCandidates.push(...preferred.map((e) => ({ endpointId: e.id, baseUrl: e.url })));
+        } catch (error) {
+          logger.warn(
+            "[ProxyForwarder] Failed to load provider endpoints, fallback to provider.url",
+            {
+              providerId: currentProvider.id,
+              vendorId: currentProvider.providerVendorId,
+              providerType: currentProvider.providerType,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+        }
+      }
+
+      if (endpointCandidates.length === 0) {
+        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+      }
+
+      maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, endpointCandidates.length);
+
+      let endpointAttemptsEvaluated = 0;
+      let allEndpointAttemptsTimedOut = true;
+
       logger.info("ProxyForwarder: Trying provider", {
         providerId: currentProvider.id,
         providerName: currentProvider.name,
@@ -218,12 +263,36 @@ export class ProxyForwarder {
         maxRetryAttempts: maxAttemptsPerProvider,
       });
 
+      if (
+        !isMcpRequest &&
+        (await isVendorTypeCircuitOpen(
+          currentProvider.providerVendorId,
+          currentProvider.providerType
+        ))
+      ) {
+        logger.warn("ProxyForwarder: Vendor-type circuit is open, skipping provider", {
+          providerId: currentProvider.id,
+          vendorId: currentProvider.providerVendorId,
+          providerType: currentProvider.providerType,
+        });
+        failedProviderIds.push(currentProvider.id);
+        attemptCount = maxAttemptsPerProvider;
+      }
+
       // ========== 内层循环：重试当前供应商（根据配置最多尝试 maxAttemptsPerProvider 次）==========
       while (attemptCount < maxAttemptsPerProvider) {
         attemptCount++;
 
+        const endpointIndex =
+          endpointCandidates.length > 0 ? (attemptCount - 1) % endpointCandidates.length : 0;
+        const activeEndpoint = endpointCandidates[endpointIndex];
+
         try {
-          const response = await ProxyForwarder.doForward(session, currentProvider);
+          const response = await ProxyForwarder.doForward(
+            session,
+            currentProvider,
+            activeEndpoint.baseUrl
+          );
 
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
@@ -307,6 +376,10 @@ export class ProxyForwarder {
           }
 
           // ========== 成功分支 ==========
+          if (activeEndpoint.endpointId != null) {
+            await recordEndpointSuccess(activeEndpoint.endpointId);
+          }
+
           recordSuccess(currentProvider.id);
 
           // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
@@ -385,6 +458,20 @@ export class ProxyForwarder {
               ? lastError.getDetailedErrorMessage()
               : lastError.message;
 
+          const isTimeoutError = lastError instanceof ProxyError && lastError.statusCode === 524;
+          if (attemptCount <= endpointCandidates.length) {
+            endpointAttemptsEvaluated = attemptCount;
+            if (!isTimeoutError) {
+              allEndpointAttemptsTimedOut = false;
+            }
+          }
+
+          if (activeEndpoint.endpointId != null) {
+            if (isTimeoutError || errorCategory === ErrorCategory.SYSTEM_ERROR) {
+              await recordEndpointFailure(activeEndpoint.endpointId, lastError);
+            }
+          }
+
           // ⭐ 2. 客户端中断处理（不计入熔断器，不重试，立即返回）
           if (errorCategory === ErrorCategory.CLIENT_ABORT) {
             logger.warn("ProxyForwarder: Client aborted, stopping immediately", {
@@ -403,16 +490,13 @@ export class ProxyForwarder {
               errorDetails: {
                 system: {
                   errorType: "ClientAbort",
-                  errorName: lastError.name,
-                  errorMessage: lastError.message || "Client aborted request",
-                  errorCode: "CLIENT_ABORT",
-                  errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+                  errorName: "ClientAbort",
+                  errorMessage: "Client aborted request",
                 },
                 request: buildRequestDetails(session),
               },
             });
 
-            // 立即抛出错误，不重试
             throw lastError;
           }
 
@@ -807,6 +891,21 @@ export class ProxyForwarder {
             const statusCode = proxyError.statusCode;
             const willRetry = attemptCount < maxAttemptsPerProvider;
 
+            if (
+              !isMcpRequest &&
+              statusCode === 524 &&
+              endpointCandidates.length > 0 &&
+              endpointAttemptsEvaluated >= endpointCandidates.length &&
+              allEndpointAttemptsTimedOut
+            ) {
+              await recordVendorTypeAllEndpointsTimeout(
+                currentProvider.providerVendorId,
+                currentProvider.providerType
+              );
+              failedProviderIds.push(currentProvider.id);
+              break;
+            }
+
             // 🆕 count_tokens 请求特殊处理：不计入熔断，不触发供应商切换
             if (session.isCountTokensRequest()) {
               logger.debug(
@@ -929,7 +1028,8 @@ export class ProxyForwarder {
    */
   private static async doForward(
     session: ProxySession,
-    provider: typeof session.provider
+    provider: typeof session.provider,
+    baseUrl: string
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -968,10 +1068,10 @@ export class ProxyForwarder {
       });
     }
 
-    let proxyUrl: string;
     let processedHeaders: Headers;
     let requestBody: BodyInit | undefined;
     let isStreaming = false;
+    let proxyUrl: string;
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -998,20 +1098,21 @@ export class ProxyForwarder {
       const isApiKey = GeminiAuth.isApiKey(provider.key);
 
       // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
-      const baseUrl =
+      const effectiveBaseUrl =
+        baseUrl ||
         provider.url ||
         (provider.providerType === "gemini"
           ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
           : GEMINI_PROTOCOL.CLI_ENDPOINT);
 
-      proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
+      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
 
       // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
       // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
       processedHeaders = ProxyForwarder.buildGeminiHeaders(
         session,
         provider,
-        baseUrl,
+        effectiveBaseUrl,
         accessToken,
         isApiKey
       );
@@ -1212,7 +1313,7 @@ export class ProxyForwarder {
       }
 
       // ⭐ MCP 透传处理：检测是否为 MCP 请求，并使用相应的 URL
-      let effectiveBaseUrl = provider.url;
+      let effectiveBaseUrl = baseUrl || provider.url;
 
       // 检测是否为 MCP 请求（非标准 Claude/Codex/OpenAI 端点）
       const requestPath = session.requestUrl.pathname;
@@ -1233,16 +1334,17 @@ export class ProxyForwarder {
             requestPath,
           });
         } else {
-          // 自动从 provider.url 提取基础域名（去掉路径部分）
+          // 自动从 baseUrl 提取基础域名（去掉路径部分）
           // 例如：https://api.minimaxi.com/anthropic -> https://api.minimaxi.com
           try {
-            const baseUrlObj = new URL(provider.url);
+            const originalBaseUrl = effectiveBaseUrl;
+            const baseUrlObj = new URL(originalBaseUrl);
             effectiveBaseUrl = `${baseUrlObj.protocol}//${baseUrlObj.host}`;
             logger.debug("ProxyForwarder: Extracted base domain for MCP passthrough", {
               providerId: provider.id,
               providerName: provider.name,
               mcpType: provider.mcpPassthroughType,
-              originalUrl: provider.url,
+              originalUrl: originalBaseUrl,
               extractedBaseDomain: effectiveBaseUrl,
               requestPath,
             });
@@ -2096,10 +2198,23 @@ export class ProxyForwarder {
 
     // 使用 undici.request 获取未自动解压的响应
     // ⭐ 显式配置超时：确保使用自定义 dispatcher（如 SOCKS 代理）时也能正确应用超时
+    const toUndiciBody = (
+      body: BodyInit | null | undefined
+    ): string | Uint8Array | Buffer | null | undefined => {
+      if (body == null || typeof body === "string") return body;
+      if (body instanceof Uint8Array) return body;
+      if (Buffer.isBuffer(body)) return body;
+      if (body instanceof ArrayBuffer) return new Uint8Array(body);
+      if (ArrayBuffer.isView(body)) {
+        return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+      }
+      return undefined;
+    };
+
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,
-      body: init.body as string | Buffer | undefined,
+      body: toUndiciBody(init.body),
       signal: init.signal,
       dispatcher: init.dispatcher,
       bodyTimeout,

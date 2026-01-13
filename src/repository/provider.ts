@@ -8,12 +8,21 @@ import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
+import { getOrCreateProviderVendorIdFromUrls } from "./provider-endpoints";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
+  const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
+    providerUrl: providerData.url,
+    websiteUrl: providerData.website_url ?? null,
+    faviconUrl: providerData.favicon_url ?? null,
+    displayName: providerData.name,
+  });
+
   const dbData = {
     name: providerData.name,
     url: providerData.url,
     key: providerData.key,
+    providerVendorId,
     isEnabled: providerData.is_enabled,
     weight: providerData.weight,
     priority: providerData.priority,
@@ -69,6 +78,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     name: providers.name,
     url: providers.url,
     key: providers.key,
+    providerVendorId: providers.providerVendorId,
     isEnabled: providers.isEnabled,
     weight: providers.weight,
     priority: providers.priority,
@@ -130,6 +140,7 @@ export async function findProviderList(
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
@@ -205,6 +216,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
@@ -284,6 +296,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
@@ -434,6 +447,29 @@ export async function updateProvider(
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
   if (providerData.cc !== undefined) dbData.cc = providerData.cc;
 
+  if (providerData.url !== undefined || providerData.website_url !== undefined) {
+    const [current] = await db
+      .select({
+        url: providers.url,
+        websiteUrl: providers.websiteUrl,
+        faviconUrl: providers.faviconUrl,
+        name: providers.name,
+      })
+      .from(providers)
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .limit(1);
+
+    if (current) {
+      const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
+        providerUrl: providerData.url ?? current.url,
+        websiteUrl: providerData.website_url ?? current.websiteUrl,
+        faviconUrl: providerData.favicon_url ?? current.faviconUrl,
+        displayName: providerData.name ?? current.name,
+      });
+      dbData.providerVendorId = providerVendorId;
+    }
+  }
+
   const [provider] = await db
     .update(providers)
     .set(dbData)
@@ -443,6 +479,7 @@ export async function updateProvider(
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,

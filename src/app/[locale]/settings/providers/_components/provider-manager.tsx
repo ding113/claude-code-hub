@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, Loader2, Search } from "lucide-react";
+import { AlertTriangle, LayoutGrid, LayoutList, Loader2, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import type { User } from "@/types/user";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
+import { ProviderVendorView } from "./provider-vendor-view";
 
 interface ProviderManagerProps {
   providers: ProviderDisplay[];
@@ -57,11 +58,13 @@ export function ProviderManager({
   addDialogSlot,
 }: ProviderManagerProps) {
   const t = useTranslations("settings.providers.search");
+  const tStrings = useTranslations("settings.providers.strings");
   const tFilter = useTranslations("settings.providers.filter");
   const tCommon = useTranslations("settings.common");
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "vendor">("list");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   // Status and group filters
@@ -202,6 +205,30 @@ export function ProviderManager({
       {/* 筛选条件 */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center border rounded-md bg-muted/50 p-1">
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 gap-1.5 text-xs"
+              onClick={() => setViewMode("list")}
+              title={tStrings("viewModeList")}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{tStrings("viewModeList")}</span>
+            </Button>
+            <Button
+              variant={viewMode === "vendor" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 gap-1.5 text-xs"
+              onClick={() => setViewMode("vendor")}
+              title={tStrings("viewModeVendor")}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{tStrings("viewModeVendor")}</span>
+            </Button>
+          </div>
+
           <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} disabled={loading} />
 
           {/* Status filter */}
@@ -317,15 +344,28 @@ export function ProviderManager({
       ) : (
         <div className="space-y-3">
           {refreshing ? <InlineLoading label={tCommon("loading")} /> : null}
-          <ProviderList
-            providers={filteredProviders}
-            currentUser={currentUser}
-            healthStatus={healthStatus}
-            statistics={statistics}
-            statisticsLoading={statisticsLoading}
-            currencyCode={currencyCode}
-            enableMultiProviderTypes={enableMultiProviderTypes}
-          />
+
+          {viewMode === "list" ? (
+            <ProviderList
+              providers={filteredProviders}
+              currentUser={currentUser}
+              healthStatus={healthStatus}
+              statistics={statistics}
+              statisticsLoading={statisticsLoading}
+              currencyCode={currencyCode}
+              enableMultiProviderTypes={enableMultiProviderTypes}
+            />
+          ) : (
+            <ProviderVendorView
+              providers={filteredProviders}
+              currentUser={currentUser}
+              enableMultiProviderTypes={enableMultiProviderTypes}
+              healthStatus={healthStatus}
+              statistics={statistics}
+              statisticsLoading={statisticsLoading}
+              currencyCode={currencyCode}
+            />
+          )}
         </div>
       )}
     </div>
