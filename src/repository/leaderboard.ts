@@ -181,9 +181,7 @@ async function findLeaderboardWithTimezone(
   const normalizedTags = (userFilters?.userTags ?? []).map((t) => t.trim()).filter(Boolean);
   let tagFilterCondition: ReturnType<typeof sql> | undefined;
   if (normalizedTags.length > 0) {
-    const tagConditions = normalizedTags.map(
-      (tag) => sql`${users.tags} @> ${JSON.stringify([tag])}::jsonb`
-    );
+    const tagConditions = normalizedTags.map((tag) => sql`${users.tags} ? ${tag}`);
     tagFilterCondition = sql`(${sql.join(tagConditions, sql` OR `)})`;
   }
 

@@ -127,23 +127,21 @@ export async function GET(request: NextRequest) {
       providerType = providerTypeParam;
     }
 
+    const parseListParam = (param: string | null): string[] | undefined => {
+      if (!param) return undefined;
+      const items = param
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .slice(0, 20);
+      return items.length > 0 ? items : undefined;
+    };
+
     let userTags: string[] | undefined;
     let userGroups: string[] | undefined;
     if (scope === "user") {
-      if (userTagsParam) {
-        userTags = userTagsParam
-          .split(",")
-          .map((t) => t.trim())
-          .filter((t) => t.length > 0)
-          .slice(0, 20);
-      }
-      if (userGroupsParam) {
-        userGroups = userGroupsParam
-          .split(",")
-          .map((g) => g.trim())
-          .filter((g) => g.length > 0)
-          .slice(0, 20);
-      }
+      userTags = parseListParam(userTagsParam);
+      userGroups = parseListParam(userGroupsParam);
     }
 
     // 使用 Redis 乐观缓存获取数据
