@@ -194,7 +194,7 @@ describe("OpenAPI 规范验证", () => {
 
     // 端点数量会随着功能模块增长而变化：这里只做“合理范围”约束
     expect(totalPaths).toBeGreaterThanOrEqual(40);
-    expect(totalPaths).toBeLessThanOrEqual(60);
+    expect(totalPaths).toBeLessThanOrEqual(80);
   });
 
   test("summary 和 description 应该不同", () => {

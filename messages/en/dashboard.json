@@ -1037,6 +1037,28 @@
       "noData": "No Data",
       "noRequests": "No Requests"
     },
+    "probeHistory": {
+      "title": "Endpoint Probe History",
+      "description": "View probe logs and manually trigger probes for specific endpoints",
+      "selectVendor": "Select Vendor",
+      "selectType": "Select Provider Type",
+      "selectEndpoint": "Select Endpoint",
+      "noEndpoints": "No endpoints found",
+      "probeNow": "Probe Now",
+      "probing": "Probing...",
+      "columns": {
+        "time": "Time",
+        "method": "Method",
+        "status": "Status",
+        "latency": "Latency",
+        "error": "Error"
+      },
+      "success": "Success",
+      "manual": "Manual Probe",
+      "auto": "Auto Probe",
+      "probeSuccess": "Probe successful",
+      "probeFailed": "Probe failed"
+    },
     "toast": {
       "refreshSuccess": "Availability data refreshed",
       "refreshFailed": "Refresh failed, please retry"

@@ -1023,6 +1023,28 @@
       "noData": "データなし",
       "noRequests": "リクエストなし"
     },
+    "probeHistory": {
+      "title": "エンドポイントプローブ履歴",
+      "description": "プローブログを確認し、特定のエンドポイントを手動でプローブできます",
+      "selectVendor": "ベンダーを選択",
+      "selectType": "プロバイダー種別を選択",
+      "selectEndpoint": "エンドポイントを選択",
+      "noEndpoints": "エンドポイントが見つかりません",
+      "probeNow": "今すぐプローブ",
+      "probing": "プローブ中...",
+      "columns": {
+        "time": "時間",
+        "method": "方法",
+        "status": "ステータス",
+        "latency": "レイテンシ",
+        "error": "エラー"
+      },
+      "success": "成功",
+      "manual": "手動プローブ",
+      "auto": "自動プローブ",
+      "probeSuccess": "プローブ成功",
+      "probeFailed": "プローブ失敗"
+    },
     "toast": {
       "refreshSuccess": "可用性データを更新しました",
       "refreshFailed": "更新に失敗しました。再試行してください"

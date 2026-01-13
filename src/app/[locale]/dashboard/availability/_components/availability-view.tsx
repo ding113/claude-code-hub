@@ -21,6 +21,7 @@ import type {
   TimeBucketMetrics,
 } from "@/lib/availability";
 import { cn } from "@/lib/utils";
+import { EndpointProbeHistory } from "./endpoint-probe-history";
 
 type TimeRangeOption = "15min" | "1h" | "6h" | "24h" | "7d";
 type SortOption = "availability" | "name" | "requests";
@@ -524,6 +525,9 @@ export function AvailabilityView() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Endpoint Probe History */}
+        <EndpointProbeHistory />
       </div>
     </TooltipProvider>
   );
