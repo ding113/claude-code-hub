@@ -322,6 +322,10 @@
       "adminAction": "Enable this permission.",
       "userAction": "Please contact an administrator to enable this permission.",
       "systemSettings": "System Settings"
+    },
+    "filters": {
+      "userTagsPlaceholder": "Filter by user tags...",
+      "userGroupsPlaceholder": "Filter by user groups..."
     }
   },
   "sessions": {

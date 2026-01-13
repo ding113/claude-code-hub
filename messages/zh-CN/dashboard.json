@@ -322,6 +322,10 @@
       "adminAction": "开启此权限。",
       "userAction": "请联系管理员开启此权限。",
       "systemSettings": "系统设置"
+    },
+    "filters": {
+      "userTagsPlaceholder": "按用户标签筛选...",
+      "userGroupsPlaceholder": "按用户分组筛选..."
     }
   },
   "sessions": {

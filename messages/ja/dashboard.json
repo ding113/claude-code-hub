@@ -321,6 +321,10 @@
       "adminAction": "この権限を有効にします。",
       "userAction": "この権限を有効にするには、管理者に連絡してください。",
       "systemSettings": "システム設定"
+    },
+    "filters": {
+      "userTagsPlaceholder": "ユーザータグでフィルタ...",
+      "userGroupsPlaceholder": "ユーザーグループでフィルタ..."
     }
   },
   "sessions": {
