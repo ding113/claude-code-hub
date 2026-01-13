@@ -1,0 +1,157 @@
+{
+  "nav": "错误规则",
+  "title": "错误规则管理",
+  "description": "管理不需要自动重试的客户端错误规则。配置后，命中规则的报错将直接返回给用户，不会触发重试，也不会计入供应商熔断。",
+  "section": {
+    "title": "错误规则列表"
+  },
+  "tester": {
+    "title": "错误规则测试",
+    "description": "输入错误消息，检查是否命中已配置的规则以及最终返回给用户的内容。",
+    "inputLabel": "测试错误消息",
+    "inputPlaceholder": "输入要检测的错误消息...",
+    "testButton": "开始测试",
+    "testing": "测试中...",
+    "matched": "已命中错误规则",
+    "notMatched": "未命中任何规则",
+    "finalResponse": "覆写响应",
+    "ruleInfo": "匹配的规则",
+    "noRule": "未匹配到任何规则",
+    "category": "规则类别",
+    "pattern": "匹配模式",
+    "matchType": "匹配类型",
+    "overrideStatusCode": "覆写状态码",
+    "testFailed": "测试失败，请稍后重试",
+    "messageRequired": "请输入要测试的错误消息",
+    "warnings": "配置警告",
+    "statusCodeOnlyOverride": "仅覆写状态码，响应体将使用上游错误消息"
+  },
+  "add": "添加错误规则",
+  "addSuccess": "错误规则创建成功",
+  "addFailed": "创建错误规则失败",
+  "edit": "编辑错误规则",
+  "editSuccess": "错误规则更新成功",
+  "editFailed": "更新错误规则失败",
+  "delete": "删除错误规则",
+  "deleteSuccess": "错误规则删除成功",
+  "deleteFailed": "删除失败",
+  "enable": "错误规则已启用",
+  "disable": "错误规则已禁用",
+  "toggleFailed": "状态切换失败",
+  "toggleFailedError": "状态切换失败:",
+  "refreshCache": "同步规则",
+  "refreshCacheSuccess": "规则同步成功，已加载 {count} 个错误规则",
+  "refreshCacheFailed": "同步规则失败",
+  "cacheStats": "缓存: 共 {totalCount} 条规则",
+  "emptyState": "暂无错误规则，点击右上角\"添加错误规则\"开始配置。",
+  "confirmDelete": "确定要删除错误规则\"{pattern}\"吗？",
+  "dialog": {
+    "addTitle": "添加错误规则",
+    "addDescription": "配置错误消息正则模式，匹配的错误将被识别为不可重试的客户端错误。",
+    "editTitle": "编辑错误规则",
+    "editDescription": "修改错误规则配置，更改后将自动刷新缓存。",
+    "patternLabel": "正则模式 *",
+    "patternPlaceholder": "输入正则表达式...",
+    "patternRequired": "请输入正则模式",
+    "patternHint": "支持 JavaScript 正则表达式语法，例如：prompt is too long|invalid.*request",
+    "categoryLabel": "规则类别 *",
+    "categoryPlaceholder": "选择规则类别",
+    "categoryRequired": "请选择规则类别",
+    "categoryHint": "选择规则所属的错误类别，用于分类管理和统计",
+    "descriptionLabel": "说明",
+    "descriptionPlaceholder": "可选：添加说明...",
+    "invalidRegex": "正则表达式语法错误",
+    "regexTester": "正则测试器",
+    "testMessageLabel": "测试消息",
+    "testMessagePlaceholder": "输入要测试的错误消息...",
+    "matchSuccess": "匹配成功",
+    "matchFailed": "未匹配",
+    "invalidPattern": "正则无效",
+    "matchedText": "匹配内容",
+    "defaultRuleHint": "默认规则的模式不可修改",
+    "enableOverride": "启用错误覆写",
+    "enableOverrideHint": "启用后可自定义返回给客户端的错误响应和状态码，原始错误仍会记录到数据库。当前仅支持 Claude API 错误格式。",
+    "overrideResponseLabel": "覆写响应（JSON 格式）",
+    "overrideResponsePlaceholder": "{\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"message\": \"您的自定义消息\"\n  }\n}",
+    "overrideResponseHint": "留空则仅覆写状态码。",
+    "overrideStatusCodeLabel": "覆写状态码（可选）",
+    "overrideStatusCodePlaceholder": "例如 400",
+    "overrideStatusCodeHint": "留空则使用上游状态码。范围：400-599。",
+    "useTemplate": "Claude Error 模板",
+    "useTemplateConfirm": "输入框已有内容，确定覆盖为模板示例？",
+    "validJson": "JSON 格式正确",
+    "invalidJson": "JSON 格式无效",
+    "invalidStatusCode": "状态码必须在 400-599 范围内",
+    "creating": "创建中...",
+    "saving": "保存中..."
+  },
+  "table": {
+    "pattern": "正则模式",
+    "category": "规则类别",
+    "description": "说明",
+    "status": "状态",
+    "default": "默认",
+    "isEnabled": "启用状态",
+    "isDefault": "默认规则",
+    "createdAt": "创建时间",
+    "actions": "操作"
+  },
+  "form": {
+    "fields": {
+      "pattern": "正则模式",
+      "category": "规则类别",
+      "description": "说明"
+    },
+    "placeholders": {
+      "pattern": "例如: prompt is too long",
+      "category": "选择类别",
+      "description": "可选：添加说明..."
+    },
+    "labels": {
+      "pattern": "正则模式 *",
+      "category": "规则类别 *",
+      "description": "说明",
+      "isEnabled": "启用状态"
+    }
+  },
+  "actions": {
+    "add": "添加",
+    "edit": "编辑",
+    "delete": "删除",
+    "refresh": "刷新",
+    "test": "测试",
+    "messages": {
+      "success": "操作成功",
+      "error": "操作失败"
+    }
+  },
+  "validation": {
+    "patternRequired": "请输入正则模式",
+    "categoryRequired": "请选择规则类别",
+    "patternInvalid": "正则表达式语法错误",
+    "redosRisk": "正则表达式存在 ReDoS 风险，请简化模式",
+    "patternTooComplex": "正则表达式过于复杂"
+  },
+  "categories": {
+    "prompt_limit": "Prompt 长度限制",
+    "content_filter": "内容过滤",
+    "pdf_limit": "PDF 页数限制",
+    "thinking_error": "Thinking 格式错误",
+    "parameter_error": "参数验证失败",
+    "invalid_request": "非法请求",
+    "cache_limit": "缓存控制限制"
+  },
+  "regexTester": {
+    "title": "正则测试器",
+    "testMessage": "测试消息",
+    "testMessagePlaceholder": "输入要测试的错误消息...",
+    "matchResult": "匹配结果",
+    "matched": "匹配成功",
+    "notMatched": "未匹配",
+    "test": "测试"
+  },
+  "defaultRules": {
+    "cannotDelete": "默认规则无法删除",
+    "cannotDisable": "建议保留默认规则启用状态"
+  }
+}

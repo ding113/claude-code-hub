@@ -1,0 +1,12 @@
+{
+  "cancel": "放棄",
+  "costMultiplierInvalid": "請輸入大於等於 0 的數字",
+  "costMultiplierLabel": "成本倍數",
+  "priorityInvalid": "請輸入大於等於 0 的整數",
+  "priorityLabel": "優先級",
+  "save": "儲存",
+  "saveFailed": "儲存失敗",
+  "saveSuccess": "儲存成功",
+  "weightInvalid": "請輸入 1-100 之間的整數",
+  "weightLabel": "權重"
+}

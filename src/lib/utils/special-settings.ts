@@ -67,6 +67,14 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.removedRedactedThinkingBlocks,
         setting.removedSignatureFields,
       ]);
+    case "codex_session_id_completion":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.action,
+        setting.source,
+        setting.sessionId,
+      ]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;

@@ -39,7 +39,7 @@ export const users = pgTable('users', {
   role: varchar('role').default('user'),
   rpmLimit: integer('rpm_limit'),
   dailyLimitUsd: numeric('daily_limit_usd', { precision: 10, scale: 2 }),
-  providerGroup: varchar('provider_group', { length: 50 }).default('default'),
+  providerGroup: varchar('provider_group', { length: 200 }).default('default'),
   // 用户标签（用于分类和筛选）
   tags: jsonb('tags').$type<string[]>().default([]),
 
@@ -112,7 +112,7 @@ export const keys = pgTable('keys', {
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
   // Provider group for this key (explicit; defaults to "default")
-  providerGroup: varchar('provider_group', { length: 50 }).default('default'),
+  providerGroup: varchar('provider_group', { length: 200 }).default('default'),
 
   // Cache TTL override：null/NULL 表示遵循供应商或客户端请求
   cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
@@ -492,6 +492,12 @@ export const systemSettings = pgTable('system_settings', {
   // thinking signature 整流器（默认开启）
   // 开启后：当 Anthropic 类型供应商出现 thinking 签名不兼容/非法请求等 400 错误时，自动整流并重试一次
   enableThinkingSignatureRectifier: boolean('enable_thinking_signature_rectifier')
+    .notNull()
+    .default(true),
+
+  // Codex Session ID 补全（默认开启）
+  // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
+  enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')
     .notNull()
     .default(true),
 

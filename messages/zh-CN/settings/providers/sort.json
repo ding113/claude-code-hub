@@ -1,0 +1,8 @@
+{
+  "byName": "按名称 (A-Z)",
+  "byPriority": "按优先级 (高-低)",
+  "byWeight": "按权重 (高-低)",
+  "byActualPriority": "按实际选取顺序",
+  "byCreatedAt": "按创建时间 (新-旧)",
+  "placeholder": "排序供应商"
+}

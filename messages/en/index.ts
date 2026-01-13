@@ -11,7 +11,7 @@ import notifications from "./notifications.json";
 import providerChain from "./provider-chain.json";
 import providers from "./providers.json";
 import quota from "./quota.json";
-import settings from "./settings.json";
+import settings from "./settings";
 import ui from "./ui.json";
 import usage from "./usage.json";
 import users from "./users.json";

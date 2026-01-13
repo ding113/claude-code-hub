@@ -1,0 +1,7 @@
+{
+  "clear": "検索をクリア",
+  "found": "{count}件のプロバイダーが見つかりました",
+  "notFound": "一致するプロバイダーが見つかりません",
+  "placeholder": "プロバイダー名、URL、メモを検索...",
+  "showing": "{filtered} / {total} プロバイダーを表示"
+}

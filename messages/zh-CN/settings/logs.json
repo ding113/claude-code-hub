@@ -1,0 +1,54 @@
+{
+  "title": "日志管理",
+  "description": "动态调整系统日志级别，实时控制日志输出详细程度。",
+  "subtitle": "日志级别控制",
+  "subtitleDesc": "调整后立即生效，无需重启服务。适合生产环境排查问题时使用。",
+  "section": {
+    "title": "日志级别控制",
+    "description": "调整后立即生效，无需重启服务。"
+  },
+  "levels": {
+    "fatal": {
+      "label": "Fatal",
+      "description": "仅致命错误"
+    },
+    "error": {
+      "label": "Error",
+      "description": "错误信息"
+    },
+    "warn": {
+      "label": "Warn",
+      "description": "警告 + 错误"
+    },
+    "info": {
+      "label": "Info",
+      "description": "关键业务事件 + 警告 + 错误（推荐生产）"
+    },
+    "debug": {
+      "label": "Debug",
+      "description": "调试信息 + 所有级别（推荐开发）"
+    },
+    "trace": {
+      "label": "Trace",
+      "description": "极详细追踪 + 所有级别"
+    }
+  },
+  "form": {
+    "currentLevel": "当前日志级别",
+    "selectLevel": "选择日志级别",
+    "save": "保存设置",
+    "saving": "保存中...",
+    "success": "日志级别已设置为: {level}",
+    "failed": "设置失败",
+    "failedError": "设置日志级别失败",
+    "fetchFailed": "获取日志级别失败",
+    "effectiveImmediately": "调整日志级别后立即生效，无需重启服务。",
+    "levelGuideTitle": "日志级别说明",
+    "levelGuideFatal": "Fatal/Error: 仅显示错误，日志最少，适合高负载生产环境",
+    "levelGuideWarn": "Warn: 包含警告（限流触发、熔断器打开等）+ 错误",
+    "levelGuideInfo": "Info（推荐生产）: 显示关键业务事件（供应商选择、Session 复用、价格同步）+ 警告 + 错误",
+    "levelGuideDebug": "Debug（推荐开发）: 包含详细调试信息，适合排查问题时使用",
+    "levelGuideTrace": "Trace: 极详细的追踪信息，包含所有细节",
+    "changeNotice": "当前级别为 {current}，点击保存后将切换到 {selected}"
+  }
+}

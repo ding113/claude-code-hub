@@ -58,6 +58,26 @@ export function ModelMultiSelect({
   const [modelSource, setModelSource] = useState<ModelSource>("loading");
   const [customModel, setCustomModel] = useState("");
 
+  const displayedModels = (() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+
+    for (const model of availableModels) {
+      if (seen.has(model)) continue;
+      seen.add(model);
+      merged.push(model);
+    }
+
+    // 关键：把已选中但不在远端列表的自定义模型也渲染出来，保证可取消选中
+    for (const model of selectedModels) {
+      if (seen.has(model)) continue;
+      seen.add(model);
+      merged.push(model);
+    }
+
+    return merged;
+  })();
+
   // 供应商类型到显示名称的映射
   const getProviderTypeLabel = (type: string): string => {
     const typeMap: Record<string, string> = {
@@ -267,7 +287,7 @@ export function ModelMultiSelect({
 
                 {/* 模型列表 */}
                 <CommandGroup>
-                  {availableModels.map((model) => (
+                  {displayedModels.map((model) => (
                     <CommandItem
                       key={model}
                       value={model}

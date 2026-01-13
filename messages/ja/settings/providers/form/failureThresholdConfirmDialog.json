@@ -1,0 +1,13 @@
+{
+  "cancel": "キャンセル",
+  "confirm": "保存を確定",
+  "confirmQuestion": "この設定を保存してもよろしいですか？",
+  "descriptionDisabledAction": "サーキットブレーカーを無効化",
+  "descriptionDisabledMiddle": "に設定しています。これは",
+  "descriptionDisabledPrefix": "サーキットブレーカーの失敗閾値を",
+  "descriptionDisabledSuffix": "することを意味し、プロバイダーは連続した失敗によって遮断されません。",
+  "descriptionDisabledValue": "0",
+  "descriptionHighValuePrefix": "サーキットブレーカーの失敗閾値を",
+  "descriptionHighValueSuffix": "に設定しています。これは高い値であり、プロバイダーが多数の失敗の後にのみ遮断される可能性があります。",
+  "title": "特別な設定を確認"
+}

@@ -1,0 +1,12 @@
+{
+  "save": "保存",
+  "cancel": "取消",
+  "saveSuccess": "保存成功",
+  "saveFailed": "保存失败",
+  "priorityLabel": "优先级",
+  "weightLabel": "权重",
+  "costMultiplierLabel": "成本倍数",
+  "priorityInvalid": "请输入大于等于 0 的整数",
+  "weightInvalid": "请输入 1-100 之间的整数",
+  "costMultiplierInvalid": "请输入大于等于 0 的数字"
+}

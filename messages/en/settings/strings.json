@@ -1,0 +1,22 @@
+{
+  "mcpPassthroughConfig": "MCP Passthrough Configuration",
+  "mcpPassthroughConfigCustom": "Custom (Reserved)",
+  "mcpPassthroughConfigGlm": "GLM",
+  "mcpPassthroughConfigMinimax": "Minimax",
+  "mcpPassthroughConfigNone": "Disabled",
+  "mcpPassthroughCustomDesc": "Pass through to custom MCP service (reserved, not implemented yet)",
+  "mcpPassthroughCustomLabel": "Custom",
+  "mcpPassthroughDesc": "When enabled, pass through MCP tool calls to specified AI provider (e.g. minimax for image recognition, web search)",
+  "mcpPassthroughGlmDesc": "Pass through to GLM MCP service (supports image analysis, video analysis, etc.)",
+  "mcpPassthroughGlmLabel": "GLM",
+  "mcpPassthroughHint": "Hint: MCP passthrough allows Claude Code client to use tool capabilities provided by third-party AI providers (e.g. image recognition, web search)",
+  "mcpPassthroughMinimaxDesc": "Pass through to minimax MCP service (supports image recognition, web search, etc.)",
+  "mcpPassthroughMinimaxLabel": "Minimax",
+  "mcpPassthroughNoneDesc": "Do not enable MCP passthrough (default)",
+  "mcpPassthroughNoneLabel": "Disabled",
+  "mcpPassthroughSelect": "Passthrough Type",
+  "mcpPassthroughUrlAuto": "Auto-extracted: {url}",
+  "mcpPassthroughUrlDesc": "MCP service base URL. Leave empty to auto-extract from provider URL",
+  "mcpPassthroughUrlLabel": "MCP Passthrough URL",
+  "mcpPassthroughUrlPlaceholder": "https://api.minimaxi.com"
+}

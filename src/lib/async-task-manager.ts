@@ -26,11 +26,25 @@ interface TaskInfo {
 class AsyncTaskManagerClass {
   private tasks: Map<string, TaskInfo> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
+  // Lazily initialize Node-only hooks on first use to avoid side effects at import time.
+  private initialized = false;
 
-  constructor() {
-    // Skip initialization during CI/build phase to avoid unnecessary logs and side effects
-    if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
-      logger.debug("[AsyncTaskManager] Skipping initialization in CI/build environment");
+  private initializeIfNeeded(): void {
+    if (this.initialized) {
+      return;
+    }
+    this.initialized = true;
+
+    // Skip initialization in Edge/CI environments to avoid Node-only APIs and side effects.
+    if (
+      process.env.NEXT_RUNTIME === "edge" ||
+      process.env.CI === "true" ||
+      process.env.NEXT_PHASE === "phase-production-build"
+    ) {
+      logger.debug("[AsyncTaskManager] Skipping initialization in edge/CI environment", {
+        nextRuntime: process.env.NEXT_RUNTIME,
+        ci: process.env.CI,
+      });
       return;
     }
 
@@ -63,6 +77,8 @@ class AsyncTaskManagerClass {
    * @returns AbortController（可用于取消任务）
    */
   register(taskId: string, promise: Promise<void>, taskType = "unknown"): AbortController {
+    this.initializeIfNeeded();
+
     // 如果任务已存在，先取消旧任务
     if (this.tasks.has(taskId)) {
       logger.warn("[AsyncTaskManager] Task already exists, cancelling old task", {

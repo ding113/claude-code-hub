@@ -1,0 +1,7 @@
+{
+  "clear": "清除搜尋",
+  "found": "找到 {count} 個匹配的供應商",
+  "notFound": "未找到匹配的供應商",
+  "placeholder": "搜尋供應商名稱、URL、備註...",
+  "showing": "顯示 {filtered} / {total} 個供應商"
+}

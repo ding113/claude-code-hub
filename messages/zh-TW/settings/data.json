@@ -1,0 +1,133 @@
+{
+  "cleanup": {
+    "backupRecommendation": "建議：在清理前先匯出資料庫備份，以防需要還原資料。",
+    "button": "清理日誌",
+    "cancel": "關閉",
+    "cleaning": "清理中...",
+    "confirm": "確認清理",
+    "confirmTitle": "確認清理日誌",
+    "confirmWarning": "此操作將永久刪除 {range}的所有日誌記錄，且無法復原。",
+    "descriptionWarning": "清理歷史日誌資料以釋放資料庫儲存空間。注意：統計資料將被保留，但日誌詳情將被永久刪除。",
+    "error": "清理日誌失敗",
+    "failed": "清理失敗",
+    "logsDeleted": "✗ 日誌詳情將被刪除（請求/回應內容、錯誤資訊等）",
+    "previewCount": "將刪除 {count} 筆日誌記錄",
+    "previewError": "無法取得預覽資訊",
+    "previewLoading": "正在統計...",
+    "range": {
+      "180days": "六個月前的日誌 (180 天)",
+      "30days": "一個月前的日誌 (30 天)",
+      "7days": "一週前的日誌 (7 天)",
+      "90days": "三個月前的日誌 (90 天)"
+    },
+    "rangeDescription": {
+      "180days": "六個月前",
+      "30days": "一個月前",
+      "7days": "一週前",
+      "90days": "三個月前",
+      "default": "約 {days} 天前"
+    },
+    "rangeLabel": "清理範圍",
+    "statisticsRetained": "✓ 統計資料將被保留（用於趨勢分析）",
+    "successMessage": "成功清理 {count} 筆日誌記錄（{batches} 批次，耗時 {duration}秒）",
+    "willClean": "將清理 {range} 的所有日誌記錄"
+  },
+  "description": "管理資料庫的備份與恢復，支援完整資料匯入匯出和日誌清理。",
+  "export": {
+    "button": "匯出資料庫",
+    "descriptionFull": "匯出完整的資料庫備份檔案（.dump 格式），可用於資料遷移或還原。備份檔案使用 PostgreSQL custom format，自動壓縮且相容不同版本的資料庫結構。",
+    "error": "匯出資料庫失敗",
+    "exporting": "正在匯出...",
+    "failed": "匯出失敗",
+    "successMessage": "資料庫匯出成功！"
+  },
+  "guide": {
+    "items": {
+      "cleanup": {
+        "description": "物理刪除歷史日誌資料，不可恢復。統計資料（statistics 表）將被保留。建議清理前先匯出資料庫備份。",
+        "title": "日誌清理"
+      },
+      "environment": {
+        "description": "此功能需要 Docker Compose 部署環境。本機開發環境可能無法使用。",
+        "title": "環境要求"
+      },
+      "format": {
+        "description": "使用 PostgreSQL custom format (.dump)，自動壓縮且能夠相容不同版本的資料庫結構。",
+        "title": "備份格式"
+      },
+      "merge": {
+        "description": "保留現有資料，嘗試插入備份中的資料。如果存在主鍵衝突可能導致匯入失敗。",
+        "title": "合併模式"
+      },
+      "overwrite": {
+        "description": "匯入前會刪除所有現有資料，確保資料庫與備份檔案完全一致。適合完整復原場景。",
+        "title": "覆寫模式"
+      },
+      "safety": {
+        "description": "在執行匯入操作前，建議先匯出目前資料庫作為備份，避免資料遺失。",
+        "title": "安全建議"
+      }
+    },
+    "title": "使用說明與注意事項"
+  },
+  "import": {
+    "backupFile": "備份檔案：",
+    "backupRecommendation": "建議在執行此操作前，先匯出目前資料庫作為備份。",
+    "button": "匯入資料庫",
+    "cancel": "關閉",
+    "cleanFirstDescription": "匯入前刪除所有現有資料，確保資料庫與備份檔案完全一致。如果不勾選，將嘗試合併資料，但可能因主鍵衝突而失敗。",
+    "cleanFirstLabel": "清除現有資料（覆蓋模式）",
+    "confirm": "確認匯入",
+    "confirmMerge": "您選擇了「合併模式」，這將嘗試在保留現有資料的基礎上匯入備份。",
+    "confirmOverwrite": "您選擇了「覆蓋模式」，這將會刪除所有現有資料後匯入備份。",
+    "confirmTitle": "確認匯入資料庫",
+    "descriptionFull": "從備份檔案還原資料庫。支援 PostgreSQL custom format (.dump) 格式的備份檔案。",
+    "error": "匯入資料庫失敗",
+    "errorUnknown": "未知錯誤",
+    "failedMessage": "資料匯入失敗，請查看詳細日誌",
+    "fileError": "請選擇 .dump 格式的備份檔案",
+    "fileSelected": "已選擇：{name}（{size} MB）",
+    "importing": "正在匯入...",
+    "noFileSelected": "請先選擇備份檔案",
+    "parseError": "解析回應資料失敗",
+    "progressTitle": "匯入進度",
+    "selectFileLabel": "選擇備份檔案",
+    "streamError": "無法讀取回應串流",
+    "streamInterrupted": "資料流意外中斷",
+    "streamInterruptedDesc": "匯入進度未正常完成，請檢查日誌並驗證資料完整性。如有問題，請重新匯入。",
+    "successCleanModeDesc": "所有資料已成功還原。如果頁面顯示異常，請重新整理瀏覽器。",
+    "successMergeModeDesc": "資料已成功匯入並合併。如果頁面顯示異常，請重新整理瀏覽器。",
+    "successMessage": "資料匯入完成！",
+    "successWithWarnings": "資料匯入完成（有警告）",
+    "successWithWarningsDesc": "資料已成功匯入，但略過了一些已存在的物件。如果頁面顯示異常，請重新整理瀏覽器或重新啟動應用。",
+    "warningMerge": "注意：如果存在主鍵衝突，匯入可能會失敗。",
+    "warningOverwrite": "警告：此操作不可逆，所有目前資料將被永久刪除！"
+  },
+  "section": {
+    "cleanup": {
+      "description": "清理歷史日誌資料以釋放資料庫儲存空間。注意：統計資料將被保留，但日誌詳情將被永久刪除。",
+      "title": "日誌清理"
+    },
+    "export": {
+      "description": "匯出完整的資料庫備份檔案（.dump 格式），可用於資料遷移或還原。",
+      "title": "資料匯出"
+    },
+    "import": {
+      "description": "從備份檔案還原資料庫。支援 PostgreSQL custom format (.dump) 格式的備份檔案。",
+      "title": "資料匯入"
+    },
+    "status": {
+      "description": "查看目前資料庫的連線狀態和基本資訊。",
+      "title": "資料庫狀態"
+    }
+  },
+  "status": {
+    "connected": "資料庫連線正常",
+    "error": "取得資料庫狀態失敗",
+    "loading": "載入中...",
+    "retry": "重試",
+    "tables": "{count} 個資料表",
+    "unavailable": "資料庫無法使用"
+  },
+  "title": "資料管理"
+}

@@ -1,0 +1,7 @@
+{
+  "currentKey": "Текущий ключ: {key}",
+  "label": "API ключ",
+  "leaveEmpty": "(Оставьте пустым, чтобы не менять)",
+  "leaveEmptyDesc": "Пустое значение — без изменений",
+  "placeholder": "Введите API ключ"
+}

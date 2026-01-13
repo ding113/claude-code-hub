@@ -1,0 +1,16 @@
+{
+  "button": "優先度を自動ソート",
+  "changeCount": "{count} 件のプロバイダーが更新されます",
+  "changesTitle": "変更詳細",
+  "confirm": "変更を適用",
+  "costMultiplierHeader": "コスト倍率",
+  "dialogDescription": "コスト倍率に基づいて優先度を自動割り当て（低コスト = 高優先度）",
+  "dialogTitle": "プロバイダー優先度の自動ソート",
+  "error": "優先度の更新に失敗しました",
+  "noChanges": "変更不要（ソート済み）",
+  "priorityChangeHeader": "優先度変更",
+  "priorityHeader": "優先度",
+  "providerHeader": "プロバイダー",
+  "providersHeader": "プロバイダー",
+  "success": "{count} 件のプロバイダーの優先度を更新しました"
+}

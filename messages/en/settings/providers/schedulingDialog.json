@@ -1,0 +1,9 @@
+{
+  "after": "After:",
+  "before": "Before:",
+  "decision": "Decision:",
+  "description": "Understand how the system intelligently selects upstream providers for high availability and cost optimization",
+  "step": "Step",
+  "title": "Provider Scheduling Rules",
+  "triggerButton": "Rules"
+}

@@ -1,0 +1,9 @@
+{
+  "copy": "Copy",
+  "copyFailed": "Copy failed",
+  "copySuccess": "Copied {name} to clipboard",
+  "duplicatePath": "Duplicate path detected",
+  "invalidUrl": "Invalid URL format",
+  "invalidUrlDesc": "Please enter a valid HTTP/HTTPS address",
+  "title": "URL Concatenation Preview"
+}

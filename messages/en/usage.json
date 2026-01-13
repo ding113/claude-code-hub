@@ -543,8 +543,8 @@
         "important": "Important",
         "importantPoints": [
           "Create an API key in the cch console and set the CCH_API_KEY environment variable",
-          "All providers use ${resolvedOrigin}/v1 as baseURL (cch v1 API base URL)",
-          "When selecting models, use provider_id/model_id (e.g. cchClaude/claude-sonnet-4-5-20250929)"
+          "cchClaude/openai use ${resolvedOrigin}/v1; cchGemini uses ${resolvedOrigin}/v1beta",
+          "When selecting models, use provider_id/model_id (e.g. openai/gpt-5.2 or cchClaude/claude-sonnet-4-5-20250929)"
         ]
       },
 

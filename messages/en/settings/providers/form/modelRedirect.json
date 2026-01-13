@@ -1,0 +1,14 @@
+{
+  "add": "Add",
+  "addNewRule": "Add New Rule",
+  "alreadyExists": "Model \"{model}\" already has a redirect rule",
+  "currentRules": "Current Rules ({count})",
+  "description": "Redirect Claude Code client requested models (e.g. claude-sonnet-4.5) to upstream provider supported models (e.g. glm-4.6, gemini-pro). For cost optimization or third-party AI integration.",
+  "emptyState": "No redirect rules yet. After adding rules, the system will automatically rewrite model names in requests.",
+  "sourceEmpty": "Source model name cannot be empty",
+  "sourceModel": "User Requested Model",
+  "sourcePlaceholder": "e.g. claude-sonnet-4-5-20250929",
+  "targetEmpty": "Target model name cannot be empty",
+  "targetModel": "Actual Forwarded Model",
+  "targetPlaceholder": "e.g. glm-4.6"
+}

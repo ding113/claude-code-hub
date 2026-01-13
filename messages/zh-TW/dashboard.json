@@ -5,7 +5,7 @@
     "copied": "已複製"
   },
   "title": {
-    "costRanking": "消耗排行榜",
+    "costRanking": "消耗排行",
     "costRankingDescription": "查看用戶消耗排名，資料每 5 分鐘更新一次",
     "usageLogs": "使用記錄",
     "clients": "用戶端",
@@ -45,13 +45,13 @@
   "stats": {
     "title": "統計",
     "requests": "請求",
-    "cost": "成本",
+    "cost": "費用",
     "tokens": "Tokens",
     "period": {
       "hour": "最近1小時",
-      "day": "今天",
+      "day": "今日",
       "week": "本週",
-      "month": "本月"
+      "month": "當月"
     }
   },
   "logs": {
@@ -64,7 +64,7 @@
       "searchProvider": "搜尋供應商...",
       "noUserFound": "未找到匹配的使用者",
       "noProviderFound": "未找到匹配的供應商",
-      "model": "模型",
+      "model": "Model",
       "endpoint": "端點",
       "status": "狀態",
       "timeRange": "時間範圍",
@@ -84,8 +84,8 @@
       "minRetryCountPlaceholder": "輸入次數（0 表示不限）",
       "apply": "套用篩選",
       "reset": "重設",
-      "last7days": "近7天",
-      "last30days": "近30天",
+      "last7days": "近 7 天",
+      "last30days": "近 30 天",
       "customRange": "自訂範圍",
       "export": "匯出",
       "exporting": "匯出中...",
@@ -105,7 +105,7 @@
       "cacheWrite": "快取寫入",
       "cacheRead": "快取讀取",
       "cache": "快取",
-      "cost": "成本",
+      "cost": "費用",
       "duration": "耗時",
       "performance": "效能",
       "status": "狀態"
@@ -114,7 +114,7 @@
       "title": "統計匯總",
       "description": "點擊展開查看當前篩選條件下的彙總統計",
       "expand": "展開",
-      "collapse": "收起",
+      "collapse": "收合",
       "totalAmount": "總消耗金額",
       "totalTokens": "總 Token 數",
       "cacheTokens": "快取 Token",
@@ -134,7 +134,7 @@
       "nonBilling": "非計費",
       "skipped": "已跳過",
       "specialSettings": "特殊設定",
-      "times": "次",
+      "times": "次數",
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",
       "noMoreData": "已載入全部記錄",
@@ -155,7 +155,7 @@
       "title": "請求詳情",
       "statusTitle": "請求詳情 - 狀態碼 {status}",
       "inProgress": "請求中",
-      "unknown": "未知",
+      "unknown": "未知狀態",
       "success": "請求成功完成",
       "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",
       "processing": "請求正在進行中，尚未完成",
@@ -164,7 +164,7 @@
       },
       "skipped": {
         "title": "跳過資訊",
-        "reason": "原因",
+        "reason": "原因說明",
         "warmup": "Warmup 搶答（CCH）",
         "desc": "該請求被識別為 Warmup 探測請求，已由 CCH 直接搶答回應，未轉發上游供應商；不計費、不限流、不計入統計。"
       },
@@ -174,7 +174,7 @@
         "sensitiveWord": "敏感詞攔截",
         "word": "敏感詞",
         "matchType": "匹配類型",
-        "matchTypeContains": "包含匹配",
+        "matchTypeContains": "包含比對",
         "matchTypeExact": "精確匹配",
         "matchTypeRegex": "正規表達式",
         "matchedText": "匹配內容"
@@ -192,7 +192,7 @@
         "billingDescription": "系統優先使用請求模型（{original}）的價格計費。如果價格表中不存在該模型，則使用實際呼叫模型（{current}）的價格。",
         "billingModel": "計費模型",
         "actualModelTooltip": "實際模型: {model}",
-        "originalModelTooltip": "原始模型: {model}",
+        "originalModelTooltip": "原始模型：{model}",
         "billingDescription_original": "目前計費模式：使用重新導向前的原始模型（{original}）計費",
         "billingDescription_redirected": "目前計費模式：使用重新導向後的實際模型（{current}）計費",
         "billingOriginal": "計費: 原始",
@@ -234,30 +234,30 @@
     },
     "statusCodes": {
       "not200": "非 200（所有非成功請求）",
-      "200": "200 (成功)",
-      "400": "400 (錯誤請求)",
-      "401": "401 (未授權)",
-      "429": "429 (限流)",
-      "500": "500 (服務器錯誤)"
+      "200": "200（成功）",
+      "400": "400（錯誤請求）",
+      "401": "401（未授權）",
+      "429": "429（限流）",
+      "500": "500（服務器錯誤）"
     },
     "billingDetails": {
       "input": "輸入",
       "output": "輸出",
-      "cacheWrite5m": "快取寫入 (5m)",
-      "cacheWrite1h": "快取寫入 (1h)",
+      "cacheWrite5m": "快取寫入（5m）",
+      "cacheWrite1h": "快取寫入（1h）",
       "cacheRead": "快取讀取",
       "cacheTtl": "快取 TTL",
       "multiplier": "供應商倍率",
       "totalCost": "總費用",
-      "context1m": "1M 上下文",
+      "context1m": "1M 上下文長度",
       "context1mPricing": "輸入 >200k 2倍, 輸出 >200k 1.5倍"
     }
   },
   "leaderboard": {
-    "title": "成本排行榜",
+    "title": "費用排行榜",
     "description": "查看用戶和密鑰的成本統計排名",
-    "todayTitle": "今日排行榜",
-    "viewAll": "查看全部",
+    "todayTitle": "今日排行",
+    "viewAll": "檢視全部",
     "userRankings": "使用者排名",
     "providerRankings": "供應商排名",
     "modelRankings": "模型排名",
@@ -271,40 +271,40 @@
       "providerRanking": "供應商排名",
       "providerCacheHitRateRanking": "供應商快取命中率排行",
       "modelRanking": "模型排名",
-      "dailyRanking": "今日",
+      "dailyRanking": "今天",
       "weeklyRanking": "本週",
-      "monthlyRanking": "本月",
-      "allTimeRanking": "全部"
+      "monthlyRanking": "當月",
+      "allTimeRanking": "全期間"
     },
     "dateRange": {
-      "to": "至",
+      "to": "到",
       "prevPeriod": "上一週期",
       "nextPeriod": "下一週期",
       "customRange": "自訂日期範圍"
     },
     "columns": {
-      "rank": "排名",
+      "rank": "名次",
       "name": "名稱",
       "totalCost": "總成本",
       "totalRequests": "總請求數",
-      "avgCost": "平均成本",
+      "avgCost": "平均費用",
       "lastActive": "最後活躍時間",
       "user": "使用者",
       "requests": "請求數",
       "tokens": "Token 數",
       "consumedAmount": "消耗金額",
       "provider": "供應商",
-      "model": "模型",
-      "cost": "成本",
+      "model": "Model",
+      "cost": "費用",
       "cacheHitRequests": "快取命中請求數（納入快取命中率計算的請求總數）",
       "cacheHitRate": "快取命中率",
       "cacheReadTokens": "快取讀取 Token 數",
       "totalTokens": "總 Token 數",
       "cacheCreationConsumedAmount": "快取建立消耗金額",
       "totalConsumedAmount": "總消耗金額",
-      "successRate": "成功率",
+      "successRate": "成功率（%）",
       "avgResponseTime": "平均回覆時間",
-      "avgTtfbMs": "平均 TTFB",
+      "avgTtfbMs": "平均 TTFB（ms）",
       "avgTokensPerSecond": "平均輸出速率"
     },
     "states": {
@@ -336,7 +336,7 @@
       "user": "使用者",
       "key": "金鑰",
       "provider": "供應商",
-      "model": "模型",
+      "model": "Model",
       "startTime": "開始時間",
       "lastActivity": "最後活動",
       "requestCount": "請求數",
@@ -345,13 +345,13 @@
       "totalCost": "總成本",
       "totalDuration": "總耗時",
       "status": "狀態",
-      "actions": "操作"
+      "actions": "動作"
     },
     "table": {
       "count": "共 {count} 個{type} 會話",
       "active": "活躍",
       "inactive": "非活躍",
-      "notCountedInConcurrency": "(不計入並發數)",
+      "notCountedInConcurrency": "（不計入並發數）",
       "refreshing": "重新整理中...",
       "noActiveSessions": "暫無活躍 Session"
     },
@@ -366,7 +366,7 @@
       "overview": "Session 概覽",
       "overviewDescription": "彙總統計資訊",
       "providersAndModels": "供應商與模型",
-      "providersAndModelsDescription": "使用的提供商和模型",
+      "providersAndModelsDescription": "使用的供應商與模型",
       "tokenUsage": "Token 使用（總量）",
       "tokenUsageDescription": "所有請求的累計統計",
       "costInfo": "成本資訊（總計）",
@@ -378,12 +378,12 @@
       "totalInput": "總輸入",
       "totalOutput": "總輸出",
       "cacheCreation": "快取建立",
-      "cacheTtlMixed": "混合",
+      "cacheTtlMixed": "混合模式",
       "cacheRead": "快取讀取",
       "total": "總計",
       "totalFee": "總費用",
       "providers": "供應商",
-      "models": "模型",
+      "models": "Model",
       "noDetailedData": "暫無詳細資料",
       "storageTip": "未找到詳細資料。如需查看請求詳情，請檢查環境變數 STORE_SESSION_MESSAGES 是否已設定為 true。注意：啟用後會增加 Redis 記憶體使用，且可能包含敏感資訊。",
       "clientInfo": "用戶端資訊",
@@ -401,7 +401,7 @@
       "nextRequest": "下一條"
     },
     "actions": {
-      "back": "返回",
+      "back": "返回上一頁",
       "view": "檢視",
       "copy": "複製",
       "download": "下載",
@@ -413,7 +413,7 @@
       "terminateTitle": "終止會話",
       "terminateDescription": "確定要終止此會話嗎？終止後會清除供應商綁定，下一次請求將重新選擇供應商。",
       "sessionIdLabel": "會話 ID：{sessionId}",
-      "cancel": "取消",
+      "cancel": "取消操作",
       "confirmTerminate": "確認終止",
       "terminating": "終止中...",
       "terminateSuccess": "會話已成功終止",
@@ -423,7 +423,7 @@
       "selectAll": "全選",
       "selectSessionLabel": "選擇會話",
       "multiSelect": "多選",
-      "cancelMultiSelect": "取消",
+      "cancelMultiSelect": "取消多選",
       "terminateSessionTitle": "終止會話",
       "terminateSessionDescription": "確定要終止此會話嗎？此操作無法撤銷。",
       "batchTerminateSuccess": "已終止 {count} 個會話",
@@ -433,26 +433,26 @@
       "noSelection": "請至少選擇一個會話"
     },
     "codeDisplay": {
-      "raw": "原始",
-      "pretty": "美化",
+      "raw": "原始內容",
+      "pretty": "格式化",
       "searchPlaceholder": "搜尋",
       "expand": "展開",
-      "collapse": "收起",
+      "collapse": "摺疊",
       "themeAuto": "跟隨系統",
       "themeLight": "淺色",
-      "themeDark": "深色",
+      "themeDark": "暗色",
       "noMatches": "沒有符合結果",
       "onlyMatches": "僅符合行",
       "showAll": "顯示全部",
       "prevPage": "上一頁",
       "nextPage": "下一頁",
       "pageInfo": "第 {page} / {total} 頁",
-      "sseEvent": "事件",
+      "sseEvent": "事件類型",
       "sseData": "資料",
       "hardLimit": {
         "title": "內容過大",
         "size": "大小：{sizeMB} MB（{sizeBytes} 位元組）",
-        "maximum": "上限：{maxSizeMB} MB 或 {maxLines} 行",
+        "maximum": "上限：{maxSizeMB} MB 或 {maxLines} 行（擇一）",
         "hint": "請下載檔案以查看完整內容。",
         "download": "下載"
       }
@@ -478,7 +478,7 @@
       "orderAsc": "切換為正序（最早的在前）",
       "orderDesc": "切換為倒序（最新的在前）"
     },
-    "back": "返回",
+    "back": "返回上一頁",
     "loadingError": "載入失敗"
   },
   "quotas": {
@@ -493,14 +493,14 @@
     "columns": {
       "name": "名稱",
       "limit": "額度",
-      "used": "已用",
+      "used": "已使用",
       "remaining": "剩餘",
       "resetTime": "重設時間",
       "status": "狀態"
     },
     "labels": {
       "byName": "按名稱",
-      "byUsageRate": "按使用率"
+      "byUsageRate": "依使用率"
     },
     "users": {
       "title": "用戶額度統計",
@@ -522,14 +522,14 @@
   },
   "labels": {
     "byName": "按名稱",
-    "byUsageRate": "按使用率"
+    "byUsageRate": "依使用率"
   },
   "all": "全部",
   "nav": {
     "mobileMenuTitle": "導覽選單",
     "dashboard": "儀表板",
     "usageLogs": "使用記錄",
-    "leaderboard": "排行榜",
+    "leaderboard": "排行",
     "availability": "可用性監控",
     "myQuota": "我的額度",
     "quotasManagement": "額度管理",
@@ -548,13 +548,13 @@
     "totalCost": "總消費金額",
     "totalCalls": "總 API 呼叫次數",
     "timeRange": {
-      "today": "今天",
+      "today": "本日",
       "todayDescription": "今天的使用情況",
       "7days": "過去 7 天",
       "7daysDescription": "過去 7 天的使用情況",
       "30days": "過去 30 天",
       "30daysDescription": "過去 30 天的使用情況",
-      "thisMonth": "本月",
+      "thisMonth": "這個月",
       "thisMonthDescription": "本月的使用情況",
       "default": "使用情況"
     },
@@ -565,7 +565,7 @@
     },
     "legend": {
       "selectAll": "全選",
-      "deselectAll": "清空",
+      "deselectAll": "取消全選",
       "selected": "已選"
     },
     "chartMode": {
@@ -588,25 +588,25 @@
       "name": "名稱",
       "key": "金鑰",
       "todayCalls": "今日呼叫",
-      "todayCost": "今日消耗",
+      "todayCost": "今日花費",
       "lastUsed": "最後使用",
-      "actions": "操作"
+      "actions": "動作"
     },
     "detailsButton": "詳細資訊",
     "modelStats": "模型統計",
     "modelStatsColumns": {
-      "model": "模型",
+      "model": "Model",
       "calls": "呼叫次數",
-      "cost": "消耗"
+      "cost": "花費"
     },
     "limitUsage": "額度使用情況",
     "copyKeyTooltip": "複製完整金鑰",
     "showKeyTooltip": "顯示完整金鑰",
     "hideKeyTooltip": "隱藏金鑰",
     "copyFailed": "複製失敗:",
-    "timesUnit": "次",
+    "timesUnit": "次數",
     "provider": "供應商",
-    "neverUsed": "未使用",
+    "neverUsed": "從未使用",
     "viewLogsTooltip": "查看詳細記錄",
     "logsButton": "記錄",
     "emptyState": {
@@ -636,7 +636,7 @@
       "invalidDate": "請輸入有效日期",
       "enable": "啟用",
       "disable": "停用",
-      "success": "操作成功",
+      "success": "操作完成",
       "failed": "操作失敗，請稍後再試"
     },
     "emptyState": {
@@ -647,7 +647,7 @@
     "addUser": "新增使用者"
   },
   "keyListHeader": {
-    "todayUsage": "今日用量",
+    "todayUsage": "今日使用量",
     "allowedModels": {
       "label": "允許的模型",
       "noRestrictions": "允許的模型：無限制"
@@ -665,7 +665,7 @@
         "secondsAgo": "{count}秒前",
         "minutesAgo": "{count}分鐘前",
         "hoursAgo": "{count}小時前",
-        "daysAgo": "{count}天前"
+        "daysAgo": "{count} 天前"
       }
     },
     "addKey": "新增金鑰",
@@ -715,12 +715,12 @@
       "description": "關閉後，此金鑰僅可用於 API 呼叫，無法登入管理後台"
     },
     "limit5hUsd": {
-      "label": "5小時消費上限 (USD)",
+      "label": "5小時消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "5小時內最大消費金額"
     },
     "limitDailyUsd": {
-      "label": "每日消費上限 (USD)",
+      "label": "每日消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每日最大消費金額"
     },
@@ -741,12 +741,12 @@
       "description": "每日限額的重設時間（使用系統時區）"
     },
     "limitWeeklyUsd": {
-      "label": "週消費上限 (USD)",
+      "label": "週消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每週最大消費金額"
     },
     "limitMonthlyUsd": {
-      "label": "月消費上限 (USD)",
+      "label": "月消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每月最大消費金額"
     },
@@ -802,7 +802,7 @@
     },
     "providerGroup": {
       "label": "供應商分組",
-      "placeholder": "例如：default 或 premium,economy",
+      "placeholder": "例如：default 或 premium,economy（多個以逗號分隔）",
       "description": "使用者供應商分組（預設：default）。default 分組包含所有未設定 groupTag 的供應商。"
     },
     "tags": {
@@ -822,17 +822,17 @@
       "description": "預設值：${default}，範圍：$0.01-$1000"
     },
     "limit5hUsd": {
-      "label": "5小時消費上限 (USD)",
+      "label": "5小時消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "5小時內最大消費金額"
     },
     "limitWeeklyUsd": {
-      "label": "週消費上限 (USD)",
+      "label": "週消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每週最大消費金額"
     },
     "limitMonthlyUsd": {
-      "label": "月消費上限 (USD)",
+      "label": "月消費上限（USD）",
       "placeholder": "留空表示無限制",
       "description": "每月最大消費金額"
     },
@@ -865,7 +865,7 @@
   "deleteKeyConfirm": {
     "title": "確認刪除金鑰",
     "description": "您確定要刪除金鑰「{name}」嗎？\n{maskedKey}\n此操作無法復原，刪除後所有使用此金鑰的應用程式將無法存取。",
-    "cancel": "取消",
+    "cancel": "取消刪除",
     "confirm": "確認刪除",
     "confirmLoading": "刪除中...",
     "errors": {
@@ -890,9 +890,9 @@
     "description": "即時監控供應商的可用性狀態和效能指標",
     "nav": "可用性監控",
     "status": {
-      "green": "正常",
+      "green": "良好",
       "red": "異常",
-      "unknown": "未知"
+      "unknown": "不明"
     },
     "statusDescription": {
       "green": "服務正常，請求成功",
@@ -902,7 +902,7 @@
     "metrics": {
       "systemAvailability": "系統可用性",
       "totalRequests": "總請求數",
-      "successRate": "成功率",
+      "successRate": "成功率（%）",
       "avgLatency": "平均延遲",
       "p50Latency": "P50 延遲",
       "p95Latency": "P95 延遲",
@@ -916,7 +916,7 @@
       "last1h": "最近 1 小時",
       "last6h": "最近 6 小時",
       "last24h": "最近 24 小時",
-      "last7d": "最近 7 天",
+      "last7d": "近 7 天",
       "custom": "自訂"
     },
     "filters": {
@@ -925,8 +925,8 @@
       "includeDisabled": "包含已停用"
     },
     "sort": {
-      "label": "排序",
-      "availability": "可用性",
+      "label": "排序方式",
+      "availability": "可用度",
       "name": "名稱",
       "requests": "請求數"
     },
@@ -934,12 +934,12 @@
       "provider": "供應商",
       "type": "類型",
       "status": "狀態",
-      "availability": "可用性",
+      "availability": "可用度",
       "requests": "請求數",
-      "successRate": "成功率",
+      "successRate": "成功率（%）",
       "avgLatency": "平均延遲",
       "lastRequest": "最後請求",
-      "actions": "操作"
+      "actions": "動作"
     },
     "chart": {
       "title": "可用性趨勢",
@@ -972,14 +972,14 @@
       "fetchFailed": "取得可用性資料失敗"
     },
     "legend": {
-      "green": "優秀 (可用性 95%+)",
-      "lime": "良好 (可用性 80-95%)",
-      "orange": "警告 (可用性 50-80%)",
-      "red": "異常 (可用性 <50%)",
+      "green": "優秀（可用性 95%+）",
+      "lime": "良好（可用性 80-95%）",
+      "orange": "警告（可用性 50-80%）",
+      "red": "異常（可用性 <50%）",
       "noData": "無資料"
     },
     "summary": {
-      "title": "可用性摘要",
+      "title": "可用度摘要",
       "healthyProviders": "健康供應商",
       "unhealthyProviders": "異常供應商",
       "unknownProviders": "無資料",
@@ -1003,7 +1003,7 @@
     "loading": "載入中...",
     "error": "載入失敗",
     "totalEvents": "總事件數",
-    "avgUsage": "平均使用率",
+    "avgUsage": "平均使用率（%）",
     "affectedUsers": "受影響使用者數",
     "noData": "無資料",
     "noDataHint": "在選定的時間範圍內沒有限流事件",
@@ -1039,7 +1039,7 @@
       "description": "不同限流類型的事件占比",
       "total": "總計",
       "count": "事件數",
-      "percentage": "占比",
+      "percentage": "佔比",
       "noData": "無資料",
       "types": {
         "rpm": "RPM 限流",
@@ -1054,10 +1054,10 @@
       "title": "受影響使用者排行",
       "description": "觸發限流最多的使用者列表",
       "total": "總計",
-      "rank": "排名",
+      "rank": "名次",
       "username": "使用者名稱",
       "eventCount": "事件數",
-      "percentage": "占比",
+      "percentage": "佔比",
       "loading": "載入中...",
       "noData": "無資料"
     }
@@ -1073,26 +1073,26 @@
       "allTags": "所有標籤",
       "keyGroupFilter": "金鑰分組",
       "allKeyGroups": "所有金鑰分組",
-      "sortBy": "排序方式",
+      "sortBy": "排序依據",
       "sortOrder": "排序順序",
       "sortByName": "按名稱",
       "sortByTags": "按標籤",
       "sortByExpiresAt": "按過期時間",
-      "sortByRpm": "按RPM限制",
+      "sortByRpm": "依 RPM 上限",
       "sortByLimit5h": "按5小時限額",
       "sortByLimitDaily": "按每日限額",
       "sortByLimitWeekly": "按週限額",
       "sortByLimitMonthly": "按月限額",
       "sortByCreatedAt": "按建立時間",
-      "ascending": "升序",
-      "descending": "降序",
+      "ascending": "由小到大",
+      "descending": "由大到小",
       "statusFilter": "狀態篩選",
       "allStatus": "全部狀態",
-      "statusActive": "正常",
+      "statusActive": "啟用",
       "statusExpired": "已過期",
       "statusExpiringSoon": "即將過期",
       "statusEnabled": "已啟用",
-      "statusDisabled": "已禁用",
+      "statusDisabled": "已停用",
       "createUser": "建立使用者",
       "createKey": "建立 Key"
     },
@@ -1109,21 +1109,21 @@
         "expiresAt": "到期時間",
         "expiresAtHint": "點擊快速續期",
         "limitRpm": "RPM 限制",
-        "limit5h": "5h 限額 (USD)",
-        "limitDaily": "每日限額 (USD)",
-        "limitWeekly": "週限額 (USD)",
-        "limitMonthly": "月限額 (USD)",
-        "limitTotal": "總限額 (USD)",
+        "limit5h": "5h 限額（USD）",
+        "limitDaily": "每日限額（USD）",
+        "limitWeekly": "週限額（USD）",
+        "limitMonthly": "月限額（USD）",
+        "limitTotal": "總限額（USD）",
         "limitSessions": "並發"
       },
       "keyRow": {
         "name": "金鑰名稱",
         "key": "金鑰",
         "group": "分組",
-        "todayUsage": "今日用量",
-        "todayCost": "今日消耗",
+        "todayUsage": "今日使用量",
+        "todayCost": "今日花費",
         "lastUsed": "最後使用",
-        "actions": "操作",
+        "actions": "動作",
         "quotaButton": "查看限額用量",
         "fields": {
           "callsLabel": "今日呼叫",
@@ -1131,7 +1131,7 @@
         }
       },
       "expand": "展開",
-      "collapse": "收起",
+      "collapse": "摺疊",
       "noKeys": "無金鑰",
       "defaultGroup": "default",
       "userStatus": {
@@ -1153,7 +1153,7 @@
     "keyStatsDialog": {
       "title": "今日模型統計",
       "columns": {
-        "model": "模型",
+        "model": "Model",
         "calls": "呼叫次數",
         "cost": "消費金額"
       },
@@ -1170,9 +1170,9 @@
       "retry": "重試",
       "labels": {
         "limit5h": "5 小時",
-        "limitDaily": "每日",
+        "limitDaily": "每天",
         "limitWeekly": "每週",
-        "limitMonthly": "每月",
+        "limitMonthly": "每個月",
         "limitTotal": "總計",
         "limitSessions": "並發"
       }
@@ -1184,14 +1184,14 @@
       "neverExpires": "永不過期",
       "expired": "已過期",
       "quickOptions": {
-        "7days": "7 天",
-        "30days": "30 天",
-        "90days": "90 天",
-        "1year": "1 年"
+        "7days": "7天",
+        "30days": "30天",
+        "90days": "90天",
+        "1year": "1年"
       },
       "customDate": "自訂日期",
       "enableOnRenew": "同時啟用使用者",
-      "cancel": "取消",
+      "cancel": "取消續期",
       "confirm": "確認續期",
       "confirming": "續期中...",
       "success": "續期成功",
@@ -1221,15 +1221,15 @@
     },
     "batchEdit": {
       "enterMode": "批量編輯",
-      "exitMode": "退出",
+      "exitMode": "離開",
       "selectAll": "全選",
       "selectedCount": "已選 {users} 位使用者，{keys} 個金鑰",
       "editSelected": "編輯選取項目",
       "dialog": {
         "title": "批量編輯",
         "description": "將影響 {users} 位使用者，{keys} 個金鑰",
-        "cancel": "取消",
-        "next": "下一步",
+        "cancel": "取消變更",
+        "next": "繼續",
         "noFieldEnabled": "請先啟用至少一個要覆蓋的欄位",
         "noUpdate": "沒有可執行的更新",
         "noSelection": "請先選擇要批量編輯的使用者或金鑰。"
@@ -1239,9 +1239,9 @@
         "description": "此操作將更新 {users} 位使用者和 {keys} 個金鑰，操作不可撤銷。",
         "userFields": "使用者欄位",
         "keyFields": "金鑰欄位",
-        "goBack": "返回修改",
+        "goBack": "返回編輯",
         "update": "確認更新",
-        "updating": "更新中..."
+        "updating": "正在更新..."
       },
       "toast": {
         "usersUpdated": "已更新 {count} 位使用者",
@@ -1265,14 +1265,14 @@
         "fields": {
           "note": "備註",
           "tags": "標籤",
-          "rpm": "RPM 限制",
-          "limit5h": "5h 限額 (USD)",
-          "limitDaily": "每日限額 (USD)",
-          "limitWeekly": "週限額 (USD)",
-          "limitMonthly": "月限額 (USD)"
+          "rpm": "RPM 上限",
+          "limit5h": "5h 限額（USD）",
+          "limitDaily": "每日限額（USD）",
+          "limitWeekly": "週限額（USD）",
+          "limitMonthly": "月限額（USD）"
         },
         "placeholders": {
-          "emptyToClear": "留空表示清空",
+          "emptyToClear": "留空表示清除",
           "tagsPlaceholder": "輸入後按 Enter 新增，支援逗號分隔",
           "emptyNoLimit": "留空表示不限額"
         }
@@ -1281,11 +1281,11 @@
         "title": "金鑰設定",
         "affected": "將影響 {count} 個金鑰",
         "fields": {
-          "providerGroup": "分組 (providerGroup)",
-          "limit5h": "5h 限額 (USD)",
-          "limitDaily": "每日限額 (USD)",
-          "limitWeekly": "週限額 (USD)",
-          "limitMonthly": "月限額 (USD)",
+          "providerGroup": "分組（providerGroup）",
+          "limit5h": "5h 限額（USD）",
+          "limitDaily": "每日限額（USD）",
+          "limitWeekly": "週限額（USD）",
+          "limitMonthly": "月限額（USD）",
           "canLoginWebUi": "允許登入 Web UI",
           "keyEnabled": "Key 啟用狀態"
         },
@@ -1340,7 +1340,7 @@
       },
       "alreadySet": "已設定",
       "confirmAdd": "新增",
-      "cancel": "取消"
+      "cancel": "取消設定"
     },
     "quickExpire": {
       "oneWeek": "一週後",
@@ -1388,7 +1388,7 @@
         "loading": "刪除中..."
       },
       "actions": {
-        "cancel": "取消"
+        "cancel": "取消操作"
       },
       "errors": {
         "enableFailed": "啟用使用者失敗，請稍後重試",
@@ -1425,7 +1425,7 @@
     "keyStatus": {
       "enabled": "啟用",
       "disabled": "停用",
-      "active": "正常",
+      "active": "啟用中",
       "expired": "已過期",
       "expiringSoon": "即將過期",
       "keyEnabled": "密鑰已啟用",
@@ -1439,7 +1439,7 @@
     "userStatus": {
       "enabled": "啟用",
       "disabled": "停用",
-      "active": "正常",
+      "active": "啟用中",
       "expired": "已過期",
       "expiringSoon": "即將過期",
       "userEnabled": "使用者已啟用",
@@ -1482,7 +1482,7 @@
           "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
         },
         "allowedModels": {
-          "label": "模型限制",
+          "label": "Model 限制",
           "placeholder": "輸入模型名稱或從下拉選單選擇",
           "description": "限制使用者只能使用指定的 AI 模型。留空表示無限制。"
         },
@@ -1496,7 +1496,7 @@
           "confirmDisableTitle": "確認停用使用者",
           "confirmEnableDescription": "啟用後該使用者及其金鑰將恢復正常使用",
           "confirmDisableDescription": "停用後該使用者及其金鑰將無法繼續使用",
-          "cancel": "取消",
+          "cancel": "取消變更",
           "processing": "處理中..."
         }
       },
@@ -1512,7 +1512,7 @@
         "basicInfo": "基本資訊",
         "expireTime": "過期時間",
         "limitRules": "限額規則",
-        "specialFeatures": "特殊功能"
+        "specialFeatures": "進階功能"
       },
       "fields": {
         "keyName": {
@@ -1530,14 +1530,14 @@
           "descriptionEnabled": "啟用後，此金鑰在登入時將進入獨立的個人用量頁面。但不可修改自己金鑰的供應商分組。",
           "descriptionDisabled": "關閉後，使用者將無法進入個人獨立用量頁面 UI，而是進入受限的 Web UI。"
         },
-      "providerGroup": {
-        "label": "供應商分組",
-        "placeholder": "預設：default",
-        "selectHint": "選擇此 Key 可使用的供應商分組",
-        "editHint": "已有密鑰的分組不可修改",
-        "allGroups": "使用全部群組",
-        "noGroupHint": "default 分組包含所有未設定 groupTag 的供應商"
-      },
+        "providerGroup": {
+          "label": "供應商分組",
+          "placeholder": "預設：default",
+          "selectHint": "選擇此 Key 可使用的供應商分組",
+          "editHint": "已有密鑰的分組不可修改",
+          "allGroups": "使用全部群組",
+          "noGroupHint": "default 分組包含所有未設定 groupTag 的供應商"
+        },
         "cacheTtl": {
           "label": "Cache TTL 覆寫",
           "description": "強制為包含 cache_control 的請求設定 Anthropic prompt cache TTL。",
@@ -1552,7 +1552,7 @@
         "title": "新增限額規則",
         "actions": {
           "add": "新增規則",
-          "remove": "移除"
+          "remove": "移除項目"
         },
         "daily": {
           "mode": {
@@ -1584,7 +1584,7 @@
     },
     "migrateButton": "開始遷移",
     "skipButton": "稍後再說",
-    "nextButton": "下一步",
+    "nextButton": "繼續",
     "goToSettingsButton": "前往設定",
     "migrating": "正在遷移...",
     "success": "遷移完成",
@@ -1594,10 +1594,10 @@
     "detectedWebhooks": "偵測到的 Webhook",
     "notificationTypes": {
       "circuit_breaker": "熔斷器告警",
-      "daily_leaderboard": "每日排行榜",
+      "daily_leaderboard": "每日排行",
       "cost_alert": "成本預警"
     },
-    "urlLabel": "Webhook 地址",
+    "urlLabel": "Webhook URL",
     "platformLabel": "平台類型",
     "autoDetected": "自動識別",
     "selectPlatform": "請選擇平台",

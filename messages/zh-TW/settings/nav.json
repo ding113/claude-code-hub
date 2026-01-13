@@ -1,0 +1,15 @@
+{
+  "apiDocs": "API 文檔",
+  "clientVersions": "用戶端升級提醒",
+  "config": "設定",
+  "data": "資料管理",
+  "docs": "使用文檔",
+  "errorRules": "錯誤規則",
+  "feedback": "意見回饋",
+  "logs": "日誌",
+  "notifications": "訊息推送",
+  "prices": "價格表",
+  "providers": "供應商",
+  "requestFilters": "請求過濾",
+  "sensitiveWords": "敏感詞"
+}

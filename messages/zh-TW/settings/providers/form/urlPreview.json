@@ -1,0 +1,9 @@
+{
+  "copy": "複製",
+  "copyFailed": "複製失敗",
+  "copySuccess": "已複製 {name} 到剪貼簿",
+  "duplicatePath": "檢測到重複路徑",
+  "invalidUrl": "無效的 URL 格式",
+  "invalidUrlDesc": "請輸入有效的 HTTP/HTTPS 地址",
+  "title": "URL 拼接預覽"
+}

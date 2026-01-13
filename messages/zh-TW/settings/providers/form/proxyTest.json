@@ -1,0 +1,21 @@
+{
+  "connectionFailed": "連線失敗",
+  "connectionMethod": "連線方式：",
+  "connectionSuccess": "連線成功",
+  "direct": "直連",
+  "errorType": "錯誤類型：",
+  "fillUrlFirst": "請先填寫供應商 URL",
+  "networkError": "網路錯誤：",
+  "noResult": "測試成功但未返回結果",
+  "proxy": "代理連線",
+  "proxyError": "代理錯誤：",
+  "responseTime": "回應時間：",
+  "statusCode": "狀態碼：",
+  "testConnection": "測試連線",
+  "testFailed": "測試失敗",
+  "testFailedRetry": "測試失敗，請重試",
+  "testing": "測試中...",
+  "timeoutError": "連線逾時（5秒）。請檢查：\n1. 代理伺服器是否可存取\n2. 代理位址和連接埠是否正確\n3. 代理認證資訊是否正確",
+  "viaDirect": "（直連）",
+  "viaProxy": "（透過代理）"
+}

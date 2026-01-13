@@ -1,0 +1,157 @@
+{
+  "apiFormat": "プロバイダータイプ",
+  "apiFormatDesc": "手動で変更しない限り、ルーティング設定のプロバイダータイプと同期",
+  "chunksCount": "{count} チャンク受信 ({format})",
+  "chunksReceived": "受信したチャンク",
+  "close": "閉じる",
+  "copyFailed": "コピー失敗",
+  "copyFormat": {
+    "errorDetails": "エラー詳細",
+    "message": "メッセージ",
+    "testResult": "テスト結果"
+  },
+  "copyResult": "結果をコピー",
+  "copySuccess": "クリップボードにコピーしました",
+  "customConfig": "カスタム",
+  "customPayloadDesc": "カスタムJSONペイロードを入力してデフォルトのリクエストボディを上書き",
+  "customPayloadPlaceholder": "{\"model\": \"...\", \"messages\": [...]}",
+  "disclaimer": {
+    "confirmConfig": "プロバイダーURL、APIキー、モデル設定を確認してください",
+    "realRequest": "テストはプロバイダーに実際のリクエストを送信し、少量のクォータを消費する可能性があります",
+    "resultReference": "プロバイダーによって結果が異なる場合があり、参考用です",
+    "title": "注意事項"
+  },
+  "error": "エラーメッセージ",
+  "failed": "失敗",
+  "fillKeyFirst": "まずAPIキーを入力してください",
+  "fillUrlFirst": "まずプロバイダーURLを入力してください",
+  "formatAnthropicMessages": "Claude (Anthropic Messages API)",
+  "formatOpenAIChat": "OpenAI Compatible",
+  "formatOpenAIResponses": "Codex (Response API)",
+  "geminiAuthFallback": {
+    "desc": "実際のプロキシ転送はヘッダー認証のみを使用するため、リクエストが失敗する可能性があります",
+    "warning": "ヘッダー認証に失敗し、URLパラメータ認証を使用しました"
+  },
+  "invalidUrl": "プロバイダーURLが無効です（http/httpsのみ対応）",
+  "model": "モデル",
+  "noResult": "テスト成功ですが結果が返されませんでした",
+  "presetConfig": "プリセット",
+  "presetDesc": "プリセットテンプレートには、リレーサービス検証用の本物のCLIリクエストパターンが含まれています",
+  "requestConfig": "リクエスト設定",
+  "response": "応答内容",
+  "responseModel": "応答モデル",
+  "responseTime": "応答時間",
+  "resultCard": {
+    "copyText": {
+      "contentCheck": "コンテンツ検証",
+      "error": "エラー",
+      "httpCheck": "HTTPチェック",
+      "httpStatus": "HTTPステータス",
+      "inputOutput": "入力 {input} / 出力 {output} トークン",
+      "latency": "レイテンシ",
+      "latencyCheck": "レイテンシチェック",
+      "message": "メッセージ",
+      "model": "モデル",
+      "response": "応答",
+      "status": "ステータス",
+      "testedAt": "テスト日時",
+      "usage": "使用量",
+      "validationDetails": "検証詳細"
+    },
+    "dialogTitle": "プロバイダーテスト詳細",
+    "errorDetails": {
+      "title": "エラー詳細",
+      "type": "エラータイプ"
+    },
+    "judgment": "判定結果",
+    "labels": {
+      "content": "コンテンツ",
+      "error": "エラー",
+      "firstByte": "最初のバイト",
+      "http": "HTTP",
+      "latency": "レイテンシ",
+      "model": "モデル",
+      "responsePreview": "応答プレビュー",
+      "totalLatency": "合計レイテンシ"
+    },
+    "rawResponse": {
+      "hint": "ここに生のレスポンス内容が表示されます。キーワードがレスポンスに含まれているか確認できます。",
+      "title": "生のレスポンスボディ"
+    },
+    "status": {
+      "green": "利用可能",
+      "red": "利用不可",
+      "yellow": "不安定"
+    },
+    "streamInfo": {
+      "chunksCount": "チャンク数",
+      "isStreaming": "ストリーミング",
+      "no": "いいえ",
+      "title": "ストリーム応答情報",
+      "yes": "はい"
+    },
+    "timing": {
+      "firstByte": "最初のバイト",
+      "testedAt": "テスト日時",
+      "title": "タイミング情報",
+      "totalLatency": "合計レイテンシ"
+    },
+    "tokenUsage": {
+      "cacheCreation": "キャッシュ作成",
+      "cacheRead": "キャッシュ読取",
+      "input": "入力",
+      "output": "出力",
+      "title": "トークン使用量"
+    },
+    "validation": {
+      "content": {
+        "failed": "ターゲットが見つかりません",
+        "passed": "ターゲット文字列を含む",
+        "target": "ターゲット",
+        "title": "Tier 3: コンテンツ検証"
+      },
+      "failed": "失敗",
+      "http": {
+        "failed": "4xx/5xx 失敗",
+        "passed": "2xx/3xx OK",
+        "statusCode": "ステータスコード",
+        "title": "Tier 1: HTTPステータス"
+      },
+      "latency": {
+        "actual": "実際のレイテンシ",
+        "failed": "閾値超過",
+        "passed": "閾値内",
+        "title": "Tier 2: レイテンシ閾値"
+      },
+      "passed": "合格",
+      "timeout": "タイムアウト",
+      "title": "三層検証詳細"
+    }
+  },
+  "selectApiFormat": "テストするプロバイダータイプを選択",
+  "selectPreset": "プリセットテンプレートを選択",
+  "streamFormat": "ストリーム形式",
+  "streamInfo": "ストリーム応答情報",
+  "streamResponse": "ストリーム応答",
+  "success": "成功しました",
+  "successContains": "成功検出キーワード",
+  "successContainsDesc": "成功と見なすには、レスポンスにこのキーワードが含まれている必要があります",
+  "successContainsPlaceholder": "pong",
+  "testApi": "プロバイダーモデルテスト",
+  "testFailed": "テスト失敗",
+  "testFailedRetry": "テスト失敗、再試行してください",
+  "testModel": "テストモデル",
+  "testModelDesc": "空欄の場合はデフォルトモデルを使用、手動入力も可能",
+  "testSuccess": "モデルテスト成功",
+  "testing": "テスト中...",
+  "timeout": {
+    "desc": "テストリクエストの最大待機時間（5〜120秒）",
+    "geminiHint": "、Gemini Thinkingモデルは60秒以上を推奨",
+    "label": "タイムアウト（秒）"
+  },
+  "truncatedBrief": "先頭 {length} 文字を表示、全文は「詳細を見る」をクリック",
+  "truncatedPreview": "先頭 {length} 文字を表示、全文はコピーして確認",
+  "unknown": "不明",
+  "usage": "トークン使用量",
+  "viewDetails": "詳細を見る"
+}

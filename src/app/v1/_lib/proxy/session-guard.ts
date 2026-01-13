@@ -2,6 +2,7 @@ import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
+import { completeCodexSessionIdentifiers } from "../codex/session-completer";
 import type { ProxySession } from "./session";
 
 /**
@@ -47,13 +48,40 @@ export class ProxySessionGuard {
     }
 
     try {
+      const systemSettings = await getCachedSystemSettings();
+
+      // Codex Session ID 补全：在提取 clientSessionId 之前触发，避免落入不稳定的降级方案
+      const codexCompletionEnabled = systemSettings.enableCodexSessionIdCompletion ?? true;
+      const requestMessage = session.request.message as Record<string, unknown>;
+      const isCodexRequest = Array.isArray(requestMessage.input);
+
+      if (codexCompletionEnabled && isCodexRequest) {
+        const completion = await completeCodexSessionIdentifiers({
+          keyId,
+          headers: session.headers,
+          requestBody: requestMessage,
+          userAgent: session.userAgent,
+        });
+
+        if (completion.applied && completion.action !== "none") {
+          session.addSpecialSetting({
+            type: "codex_session_id_completion",
+            scope: "request",
+            hit: true,
+            action: completion.action,
+            source: completion.source,
+            sessionId: completion.sessionId,
+          });
+        }
+      }
+
       const warmupMaybeIntercepted =
         session.isWarmupRequest() &&
         !!session.authState?.success &&
         !!session.authState.user &&
         !!session.authState.key &&
         !!session.authState.apiKey &&
-        (await getCachedSystemSettings()).interceptAnthropicWarmupRequests;
+        systemSettings.interceptAnthropicWarmupRequests;
 
       // 1. 尝试从客户端提取 session_id（metadata.session_id）
       const clientSessionId =

@@ -1,4 +1,3 @@
-import { AsyncTaskManager } from "@/lib/async-task-manager";
 import { logger } from "@/lib/logger";
 import type { PriceUpdateResult } from "@/types/model-price";
 import {
@@ -58,47 +57,73 @@ export function requestCloudPriceTableSync(options: {
   reason: "missing-model" | "scheduled" | "manual";
   throttleMs?: number;
 }): void {
-  const throttleMs = options.throttleMs ?? DEFAULT_THROTTLE_MS;
-  const taskId = "cloud-price-table-sync";
-
-  // 去重：已有任务在跑则不重复触发
-  const active = AsyncTaskManager.getActiveTasks();
-  if (active.some((t) => t.taskId === taskId)) {
+  if (process.env.NEXT_RUNTIME === "edge") {
     return;
   }
 
+  const throttleMs = options.throttleMs ?? DEFAULT_THROTTLE_MS;
+  const taskId = "cloud-price-table-sync";
+
   // 节流：避免短时间内频繁拉取云端价格表
-  const g = globalThis as unknown as { __CCH_CLOUD_PRICE_SYNC_LAST_AT__?: number };
+  const g = globalThis as unknown as {
+    __CCH_CLOUD_PRICE_SYNC_LAST_AT__?: number;
+    __CCH_CLOUD_PRICE_SYNC_SCHEDULING__?: boolean;
+  };
   const lastAt = g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__ ?? 0;
   const now = Date.now();
   if (now - lastAt < throttleMs) {
     return;
   }
 
-  AsyncTaskManager.register(
-    taskId,
-    (async () => {
-      try {
-        const result = await syncCloudPriceTableToDatabase();
-        if (!result.ok) {
-          logger.warn("[PriceSync] Cloud price sync task failed", {
-            reason: options.reason,
-            error: result.error,
-          });
-          return;
-        }
+  // 避免并发请求在 AsyncTaskManager 加载前重复触发（例如多请求同时命中 missing-model）
+  if (g.__CCH_CLOUD_PRICE_SYNC_SCHEDULING__) {
+    return;
+  }
+  g.__CCH_CLOUD_PRICE_SYNC_SCHEDULING__ = true;
 
-        logger.info("[PriceSync] Cloud price sync task completed", {
-          reason: options.reason,
-          added: result.data.added.length,
-          updated: result.data.updated.length,
-          skippedConflicts: result.data.skippedConflicts?.length ?? 0,
-          total: result.data.total,
-        });
-      } finally {
-        g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__ = Date.now();
+  void (async () => {
+    try {
+      const { AsyncTaskManager } = await import("@/lib/async-task-manager");
+
+      // 去重：已有任务在跑则不重复触发
+      const active = AsyncTaskManager.getActiveTasks();
+      if (active.some((t) => t.taskId === taskId)) {
+        return;
       }
-    })(),
-    "cloud_price_table_sync"
-  );
+
+      AsyncTaskManager.register(
+        taskId,
+        (async () => {
+          try {
+            const result = await syncCloudPriceTableToDatabase();
+            if (!result.ok) {
+              logger.warn("[PriceSync] Cloud price sync task failed", {
+                reason: options.reason,
+                error: result.error,
+              });
+              return;
+            }
+
+            logger.info("[PriceSync] Cloud price sync task completed", {
+              reason: options.reason,
+              added: result.data.added.length,
+              updated: result.data.updated.length,
+              skippedConflicts: result.data.skippedConflicts?.length ?? 0,
+              total: result.data.total,
+            });
+          } finally {
+            g.__CCH_CLOUD_PRICE_SYNC_LAST_AT__ = Date.now();
+          }
+        })(),
+        "cloud_price_table_sync"
+      );
+    } catch (error) {
+      logger.warn("[PriceSync] Cloud price sync scheduling failed", {
+        reason: options.reason,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      g.__CCH_CLOUD_PRICE_SYNC_SCHEDULING__ = false;
+    }
+  })();
 }

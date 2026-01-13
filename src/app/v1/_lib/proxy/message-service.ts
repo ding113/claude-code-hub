@@ -43,6 +43,7 @@ export class ProxyMessageService {
       original_model: session.getOriginalModel() ?? undefined, // 传入原始模型（用户请求的模型）
       messages_count: session.getMessagesLength(), // 传入 messages 数量
       endpoint, // 传入请求端点（可能为 undefined）
+      special_settings: session.getSpecialSettings(), // 特殊设置（审计/展示）
     });
 
     session.setMessageContext({

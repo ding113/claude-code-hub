@@ -1,0 +1,15 @@
+{
+  "apiDocs": "API文書",
+  "clientVersions": "更新通知",
+  "config": "設定",
+  "data": "データ",
+  "docs": "ドキュメント",
+  "errorRules": "エラー",
+  "feedback": "報告",
+  "logs": "ログ",
+  "notifications": "通知",
+  "prices": "価格表",
+  "providers": "供給元",
+  "requestFilters": "リクエスト",
+  "sensitiveWords": "フィルター"
+}

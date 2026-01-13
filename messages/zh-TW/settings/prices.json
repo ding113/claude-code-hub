@@ -1,0 +1,191 @@
+{
+  "title": "價格表",
+  "description": "管理平台基礎設定與模型價格",
+  "section": {
+    "title": "模型價格",
+    "description": "管理 AI 模型的價格設定"
+  },
+  "searchPlaceholder": "搜尋模型名稱...",
+  "filters": {
+    "all": "所有",
+    "local": "本機",
+    "anthropic": "Anthropic",
+    "openai": "OpenAI",
+    "vertex": "Vertex"
+  },
+  "badges": {
+    "local": "本機"
+  },
+  "capabilities": {
+    "assistantPrefill": "助手預填充",
+    "computerUse": "電腦使用",
+    "functionCalling": "函數呼叫",
+    "pdfInput": "PDF 輸入",
+    "promptCaching": "Prompt 快取",
+    "reasoning": "推理能力",
+    "responseSchema": "回應 Schema",
+    "toolChoice": "工具選擇",
+    "vision": "視覺",
+    "statusSupported": "支援",
+    "statusUnsupported": "不支援",
+    "tooltip": "{label}: {status}"
+  },
+  "sync": {
+    "button": "同步雲端價格表",
+    "syncing": "同步中…",
+    "checking": "檢查衝突...",
+    "successWithChanges": "價格表更新: 新增 {added} 個，更新 {updated} 個，未變化 {unchanged} 個",
+    "successNoChanges": "價格表已是最新，無需更新",
+    "failed": "同步失敗",
+    "failedError": "同步失敗: {error}",
+    "failedNoResult": "價格表更新成功但未返回處理結果",
+    "noModels": "未找到支援的模型價格",
+    "partialFailure": "部分更新成功，但有 {failed} 個模型失敗",
+    "failedModels": "失敗模型: {models}",
+    "skippedConflicts": "跳過 {count} 個手動模型"
+  },
+  "conflict": {
+    "title": "選擇要覆蓋的衝突項",
+    "description": "以下模型存在手動維護的價格，勾選後將用 LiteLLM 價格覆蓋，未勾選的保持本地不變",
+    "searchPlaceholder": "搜尋模型...",
+    "table": {
+      "modelName": "模型名稱",
+      "manualPrice": "手動價格",
+      "litellmPrice": "LiteLLM 價格",
+      "action": "動作"
+    },
+    "viewDiff": "查看差異",
+    "diffTitle": "價格差異對比",
+    "diff": {
+      "field": "欄位",
+      "manual": "手動",
+      "litellm": "LiteLLM",
+      "inputPrice": "輸入價格",
+      "outputPrice": "輸出價格",
+      "imagePrice": "圖片價格",
+      "provider": "供應商",
+      "mode": "類型"
+    },
+    "pagination": {
+      "showing": "顯示 {from}-{to} 條，共 {total} 條"
+    },
+    "selectedCount": "已選擇 {count}/{total} 個模型",
+    "noMatch": "未找到符合的模型",
+    "noConflicts": "無衝突項",
+    "applyOverwrite": "套用覆蓋",
+    "applying": "套用中..."
+  },
+  "table": {
+    "modelName": "模型名稱",
+    "provider": "供應商",
+    "capabilities": "功能",
+    "price": "價格",
+    "inputPrice": "輸入價格（$/M）",
+    "outputPrice": "輸出價格（$/M）",
+    "priceInput": "輸入",
+    "priceOutput": "輸出",
+    "pricePerRequest": "每次",
+    "cacheReadPrice": "快取讀取（$/M）",
+    "cacheCreationPrice": "快取建立（$/M）",
+    "cache5m": "5m",
+    "cache1h": "1h+",
+    "copyModelId": "複製模型 ID",
+    "updatedAt": "更新時間",
+    "actions": "動作",
+    "typeChat": "對話",
+    "typeImage": "圖像生成",
+    "typeCompletion": "補全",
+    "typeUnknown": "未知類型",
+    "loading": "載入中...",
+    "noMatch": "未找到符合的模型",
+    "noDataTitle": "暫無價格資料",
+    "noDataHint": "系統已內置價格表，請透過上方按鈕同步或更新"
+  },
+  "pagination": {
+    "showing": "顯示 {from}-{to} 條，共 {total} 條",
+    "previous": "上一頁",
+    "next": "下一頁",
+    "perPageLabel": "每頁",
+    "perPage": "每頁 {size} 條"
+  },
+  "stats": {
+    "totalModels": "共 {count} 個模型",
+    "searchResults": "搜尋到 {count} 個結果",
+    "lastUpdated": "最後更新: {time}"
+  },
+  "dialog": {
+    "title": "更新模型價格表",
+    "description": "選擇包含模型價格資料的 JSON 或 TOML 檔案並上傳",
+    "selectFile": "點擊選擇 JSON/TOML 檔案或拖曳到此處",
+    "fileSizeLimit": "檔案大小不能超過 10MB",
+    "fileSizeLimitSmall": "檔案大小不超過 10MB",
+    "invalidFileType": "請選擇 JSON 或 TOML 格式的檔案",
+    "fileTooLarge": "檔案大小超過 10MB 限制",
+    "upload": "上傳並更新",
+    "uploading": "上傳中...",
+    "updatePriceTable": "更新價格表",
+    "updating": "更新中…",
+    "selectJson": "選擇檔案",
+    "updateSuccess": "價格表更新成功，共更新 {count} 個模型",
+    "updateFailed": "更新失敗",
+    "systemHasBuiltIn": "系統已內置價格表",
+    "manualDownload": "你也可以手動下載",
+    "latestPriceTable": "雲端價格表",
+    "andUploadViaButton": "，並透過上方按鈕上傳",
+    "cloudModelCountLoading": "雲端模型數量載入中...",
+    "cloudModelCountFailed": "雲端模型數量載入失敗",
+    "supportedModels": "目前支援 {count} 個模型",
+    "results": {
+      "title": "更新結果",
+      "total": "總計: {total} 個模型",
+      "success": "成功：{success}",
+      "failed": "失敗: {failed}",
+      "skipped": "跳過: {skipped}",
+      "more": " （+{count}）",
+      "details": "詳細資訊",
+      "viewDetails": "檢視詳細記錄"
+    }
+  },
+  "addModel": "新增模型",
+  "editModel": "編輯模型",
+  "deleteModel": "刪除模型",
+  "addModelDescription": "手動新增模型價格設定",
+  "editModelDescription": "編輯模型的價格設定",
+  "deleteConfirm": "確定要刪除模型 {name} 嗎？此操作無法復原。",
+  "form": {
+    "modelName": "模型識別碼",
+    "modelNamePlaceholder": "例如：gpt-5.2-codex",
+    "modelNameRequired": "模型 ID 為必填",
+    "displayName": "顯示名稱（選填）",
+    "displayNamePlaceholder": "例如：GPT-5.2 Codex",
+    "type": "類型",
+    "provider": "供應商",
+    "providerPlaceholder": "例如：openai",
+    "requestPrice": "按次呼叫價格（$/request）",
+    "inputPrice": "輸入價格（$/M tokens）",
+    "outputPrice": "輸出價格（$/M tokens）",
+    "outputPriceImage": "輸出價格（$/張圖）",
+    "cacheReadPrice": "快取讀取價格（$/M tokens）",
+    "cacheCreationPrice5m": "快取建立價格（5m，$/M tokens）",
+    "cacheCreationPrice1h": "快取建立價格（1h+，$/M tokens）"
+  },
+  "drawer": {
+    "prefillLabel": "搜尋現有模型並預填充",
+    "prefillEmpty": "找不到符合的模型",
+    "prefillFailed": "搜尋失敗",
+    "promptCachingHint": "僅當模型支援快取時開啟，並配置下方快取價格",
+    "cachePricingTitle": "快取價格"
+  },
+  "actions": {
+    "edit": "編輯",
+    "more": "更多動作",
+    "delete": "刪除"
+  },
+  "toast": {
+    "createSuccess": "模型已新增",
+    "updateSuccess": "模型已更新完成",
+    "deleteSuccess": "模型已刪除",
+    "saveFailed": "儲存失敗",
+    "deleteFailed": "刪除失敗"
+  }
+}

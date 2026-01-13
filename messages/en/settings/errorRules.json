@@ -1,0 +1,157 @@
+{
+  "actions": {
+    "add": "Add",
+    "delete": "Delete",
+    "edit": "Edit",
+    "messages": {
+      "error": "Operation failed",
+      "success": "Operation successful"
+    },
+    "refresh": "Refresh",
+    "test": "Test"
+  },
+  "add": "Add Error Rule",
+  "addFailed": "Failed to create error rule",
+  "addSuccess": "Error rule created successfully",
+  "cacheStats": "Cached {totalCount} error rules",
+  "categories": {
+    "cache_limit": "Cache Control Limit",
+    "content_filter": "Content Filter",
+    "invalid_request": "Invalid Request",
+    "parameter_error": "Parameter Validation Failed",
+    "pdf_limit": "PDF Page Limit",
+    "prompt_limit": "Prompt Length Limit",
+    "thinking_error": "Thinking Format Error"
+  },
+  "confirmDelete": "Are you sure you want to delete error rule \"{pattern}\"?",
+  "defaultRules": {
+    "cannotDelete": "Default rules cannot be deleted",
+    "cannotDisable": "Recommend keeping default rules enabled"
+  },
+  "delete": "Delete Error Rule",
+  "deleteFailed": "Delete failed",
+  "deleteSuccess": "Error rule deleted successfully",
+  "description": "Manage client error rules that should not trigger automatic retries. When configured, errors matching these rules will be returned directly to users without retrying or counting toward provider circuit breaker thresholds.",
+  "dialog": {
+    "addDescription": "Configure error message regex patterns. Matched errors will be identified as non-retryable client errors.",
+    "addTitle": "Add Error Rule",
+    "categoryHint": "Choose the error category for classification and statistics",
+    "categoryLabel": "Rule Category *",
+    "categoryPlaceholder": "Select rule category",
+    "categoryRequired": "Please select rule category",
+    "creating": "Creating...",
+    "defaultRuleHint": "Default rule pattern cannot be modified",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Optional: Add description...",
+    "editDescription": "Modify error rule configuration. Changes will automatically refresh the cache.",
+    "editTitle": "Edit Error Rule",
+    "enableOverride": "Enable Error Override",
+    "enableOverrideHint": "When enabled, you can customize the error response and status code returned to clients. Original errors are still logged to the database. Currently only supports Claude API error format.",
+    "invalidJson": "Invalid JSON format",
+    "invalidPattern": "Invalid Regex",
+    "invalidRegex": "Invalid regex syntax",
+    "invalidStatusCode": "Status code must be between 400-599",
+    "matchFailed": "No Match",
+    "matchSuccess": "Match Successful",
+    "matchedText": "Matched Text",
+    "overrideResponseHint": "Leave empty to only override status code.",
+    "overrideResponseLabel": "Override Response (JSON)",
+    "overrideResponsePlaceholder": "{\n  \"type\": \"error\",\n  \"error\": {\n    \"type\": \"invalid_request_error\",\n    \"message\": \"Your custom message\"\n  }\n}",
+    "overrideStatusCodeHint": "Leave empty to use upstream status code. Range: 400-599.",
+    "overrideStatusCodeLabel": "Override Status Code (Optional)",
+    "overrideStatusCodePlaceholder": "e.g. 400",
+    "patternHint": "Supports JavaScript regex syntax, e.g.: prompt is too long|invalid.*request",
+    "patternLabel": "Regex Pattern *",
+    "patternPlaceholder": "Enter regular expression...",
+    "patternRequired": "Please enter regex pattern",
+    "regexTester": "Regex Tester",
+    "saving": "Saving...",
+    "testMessageLabel": "Test Message",
+    "testMessagePlaceholder": "Enter error message to test...",
+    "useTemplate": "Claude Error Template",
+    "useTemplateConfirm": "Existing content will be replaced by the template. Continue?",
+    "validJson": "JSON format is valid"
+  },
+  "disable": "Error rule disabled",
+  "edit": "Edit Error Rule",
+  "editFailed": "Failed to update error rule",
+  "editSuccess": "Error rule updated successfully",
+  "emptyState": "No error rules yet. Click 'Add Error Rule' in the top right to start configuration.",
+  "enable": "Error rule enabled",
+  "form": {
+    "fields": {
+      "category": "Rule Category",
+      "description": "Description",
+      "pattern": "Regex Pattern"
+    },
+    "labels": {
+      "category": "Rule Category *",
+      "description": "Description",
+      "isEnabled": "Enabled Status",
+      "pattern": "Regex Pattern *"
+    },
+    "placeholders": {
+      "category": "Select category",
+      "description": "Optional: Add description...",
+      "pattern": "e.g. prompt is too long"
+    }
+  },
+  "nav": "Error Rules",
+  "refreshCache": "Sync Rules",
+  "refreshCacheFailed": "Failed to sync rules",
+  "refreshCacheSuccess": "Rules synced successfully, loaded {count} error rules",
+  "regexTester": {
+    "matchResult": "Match Result",
+    "matched": "Matched",
+    "notMatched": "Not Matched",
+    "test": "Test",
+    "testMessage": "Test Message",
+    "testMessagePlaceholder": "Enter error message to test...",
+    "title": "Regex Tester"
+  },
+  "section": {
+    "title": "Error Rules List"
+  },
+  "table": {
+    "actions": "Actions",
+    "category": "Rule Category",
+    "createdAt": "Created At",
+    "default": "Default",
+    "description": "Description",
+    "isDefault": "Default Rule",
+    "isEnabled": "Enabled Status",
+    "pattern": "Regex Pattern",
+    "status": "Status"
+  },
+  "tester": {
+    "category": "Category",
+    "description": "Input an error message to check if it matches configured rules and see the final response.",
+    "finalResponse": "Override response to return",
+    "inputLabel": "Test Error Message",
+    "inputPlaceholder": "Enter an error message to test...",
+    "matchType": "Match type",
+    "matched": "Matched an error rule",
+    "messageRequired": "Please enter an error message to test",
+    "noRule": "No rule matched",
+    "notMatched": "No rule matched",
+    "overrideStatusCode": "Override status code",
+    "pattern": "Pattern",
+    "ruleInfo": "Matched rule",
+    "statusCodeOnlyOverride": "Only status code will be overridden, response body will use upstream error",
+    "testButton": "Run Test",
+    "testFailed": "Test failed, please try again",
+    "testing": "Testing...",
+    "title": "Error Rule Tester",
+    "warnings": "Configuration Warnings"
+  },
+  "title": "Error Rules Management",
+  "toggleFailed": "Toggle failed",
+  "toggleFailedError": "Toggle failed:",
+  "validation": {
+    "categoryRequired": "Please select rule category",
+    "patternInvalid": "Invalid regex syntax",
+    "patternRequired": "Please enter regex pattern",
+    "patternTooComplex": "Regex is too complex",
+    "redosRisk": "Regex has ReDoS risk, please simplify pattern"
+  }
+}

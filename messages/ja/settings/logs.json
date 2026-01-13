@@ -1,0 +1,54 @@
+{
+  "description": "システムログレベルを動的に調整してロギング詳細度をリアルタイムで制御します。",
+  "form": {
+    "changeNotice": "現在のレベルは {current} です、保存後 {selected} に切り替わります",
+    "currentLevel": "現在のログレベル",
+    "effectiveImmediately": "ログレベルの変更はすぐに有効になります、サービス再起動不要。",
+    "failed": "設定に失敗しました",
+    "failedError": "ログレベルの設定に失敗しました",
+    "fetchFailed": "ログレベルの取得に失敗しました",
+    "levelGuideDebug": "Debug（開発環境推奨）: 詳細なデバッグ情報を含む、トラブルシューティングに適しています",
+    "levelGuideFatal": "Fatal/Error: エラーのみ表示、最小限のログ、高負荷本番環境に適しています",
+    "levelGuideInfo": "Info（本番環境推奨）: 主要なビジネスイベント（プロバイダー選択、セッション再利用、価格同期）+ 警告 + エラーを表示",
+    "levelGuideTitle": "ログレベルガイド",
+    "levelGuideTrace": "Trace: 非常に詳細なトレース情報、すべての詳細を含む",
+    "levelGuideWarn": "Warn: 警告（レート制限、サーキットブレーカー開放など）+ エラーを含む",
+    "save": "設定を保存",
+    "saving": "保存しています...",
+    "selectLevel": "ログレベルを選択",
+    "success": "ログレベルを設定しました: {level}"
+  },
+  "levels": {
+    "debug": {
+      "description": "デバッグ情報 + 全レベル（開発環境推奨）",
+      "label": "Debug"
+    },
+    "error": {
+      "description": "エラーメッセージ",
+      "label": "Error"
+    },
+    "fatal": {
+      "description": "致命的エラーのみ",
+      "label": "Fatal"
+    },
+    "info": {
+      "description": "主要なビジネスイベント + 警告 + エラー（本番環境推奨）",
+      "label": "Info"
+    },
+    "trace": {
+      "description": "非常に詳細なトレース + 全レベル",
+      "label": "Trace"
+    },
+    "warn": {
+      "description": "警告 + エラー",
+      "label": "Warn"
+    }
+  },
+  "section": {
+    "description": "変更はすぐに有効になります、サービス再起動不要。",
+    "title": "ログレベルコントロール"
+  },
+  "subtitle": "ログレベルコントロール",
+  "subtitleDesc": "変更はすぐに有効になります、再起動不要。本番環境でのトラブルシューティングに便利です。",
+  "title": "ログ管理"
+}

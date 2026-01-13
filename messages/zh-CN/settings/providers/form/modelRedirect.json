@@ -1,0 +1,14 @@
+{
+  "currentRules": "当前规则 ({count})",
+  "addNewRule": "添加新规则",
+  "sourceModel": "用户请求的模型",
+  "targetModel": "实际转发的模型",
+  "sourcePlaceholder": "例如: claude-sonnet-4-5-20250929",
+  "targetPlaceholder": "例如: glm-4.6",
+  "add": "添加",
+  "sourceEmpty": "源模型名称不能为空",
+  "targetEmpty": "目标模型名称不能为空",
+  "alreadyExists": "模型 \"{model}\" 已存在重定向规则",
+  "description": "将 Claude Code 客户端请求的模型（如 claude-sonnet-4.5）重定向到上游供应商实际支持的模型（如 glm-4.6、gemini-pro）。用于成本优化或接入第三方 AI 服务。",
+  "emptyState": "暂无重定向规则。添加规则后，系统将自动重写请求中的模型名称。"
+}

@@ -1,0 +1,133 @@
+{
+  "title": "数据管理",
+  "description": "管理数据库的备份与恢复，支持完整数据导入导出和日志清理。",
+  "status": {
+    "loading": "加载中...",
+    "error": "获取数据库状态失败",
+    "retry": "重试",
+    "connected": "数据库连接正常",
+    "unavailable": "数据库不可用",
+    "tables": "{count} 个表"
+  },
+  "cleanup": {
+    "rangeLabel": "清理范围",
+    "range": {
+      "7days": "一周前的日志 (7 天)",
+      "30days": "一个月前的日志 (30 天)",
+      "90days": "三个月前的日志 (90 天)",
+      "180days": "六个月前的日志 (180 天)"
+    },
+    "rangeDescription": {
+      "7days": "一周前",
+      "30days": "一个月前",
+      "90days": "三个月前",
+      "180days": "六个月前",
+      "default": "{days} 天前"
+    },
+    "willClean": "将清理 {range} 的所有日志记录",
+    "button": "清理日志",
+    "confirmTitle": "确认清理日志",
+    "confirmWarning": "此操作将永久删除 {range}的所有日志记录，且无法恢复。",
+    "previewLoading": "正在统计...",
+    "previewCount": "将删除 {count} 条日志记录",
+    "previewError": "无法获取预览信息",
+    "statisticsRetained": "✓ 统计数据将被保留（用于趋势分析）",
+    "logsDeleted": "✗ 日志详情将被删除（请求/响应内容、错误信息等）",
+    "backupRecommendation": "建议：在清理前先导出数据库备份，以防需要恢复数据。",
+    "cancel": "取消",
+    "confirm": "确认清理",
+    "cleaning": "正在清理...",
+    "successMessage": "成功清理 {count} 条日志记录（{batches} 批次，耗时 {duration}s）",
+    "failed": "清理失败",
+    "error": "清理日志失败",
+    "descriptionWarning": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。"
+  },
+  "export": {
+    "button": "导出数据库",
+    "exporting": "正在导出...",
+    "successMessage": "数据库导出成功！",
+    "failed": "导出失败",
+    "error": "导出数据库失败",
+    "descriptionFull": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。备份文件使用 PostgreSQL custom format，自动压缩且兼容不同版本的数据库结构。"
+  },
+  "import": {
+    "selectFileLabel": "选择备份文件",
+    "fileSelected": "已选择: {name} ({size} MB)",
+    "fileError": "请选择 .dump 格式的备份文件",
+    "noFileSelected": "请先选择备份文件",
+    "cleanFirstLabel": "清除现有数据（覆盖模式）",
+    "cleanFirstDescription": "导入前删除所有现有数据，确保数据库与备份文件完全一致。如果不勾选，将尝试合并数据，但可能因主键冲突而失败。",
+    "button": "导入数据库",
+    "importing": "正在导入...",
+    "progressTitle": "导入进度",
+    "confirmTitle": "确认导入数据库",
+    "confirmOverwrite": "您选择了「覆盖模式」，这将会删除所有现有数据后导入备份。",
+    "confirmMerge": "您选择了「合并模式」，这将尝试在保留现有数据的基础上导入备份。",
+    "warningOverwrite": "警告：此操作不可逆，所有当前数据将被永久删除！",
+    "warningMerge": "注意：如果存在主键冲突，导入可能会失败。",
+    "backupFile": "备份文件:",
+    "backupRecommendation": "建议在执行此操作前，先导出当前数据库作为备份。",
+    "cancel": "取消",
+    "confirm": "确认导入",
+    "successMessage": "数据导入完成！",
+    "successCleanModeDesc": "所有数据已成功恢复。如果页面显示异常，请刷新浏览器。",
+    "successMergeModeDesc": "数据已成功导入并合并。如果页面显示异常，请刷新浏览器。",
+    "successWithWarnings": "数据导入完成（有警告）",
+    "successWithWarningsDesc": "数据已成功导入，但跳过了一些已存在的对象。如果页面显示异常，请刷新浏览器或重启应用。",
+    "failedMessage": "数据导入失败",
+    "error": "导入数据库失败",
+    "streamError": "无法读取响应流",
+    "streamInterrupted": "数据流意外中断",
+    "streamInterruptedDesc": "导入进度未正常完成，请检查日志并验证数据完整性。如有问题，请重新导入。",
+    "parseError": "解析响应数据失败",
+    "errorUnknown": "未知错误",
+    "descriptionFull": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
+  },
+  "guide": {
+    "title": "使用说明与注意事项",
+    "items": {
+      "cleanup": {
+        "title": "日志清理",
+        "description": "物理删除历史日志数据，不可恢复。统计数据（statistics 表）将被保留。建议清理前先导出数据库备份。"
+      },
+      "format": {
+        "title": "备份格式",
+        "description": "使用 PostgreSQL custom format (.dump)，自动压缩且能够兼容不同版本的数据库结构。"
+      },
+      "overwrite": {
+        "title": "覆盖模式",
+        "description": "导入前会删除所有现有数据，确保数据库与备份文件完全一致。适合完整恢复场景。"
+      },
+      "merge": {
+        "title": "合并模式",
+        "description": "保留现有数据，尝试插入备份中的数据。如果存在主键冲突可能导致导入失败。"
+      },
+      "safety": {
+        "title": "安全建议",
+        "description": "在执行导入操作前，建议先导出当前数据库作为备份，避免数据丢失。"
+      },
+      "environment": {
+        "title": "环境要求",
+        "description": "此功能需要 Docker Compose 部署环境。本地开发环境可能无法使用。"
+      }
+    }
+  },
+  "section": {
+    "status": {
+      "title": "数据库状态",
+      "description": "查看当前数据库的连接状态和基本信息。"
+    },
+    "cleanup": {
+      "title": "日志清理",
+      "description": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。"
+    },
+    "export": {
+      "title": "数据导出",
+      "description": "导出完整的数据库备份文件（.dump 格式），可用于数据迁移或恢复。"
+    },
+    "import": {
+      "title": "数据导入",
+      "description": "从备份文件恢复数据库。支持 PostgreSQL custom format (.dump) 格式的备份文件。"
+    }
+  }
+}
