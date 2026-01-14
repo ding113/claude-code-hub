@@ -3,7 +3,8 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,36 @@ export function VirtualizedLogsTable({
     logId: number | null;
     scrollToRedirect: boolean;
   }>({ logId: null, scrollToRedirect: false });
+
+  const handleCopySessionIdClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      const sessionId = event.currentTarget.dataset.sessionId;
+      if (!sessionId) return;
+
+      const clipboard = navigator.clipboard;
+      if (clipboard) {
+        void clipboard
+          .writeText(sessionId)
+          .then(() => toast.success(t("actions.copied")))
+          .catch(() => {});
+        return;
+      }
+
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = sessionId;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (ok) toast.success(t("actions.copied"));
+      } catch {}
+    },
+    [t]
+  );
 
   // Infinite query with cursor-based pagination
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
@@ -169,22 +200,28 @@ export function VirtualizedLogsTable({
       {/* Table with virtual scrolling */}
       <div className="rounded-md border overflow-hidden">
         {/* Fixed header */}
-        <div className="bg-muted/50 border-b">
-          <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
-            <div className="flex-[0.8] min-w-[80px] pl-2 truncate" title={t("logs.columns.time")}>
-              {t("logs.columns.time")}
-            </div>
-            <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.user")}>
-              {t("logs.columns.user")}
-            </div>
-            <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.key")}>
-              {t("logs.columns.key")}
-            </div>
-            <div
-              className="flex-[1.5] min-w-[100px] px-1 truncate"
-              title={t("logs.columns.provider")}
-            >
-              {t("logs.columns.provider")}
+          <div className="bg-muted/50 border-b">
+            <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
+              <div className="flex-[0.8] min-w-[80px] pl-2 truncate" title={t("logs.columns.time")}>
+                {t("logs.columns.time")}
+              </div>
+              <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.user")}>
+                {t("logs.columns.user")}
+              </div>
+              <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.key")}>
+                {t("logs.columns.key")}
+              </div>
+              <div
+                className="flex-[0.8] min-w-[80px] px-1 truncate"
+                title={t("logs.columns.sessionId")}
+              >
+                {t("logs.columns.sessionId")}
+              </div>
+              <div
+                className="flex-[1.5] min-w-[100px] px-1 truncate"
+                title={t("logs.columns.provider")}
+              >
+                {t("logs.columns.provider")}
             </div>
             <div className="flex-[1] min-w-[80px] px-1 truncate" title={t("logs.columns.model")}>
               {t("logs.columns.model")}
@@ -285,6 +322,33 @@ export function VirtualizedLogsTable({
                     title={log.keyName}
                   >
                     {log.keyName}
+                  </div>
+
+                  {/* Session ID */}
+                  <div className="flex-[0.8] min-w-[80px] px-1">
+                    {log.sessionId ? (
+                      <TooltipProvider>
+                        <Tooltip delayDuration={300}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="w-full text-left font-mono text-xs truncate cursor-pointer hover:underline"
+                              data-session-id={log.sessionId}
+                              onClick={handleCopySessionIdClick}
+                            >
+                              {log.sessionId}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" align="start" className="max-w-[500px]">
+                            <p className="text-xs whitespace-normal break-words font-mono">
+                              {log.sessionId}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground">-</span>
+                    )}
                   </div>
 
                   {/* Provider */}

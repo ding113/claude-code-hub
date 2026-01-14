@@ -10,6 +10,15 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+const toastMocks = vi.hoisted(() => ({
+  success: vi.fn(),
+  error: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: toastMocks,
+}));
+
 vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
@@ -175,6 +184,49 @@ describe("usage-logs-table multiplier badge", () => {
       nextButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(onPageChange).toHaveBeenCalledWith(2);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  test("copies sessionId on click and shows toast", async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <UsageLogsTable
+          logs={[makeLog({ id: 1, sessionId: "session_test" })]}
+          total={1}
+          page={1}
+          pageSize={50}
+          onPageChange={() => {}}
+          isPending={false}
+        />
+      );
+    });
+
+    const sessionBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => (b.textContent ?? "").includes("session_test")
+    );
+    expect(sessionBtn).not.toBeUndefined();
+
+    await act(async () => {
+      sessionBtn?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(writeText).toHaveBeenCalledWith("session_test");
+    expect(toastMocks.success).toHaveBeenCalledWith("actions.copied");
 
     await act(async () => {
       root.unmount();

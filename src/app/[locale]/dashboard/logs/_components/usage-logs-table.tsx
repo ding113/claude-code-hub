@@ -1,7 +1,8 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useCallback, useState, type MouseEvent } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
@@ -62,6 +63,36 @@ export function UsageLogsTable({
     scrollToRedirect: boolean;
   }>({ logId: null, scrollToRedirect: false });
 
+  const handleCopySessionIdClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      const sessionId = event.currentTarget.dataset.sessionId;
+      if (!sessionId) return;
+
+      const clipboard = navigator.clipboard;
+      if (clipboard) {
+        void clipboard
+          .writeText(sessionId)
+          .then(() => toast.success(t("actions.copied")))
+          .catch(() => {});
+        return;
+      }
+
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = sessionId;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (ok) toast.success(t("actions.copied"));
+      } catch {}
+    },
+    [t]
+  );
+
   return (
     <div className="space-y-4">
       <div className="rounded-md border overflow-x-auto">
@@ -71,6 +102,7 @@ export function UsageLogsTable({
               <TableHead>{t("logs.columns.time")}</TableHead>
               <TableHead>{t("logs.columns.user")}</TableHead>
               <TableHead>{t("logs.columns.key")}</TableHead>
+              <TableHead>{t("logs.columns.sessionId")}</TableHead>
               <TableHead>{t("logs.columns.provider")}</TableHead>
               <TableHead>{t("logs.columns.model")}</TableHead>
               <TableHead className="text-right">{t("logs.columns.tokens")}</TableHead>
@@ -83,7 +115,7 @@ export function UsageLogsTable({
           <TableBody>
             {logs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center text-muted-foreground">
+                <TableCell colSpan={11} className="text-center text-muted-foreground">
                   {t("logs.table.noData")}
                 </TableCell>
               </TableRow>
@@ -129,6 +161,31 @@ export function UsageLogsTable({
                     </TableCell>
                     <TableCell>{log.userName}</TableCell>
                     <TableCell className="font-mono text-xs">{log.keyName}</TableCell>
+                    <TableCell className="font-mono text-xs w-[140px] max-w-[140px]">
+                      {log.sessionId ? (
+                        <TooltipProvider>
+                          <Tooltip delayDuration={300}>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="w-full text-left truncate cursor-pointer hover:underline"
+                                data-session-id={log.sessionId}
+                                onClick={handleCopySessionIdClick}
+                              >
+                                {log.sessionId}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" align="start" className="max-w-[500px]">
+                              <p className="text-xs whitespace-normal break-words font-mono">
+                                {log.sessionId}
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-left">
                       {isWarmupSkipped ? (
                         // Warmup 被跳过的请求显示“抢答/跳过”标记
