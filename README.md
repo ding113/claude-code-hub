@@ -44,8 +44,7 @@ Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使�
 </a>
 </td>
 <td>
-<b>💎 特别优惠</b>：<a href="https://privnode.com/with-cch?utm_source=refLink">Privnode</a> 是一家平价的 AI API 聚合平台，为 Claude、Codex 等主流模型提供一站式中转服务，以良好的稳定性和较高的性价比，服务于开发者与团队的实际需求。<br/>
-使用优惠码 <code>WITHCCH</code> 可获得 <b>15% 折扣</b> → <a href="https://privnode.com/with-cch?utm_source=refLink">立即访问</a>
+<a href="https://privnode.com/with-cch?utm_source=refLink">Privnode</a> 是一家平价的 AI API 聚合平台，为 Claude、Codex 等主流模型提供一站式中转服务，以良好的稳定性和较高的性价比，服务于开发者与团队的实际需求。 → <a href="https://privnode.com/with-cch?utm_source=refLink">立即访问</a>
 </td>
 </tr>
 </table>
