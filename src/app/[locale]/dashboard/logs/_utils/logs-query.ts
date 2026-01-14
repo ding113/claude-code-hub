@@ -37,7 +37,9 @@ export function parseLogsUrlFilters(searchParams: {
   const statusCodeParam = parseStringParam(searchParams.statusCode);
 
   const statusCode =
-    statusCodeParam && statusCodeParam !== "!200" ? Number.parseInt(statusCodeParam, 10) : undefined;
+    statusCodeParam && statusCodeParam !== "!200"
+      ? Number.parseInt(statusCodeParam, 10)
+      : undefined;
 
   return {
     userId: parseIntParam(searchParams.userId),
@@ -85,4 +87,3 @@ export function buildLogsUrlQuery(filters: LogsUrlFilters): URLSearchParams {
 
   return query;
 }
-

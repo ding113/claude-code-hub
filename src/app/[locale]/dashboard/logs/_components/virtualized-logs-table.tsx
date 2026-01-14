@@ -3,7 +3,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { Badge } from "@/components/ui/badge";
@@ -200,28 +200,28 @@ export function VirtualizedLogsTable({
       {/* Table with virtual scrolling */}
       <div className="rounded-md border overflow-hidden">
         {/* Fixed header */}
-          <div className="bg-muted/50 border-b">
-            <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
-              <div className="flex-[0.8] min-w-[80px] pl-2 truncate" title={t("logs.columns.time")}>
-                {t("logs.columns.time")}
-              </div>
-              <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.user")}>
-                {t("logs.columns.user")}
-              </div>
-              <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.key")}>
-                {t("logs.columns.key")}
-              </div>
-              <div
-                className="flex-[0.8] min-w-[80px] px-1 truncate"
-                title={t("logs.columns.sessionId")}
-              >
-                {t("logs.columns.sessionId")}
-              </div>
-              <div
-                className="flex-[1.5] min-w-[100px] px-1 truncate"
-                title={t("logs.columns.provider")}
-              >
-                {t("logs.columns.provider")}
+        <div className="bg-muted/50 border-b">
+          <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
+            <div className="flex-[0.8] min-w-[80px] pl-2 truncate" title={t("logs.columns.time")}>
+              {t("logs.columns.time")}
+            </div>
+            <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.user")}>
+              {t("logs.columns.user")}
+            </div>
+            <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.key")}>
+              {t("logs.columns.key")}
+            </div>
+            <div
+              className="flex-[0.8] min-w-[80px] px-1 truncate"
+              title={t("logs.columns.sessionId")}
+            >
+              {t("logs.columns.sessionId")}
+            </div>
+            <div
+              className="flex-[1.5] min-w-[100px] px-1 truncate"
+              title={t("logs.columns.provider")}
+            >
+              {t("logs.columns.provider")}
             </div>
             <div className="flex-[1] min-w-[80px] px-1 truncate" title={t("logs.columns.model")}>
               {t("logs.columns.model")}

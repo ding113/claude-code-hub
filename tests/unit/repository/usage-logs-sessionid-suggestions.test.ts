@@ -145,4 +145,3 @@ describe("Usage logs sessionId suggestions", () => {
     expect(limitArgs).toEqual([50]);
   });
 });
-

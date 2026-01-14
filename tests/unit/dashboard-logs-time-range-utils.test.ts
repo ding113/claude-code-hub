@@ -11,6 +11,11 @@ describe("dashboard logs time range utils", () => {
     expect(parseClockString("01:02")).toEqual({ hours: 1, minutes: 2, seconds: 0 });
   });
 
+  test("parseClockString falls back to 0 for invalid numbers", () => {
+    expect(parseClockString("xx:yy:zz")).toEqual({ hours: 0, minutes: 0, seconds: 0 });
+    expect(parseClockString("01:02:xx")).toEqual({ hours: 1, minutes: 2, seconds: 0 });
+  });
+
   test("dateStringWithClockToTimestamp combines local date + clock", () => {
     const ts = dateStringWithClockToTimestamp("2026-01-01", "01:02:03");
     const expected = new Date(2026, 0, 1, 1, 2, 3, 0).getTime();
@@ -23,9 +28,13 @@ describe("dashboard logs time range utils", () => {
     expect(inclusiveEndTimestampFromExclusive(exclusive)).toBe(inclusive);
   });
 
+  test("inclusiveEndTimestampFromExclusive clamps at 0", () => {
+    expect(inclusiveEndTimestampFromExclusive(0)).toBe(0);
+    expect(inclusiveEndTimestampFromExclusive(500)).toBe(0);
+  });
+
   test("formatClockFromTimestamp uses HH:MM:SS", () => {
     const ts = new Date(2026, 0, 1, 1, 2, 3, 0).getTime();
     expect(formatClockFromTimestamp(ts)).toBe("01:02:03");
   });
 });
-

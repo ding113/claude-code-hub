@@ -32,14 +32,14 @@ import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import {
-	useLazyEndpoints,
-	useLazyModels,
-	useLazyStatusCodes,
+  useLazyEndpoints,
+  useLazyModels,
+  useLazyStatusCodes,
 } from "../_hooks/use-lazy-filter-options";
 import {
-	dateStringWithClockToTimestamp,
-	formatClockFromTimestamp,
-	inclusiveEndTimestampFromExclusive,
+  dateStringWithClockToTimestamp,
+  formatClockFromTimestamp,
+  inclusiveEndTimestampFromExclusive,
 } from "../_utils/time-range";
 import { LogsDateRangePicker } from "./logs-date-range-picker";
 
@@ -53,15 +53,15 @@ interface UsageLogsFiltersProps {
   initialKeys: Key[];
   isProvidersLoading?: boolean;
   isKeysLoading?: boolean;
-	filters: {
-		userId?: number;
-		keyId?: number;
-		providerId?: number;
-		sessionId?: string;
-		/** 开始时间戳（毫秒，浏览器本地时区的 00:00:00） */
-		startTime?: number;
-		/** 结束时间戳（毫秒，浏览器本地时区的次日 00:00:00，用于 < 比较） */
-		endTime?: number;
+  filters: {
+    userId?: number;
+    keyId?: number;
+    providerId?: number;
+    sessionId?: string;
+    /** 开始时间戳（毫秒，浏览器本地时区的 00:00:00） */
+    startTime?: number;
+    /** 结束时间戳（毫秒，浏览器本地时区的次日 00:00:00，用于 < 比较） */
+    endTime?: number;
     statusCode?: number;
     excludeStatusCode200?: boolean;
     model?: string;
@@ -335,128 +335,127 @@ export function UsageLogsFilters({
     }
   };
 
-	// Helper: convert timestamp to display date string (YYYY-MM-DD)
-	const timestampToDateString = useCallback((timestamp: number): string => {
-		const date = new Date(timestamp);
-		return format(date, "yyyy-MM-dd");
-	}, []);
+  // Helper: convert timestamp to display date string (YYYY-MM-DD)
+  const timestampToDateString = useCallback((timestamp: number): string => {
+    const date = new Date(timestamp);
+    return format(date, "yyyy-MM-dd");
+  }, []);
 
   // Memoized startDate for display (from timestamp)
-	const displayStartDate = useMemo(() => {
-		if (!localFilters.startTime) return undefined;
-		return timestampToDateString(localFilters.startTime);
-	}, [localFilters.startTime, timestampToDateString]);
+  const displayStartDate = useMemo(() => {
+    if (!localFilters.startTime) return undefined;
+    return timestampToDateString(localFilters.startTime);
+  }, [localFilters.startTime, timestampToDateString]);
 
-	const displayStartClock = useMemo(() => {
-		if (!localFilters.startTime) return undefined;
-		return formatClockFromTimestamp(localFilters.startTime);
-	}, [localFilters.startTime]);
+  const displayStartClock = useMemo(() => {
+    if (!localFilters.startTime) return undefined;
+    return formatClockFromTimestamp(localFilters.startTime);
+  }, [localFilters.startTime]);
 
-	// Memoized endDate calculation: endTime is exclusive, use endTime-1s to infer inclusive display end date
-	const displayEndDate = useMemo(() => {
-		if (!localFilters.endTime) return undefined;
-		const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
-		return format(new Date(inclusiveEndTime), "yyyy-MM-dd");
-	}, [localFilters.endTime]);
+  // Memoized endDate calculation: endTime is exclusive, use endTime-1s to infer inclusive display end date
+  const displayEndDate = useMemo(() => {
+    if (!localFilters.endTime) return undefined;
+    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
+    return format(new Date(inclusiveEndTime), "yyyy-MM-dd");
+  }, [localFilters.endTime]);
 
-	const displayEndClock = useMemo(() => {
-		if (!localFilters.endTime) return undefined;
-		const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
-		return formatClockFromTimestamp(inclusiveEndTime);
-	}, [localFilters.endTime]);
+  const displayEndClock = useMemo(() => {
+    if (!localFilters.endTime) return undefined;
+    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
+    return formatClockFromTimestamp(inclusiveEndTime);
+  }, [localFilters.endTime]);
 
-	// Memoized callback for date range changes
-	const handleDateRangeChange = useCallback(
-		(range: { startDate?: string; endDate?: string }) => {
-			if (range.startDate && range.endDate) {
-				// Convert to millisecond timestamps:
-				// startTime: startDate + startClock (default 00:00:00)
-				// endTime: endDate + endClock as exclusive upper bound (endClock default 23:59:59)
-				const startClock = displayStartClock ?? "00:00:00";
-				const endClock = displayEndClock ?? "23:59:59";
-				const startTimestamp = dateStringWithClockToTimestamp(range.startDate, startClock);
-				const endInclusiveTimestamp = dateStringWithClockToTimestamp(range.endDate, endClock);
-				const endTimestamp = endInclusiveTimestamp + 1000;
-				setLocalFilters((prev) => ({
-					...prev,
-					startTime: startTimestamp,
-					endTime: endTimestamp,
-				}));
-			} else {
-				setLocalFilters((prev) => ({
-					...prev,
-					startTime: undefined,
-					endTime: undefined,
-				}));
-			}
-		},
-		[displayEndClock, displayStartClock]
-	);
+  // Memoized callback for date range changes
+  const handleDateRangeChange = useCallback(
+    (range: { startDate?: string; endDate?: string }) => {
+      if (range.startDate && range.endDate) {
+        // Convert to millisecond timestamps:
+        // startTime: startDate + startClock (default 00:00:00)
+        // endTime: endDate + endClock as exclusive upper bound (endClock default 23:59:59)
+        const startClock = displayStartClock ?? "00:00:00";
+        const endClock = displayEndClock ?? "23:59:59";
+        const startTimestamp = dateStringWithClockToTimestamp(range.startDate, startClock);
+        const endInclusiveTimestamp = dateStringWithClockToTimestamp(range.endDate, endClock);
+        const endTimestamp = endInclusiveTimestamp + 1000;
+        setLocalFilters((prev) => ({
+          ...prev,
+          startTime: startTimestamp,
+          endTime: endTimestamp,
+        }));
+      } else {
+        setLocalFilters((prev) => ({
+          ...prev,
+          startTime: undefined,
+          endTime: undefined,
+        }));
+      }
+    },
+    [displayEndClock, displayStartClock]
+  );
 
-	return (
-		<div className="space-y-4">
-			<div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-				{/* 时间范围 - 使用日期范围选择器 */}
-				<div className="space-y-2 lg:col-span-4">
-					<Label>{t("logs.filters.dateRange")}</Label>
-					<LogsDateRangePicker
-						startDate={displayStartDate}
-						endDate={displayEndDate}
-						onDateRangeChange={handleDateRangeChange}
-					/>
-					<div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-						<div className="space-y-1">
-							<Label className="text-xs text-muted-foreground">
-								{t("logs.filters.startTime")}
-							</Label>
-							<Input
-								type="time"
-								step={1}
-								value={displayStartClock ?? ""}
-								disabled={!displayStartDate}
-								onChange={(e) => {
-									const nextClock = e.target.value || "00:00:00";
-									setLocalFilters((prev) => {
-										if (!prev.startTime) return prev;
-										const dateStr = timestampToDateString(prev.startTime);
-										return {
-											...prev,
-											startTime: dateStringWithClockToTimestamp(dateStr, nextClock),
-										};
-									});
-								}}
-							/>
-						</div>
-						<div className="space-y-1">
-							<Label className="text-xs text-muted-foreground">
-								{t("logs.filters.endTime")}
-							</Label>
-							<Input
-								type="time"
-								step={1}
-								value={displayEndClock ?? ""}
-								disabled={!displayEndDate}
-								onChange={(e) => {
-									const nextClock = e.target.value || "23:59:59";
-									setLocalFilters((prev) => {
-										if (!prev.endTime) return prev;
-										const inclusiveEndTime = inclusiveEndTimestampFromExclusive(prev.endTime);
-										const endDateStr = timestampToDateString(inclusiveEndTime);
-										const endInclusiveTimestamp = dateStringWithClockToTimestamp(endDateStr, nextClock);
-										return {
-											...prev,
-											endTime: endInclusiveTimestamp + 1000,
-										};
-									});
-								}}
-							/>
-						</div>
-					</div>
-				</div>
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
+        {/* 时间范围 - 使用日期范围选择器 */}
+        <div className="space-y-2 lg:col-span-4">
+          <Label>{t("logs.filters.dateRange")}</Label>
+          <LogsDateRangePicker
+            startDate={displayStartDate}
+            endDate={displayEndDate}
+            onDateRangeChange={handleDateRangeChange}
+          />
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t("logs.filters.startTime")}</Label>
+              <Input
+                type="time"
+                step={1}
+                value={displayStartClock ?? ""}
+                disabled={!displayStartDate}
+                onChange={(e) => {
+                  const nextClock = e.target.value || "00:00:00";
+                  setLocalFilters((prev) => {
+                    if (!prev.startTime) return prev;
+                    const dateStr = timestampToDateString(prev.startTime);
+                    return {
+                      ...prev,
+                      startTime: dateStringWithClockToTimestamp(dateStr, nextClock),
+                    };
+                  });
+                }}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t("logs.filters.endTime")}</Label>
+              <Input
+                type="time"
+                step={1}
+                value={displayEndClock ?? ""}
+                disabled={!displayEndDate}
+                onChange={(e) => {
+                  const nextClock = e.target.value || "23:59:59";
+                  setLocalFilters((prev) => {
+                    if (!prev.endTime) return prev;
+                    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(prev.endTime);
+                    const endDateStr = timestampToDateString(inclusiveEndTime);
+                    const endInclusiveTimestamp = dateStringWithClockToTimestamp(
+                      endDateStr,
+                      nextClock
+                    );
+                    return {
+                      ...prev,
+                      endTime: endInclusiveTimestamp + 1000,
+                    };
+                  });
+                }}
+              />
+            </div>
+          </div>
+        </div>
 
-				{/* 用户选择（仅 Admin） */}
-				{isAdmin && (
-					<div className="space-y-2 lg:col-span-4">
+        {/* 用户选择（仅 Admin） */}
+        {isAdmin && (
+          <div className="space-y-2 lg:col-span-4">
             <Label>{t("logs.filters.user")}</Label>
             <Popover open={userPopoverOpen} onOpenChange={setUserPopoverOpen}>
               <PopoverTrigger asChild>
@@ -673,7 +672,9 @@ export function UsageLogsFilters({
               <Command shouldFilter={false}>
                 <CommandList className="max-h-[250px] overflow-y-auto">
                   <CommandEmpty>
-                    {isSessionIdsLoading ? t("logs.stats.loading") : t("logs.filters.noSessionFound")}
+                    {isSessionIdsLoading
+                      ? t("logs.stats.loading")
+                      : t("logs.filters.noSessionFound")}
                   </CommandEmpty>
                   <CommandGroup>
                     {availableSessionIds.map((sessionId) => (

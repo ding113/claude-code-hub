@@ -36,4 +36,3 @@ export function dateStringWithClockToTimestamp(dateStr: string, clockStr: string
 export function inclusiveEndTimestampFromExclusive(endExclusiveTimestamp: number): number {
   return Math.max(0, endExclusiveTimestamp - 1000);
 }
-

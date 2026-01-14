@@ -33,7 +33,11 @@ function renderWithIntl(node: ReactNode) {
 
   act(() => {
     root.render(
-      <NextIntlClientProvider locale="en" messages={{ dashboard: dashboardMessages }} timeZone="UTC">
+      <NextIntlClientProvider
+        locale="en"
+        messages={{ dashboard: dashboardMessages }}
+        timeZone="UTC"
+      >
         {node}
       </NextIntlClientProvider>
     );

@@ -215,8 +215,8 @@ describe("usage-logs-table multiplier badge", () => {
       );
     });
 
-    const sessionBtn = Array.from(container.querySelectorAll("button")).find(
-      (b) => (b.textContent ?? "").includes("session_test")
+    const sessionBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      (b.textContent ?? "").includes("session_test")
     );
     expect(sessionBtn).not.toBeUndefined();
 

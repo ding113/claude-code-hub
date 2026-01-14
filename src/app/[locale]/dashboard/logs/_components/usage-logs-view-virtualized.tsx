@@ -13,10 +13,10 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource, SystemSettings } from "@/types/system-config";
+import { buildLogsUrlQuery, parseLogsUrlFilters } from "../_utils/logs-query";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
-import { buildLogsUrlQuery, parseLogsUrlFilters } from "../_utils/logs-query";
 
 // Create a stable QueryClient instance
 const queryClient = new QueryClient({
@@ -92,38 +92,47 @@ function UsageLogsViewContent({
   const resolvedKeys = initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
 
   // Parse filters from URL with stable reference
-  const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(
-    () => {
-      const parsed = parseLogsUrlFilters(searchParams);
-      return {
-        userId: parsed.userId,
-        keyId: parsed.keyId,
-        providerId: parsed.providerId,
-        sessionId: parsed.sessionId,
-        startTime: parsed.startTime,
-        endTime: parsed.endTime,
-        statusCode: parsed.statusCode,
-        excludeStatusCode200: parsed.excludeStatusCode200,
-        model: parsed.model,
-        endpoint: parsed.endpoint,
-        minRetryCount: parsed.minRetryCount,
-        page: parsed.page,
-      };
-    },
-    [
-      searchParams.userId,
-      searchParams.keyId,
-      searchParams.providerId,
-      searchParams.sessionId,
-      searchParams.startTime,
-      searchParams.endTime,
-      searchParams.statusCode,
-      searchParams.model,
-      searchParams.endpoint,
-      searchParams.minRetry,
-      searchParams.page,
-    ]
-  );
+  const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(() => {
+    const parsed = parseLogsUrlFilters({
+      userId: searchParams.userId,
+      keyId: searchParams.keyId,
+      providerId: searchParams.providerId,
+      sessionId: searchParams.sessionId,
+      startTime: searchParams.startTime,
+      endTime: searchParams.endTime,
+      statusCode: searchParams.statusCode,
+      model: searchParams.model,
+      endpoint: searchParams.endpoint,
+      minRetry: searchParams.minRetry,
+      page: searchParams.page,
+    });
+    return {
+      userId: parsed.userId,
+      keyId: parsed.keyId,
+      providerId: parsed.providerId,
+      sessionId: parsed.sessionId,
+      startTime: parsed.startTime,
+      endTime: parsed.endTime,
+      statusCode: parsed.statusCode,
+      excludeStatusCode200: parsed.excludeStatusCode200,
+      model: parsed.model,
+      endpoint: parsed.endpoint,
+      minRetryCount: parsed.minRetryCount,
+      page: parsed.page,
+    };
+  }, [
+    searchParams.userId,
+    searchParams.keyId,
+    searchParams.providerId,
+    searchParams.sessionId,
+    searchParams.startTime,
+    searchParams.endTime,
+    searchParams.statusCode,
+    searchParams.model,
+    searchParams.endpoint,
+    searchParams.minRetry,
+    searchParams.page,
+  ]);
 
   // Manual refresh handler
   const handleManualRefresh = useCallback(async () => {

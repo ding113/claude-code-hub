@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { buildLogsUrlQuery, parseLogsUrlFilters } from "@/app/[locale]/dashboard/logs/_utils/logs-query";
+import {
+  buildLogsUrlQuery,
+  parseLogsUrlFilters,
+} from "@/app/[locale]/dashboard/logs/_utils/logs-query";
 
 describe("dashboard logs url query utils", () => {
   test("parses and trims sessionId", () => {
@@ -7,10 +10,27 @@ describe("dashboard logs url query utils", () => {
     expect(parsed.sessionId).toBe("abc");
   });
 
+  test("array params use the first value", () => {
+    const parsed = parseLogsUrlFilters({
+      sessionId: ["  abc  ", "ignored"],
+      userId: ["1", "2"],
+      statusCode: ["!200", "200"],
+    });
+    expect(parsed.sessionId).toBe("abc");
+    expect(parsed.userId).toBe(1);
+    expect(parsed.excludeStatusCode200).toBe(true);
+  });
+
   test("statusCode '!200' maps to excludeStatusCode200", () => {
     const parsed = parseLogsUrlFilters({ statusCode: "!200" });
     expect(parsed.excludeStatusCode200).toBe(true);
     expect(parsed.statusCode).toBeUndefined();
+  });
+
+  test("parseIntParam returns undefined for invalid numbers", () => {
+    const parsed = parseLogsUrlFilters({ userId: "NaN", startTime: "bad" });
+    expect(parsed.userId).toBeUndefined();
+    expect(parsed.startTime).toBeUndefined();
   });
 
   test("buildLogsUrlQuery omits empty sessionId", () => {
@@ -44,5 +64,9 @@ describe("dashboard logs url query utils", () => {
     const parsed = parseLogsUrlFilters(Object.fromEntries(query.entries()));
     expect(parsed).toEqual(expect.objectContaining(original));
   });
-});
 
+  test("buildLogsUrlQuery includes minRetryCount even when 0", () => {
+    const query = buildLogsUrlQuery({ minRetryCount: 0 });
+    expect(query.get("minRetry")).toBe("0");
+  });
+});
