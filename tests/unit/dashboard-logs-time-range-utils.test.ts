@@ -1,0 +1,31 @@
+import { describe, expect, test } from "vitest";
+import {
+  dateStringWithClockToTimestamp,
+  formatClockFromTimestamp,
+  inclusiveEndTimestampFromExclusive,
+  parseClockString,
+} from "@/app/[locale]/dashboard/logs/_utils/time-range";
+
+describe("dashboard logs time range utils", () => {
+  test("parseClockString supports HH:MM and defaults seconds to 0", () => {
+    expect(parseClockString("01:02")).toEqual({ hours: 1, minutes: 2, seconds: 0 });
+  });
+
+  test("dateStringWithClockToTimestamp combines local date + clock", () => {
+    const ts = dateStringWithClockToTimestamp("2026-01-01", "01:02:03");
+    const expected = new Date(2026, 0, 1, 1, 2, 3, 0).getTime();
+    expect(ts).toBe(expected);
+  });
+
+  test("exclusive end time round-trips to inclusive end time (+/-1s)", () => {
+    const inclusive = dateStringWithClockToTimestamp("2026-01-02", "04:05:06");
+    const exclusive = inclusive + 1000;
+    expect(inclusiveEndTimestampFromExclusive(exclusive)).toBe(inclusive);
+  });
+
+  test("formatClockFromTimestamp uses HH:MM:SS", () => {
+    const ts = new Date(2026, 0, 1, 1, 2, 3, 0).getTime();
+    expect(formatClockFromTimestamp(ts)).toBe("01:02:03");
+  });
+});
+
