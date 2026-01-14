@@ -35,6 +35,8 @@ export function parseLogsUrlFilters(searchParams: {
   [key: string]: string | string[] | undefined;
 }): LogsUrlFilters {
   const statusCodeParam = parseStringParam(searchParams.statusCode);
+  const pageRaw = parseIntParam(searchParams.page);
+  const page = pageRaw && pageRaw >= 1 ? pageRaw : undefined;
 
   const statusCode =
     statusCodeParam && statusCodeParam !== "!200"
@@ -53,22 +55,22 @@ export function parseLogsUrlFilters(searchParams: {
     model: parseStringParam(searchParams.model),
     endpoint: parseStringParam(searchParams.endpoint),
     minRetryCount: parseIntParam(searchParams.minRetry),
-    page: parseIntParam(searchParams.page),
+    page,
   };
 }
 
 export function buildLogsUrlQuery(filters: LogsUrlFilters): URLSearchParams {
   const query = new URLSearchParams();
 
-  if (filters.userId) query.set("userId", filters.userId.toString());
-  if (filters.keyId) query.set("keyId", filters.keyId.toString());
-  if (filters.providerId) query.set("providerId", filters.providerId.toString());
+  if (filters.userId !== undefined) query.set("userId", filters.userId.toString());
+  if (filters.keyId !== undefined) query.set("keyId", filters.keyId.toString());
+  if (filters.providerId !== undefined) query.set("providerId", filters.providerId.toString());
 
   const sessionId = filters.sessionId?.trim();
   if (sessionId) query.set("sessionId", sessionId);
 
-  if (filters.startTime) query.set("startTime", filters.startTime.toString());
-  if (filters.endTime) query.set("endTime", filters.endTime.toString());
+  if (filters.startTime !== undefined) query.set("startTime", filters.startTime.toString());
+  if (filters.endTime !== undefined) query.set("endTime", filters.endTime.toString());
 
   if (filters.excludeStatusCode200) {
     query.set("statusCode", "!200");
@@ -83,7 +85,9 @@ export function buildLogsUrlQuery(filters: LogsUrlFilters): URLSearchParams {
     query.set("minRetry", filters.minRetryCount.toString());
   }
 
-  if (filters.page) query.set("page", filters.page.toString());
+  if (filters.page !== undefined && filters.page > 1) {
+    query.set("page", filters.page.toString());
+  }
 
   return query;
 }

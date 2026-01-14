@@ -22,9 +22,15 @@ describe("dashboard logs time range utils", () => {
     expect(ts).toBe(expected);
   });
 
+  test("dateStringWithClockToTimestamp returns undefined for invalid date", () => {
+    expect(dateStringWithClockToTimestamp("not-a-date", "01:02:03")).toBeUndefined();
+    expect(dateStringWithClockToTimestamp("2026-13-40", "01:02:03")).toBeUndefined();
+  });
+
   test("exclusive end time round-trips to inclusive end time (+/-1s)", () => {
     const inclusive = dateStringWithClockToTimestamp("2026-01-02", "04:05:06");
-    const exclusive = inclusive + 1000;
+    expect(inclusive).toBeDefined();
+    const exclusive = inclusive! + 1000;
     expect(inclusiveEndTimestampFromExclusive(exclusive)).toBe(inclusive);
   });
 

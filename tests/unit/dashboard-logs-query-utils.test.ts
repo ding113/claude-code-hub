@@ -45,6 +45,24 @@ describe("dashboard logs url query utils", () => {
     expect(query.get("endTime")).toBe("2");
   });
 
+  test("buildLogsUrlQuery includes startTime/endTime even when 0", () => {
+    const query = buildLogsUrlQuery({ startTime: 0, endTime: 0 });
+    expect(query.get("startTime")).toBe("0");
+    expect(query.get("endTime")).toBe("0");
+  });
+
+  test("parseLogsUrlFilters sanitizes invalid page (<1) to undefined", () => {
+    expect(parseLogsUrlFilters({ page: "0" }).page).toBeUndefined();
+    expect(parseLogsUrlFilters({ page: "-1" }).page).toBeUndefined();
+    expect(parseLogsUrlFilters({ page: "1" }).page).toBe(1);
+  });
+
+  test("buildLogsUrlQuery only includes page when > 1", () => {
+    expect(buildLogsUrlQuery({ page: 0 }).get("page")).toBeNull();
+    expect(buildLogsUrlQuery({ page: 1 }).get("page")).toBeNull();
+    expect(buildLogsUrlQuery({ page: 2 }).get("page")).toBe("2");
+  });
+
   test("build + parse roundtrip preserves filters", () => {
     const original = {
       userId: 1,

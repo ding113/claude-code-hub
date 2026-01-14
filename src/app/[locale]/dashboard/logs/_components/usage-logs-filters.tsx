@@ -424,6 +424,14 @@ export function UsageLogsFilters({
         const endClock = displayEndClock ?? "23:59:59";
         const startTimestamp = dateStringWithClockToTimestamp(range.startDate, startClock);
         const endInclusiveTimestamp = dateStringWithClockToTimestamp(range.endDate, endClock);
+        if (startTimestamp === undefined || endInclusiveTimestamp === undefined) {
+          setLocalFilters((prev) => ({
+            ...prev,
+            startTime: undefined,
+            endTime: undefined,
+          }));
+          return;
+        }
         const endTimestamp = endInclusiveTimestamp + 1000;
         setLocalFilters((prev) => ({
           ...prev,
@@ -465,9 +473,11 @@ export function UsageLogsFilters({
                   setLocalFilters((prev) => {
                     if (!prev.startTime) return prev;
                     const dateStr = timestampToDateString(prev.startTime);
+                    const startTime = dateStringWithClockToTimestamp(dateStr, nextClock);
+                    if (startTime === undefined) return prev;
                     return {
                       ...prev,
-                      startTime: dateStringWithClockToTimestamp(dateStr, nextClock),
+                      startTime,
                     };
                   });
                 }}
@@ -490,6 +500,7 @@ export function UsageLogsFilters({
                       endDateStr,
                       nextClock
                     );
+                    if (endInclusiveTimestamp === undefined) return prev;
                     return {
                       ...prev,
                       endTime: endInclusiveTimestamp + 1000,

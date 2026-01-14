@@ -26,11 +26,22 @@ export function formatClockFromTimestamp(timestamp: number): string {
   return `${hh}:${mm}:${ss}`;
 }
 
-export function dateStringWithClockToTimestamp(dateStr: string, clockStr: string): number {
+export function dateStringWithClockToTimestamp(
+  dateStr: string,
+  clockStr: string
+): number | undefined {
   const [year, month, day] = dateStr.split("-").map(Number);
   const { hours, minutes, seconds } = parseClockString(clockStr);
 
-  return new Date(year, month - 1, day, hours, minutes, seconds, 0).getTime();
+  const date = new Date(year, month - 1, day, hours, minutes, seconds, 0);
+  const timestamp = date.getTime();
+  if (!Number.isFinite(timestamp)) return undefined;
+
+  if (date.getFullYear() !== year) return undefined;
+  if (date.getMonth() !== month - 1) return undefined;
+  if (date.getDate() !== day) return undefined;
+
+  return timestamp;
 }
 
 export function inclusiveEndTimestampFromExclusive(endExclusiveTimestamp: number): number {
