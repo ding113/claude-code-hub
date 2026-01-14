@@ -87,6 +87,51 @@ export class SessionManager {
   private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
     process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
 
+  private static getDefaultSessionTtlSeconds(): number {
+    const parsed = SessionManager.SESSION_TTL;
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 300;
+    }
+    return parsed;
+  }
+
+  static resolveSessionTtl(providerTtl: number | null | undefined): number {
+    const rawValue = providerTtl ?? SessionManager.getDefaultSessionTtlSeconds();
+    const normalized = Number.isFinite(rawValue)
+      ? Math.trunc(rawValue)
+      : SessionManager.getDefaultSessionTtlSeconds();
+
+    return Math.max(60, Math.min(normalized, 3600));
+  }
+
+  static async resolveSessionTtlForSession(sessionId: string): Promise<number> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      return SessionManager.resolveSessionTtl(null);
+    }
+
+    try {
+      const providerIdRaw = await redis.get(`session:${sessionId}:provider`);
+      if (!providerIdRaw) {
+        return SessionManager.resolveSessionTtl(null);
+      }
+
+      const providerId = Number.parseInt(providerIdRaw, 10);
+      if (!Number.isFinite(providerId)) {
+        return SessionManager.resolveSessionTtl(null);
+      }
+
+      const { findAllProviders } = await import("@/repository/provider");
+      const providers = await findAllProviders();
+      const provider = providers.find((item) => item.id === providerId);
+
+      return SessionManager.resolveSessionTtl(provider?.sessionTtl);
+    } catch (error) {
+      logger.warn("SessionManager: Failed to resolve session TTL", { sessionId, error });
+      return SessionManager.resolveSessionTtl(null);
+    }
+  }
+
   /**
    * 从客户端请求中提取 session_id（支持 metadata 或 header）
    *
@@ -469,16 +514,13 @@ export class SessionManager {
     if (!redis || redis.status !== "ready") return;
 
     try {
+      const ttlSeconds = await SessionManager.resolveSessionTtlForSession(sessionId);
       const pipeline = redis.pipeline();
 
       // 刷新所有 session 相关 key 的 TTL
-      pipeline.expire(`session:${sessionId}:key`, SessionManager.SESSION_TTL);
-      pipeline.expire(`session:${sessionId}:provider`, SessionManager.SESSION_TTL);
-      pipeline.setex(
-        `session:${sessionId}:last_seen`,
-        SessionManager.SESSION_TTL,
-        Date.now().toString()
-      );
+      pipeline.expire(`session:${sessionId}:key`, ttlSeconds);
+      pipeline.expire(`session:${sessionId}:provider`, ttlSeconds);
+      pipeline.setex(`session:${sessionId}:last_seen`, ttlSeconds, Date.now().toString());
 
       await pipeline.exec();
     } catch (error) {
@@ -489,7 +531,11 @@ export class SessionManager {
   /**
    * 绑定 session 到 provider（TC-009 修复：使用 SET NX 避免竞态条件）
    */
-  static async bindSessionToProvider(sessionId: string, providerId: number): Promise<void> {
+  static async bindSessionToProvider(
+    sessionId: string,
+    providerId: number,
+    providerSessionTtl?: number | null
+  ): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
@@ -500,7 +546,7 @@ export class SessionManager {
         key,
         providerId.toString(),
         "EX",
-        SessionManager.SESSION_TTL,
+        SessionManager.resolveSessionTtl(providerSessionTtl),
         "NX" // Only set if not exists
       );
 
@@ -596,7 +642,8 @@ export class SessionManager {
     newProviderId: number,
     newProviderPriority: number,
     isFirstAttempt: boolean = false,
-    isFailoverSuccess: boolean = false
+    isFailoverSuccess: boolean = false,
+    providerSessionTtl?: number | null
   ): Promise<{ updated: boolean; reason: string; details?: string }> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
@@ -604,17 +651,12 @@ export class SessionManager {
     }
 
     try {
+      const ttlSeconds = SessionManager.resolveSessionTtl(providerSessionTtl);
       // ========== 情况 1：首次尝试成功 ==========
       if (isFirstAttempt) {
         const key = `session:${sessionId}:provider`;
         // 使用 SET NX 绑定（避免覆盖并发请求）
-        const result = await redis.set(
-          key,
-          newProviderId.toString(),
-          "EX",
-          SessionManager.SESSION_TTL,
-          "NX"
-        );
+        const result = await redis.set(key, newProviderId.toString(), "EX", ttlSeconds, "NX");
 
         if (result === "OK") {
           logger.info("SessionManager: Bound session to provider (first success)", {
@@ -642,7 +684,7 @@ export class SessionManager {
       // 2.0 故障转移成功：无条件更新绑定（减少缓存切换）
       if (isFailoverSuccess) {
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, ttlSeconds, newProviderId.toString());
 
         logger.info("SessionManager: Updated binding after failover", {
           sessionId,
@@ -662,13 +704,7 @@ export class SessionManager {
       if (!currentProviderIdStr) {
         // 没有绑定，使用 SET NX 绑定
         const key = `session:${sessionId}:provider`;
-        const result = await redis.set(
-          key,
-          newProviderId.toString(),
-          "EX",
-          SessionManager.SESSION_TTL,
-          "NX"
-        );
+        const result = await redis.set(key, newProviderId.toString(), "EX", ttlSeconds, "NX");
 
         if (result === "OK") {
           logger.info("SessionManager: Bound session (no previous binding)", {
@@ -705,7 +741,7 @@ export class SessionManager {
       if (!currentProvider) {
         // 当前供应商不存在（可能被删除），直接更新
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, ttlSeconds, newProviderId.toString());
 
         logger.info("SessionManager: Updated binding (current provider not found)", {
           sessionId,
@@ -728,7 +764,7 @@ export class SessionManager {
       // ========== 规则 A：新供应商优先级更高（数字更小）→ 直接迁移 ==========
       if (newProviderPriority < currentPriority) {
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, ttlSeconds, newProviderId.toString());
 
         logger.info("SessionManager: Migrated to higher priority provider", {
           sessionId,
@@ -753,7 +789,7 @@ export class SessionManager {
       if (isCurrentCircuitOpen) {
         // 原供应商已熔断 → 更新到新供应商（备用供应商接管）
         const key = `session:${sessionId}:provider`;
-        await redis.setex(key, SessionManager.SESSION_TTL, newProviderId.toString());
+        await redis.setex(key, ttlSeconds, newProviderId.toString());
 
         logger.info("SessionManager: Migrated to backup provider (circuit open)", {
           sessionId,
@@ -1812,7 +1848,8 @@ export class SessionManager {
   static async updateSessionWithCodexCacheKey(
     currentSessionId: string,
     promptCacheKey: string,
-    providerId: number
+    providerId: number,
+    providerSessionTtl?: number | null
   ): Promise<{ sessionId: string; updated: boolean }> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
@@ -1821,6 +1858,7 @@ export class SessionManager {
     }
 
     try {
+      const ttlSeconds = SessionManager.resolveSessionTtl(providerSessionTtl);
       // 使用 prompt_cache_key 作为新的 Session ID（添加前缀以区分）
       const codexSessionId = `codex_${promptCacheKey}`;
 
@@ -1829,7 +1867,7 @@ export class SessionManager {
 
       if (existingProvider) {
         // 已存在绑定，刷新 TTL
-        await redis.expire(`session:${codexSessionId}:provider`, SessionManager.SESSION_TTL);
+        await redis.expire(`session:${codexSessionId}:provider`, ttlSeconds);
         logger.debug("SessionManager: Refreshed Codex session TTL", {
           sessionId: codexSessionId,
           providerId: parseInt(existingProvider, 10),
@@ -1842,14 +1880,14 @@ export class SessionManager {
         `session:${codexSessionId}:provider`,
         providerId.toString(),
         "EX",
-        SessionManager.SESSION_TTL
+        ttlSeconds
       );
 
       logger.info("SessionManager: Created Codex session from prompt_cache_key", {
         sessionId: codexSessionId,
         promptCacheKey,
         providerId,
-        ttl: SessionManager.SESSION_TTL,
+        ttl: ttlSeconds,
       });
 
       return { sessionId: codexSessionId, updated: true };

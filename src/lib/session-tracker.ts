@@ -154,9 +154,16 @@ export class SessionTracker {
    * @param keyId - API Key ID
    * @param providerId - Provider ID
    */
-  static async refreshSession(sessionId: string, keyId: number, providerId: number): Promise<void> {
+  static async refreshSession(
+    sessionId: string,
+    keyId: number,
+    providerId: number,
+    ttlSeconds: number
+  ): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
+
+    const normalizedTtlSeconds = Number.isFinite(ttlSeconds) && ttlSeconds > 0 ? ttlSeconds : 300;
 
     try {
       const now = Date.now();
@@ -167,17 +174,9 @@ export class SessionTracker {
       pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
       pipeline.zadd(`provider:${providerId}:active_sessions`, now, sessionId);
 
-      // 修复 Bug：同步刷新 session 绑定信息的 TTL
-      //
-      // 问题：ZSET 条目（上面 zadd）会在每次请求时更新时间戳，但绑定信息 key 的 TTL 不会自动刷新
-      // 导致：session 创建 5 分钟后，ZSET 仍有记录（仍被计为活跃），但绑定信息已过期，造成：
-      //   1. 并发检查被绕过（无法从绑定信息查询 session 所属 provider/key，检查失效）
-      //   2. Session 复用失败（无法确定 session 绑定关系，被迫创建新 session）
-      //
-      // 解决：每次 refreshSession 时同步刷新绑定信息 TTL（与 ZSET 保持 5 分钟生命周期一致）
-      pipeline.expire(`session:${sessionId}:provider`, 300); // 5 分钟（秒）
-      pipeline.expire(`session:${sessionId}:key`, 300);
-      pipeline.setex(`session:${sessionId}:last_seen`, 300, now.toString());
+      pipeline.expire(`session:${sessionId}:provider`, normalizedTtlSeconds);
+      pipeline.expire(`session:${sessionId}:key`, normalizedTtlSeconds);
+      pipeline.setex(`session:${sessionId}:last_seen`, normalizedTtlSeconds, now.toString());
 
       const results = await pipeline.exec();
 

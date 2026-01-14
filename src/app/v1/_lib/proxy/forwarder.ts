@@ -317,7 +317,8 @@ export class ProxyForwarder {
               currentProvider.id,
               currentProvider.priority || 0,
               totalProvidersAttempted === 1 && attemptCount === 1, // isFirstAttempt
-              totalProvidersAttempted > 1 // isFailoverSuccess: 切换过供应商
+              totalProvidersAttempted > 1, // isFailoverSuccess: 切换过供应商
+              currentProvider.sessionTtl
             );
 
             if (result.updated) {
