@@ -39,7 +39,29 @@ CREATE TABLE IF NOT EXISTS "provider_vendors" (
 	"updated_at" timestamp with time zone DEFAULT now()
 );
 --> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "website_domain" varchar(255);
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "display_name" varchar(200);
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "website_url" text;
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "favicon_url" text;
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "created_at" timestamp with time zone DEFAULT now();
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "updated_at" timestamp with time zone DEFAULT now();
+--> statement-breakpoint
+UPDATE "provider_vendors"
+SET "website_domain" = 'unknown-' || "id"
+WHERE ("website_domain" IS NULL OR "website_domain" = '');
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ALTER COLUMN "website_domain" SET NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "uniq_provider_vendors_website_domain" ON "provider_vendors" USING btree ("website_domain");
+--> statement-breakpoint
 ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "provider_vendor_id" integer;
+--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN IF NOT EXISTS "enable_codex_session_id_completion" boolean DEFAULT true NOT NULL;
 --> statement-breakpoint
 INSERT INTO provider_vendors (website_domain)
 SELECT DISTINCT
@@ -123,8 +145,6 @@ CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_enabled" ON "provider_endpoin
 CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_created_at" ON "provider_endpoints" USING btree ("created_at");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_deleted_at" ON "provider_endpoints" USING btree ("deleted_at");
---> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "uniq_provider_vendors_website_domain" ON "provider_vendors" USING btree ("website_domain");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_provider_vendors_created_at" ON "provider_vendors" USING btree ("created_at");
 --> statement-breakpoint
