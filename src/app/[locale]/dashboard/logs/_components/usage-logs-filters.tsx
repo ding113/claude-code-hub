@@ -611,7 +611,9 @@ export function UsageLogsFilters({
               setLocalFilters({
                 ...localFilters,
                 statusCode:
-                  value && value !== "!200" && value !== "__all__" ? parseInt(value, 10) : undefined,
+                  value && value !== "!200" && value !== "__all__"
+                    ? parseInt(value, 10)
+                    : undefined,
                 excludeStatusCode200: value === "!200",
               })
             }

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
-import { defaultLocale, locales, type Locale } from "@/i18n/config";
+import { defaultLocale, type Locale, locales } from "@/i18n/config";
 import { getLoginRedirectTarget, setAuthCookie, validateKey } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 

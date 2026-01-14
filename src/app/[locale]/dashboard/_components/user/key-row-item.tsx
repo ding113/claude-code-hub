@@ -1,6 +1,16 @@
 "use client";
 
-import { Activity, BarChart3, Coins, Copy, Eye, FileText, Info, Pencil, Trash2 } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Coins,
+  Copy,
+  Eye,
+  FileText,
+  Info,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
@@ -184,7 +194,6 @@ export function KeyRowItem({
   // 计算 key 过期状态
   const keyExpiryStatus = getKeyExpiryStatus(localStatus, localExpiresAt);
   const remainingGroups = Math.max(0, effectiveGroups.length - visibleGroups.length);
-  const effectiveGroupText = effectiveGroups.join(", ");
 
   const canReveal = Boolean(keyData.fullKey);
   const canCopy = Boolean(keyData.canCopy && keyData.fullKey);
@@ -407,10 +416,7 @@ export function KeyRowItem({
                       </Badge>
                     ))}
                     {remainingGroups > 0 ? (
-                      <Badge
-                        variant="outline"
-                        className="text-xs font-mono shrink-0"
-                      >
+                      <Badge variant="outline" className="text-xs font-mono shrink-0">
                         +{remainingGroups}
                       </Badge>
                     ) : null}
@@ -452,10 +458,7 @@ export function KeyRowItem({
       </div>
 
       {/* 今日消耗（成本） */}
-      <div
-        className="text-right font-mono tabular-nums"
-        title={translations.fields.todayCost}
-      >
+      <div className="text-right font-mono tabular-nums" title={translations.fields.todayCost}>
         {formatCurrency(keyData.todayUsage || 0, resolvedCurrencyCode)}
       </div>
 

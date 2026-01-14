@@ -520,7 +520,9 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             </div>
             <div className="space-y-1">
               <div className="flex items-baseline gap-1.5">
-                <span className="text-xs text-muted-foreground">{tProviderGroup("userGroup")}:</span>
+                <span className="text-xs text-muted-foreground">
+                  {tProviderGroup("userGroup")}:
+                </span>
                 <span className="text-sm font-semibold text-foreground">
                   {selfUser.providerGroup || tProviderGroup("allProviders")}
                 </span>
@@ -538,13 +540,17 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
               <div className="flex items-baseline gap-1.5">
                 <span className="text-xs text-muted-foreground">{tRestrictions("models")}:</span>
                 <span className="text-sm font-semibold text-foreground">
-                  {selfUser.allowedModels?.length ? selfUser.allowedModels.join(", ") : tRestrictions("noRestrictions")}
+                  {selfUser.allowedModels?.length
+                    ? selfUser.allowedModels.join(", ")
+                    : tRestrictions("noRestrictions")}
                 </span>
               </div>
               <div className="flex items-baseline gap-1.5">
                 <span className="text-xs text-muted-foreground">{tRestrictions("clients")}:</span>
                 <span className="text-sm font-semibold text-foreground">
-                  {selfUser.allowedClients?.length ? selfUser.allowedClients.join(", ") : tRestrictions("noRestrictions")}
+                  {selfUser.allowedClients?.length
+                    ? selfUser.allowedClients.join(", ")
+                    : tRestrictions("noRestrictions")}
                 </span>
               </div>
             </div>

@@ -425,7 +425,6 @@ export function UserManagementTable({
               onEditSelected={onOpenBatchEdit}
             />
           ) : null}
-
         </div>
 
         {onRefresh ? (

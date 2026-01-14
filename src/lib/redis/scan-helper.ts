@@ -14,22 +14,15 @@ import type Redis from "ioredis";
  * @example
  * const keys = await scanPattern(redis, "session:*:info", 100);
  */
-export async function scanPattern(
-  redis: Redis,
-  pattern: string,
-  count = 100
-): Promise<string[]> {
+export async function scanPattern(redis: Redis, pattern: string, count = 100): Promise<string[]> {
   const keys: string[] = [];
   let cursor = "0";
 
   do {
-    const [nextCursor, batch] = (await redis.scan(
-      cursor,
-      "MATCH",
-      pattern,
-      "COUNT",
-      count
-    )) as [string, string[]];
+    const [nextCursor, batch] = (await redis.scan(cursor, "MATCH", pattern, "COUNT", count)) as [
+      string,
+      string[],
+    ];
 
     cursor = nextCursor;
     keys.push(...batch);

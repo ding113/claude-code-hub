@@ -210,7 +210,12 @@ export async function getUsers(): Promise<UserDisplay[]> {
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
 
-        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 }]));
+        const usageLookup = new Map(
+          usageRecords.map((item) => [
+            item.keyId,
+            { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 },
+          ])
+        );
         const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
 
         return {
@@ -474,7 +479,12 @@ export async function getUsersBatch(
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
 
-        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 }]));
+        const usageLookup = new Map(
+          usageRecords.map((item) => [
+            item.keyId,
+            { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 },
+          ])
+        );
         const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
 
         return {

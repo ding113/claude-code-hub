@@ -2,7 +2,7 @@
 
 import { format as formatDate } from "date-fns";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateDistance } from "@/lib/utils/date-format";
 
@@ -38,29 +38,32 @@ export function RelativeTime({
   const tShort = useTranslations("common.relativeTimeShort");
 
   // Format short distance with i18n
-  const formatShortDistance = (dateObj: Date, now: Date): string => {
-    if (Number.isNaN(dateObj.getTime())) return fallback;
-    if (dateObj > now) return tShort("now");
+  const formatShortDistance = useCallback(
+    (dateObj: Date, now: Date): string => {
+      if (Number.isNaN(dateObj.getTime())) return fallback;
+      if (dateObj > now) return tShort("now");
 
-    const diffMs = now.getTime() - dateObj.getTime();
-    const seconds = Math.floor(diffMs / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    const weeks = Math.floor(days / 7);
-    const months = Math.floor(days / 30);
-    const years = Math.floor(days / 365);
+      const diffMs = now.getTime() - dateObj.getTime();
+      const seconds = Math.floor(diffMs / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      const weeks = Math.floor(days / 7);
+      const months = Math.floor(days / 30);
+      const years = Math.floor(days / 365);
 
-    if (years > 0) return tShort("yearsAgo", { count: years });
-    if (months > 0) return tShort("monthsAgo", { count: months });
-    if (weeks > 0) return tShort("weeksAgo", { count: weeks });
-    if (days > 0) return tShort("daysAgo", { count: days });
-    if (hours > 0) return tShort("hoursAgo", { count: hours });
-    if (minutes > 0) return tShort("minutesAgo", { count: minutes });
-    if (seconds > 0) return tShort("secondsAgo", { count: seconds });
+      if (years > 0) return tShort("yearsAgo", { count: years });
+      if (months > 0) return tShort("monthsAgo", { count: months });
+      if (weeks > 0) return tShort("weeksAgo", { count: weeks });
+      if (days > 0) return tShort("daysAgo", { count: days });
+      if (hours > 0) return tShort("hoursAgo", { count: hours });
+      if (minutes > 0) return tShort("minutesAgo", { count: minutes });
+      if (seconds > 0) return tShort("secondsAgo", { count: seconds });
 
-    return tShort("now");
-  };
+      return tShort("now");
+    },
+    [tShort, fallback]
+  );
 
   // Precompute an absolute timestamp string for tooltip content. Include timezone display.
   const absolute = useMemo(() => {
@@ -100,7 +103,7 @@ export function RelativeTime({
     const interval = setInterval(updateTime, updateInterval);
 
     return () => clearInterval(interval);
-  }, [date, autoUpdate, updateInterval, locale, format, fallback, tShort]);
+  }, [date, autoUpdate, updateInterval, locale, format, formatShortDistance]);
 
   // 服务端渲染和客户端首次渲染显示占位符
   if (!mounted) {

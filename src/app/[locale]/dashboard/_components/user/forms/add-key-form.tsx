@@ -232,9 +232,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
             <SelectItem value="1h">{t("cacheTtl.options.1h")}</SelectItem>
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          {t("cacheTtl.description")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("cacheTtl.description")}</p>
       </div>
 
       <FormGrid columns={2}>

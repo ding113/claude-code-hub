@@ -18,7 +18,9 @@ export function Section({ title, description, actions, children, className }: Se
           <h2 className="text-base font-semibold tracking-tight">{title}</h2>
           {description ? <p className="text-sm text-muted-foreground mt-1">{description}</p> : null}
         </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div> : null}
+        {actions ? (
+          <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>
+        ) : null}
       </div>
       {children}
     </section>

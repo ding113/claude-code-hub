@@ -7,12 +7,7 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import {
-  editUser,
-  removeUser,
-  resetUserAllStatistics,
-  toggleUserEnabled,
-} from "@/actions/users";
+import { editUser, removeUser, resetUserAllStatistics, toggleUserEnabled } from "@/actions/users";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,8 +28,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
+import { cn } from "@/lib/utils";
 import { UpdateUserSchema } from "@/lib/validation/schemas";
 import type { UserDisplay } from "@/types/user";
 import { DangerZone } from "./forms/danger-zone";
@@ -312,9 +307,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t("editDialog.resetData.confirmTitle")}
-                    </AlertDialogTitle>
+                    <AlertDialogTitle>{t("editDialog.resetData.confirmTitle")}</AlertDialogTitle>
                     <AlertDialogDescription>
                       {t("editDialog.resetData.confirmDescription")}
                     </AlertDialogDescription>

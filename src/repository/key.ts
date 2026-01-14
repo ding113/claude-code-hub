@@ -355,7 +355,10 @@ export async function findKeyUsageTodayBatch(
     .where(and(inArray(keys.userId, userIds), isNull(keys.deletedAt)))
     .groupBy(keys.userId, keys.id);
 
-  const usageMap = new Map<number, Array<{ keyId: number; totalCost: number; totalTokens: number }>>();
+  const usageMap = new Map<
+    number,
+    Array<{ keyId: number; totalCost: number; totalTokens: number }>
+  >();
   for (const userId of userIds) {
     usageMap.set(userId, []);
   }
