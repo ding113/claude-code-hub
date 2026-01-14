@@ -4,5 +4,6 @@
   "groupTagTooLong": "プロバイダーグループが長すぎます（合計{max}文字まで）",
   "invalidUrl": "有効な API アドレスを入力してください",
   "invalidWebsiteUrl": "有効な公式サイト URL を入力してください",
+  "sessionTtlOutOfRange": "セッションTTLは{min}〜{max}秒の範囲で入力してください",
   "updateFailed": "プロバイダーの更新に失敗しました"
 }

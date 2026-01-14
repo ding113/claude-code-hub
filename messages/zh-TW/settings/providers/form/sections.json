@@ -174,6 +174,11 @@
         "inherit": "不覆寫（跟隨客戶端）"
       }
     },
+    "sessionTtl": {
+      "desc": "供應商級 Session TTL（秒）。會覆寫全域 SESSION_TTL。範圍：60-3600 秒。留空則使用全域設定。",
+      "label": "Session TTL（秒）",
+      "placeholder": "留空使用全域設定"
+    },
     "codexOverrides": {
       "parallelToolCalls": {
         "help": "控制是否允許並行 tool calls。關閉可能降低工具呼叫並發能力；「跟隨客戶端」不改寫 parallel_tool_calls。",

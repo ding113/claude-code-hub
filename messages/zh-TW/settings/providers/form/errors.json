@@ -1,6 +1,7 @@
 {
   "addFailed": "新增供應商失敗",
   "deleteFailed": "刪除供應商失敗",
+  "sessionTtlOutOfRange": "Session TTL 必須介於 {min} 到 {max} 秒之間",
   "groupTagTooLong": "分組標籤總長度不能超過 {max} 個字元",
   "invalidUrl": "請輸入有效的 API 位址",
   "invalidWebsiteUrl": "請輸入有效的供應商官網",

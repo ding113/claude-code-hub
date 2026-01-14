@@ -172,6 +172,9 @@ export function ProviderForm({
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
   );
+  const [sessionTtlSeconds, setSessionTtlSeconds] = useState<number | null>(
+    sourceProvider?.sessionTtl ?? null
+  );
 
   // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
   const [context1mPreference, setContext1mPreference] = useState<
@@ -377,6 +380,11 @@ export function ProviderForm({
       return;
     }
 
+    if (sessionTtlSeconds !== null && (sessionTtlSeconds < 60 || sessionTtlSeconds > 3600)) {
+      toast.error(t("errors.sessionTtlOutOfRange", { min: 60, max: 3600 }));
+      return;
+    }
+
     // 正常提交
     performSubmit();
   };
@@ -418,6 +426,7 @@ export function ProviderForm({
             limit_monthly_usd?: number | null;
             limit_total_usd?: number | null;
             limit_concurrent_sessions?: number | null;
+            session_ttl?: number | null;
             cache_ttl_preference?: "inherit" | "5m" | "1h";
             context_1m_preference?: Context1mPreference | null;
             codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
@@ -461,6 +470,7 @@ export function ProviderForm({
             limit_monthly_usd: limitMonthlyUsd,
             limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
+            session_ttl: sessionTtlSeconds,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
             codex_reasoning_effort_preference: codexReasoningEffortPreference,
@@ -526,6 +536,7 @@ export function ProviderForm({
             limit_monthly_usd: limitMonthlyUsd,
             limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
+            session_ttl: sessionTtlSeconds,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
             codex_reasoning_effort_preference: codexReasoningEffortPreference,
@@ -588,6 +599,7 @@ export function ProviderForm({
           setLimitMonthlyUsd(null);
           setLimitTotalUsd(null);
           setLimitConcurrentSessions(null);
+          setSessionTtlSeconds(null);
           setMaxRetryAttempts(null);
           setFailureThreshold(5);
           setOpenDurationMinutes(30);
@@ -1051,6 +1063,34 @@ export function ProviderForm({
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       {t("sections.routing.cacheTtl.desc")}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-session-ttl" : "session-ttl"}>
+                      {t("sections.routing.sessionTtl.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-session-ttl" : "session-ttl"}
+                      type="number"
+                      min="60"
+                      max="3600"
+                      step="1"
+                      placeholder={t("sections.routing.sessionTtl.placeholder")}
+                      value={sessionTtlSeconds?.toString() ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          setSessionTtlSeconds(null);
+                        } else {
+                          const num = parseInt(val, 10);
+                          setSessionTtlSeconds(Number.isNaN(num) ? null : num);
+                        }
+                      }}
+                      disabled={isPending}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.sessionTtl.desc")}
                     </p>
                   </div>
 
