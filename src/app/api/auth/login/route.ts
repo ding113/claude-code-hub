@@ -64,7 +64,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error("Login error:", error);
-    const t = await getTranslations({ locale, namespace: "auth.errors" });
-    return NextResponse.json({ error: t("serverError") }, { status: 500 });
+    try {
+      const t = await getTranslations({ locale, namespace: "auth.errors" });
+      return NextResponse.json({ error: t("serverError") }, { status: 500 });
+    } catch {
+      return NextResponse.json({ error: "Server error" }, { status: 500 });
+    }
   }
 }
