@@ -165,7 +165,7 @@ function VendorCard({
   statisticsLoading: boolean;
   currencyCode: CurrencyCode;
 }) {
-  const t = useTranslations("settings.providers.strings");
+  const t = useTranslations("settings.providers");
 
   const displayName =
     vendor?.displayName || vendor?.websiteDomain || t("vendorFallbackName", { id: vendorId });
@@ -234,7 +234,7 @@ function VendorCard({
 }
 
 function VendorEndpointsSection({ vendorId }: { vendorId: number }) {
-  const t = useTranslations("settings.providers.strings");
+  const t = useTranslations("settings.providers");
   const [activeType, setActiveType] = useState<ProviderType>("claude");
 
   const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
@@ -281,7 +281,7 @@ function VendorTypeCircuitControl({
   vendorId: number;
   providerType: ProviderType;
 }) {
-  const t = useTranslations("settings.providers.strings");
+  const t = useTranslations("settings.providers");
   const queryClient = useQueryClient();
 
   const { data: circuitInfo, isLoading } = useQuery({
@@ -348,7 +348,7 @@ function EndpointsTable({
   vendorId: number;
   providerType: ProviderType;
 }) {
-  const t = useTranslations("settings.providers.strings");
+  const t = useTranslations("settings.providers");
 
   const { data: endpoints = [], isLoading } = useQuery({
     queryKey: ["provider-endpoints", vendorId, providerType],
@@ -393,7 +393,7 @@ function EndpointsTable({
 }
 
 function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
-  const t = useTranslations("settings.providers.strings");
+  const t = useTranslations("settings.providers");
   const tCommon = useTranslations("settings.common");
   const queryClient = useQueryClient();
   const [isProbing, setIsProbing] = useState(false);
@@ -526,7 +526,7 @@ function AddEndpointButton({
   vendorId: number;
   providerType: ProviderType;
 }) {
-  const t = useTranslations("settings.providers.strings");
+  const t = useTranslations("settings.providers");
   const tCommon = useTranslations("settings.common");
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -601,7 +601,7 @@ function AddEndpointButton({
 }
 
 function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
-  const t = useTranslations("settings.providers.strings");
+  const t = useTranslations("settings.providers");
   const tCommon = useTranslations("settings.common");
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();

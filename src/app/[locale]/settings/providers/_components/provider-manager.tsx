@@ -58,7 +58,7 @@ export function ProviderManager({
   addDialogSlot,
 }: ProviderManagerProps) {
   const t = useTranslations("settings.providers.search");
-  const tStrings = useTranslations("settings.providers.strings");
+  const tStrings = useTranslations("settings.providers");
   const tFilter = useTranslations("settings.providers.filter");
   const tCommon = useTranslations("settings.common");
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
