@@ -68,6 +68,11 @@
       },
       "desc": "强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。"
     },
+    "sessionTtl": {
+      "label": "Session TTL（秒）",
+      "placeholder": "留空使用全局配置",
+      "desc": "供应商级 Session TTL（秒）。会覆写全局 SESSION_TTL。范围：60-3600 秒。留空则使用全局配置。"
+    },
     "context1m": {
       "label": "1M 上下文窗口",
       "options": {

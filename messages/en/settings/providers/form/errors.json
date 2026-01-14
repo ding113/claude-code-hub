@@ -4,5 +4,6 @@
   "groupTagTooLong": "Provider group tags are too long (max {max} chars total)",
   "invalidUrl": "Please enter a valid API address",
   "invalidWebsiteUrl": "Please enter a valid provider website URL",
+  "sessionTtlOutOfRange": "Session TTL must be between {min} and {max} seconds",
   "updateFailed": "Failed to update provider"
 }

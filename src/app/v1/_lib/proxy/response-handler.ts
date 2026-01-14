@@ -323,7 +323,8 @@ export class ProxyResponseHandler {
               void SessionManager.updateSessionWithCodexCacheKey(
                 session.sessionId,
                 promptCacheKey,
-                provider.id
+                provider.id,
+                provider.sessionTtl
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to update Codex session:", err);
               });
@@ -902,7 +903,8 @@ export class ProxyResponseHandler {
                   void SessionManager.updateSessionWithCodexCacheKey(
                     session.sessionId,
                     promptCacheKey,
-                    provider.id
+                    provider.id,
+                    provider.sessionTtl
                   ).catch((err) => {
                     logger.error("[ResponseHandler] Failed to update Codex session (stream):", err);
                   });
@@ -1897,6 +1899,8 @@ export async function finalizeRequestStats(
 async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | null): Promise<void> {
   if (!usage || !session.sessionId) return;
 
+  const sessionId = session.sessionId;
+
   try {
     const messageContext = session.messageContext;
     const provider = session.provider;
@@ -1951,9 +1955,13 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     );
 
     // 刷新 session 时间戳（滑动窗口）
-    void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {
-      logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
-    });
+    void SessionManager.resolveSessionTtlForSession(sessionId)
+      .then((ttlSeconds) =>
+        SessionTracker.refreshSession(sessionId, key.id, provider.id, ttlSeconds)
+      )
+      .catch((error) => {
+        logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
+      });
   } catch (error) {
     logger.error("[ResponseHandler] Failed to track cost to Redis, skipping", {
       error: error instanceof Error ? error.message : String(error),

@@ -279,6 +279,11 @@
         "placeholder": "1"
       }
     },
+    "sessionTtl": {
+      "desc": "Provider-specific session TTL. Overrides global SESSION_TTL. Range: 60-3600 seconds. Leave empty to use global setting.",
+      "label": "Session TTL (seconds)",
+      "placeholder": "Leave empty to use global setting"
+    },
     "summary": {
       "models": "{count} whitelisted models",
       "none": "Not configured",

@@ -204,6 +204,8 @@ export const providers = pgTable('providers', {
   totalCostResetAt: timestamp('total_cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
+  sessionTtl: integer("session_ttl"),
+
   // 熔断器配置（每个供应商独立配置）
   // null = 使用全局默认值 (env.MAX_RETRY_ATTEMPTS_DEFAULT 或 2)
   maxRetryAttempts: integer('max_retry_attempts'),
