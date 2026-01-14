@@ -1258,7 +1258,18 @@
       "userEnabled": "User has been enabled",
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "resetData": {
+        "title": "Reset Statistics",
+        "description": "Delete all request logs and usage data for this user. This action is irreversible.",
+        "error": "Failed to reset data",
+        "button": "Reset Statistics",
+        "confirmTitle": "Reset All Statistics?",
+        "confirmDescription": "This will permanently delete all request logs and usage statistics for this user. This action cannot be undone.",
+        "confirm": "Yes, Reset All",
+        "loading": "Resetting...",
+        "success": "All statistics have been reset"
+      }
     },
     "batchEdit": {
       "enterMode": "Batch Edit",

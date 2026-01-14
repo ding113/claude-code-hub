@@ -1259,7 +1259,18 @@
       "userEnabled": "用户已启用",
       "deleteFailed": "删除用户失败",
       "userDeleted": "用户已删除",
-      "saving": "保存中..."
+      "saving": "保存中...",
+      "resetData": {
+        "title": "重置统计",
+        "description": "删除该用户的所有请求日志和使用数据。此操作不可逆。",
+        "error": "重置数据失败",
+        "button": "重置统计",
+        "confirmTitle": "重置所有统计？",
+        "confirmDescription": "这将永久删除该用户的所有请求日志和使用统计。此操作无法撤销。",
+        "confirm": "是的，重置全部",
+        "loading": "重置中...",
+        "success": "所有统计已重置"
+      }
     },
     "batchEdit": {
       "enterMode": "批量编辑",

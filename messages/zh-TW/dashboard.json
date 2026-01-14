@@ -1244,7 +1244,18 @@
       "userEnabled": "使用者已啟用",
       "deleteFailed": "刪除使用者失敗",
       "userDeleted": "使用者已刪除",
-      "saving": "儲存中..."
+      "saving": "儲存中...",
+      "resetData": {
+        "title": "重置統計",
+        "description": "刪除該使用者的所有請求日誌和使用資料。此操作不可逆。",
+        "error": "重置資料失敗",
+        "button": "重置統計",
+        "confirmTitle": "重置所有統計？",
+        "confirmDescription": "這將永久刪除該使用者的所有請求日誌和使用統計。此操作無法撤銷。",
+        "confirm": "是的，重置全部",
+        "loading": "重置中...",
+        "success": "所有統計已重置"
+      }
     },
     "batchEdit": {
       "enterMode": "批量編輯",
