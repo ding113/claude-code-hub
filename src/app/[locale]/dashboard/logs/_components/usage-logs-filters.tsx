@@ -137,7 +137,7 @@ export function UsageLogsFilters({
   const [availableSessionIds, setAvailableSessionIds] = useState<string[]>([]);
   const debouncedSessionIdSearchTerm = useDebounce(localFilters.sessionId ?? "", 300);
   const sessionIdSearchRequestIdRef = useRef(0);
-  const lastLoadedSessionIdSearchTermRef = useRef<string | undefined>(undefined);
+  const lastLoadedSessionIdSuggestionsKeyRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -198,7 +198,14 @@ export function UsageLogsFilters({
     async (term: string) => {
       const requestId = ++sessionIdSearchRequestIdRef.current;
       setIsSessionIdsLoading(true);
-      lastLoadedSessionIdSearchTermRef.current = term;
+      const requestKey = [
+        term,
+        isAdmin ? (localFilters.userId ?? "").toString() : "",
+        (localFilters.keyId ?? "").toString(),
+        (localFilters.providerId ?? "").toString(),
+        isAdmin ? "1" : "0",
+      ].join("|");
+      lastLoadedSessionIdSuggestionsKeyRef.current = requestKey;
 
       try {
         const result = await getUsageLogSessionIdSuggestions({
@@ -235,18 +242,33 @@ export function UsageLogsFilters({
     const term = debouncedSessionIdSearchTerm.trim();
     if (term.length < SESSION_ID_SUGGESTION_MIN_LEN) {
       setAvailableSessionIds([]);
-      lastLoadedSessionIdSearchTermRef.current = undefined;
+      lastLoadedSessionIdSuggestionsKeyRef.current = undefined;
       return;
     }
 
-    if (term === lastLoadedSessionIdSearchTermRef.current) return;
+    const requestKey = [
+      term,
+      isAdmin ? (localFilters.userId ?? "").toString() : "",
+      (localFilters.keyId ?? "").toString(),
+      (localFilters.providerId ?? "").toString(),
+      isAdmin ? "1" : "0",
+    ].join("|");
+    if (requestKey === lastLoadedSessionIdSuggestionsKeyRef.current) return;
     void loadSessionIdsForFilter(term);
-  }, [sessionIdPopoverOpen, debouncedSessionIdSearchTerm, loadSessionIdsForFilter]);
+  }, [
+    sessionIdPopoverOpen,
+    debouncedSessionIdSearchTerm,
+    isAdmin,
+    localFilters.userId,
+    localFilters.keyId,
+    localFilters.providerId,
+    loadSessionIdsForFilter,
+  ]);
 
   useEffect(() => {
     if (!sessionIdPopoverOpen) {
       setAvailableSessionIds([]);
-      lastLoadedSessionIdSearchTermRef.current = undefined;
+      lastLoadedSessionIdSuggestionsKeyRef.current = undefined;
     }
   }, [sessionIdPopoverOpen]);
 

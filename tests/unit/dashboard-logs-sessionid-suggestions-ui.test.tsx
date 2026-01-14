@@ -29,6 +29,10 @@ const usageLogsActionMocks = vi.hoisted(() => ({
   getEndpointList: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 
+const usersActionMocks = vi.hoisted(() => ({
+  searchUsersForFilter: vi.fn(async () => ({ ok: true, data: [] as Array<{ id: number; name: string }> })),
+}));
+
 vi.mock("@/actions/usage-logs", () => ({
   exportUsageLogs: usageLogsActionMocks.exportUsageLogs,
   getUsageLogSessionIdSuggestions: usageLogsActionMocks.getUsageLogSessionIdSuggestions,
@@ -36,6 +40,76 @@ vi.mock("@/actions/usage-logs", () => ({
   getStatusCodeList: usageLogsActionMocks.getStatusCodeList,
   getEndpointList: usageLogsActionMocks.getEndpointList,
 }));
+
+vi.mock("@/actions/users", () => ({
+  searchUsersForFilter: usersActionMocks.searchUsersForFilter,
+}));
+
+vi.mock("@/components/ui/popover", async () => {
+  const React = await import("react");
+
+  type PopoverCtx = { open: boolean; onOpenChange?: (open: boolean) => void };
+  const PopoverContext = React.createContext<PopoverCtx>({ open: false });
+
+  function Popover({
+    open,
+    onOpenChange,
+    children,
+  }: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    children?: ReactNode;
+  }) {
+    return (
+      <PopoverContext.Provider value={{ open: Boolean(open), onOpenChange }}>
+        {children}
+      </PopoverContext.Provider>
+    );
+  }
+
+  function PopoverTrigger({
+    asChild,
+    children,
+  }: {
+    asChild?: boolean;
+    children?: ReactNode;
+  }) {
+    const { open, onOpenChange } = React.useContext(PopoverContext);
+    const child = React.Children.only(children) as unknown as { props: { onClick?: (e: unknown) => void } };
+
+    const handleClick = (e: unknown) => {
+      child.props.onClick?.(e);
+      onOpenChange?.(!open);
+    };
+
+    if (asChild) {
+      return React.cloneElement(child as never, { onClick: handleClick });
+    }
+
+    return (
+      <button type="button" onClick={handleClick}>
+        {children}
+      </button>
+    );
+  }
+
+  function PopoverContent({ children }: { children?: ReactNode }) {
+    const { open } = React.useContext(PopoverContext);
+    if (!open) return null;
+    return <div>{children}</div>;
+  }
+
+  function PopoverAnchor({ children }: { children?: ReactNode }) {
+    return <>{children}</>;
+  }
+
+  return {
+    Popover,
+    PopoverTrigger,
+    PopoverContent,
+    PopoverAnchor,
+  };
+});
 
 vi.mock("@/components/ui/tooltip", () => ({
   TooltipProvider: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
@@ -47,6 +121,13 @@ vi.mock("@/components/ui/tooltip", () => ({
 async function flushMicrotasks() {
   await act(async () => {
     await Promise.resolve();
+  });
+}
+
+async function actClick(el: Element | null) {
+  if (!el) throw new Error("element not found");
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 }
 
@@ -165,6 +246,73 @@ describe("UsageLogsFilters sessionId suggestions", () => {
 
     expect(usageLogsActionMocks.getUsageLogSessionIdSuggestions).toHaveBeenCalledTimes(1);
     expect(document.activeElement).toBe(input);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    vi.useRealTimers();
+  });
+
+  test("should reload suggestions when provider scope changes (term unchanged)", async () => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    document.body.innerHTML = "";
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <UsageLogsFilters
+          isAdmin={true}
+          providers={[
+            { id: 1, name: "p1" },
+            { id: 2, name: "p2" },
+          ]}
+          initialKeys={[]}
+          filters={{ sessionId: "ab" }}
+          onChange={() => {}}
+          onReset={() => {}}
+        />
+      );
+    });
+    await flushMicrotasks();
+
+    const input = container.querySelector(
+      'input[placeholder="logs.filters.searchSessionId"]'
+    ) as HTMLInputElement | null;
+    expect(input).toBeTruthy();
+
+    await act(async () => {
+      input?.focus();
+    });
+    await flushMicrotasks();
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await flushMicrotasks();
+
+    expect(usageLogsActionMocks.getUsageLogSessionIdSuggestions).toHaveBeenCalledTimes(1);
+
+    const providerBtn = Array.from(container.querySelectorAll("button")).find((b) =>
+      (b.textContent || "").includes("logs.filters.allProviders")
+    );
+    await actClick(providerBtn ?? null);
+    await flushMicrotasks();
+
+    const providerItem = Array.from(document.querySelectorAll("[cmdk-item]")).find((el) =>
+      (el.textContent || "").includes("p1")
+    );
+    await actClick(providerItem ?? null);
+    await flushMicrotasks();
+
+    expect(usageLogsActionMocks.getUsageLogSessionIdSuggestions).toHaveBeenCalledTimes(2);
+    expect(usageLogsActionMocks.getUsageLogSessionIdSuggestions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ term: "ab", providerId: 1 })
+    );
 
     await act(async () => {
       root.unmount();
