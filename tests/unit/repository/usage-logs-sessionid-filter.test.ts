@@ -66,11 +66,13 @@ describe("Usage logs sessionId filter", () => {
     }));
 
     const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+    await findUsageLogsBatch({});
     await findUsageLogsBatch({ sessionId: "   " });
 
-    expect(whereArgs.length).toBeGreaterThan(0);
-    const whereSql = sqlToString(whereArgs[0]).toLowerCase();
-    expect(whereSql).not.toContain("abc");
+    expect(whereArgs).toHaveLength(2);
+    const baseWhereSql = sqlToString(whereArgs[0]).toLowerCase();
+    const blankWhereSql = sqlToString(whereArgs[1]).toLowerCase();
+    expect(blankWhereSql).toBe(baseWhereSql);
   });
 
   test("findUsageLogsBatch: sessionId 应 trim 后精确匹配", async () => {
@@ -119,6 +121,25 @@ describe("Usage logs sessionId filter", () => {
       )
     );
     selectQueue.push(createThenableQuery([]));
+    selectQueue.push(
+      createThenableQuery(
+        [
+          {
+            totalRows: 0,
+            totalRequests: 0,
+            totalCost: "0",
+            totalInputTokens: 0,
+            totalOutputTokens: 0,
+            totalCacheCreationTokens: 0,
+            totalCacheReadTokens: 0,
+            totalCacheCreation5mTokens: 0,
+            totalCacheCreation1hTokens: 0,
+          },
+        ],
+        whereArgs
+      )
+    );
+    selectQueue.push(createThenableQuery([]));
 
     const fallbackSelect = createThenableQuery<unknown[]>([]);
     const selectMock = vi.fn(() => selectQueue.shift() ?? fallbackSelect);
@@ -131,11 +152,13 @@ describe("Usage logs sessionId filter", () => {
     }));
 
     const { findUsageLogsWithDetails } = await import("@/repository/usage-logs");
+    await findUsageLogsWithDetails({ page: 1, pageSize: 1 });
     await findUsageLogsWithDetails({ page: 1, pageSize: 1, sessionId: "  " });
 
-    expect(whereArgs.length).toBeGreaterThan(0);
-    const whereSql = sqlToString(whereArgs[0]).toLowerCase();
-    expect(whereSql).not.toContain("abc");
+    expect(whereArgs).toHaveLength(2);
+    const baseWhereSql = sqlToString(whereArgs[0]).toLowerCase();
+    const blankWhereSql = sqlToString(whereArgs[1]).toLowerCase();
+    expect(blankWhereSql).toBe(baseWhereSql);
   });
 
   test("findUsageLogsWithDetails: sessionId 应 trim 后精确匹配", async () => {
@@ -204,6 +227,23 @@ describe("Usage logs sessionId filter", () => {
         whereArgs
       )
     );
+    selectQueue.push(
+      createThenableQuery(
+        [
+          {
+            totalRequests: 0,
+            totalCost: "0",
+            totalInputTokens: 0,
+            totalOutputTokens: 0,
+            totalCacheCreationTokens: 0,
+            totalCacheReadTokens: 0,
+            totalCacheCreation5mTokens: 0,
+            totalCacheCreation1hTokens: 0,
+          },
+        ],
+        whereArgs
+      )
+    );
 
     const fallbackSelect = createThenableQuery<unknown[]>([]);
     const selectMock = vi.fn(() => selectQueue.shift() ?? fallbackSelect);
@@ -216,11 +256,13 @@ describe("Usage logs sessionId filter", () => {
     }));
 
     const { findUsageLogsStats } = await import("@/repository/usage-logs");
+    await findUsageLogsStats({});
     await findUsageLogsStats({ sessionId: "  " });
 
-    expect(whereArgs.length).toBeGreaterThan(0);
-    const whereSql = sqlToString(whereArgs[0]).toLowerCase();
-    expect(whereSql).not.toContain("abc");
+    expect(whereArgs).toHaveLength(2);
+    const baseWhereSql = sqlToString(whereArgs[0]).toLowerCase();
+    const blankWhereSql = sqlToString(whereArgs[1]).toLowerCase();
+    expect(blankWhereSql).toBe(baseWhereSql);
   });
 
   test("findUsageLogsStats: sessionId 应 trim 后精确匹配", async () => {
