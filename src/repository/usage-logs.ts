@@ -595,13 +595,19 @@ export async function findUsageLogSessionIdSuggestions(
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  const results = await db
+  const baseQuery = db
     .select({
       sessionId: messageRequest.sessionId,
       firstSeen: sql<Date>`min(${messageRequest.createdAt})`,
     })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+    .from(messageRequest);
+
+  const query =
+    keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      : baseQuery;
+
+  const results = await query
     .where(and(...conditions))
     .groupBy(messageRequest.sessionId)
     .orderBy(desc(sql`min(${messageRequest.createdAt})`))

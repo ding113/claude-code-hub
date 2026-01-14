@@ -144,4 +144,34 @@ describe("Usage logs sessionId suggestions", () => {
 
     expect(limitArgs).toEqual([50]);
   });
+
+  test("keyId 未提供时不应 innerJoin(keysTable)", async () => {
+    vi.resetModules();
+
+    const query = createThenableQuery([]);
+    const selectMock = vi.fn(() => query);
+    vi.doMock("@/drizzle/db", () => ({
+      db: { select: selectMock },
+    }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await findUsageLogSessionIdSuggestions({ term: "abc", limit: 20 });
+
+    expect(query.innerJoin).not.toHaveBeenCalled();
+  });
+
+  test("keyId 提供时才 innerJoin(keysTable)", async () => {
+    vi.resetModules();
+
+    const query = createThenableQuery([]);
+    const selectMock = vi.fn(() => query);
+    vi.doMock("@/drizzle/db", () => ({
+      db: { select: selectMock },
+    }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await findUsageLogSessionIdSuggestions({ term: "abc", keyId: 2, limit: 20 });
+
+    expect(query.innerJoin).toHaveBeenCalledTimes(1);
+  });
 });
