@@ -111,7 +111,7 @@ BEGIN
 			AND column_name = 'vendor_key'
 	) THEN
 		EXECUTE $insert$
-			INSERT INTO provider_vendors (website_domain, vendor_key)
+			INSERT INTO provider_vendors (website_domain, vendor_key, display_name)
 			SELECT DISTINCT
 				CASE
 					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
@@ -120,7 +120,11 @@ BEGIN
 				CASE
 					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
 					ELSE domain_candidate
-				END AS vendor_key
+				END AS vendor_key,
+				CASE
+					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+					ELSE domain_candidate
+				END AS display_name
 			FROM (
 				SELECT
 					id AS provider_id,
@@ -140,12 +144,16 @@ BEGIN
 			ON CONFLICT DO NOTHING
 		$insert$;
 	ELSE
-		INSERT INTO provider_vendors (website_domain)
+		INSERT INTO provider_vendors (website_domain, display_name)
 		SELECT DISTINCT
 			CASE
 				WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
 				ELSE domain_candidate
-			END AS website_domain
+			END AS website_domain,
+			CASE
+				WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+				ELSE domain_candidate
+			END AS display_name
 		FROM (
 			SELECT
 				id AS provider_id,
@@ -162,7 +170,7 @@ BEGIN
 				) AS domain_candidate
 			FROM providers
 		) t
-		ON CONFLICT (website_domain) DO NOTHING;
+		ON CONFLICT DO NOTHING;
 	END IF;
 END $$;
 --> statement-breakpoint
