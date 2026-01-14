@@ -16,6 +16,7 @@ import type { BillingModelSource, SystemSettings } from "@/types/system-config";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
+import { buildLogsUrlQuery, parseLogsUrlFilters } from "../_utils/logs-query";
 
 // Create a stable QueryClient instance
 const queryClient = new QueryClient({
@@ -92,37 +93,35 @@ function UsageLogsViewContent({
 
   // Parse filters from URL with stable reference
   const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(
-    () => ({
-      userId: searchParams.userId ? parseInt(searchParams.userId as string, 10) : undefined,
-      keyId: searchParams.keyId ? parseInt(searchParams.keyId as string, 10) : undefined,
-      providerId: searchParams.providerId
-        ? parseInt(searchParams.providerId as string, 10)
-        : undefined,
-      startTime: searchParams.startTime
-        ? parseInt(searchParams.startTime as string, 10)
-        : undefined,
-      endTime: searchParams.endTime ? parseInt(searchParams.endTime as string, 10) : undefined,
-      statusCode:
-        searchParams.statusCode && searchParams.statusCode !== "!200"
-          ? parseInt(searchParams.statusCode as string, 10)
-          : undefined,
-      excludeStatusCode200: searchParams.statusCode === "!200",
-      model: searchParams.model as string | undefined,
-      endpoint: searchParams.endpoint as string | undefined,
-      minRetryCount: searchParams.minRetry
-        ? parseInt(searchParams.minRetry as string, 10)
-        : undefined,
-    }),
+    () => {
+      const parsed = parseLogsUrlFilters(searchParams);
+      return {
+        userId: parsed.userId,
+        keyId: parsed.keyId,
+        providerId: parsed.providerId,
+        sessionId: parsed.sessionId,
+        startTime: parsed.startTime,
+        endTime: parsed.endTime,
+        statusCode: parsed.statusCode,
+        excludeStatusCode200: parsed.excludeStatusCode200,
+        model: parsed.model,
+        endpoint: parsed.endpoint,
+        minRetryCount: parsed.minRetryCount,
+        page: parsed.page,
+      };
+    },
     [
       searchParams.userId,
       searchParams.keyId,
       searchParams.providerId,
+      searchParams.sessionId,
       searchParams.startTime,
       searchParams.endTime,
       searchParams.statusCode,
       searchParams.model,
       searchParams.endpoint,
       searchParams.minRetry,
+      searchParams.page,
     ]
   );
 
@@ -138,24 +137,7 @@ function UsageLogsViewContent({
 
   // Handle filter changes
   const handleFilterChange = (newFilters: Omit<typeof filters, "page">) => {
-    const query = new URLSearchParams();
-
-    if (newFilters.userId) query.set("userId", newFilters.userId.toString());
-    if (newFilters.keyId) query.set("keyId", newFilters.keyId.toString());
-    if (newFilters.providerId) query.set("providerId", newFilters.providerId.toString());
-    if (newFilters.startTime) query.set("startTime", newFilters.startTime.toString());
-    if (newFilters.endTime) query.set("endTime", newFilters.endTime.toString());
-    if (newFilters.excludeStatusCode200) {
-      query.set("statusCode", "!200");
-    } else if (newFilters.statusCode !== undefined) {
-      query.set("statusCode", newFilters.statusCode.toString());
-    }
-    if (newFilters.model) query.set("model", newFilters.model);
-    if (newFilters.endpoint) query.set("endpoint", newFilters.endpoint);
-    if (newFilters.minRetryCount !== undefined) {
-      query.set("minRetry", newFilters.minRetryCount.toString());
-    }
-
+    const query = buildLogsUrlQuery(newFilters);
     router.push(`/dashboard/logs?${query.toString()}`);
   };
 
@@ -181,6 +163,7 @@ function UsageLogsViewContent({
           userId: filters.userId,
           keyId: filters.keyId,
           providerId: filters.providerId,
+          sessionId: filters.sessionId,
           startTime: filters.startTime,
           endTime: filters.endTime,
           statusCode: filters.statusCode,

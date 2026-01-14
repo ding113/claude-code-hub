@@ -52,14 +52,15 @@ interface UsageLogsFiltersProps {
   initialKeys: Key[];
   isProvidersLoading?: boolean;
   isKeysLoading?: boolean;
-  filters: {
-    userId?: number;
-    keyId?: number;
-    providerId?: number;
-    /** 开始时间戳（毫秒，浏览器本地时区的 00:00:00） */
-    startTime?: number;
-    /** 结束时间戳（毫秒，浏览器本地时区的次日 00:00:00，用于 < 比较） */
-    endTime?: number;
+	filters: {
+		userId?: number;
+		keyId?: number;
+		providerId?: number;
+		sessionId?: string;
+		/** 开始时间戳（毫秒，浏览器本地时区的 00:00:00） */
+		startTime?: number;
+		/** 结束时间戳（毫秒，浏览器本地时区的次日 00:00:00，用于 < 比较） */
+		endTime?: number;
     statusCode?: number;
     excludeStatusCode200?: boolean;
     model?: string;

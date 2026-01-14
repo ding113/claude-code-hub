@@ -31,6 +31,7 @@ export interface VirtualizedLogsTableFilters {
   userId?: number;
   keyId?: number;
   providerId?: number;
+  sessionId?: string;
   startTime?: number;
   endTime?: number;
   statusCode?: number;
