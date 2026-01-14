@@ -174,9 +174,9 @@ export class SessionTracker {
       pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
       pipeline.zadd(`provider:${providerId}:active_sessions`, now, sessionId);
 
-      pipeline.expire(`session:${sessionId}:provider`, normalizedTtlSeconds);
-      pipeline.expire(`session:${sessionId}:key`, normalizedTtlSeconds);
-      pipeline.setex(`session:${sessionId}:last_seen`, normalizedTtlSeconds, now.toString());
+      pipeline.expire(`session:${sessionId}:provider`, ttlSeconds);
+      pipeline.expire(`session:${sessionId}:key`, ttlSeconds);
+      pipeline.setex(`session:${sessionId}:last_seen`, ttlSeconds, now.toString());
 
       const results = await pipeline.exec();
 
