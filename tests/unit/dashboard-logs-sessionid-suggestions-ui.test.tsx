@@ -123,4 +123,53 @@ describe("UsageLogsFilters sessionId suggestions", () => {
     container.remove();
     vi.useRealTimers();
   });
+
+  test("should keep input focused when opening suggestions popover", async () => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    document.body.innerHTML = "";
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <UsageLogsFilters
+          isAdmin={false}
+          providers={[]}
+          initialKeys={[]}
+          filters={{ sessionId: "ab" }}
+          onChange={() => {}}
+          onReset={() => {}}
+        />
+      );
+    });
+
+    const input = container.querySelector(
+      'input[placeholder="logs.filters.searchSessionId"]'
+    ) as HTMLInputElement | null;
+    expect(input).toBeTruthy();
+
+    await act(async () => {
+      input?.focus();
+    });
+    await flushMicrotasks();
+
+    expect(document.activeElement).toBe(input);
+
+    await act(async () => {
+      vi.advanceTimersByTime(350);
+    });
+    await flushMicrotasks();
+
+    expect(usageLogsActionMocks.getUsageLogSessionIdSuggestions).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(input);
+
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+    vi.useRealTimers();
+  });
 });

@@ -666,6 +666,7 @@ export function UsageLogsFilters({
             <PopoverContent
               className="w-[320px] p-0"
               align="start"
+              onOpenAutoFocus={(e) => e.preventDefault()}
               onWheel={(e) => e.stopPropagation()}
               onTouchMove={(e) => e.stopPropagation()}
             >
