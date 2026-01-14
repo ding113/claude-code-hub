@@ -265,7 +265,8 @@
       "limit5hUsd": {
         "label": "5時間消費上限 (USD)",
         "placeholder": "空欄の場合は無制限",
-        "description": "5時間以内の最大消費金額"
+        "description": "5時間以内の最大消費金額",
+        "descriptionWithUserLimit": "ユーザーの5時間制限を超えることはできません ({limit})"
       },
       "limitDailyUsd": {
         "label": "日次消費上限 (USD)",
@@ -291,17 +292,26 @@
       "limitWeeklyUsd": {
         "label": "週間消費上限 (USD)",
         "placeholder": "空欄の場合は無制限",
-        "description": "毎週の最大消費金額"
+        "description": "毎週の最大消費金額",
+        "descriptionWithUserLimit": "ユーザーの週間制限を超えることはできません ({limit})"
       },
       "limitMonthlyUsd": {
         "label": "月間消費上限 (USD)",
         "placeholder": "空欄の場合は無制限",
-        "description": "毎月の最大消費金額"
+        "description": "毎月の最大消費金額",
+        "descriptionWithUserLimit": "ユーザーの月間制限を超えることはできません ({limit})"
+      },
+      "limitTotalUsd": {
+        "label": "総消費上限 (USD)",
+        "placeholder": "空欄の場合は無制限",
+        "description": "累計消費上限（リセットなし）",
+        "descriptionWithUserLimit": "ユーザーの総制限を超えることはできません ({limit})"
       },
       "limitConcurrentSessions": {
         "label": "同時セッション上限",
         "placeholder": "0 = 無制限",
-        "description": "同時実行可能な会話数"
+        "description": "同時実行可能な会話数",
+        "descriptionWithUserLimit": "ユーザーのセッション制限を超えることはできません ({limit})"
       },
       "providerGroup": {
         "label": "プロバイダーグループ",

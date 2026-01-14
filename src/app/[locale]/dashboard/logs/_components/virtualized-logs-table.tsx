@@ -270,7 +270,7 @@ export function VirtualizedLogsTable({
                 >
                   {/* Time */}
                   <div className="flex-[0.8] min-w-[80px] font-mono text-xs truncate pl-2">
-                    <RelativeTime date={log.createdAt} fallback="-" />
+                    <RelativeTime date={log.createdAt} fallback="-" format="short" />
                   </div>
 
                   {/* User */}

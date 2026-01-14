@@ -1,5 +1,6 @@
 import { BarChart3 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
+import { AutoSortPriorityDialog } from "@/app/[locale]/settings/providers/_components/auto-sort-priority-dialog";
 import { ProviderManagerLoader } from "@/app/[locale]/settings/providers/_components/provider-manager-loader";
 import { SchedulingRulesDialog } from "@/app/[locale]/settings/providers/_components/scheduling-rules-dialog";
 import { Section } from "@/components/section";
@@ -50,6 +51,7 @@ export default async function DashboardProvidersPage({
                 {t("providers.section.leaderboard")}
               </Link>
             </Button>
+            <AutoSortPriorityDialog />
             <SchedulingRulesDialog />
           </>
         }

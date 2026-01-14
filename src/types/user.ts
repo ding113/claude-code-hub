@@ -100,6 +100,7 @@ export interface UserKeyDisplay {
   status: "enabled" | "disabled";
   todayUsage: number; // 今日消耗金额（美元）
   todayCallCount: number; // 今日调用次数
+  todayTokens: number; // 今日消耗Token数
   lastUsedAt: Date | null; // 最后使用时间
   lastProviderName: string | null; // 最后调用的供应商名称
   modelStats: Array<{
@@ -167,6 +168,8 @@ export interface KeyDialogUserContext {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  allowedClients?: string[];
+  allowedModels?: string[];
 }
 
 /**

@@ -28,11 +28,8 @@ export interface KeyQuotaUsageResult {
 
 export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQuotaUsageResult>> {
   try {
-    const session = await getSession();
+    const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
-    if (session.user.role !== "admin") {
-      return { ok: false, error: "Admin access required" };
-    }
 
     const [keyRow] = await db
       .select()
@@ -42,6 +39,11 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
 
     if (!keyRow) {
       return { ok: false, error: "Key not found" };
+    }
+
+    // Allow admin to view any key, users can only view their own keys
+    if (session.user.role !== "admin" && keyRow.userId !== session.user.id) {
+      return { ok: false, error: "Access denied" };
     }
 
     const settings = await getSystemSettings();

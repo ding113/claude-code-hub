@@ -51,12 +51,12 @@ export function DialogFormLayout({
   const t = useTranslations("forms");
   return (
     <form onSubmit={onSubmit} className="flex flex-col min-h-0 flex-1" noValidate>
-      <DialogHeader className="flex-shrink-0">
+      <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4 border-b">
         <DialogTitle>{config.title}</DialogTitle>
         {config.description && <DialogDescription>{config.description}</DialogDescription>}
       </DialogHeader>
 
-      <div className="flex-1 overflow-y-auto min-h-0 py-4 px-1 -mx-1">
+      <div className="flex-1 overflow-y-auto min-h-0 py-6 px-6">
         <div className="grid gap-4">
           {children}
 
@@ -68,7 +68,7 @@ export function DialogFormLayout({
         </div>
       </div>
 
-      <DialogFooter className="flex-shrink-0 pt-4 border-t">
+      <DialogFooter className="flex-shrink-0 px-6 py-4 border-t">
         <DialogClose asChild>
           <Button type="button" variant="outline" onClick={onCancel} disabled={isSubmitting}>
             {config.cancelText || t("common.cancel")}

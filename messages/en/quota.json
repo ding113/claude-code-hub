@@ -288,7 +288,8 @@
       "limit5hUsd": {
         "label": "5-Hour Cost Limit (USD)",
         "placeholder": "Leave blank for unlimited",
-        "description": "Maximum cost within 5 hours"
+        "description": "Maximum cost within 5 hours",
+        "descriptionWithUserLimit": "Cannot exceed user 5-hour limit ({limit})"
       },
       "limitDailyUsd": {
         "label": "Daily Cost Limit (USD)",
@@ -314,12 +315,14 @@
       "limitWeeklyUsd": {
         "label": "Weekly Cost Limit (USD)",
         "placeholder": "Leave blank for unlimited",
-        "description": "Maximum cost per week"
+        "description": "Maximum cost per week",
+        "descriptionWithUserLimit": "Cannot exceed user weekly limit ({limit})"
       },
       "limitMonthlyUsd": {
         "label": "Monthly Cost Limit (USD)",
         "placeholder": "Leave blank for unlimited",
-        "description": "Maximum cost per month"
+        "description": "Maximum cost per month",
+        "descriptionWithUserLimit": "Cannot exceed user monthly limit ({limit})"
       },
       "limitTotalUsd": {
         "label": "Total Cost Limit (USD)",
@@ -330,7 +333,8 @@
       "limitConcurrentSessions": {
         "label": "Concurrent Session Limit",
         "placeholder": "0 means unlimited",
-        "description": "Number of simultaneous conversations"
+        "description": "Number of simultaneous conversations",
+        "descriptionWithUserLimit": "Cannot exceed user session limit ({limit})"
       },
       "providerGroup": {
         "label": "Provider Group",

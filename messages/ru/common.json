@@ -48,5 +48,15 @@
   "theme": "Тема",
   "light": "Светлая",
   "dark": "Тёмная",
-  "system": "Системная"
+  "system": "Системная",
+  "relativeTimeShort": {
+    "now": "сейчас",
+    "secondsAgo": "{count}с назад",
+    "minutesAgo": "{count}м назад",
+    "hoursAgo": "{count}ч назад",
+    "daysAgo": "{count}д назад",
+    "weeksAgo": "{count}н назад",
+    "monthsAgo": "{count}мес назад",
+    "yearsAgo": "{count}г назад"
+  }
 }

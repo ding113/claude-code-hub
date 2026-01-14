@@ -319,7 +319,7 @@ export async function findKeyUsageToday(
  */
 export async function findKeyUsageTodayBatch(
   userIds: number[]
-): Promise<Map<number, Array<{ keyId: number; totalCost: number }>>> {
+): Promise<Map<number, Array<{ keyId: number; totalCost: number; totalTokens: number }>>> {
   if (userIds.length === 0) {
     return new Map();
   }
@@ -334,6 +334,12 @@ export async function findKeyUsageTodayBatch(
       userId: keys.userId,
       keyId: keys.id,
       totalCost: sum(messageRequest.costUsd),
+      totalTokens: sql<number>`COALESCE(SUM(
+        COALESCE(${messageRequest.inputTokens}, 0) +
+        COALESCE(${messageRequest.outputTokens}, 0) +
+        COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
+        COALESCE(${messageRequest.cacheReadInputTokens}, 0)
+      ), 0)::int`,
     })
     .from(keys)
     .leftJoin(
@@ -349,7 +355,10 @@ export async function findKeyUsageTodayBatch(
     .where(and(inArray(keys.userId, userIds), isNull(keys.deletedAt)))
     .groupBy(keys.userId, keys.id);
 
-  const usageMap = new Map<number, Array<{ keyId: number; totalCost: number }>>();
+  const usageMap = new Map<
+    number,
+    Array<{ keyId: number; totalCost: number; totalTokens: number }>
+  >();
   for (const userId of userIds) {
     usageMap.set(userId, []);
   }
@@ -363,6 +372,7 @@ export async function findKeyUsageTodayBatch(
           const costDecimal = toCostDecimal(row.totalCost) ?? new Decimal(0);
           return costDecimal.toDecimalPlaces(6).toNumber();
         })(),
+        totalTokens: Number(row.totalTokens) || 0,
       });
     }
   }

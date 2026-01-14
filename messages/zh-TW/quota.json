@@ -263,7 +263,8 @@
       "limit5hUsd": {
         "label": "5小時消費上限 (USD)",
         "placeholder": "留空表示無限制",
-        "description": "5小時內最大消費金額"
+        "description": "5小時內最大消費金額",
+        "descriptionWithUserLimit": "不能超過使用者5小時限額 ({limit})"
       },
       "limitDailyUsd": {
         "label": "每日消費上限 (USD)",
@@ -289,17 +290,26 @@
       "limitWeeklyUsd": {
         "label": "週消費上限 (USD)",
         "placeholder": "留空表示無限制",
-        "description": "每週最大消費金額"
+        "description": "每週最大消費金額",
+        "descriptionWithUserLimit": "不能超過使用者週限額 ({limit})"
       },
       "limitMonthlyUsd": {
         "label": "月消費上限 (USD)",
         "placeholder": "留空表示無限制",
-        "description": "每月最大消費金額"
+        "description": "每月最大消費金額",
+        "descriptionWithUserLimit": "不能超過使用者月限額 ({limit})"
+      },
+      "limitTotalUsd": {
+        "label": "總消費上限 (USD)",
+        "placeholder": "留空表示無限制",
+        "description": "累計消費上限（不重置）",
+        "descriptionWithUserLimit": "不能超過使用者總限額 ({limit})"
       },
       "limitConcurrentSessions": {
         "label": "並發 Session 上限",
         "placeholder": "0 表示無限制",
-        "description": "同時運行的對話數量"
+        "description": "同時運行的對話數量",
+        "descriptionWithUserLimit": "不能超過使用者並發限額 ({limit})"
       },
       "providerGroup": {
         "label": "供應商分組",

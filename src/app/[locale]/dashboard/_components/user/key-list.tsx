@@ -236,7 +236,7 @@ export function KeyList({
           {record.lastUsedAt ? (
             <>
               <div className="text-sm">
-                <RelativeTime date={record.lastUsedAt} />
+                <RelativeTime date={record.lastUsedAt} format="short" />
               </div>
               {record.lastProviderName && (
                 <div className="text-xs text-muted-foreground">

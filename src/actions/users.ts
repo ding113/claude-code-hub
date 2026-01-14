@@ -1,11 +1,11 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import { and, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
-import { users as usersTable } from "@/drizzle/schema";
+import { messageRequest, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -210,7 +210,12 @@ export async function getUsers(): Promise<UserDisplay[]> {
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
 
-        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, item.totalCost ?? 0]));
+        const usageLookup = new Map(
+          usageRecords.map((item) => [
+            item.keyId,
+            { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 },
+          ])
+        );
         const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
 
         return {
@@ -256,7 +261,8 @@ export async function getUsers(): Promise<UserDisplay[]> {
                 minute: "2-digit",
                 second: "2-digit",
               }),
-              todayUsage: usageLookup.get(key.id) ?? 0,
+              todayUsage: usageLookup.get(key.id)?.totalCost ?? 0,
+              todayTokens: usageLookup.get(key.id)?.totalTokens ?? 0,
               todayCallCount: stats?.todayCallCount ?? 0,
               lastUsedAt: stats?.lastUsedAt ?? null,
               lastProviderName: stats?.lastProviderName ?? null,
@@ -473,7 +479,12 @@ export async function getUsersBatch(
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
 
-        const usageLookup = new Map(usageRecords.map((item) => [item.keyId, item.totalCost ?? 0]));
+        const usageLookup = new Map(
+          usageRecords.map((item) => [
+            item.keyId,
+            { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 },
+          ])
+        );
         const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
 
         return {
@@ -517,7 +528,8 @@ export async function getUsersBatch(
                 minute: "2-digit",
                 second: "2-digit",
               }),
-              todayUsage: usageLookup.get(key.id) ?? 0,
+              todayUsage: usageLookup.get(key.id)?.totalCost ?? 0,
+              todayTokens: usageLookup.get(key.id)?.totalTokens ?? 0,
               todayCallCount: stats?.todayCallCount ?? 0,
               lastUsedAt: stats?.lastUsedAt ?? null,
               lastProviderName: stats?.lastProviderName ?? null,
@@ -1494,5 +1506,117 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}
+
+/**
+ * Reset ALL user statistics (logs + Redis cache + sessions)
+ * This is IRREVERSIBLE - deletes all messageRequest logs for the user
+ *
+ * Admin only.
+ */
+export async function resetUserAllStatistics(userId: number): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    // Get user's keys
+    const keys = await findKeyList(userId);
+    const keyIds = keys.map((k) => k.id);
+
+    // 1. Delete all messageRequest logs for this user
+    await db.delete(messageRequest).where(eq(messageRequest.userId, userId));
+
+    // 2. Clear Redis cache
+    const { getRedisClient } = await import("@/lib/redis");
+    const { scanPattern } = await import("@/lib/redis/scan-helper");
+    const redis = getRedisClient();
+
+    if (redis && redis.status === "ready") {
+      try {
+        const startTime = Date.now();
+
+        // Scan all patterns in parallel
+        const scanResults = await Promise.all([
+          ...keyIds.map((keyId) =>
+            scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
+              logger.warn("Failed to scan key cost pattern", { keyId, error: err });
+              return [];
+            })
+          ),
+          scanPattern(redis, `user:${userId}:cost_*`).catch((err) => {
+            logger.warn("Failed to scan user cost pattern", { userId, error: err });
+            return [];
+          }),
+        ]);
+
+        const allCostKeys = scanResults.flat();
+
+        // Batch delete via pipeline
+        const pipeline = redis.pipeline();
+
+        // Active sessions
+        for (const keyId of keyIds) {
+          pipeline.del(`key:${keyId}:active_sessions`);
+        }
+
+        // Cost keys
+        for (const key of allCostKeys) {
+          pipeline.del(key);
+        }
+
+        const results = await pipeline.exec();
+
+        // Check for errors
+        const errors = results?.filter(([err]) => err);
+        if (errors && errors.length > 0) {
+          logger.warn("Some Redis deletes failed during user statistics reset", {
+            errorCount: errors.length,
+            userId,
+          });
+        }
+
+        const duration = Date.now() - startTime;
+        logger.info("Reset user statistics - Redis cache cleared", {
+          userId,
+          keyCount: keyIds.length,
+          costKeysDeleted: allCostKeys.length,
+          activeSessionsDeleted: keyIds.length,
+          durationMs: duration,
+        });
+      } catch (error) {
+        logger.error("Failed to clear Redis cache during user statistics reset", {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Continue execution - DB logs already deleted
+      }
+    }
+
+    logger.info("Reset all user statistics", { userId, keyCount: keyIds.length });
+    revalidatePath("/dashboard/users");
+
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to reset all user statistics:", error);
+    const tError = await getTranslations("errors");
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
