@@ -30,7 +30,10 @@ const usageLogsActionMocks = vi.hoisted(() => ({
 }));
 
 const usersActionMocks = vi.hoisted(() => ({
-  searchUsersForFilter: vi.fn(async () => ({ ok: true, data: [] as Array<{ id: number; name: string }> })),
+  searchUsersForFilter: vi.fn(async () => ({
+    ok: true,
+    data: [] as Array<{ id: number; name: string }>,
+  })),
 }));
 
 vi.mock("@/actions/usage-logs", () => ({
@@ -67,15 +70,11 @@ vi.mock("@/components/ui/popover", async () => {
     );
   }
 
-  function PopoverTrigger({
-    asChild,
-    children,
-  }: {
-    asChild?: boolean;
-    children?: ReactNode;
-  }) {
+  function PopoverTrigger({ asChild, children }: { asChild?: boolean; children?: ReactNode }) {
     const { open, onOpenChange } = React.useContext(PopoverContext);
-    const child = React.Children.only(children) as unknown as { props: { onClick?: (e: unknown) => void } };
+    const child = React.Children.only(children) as unknown as {
+      props: { onClick?: (e: unknown) => void };
+    };
 
     const handleClick = (e: unknown) => {
       child.props.onClick?.(e);
