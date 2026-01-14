@@ -33,12 +33,12 @@ async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }>
 
 interface ProviderManagerLoaderProps {
   currentUser?: User;
-  enableMultiProviderTypes: boolean;
+  enableMultiProviderTypes?: boolean;
 }
 
 function ProviderManagerLoaderContent({
   currentUser,
-  enableMultiProviderTypes,
+  enableMultiProviderTypes = true,
 }: ProviderManagerLoaderProps) {
   const {
     data: providers = [],
