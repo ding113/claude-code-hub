@@ -8,7 +8,10 @@ import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
-import { getOrCreateProviderVendorIdFromUrls } from "./provider-endpoints";
+import {
+  ensureProviderEndpointExistsForUrl,
+  getOrCreateProviderVendorIdFromUrls,
+} from "./provider-endpoints";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
@@ -127,7 +130,23 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     deletedAt: providers.deletedAt,
   });
 
-  return toProvider(provider);
+  const created = toProvider(provider);
+
+  try {
+    await ensureProviderEndpointExistsForUrl({
+      vendorId: created.providerVendorId,
+      providerType: created.providerType,
+      url: created.url,
+    });
+  } catch (error) {
+    logger.warn("[Provider] Failed to seed provider endpoint from provider.url", {
+      providerVendorId,
+      providerType: created.providerType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return created;
 }
 
 export async function findProviderList(
@@ -529,7 +548,30 @@ export async function updateProvider(
     });
 
   if (!provider) return null;
-  return toProvider(provider);
+  const transformed = toProvider(provider);
+
+  if (
+    providerData.url !== undefined ||
+    providerData.provider_type !== undefined ||
+    providerData.website_url !== undefined
+  ) {
+    try {
+      await ensureProviderEndpointExistsForUrl({
+        vendorId: transformed.providerVendorId,
+        providerType: transformed.providerType,
+        url: transformed.url,
+      });
+    } catch (error) {
+      logger.warn("[Provider] Failed to seed provider endpoint after provider update", {
+        providerId: transformed.id,
+        providerVendorId: transformed.providerVendorId,
+        providerType: transformed.providerType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return transformed;
 }
 
 export async function updateProviderPrioritiesBatch(

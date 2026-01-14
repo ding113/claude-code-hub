@@ -1,8 +1,13 @@
 "use server";
 
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providerEndpointProbeLogs, providerEndpoints, providerVendors } from "@/drizzle/schema";
+import {
+  providerEndpointProbeLogs,
+  providerEndpoints,
+  providers,
+  providerVendors,
+} from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import type {
   ProviderEndpoint,
@@ -321,6 +326,126 @@ export async function createProviderEndpoint(payload: {
     });
 
   return toProviderEndpoint(row);
+}
+
+export async function ensureProviderEndpointExistsForUrl(input: {
+  vendorId: number;
+  providerType: ProviderType;
+  url: string;
+  label?: string | null;
+}): Promise<boolean> {
+  const trimmedUrl = input.url.trim();
+  if (!trimmedUrl) {
+    return false;
+  }
+
+  try {
+    // eslint-disable-next-line no-new
+    new URL(trimmedUrl);
+  } catch {
+    return false;
+  }
+
+  const now = new Date();
+  const inserted = await db
+    .insert(providerEndpoints)
+    .values({
+      vendorId: input.vendorId,
+      providerType: input.providerType,
+      url: trimmedUrl,
+      label: input.label ?? null,
+      updatedAt: now,
+    })
+    .onConflictDoNothing({
+      target: [providerEndpoints.vendorId, providerEndpoints.providerType, providerEndpoints.url],
+    })
+    .returning({ id: providerEndpoints.id });
+
+  return inserted.length > 0;
+}
+
+export async function backfillProviderEndpointsFromProviders(): Promise<{
+  inserted: number;
+  uniqueCandidates: number;
+  skippedInvalid: number;
+}> {
+  const pageSize = 1000;
+  const insertBatchSize = 500;
+
+  let lastProviderId = 0;
+  let skippedInvalid = 0;
+  let insertedTotal = 0;
+  const seen = new Set<string>();
+  const pending: Array<{ vendorId: number; providerType: ProviderType; url: string }> = [];
+
+  const flush = async (): Promise<void> => {
+    if (pending.length === 0) return;
+    const now = new Date();
+    const inserted = await db
+      .insert(providerEndpoints)
+      .values(pending.map((value) => ({ ...value, updatedAt: now })))
+      .onConflictDoNothing({
+        target: [providerEndpoints.vendorId, providerEndpoints.providerType, providerEndpoints.url],
+      })
+      .returning({ id: providerEndpoints.id });
+    insertedTotal += inserted.length;
+    pending.length = 0;
+  };
+
+  while (true) {
+    const rows = await db
+      .select({
+        id: providers.id,
+        vendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      })
+      .from(providers)
+      .where(and(isNull(providers.deletedAt), gt(providers.id, lastProviderId)))
+      .orderBy(asc(providers.id))
+      .limit(pageSize);
+
+    if (rows.length === 0) {
+      break;
+    }
+
+    for (const row of rows) {
+      lastProviderId = Math.max(lastProviderId, row.id);
+
+      if (!row.vendorId || row.vendorId <= 0) {
+        skippedInvalid++;
+        continue;
+      }
+
+      const trimmedUrl = row.url.trim();
+      if (!trimmedUrl) {
+        skippedInvalid++;
+        continue;
+      }
+
+      try {
+        // eslint-disable-next-line no-new
+        new URL(trimmedUrl);
+      } catch {
+        skippedInvalid++;
+        continue;
+      }
+
+      const key = `${row.vendorId}|${row.providerType}|${trimmedUrl}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      pending.push({ vendorId: row.vendorId, providerType: row.providerType, url: trimmedUrl });
+
+      if (pending.length >= insertBatchSize) {
+        await flush();
+      }
+    }
+  }
+
+  await flush();
+  return { inserted: insertedTotal, uniqueCandidates: seen.size, skippedInvalid };
 }
 
 export async function updateProviderEndpoint(
