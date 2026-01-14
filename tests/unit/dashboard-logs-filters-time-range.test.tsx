@@ -93,4 +93,36 @@ describe("UsageLogsFilters - seconds-level time range", () => {
 
     unmount();
   });
+
+  test("Apply drops leaked page field from runtime filters object", async () => {
+    const onChange = vi.fn();
+
+    const leakedFilters = { sessionId: "abc", page: 3 } as unknown as Parameters<
+      typeof UsageLogsFilters
+    >[0]["filters"];
+
+    const { container, unmount } = renderWithIntl(
+      <UsageLogsFilters
+        isAdmin={false}
+        providers={[]}
+        initialKeys={[]}
+        // Runtime filters object may carry extra fields (e.g. page) even if TS types omit them
+        filters={leakedFilters}
+        onChange={onChange}
+        onReset={() => {}}
+      />
+    );
+
+    const applyBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => (b.textContent || "").trim() === "Apply Filter"
+    );
+    await actClick(applyBtn ?? null);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const calledFilters = onChange.mock.calls[0]?.[0] as Record<string, unknown> | undefined;
+    expect(calledFilters).toEqual(expect.objectContaining({ sessionId: "abc" }));
+    expect(calledFilters && "page" in calledFilters).toBe(false);
+
+    unmount();
+  });
 });

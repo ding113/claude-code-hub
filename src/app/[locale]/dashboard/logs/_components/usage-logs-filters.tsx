@@ -297,7 +297,33 @@ export function UsageLogsFilters({
   };
 
   const handleApply = () => {
-    onChange(localFilters);
+    const {
+      userId,
+      keyId,
+      providerId,
+      sessionId,
+      startTime,
+      endTime,
+      statusCode,
+      excludeStatusCode200,
+      model,
+      endpoint,
+      minRetryCount,
+    } = localFilters;
+
+    onChange({
+      userId,
+      keyId,
+      providerId,
+      sessionId,
+      startTime,
+      endTime,
+      statusCode,
+      excludeStatusCode200,
+      model,
+      endpoint,
+      minRetryCount,
+    });
   };
 
   const handleReset = () => {
