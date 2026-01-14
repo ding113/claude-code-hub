@@ -12,6 +12,8 @@ export interface UsageLogFilters {
   userId?: number;
   keyId?: number;
   providerId?: number;
+  /** Session ID（精确匹配；空字符串/空白视为不筛选） */
+  sessionId?: string;
   /** 开始时间戳（毫秒），用于 >= 比较 */
   startTime?: number;
   /** 结束时间戳（毫秒），用于 < 比较 */
@@ -115,6 +117,7 @@ export async function findUsageLogsBatch(
     userId,
     keyId,
     providerId,
+    sessionId,
     startTime,
     endTime,
     statusCode,
@@ -139,6 +142,11 @@ export async function findUsageLogsBatch(
 
   if (providerId !== undefined) {
     conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
   }
 
   if (startTime !== undefined) {
@@ -320,6 +328,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     userId,
     keyId,
     providerId,
+    sessionId,
     startTime,
     endTime,
     statusCode,
@@ -344,6 +353,11 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
 
   if (providerId !== undefined) {
     conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
   }
 
   // 使用毫秒时间戳进行时间比较
@@ -560,6 +574,7 @@ export async function findUsageLogsStats(
     userId,
     keyId,
     providerId,
+    sessionId,
     startTime,
     endTime,
     statusCode,
@@ -582,6 +597,11 @@ export async function findUsageLogsStats(
 
   if (providerId !== undefined) {
     conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
   }
 
   if (startTime !== undefined) {
