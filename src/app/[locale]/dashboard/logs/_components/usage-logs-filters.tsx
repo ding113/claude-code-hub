@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getKeys } from "@/actions/keys";
-import { exportUsageLogs } from "@/actions/usage-logs";
+import { exportUsageLogs, getUsageLogSessionIdSuggestions } from "@/actions/usage-logs";
 import { searchUsersForFilter } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -45,6 +45,7 @@ import { LogsDateRangePicker } from "./logs-date-range-picker";
 
 // 硬编码常用状态码（首次渲染时显示，无需等待加载）
 const COMMON_STATUS_CODES: number[] = [200, 400, 401, 429, 500];
+const SESSION_ID_SUGGESTION_MIN_LEN = 2;
 
 interface UsageLogsFiltersProps {
   isAdmin: boolean;
@@ -131,6 +132,12 @@ export function UsageLogsFilters({
   const [isExporting, setIsExporting] = useState(false);
   const [userPopoverOpen, setUserPopoverOpen] = useState(false);
   const [providerPopoverOpen, setProviderPopoverOpen] = useState(false);
+  const [sessionIdPopoverOpen, setSessionIdPopoverOpen] = useState(false);
+  const [isSessionIdsLoading, setIsSessionIdsLoading] = useState(false);
+  const [availableSessionIds, setAvailableSessionIds] = useState<string[]>([]);
+  const debouncedSessionIdSearchTerm = useDebounce(localFilters.sessionId ?? "", 300);
+  const sessionIdSearchRequestIdRef = useRef(0);
+  const lastLoadedSessionIdSearchTermRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -186,6 +193,62 @@ export function UsageLogsFilters({
       setUserSearchTerm("");
     }
   }, [isAdmin, userPopoverOpen]);
+
+  const loadSessionIdsForFilter = useCallback(
+    async (term: string) => {
+      const requestId = ++sessionIdSearchRequestIdRef.current;
+      setIsSessionIdsLoading(true);
+      lastLoadedSessionIdSearchTermRef.current = term;
+
+      try {
+        const result = await getUsageLogSessionIdSuggestions({
+          term,
+          userId: isAdmin ? localFilters.userId : undefined,
+          keyId: localFilters.keyId,
+          providerId: localFilters.providerId,
+        });
+
+        if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
+
+        if (result.ok) {
+          setAvailableSessionIds(result.data);
+        } else {
+          console.error("Failed to load sessionId suggestions:", result.error);
+          setAvailableSessionIds([]);
+        }
+      } catch (error) {
+        if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
+        console.error("Failed to load sessionId suggestions:", error);
+        setAvailableSessionIds([]);
+      } finally {
+        if (isMountedRef.current && requestId === sessionIdSearchRequestIdRef.current) {
+          setIsSessionIdsLoading(false);
+        }
+      }
+    },
+    [isAdmin, localFilters.keyId, localFilters.providerId, localFilters.userId]
+  );
+
+  useEffect(() => {
+    if (!sessionIdPopoverOpen) return;
+
+    const term = debouncedSessionIdSearchTerm.trim();
+    if (term.length < SESSION_ID_SUGGESTION_MIN_LEN) {
+      setAvailableSessionIds([]);
+      lastLoadedSessionIdSearchTermRef.current = undefined;
+      return;
+    }
+
+    if (term === lastLoadedSessionIdSearchTermRef.current) return;
+    void loadSessionIdsForFilter(term);
+  }, [sessionIdPopoverOpen, debouncedSessionIdSearchTerm, loadSessionIdsForFilter]);
+
+  useEffect(() => {
+    if (!sessionIdPopoverOpen) {
+      setAvailableSessionIds([]);
+      lastLoadedSessionIdSearchTermRef.current = undefined;
+    }
+  }, [sessionIdPopoverOpen]);
 
   useEffect(() => {
     if (initialKeys.length > 0) {
@@ -581,6 +644,60 @@ export function UsageLogsFilters({
             </Popover>
           </div>
         )}
+
+        {/* Session ID 联想 */}
+        <div className="space-y-2 lg:col-span-4">
+          <Label>{t("logs.filters.sessionId")}</Label>
+          <Popover open={sessionIdPopoverOpen} onOpenChange={setSessionIdPopoverOpen}>
+            <PopoverAnchor asChild>
+              <Input
+                value={localFilters.sessionId ?? ""}
+                placeholder={t("logs.filters.searchSessionId")}
+                onFocus={() => {
+                  const term = (localFilters.sessionId ?? "").trim();
+                  setSessionIdPopoverOpen(term.length >= SESSION_ID_SUGGESTION_MIN_LEN);
+                }}
+                onChange={(e) => {
+                  const next = e.target.value.trim();
+                  setLocalFilters((prev) => ({ ...prev, sessionId: next || undefined }));
+                  setSessionIdPopoverOpen(next.length >= SESSION_ID_SUGGESTION_MIN_LEN);
+                }}
+              />
+            </PopoverAnchor>
+            <PopoverContent
+              className="w-[320px] p-0"
+              align="start"
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
+              <Command shouldFilter={false}>
+                <CommandList className="max-h-[250px] overflow-y-auto">
+                  <CommandEmpty>
+                    {isSessionIdsLoading ? t("logs.stats.loading") : t("logs.filters.noSessionFound")}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {availableSessionIds.map((sessionId) => (
+                      <CommandItem
+                        key={sessionId}
+                        value={sessionId}
+                        onSelect={() => {
+                          setLocalFilters((prev) => ({ ...prev, sessionId }));
+                          setSessionIdPopoverOpen(false);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <span className="flex-1 font-mono text-xs truncate">{sessionId}</span>
+                        {localFilters.sessionId === sessionId && (
+                          <Check className="h-4 w-4 text-primary" />
+                        )}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
 
         {/* 模型选择 */}
         <div className="space-y-2 lg:col-span-4">
