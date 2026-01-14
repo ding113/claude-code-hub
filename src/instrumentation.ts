@@ -180,6 +180,19 @@ export async function register() {
       // 执行迁移
       await runMigrations();
 
+      // 回填 provider_endpoints（从 providers.url/类型 生成端点池，幂等）
+      try {
+        const { backfillProviderEndpointsFromProviders } = await import(
+          "@/repository/provider-endpoints"
+        );
+        const result = await backfillProviderEndpointsFromProviders();
+        logger.info("[Instrumentation] Provider endpoints backfill completed", result);
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       // 初始化价格表（如果数据库为空）
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
       await ensurePriceTable();
@@ -226,6 +239,19 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+
+        // 回填 provider_endpoints（幂等；避免老数据缺少端点池）
+        try {
+          const { backfillProviderEndpointsFromProviders } = await import(
+            "@/repository/provider-endpoints"
+          );
+          const result = await backfillProviderEndpointsFromProviders();
+          logger.info("[Instrumentation] Provider endpoints backfill completed", result);
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       } else {
         logger.warn("Database connection failed, skipping migrations");
       }

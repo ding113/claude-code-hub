@@ -42,6 +42,7 @@ import {
   isEmptyResponseError,
   isHttp2Error,
   ProxyError,
+  sanitizeUrl,
 } from "./errors";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 import { ModelRedirector } from "./model-redirector";
@@ -286,12 +287,18 @@ export class ProxyForwarder {
         const endpointIndex =
           endpointCandidates.length > 0 ? (attemptCount - 1) % endpointCandidates.length : 0;
         const activeEndpoint = endpointCandidates[endpointIndex];
+        const endpointAudit = {
+          endpointId: activeEndpoint.endpointId,
+          endpointUrl: sanitizeUrl(activeEndpoint.baseUrl),
+        };
 
         try {
           const response = await ProxyForwarder.doForward(
             session,
             currentProvider,
-            activeEndpoint.baseUrl
+            activeEndpoint.baseUrl,
+            endpointAudit,
+            attemptCount
           );
 
           // ========== 空响应检测（仅非流式）==========
@@ -429,6 +436,7 @@ export class ProxyForwarder {
 
           // 记录到决策链
           session.addProviderToChain(currentProvider, {
+            ...endpointAudit,
             reason:
               totalProvidersAttempted === 1 && attemptCount === 1
                 ? "request_success"
@@ -483,6 +491,7 @@ export class ProxyForwarder {
 
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "system_error", // 使用 system_error 作为客户端中断的原因
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -599,6 +608,7 @@ export class ProxyForwarder {
                   // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
                   if (lastError instanceof ProxyError) {
                     session.addProviderToChain(currentProvider, {
+                      ...endpointAudit,
                       reason: "retry_failed",
                       circuitState: getCircuitState(currentProvider.id),
                       attemptNumber: attemptCount,
@@ -618,6 +628,7 @@ export class ProxyForwarder {
                     });
                   } else {
                     session.addProviderToChain(currentProvider, {
+                      ...endpointAudit,
                       reason: "retry_failed",
                       circuitState: getCircuitState(currentProvider.id),
                       attemptNumber: attemptCount,
@@ -678,6 +689,7 @@ export class ProxyForwarder {
             // 记录到决策链（标记为不可重试的客户端错误）
             // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "client_error_non_retryable", // 新增的 reason 值
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -706,8 +718,9 @@ export class ProxyForwarder {
           // ⭐ 4. 系统错误处理（不计入熔断器，先重试1次当前供应商）
           if (errorCategory === ErrorCategory.SYSTEM_ERROR) {
             const err = lastError as Error & {
-              code?: string;
-              syscall?: string;
+              code?: string; // Node.js 错误码：如 'ENOTFOUND'、'ECONNREFUSED'、'ETIMEDOUT'、'ECONNRESET'
+              errno?: number;
+              syscall?: string; // 系统调用：如 'getaddrinfo'、'connect'、'read'、'write'
             };
 
             logger.warn("ProxyForwarder: System/network error occurred", {
@@ -721,6 +734,7 @@ export class ProxyForwarder {
 
             // 记录到决策链（不计入 failedProviderIds）
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "system_error",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -800,6 +814,7 @@ export class ProxyForwarder {
 
             // 记录到决策链（标记为 resource_not_found，不计入熔断）
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "resource_not_found",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -853,6 +868,7 @@ export class ProxyForwarder {
 
               // 记录到决策链
               session.addProviderToChain(currentProvider, {
+                ...endpointAudit,
                 reason: "retry_failed",
                 circuitState: getCircuitState(currentProvider.id),
                 attemptNumber: attemptCount,
@@ -936,6 +952,7 @@ export class ProxyForwarder {
 
             // 记录到决策链
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "retry_failed",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -975,7 +992,7 @@ export class ProxyForwarder {
 
             // 加入失败列表并切换供应商
             failedProviderIds.push(currentProvider.id);
-            break; // ⭐ 跳出内层循环，进入供应商切换逻辑
+            break; // 跳出内层循环，进入供应商切换逻辑
           }
         }
       } // ========== 内层循环结束 ==========
@@ -1029,7 +1046,9 @@ export class ProxyForwarder {
   private static async doForward(
     session: ProxySession,
     provider: typeof session.provider,
-    baseUrl: string
+    baseUrl: string,
+    endpointAudit?: { endpointId: number | null; endpointUrl: string },
+    attemptNumber?: number
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -1721,9 +1740,10 @@ export class ProxyForwarder {
 
         // 记录到决策链（标记为 HTTP/2 回退）
         session.addProviderToChain(provider, {
+          ...(endpointAudit ?? { endpointId: null, endpointUrl: sanitizeUrl(baseUrl) }),
           reason: "http2_fallback",
           circuitState: getCircuitState(provider.id),
-          attemptNumber: 1,
+          attemptNumber: attemptNumber ?? 1,
           errorMessage: `HTTP/2 error: ${err.message}`,
           errorDetails: {
             system: {
