@@ -434,6 +434,13 @@ export const CreateProviderSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
+  session_ttl: z.coerce
+    .number()
+    .int("Session TTL必须是整数")
+    .min(60, "Session TTL不能少于60秒")
+    .max(3600, "Session TTL不能超过3600秒")
+    .nullable()
+    .optional(),
   cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
   context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
   codex_reasoning_effort_preference:
@@ -610,6 +617,13 @@ export const UpdateProviderSchema = z
       .int("并发Session上限必须是整数")
       .min(0, "并发Session上限不能为负数")
       .max(1000, "并发Session上限不能超过1000")
+      .optional(),
+    session_ttl: z.coerce
+      .number()
+      .int("Session TTL必须是整数")
+      .min(60, "Session TTL不能少于60秒")
+      .max(3600, "Session TTL不能超过3600秒")
+      .nullable()
       .optional(),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),

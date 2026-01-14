@@ -94,6 +94,7 @@ export interface Provider {
   // 总消费重置时间：用于实现“达到总限额后手动重置用量”
   totalCostResetAt: Date | null;
   limitConcurrentSessions: number;
+  sessionTtl: number | null;
 
   // 熔断器配置（每个供应商独立配置）
   maxRetryAttempts: number | null;
@@ -177,6 +178,7 @@ export interface ProviderDisplay {
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
   limitConcurrentSessions: number;
+  sessionTtl: number | null;
   // 熔断器配置
   maxRetryAttempts: number | null;
   circuitBreakerFailureThreshold: number;
@@ -261,6 +263,7 @@ export interface CreateProviderData {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
+  session_ttl?: number | null;
 
   // 熔断器配置
   max_retry_attempts?: number | null;
@@ -331,6 +334,7 @@ export interface UpdateProviderData {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
+  session_ttl?: number | null;
 
   // 熔断器配置
   max_retry_attempts?: number | null;

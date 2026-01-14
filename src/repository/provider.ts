@@ -40,6 +40,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitTotalUsd:
       providerData.limit_total_usd != null ? providerData.limit_total_usd.toString() : null,
     limitConcurrentSessions: providerData.limit_concurrent_sessions,
+    sessionTtl: providerData.session_ttl ?? null,
     maxRetryAttempts: providerData.max_retry_attempts ?? null,
     circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 5,
     circuitBreakerOpenDuration: providerData.circuit_breaker_open_duration ?? 1800000,
@@ -91,6 +92,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitTotalUsd: providers.limitTotalUsd,
     totalCostResetAt: providers.totalCostResetAt,
     limitConcurrentSessions: providers.limitConcurrentSessions,
+    sessionTtl: providers.sessionTtl,
     maxRetryAttempts: providers.maxRetryAttempts,
     circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
     circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
@@ -395,6 +397,7 @@ export async function updateProvider(
       providerData.limit_total_usd != null ? providerData.limit_total_usd.toString() : null;
   if (providerData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = providerData.limit_concurrent_sessions;
+  if (providerData.session_ttl !== undefined) dbData.sessionTtl = providerData.session_ttl;
   if (providerData.max_retry_attempts !== undefined)
     dbData.maxRetryAttempts = providerData.max_retry_attempts;
   if (providerData.circuit_breaker_failure_threshold !== undefined)

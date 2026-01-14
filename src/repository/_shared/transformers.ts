@@ -88,6 +88,10 @@ export function toProvider(dbProvider: any): Provider {
         : null,
     totalCostResetAt: dbProvider?.totalCostResetAt ? new Date(dbProvider.totalCostResetAt) : null,
     limitConcurrentSessions: dbProvider?.limitConcurrentSessions ?? 0,
+    sessionTtl:
+      dbProvider?.sessionTtl !== null && dbProvider?.sessionTtl !== undefined
+        ? Number(dbProvider.sessionTtl)
+        : null,
     maxRetryAttempts:
       dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null
         ? Number(dbProvider.maxRetryAttempts)
