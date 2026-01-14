@@ -1549,7 +1549,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
       try {
         const startTime = Date.now();
 
-        // Параллельно scan всех паттернов
+        // Scan all patterns in parallel
         const scanResults = await Promise.all([
           ...keyIds.map((keyId) =>
             scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
@@ -1565,7 +1565,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
 
         const allCostKeys = scanResults.flat();
 
-        // Batch delete через pipeline
+        // Batch delete via pipeline
         const pipeline = redis.pipeline();
 
         // Active sessions
@@ -1602,7 +1602,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
           userId,
           error: error instanceof Error ? error.message : String(error),
         });
-        // Продолжаем выполнение - DB logs уже удалены
+        // Continue execution - DB logs already deleted
       }
     }
 
