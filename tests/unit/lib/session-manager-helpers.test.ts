@@ -25,7 +25,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", () => ({
 }));
 
 async function loadHelpers() {
-  const mod = await import("@/lib/session-manager");
+  const mod = await import("../../../src/lib/session-manager");
   return {
     headersToSanitizedObject: mod.headersToSanitizedObject,
     parseHeaderRecord: mod.parseHeaderRecord,
