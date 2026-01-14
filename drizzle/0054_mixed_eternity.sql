@@ -51,6 +51,44 @@ ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "created_at" timestamp w
 --> statement-breakpoint
 ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "updated_at" timestamp with time zone DEFAULT now();
 --> statement-breakpoint
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'provider_vendors'
+			AND column_name = 'vendor_key'
+	) THEN
+		WITH normalized AS (
+			SELECT
+				id,
+				lower(vendor_key) AS candidate,
+				row_number() OVER (
+					PARTITION BY lower(vendor_key)
+					ORDER BY id
+				) AS rn
+			FROM provider_vendors
+			WHERE (website_domain IS NULL OR website_domain = '')
+				AND vendor_key IS NOT NULL
+				AND vendor_key <> ''
+		),
+		updated AS (
+			SELECT
+				id,
+				CASE
+					WHEN rn = 1 THEN candidate
+					ELSE candidate || '-' || id
+				END AS website_domain
+			FROM normalized
+		)
+		UPDATE provider_vendors v
+		SET website_domain = u.website_domain
+		FROM updated u
+		WHERE v.id = u.id;
+	END IF;
+END $$;
+--> statement-breakpoint
 UPDATE "provider_vendors"
 SET "website_domain" = 'unknown-' || "id"
 WHERE ("website_domain" IS NULL OR "website_domain" = '');
@@ -63,29 +101,70 @@ ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "provider_vendor_id" integer;
 --> statement-breakpoint
 ALTER TABLE "system_settings" ADD COLUMN IF NOT EXISTS "enable_codex_session_id_completion" boolean DEFAULT true NOT NULL;
 --> statement-breakpoint
-INSERT INTO provider_vendors (website_domain)
-SELECT DISTINCT
-	CASE
-		WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
-		ELSE domain_candidate
-	END AS website_domain
-FROM (
-	SELECT
-		id AS provider_id,
-		lower(
-			split_part(
-				split_part(
-					regexp_replace(COALESCE(NULLIF(website_url, ''), url), '^[a-zA-Z]+://', ''),
-					'/',
-					1
-				),
-				':',
-				1
-			)
-		) AS domain_candidate
-	FROM providers
-) t
-ON CONFLICT (website_domain) DO NOTHING;
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'provider_vendors'
+			AND column_name = 'vendor_key'
+	) THEN
+		EXECUTE $insert$
+			INSERT INTO provider_vendors (website_domain, vendor_key)
+			SELECT DISTINCT
+				CASE
+					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+					ELSE domain_candidate
+				END AS website_domain,
+				CASE
+					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+					ELSE domain_candidate
+				END AS vendor_key
+			FROM (
+				SELECT
+					id AS provider_id,
+					lower(
+						split_part(
+							split_part(
+								regexp_replace(COALESCE(NULLIF(website_url, ''), url), '^[a-zA-Z]+://', ''),
+								'/',
+								1
+							),
+							':',
+							1
+						)
+					) AS domain_candidate
+				FROM providers
+			) t
+			ON CONFLICT DO NOTHING
+		$insert$;
+	ELSE
+		INSERT INTO provider_vendors (website_domain)
+		SELECT DISTINCT
+			CASE
+				WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+				ELSE domain_candidate
+			END AS website_domain
+		FROM (
+			SELECT
+				id AS provider_id,
+				lower(
+					split_part(
+						split_part(
+							regexp_replace(COALESCE(NULLIF(website_url, ''), url), '^[a-zA-Z]+://', ''),
+							'/',
+							1
+						),
+						':',
+						1
+					)
+				) AS domain_candidate
+			FROM providers
+		) t
+		ON CONFLICT (website_domain) DO NOTHING;
+	END IF;
+END $$;
 --> statement-breakpoint
 UPDATE providers p
 SET provider_vendor_id = v.id
