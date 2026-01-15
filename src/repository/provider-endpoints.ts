@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import {
   providerEndpointProbeLogs,
@@ -59,6 +59,7 @@ function toProviderVendor(row: any): ProviderVendor {
     displayName: row.displayName ?? null,
     websiteUrl: row.websiteUrl ?? null,
     faviconUrl: row.faviconUrl ?? null,
+    isOfficial: row.isOfficial ?? false,
     createdAt: toDate(row.createdAt),
     updatedAt: toDate(row.updatedAt),
   };
@@ -161,6 +162,7 @@ export async function findProviderVendors(
       displayName: providerVendors.displayName,
       websiteUrl: providerVendors.websiteUrl,
       faviconUrl: providerVendors.faviconUrl,
+      isOfficial: providerVendors.isOfficial,
       createdAt: providerVendors.createdAt,
       updatedAt: providerVendors.updatedAt,
     })
@@ -180,6 +182,7 @@ export async function findProviderVendorById(vendorId: number): Promise<Provider
       displayName: providerVendors.displayName,
       websiteUrl: providerVendors.websiteUrl,
       faviconUrl: providerVendors.faviconUrl,
+      isOfficial: providerVendors.isOfficial,
       createdAt: providerVendors.createdAt,
       updatedAt: providerVendors.updatedAt,
     })
@@ -221,7 +224,12 @@ export async function findProviderEndpointById(
 
 export async function updateProviderVendor(
   vendorId: number,
-  payload: { displayName?: string | null; websiteUrl?: string | null; faviconUrl?: string | null }
+  payload: {
+    displayName?: string | null;
+    websiteUrl?: string | null;
+    faviconUrl?: string | null;
+    isOfficial?: boolean;
+  }
 ): Promise<ProviderVendor | null> {
   if (Object.keys(payload).length === 0) {
     return findProviderVendorById(vendorId);
@@ -232,6 +240,7 @@ export async function updateProviderVendor(
   if (payload.displayName !== undefined) updates.displayName = payload.displayName;
   if (payload.websiteUrl !== undefined) updates.websiteUrl = payload.websiteUrl;
   if (payload.faviconUrl !== undefined) updates.faviconUrl = payload.faviconUrl;
+  if (payload.isOfficial !== undefined) updates.isOfficial = payload.isOfficial;
 
   const rows = await db
     .update(providerVendors)
@@ -243,11 +252,83 @@ export async function updateProviderVendor(
       displayName: providerVendors.displayName,
       websiteUrl: providerVendors.websiteUrl,
       faviconUrl: providerVendors.faviconUrl,
+      isOfficial: providerVendors.isOfficial,
       createdAt: providerVendors.createdAt,
       updatedAt: providerVendors.updatedAt,
     });
 
   return rows[0] ? toProviderVendor(rows[0]) : null;
+}
+
+export async function deleteProviderVendor(vendorId: number): Promise<boolean> {
+  const deleted = await db.transaction(async (tx) => {
+    // 1. Delete endpoints (cascade would handle this, but manual is safe)
+    await tx.delete(providerEndpoints).where(eq(providerEndpoints.vendorId, vendorId));
+    // 2. Delete providers (keys) - explicit delete required due to 'restrict'
+    await tx.delete(providers).where(eq(providers.providerVendorId, vendorId));
+    // 3. Delete vendor
+    const result = await tx
+      .delete(providerVendors)
+      .where(eq(providerVendors.id, vendorId))
+      .returning({ id: providerVendors.id });
+
+    return result.length > 0;
+  });
+
+  return deleted;
+}
+
+export async function tryDeleteProviderVendorIfEmpty(vendorId: number): Promise<boolean> {
+  try {
+    return await db.transaction(async (tx) => {
+      // 1) Must have no active providers (soft-deleted rows still exist but should not block).
+      const [activeProvider] = await tx
+        .select({ id: providers.id })
+        .from(providers)
+        .where(and(eq(providers.providerVendorId, vendorId), isNull(providers.deletedAt)))
+        .limit(1);
+
+      if (activeProvider) {
+        return false;
+      }
+
+      // 2) Must have no active endpoints.
+      const [activeEndpoint] = await tx
+        .select({ id: providerEndpoints.id })
+        .from(providerEndpoints)
+        .where(and(eq(providerEndpoints.vendorId, vendorId), isNull(providerEndpoints.deletedAt)))
+        .limit(1);
+
+      if (activeEndpoint) {
+        return false;
+      }
+
+      // 3) Hard delete soft-deleted providers to satisfy FK `onDelete: restrict`.
+      await tx
+        .delete(providers)
+        .where(and(eq(providers.providerVendorId, vendorId), isNotNull(providers.deletedAt)));
+
+      // 4) Delete vendor. Endpoints will be physically removed by FK cascade.
+      const deleted = await tx
+        .delete(providerVendors)
+        .where(
+          and(
+            eq(providerVendors.id, vendorId),
+            sql`NOT EXISTS (SELECT 1 FROM providers p WHERE p.provider_vendor_id = ${vendorId} AND p.deleted_at IS NULL)`,
+            sql`NOT EXISTS (SELECT 1 FROM provider_endpoints e WHERE e.vendor_id = ${vendorId} AND e.deleted_at IS NULL)`
+          )
+        )
+        .returning({ id: providerVendors.id });
+
+      return deleted.length > 0;
+    });
+  } catch (error) {
+    logger.warn("[ProviderVendor] Auto delete failed", {
+      vendorId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
 }
 
 export async function findProviderEndpointsByVendorAndType(

@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
+import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
   getEndpointHealthInfo,
   resetEndpointCircuit as resetEndpointCircuitState,
@@ -17,13 +18,16 @@ import {
 } from "@/lib/vendor-type-circuit-breaker";
 import {
   createProviderEndpoint,
+  deleteProviderVendor,
   findProviderEndpointById,
   findProviderEndpointProbeLogs,
   findProviderEndpointsByVendorAndType,
   findProviderVendorById,
   findProviderVendors,
   softDeleteProviderEndpoint,
+  tryDeleteProviderVendorIfEmpty,
   updateProviderEndpoint,
+  updateProviderVendor,
 } from "@/repository";
 import type {
   ProviderEndpoint,
@@ -88,6 +92,17 @@ const DeleteProviderEndpointSchema = z.object({
 const ProbeProviderEndpointSchema = z.object({
   endpointId: EndpointIdSchema,
   timeoutMs: z.number().int().min(1000).max(120_000).optional(),
+});
+
+const EditProviderVendorSchema = z.object({
+  vendorId: VendorIdSchema,
+  displayName: z.string().trim().max(200).optional().nullable(),
+  websiteUrl: z.string().trim().url(ERROR_CODES.INVALID_URL).optional().nullable(),
+  isOfficial: z.boolean().optional(),
+});
+
+const DeleteProviderVendorSchema = z.object({
+  vendorId: VendorIdSchema,
 });
 
 const GetProbeLogsSchema = z.object({
@@ -275,6 +290,15 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
       };
     }
 
+    const endpoint = await findProviderEndpointById(parsed.data.endpointId);
+    if (!endpoint) {
+      return {
+        ok: false,
+        error: "端点不存在",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
     const ok = await softDeleteProviderEndpoint(parsed.data.endpointId);
     if (!ok) {
       return {
@@ -283,6 +307,9 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
         errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
+
+    // Auto cleanup: if the vendor has no active providers/endpoints, delete it as well.
+    await tryDeleteProviderVendorIfEmpty(endpoint.vendorId);
 
     return { ok: true };
   } catch (error) {
@@ -580,5 +607,112 @@ export async function resetVendorTypeCircuit(input: unknown): Promise<ActionResu
     logger.error("resetVendorTypeCircuit:error", error);
     const message = error instanceof Error ? error.message : "重置临时熔断失败";
     return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}
+
+export async function editProviderVendor(
+  input: unknown
+): Promise<ActionResult<{ vendor: ProviderVendor }>> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const parsed = EditProviderVendorSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: formatZodError(parsed.error),
+        errorCode: extractZodErrorCode(parsed.error),
+      };
+    }
+
+    let faviconUrl: string | null | undefined;
+    if (parsed.data.websiteUrl !== undefined) {
+      if (parsed.data.websiteUrl) {
+        try {
+          const url = new URL(parsed.data.websiteUrl);
+          const domain = url.hostname;
+          faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+        } catch (_error) {
+          faviconUrl = null;
+        }
+      } else {
+        // websiteUrl explicitly cleared (null) -> clear favicon as well
+        faviconUrl = null;
+      }
+    }
+
+    const vendor = await updateProviderVendor(parsed.data.vendorId, {
+      displayName: parsed.data.displayName,
+      websiteUrl: parsed.data.websiteUrl,
+      faviconUrl,
+      isOfficial: parsed.data.isOfficial,
+    });
+
+    if (!vendor) {
+      return {
+        ok: false,
+        error: "Vendor not found",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    return { ok: true, data: { vendor } };
+  } catch (error) {
+    logger.error("editProviderVendor:error", error);
+    const message = error instanceof Error ? error.message : "更新供应商失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
+  }
+}
+
+export async function removeProviderVendor(input: unknown): Promise<ActionResult> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const parsed = DeleteProviderVendorSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: formatZodError(parsed.error),
+        errorCode: extractZodErrorCode(parsed.error),
+      };
+    }
+
+    const ok = await deleteProviderVendor(parsed.data.vendorId);
+    if (!ok) {
+      return {
+        ok: false,
+        error: "Vendor not found or could not be deleted",
+        errorCode: ERROR_CODES.DELETE_FAILED,
+      };
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("removeProviderVendor:cache_invalidation_failed", {
+        vendorId: parsed.data.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return { ok: true };
+  } catch (error) {
+    logger.error("removeProviderVendor:error", error);
+    const message = error instanceof Error ? error.message : "删除供应商失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.DELETE_FAILED };
   }
 }

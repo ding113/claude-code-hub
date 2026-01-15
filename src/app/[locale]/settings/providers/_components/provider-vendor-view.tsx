@@ -13,18 +13,31 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   addProviderEndpoint,
   editProviderEndpoint,
+  editProviderVendor,
   getProviderEndpoints,
   getProviderVendors,
   getVendorTypeCircuitInfo,
   probeProviderEndpoint,
   removeProviderEndpoint,
+  removeProviderVendor,
   setVendorTypeCircuitManualOpen,
 } from "@/actions/provider-endpoints";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +70,7 @@ import {
 } from "@/components/ui/table";
 
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 import type {
   ProviderDisplay,
   ProviderEndpoint,
@@ -64,6 +78,7 @@ import type {
   ProviderVendor,
 } from "@/types/provider";
 import type { User } from "@/types/user";
+import { UrlPreview } from "./forms/url-preview";
 import { ProviderRichListItem } from "./provider-rich-list-item";
 
 interface ProviderVendorViewProps {
@@ -184,6 +199,11 @@ function VendorCard({
             <div>
               <CardTitle className="flex items-center gap-2">
                 {displayName}
+                {vendor?.isOfficial ? (
+                  <Badge variant="secondary" className="text-xs">
+                    {t("vendorOfficial")}
+                  </Badge>
+                ) : null}
                 {websiteUrl && (
                   <a
                     href={websiteUrl}
@@ -199,6 +219,10 @@ function VendorCard({
                 {providers.length} {t("vendorKeys")}
               </CardDescription>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <EditVendorDialog vendor={vendor} vendorId={vendorId} />
+            <DeleteVendorDialog vendor={vendor} vendorId={vendorId} />
           </div>
         </div>
       </CardHeader>
@@ -431,6 +455,7 @@ function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
       toast.success(t("endpointDeleteSuccess"));
     },
     onError: () => {
@@ -531,19 +556,24 @@ function AddEndpointButton({
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    if (!open) setUrl("");
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
-    const url = formData.get("url") as string;
+    const endpointUrl = formData.get("url") as string;
     const label = formData.get("label") as string;
 
     try {
       const res = await addProviderEndpoint({
         vendorId,
         providerType,
-        url,
+        url: endpointUrl,
         label: label || null,
         sortOrder: 0,
         isEnabled: true,
@@ -571,7 +601,7 @@ function AddEndpointButton({
           {t("addEndpoint")}
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("addEndpoint")}</DialogTitle>
           <DialogDescription>{t("addEndpointDesc", { providerType })}</DialogDescription>
@@ -579,12 +609,21 @@ function AddEndpointButton({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="url">{t("endpointUrlLabel")}</Label>
-            <Input id="url" name="url" placeholder={t("endpointUrlPlaceholder")} required />
+            <Input
+              id="url"
+              name="url"
+              placeholder={t("endpointUrlPlaceholder")}
+              required
+              onChange={(e) => setUrl(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="label">{t("endpointLabelOptional")}</Label>
             <Input id="label" name="label" placeholder={t("endpointLabelPlaceholder")} />
           </div>
+
+          <UrlPreview baseUrl={url} providerType={providerType} />
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {tCommon("cancel")}
@@ -673,5 +712,185 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function EditVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; vendorId: number }) {
+  const t = useTranslations("settings.providers");
+  const tCommon = useTranslations("settings.common");
+  const tErrors = useTranslations("errors");
+  const [open, setOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOfficial, setIsOfficial] = useState(vendor?.isOfficial ?? false);
+
+  useEffect(() => {
+    if (open) setIsOfficial(vendor?.isOfficial ?? false);
+  }, [open, vendor?.isOfficial]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    const formData = new FormData(e.currentTarget);
+    const displayName = formData.get("displayName") as string;
+    const websiteUrl = formData.get("websiteUrl") as string;
+
+    try {
+      const res = await editProviderVendor({
+        vendorId,
+        displayName: displayName || null,
+        websiteUrl: websiteUrl || null,
+        isOfficial,
+      });
+
+      if (res.ok) {
+        toast.success(t("vendorUpdateSuccess"));
+        setOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+      } else {
+        toast.error(
+          res.errorCode ? getErrorMessage(tErrors, res.errorCode) : t("vendorUpdateFailed")
+        );
+      }
+    } catch (_err) {
+      toast.error(t("vendorUpdateFailed"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Edit2 className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("editVendor")}</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="displayName">{t("vendorName")}</Label>
+            <Input
+              id="displayName"
+              name="displayName"
+              defaultValue={vendor?.displayName || ""}
+              placeholder={t("vendorFallbackName", { id: vendorId })}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="websiteUrl">{t("vendorWebsite")}</Label>
+            <Input
+              id="websiteUrl"
+              name="websiteUrl"
+              defaultValue={vendor?.websiteUrl || ""}
+              placeholder={t("vendorWebsitePlaceholder")}
+            />
+          </div>
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <Label htmlFor="isOfficial">{t("vendorOfficial")}</Label>
+            <Switch id="isOfficial" checked={isOfficial} onCheckedChange={setIsOfficial} />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              {tCommon("cancel")}
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {tCommon("save")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; vendorId: number }) {
+  const t = useTranslations("settings.providers");
+  const tCommon = useTranslations("settings.common");
+  const tErrors = useTranslations("errors");
+  const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<"confirm" | "double-confirm">("confirm");
+  const queryClient = useQueryClient();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      const res = await removeProviderVendor({ vendorId });
+
+      if (res.ok) {
+        toast.success(t("vendorDeleteSuccess"));
+        setOpen(false);
+        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+      } else {
+        toast.error(
+          res.errorCode ? getErrorMessage(tErrors, res.errorCode) : t("vendorDeleteFailed")
+        );
+      }
+    } catch (_err) {
+      toast.error(t("vendorDeleteFailed"));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const displayName = vendor?.displayName || t("vendorFallbackName", { id: vendorId });
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(val) => {
+        setOpen(val);
+        if (!val) setStep("confirm");
+      }}
+    >
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-destructive hover:text-destructive"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {step === "confirm"
+              ? t("deleteVendorConfirmTitle")
+              : t("deleteVendorDoubleConfirmTitle")}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {step === "confirm"
+              ? t("deleteVendorConfirmDesc", { name: displayName })
+              : t("deleteVendorDoubleConfirmDesc", { name: displayName })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isDeleting}>{tCommon("cancel")}</AlertDialogCancel>
+          {step === "confirm" ? (
+            <Button variant="destructive" onClick={() => setStep("double-confirm")}>
+              {t("deleteVendor")}
+            </Button>
+          ) : (
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={isDeleting}
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {tCommon("confirm")}
+            </AlertDialogAction>
+          )}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

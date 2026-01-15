@@ -11,6 +11,7 @@ import { toProvider } from "./_shared/transformers";
 import {
   ensureProviderEndpointExistsForUrl,
   getOrCreateProviderVendorIdFromUrls,
+  tryDeleteProviderVendorIfEmpty,
 } from "./provider-endpoints";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
@@ -382,6 +383,7 @@ export async function updateProvider(
   const dbData: any = {
     updatedAt: new Date(),
   };
+
   if (providerData.name !== undefined) dbData.name = providerData.name;
   if (providerData.url !== undefined) dbData.url = providerData.url;
   if (providerData.key !== undefined) dbData.key = providerData.key;
@@ -466,6 +468,7 @@ export async function updateProvider(
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
   if (providerData.cc !== undefined) dbData.cc = providerData.cc;
 
+  let previousVendorId: number | null = null;
   if (providerData.url !== undefined || providerData.website_url !== undefined) {
     const [current] = await db
       .select({
@@ -473,12 +476,14 @@ export async function updateProvider(
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
         name: providers.name,
+        providerVendorId: providers.providerVendorId,
       })
       .from(providers)
       .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
       .limit(1);
 
     if (current) {
+      previousVendorId = current.providerVendorId;
       const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
         providerUrl: providerData.url ?? current.url,
         websiteUrl: providerData.website_url ?? current.websiteUrl,
@@ -569,6 +574,10 @@ export async function updateProvider(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  if (previousVendorId && transformed.providerVendorId !== previousVendorId) {
+    await tryDeleteProviderVendorIfEmpty(previousVendorId);
   }
 
   return transformed;
