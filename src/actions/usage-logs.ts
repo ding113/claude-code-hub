@@ -311,14 +311,14 @@ export async function getUsageLogSessionIdSuggestions(
             userId: input.userId,
             keyId: input.keyId,
             providerId: input.providerId,
-            limit: 20,
+            limit: SESSION_ID_SUGGESTION_LIMIT,
           }
         : {
             term: trimmedTerm,
             userId: session.user.id,
             keyId: input.keyId,
             providerId: input.providerId,
-            limit: 20,
+            limit: SESSION_ID_SUGGESTION_LIMIT,
           };
 
     const sessionIds = await findUsageLogSessionIdSuggestions(finalFilters);
