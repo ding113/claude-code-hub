@@ -98,7 +98,6 @@ const EditProviderVendorSchema = z.object({
   vendorId: VendorIdSchema,
   displayName: z.string().trim().max(200).optional().nullable(),
   websiteUrl: z.string().trim().url(ERROR_CODES.INVALID_URL).optional().nullable(),
-  isOfficial: z.boolean().optional(),
 });
 
 const DeleteProviderVendorSchema = z.object({
@@ -652,7 +651,6 @@ export async function editProviderVendor(
       displayName: parsed.data.displayName,
       websiteUrl: parsed.data.websiteUrl,
       faviconUrl,
-      isOfficial: parsed.data.isOfficial,
     });
 
     if (!vendor) {
