@@ -18,14 +18,13 @@ import { toast } from "sonner";
 import {
   addProviderEndpoint,
   editProviderEndpoint,
-  editProviderVendor,
   getProviderEndpoints,
   getProviderVendors,
   getVendorTypeCircuitInfo,
   probeProviderEndpoint,
   removeProviderEndpoint,
   removeProviderVendor,
-  setVendorTypeCircuitManualOpen,
+  resetVendorTypeCircuit,
 } from "@/actions/provider-endpoints";
 import {
   AlertDialog,
@@ -68,7 +67,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type {
@@ -78,8 +76,9 @@ import type {
   ProviderVendor,
 } from "@/types/provider";
 import type { User } from "@/types/user";
+import { EndpointLatencySparkline } from "./endpoint-latency-sparkline";
 import { UrlPreview } from "./forms/url-preview";
-import { ProviderRichListItem } from "./provider-rich-list-item";
+import { VendorKeysCompactList } from "./vendor-keys-compact-list";
 
 interface ProviderVendorViewProps {
   providers: ProviderDisplay[];
@@ -91,15 +90,9 @@ interface ProviderVendorViewProps {
   currencyCode: CurrencyCode;
 }
 
-export function ProviderVendorView({
-  providers,
-  currentUser,
-  enableMultiProviderTypes,
-  healthStatus,
-  statistics,
-  statisticsLoading,
-  currencyCode,
-}: ProviderVendorViewProps) {
+export function ProviderVendorView(props: ProviderVendorViewProps) {
+  const { providers, currentUser, enableMultiProviderTypes } = props;
+
   const { data: vendors = [], isLoading: isVendorsLoading } = useQuery({
     queryKey: ["provider-vendors"],
     queryFn: async () => await getProviderVendors(),
@@ -148,10 +141,6 @@ export function ProviderVendorView({
             providers={vendorProviders}
             currentUser={currentUser}
             enableMultiProviderTypes={enableMultiProviderTypes}
-            healthStatus={healthStatus}
-            statistics={statistics}
-            statisticsLoading={statisticsLoading}
-            currencyCode={currencyCode}
           />
         );
       })}
@@ -165,20 +154,12 @@ function VendorCard({
   providers,
   currentUser,
   enableMultiProviderTypes,
-  healthStatus,
-  statistics,
-  statisticsLoading,
-  currencyCode,
 }: {
   vendor?: ProviderVendor;
   vendorId: number;
   providers: ProviderDisplay[];
   currentUser?: User;
   enableMultiProviderTypes: boolean;
-  healthStatus: any;
-  statistics: any;
-  statisticsLoading: boolean;
-  currencyCode: CurrencyCode;
 }) {
   const t = useTranslations("settings.providers");
 
@@ -189,7 +170,7 @@ function VendorCard({
 
   return (
     <Card className="overflow-hidden">
-      <CardHeader className="bg-muted/30 pb-4">
+      <CardHeader className="bg-muted/30 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10 border bg-background">
@@ -216,35 +197,20 @@ function VendorCard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <EditVendorDialog vendor={vendor} vendorId={vendorId} />
             <DeleteVendorDialog vendor={vendor} vendorId={vendorId} />
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="p-0">
-        {providers.length > 0 && (
-          <div className="border-b">
-            <div className="px-6 py-3 bg-muted/10 font-medium text-sm text-muted-foreground flex items-center gap-2">
-              {t("vendorKeys")}
-            </div>
-            <div className="divide-y">
-              {providers.map((provider) => (
-                <div key={provider.id} className="p-4">
-                  <ProviderRichListItem
-                    provider={provider}
-                    currentUser={currentUser}
-                    healthStatus={healthStatus[provider.id]}
-                    statistics={statistics[provider.id]}
-                    statisticsLoading={statisticsLoading}
-                    currencyCode={currencyCode}
-                    enableMultiProviderTypes={enableMultiProviderTypes}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <VendorKeysCompactList
+          vendorId={vendorId}
+          vendorWebsiteDomain={vendor?.websiteDomain ?? ""}
+          vendorWebsiteUrl={vendor?.websiteUrl ?? null}
+          providers={providers}
+          currentUser={currentUser}
+          enableMultiProviderTypes={enableMultiProviderTypes}
+        />
 
         {enableMultiProviderTypes && <VendorEndpointsSection vendorId={vendorId} />}
       </CardContent>
@@ -312,9 +278,9 @@ function VendorTypeCircuitControl({
     },
   });
 
-  const manualOpenMutation = useMutation({
-    mutationFn: async (manualOpen: boolean) => {
-      const res = await setVendorTypeCircuitManualOpen({ vendorId, providerType, manualOpen });
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await resetVendorTypeCircuit({ vendorId, providerType });
       if (!res.ok) throw new Error(res.error);
       return res.data;
     },
@@ -343,19 +309,19 @@ function VendorTypeCircuitControl({
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        <Label
-          htmlFor={`circuit-${vendorId}-${providerType}`}
-          className="text-xs text-muted-foreground"
+      {circuitInfo.circuitState === "open" ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={() => resetMutation.mutate()}
+          disabled={resetMutation.isPending}
         >
-          {circuitInfo.manualOpen ? t("manualCircuitClose") : t("manualCircuitOpen")}
-        </Label>
-        <Switch
-          id={`circuit-${vendorId}-${providerType}`}
-          checked={circuitInfo.manualOpen}
-          onCheckedChange={(checked) => manualOpenMutation.mutate(checked)}
-        />
-      </div>
+          {resetMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {t("manualCircuitClose")}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -397,7 +363,7 @@ function EndpointsTable({
           <TableRow>
             <TableHead>{t("columnUrl")}</TableHead>
             <TableHead>{t("status")}</TableHead>
-            <TableHead>{t("lastProbed")}</TableHead>
+            <TableHead>{t("latency")}</TableHead>
             <TableHead className="text-right">{t("columnActions")}</TableHead>
           </TableRow>
         </TableHeader>
@@ -479,19 +445,14 @@ function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
         </div>
       </TableCell>
       <TableCell>
-        <div className="text-xs">
+        <div className="flex items-center gap-3">
+          <EndpointLatencySparkline endpointId={endpoint.id} limit={12} />
           {endpoint.lastProbedAt ? (
-            <div className="flex flex-col gap-1">
-              <span className={endpoint.lastProbeOk ? "text-green-600" : "text-red-600"}>
-                {endpoint.lastProbeOk ? t("probeOk") : t("probeError")}
-                {endpoint.lastProbeLatencyMs && ` (${endpoint.lastProbeLatencyMs}ms)`}
-              </span>
-              <span className="text-muted-foreground text-[10px]">
-                {formatDistanceToNow(new Date(endpoint.lastProbedAt), { addSuffix: true })}
-              </span>
-            </div>
+            <span className="text-muted-foreground text-[10px] whitespace-nowrap">
+              {formatDistanceToNow(new Date(endpoint.lastProbedAt), { addSuffix: true })}
+            </span>
           ) : (
-            <span className="text-muted-foreground">-</span>
+            <span className="text-muted-foreground text-[10px]">-</span>
           )}
         </div>
       </TableCell>
@@ -694,89 +655,6 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
           <div className="flex items-center space-x-2">
             <Switch id="isEnabled" name="isEnabled" defaultChecked={endpoint.isEnabled} />
             <Label htmlFor="isEnabled">{t("enabledStatus")}</Label>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              {tCommon("cancel")}
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {tCommon("save")}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function EditVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; vendorId: number }) {
-  const t = useTranslations("settings.providers");
-  const tCommon = useTranslations("settings.common");
-  const tErrors = useTranslations("errors");
-  const [open, setOpen] = useState(false);
-  const queryClient = useQueryClient();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    const formData = new FormData(e.currentTarget);
-    const displayName = formData.get("displayName") as string;
-    const websiteUrl = formData.get("websiteUrl") as string;
-
-    try {
-      const res = await editProviderVendor({
-        vendorId,
-        displayName: displayName || null,
-        websiteUrl: websiteUrl || null,
-      });
-
-      if (res.ok) {
-        toast.success(t("vendorUpdateSuccess"));
-        setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-      } else {
-        toast.error(
-          res.errorCode ? getErrorMessage(tErrors, res.errorCode) : t("vendorUpdateFailed")
-        );
-      }
-    } catch (_err) {
-      toast.error(t("vendorUpdateFailed"));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <Edit2 className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("editVendor")}</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="displayName">{t("vendorName")}</Label>
-            <Input
-              id="displayName"
-              name="displayName"
-              defaultValue={vendor?.displayName || ""}
-              placeholder={t("vendorFallbackName", { id: vendorId })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="websiteUrl">{t("vendorWebsite")}</Label>
-            <Input
-              id="websiteUrl"
-              name="websiteUrl"
-              defaultValue={vendor?.websiteUrl || ""}
-              placeholder={t("vendorWebsitePlaceholder")}
-            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
