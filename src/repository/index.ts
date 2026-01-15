@@ -47,7 +47,9 @@ export {
 
 export {
   createProviderEndpoint,
+  deleteProviderEndpointProbeLogsBeforeDateBatch,
   deleteProviderVendor,
+  findEnabledProviderEndpointsForProbing,
   findProviderEndpointById,
   findProviderEndpointProbeLogs,
   findProviderEndpointsByVendorAndType,
@@ -57,6 +59,7 @@ export {
   softDeleteProviderEndpoint,
   tryDeleteProviderVendorIfEmpty,
   updateProviderEndpoint,
+  updateProviderEndpointProbeSnapshot,
   updateProviderVendor,
 } from "./provider-endpoints";
 // Statistics related exports
