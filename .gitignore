@@ -16,6 +16,8 @@
 /coverage-my-usage
 /coverage-proxy-guard-pipeline
 /coverage-thinking-signature-rectifier
+/coverage-logs-sessionid-time-filter
+/coverage-usage-logs-sessionid-search
 
 # next.js
 /.next/

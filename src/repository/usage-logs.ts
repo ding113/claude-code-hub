@@ -6,12 +6,15 @@ import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/s
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
+import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 export interface UsageLogFilters {
   userId?: number;
   keyId?: number;
   providerId?: number;
+  /** Session ID（精确匹配；空字符串/空白视为不筛选） */
+  sessionId?: string;
   /** 开始时间戳（毫秒），用于 >= 比较 */
   startTime?: number;
   /** 结束时间戳（毫秒），用于 < 比较 */
@@ -115,6 +118,7 @@ export async function findUsageLogsBatch(
     userId,
     keyId,
     providerId,
+    sessionId,
     startTime,
     endTime,
     statusCode,
@@ -139,6 +143,11 @@ export async function findUsageLogsBatch(
 
   if (providerId !== undefined) {
     conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
   }
 
   if (startTime !== undefined) {
@@ -320,6 +329,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     userId,
     keyId,
     providerId,
+    sessionId,
     startTime,
     endTime,
     statusCode,
@@ -344,6 +354,11 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
 
   if (providerId !== undefined) {
     conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
   }
 
   // 使用毫秒时间戳进行时间比较
@@ -545,6 +560,64 @@ export async function getUsedEndpoints(): Promise<string[]> {
   return results.map((r) => r.endpoint).filter((e): e is string => e !== null);
 }
 
+export interface UsageLogSessionIdSuggestionFilters {
+  term: string;
+  userId?: number;
+  keyId?: number;
+  providerId?: number;
+  limit?: number;
+}
+
+export async function findUsageLogSessionIdSuggestions(
+  filters: UsageLogSessionIdSuggestionFilters
+): Promise<string[]> {
+  const { term, userId, keyId, providerId } = filters;
+  const limit = Math.min(50, Math.max(1, filters.limit ?? 20));
+  const trimmedTerm = term.trim();
+  if (!trimmedTerm) return [];
+
+  const pattern = `${escapeLike(trimmedTerm)}%`;
+  const conditions = [
+    isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
+    sql`${messageRequest.sessionId} IS NOT NULL`,
+    sql`length(${messageRequest.sessionId}) > 0`,
+    sql`${messageRequest.sessionId} LIKE ${pattern} ESCAPE '\\'`,
+  ];
+
+  if (userId !== undefined) {
+    conditions.push(eq(messageRequest.userId, userId));
+  }
+
+  if (keyId !== undefined) {
+    conditions.push(eq(keysTable.id, keyId));
+  }
+
+  if (providerId !== undefined) {
+    conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  const baseQuery = db
+    .select({
+      sessionId: messageRequest.sessionId,
+      firstSeen: sql<Date>`min(${messageRequest.createdAt})`,
+    })
+    .from(messageRequest);
+
+  const query =
+    keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      : baseQuery;
+
+  const results = await query
+    .where(and(...conditions))
+    .groupBy(messageRequest.sessionId)
+    .orderBy(desc(sql`min(${messageRequest.createdAt})`))
+    .limit(limit);
+
+  return results.map((r) => r.sessionId).filter((id): id is string => Boolean(id));
+}
+
 /**
  * 独立获取使用日志聚合统计（用于可折叠面板按需加载）
  *
@@ -560,6 +633,7 @@ export async function findUsageLogsStats(
     userId,
     keyId,
     providerId,
+    sessionId,
     startTime,
     endTime,
     statusCode,
@@ -582,6 +656,11 @@ export async function findUsageLogsStats(
 
   if (providerId !== undefined) {
     conditions.push(eq(messageRequest.providerId, providerId));
+  }
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
   }
 
   if (startTime !== undefined) {

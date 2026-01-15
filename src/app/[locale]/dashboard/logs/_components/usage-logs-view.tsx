@@ -13,6 +13,7 @@ import type { UsageLogsResult } from "@/repository/usage-logs";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource } from "@/types/system-config";
+import { buildLogsUrlQuery, parseLogsUrlFilters } from "../_utils/logs-query";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { UsageLogsTable } from "./usage-logs-table";
@@ -50,39 +51,8 @@ export function UsageLogsView({
 
   // 从 URL 参数解析筛选条件
   // 使用毫秒时间戳传递时间，避免时区问题
-  const filters: {
-    userId?: number;
-    keyId?: number;
-    providerId?: number;
-    startTime?: number;
-    endTime?: number;
-    statusCode?: number;
-    excludeStatusCode200?: boolean;
-    model?: string;
-    endpoint?: string;
-    minRetryCount?: number;
-    page: number;
-  } = {
-    userId: searchParams.userId ? parseInt(searchParams.userId as string, 10) : undefined,
-    keyId: searchParams.keyId ? parseInt(searchParams.keyId as string, 10) : undefined,
-    providerId: searchParams.providerId
-      ? parseInt(searchParams.providerId as string, 10)
-      : undefined,
-    // 使用毫秒时间戳，无时区歧义
-    startTime: searchParams.startTime ? parseInt(searchParams.startTime as string, 10) : undefined,
-    endTime: searchParams.endTime ? parseInt(searchParams.endTime as string, 10) : undefined,
-    statusCode:
-      searchParams.statusCode && searchParams.statusCode !== "!200"
-        ? parseInt(searchParams.statusCode as string, 10)
-        : undefined,
-    excludeStatusCode200: searchParams.statusCode === "!200",
-    model: searchParams.model as string | undefined,
-    endpoint: searchParams.endpoint as string | undefined,
-    minRetryCount: searchParams.minRetry
-      ? parseInt(searchParams.minRetry as string, 10)
-      : undefined,
-    page: searchParams.page ? parseInt(searchParams.page as string, 10) : 1,
-  };
+  const parsedFilters = parseLogsUrlFilters(searchParams);
+  const filters = { ...parsedFilters, page: parsedFilters.page ?? 1 } as const;
 
   // 使用 ref 来存储最新的值,避免闭包陷阱
   const isPendingRef = useRef(isPending);
@@ -176,25 +146,7 @@ export function UsageLogsView({
 
   // 处理筛选条件变更
   const handleFilterChange = (newFilters: Omit<typeof filters, "page">) => {
-    const query = new URLSearchParams();
-
-    if (newFilters.userId) query.set("userId", newFilters.userId.toString());
-    if (newFilters.keyId) query.set("keyId", newFilters.keyId.toString());
-    if (newFilters.providerId) query.set("providerId", newFilters.providerId.toString());
-    // 使用毫秒时间戳传递时间，无时区歧义
-    if (newFilters.startTime) query.set("startTime", newFilters.startTime.toString());
-    if (newFilters.endTime) query.set("endTime", newFilters.endTime.toString());
-    if (newFilters.excludeStatusCode200) {
-      query.set("statusCode", "!200");
-    } else if (newFilters.statusCode !== undefined) {
-      query.set("statusCode", newFilters.statusCode.toString());
-    }
-    if (newFilters.model) query.set("model", newFilters.model);
-    if (newFilters.endpoint) query.set("endpoint", newFilters.endpoint);
-    if (newFilters.minRetryCount !== undefined) {
-      query.set("minRetry", newFilters.minRetryCount.toString());
-    }
-
+    const query = buildLogsUrlQuery(newFilters);
     router.push(`/dashboard/logs?${query.toString()}`);
   };
 
@@ -213,6 +165,7 @@ export function UsageLogsView({
           userId: filters.userId,
           keyId: filters.keyId,
           providerId: filters.providerId,
+          sessionId: filters.sessionId,
           startTime: filters.startTime,
           endTime: filters.endTime,
           statusCode: filters.statusCode,

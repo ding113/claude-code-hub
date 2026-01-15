@@ -13,6 +13,7 @@ import type { CurrencyCode } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource, SystemSettings } from "@/types/system-config";
+import { buildLogsUrlQuery, parseLogsUrlFilters } from "../_utils/logs-query";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
@@ -91,40 +92,33 @@ function UsageLogsViewContent({
   const resolvedKeys = initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
 
   // Parse filters from URL with stable reference
-  const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(
-    () => ({
-      userId: searchParams.userId ? parseInt(searchParams.userId as string, 10) : undefined,
-      keyId: searchParams.keyId ? parseInt(searchParams.keyId as string, 10) : undefined,
-      providerId: searchParams.providerId
-        ? parseInt(searchParams.providerId as string, 10)
-        : undefined,
-      startTime: searchParams.startTime
-        ? parseInt(searchParams.startTime as string, 10)
-        : undefined,
-      endTime: searchParams.endTime ? parseInt(searchParams.endTime as string, 10) : undefined,
-      statusCode:
-        searchParams.statusCode && searchParams.statusCode !== "!200"
-          ? parseInt(searchParams.statusCode as string, 10)
-          : undefined,
-      excludeStatusCode200: searchParams.statusCode === "!200",
-      model: searchParams.model as string | undefined,
-      endpoint: searchParams.endpoint as string | undefined,
-      minRetryCount: searchParams.minRetry
-        ? parseInt(searchParams.minRetry as string, 10)
-        : undefined,
-    }),
-    [
-      searchParams.userId,
-      searchParams.keyId,
-      searchParams.providerId,
-      searchParams.startTime,
-      searchParams.endTime,
-      searchParams.statusCode,
-      searchParams.model,
-      searchParams.endpoint,
-      searchParams.minRetry,
-    ]
-  );
+  const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(() => {
+    return parseLogsUrlFilters({
+      userId: searchParams.userId,
+      keyId: searchParams.keyId,
+      providerId: searchParams.providerId,
+      sessionId: searchParams.sessionId,
+      startTime: searchParams.startTime,
+      endTime: searchParams.endTime,
+      statusCode: searchParams.statusCode,
+      model: searchParams.model,
+      endpoint: searchParams.endpoint,
+      minRetry: searchParams.minRetry,
+      page: searchParams.page,
+    }) as VirtualizedLogsTableFilters & { page?: number };
+  }, [
+    searchParams.userId,
+    searchParams.keyId,
+    searchParams.providerId,
+    searchParams.sessionId,
+    searchParams.startTime,
+    searchParams.endTime,
+    searchParams.statusCode,
+    searchParams.model,
+    searchParams.endpoint,
+    searchParams.minRetry,
+    searchParams.page,
+  ]);
 
   // Manual refresh handler
   const handleManualRefresh = useCallback(async () => {
@@ -138,24 +132,7 @@ function UsageLogsViewContent({
 
   // Handle filter changes
   const handleFilterChange = (newFilters: Omit<typeof filters, "page">) => {
-    const query = new URLSearchParams();
-
-    if (newFilters.userId) query.set("userId", newFilters.userId.toString());
-    if (newFilters.keyId) query.set("keyId", newFilters.keyId.toString());
-    if (newFilters.providerId) query.set("providerId", newFilters.providerId.toString());
-    if (newFilters.startTime) query.set("startTime", newFilters.startTime.toString());
-    if (newFilters.endTime) query.set("endTime", newFilters.endTime.toString());
-    if (newFilters.excludeStatusCode200) {
-      query.set("statusCode", "!200");
-    } else if (newFilters.statusCode !== undefined) {
-      query.set("statusCode", newFilters.statusCode.toString());
-    }
-    if (newFilters.model) query.set("model", newFilters.model);
-    if (newFilters.endpoint) query.set("endpoint", newFilters.endpoint);
-    if (newFilters.minRetryCount !== undefined) {
-      query.set("minRetry", newFilters.minRetryCount.toString());
-    }
-
+    const query = buildLogsUrlQuery(newFilters);
     router.push(`/dashboard/logs?${query.toString()}`);
   };
 
@@ -181,6 +158,7 @@ function UsageLogsViewContent({
           userId: filters.userId,
           keyId: filters.keyId,
           providerId: filters.providerId,
+          sessionId: filters.sessionId,
           startTime: filters.startTime,
           endTime: filters.endTime,
           statusCode: filters.statusCode,

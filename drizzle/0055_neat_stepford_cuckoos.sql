@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "idx_message_request_session_id_prefix" ON "message_request" USING btree ("session_id" varchar_pattern_ops) WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');

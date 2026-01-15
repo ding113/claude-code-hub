@@ -18,6 +18,7 @@
     "test:e2e": "vitest run --config vitest.e2e.config.ts --reporter=verbose",
     "test:integration": "vitest run --config vitest.integration.config.ts --reporter=verbose",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:logs-sessionid-time-filter": "vitest run --config vitest.logs-sessionid-time-filter.config.ts --coverage",
     "test:coverage:codex-session-id-completer": "vitest run --config vitest.codex-session-id-completer.config.ts --coverage",
     "test:coverage:thinking-signature-rectifier": "vitest run --config vitest.thinking-signature-rectifier.config.ts --coverage",
     "test:coverage:quota": "vitest run --config vitest.quota.config.ts --coverage",

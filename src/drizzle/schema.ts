@@ -347,6 +347,8 @@ export const messageRequest = pgTable('message_request', {
   messageRequestUserQueryIdx: index('idx_message_request_user_query').on(table.userId, table.createdAt).where(sql`${table.deletedAt} IS NULL`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
+  // Session ID 前缀查询索引（LIKE 'prefix%'，可稳定命中 B-tree）
+  messageRequestSessionIdPrefixIdx: index('idx_message_request_session_id_prefix').on(sql`${table.sessionId} varchar_pattern_ops`).where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
   // Session + Sequence 复合索引（用于 Session 内请求列表查询）
   messageRequestSessionSeqIdx: index('idx_message_request_session_seq').on(table.sessionId, table.requestSequence).where(sql`${table.deletedAt} IS NULL`),
   // Endpoint 过滤查询索引（仅针对未删除数据）
