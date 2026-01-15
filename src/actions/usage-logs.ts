@@ -1,6 +1,11 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
+import {
+  SESSION_ID_SUGGESTION_LIMIT,
+  SESSION_ID_SUGGESTION_MAX_LEN,
+  SESSION_ID_SUGGESTION_MIN_LEN,
+} from "@/lib/constants/usage-logs.constants";
 import { logger } from "@/lib/logger";
 import {
   findUsageLogSessionIdSuggestions,
@@ -18,10 +23,6 @@ import {
   type UsageLogsResult,
 } from "@/repository/usage-logs";
 import type { ActionResult } from "./types";
-
-const SESSION_ID_SUGGESTION_MIN_LEN = 2;
-const SESSION_ID_SUGGESTION_MAX_LEN = 128;
-const SESSION_ID_SUGGESTION_LIMIT = 20;
 
 /**
  * 筛选器选项缓存

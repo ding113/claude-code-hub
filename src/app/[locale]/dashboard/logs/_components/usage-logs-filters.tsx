@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SESSION_ID_SUGGESTION_MIN_LEN } from "@/lib/constants/usage-logs.constants";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
@@ -45,7 +46,6 @@ import { LogsDateRangePicker } from "./logs-date-range-picker";
 
 // 硬编码常用状态码（首次渲染时显示，无需等待加载）
 const COMMON_STATUS_CODES: number[] = [200, 400, 401, 429, 500];
-const SESSION_ID_SUGGESTION_MIN_LEN = 2;
 
 interface UsageLogsFiltersProps {
   isAdmin: boolean;

@@ -18,6 +18,7 @@ export default defineConfig({
       "tests/unit/repository/usage-logs-sessionid-suggestions.test.ts",
       "tests/unit/repository/usage-logs-sessionid-filter.test.ts",
       "tests/unit/repository/warmup-stats-exclusion.test.ts",
+      "tests/unit/lib/constants/usage-logs.constants.test.ts",
     ],
     exclude: ["node_modules", ".next", "dist", "build", "coverage", "tests/integration/**"],
 
@@ -26,7 +27,7 @@ export default defineConfig({
       reporter: ["text", "html", "json", "lcov"],
       reportsDirectory: "./coverage-usage-logs-sessionid-search",
 
-      include: ["src/repository/_shared/like.ts"],
+      include: ["src/repository/_shared/like.ts", "src/lib/constants/usage-logs.constants.ts"],
       exclude: ["node_modules/", "tests/", "**/*.d.ts", ".next/"],
 
       thresholds: {
@@ -51,4 +52,3 @@ export default defineConfig({
     },
   },
 });
-
