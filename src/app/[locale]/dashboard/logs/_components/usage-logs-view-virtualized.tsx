@@ -93,7 +93,7 @@ function UsageLogsViewContent({
 
   // Parse filters from URL with stable reference
   const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(() => {
-    const parsed = parseLogsUrlFilters({
+    return parseLogsUrlFilters({
       userId: searchParams.userId,
       keyId: searchParams.keyId,
       providerId: searchParams.providerId,
@@ -105,21 +105,7 @@ function UsageLogsViewContent({
       endpoint: searchParams.endpoint,
       minRetry: searchParams.minRetry,
       page: searchParams.page,
-    });
-    return {
-      userId: parsed.userId,
-      keyId: parsed.keyId,
-      providerId: parsed.providerId,
-      sessionId: parsed.sessionId,
-      startTime: parsed.startTime,
-      endTime: parsed.endTime,
-      statusCode: parsed.statusCode,
-      excludeStatusCode200: parsed.excludeStatusCode200,
-      model: parsed.model,
-      endpoint: parsed.endpoint,
-      minRetryCount: parsed.minRetryCount,
-      page: parsed.page,
-    };
+    }) as VirtualizedLogsTableFilters & { page?: number };
   }, [
     searchParams.userId,
     searchParams.keyId,
