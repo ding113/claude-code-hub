@@ -47,6 +47,7 @@ export {
 
 export {
   createProviderEndpoint,
+  deleteProviderVendor,
   findProviderEndpointById,
   findProviderEndpointProbeLogs,
   findProviderEndpointsByVendorAndType,
@@ -54,6 +55,7 @@ export {
   findProviderVendors,
   recordProviderEndpointProbeResult,
   softDeleteProviderEndpoint,
+  tryDeleteProviderVendorIfEmpty,
   updateProviderEndpoint,
   updateProviderVendor,
 } from "./provider-endpoints";

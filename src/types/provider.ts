@@ -378,6 +378,7 @@ export interface ProviderVendor {
   displayName: string | null;
   websiteUrl: string | null;
   faviconUrl: string | null;
+  isOfficial: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

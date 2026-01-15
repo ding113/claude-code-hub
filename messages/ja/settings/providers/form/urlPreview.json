@@ -5,5 +5,16 @@
   "duplicatePath": "重複パス検出",
   "invalidUrl": "無効なURL形式",
   "invalidUrlDesc": "有効なHTTP/HTTPSアドレスを入力してください",
-  "title": "URL結合プレビュー"
+  "title": "URL結合プレビュー",
+  "endpoints": {
+    "claudeMessages": "Claude メッセージ",
+    "claudeCountTokens": "Claude トークン数",
+    "codexResponses": "Codex Responses",
+    "openaiChatCompletions": "OpenAI Chat Completions",
+    "openaiModels": "OpenAI Models",
+    "geminiGenerateContent": "Gemini Generate Content",
+    "geminiStreamContent": "Gemini Stream Content",
+    "geminiCliGenerate": "Gemini CLI Generate",
+    "geminiCliStream": "Gemini CLI Stream"
+  }
 }

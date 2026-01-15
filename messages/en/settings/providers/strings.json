@@ -80,5 +80,19 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "Label (optional)",
   "endpointLabelPlaceholder": "Production endpoint",
-  "editEndpoint": "Edit Endpoint"
+  "editEndpoint": "Edit Endpoint",
+  "editVendor": "Edit Vendor",
+  "vendorName": "Vendor Name",
+  "vendorWebsite": "Website URL",
+  "vendorWebsitePlaceholder": "https://example.com",
+  "vendorOfficial": "Official",
+  "deleteVendor": "Delete Vendor",
+  "deleteVendorConfirmTitle": "Delete Vendor?",
+  "deleteVendorDoubleConfirmTitle": "Confirm deletion?",
+  "deleteVendorConfirmDesc": "This will permanently delete the vendor \"{name}\" and all its associated API keys and endpoints.",
+  "deleteVendorDoubleConfirmDesc": "This action is irreversible. Please confirm you want to wipe out everything related to \"{name}\".",
+  "vendorUpdateSuccess": "Vendor updated successfully",
+  "vendorUpdateFailed": "Failed to update vendor",
+  "vendorDeleteSuccess": "Vendor deleted successfully",
+  "vendorDeleteFailed": "Failed to delete vendor"
 }

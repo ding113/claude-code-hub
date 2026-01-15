@@ -80,5 +80,19 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "Метка (необязательно)",
   "endpointLabelPlaceholder": "Продакшн",
-  "editEndpoint": "Редактировать эндпоинт"
+  "editEndpoint": "Редактировать эндпоинт",
+  "editVendor": "Редактировать вендора",
+  "vendorName": "Название вендора",
+  "vendorWebsite": "URL сайта",
+  "vendorWebsitePlaceholder": "https://example.com",
+  "vendorOfficial": "Официальный",
+  "deleteVendor": "Удалить вендора",
+  "deleteVendorConfirmTitle": "Удалить вендора?",
+  "deleteVendorDoubleConfirmTitle": "Подтвердить удаление?",
+  "deleteVendorConfirmDesc": "Это навсегда удалит вендора \"{name}\" и все связанные с ним API ключи и эндпоинты.",
+  "deleteVendorDoubleConfirmDesc": "Это действие необратимо. Подтвердите, что хотите удалить всё, связанное с \"{name}\".",
+  "vendorUpdateSuccess": "Вендор обновлён",
+  "vendorUpdateFailed": "Не удалось обновить вендора",
+  "vendorDeleteSuccess": "Вендор удалён",
+  "vendorDeleteFailed": "Не удалось удалить вендора"
 }

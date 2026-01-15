@@ -176,6 +176,7 @@ export function ProviderRichListItem({
             });
             queryClient.invalidateQueries({ queryKey: ["providers"] });
             queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+            queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
             router.refresh();
           } else {
             toast.error(tList("deleteFailed"), {

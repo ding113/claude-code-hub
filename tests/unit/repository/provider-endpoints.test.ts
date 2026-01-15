@@ -251,4 +251,237 @@ describe("provider-endpoints repository", () => {
 
     expect(result).toEqual({ inserted: 0, uniqueCandidates: 2, skippedInvalid: 0 });
   });
+
+  test("tryDeleteProviderVendorIfEmpty: 有 active provider 时不删除", async () => {
+    vi.resetModules();
+
+    const selectPages = [[{ id: 1 }], []];
+    const selectMock = vi.fn(() => createThenableQuery(selectPages.shift() ?? []));
+    const deleteMock = vi.fn();
+    const transactionMock = vi.fn(async (fn: (tx: any) => Promise<any>) => {
+      return fn({
+        select: selectMock,
+        delete: deleteMock,
+      });
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        transaction: transactionMock,
+      },
+    }));
+
+    const { tryDeleteProviderVendorIfEmpty } = await import("@/repository/provider-endpoints");
+    const ok = await tryDeleteProviderVendorIfEmpty(123);
+
+    expect(ok).toBe(false);
+    expect(selectMock).toHaveBeenCalledTimes(1);
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  test("tryDeleteProviderVendorIfEmpty: 有 active endpoint 时不删除", async () => {
+    vi.resetModules();
+
+    const selectPages = [[], [{ id: 1 }]];
+    const selectMock = vi.fn(() => createThenableQuery(selectPages.shift() ?? []));
+    const deleteMock = vi.fn();
+    const transactionMock = vi.fn(async (fn: (tx: any) => Promise<any>) => {
+      return fn({
+        select: selectMock,
+        delete: deleteMock,
+      });
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        transaction: transactionMock,
+      },
+    }));
+
+    const { tryDeleteProviderVendorIfEmpty } = await import("@/repository/provider-endpoints");
+    const ok = await tryDeleteProviderVendorIfEmpty(123);
+
+    expect(ok).toBe(false);
+    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  test("tryDeleteProviderVendorIfEmpty: 无 active provider/endpoint 时删除 vendor", async () => {
+    vi.resetModules();
+
+    const selectPages = [[], []];
+    const selectMock = vi.fn(() => createThenableQuery(selectPages.shift() ?? []));
+
+    let deleteCallIndex = 0;
+    const deleteMock = vi.fn(() => {
+      deleteCallIndex += 1;
+      if (deleteCallIndex === 1) {
+        return {
+          where: vi.fn(async () => []),
+        };
+      }
+      return {
+        where: vi.fn(() => ({
+          returning: vi.fn(async () => [{ id: 123 }]),
+        })),
+      };
+    });
+
+    const transactionMock = vi.fn(async (fn: (tx: any) => Promise<any>) => {
+      return fn({
+        select: selectMock,
+        delete: deleteMock,
+      });
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        transaction: transactionMock,
+      },
+    }));
+
+    const { tryDeleteProviderVendorIfEmpty } = await import("@/repository/provider-endpoints");
+    const ok = await tryDeleteProviderVendorIfEmpty(123);
+
+    expect(ok).toBe(true);
+    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(deleteMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("tryDeleteProviderVendorIfEmpty: vendor 不存在时返回 false", async () => {
+    vi.resetModules();
+
+    const selectPages = [[], []];
+    const selectMock = vi.fn(() => createThenableQuery(selectPages.shift() ?? []));
+
+    let deleteCallIndex = 0;
+    const deleteMock = vi.fn(() => {
+      deleteCallIndex += 1;
+      if (deleteCallIndex === 1) {
+        return {
+          where: vi.fn(async () => []),
+        };
+      }
+      return {
+        where: vi.fn(() => ({
+          returning: vi.fn(async () => []),
+        })),
+      };
+    });
+
+    const transactionMock = vi.fn(async (fn: (tx: any) => Promise<any>) => {
+      return fn({
+        select: selectMock,
+        delete: deleteMock,
+      });
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        transaction: transactionMock,
+      },
+    }));
+
+    const { tryDeleteProviderVendorIfEmpty } = await import("@/repository/provider-endpoints");
+    const ok = await tryDeleteProviderVendorIfEmpty(123);
+
+    expect(ok).toBe(false);
+    expect(selectMock).toHaveBeenCalledTimes(2);
+    expect(deleteMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("tryDeleteProviderVendorIfEmpty: transaction 抛错时返回 false", async () => {
+    vi.resetModules();
+
+    const transactionMock = vi.fn(async () => {
+      throw new Error("boom");
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        transaction: transactionMock,
+      },
+    }));
+
+    const { tryDeleteProviderVendorIfEmpty } = await import("@/repository/provider-endpoints");
+    const ok = await tryDeleteProviderVendorIfEmpty(123);
+
+    expect(ok).toBe(false);
+  });
+
+  test("deleteProviderVendor: vendor 存在时返回 true 且执行级联删除", async () => {
+    vi.resetModules();
+
+    let deleteCallIndex = 0;
+    const deleteMock = vi.fn(() => {
+      deleteCallIndex += 1;
+      // 1) delete endpoints, 2) delete providers
+      if (deleteCallIndex <= 2) {
+        return {
+          where: vi.fn(async () => []),
+        };
+      }
+      // 3) delete vendor
+      return {
+        where: vi.fn(() => ({
+          returning: vi.fn(async () => [{ id: 123 }]),
+        })),
+      };
+    });
+
+    const transactionMock = vi.fn(async (fn: (tx: any) => Promise<any>) => {
+      return fn({
+        delete: deleteMock,
+      });
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        transaction: transactionMock,
+      },
+    }));
+
+    const { deleteProviderVendor } = await import("@/repository/provider-endpoints");
+    const ok = await deleteProviderVendor(123);
+
+    expect(ok).toBe(true);
+    expect(deleteMock).toHaveBeenCalledTimes(3);
+  });
+
+  test("deleteProviderVendor: vendor 不存在时返回 false", async () => {
+    vi.resetModules();
+
+    let deleteCallIndex = 0;
+    const deleteMock = vi.fn(() => {
+      deleteCallIndex += 1;
+      if (deleteCallIndex <= 2) {
+        return {
+          where: vi.fn(async () => []),
+        };
+      }
+      return {
+        where: vi.fn(() => ({
+          returning: vi.fn(async () => []),
+        })),
+      };
+    });
+
+    const transactionMock = vi.fn(async (fn: (tx: any) => Promise<any>) => {
+      return fn({
+        delete: deleteMock,
+      });
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        transaction: transactionMock,
+      },
+    }));
+
+    const { deleteProviderVendor } = await import("@/repository/provider-endpoints");
+    const ok = await deleteProviderVendor(123);
+
+    expect(ok).toBe(false);
+    expect(deleteMock).toHaveBeenCalledTimes(3);
+  });
 });

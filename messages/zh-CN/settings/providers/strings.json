@@ -80,5 +80,19 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "标签（可选）",
   "endpointLabelPlaceholder": "生产环境",
-  "editEndpoint": "编辑端点"
+  "editEndpoint": "编辑端点",
+  "editVendor": "编辑服务商",
+  "vendorName": "服务商名称",
+  "vendorWebsite": "官网地址",
+  "vendorWebsitePlaceholder": "https://example.com",
+  "vendorOfficial": "官方",
+  "deleteVendor": "删除服务商",
+  "deleteVendorConfirmTitle": "删除服务商？",
+  "deleteVendorDoubleConfirmTitle": "再次确认删除？",
+  "deleteVendorConfirmDesc": "此操作将永久删除服务商 \"{name}\" 及其所有 API 密钥和端点。",
+  "deleteVendorDoubleConfirmDesc": "该操作不可恢复。请确认你要删除与 \"{name}\" 相关的所有内容。",
+  "vendorUpdateSuccess": "服务商更新成功",
+  "vendorUpdateFailed": "更新服务商失败",
+  "vendorDeleteSuccess": "服务商删除成功",
+  "vendorDeleteFailed": "删除服务商失败"
 }

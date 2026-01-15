@@ -5,5 +5,16 @@
   "duplicatePath": "检测到重复路径",
   "copy": "复制",
   "copySuccess": "已复制 {name} 到剪贴板",
-  "copyFailed": "复制失败"
+  "copyFailed": "复制失败",
+  "endpoints": {
+    "claudeMessages": "Claude 消息",
+    "claudeCountTokens": "Claude 统计 Token",
+    "codexResponses": "Codex Responses",
+    "openaiChatCompletions": "OpenAI Chat Completions",
+    "openaiModels": "OpenAI Models",
+    "geminiGenerateContent": "Gemini 生成内容",
+    "geminiStreamContent": "Gemini 流式内容",
+    "geminiCliGenerate": "Gemini CLI 生成",
+    "geminiCliStream": "Gemini CLI 流式"
+  }
 }

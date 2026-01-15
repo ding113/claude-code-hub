@@ -80,5 +80,19 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "ラベル (任意)",
   "endpointLabelPlaceholder": "本番環境",
-  "editEndpoint": "エンドポイントを編集"
+  "editEndpoint": "エンドポイントを編集",
+  "editVendor": "ベンダーを編集",
+  "vendorName": "ベンダー名",
+  "vendorWebsite": "Webサイト URL",
+  "vendorWebsitePlaceholder": "https://example.com",
+  "vendorOfficial": "公式",
+  "deleteVendor": "ベンダーを削除",
+  "deleteVendorConfirmTitle": "ベンダーを削除しますか？",
+  "deleteVendorDoubleConfirmTitle": "削除を確定しますか？",
+  "deleteVendorConfirmDesc": "ベンダー「{name}」と関連する API キーおよびエンドポイントをすべて永久に削除します。",
+  "deleteVendorDoubleConfirmDesc": "この操作は元に戻せません。「{name}」に関するすべてのデータを削除してよいか確認してください。",
+  "vendorUpdateSuccess": "ベンダーを更新しました",
+  "vendorUpdateFailed": "ベンダーの更新に失敗しました",
+  "vendorDeleteSuccess": "ベンダーを削除しました",
+  "vendorDeleteFailed": "ベンダーの削除に失敗しました"
 }

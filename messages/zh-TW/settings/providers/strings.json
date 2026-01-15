@@ -80,5 +80,19 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "標籤（選填）",
   "endpointLabelPlaceholder": "生產環境",
-  "editEndpoint": "編輯端點"
+  "editEndpoint": "編輯端點",
+  "editVendor": "編輯供應商",
+  "vendorName": "供應商名稱",
+  "vendorWebsite": "官網地址",
+  "vendorWebsitePlaceholder": "https://example.com",
+  "vendorOfficial": "官方",
+  "deleteVendor": "刪除供應商",
+  "deleteVendorConfirmTitle": "刪除供應商？",
+  "deleteVendorDoubleConfirmTitle": "再次確認刪除？",
+  "deleteVendorConfirmDesc": "此操作將永久刪除供應商「{name}」及其所有 API 金鑰與端點。",
+  "deleteVendorDoubleConfirmDesc": "此操作無法復原。請確認要清除所有與「{name}」相關的內容。",
+  "vendorUpdateSuccess": "供應商已更新",
+  "vendorUpdateFailed": "更新供應商失敗",
+  "vendorDeleteSuccess": "供應商已刪除",
+  "vendorDeleteFailed": "刪除供應商失敗"
 }
