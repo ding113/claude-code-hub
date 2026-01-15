@@ -21,6 +21,7 @@ import type { ActionResult } from "./types";
 
 const SESSION_ID_SUGGESTION_MIN_LEN = 2;
 const SESSION_ID_SUGGESTION_MAX_LEN = 128;
+const SESSION_ID_SUGGESTION_LIMIT = 20;
 
 /**
  * 筛选器选项缓存
