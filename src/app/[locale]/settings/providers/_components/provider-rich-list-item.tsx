@@ -345,7 +345,7 @@ export function ProviderRichListItem({
 
   return (
     <>
-      <div className="flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
+      <div className="flex flex-wrap items-start gap-2 py-3 px-4 border-b hover:bg-muted/50 transition-colors md:flex-nowrap md:items-center md:gap-4">
         {/* 左侧：状态和类型图标 */}
         <div className="flex items-center gap-2">
           {/* 启用状态指示器 */}
@@ -366,7 +366,7 @@ export function ProviderRichListItem({
         </div>
 
         {/* 中间：名称、URL、官网、tag、熔断状态 */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 w-full md:w-auto">
           <div className="flex items-center gap-2 flex-wrap">
             {/* Favicon */}
             {provider.faviconUrl && (
@@ -382,7 +382,7 @@ export function ProviderRichListItem({
             )}
 
             {/* 名称 */}
-            <span className="font-semibold truncate">{provider.name}</span>
+            <span className="font-semibold md:truncate">{provider.name}</span>
 
             {/* Group Tags (supports comma-separated values) */}
             {(provider.groupTag
@@ -556,8 +556,61 @@ export function ProviderRichListItem({
           )}
         </div>
 
+        {/* 移动端：指标快速编辑 */}
+        <div className="grid grid-cols-3 gap-4 text-center w-full md:hidden">
+          <div>
+            <div className="text-xs text-muted-foreground">{tList("priority")}</div>
+            <div className="font-medium">
+              {canEdit ? (
+                <InlineEditPopover
+                  value={provider.priority}
+                  label={tInline("priorityLabel")}
+                  type="integer"
+                  validator={validatePriority}
+                  onSave={handleSavePriority}
+                />
+              ) : (
+                <span>{provider.priority}</span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">{tList("weight")}</div>
+            <div className="font-medium">
+              {canEdit ? (
+                <InlineEditPopover
+                  value={provider.weight}
+                  label={tInline("weightLabel")}
+                  type="integer"
+                  validator={validateWeight}
+                  onSave={handleSaveWeight}
+                />
+              ) : (
+                <span>{provider.weight}</span>
+              )}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">{tList("costMultiplier")}</div>
+            <div className="font-medium">
+              {canEdit ? (
+                <InlineEditPopover
+                  value={provider.costMultiplier}
+                  label={tInline("costMultiplierLabel")}
+                  validator={validateCostMultiplier}
+                  onSave={handleSaveCostMultiplier}
+                  suffix="x"
+                  type="number"
+                />
+              ) : (
+                <span>{provider.costMultiplier}x</span>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* 操作按钮 */}
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0 w-full justify-end pt-2 border-t border-border/30 md:gap-1 md:w-auto md:pt-0 md:border-t-0">
           {/* 启用/禁用切换 */}
           {canEdit && (
             <Switch
