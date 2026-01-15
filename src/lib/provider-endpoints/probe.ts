@@ -1,8 +1,13 @@
 import "server-only";
 
+import { recordEndpointFailure } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
-import { findProviderEndpointById, recordProviderEndpointProbeResult } from "@/repository";
-import type { ProviderEndpointProbeSource } from "@/types/provider";
+import {
+  findProviderEndpointById,
+  recordProviderEndpointProbeResult,
+  updateProviderEndpointProbeSnapshot,
+} from "@/repository";
+import type { ProviderEndpoint, ProviderEndpointProbeSource } from "@/types/provider";
 
 export type EndpointProbeMethod = "HEAD" | "GET";
 
@@ -15,7 +20,28 @@ export interface EndpointProbeResult {
   errorMessage: string | null;
 }
 
-const DEFAULT_TIMEOUT_MS = 5000;
+function parseIntWithDefault(value: string | undefined, fallback: number): number {
+  const n = value ? Number.parseInt(value, 10) : Number.NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
+const DEFAULT_TIMEOUT_MS = Math.max(
+  1,
+  parseIntWithDefault(process.env.ENDPOINT_PROBE_TIMEOUT_MS, 5_000)
+);
+const SUCCESS_LOG_MIN_INTERVAL_MS = Math.max(
+  0,
+  parseIntWithDefault(process.env.ENDPOINT_PROBE_SUCCESS_LOG_MIN_INTERVAL_MS, 60_000)
+);
+
+function safeUrlForLog(rawUrl: string): string {
+  try {
+    // Avoid leaking credentials/querystring in logs.
+    return new URL(rawUrl).origin;
+  } catch {
+    return "<invalid-url>";
+  }
+}
 
 async function fetchWithTimeout(
   url: string,
@@ -29,6 +55,7 @@ async function fetchWithTimeout(
   try {
     const response = await fetch(url, {
       ...init,
+      cache: "no-store",
       signal: controller.signal,
       redirect: "manual",
     });
@@ -42,6 +69,10 @@ function toErrorInfo(error: unknown): { type: string; message: string } {
   if (error instanceof Error) {
     if (error.name === "AbortError") {
       return { type: "timeout", message: error.message || "timeout" };
+    }
+    if (error instanceof TypeError) {
+      // Fetch URL parsing failures should not leak the original URL.
+      return { type: "invalid_url", message: "invalid_url" };
     }
     return { type: "network_error", message: error.message };
   }
@@ -78,7 +109,12 @@ async function tryProbe(
     };
   } catch (error) {
     const { type, message } = toErrorInfo(error);
-    logger.debug("[EndpointProbe] Probe request failed", { url, method, type, error });
+    logger.debug("[EndpointProbe] Probe request failed", {
+      url: safeUrlForLog(url),
+      method,
+      type,
+      errorMessage: message,
+    });
     return {
       ok: false,
       method,
@@ -101,6 +137,71 @@ export async function probeEndpointUrl(
   return head;
 }
 
+type ProbeTarget = Pick<ProviderEndpoint, "id" | "url" | "lastProbedAt" | "lastProbeOk">;
+
+function shouldLogScheduledSuccess(endpoint: ProbeTarget, probedAt: Date): boolean {
+  if (!endpoint.lastProbedAt) {
+    return true;
+  }
+
+  if (endpoint.lastProbeOk !== true) {
+    return true;
+  }
+
+  const elapsedMs = probedAt.getTime() - endpoint.lastProbedAt.getTime();
+  return elapsedMs >= SUCCESS_LOG_MIN_INTERVAL_MS;
+}
+
+export async function probeProviderEndpointAndRecordByEndpoint(input: {
+  endpoint: ProbeTarget;
+  source: ProviderEndpointProbeSource;
+  timeoutMs?: number;
+}): Promise<EndpointProbeResult> {
+  const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const result = await probeEndpointUrl(input.endpoint.url, timeoutMs);
+  const probedAt = new Date();
+
+  if (!result.ok) {
+    // Keep circuit-breaker logs free of raw upstream error strings.
+    const message = result.statusCode
+      ? `HTTP ${result.statusCode}`
+      : result.errorType || "probe_failed";
+    await recordEndpointFailure(input.endpoint.id, new Error(message));
+  }
+
+  const shouldWriteLog =
+    input.source !== "scheduled" ||
+    !result.ok ||
+    shouldLogScheduledSuccess(input.endpoint, probedAt);
+
+  if (shouldWriteLog) {
+    await recordProviderEndpointProbeResult({
+      endpointId: input.endpoint.id,
+      source: input.source,
+      ok: result.ok,
+      statusCode: result.statusCode,
+      latencyMs: result.latencyMs,
+      errorType: result.errorType,
+      errorMessage: result.errorMessage,
+      probedAt,
+    });
+
+    return result;
+  }
+
+  await updateProviderEndpointProbeSnapshot({
+    endpointId: input.endpoint.id,
+    ok: result.ok,
+    statusCode: result.statusCode,
+    latencyMs: result.latencyMs,
+    errorType: result.errorType,
+    errorMessage: result.errorMessage,
+    probedAt,
+  });
+
+  return result;
+}
+
 export async function probeProviderEndpointAndRecord(input: {
   endpointId: number;
   source: ProviderEndpointProbeSource;
@@ -111,19 +212,9 @@ export async function probeProviderEndpointAndRecord(input: {
     return null;
   }
 
-  const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const result = await probeEndpointUrl(endpoint.url, timeoutMs);
-
-  await recordProviderEndpointProbeResult({
-    endpointId: endpoint.id,
+  return probeProviderEndpointAndRecordByEndpoint({
+    endpoint,
     source: input.source,
-    ok: result.ok,
-    statusCode: result.statusCode,
-    latencyMs: result.latencyMs,
-    errorType: result.errorType,
-    errorMessage: result.errorMessage,
-    probedAt: new Date(),
+    timeoutMs: input.timeoutMs,
   });
-
-  return result;
 }

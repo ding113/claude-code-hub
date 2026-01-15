@@ -45,6 +45,10 @@ describe("provider-endpoints: probe", () => {
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(),
       recordProviderEndpointProbeResult: vi.fn(),
+      updateProviderEndpointProbeSnapshot: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
     }));
 
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -80,6 +84,10 @@ describe("provider-endpoints: probe", () => {
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(),
       recordProviderEndpointProbeResult: vi.fn(),
+      updateProviderEndpointProbeSnapshot: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
     }));
 
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -118,6 +126,10 @@ describe("provider-endpoints: probe", () => {
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(),
       recordProviderEndpointProbeResult: vi.fn(),
+      updateProviderEndpointProbeSnapshot: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -151,6 +163,10 @@ describe("provider-endpoints: probe", () => {
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(),
       recordProviderEndpointProbeResult: vi.fn(),
+      updateProviderEndpointProbeSnapshot: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -182,6 +198,10 @@ describe("provider-endpoints: probe", () => {
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(),
       recordProviderEndpointProbeResult: vi.fn(),
+      updateProviderEndpointProbeSnapshot: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
     }));
 
     const fetchMock = vi.fn(async () => {
@@ -205,6 +225,7 @@ describe("provider-endpoints: probe", () => {
     vi.resetModules();
 
     const recordMock = vi.fn(async () => {});
+    const snapshotMock = vi.fn(async () => {});
     const findMock = vi.fn(async () => null);
 
     const logger = {
@@ -216,10 +237,16 @@ describe("provider-endpoints: probe", () => {
       fatal: vi.fn(),
     };
 
+    const recordFailureMock = vi.fn(async () => {});
+
     vi.doMock("@/lib/logger", () => ({ logger }));
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: findMock,
       recordProviderEndpointProbeResult: recordMock,
+      updateProviderEndpointProbeSnapshot: snapshotMock,
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: recordFailureMock,
     }));
 
     vi.stubGlobal(
@@ -232,6 +259,8 @@ describe("provider-endpoints: probe", () => {
 
     expect(result).toBeNull();
     expect(recordMock).not.toHaveBeenCalled();
+    expect(snapshotMock).not.toHaveBeenCalled();
+    expect(recordFailureMock).not.toHaveBeenCalled();
   });
 
   test("probeProviderEndpointAndRecord: 记录入库字段包含 source/ok/statusCode/latency/probedAt", async () => {
@@ -241,6 +270,7 @@ describe("provider-endpoints: probe", () => {
     vi.resetModules();
 
     const recordMock = vi.fn(async () => {});
+    const snapshotMock = vi.fn(async () => {});
     const findMock = vi.fn(async () => makeEndpoint({ id: 123, url: "https://example.com" }));
 
     const logger = {
@@ -252,10 +282,16 @@ describe("provider-endpoints: probe", () => {
       fatal: vi.fn(),
     };
 
+    const recordFailureMock = vi.fn(async () => {});
+
     vi.doMock("@/lib/logger", () => ({ logger }));
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: findMock,
       recordProviderEndpointProbeResult: recordMock,
+      updateProviderEndpointProbeSnapshot: snapshotMock,
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: recordFailureMock,
     }));
 
     vi.stubGlobal(
@@ -288,5 +324,101 @@ describe("provider-endpoints: probe", () => {
     const probedAt = (payload as { probedAt: Date }).probedAt;
     expect(probedAt).toBeInstanceOf(Date);
     expect(probedAt.toISOString()).toBe("2026-01-01T00:00:00.000Z");
+
+    expect(snapshotMock).not.toHaveBeenCalled();
+    expect(recordFailureMock).not.toHaveBeenCalled();
+  });
+
+  test("probeProviderEndpointAndRecord: scheduled 成功按间隔采样写日志，其余仅更新快照", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:30.000Z"));
+
+    vi.resetModules();
+
+    const recordMock = vi.fn(async () => {});
+    const snapshotMock = vi.fn(async () => {});
+    const recordFailureMock = vi.fn(async () => {});
+
+    const endpoint = makeEndpoint({
+      id: 1,
+      url: "https://example.com",
+      lastProbeOk: true,
+      lastProbedAt: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    vi.doMock("@/lib/logger", () => ({
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        trace: vi.fn(),
+        error: vi.fn(),
+        fatal: vi.fn(),
+      },
+    }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(async () => endpoint),
+      recordProviderEndpointProbeResult: recordMock,
+      updateProviderEndpointProbeSnapshot: snapshotMock,
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: recordFailureMock,
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 200 }))
+    );
+
+    const { probeProviderEndpointAndRecord } = await import("@/lib/provider-endpoints/probe");
+    const result = await probeProviderEndpointAndRecord({ endpointId: 1, source: "scheduled" });
+
+    expect(result).toEqual(expect.objectContaining({ ok: true, statusCode: 200 }));
+    expect(recordMock).not.toHaveBeenCalled();
+    expect(snapshotMock).toHaveBeenCalledTimes(1);
+    expect(recordFailureMock).not.toHaveBeenCalled();
+  });
+
+  test("probeProviderEndpointAndRecord: 失败会计入端点熔断计数（scheduled 与 manual）", async () => {
+    vi.resetModules();
+
+    const recordMock = vi.fn(async () => {});
+    const snapshotMock = vi.fn(async () => {});
+    const recordFailureMock = vi.fn(async () => {});
+
+    vi.doMock("@/lib/logger", () => ({
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        trace: vi.fn(),
+        error: vi.fn(),
+        fatal: vi.fn(),
+      },
+    }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(async () =>
+        makeEndpoint({ id: 123, url: "https://example.com" })
+      ),
+      recordProviderEndpointProbeResult: recordMock,
+      updateProviderEndpointProbeSnapshot: snapshotMock,
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: recordFailureMock,
+    }));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 503 }))
+    );
+
+    const { probeProviderEndpointAndRecord } = await import("@/lib/provider-endpoints/probe");
+
+    await probeProviderEndpointAndRecord({ endpointId: 123, source: "scheduled" });
+    await probeProviderEndpointAndRecord({ endpointId: 123, source: "manual" });
+
+    expect(recordFailureMock).toHaveBeenCalledTimes(2);
+    expect(recordMock).toHaveBeenCalledTimes(2);
+    expect(snapshotMock).not.toHaveBeenCalled();
   });
 });

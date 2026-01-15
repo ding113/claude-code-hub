@@ -44,7 +44,10 @@ function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
       if (!hostname) continue;
       return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
     } catch (error) {
-      logger.debug("[ProviderVendor] Failed to parse URL", { candidate, error });
+      logger.debug("[ProviderVendor] Failed to parse URL", {
+        candidateLength: candidate.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -99,6 +102,80 @@ function toProviderEndpointProbeLog(row: any): ProviderEndpointProbeLog {
     errorMessage: row.errorMessage ?? null,
     createdAt: toDate(row.createdAt),
   };
+}
+
+export type ProviderEndpointProbeTarget = Pick<
+  ProviderEndpoint,
+  "id" | "url" | "lastProbedAt" | "lastProbeOk"
+>;
+
+export async function findEnabledProviderEndpointsForProbing(): Promise<
+  ProviderEndpointProbeTarget[]
+> {
+  const rows = await db
+    .select({
+      id: providerEndpoints.id,
+      url: providerEndpoints.url,
+      lastProbedAt: providerEndpoints.lastProbedAt,
+      lastProbeOk: providerEndpoints.lastProbeOk,
+    })
+    .from(providerEndpoints)
+    .where(and(eq(providerEndpoints.isEnabled, true), isNull(providerEndpoints.deletedAt)))
+    .orderBy(asc(providerEndpoints.id));
+
+  return rows.map((row) => ({
+    id: row.id,
+    url: row.url,
+    lastProbedAt: toNullableDate(row.lastProbedAt),
+    lastProbeOk: row.lastProbeOk ?? null,
+  }));
+}
+
+export async function updateProviderEndpointProbeSnapshot(input: {
+  endpointId: number;
+  ok: boolean;
+  statusCode?: number | null;
+  latencyMs?: number | null;
+  errorType?: string | null;
+  errorMessage?: string | null;
+  probedAt?: Date;
+}): Promise<void> {
+  const probedAt = input.probedAt ?? new Date();
+
+  await db
+    .update(providerEndpoints)
+    .set({
+      lastProbedAt: probedAt,
+      lastProbeOk: input.ok,
+      lastProbeStatusCode: input.statusCode ?? null,
+      lastProbeLatencyMs: input.latencyMs ?? null,
+      lastProbeErrorType: input.ok ? null : (input.errorType ?? null),
+      lastProbeErrorMessage: input.ok ? null : (input.errorMessage ?? null),
+      updatedAt: new Date(),
+    })
+    .where(and(eq(providerEndpoints.id, input.endpointId), isNull(providerEndpoints.deletedAt)));
+}
+
+export async function deleteProviderEndpointProbeLogsBeforeDateBatch(input: {
+  beforeDate: Date;
+  batchSize?: number;
+}): Promise<number> {
+  const batchSize = input.batchSize ?? 10_000;
+
+  const result = await db.execute(sql`
+    WITH ids_to_delete AS (
+      SELECT id FROM provider_endpoint_probe_logs
+      WHERE created_at < ${input.beforeDate}
+      ORDER BY created_at ASC
+      LIMIT ${batchSize}
+      FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM provider_endpoint_probe_logs
+    WHERE id IN (SELECT id FROM ids_to_delete)
+  `);
+
+  const rowCount = (result as { rowCount?: number }).rowCount;
+  return typeof rowCount === "number" ? rowCount : 0;
 }
 
 export async function getOrCreateProviderVendorIdFromUrls(input: {
