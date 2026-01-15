@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatTokenAmount } from "@/lib/utils";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
@@ -68,27 +69,9 @@ export function UsageLogsTable({
       const sessionId = event.currentTarget.dataset.sessionId;
       if (!sessionId) return;
 
-      const clipboard = navigator.clipboard;
-      if (clipboard) {
-        void clipboard
-          .writeText(sessionId)
-          .then(() => toast.success(t("actions.copied")))
-          .catch(() => {});
-        return;
-      }
-
-      try {
-        const textarea = document.createElement("textarea");
-        textarea.value = sessionId;
-        textarea.setAttribute("readonly", "");
-        textarea.style.position = "absolute";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        const ok = document.execCommand("copy");
-        document.body.removeChild(textarea);
+      void copyTextToClipboard(sessionId).then((ok) => {
         if (ok) toast.success(t("actions.copied"));
-      } catch {}
+      });
     },
     [t]
   );
