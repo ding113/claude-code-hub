@@ -199,11 +199,6 @@ function VendorCard({
             <div>
               <CardTitle className="flex items-center gap-2">
                 {displayName}
-                {vendor?.isOfficial ? (
-                  <Badge variant="secondary" className="text-xs">
-                    {t("vendorOfficial")}
-                  </Badge>
-                ) : null}
                 {websiteUrl && (
                   <a
                     href={websiteUrl}
@@ -683,7 +678,7 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
           <Edit2 className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("editEndpoint")}</DialogTitle>
         </DialogHeader>
@@ -722,11 +717,6 @@ function EditVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; vendo
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isOfficial, setIsOfficial] = useState(vendor?.isOfficial ?? false);
-
-  useEffect(() => {
-    if (open) setIsOfficial(vendor?.isOfficial ?? false);
-  }, [open, vendor?.isOfficial]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -740,7 +730,6 @@ function EditVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; vendo
         vendorId,
         displayName: displayName || null,
         websiteUrl: websiteUrl || null,
-        isOfficial,
       });
 
       if (res.ok) {
@@ -788,10 +777,6 @@ function EditVendorDialog({ vendor, vendorId }: { vendor?: ProviderVendor; vendo
               defaultValue={vendor?.websiteUrl || ""}
               placeholder={t("vendorWebsitePlaceholder")}
             />
-          </div>
-          <div className="flex items-center justify-between rounded-md border p-3">
-            <Label htmlFor="isOfficial">{t("vendorOfficial")}</Label>
-            <Switch id="isOfficial" checked={isOfficial} onCheckedChange={setIsOfficial} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>

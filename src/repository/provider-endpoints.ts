@@ -59,7 +59,6 @@ function toProviderVendor(row: any): ProviderVendor {
     displayName: row.displayName ?? null,
     websiteUrl: row.websiteUrl ?? null,
     faviconUrl: row.faviconUrl ?? null,
-    isOfficial: row.isOfficial ?? false,
     createdAt: toDate(row.createdAt),
     updatedAt: toDate(row.updatedAt),
   };
@@ -162,7 +161,6 @@ export async function findProviderVendors(
       displayName: providerVendors.displayName,
       websiteUrl: providerVendors.websiteUrl,
       faviconUrl: providerVendors.faviconUrl,
-      isOfficial: providerVendors.isOfficial,
       createdAt: providerVendors.createdAt,
       updatedAt: providerVendors.updatedAt,
     })
@@ -182,7 +180,6 @@ export async function findProviderVendorById(vendorId: number): Promise<Provider
       displayName: providerVendors.displayName,
       websiteUrl: providerVendors.websiteUrl,
       faviconUrl: providerVendors.faviconUrl,
-      isOfficial: providerVendors.isOfficial,
       createdAt: providerVendors.createdAt,
       updatedAt: providerVendors.updatedAt,
     })
@@ -228,7 +225,6 @@ export async function updateProviderVendor(
     displayName?: string | null;
     websiteUrl?: string | null;
     faviconUrl?: string | null;
-    isOfficial?: boolean;
   }
 ): Promise<ProviderVendor | null> {
   if (Object.keys(payload).length === 0) {
@@ -240,7 +236,6 @@ export async function updateProviderVendor(
   if (payload.displayName !== undefined) updates.displayName = payload.displayName;
   if (payload.websiteUrl !== undefined) updates.websiteUrl = payload.websiteUrl;
   if (payload.faviconUrl !== undefined) updates.faviconUrl = payload.faviconUrl;
-  if (payload.isOfficial !== undefined) updates.isOfficial = payload.isOfficial;
 
   const rows = await db
     .update(providerVendors)
@@ -252,7 +247,6 @@ export async function updateProviderVendor(
       displayName: providerVendors.displayName,
       websiteUrl: providerVendors.websiteUrl,
       faviconUrl: providerVendors.faviconUrl,
-      isOfficial: providerVendors.isOfficial,
       createdAt: providerVendors.createdAt,
       updatedAt: providerVendors.updatedAt,
     });

@@ -135,7 +135,6 @@ export const providerVendors = pgTable('provider_vendors', {
   displayName: varchar('display_name', { length: 200 }),
   websiteUrl: text('website_url'),
   faviconUrl: text('favicon_url'),
-  isOfficial: boolean('is_official').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({

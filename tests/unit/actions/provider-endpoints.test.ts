@@ -79,7 +79,7 @@ describe("provider-endpoints actions", () => {
     expect(res.errorCode).toBe("PERMISSION_DENIED");
   });
 
-  it("editProviderVendor: computes favicon and forwards isOfficial", async () => {
+  it("editProviderVendor: computes favicon", async () => {
     getSessionMock.mockResolvedValue({ user: { role: "admin" } });
 
     updateProviderVendorMock.mockResolvedValue({
@@ -88,7 +88,6 @@ describe("provider-endpoints actions", () => {
       displayName: "Example",
       websiteUrl: "https://example.com/path",
       faviconUrl: "https://www.google.com/s2/favicons?domain=example.com&sz=32",
-      isOfficial: true,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -98,7 +97,6 @@ describe("provider-endpoints actions", () => {
       vendorId: 1,
       displayName: "Example",
       websiteUrl: "https://example.com/path",
-      isOfficial: true,
     });
 
     expect(res.ok).toBe(true);
@@ -108,7 +106,6 @@ describe("provider-endpoints actions", () => {
         displayName: "Example",
         websiteUrl: "https://example.com/path",
         faviconUrl: "https://www.google.com/s2/favicons?domain=example.com&sz=32",
-        isOfficial: true,
       })
     );
   });
@@ -122,7 +119,6 @@ describe("provider-endpoints actions", () => {
       displayName: null,
       websiteUrl: null,
       faviconUrl: null,
-      isOfficial: false,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
