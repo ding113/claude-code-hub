@@ -28,6 +28,7 @@ import {
   type ModelLeaderboardEntry,
   type ProviderCacheHitRateLeaderboardEntry,
   type ProviderLeaderboardEntry,
+  type UserLeaderboardFilters,
 } from "@/repository/leaderboard";
 import type { ProviderType } from "@/types/provider";
 import { getRedisClient } from "./client";
@@ -43,6 +44,8 @@ type LeaderboardData =
 
 export interface LeaderboardFilters {
   providerType?: ProviderType;
+  userTags?: string[];
+  userGroups?: string[];
 }
 
 /**
@@ -59,24 +62,35 @@ function buildCacheKey(
   const tz = getEnvConfig().TZ; // ensure date formatting aligns with configured timezone
   const providerTypeSuffix = filters?.providerType ? `:providerType:${filters.providerType}` : "";
 
+  let userFilterSuffix = "";
+  if (scope === "user") {
+    const tagsPart = filters?.userTags?.length
+      ? `:tags:${[...filters.userTags].sort().join(",")}`
+      : "";
+    const groupsPart = filters?.userGroups?.length
+      ? `:groups:${[...filters.userGroups].sort().join(",")}`
+      : "";
+    userFilterSuffix = tagsPart + groupsPart;
+  }
+
   if (period === "custom" && dateRange) {
     // leaderboard:{scope}:custom:2025-01-01_2025-01-15:USD
-    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}${providerTypeSuffix}`;
+    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else if (period === "daily") {
     // leaderboard:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, tz, "yyyy-MM-dd");
-    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}${providerTypeSuffix}`;
+    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else if (period === "weekly") {
     // leaderboard:{scope}:weekly:2025-W03:USD (ISO week)
     const weekStr = formatInTimeZone(now, tz, "yyyy-'W'ww");
-    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}${providerTypeSuffix}`;
+    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else if (period === "monthly") {
     // leaderboard:{scope}:monthly:2025-01:USD
     const monthStr = formatInTimeZone(now, tz, "yyyy-MM");
-    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}${providerTypeSuffix}`;
+    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else {
     // allTime: leaderboard:{scope}:allTime:USD (no date component)
-    return `leaderboard:${scope}:allTime:${currencyDisplay}${providerTypeSuffix}`;
+    return `leaderboard:${scope}:allTime:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   }
 }
 
@@ -89,10 +103,15 @@ async function queryDatabase(
   dateRange?: DateRangeParams,
   filters?: LeaderboardFilters
 ): Promise<LeaderboardData> {
+  const userFilters: UserLeaderboardFilters | undefined =
+    scope === "user" && (filters?.userTags?.length || filters?.userGroups?.length)
+      ? { userTags: filters.userTags, userGroups: filters.userGroups }
+      : undefined;
+
   // 处理自定义日期范围
   if (period === "custom" && dateRange) {
     if (scope === "user") {
-      return await findCustomRangeLeaderboard(dateRange);
+      return await findCustomRangeLeaderboard(dateRange, userFilters);
     }
     if (scope === "provider") {
       return await findCustomRangeProviderLeaderboard(dateRange, filters?.providerType);
@@ -106,15 +125,15 @@ async function queryDatabase(
   if (scope === "user") {
     switch (period) {
       case "daily":
-        return await findDailyLeaderboard();
+        return await findDailyLeaderboard(userFilters);
       case "weekly":
-        return await findWeeklyLeaderboard();
+        return await findWeeklyLeaderboard(userFilters);
       case "monthly":
-        return await findMonthlyLeaderboard();
+        return await findMonthlyLeaderboard(userFilters);
       case "allTime":
-        return await findAllTimeLeaderboard();
+        return await findAllTimeLeaderboard(userFilters);
       default:
-        return await findDailyLeaderboard();
+        return await findDailyLeaderboard(userFilters);
     }
   }
   if (scope === "provider") {

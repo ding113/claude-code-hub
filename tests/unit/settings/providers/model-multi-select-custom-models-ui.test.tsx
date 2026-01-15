@@ -8,7 +8,11 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ModelMultiSelect } from "@/app/[locale]/settings/providers/_components/model-multi-select";
-import { loadMessages as loadTestMessages } from "../prices/test-messages";
+import commonMessages from "../../../../messages/en/common.json";
+import errorsMessages from "../../../../messages/en/errors.json";
+import formsMessages from "../../../../messages/en/forms.json";
+import settingsMessages from "../../../../messages/en/settings";
+import uiMessages from "../../../../messages/en/ui.json";
 
 const modelPricesActionMocks = vi.hoisted(() => ({
   getAvailableModelsByProviderType: vi.fn(async () => ["remote-model-1"]),
@@ -20,6 +24,16 @@ const providersActionMocks = vi.hoisted(() => ({
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: false })),
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
+
+function loadMessages() {
+  return {
+    common: commonMessages,
+    errors: errorsMessages,
+    ui: uiMessages,
+    forms: formsMessages,
+    settings: settingsMessages,
+  };
+}
 
 function render(node: ReactNode) {
   const container = document.createElement("div");

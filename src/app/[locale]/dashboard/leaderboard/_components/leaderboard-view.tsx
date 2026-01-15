@@ -3,10 +3,12 @@
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
+import { getAllUserKeyGroups, getAllUserTags } from "@/actions/users";
 import { ProviderTypeFilter } from "@/app/[locale]/settings/providers/_components/provider-type-filter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TagInput } from "@/components/ui/tag-input";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
   DateRangeParams,
@@ -51,9 +53,28 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [dateRange, setDateRange] = useState<DateRangeParams | undefined>(undefined);
   const [providerTypeFilter, setProviderTypeFilter] = useState<ProviderType | "all">("all");
+  const [userTagFilters, setUserTagFilters] = useState<string[]>([]);
+  const [userGroupFilters, setUserGroupFilters] = useState<string[]>([]);
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [data, setData] = useState<AnyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const fetchSuggestions = async () => {
+      const [tagsResult, groupsResult] = await Promise.all([
+        getAllUserTags(),
+        getAllUserKeyGroups(),
+      ]);
+      if (tagsResult.ok) setTagSuggestions(tagsResult.data);
+      if (groupsResult.ok) setGroupSuggestions(groupsResult.data);
+    };
+
+    fetchSuggestions();
+  }, [isAdmin]);
 
   // 与 URL 查询参数保持同步，支持外部携带 scope/period 直达特定榜单
   // biome-ignore lint/correctness/useExhaustiveDependencies: period 和 scope 仅用于比较，不应触发 effect 重新执行
@@ -96,6 +117,14 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         ) {
           url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
         }
+        if (scope === "user") {
+          if (userTagFilters.length > 0) {
+            url += `&userTags=${encodeURIComponent(userTagFilters.join(","))}`;
+          }
+          if (userGroupFilters.length > 0) {
+            url += `&userGroups=${encodeURIComponent(userGroupFilters.join(","))}`;
+          }
+        }
         const res = await fetch(url);
 
         if (!res.ok) {
@@ -120,7 +149,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [scope, period, dateRange, providerTypeFilter, t]);
+  }, [scope, period, dateRange, providerTypeFilter, userTagFilters, userGroupFilters, t]);
 
   const handlePeriodChange = useCallback(
     (newPeriod: LeaderboardPeriod, newDateRange?: DateRangeParams) => {
@@ -368,6 +397,37 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           />
         ) : null}
       </div>
+
+      {scope === "user" && isAdmin && (
+        <div className="flex flex-wrap gap-4 mb-4">
+          <div className="flex-1 min-w-[200px] max-w-[300px]">
+            <TagInput
+              value={userTagFilters}
+              onChange={setUserTagFilters}
+              placeholder={t("filters.userTagsPlaceholder")}
+              disabled={loading}
+              maxTags={20}
+              clearable
+              suggestions={tagSuggestions}
+              allowDuplicates={false}
+              validateTag={(tag) => tagSuggestions.length === 0 || tagSuggestions.includes(tag)}
+            />
+          </div>
+          <div className="flex-1 min-w-[200px] max-w-[300px]">
+            <TagInput
+              value={userGroupFilters}
+              onChange={setUserGroupFilters}
+              placeholder={t("filters.userGroupsPlaceholder")}
+              disabled={loading}
+              maxTags={20}
+              clearable
+              suggestions={groupSuggestions}
+              allowDuplicates={false}
+              validateTag={(tag) => groupSuggestions.length === 0 || groupSuggestions.includes(tag)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Date range picker with quick period buttons */}
       <div className="mb-6">

@@ -19,7 +19,7 @@
   },
 
   "codeExamples": {
-    "label": "Code example - ${language}",
+    "label": "Code example - {language}",
     "description": "Click the code block to copy to clipboard"
   },
 
@@ -206,7 +206,7 @@
         "unix": {
           "temporary": "Temporary setting (current session):",
           "permanent": "Permanent setting:",
-          "permanentNote": "Add to your shell configuration file (${shellConfig}):"
+          "permanentNote": "Add to your shell configuration file ({shellConfig}):"
         }
       },
 
@@ -696,6 +696,35 @@
     "macos": "macOS",
     "windows": "Windows",
     "linux": "Linux"
+  },
+
+  "placeholders": {
+    "windowsUserName": "your-username",
+    "shellConfig": {
+      "linux": "~/.bashrc",
+      "macos": "~/.zshrc"
+    },
+    "codexVsCodeConfigFiles": "config.toml and auth.json"
+  },
+
+  "snippets": {
+    "comments": {
+      "updateHomebrew": "# Update Homebrew",
+      "installNodeJs": "# Install Node.js",
+      "usingChocolatey": "# Using Chocolatey",
+      "orUsingScoop": "# Or using Scoop",
+      "addNodeSourceRepo": "# Add NodeSource repository",
+      "ubuntuDebian": "# Ubuntu/Debian",
+      "centosRhelFedora": "# CentOS/RHEL/Fedora",
+      "addToPathIfMissing": "# Add to PATH (if missing)",
+      "checkEnvVar": "# Check environment variable",
+      "testNetworkConnection": "# Test network connection"
+    }
+  },
+
+  "layout": {
+    "headerTitle": "Usage Docs",
+    "loginConsole": "Log in to console"
   },
 
   "ui": {
