@@ -21,4 +21,3 @@ describe("escapeLike", () => {
     expect(escapeLike("")).toBe("");
   });
 });
-

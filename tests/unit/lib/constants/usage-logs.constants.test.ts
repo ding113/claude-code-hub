@@ -13,4 +13,3 @@ describe("Usage logs constants", () => {
     expect(SESSION_ID_SUGGESTION_LIMIT).toBe(20);
   });
 });
-

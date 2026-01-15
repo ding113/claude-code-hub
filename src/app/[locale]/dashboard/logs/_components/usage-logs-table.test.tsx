@@ -197,6 +197,10 @@ describe("usage-logs-table multiplier badge", () => {
       value: { writeText },
       configurable: true,
     });
+    Object.defineProperty(window, "isSecureContext", {
+      value: true,
+      configurable: true,
+    });
 
     const container = document.createElement("div");
     document.body.appendChild(container);
