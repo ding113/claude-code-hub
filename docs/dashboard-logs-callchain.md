@@ -57,6 +57,31 @@
 - Action：`src/actions/usage-logs.ts#getUsageLogSessionIdSuggestions`
 - Repo：`src/repository/usage-logs.ts#findUsageLogSessionIdSuggestions`
 
+#### 匹配语义与边界（2026-01-15 更新）
+
+- **前端约束**：
+  - 最小长度：`SESSION_ID_SUGGESTION_MIN_LEN`（`src/lib/constants/usage-logs.constants.ts`）
+  - 最大长度截断：`SESSION_ID_SUGGESTION_MAX_LEN`（`src/actions/usage-logs.ts` 内对输入 trim 后截断）
+  - 每次返回数量：`SESSION_ID_SUGGESTION_LIMIT`
+- **后端匹配**：
+  - 语义：仅支持「字面量前缀匹配」（`term%`），不再支持包含匹配（`%term%`）
+  - 安全：输入中的 `%` / `_` / `\\` 会被统一转义，避免被当作 LIKE 通配符
+  - SQL（核心条件）：`session_id LIKE '<escapedTerm>%' ESCAPE '\\'`
+    - 转义实现：`src/repository/_shared/like.ts#escapeLike`
+- **行为变更示例**：
+  - 之前：输入 `abc` 可能命中 `xxxabcxxx`（包含匹配）
+  - 之后：仅命中 `abc...`（前缀匹配）
+  - 之前：输入 `%` / `_` 可主动触发通配
+  - 之后：`%` / `_` 按字面量处理（例如输入 `%a` 只匹配以 `%a` 开头的 session_id）
+
+#### 索引与迁移（前缀匹配性能）
+
+- 已有索引：`idx_message_request_session_id`（`message_request.session_id`，partial: `deleted_at IS NULL`）
+- 新增索引（前缀匹配）：`idx_message_request_session_id_prefix`
+  - opclass：`varchar_pattern_ops`
+  - partial：`deleted_at IS NULL AND (blocked_by IS NULL OR blocked_by <> 'warmup')`
+  - 迁移文件：`drizzle/0055_neat_stepford_cuckoos.sql`
+
 ## 5) 本需求相关影响面（文件/符号清单）
 
 **前端（logs 页面内聚）**：
@@ -90,6 +115,5 @@
 不在范围内（需另开 issue/评审确认后再做）：
 
 - 针对联想查询的索引/物化/离线表（优化类工程）
-- 改动数据库 schema 或迁移
+- 大规模改动数据库 schema 或重建索引策略（例如 CONCURRENTLY/离线重建）
 - Logs 页面其它过滤项语义调整（非本需求验收口径）
-
