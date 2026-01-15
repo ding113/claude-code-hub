@@ -117,8 +117,11 @@ describe("Usage logs sessionId suggestions", () => {
 
     expect(whereArgs.length).toBeGreaterThan(0);
     const whereSql = sqlToString(whereArgs[0]).toLowerCase();
-    expect(whereSql).toContain("ilike");
-    expect(whereSql).toContain("abc");
+    expect(whereSql).toContain("like");
+    expect(whereSql).toContain("escape");
+    expect(whereSql).toContain("abc%");
+    expect(whereSql).not.toContain("%abc%");
+    expect(whereSql).not.toContain("ilike");
     expect(whereSql).not.toContain("  abc  ");
 
     expect(groupByArgs.length).toBeGreaterThan(0);
@@ -128,6 +131,30 @@ describe("Usage logs sessionId suggestions", () => {
     expect(orderSql).toContain("min");
 
     expect(limitArgs).toEqual([20]);
+  });
+
+  test("term 含 %/_/\\\\：应按字面量前缀匹配（需转义）", async () => {
+    vi.resetModules();
+
+    const whereArgs: unknown[] = [];
+    const selectMock = vi.fn(() => createThenableQuery([], { whereArgs }));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: { select: selectMock },
+    }));
+
+    const { findUsageLogSessionIdSuggestions } = await import("@/repository/usage-logs");
+    await findUsageLogSessionIdSuggestions({
+      term: "a%_\\b",
+      limit: 20,
+    });
+
+    expect(whereArgs.length).toBeGreaterThan(0);
+    const whereSql = sqlToString(whereArgs[0]).toLowerCase();
+    expect(whereSql).toContain("like");
+    expect(whereSql).toContain("escape");
+    expect(whereSql).toContain("a\\%\\_\\\\b%");
+    expect(whereSql).not.toContain("ilike");
   });
 
   test("limit 应被 clamp 到 [1, 50]", async () => {

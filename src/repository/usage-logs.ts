@@ -7,6 +7,7 @@ import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
+import { escapeLike } from "./_shared/like";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -575,12 +576,13 @@ export async function findUsageLogSessionIdSuggestions(
   const trimmedTerm = term.trim();
   if (!trimmedTerm) return [];
 
+  const pattern = `${escapeLike(trimmedTerm)}%`;
   const conditions = [
     isNull(messageRequest.deletedAt),
     EXCLUDE_WARMUP_CONDITION,
     sql`${messageRequest.sessionId} IS NOT NULL`,
     sql`length(${messageRequest.sessionId}) > 0`,
-    sql`${messageRequest.sessionId} ILIKE ${`%${trimmedTerm}%`}`,
+    sql`${messageRequest.sessionId} LIKE ${pattern} ESCAPE '\\'`,
   ];
 
   if (userId !== undefined) {
