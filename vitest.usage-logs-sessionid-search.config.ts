@@ -18,6 +18,7 @@ export default defineConfig({
       "tests/unit/repository/usage-logs-sessionid-suggestions.test.ts",
       "tests/unit/repository/usage-logs-sessionid-filter.test.ts",
       "tests/unit/repository/warmup-stats-exclusion.test.ts",
+      "tests/unit/repository/escape-like.test.ts",
       "tests/unit/lib/constants/usage-logs.constants.test.ts",
       "tests/unit/lib/utils/clipboard.test.ts",
     ],
