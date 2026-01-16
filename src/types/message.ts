@@ -1,5 +1,6 @@
 import type { Numeric } from "decimal.js-light";
 import type { CacheTtlApplied } from "./cache";
+import type { ProviderType } from "./provider";
 import type { SpecialSetting } from "./special-settings";
 
 /**
@@ -9,6 +10,14 @@ import type { SpecialSetting } from "./special-settings";
 export interface ProviderChainItem {
   id: number;
   name: string;
+
+  // 供应商维度（便于日志审计，无需额外 join）
+  vendorId?: number;
+  providerType?: ProviderType;
+
+  // 端点维度（记录本次请求实际使用的 baseUrl）
+  endpointId?: number | null;
+  endpointUrl?: string;
 
   // === 选择原因（细化） ===
   reason?:

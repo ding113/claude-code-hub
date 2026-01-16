@@ -109,13 +109,14 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
 
         {/* 预览列表 */}
         <div className="space-y-2">
-          {Object.entries(previews).map(([name, url]) => {
+          {Object.entries(previews).map(([endpointKey, url]) => {
             const hasDuplicate = detectDuplicatePath(url);
             const isCopied = copiedUrl === url;
+            const label = t(`endpoints.${endpointKey}`);
 
             return (
               <div
-                key={name}
+                key={endpointKey}
                 className={`rounded-md border p-3 bg-white ${
                   hasDuplicate ? "border-orange-300" : "border-blue-200"
                 }`}
@@ -124,7 +125,7 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
                   <div className="flex-1 min-w-0">
                     {/* 端点名称 */}
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-medium text-slate-700">{name}</span>
+                      <span className="text-xs font-medium text-slate-700">{label}</span>
                       {hasDuplicate && (
                         <Badge variant="outline" className="text-orange-600 border-orange-300">
                           {t("duplicatePath")}
@@ -141,7 +142,7 @@ export function UrlPreview({ baseUrl, providerType }: UrlPreviewProps) {
                     variant="ghost"
                     size="sm"
                     className="h-8 w-8 p-0 flex-shrink-0"
-                    onClick={() => copyToClipboard(url, name)}
+                    onClick={() => copyToClipboard(url, label)}
                     title={t("copy")}
                   >
                     {isCopied ? (

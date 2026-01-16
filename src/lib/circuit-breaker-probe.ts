@@ -6,7 +6,7 @@
  *
  * Configuration via environment variables:
  * - ENABLE_SMART_PROBING: Enable/disable smart probing (default: false)
- * - PROBE_INTERVAL_MS: Interval between probe cycles (default: 30000ms = 30s)
+ * - PROBE_INTERVAL_MS: Interval between probe cycles (default: 10000ms = 10s)
  * - PROBE_TIMEOUT_MS: Timeout for each probe request (default: 5000ms = 5s)
  */
 
@@ -17,7 +17,7 @@ import { executeProviderTest } from "./provider-testing/test-service";
 
 // Configuration
 const ENABLE_SMART_PROBING = process.env.ENABLE_SMART_PROBING === "true";
-const PROBE_INTERVAL_MS = parseInt(process.env.PROBE_INTERVAL_MS || "30000", 10);
+const PROBE_INTERVAL_MS = parseInt(process.env.PROBE_INTERVAL_MS || "10000", 10);
 const PROBE_TIMEOUT_MS = parseInt(process.env.PROBE_TIMEOUT_MS || "5000", 10);
 
 // Probe state

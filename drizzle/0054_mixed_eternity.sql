@@ -1,0 +1,245 @@
+CREATE TABLE IF NOT EXISTS "provider_endpoint_probe_logs" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"endpoint_id" integer NOT NULL,
+	"source" varchar(20) DEFAULT 'scheduled' NOT NULL,
+	"ok" boolean NOT NULL,
+	"status_code" integer,
+	"latency_ms" integer,
+	"error_type" varchar(64),
+	"error_message" text,
+	"created_at" timestamp with time zone DEFAULT now()
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "provider_endpoints" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"vendor_id" integer NOT NULL,
+	"provider_type" varchar(20) DEFAULT 'claude' NOT NULL,
+	"url" text NOT NULL,
+	"label" varchar(200),
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	"is_enabled" boolean DEFAULT true NOT NULL,
+	"last_probed_at" timestamp with time zone,
+	"last_probe_ok" boolean,
+	"last_probe_status_code" integer,
+	"last_probe_latency_ms" integer,
+	"last_probe_error_type" varchar(64),
+	"last_probe_error_message" text,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now(),
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "provider_vendors" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"website_domain" varchar(255) NOT NULL,
+	"display_name" varchar(200),
+	"website_url" text,
+	"favicon_url" text,
+	"created_at" timestamp with time zone DEFAULT now(),
+	"updated_at" timestamp with time zone DEFAULT now()
+);
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "website_domain" varchar(255);
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "display_name" varchar(200);
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "website_url" text;
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "favicon_url" text;
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "created_at" timestamp with time zone DEFAULT now();
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ADD COLUMN IF NOT EXISTS "updated_at" timestamp with time zone DEFAULT now();
+--> statement-breakpoint
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'provider_vendors'
+			AND column_name = 'vendor_key'
+	) THEN
+		WITH normalized AS (
+			SELECT
+				id,
+				lower(vendor_key) AS candidate,
+				row_number() OVER (
+					PARTITION BY lower(vendor_key)
+					ORDER BY id
+				) AS rn
+			FROM provider_vendors
+			WHERE (website_domain IS NULL OR website_domain = '')
+				AND vendor_key IS NOT NULL
+				AND vendor_key <> ''
+		),
+		updated AS (
+			SELECT
+				id,
+				CASE
+					WHEN rn = 1 THEN candidate
+					ELSE candidate || '-' || id
+				END AS website_domain
+			FROM normalized
+		)
+		UPDATE provider_vendors v
+		SET website_domain = u.website_domain
+		FROM updated u
+		WHERE v.id = u.id;
+	END IF;
+END $$;
+--> statement-breakpoint
+UPDATE "provider_vendors"
+SET "website_domain" = 'unknown-' || "id"
+WHERE ("website_domain" IS NULL OR "website_domain" = '');
+--> statement-breakpoint
+ALTER TABLE "provider_vendors" ALTER COLUMN "website_domain" SET NOT NULL;
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "uniq_provider_vendors_website_domain" ON "provider_vendors" USING btree ("website_domain");
+--> statement-breakpoint
+ALTER TABLE "providers" ADD COLUMN IF NOT EXISTS "provider_vendor_id" integer;
+--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN IF NOT EXISTS "enable_codex_session_id_completion" boolean DEFAULT true NOT NULL;
+--> statement-breakpoint
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'provider_vendors'
+			AND column_name = 'vendor_key'
+	) THEN
+		EXECUTE $insert$
+			INSERT INTO provider_vendors (website_domain, vendor_key, display_name)
+			SELECT DISTINCT
+				CASE
+					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+					ELSE domain_candidate
+				END AS website_domain,
+				CASE
+					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+					ELSE domain_candidate
+				END AS vendor_key,
+				CASE
+					WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+					ELSE domain_candidate
+				END AS display_name
+			FROM (
+				SELECT
+					id AS provider_id,
+					lower(
+						split_part(
+							split_part(
+								regexp_replace(COALESCE(NULLIF(website_url, ''), url), '^[a-zA-Z]+://', ''),
+								'/',
+								1
+							),
+							':',
+							1
+						)
+					) AS domain_candidate
+				FROM providers
+			) t
+			ON CONFLICT DO NOTHING
+		$insert$;
+	ELSE
+		INSERT INTO provider_vendors (website_domain, display_name)
+		SELECT DISTINCT
+			CASE
+				WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+				ELSE domain_candidate
+			END AS website_domain,
+			CASE
+				WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || provider_id
+				ELSE domain_candidate
+			END AS display_name
+		FROM (
+			SELECT
+				id AS provider_id,
+				lower(
+					split_part(
+						split_part(
+							regexp_replace(COALESCE(NULLIF(website_url, ''), url), '^[a-zA-Z]+://', ''),
+							'/',
+							1
+						),
+						':',
+						1
+					)
+				) AS domain_candidate
+			FROM providers
+		) t
+		ON CONFLICT DO NOTHING;
+	END IF;
+END $$;
+--> statement-breakpoint
+UPDATE providers p
+SET provider_vendor_id = v.id
+FROM (
+	SELECT
+		id AS provider_id,
+		CASE
+			WHEN domain_candidate IS NULL OR domain_candidate = '' THEN 'unknown-' || id
+			ELSE domain_candidate
+		END AS website_domain
+	FROM (
+		SELECT
+			id,
+			lower(
+				split_part(
+					split_part(
+						regexp_replace(COALESCE(NULLIF(website_url, ''), url), '^[a-zA-Z]+://', ''),
+						'/',
+						1
+					),
+					':',
+					1
+				)
+			) AS domain_candidate
+		FROM providers
+	) n
+) d
+JOIN provider_vendors v ON v.website_domain = d.website_domain
+WHERE p.id = d.provider_id;
+--> statement-breakpoint
+ALTER TABLE "providers" ALTER COLUMN "provider_vendor_id" SET NOT NULL;
+--> statement-breakpoint
+DO $$
+BEGIN
+	ALTER TABLE "provider_endpoint_probe_logs" ADD CONSTRAINT "provider_endpoint_probe_logs_endpoint_id_provider_endpoints_id_fk" FOREIGN KEY ("endpoint_id") REFERENCES "public"."provider_endpoints"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+	ALTER TABLE "provider_endpoints" ADD CONSTRAINT "provider_endpoints_vendor_id_provider_vendors_id_fk" FOREIGN KEY ("vendor_id") REFERENCES "public"."provider_vendors"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_endpoint_probe_logs_endpoint_created_at" ON "provider_endpoint_probe_logs" USING btree ("endpoint_id","created_at" DESC NULLS LAST);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_endpoint_probe_logs_created_at" ON "provider_endpoint_probe_logs" USING btree ("created_at");
+--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "uniq_provider_endpoints_vendor_type_url" ON "provider_endpoints" USING btree ("vendor_id","provider_type","url");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_vendor_type" ON "provider_endpoints" USING btree ("vendor_id","provider_type") WHERE "provider_endpoints"."deleted_at" IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_enabled" ON "provider_endpoints" USING btree ("is_enabled","vendor_id","provider_type") WHERE "provider_endpoints"."deleted_at" IS NULL;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_created_at" ON "provider_endpoints" USING btree ("created_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_deleted_at" ON "provider_endpoints" USING btree ("deleted_at");
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_vendors_created_at" ON "provider_vendors" USING btree ("created_at");
+--> statement-breakpoint
+DO $$
+BEGIN
+	ALTER TABLE "providers" ADD CONSTRAINT "providers_provider_vendor_id_provider_vendors_id_fk" FOREIGN KEY ("provider_vendor_id") REFERENCES "public"."provider_vendors"("id") ON DELETE restrict ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN NULL;
+END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_providers_vendor_type" ON "providers" USING btree ("provider_vendor_id","provider_type") WHERE "providers"."deleted_at" IS NULL;

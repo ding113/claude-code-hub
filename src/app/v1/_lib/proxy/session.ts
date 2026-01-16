@@ -468,6 +468,8 @@ export class ProxySession {
       circuitState?: "closed" | "open" | "half-open";
       attemptNumber?: number;
       errorMessage?: string; // 错误信息（失败时记录）
+      endpointId?: number | null;
+      endpointUrl?: string;
       // 修复：添加新字段
       statusCode?: number; // 成功时的状态码
       circuitFailureCount?: number; // 熔断失败计数
@@ -479,6 +481,10 @@ export class ProxySession {
     const item: ProviderChainItem = {
       id: provider.id,
       name: provider.name,
+      vendorId: provider.providerVendorId,
+      providerType: provider.providerType,
+      endpointId: metadata?.endpointId,
+      endpointUrl: metadata?.endpointUrl,
       // 元数据
       reason: metadata?.reason,
       selectionMethod: metadata?.selectionMethod,

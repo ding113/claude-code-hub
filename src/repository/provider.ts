@@ -8,12 +8,25 @@ import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
+import {
+  ensureProviderEndpointExistsForUrl,
+  getOrCreateProviderVendorIdFromUrls,
+  tryDeleteProviderVendorIfEmpty,
+} from "./provider-endpoints";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
+  const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
+    providerUrl: providerData.url,
+    websiteUrl: providerData.website_url ?? null,
+    faviconUrl: providerData.favicon_url ?? null,
+    displayName: providerData.name,
+  });
+
   const dbData = {
     name: providerData.name,
     url: providerData.url,
     key: providerData.key,
+    providerVendorId,
     isEnabled: providerData.is_enabled,
     weight: providerData.weight,
     priority: providerData.priority,
@@ -69,6 +82,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     name: providers.name,
     url: providers.url,
     key: providers.key,
+    providerVendorId: providers.providerVendorId,
     isEnabled: providers.isEnabled,
     weight: providers.weight,
     priority: providers.priority,
@@ -117,7 +131,23 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     deletedAt: providers.deletedAt,
   });
 
-  return toProvider(provider);
+  const created = toProvider(provider);
+
+  try {
+    await ensureProviderEndpointExistsForUrl({
+      vendorId: created.providerVendorId,
+      providerType: created.providerType,
+      url: created.url,
+    });
+  } catch (error) {
+    logger.warn("[Provider] Failed to seed provider endpoint from provider.url", {
+      providerVendorId,
+      providerType: created.providerType,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  return created;
 }
 
 export async function findProviderList(
@@ -130,6 +160,7 @@ export async function findProviderList(
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
@@ -205,6 +236,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
@@ -284,6 +316,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
@@ -350,6 +383,7 @@ export async function updateProvider(
   const dbData: any = {
     updatedAt: new Date(),
   };
+
   if (providerData.name !== undefined) dbData.name = providerData.name;
   if (providerData.url !== undefined) dbData.url = providerData.url;
   if (providerData.key !== undefined) dbData.key = providerData.key;
@@ -434,6 +468,32 @@ export async function updateProvider(
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
   if (providerData.cc !== undefined) dbData.cc = providerData.cc;
 
+  let previousVendorId: number | null = null;
+  if (providerData.url !== undefined || providerData.website_url !== undefined) {
+    const [current] = await db
+      .select({
+        url: providers.url,
+        websiteUrl: providers.websiteUrl,
+        faviconUrl: providers.faviconUrl,
+        name: providers.name,
+        providerVendorId: providers.providerVendorId,
+      })
+      .from(providers)
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .limit(1);
+
+    if (current) {
+      previousVendorId = current.providerVendorId;
+      const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
+        providerUrl: providerData.url ?? current.url,
+        websiteUrl: providerData.website_url ?? current.websiteUrl,
+        faviconUrl: providerData.favicon_url ?? current.faviconUrl,
+        displayName: providerData.name ?? current.name,
+      });
+      dbData.providerVendorId = providerVendorId;
+    }
+  }
+
   const [provider] = await db
     .update(providers)
     .set(dbData)
@@ -443,6 +503,7 @@ export async function updateProvider(
       name: providers.name,
       url: providers.url,
       key: providers.key,
+      providerVendorId: providers.providerVendorId,
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
@@ -492,7 +553,34 @@ export async function updateProvider(
     });
 
   if (!provider) return null;
-  return toProvider(provider);
+  const transformed = toProvider(provider);
+
+  if (
+    providerData.url !== undefined ||
+    providerData.provider_type !== undefined ||
+    providerData.website_url !== undefined
+  ) {
+    try {
+      await ensureProviderEndpointExistsForUrl({
+        vendorId: transformed.providerVendorId,
+        providerType: transformed.providerType,
+        url: transformed.url,
+      });
+    } catch (error) {
+      logger.warn("[Provider] Failed to seed provider endpoint after provider update", {
+        providerId: transformed.id,
+        providerVendorId: transformed.providerVendorId,
+        providerType: transformed.providerType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (previousVendorId && transformed.providerVendorId !== previousVendorId) {
+    await tryDeleteProviderVendorIfEmpty(previousVendorId);
+  }
+
+  return transformed;
 }
 
 export async function updateProviderPrioritiesBatch(

@@ -24,6 +24,7 @@ import * as myUsageActions from "@/actions/my-usage";
 import * as notificationBindingActions from "@/actions/notification-bindings";
 import * as notificationActions from "@/actions/notifications";
 import * as overviewActions from "@/actions/overview";
+import * as providerEndpointActions from "@/actions/provider-endpoints";
 import * as providerActions from "@/actions/providers";
 import * as sensitiveWordActions from "@/actions/sensitive-words";
 import * as statisticsActions from "@/actions/statistics";
@@ -340,6 +341,15 @@ app.openapi(getKeyLimitUsageRoute, getKeyLimitUsageHandler);
 
 // ==================== 供应商管理 ====================
 
+const ProviderTypeSchema = z.enum([
+  "claude",
+  "claude-auth",
+  "codex",
+  "gemini-cli",
+  "gemini",
+  "openai-compatible",
+]);
+
 const { route: getProvidersRoute, handler: getProvidersHandler } = createActionRoute(
   "providers",
   "getProviders",
@@ -373,6 +383,225 @@ const { route: getProvidersRoute, handler: getProvidersHandler } = createActionR
   }
 );
 app.openapi(getProvidersRoute, getProvidersHandler);
+
+const { route: getProviderVendorsRoute, handler: getProviderVendorsHandler } = createActionRoute(
+  "providers",
+  "getProviderVendors",
+  providerEndpointActions.getProviderVendors,
+  {
+    requestSchema: z.object({}).describe("无需请求参数"),
+    description: "获取供应商聚合实体列表（按官网域名归一） (管理员)",
+    summary: "获取供应商 Vendor 列表",
+    tags: ["供应商管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(getProviderVendorsRoute, getProviderVendorsHandler);
+
+const { route: getProviderEndpointsRoute, handler: getProviderEndpointsHandler } =
+  createActionRoute(
+    "providers",
+    "getProviderEndpoints",
+    providerEndpointActions.getProviderEndpoints,
+    {
+      requestSchema: z.object({
+        vendorId: z.number().int().positive(),
+        providerType: ProviderTypeSchema,
+      }),
+      description: "获取指定 vendor+type 下的端点列表 (管理员)",
+      summary: "获取端点列表",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(getProviderEndpointsRoute, getProviderEndpointsHandler);
+
+const { route: addProviderEndpointRoute, handler: addProviderEndpointHandler } = createActionRoute(
+  "providers",
+  "addProviderEndpoint",
+  providerEndpointActions.addProviderEndpoint,
+  {
+    requestSchema: z.object({
+      vendorId: z.number().int().positive(),
+      providerType: ProviderTypeSchema,
+      url: z.string().trim().url(),
+      label: z.string().trim().max(200).optional().nullable(),
+      sortOrder: z.number().int().min(0).optional(),
+      isEnabled: z.boolean().optional(),
+    }),
+    description: "创建端点（vendor+type 维度） (管理员)",
+    summary: "创建端点",
+    tags: ["供应商管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(addProviderEndpointRoute, addProviderEndpointHandler);
+
+const { route: editProviderEndpointRoute, handler: editProviderEndpointHandler } =
+  createActionRoute(
+    "providers",
+    "editProviderEndpoint",
+    providerEndpointActions.editProviderEndpoint,
+    {
+      requestSchema: z.object({
+        endpointId: z.number().int().positive(),
+        url: z.string().trim().url().optional(),
+        label: z.string().trim().max(200).optional().nullable(),
+        sortOrder: z.number().int().min(0).optional(),
+        isEnabled: z.boolean().optional(),
+      }),
+      description: "更新端点 (管理员)",
+      summary: "更新端点",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(editProviderEndpointRoute, editProviderEndpointHandler);
+
+const { route: removeProviderEndpointRoute, handler: removeProviderEndpointHandler } =
+  createActionRoute(
+    "providers",
+    "removeProviderEndpoint",
+    providerEndpointActions.removeProviderEndpoint,
+    {
+      requestSchema: z.object({
+        endpointId: z.number().int().positive(),
+      }),
+      description: "删除端点（软删除） (管理员)",
+      summary: "删除端点",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(removeProviderEndpointRoute, removeProviderEndpointHandler);
+
+const { route: probeProviderEndpointRoute, handler: probeProviderEndpointHandler } =
+  createActionRoute(
+    "providers",
+    "probeProviderEndpoint",
+    providerEndpointActions.probeProviderEndpoint,
+    {
+      requestSchema: z.object({
+        endpointId: z.number().int().positive(),
+        timeoutMs: z.number().int().min(1000).max(120_000).optional(),
+      }),
+      description: "手动测速并写入测活历史 (管理员)",
+      summary: "端点手动测速",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(probeProviderEndpointRoute, probeProviderEndpointHandler);
+
+const { route: getProviderEndpointProbeLogsRoute, handler: getProviderEndpointProbeLogsHandler } =
+  createActionRoute(
+    "providers",
+    "getProviderEndpointProbeLogs",
+    providerEndpointActions.getProviderEndpointProbeLogs,
+    {
+      requestSchema: z.object({
+        endpointId: z.number().int().positive(),
+        limit: z.number().int().min(1).max(1000).optional(),
+        offset: z.number().int().min(0).optional(),
+      }),
+      description: "读取端点测活历史 (管理员)",
+      summary: "读取测活历史",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(getProviderEndpointProbeLogsRoute, getProviderEndpointProbeLogsHandler);
+
+const { route: getEndpointCircuitInfoRoute, handler: getEndpointCircuitInfoHandler } =
+  createActionRoute(
+    "providers",
+    "getEndpointCircuitInfo",
+    providerEndpointActions.getEndpointCircuitInfo,
+    {
+      requestSchema: z.object({
+        endpointId: z.number().int().positive(),
+      }),
+      description: "读取端点级熔断器状态 (管理员)",
+      summary: "读取端点熔断状态",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(getEndpointCircuitInfoRoute, getEndpointCircuitInfoHandler);
+
+const { route: resetEndpointCircuitRoute, handler: resetEndpointCircuitHandler } =
+  createActionRoute(
+    "providers",
+    "resetEndpointCircuit",
+    providerEndpointActions.resetEndpointCircuit,
+    {
+      requestSchema: z.object({
+        endpointId: z.number().int().positive(),
+      }),
+      description: "重置端点级熔断器状态 (管理员)",
+      summary: "重置端点熔断器",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(resetEndpointCircuitRoute, resetEndpointCircuitHandler);
+
+const { route: getVendorTypeCircuitInfoRoute, handler: getVendorTypeCircuitInfoHandler } =
+  createActionRoute(
+    "providers",
+    "getVendorTypeCircuitInfo",
+    providerEndpointActions.getVendorTypeCircuitInfo,
+    {
+      requestSchema: z.object({
+        vendorId: z.number().int().positive(),
+        providerType: ProviderTypeSchema,
+      }),
+      description: "读取 vendor+type 临时熔断状态 (管理员)",
+      summary: "读取临时熔断状态",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(getVendorTypeCircuitInfoRoute, getVendorTypeCircuitInfoHandler);
+
+const {
+  route: setVendorTypeCircuitManualOpenRoute,
+  handler: setVendorTypeCircuitManualOpenHandler,
+} = createActionRoute(
+  "providers",
+  "setVendorTypeCircuitManualOpen",
+  providerEndpointActions.setVendorTypeCircuitManualOpen,
+  {
+    requestSchema: z.object({
+      vendorId: z.number().int().positive(),
+      providerType: ProviderTypeSchema,
+      manualOpen: z.boolean(),
+    }),
+    description: "设置 vendor+type 临时熔断手动开关 (管理员)",
+    summary: "设置临时熔断开关",
+    tags: ["供应商管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(setVendorTypeCircuitManualOpenRoute, setVendorTypeCircuitManualOpenHandler);
+
+const { route: resetVendorTypeCircuitRoute, handler: resetVendorTypeCircuitHandler } =
+  createActionRoute(
+    "providers",
+    "resetVendorTypeCircuit",
+    providerEndpointActions.resetVendorTypeCircuit,
+    {
+      requestSchema: z.object({
+        vendorId: z.number().int().positive(),
+        providerType: ProviderTypeSchema,
+      }),
+      description: "重置 vendor+type 临时熔断状态 (管理员)",
+      summary: "重置临时熔断状态",
+      tags: ["供应商管理"],
+      requiredRole: "admin",
+    }
+  );
+app.openapi(resetVendorTypeCircuitRoute, resetVendorTypeCircuitHandler);
 
 const { route: addProviderRoute, handler: addProviderHandler } = createActionRoute(
   "providers",

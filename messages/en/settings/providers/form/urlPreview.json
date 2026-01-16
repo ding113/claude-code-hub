@@ -5,5 +5,16 @@
   "duplicatePath": "Duplicate path detected",
   "invalidUrl": "Invalid URL format",
   "invalidUrlDesc": "Please enter a valid HTTP/HTTPS address",
-  "title": "URL Concatenation Preview"
+  "title": "URL Concatenation Preview",
+  "endpoints": {
+    "claudeMessages": "Claude Messages",
+    "claudeCountTokens": "Claude Count Tokens",
+    "codexResponses": "Codex Responses",
+    "openaiChatCompletions": "OpenAI Chat Completions",
+    "openaiModels": "OpenAI Models",
+    "geminiGenerateContent": "Gemini Generate Content",
+    "geminiStreamContent": "Gemini Stream Content",
+    "geminiCliGenerate": "Gemini CLI Generate",
+    "geminiCliStream": "Gemini CLI Stream"
+  }
 }
