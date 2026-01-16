@@ -1,17 +1,14 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle, Copy, Loader2, Plus, Trash2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getProviderEndpoints } from "@/actions/provider-endpoints";
-import {
-  addProvider,
-  editProvider,
-  getUnmaskedProviderKey,
-  removeProvider,
-} from "@/actions/providers";
+import { editProvider, getUnmaskedProviderKey, removeProvider } from "@/actions/providers";
+import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,19 +25,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -50,21 +38,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
-import type { ProviderDisplay, ProviderType } from "@/types/provider";
+import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
+import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
+import { ProviderForm } from "./forms/provider-form";
+import { InlineEditPopover } from "./inline-edit-popover";
 
-function buildKeyProviderName(input: {
+function buildDefaultProviderName(input: {
   vendorWebsiteDomain: string;
   providerType: ProviderType;
-  apiKey: string;
 }): string {
-  const keySuffix = input.apiKey.trim().slice(-4);
   const base = input.vendorWebsiteDomain.trim() || "vendor";
-  const type = input.providerType;
-  const suffix = keySuffix ? `-${keySuffix}` : "";
-  return `${base}-${type}${suffix}`.slice(0, 64);
+  return `${base}-${input.providerType}`.slice(0, 64);
 }
 
 export function VendorKeysCompactList(props: {
@@ -74,103 +62,78 @@ export function VendorKeysCompactList(props: {
   providers: ProviderDisplay[];
   currentUser?: User;
   enableMultiProviderTypes: boolean;
+  statistics?: ProviderStatisticsMap;
+  statisticsLoading?: boolean;
+  currencyCode?: CurrencyCode;
 }) {
   const t = useTranslations("settings.providers");
-  const tCommon = useTranslations("settings.common");
   const tForm = useTranslations("settings.providers.form");
-  const tTypes = useTranslations("settings.providers.types");
+  const tList = useTranslations("settings.providers.list");
 
   const canEdit = props.currentUser?.role === "admin";
 
-  const [addOpen, setAddOpen] = useState(false);
-  const [addKeyValue, setAddKeyValue] = useState("");
-  const [addProviderType, setAddProviderType] = useState<ProviderType>(
-    props.providers[0]?.providerType ?? "claude"
-  );
-
   const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!addOpen) {
-      setAddKeyValue("");
-      setAddProviderType(props.providers[0]?.providerType ?? "claude");
-    }
-  }, [addOpen, props.providers]);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const { data: endpoints = [], isLoading: isEndpointsLoading } = useQuery({
-    queryKey: ["provider-endpoints", props.vendorId, addProviderType],
-    queryFn: async () =>
-      await getProviderEndpoints({ vendorId: props.vendorId, providerType: addProviderType }),
-    enabled: addOpen,
-    staleTime: 30_000,
-  });
-
-  const firstEndpointUrl = useMemo(() => {
-    const enabled = endpoints.find((e) => e.isEnabled);
-    return (enabled ?? endpoints[0])?.url ?? null;
-  }, [endpoints]);
-
-  const addKeyMutation = useMutation({
-    mutationFn: async () => {
-      const apiKey = addKeyValue.trim();
-      if (!apiKey) {
-        throw new Error(tForm("key.placeholder"));
-      }
-
-      if (!firstEndpointUrl) {
-        throw new Error(t("noEndpoints"));
-      }
-
-      const name = buildKeyProviderName({
-        vendorWebsiteDomain: props.vendorWebsiteDomain,
-        providerType: addProviderType,
-        apiKey,
-      });
-
-      const res = await addProvider({
-        name,
-        url: firstEndpointUrl,
-        key: apiKey,
-        provider_type: addProviderType,
-        website_url: props.vendorWebsiteUrl ?? null,
-        tpm: null,
-        rpm: null,
-        rpd: null,
-        cc: null,
-      });
-
-      if (!res.ok) {
-        throw new Error(res.error || t("addVendorKeyFailed"));
-      }
-    },
-    onSuccess: () => {
-      toast.success(t("addVendorKeySuccess"));
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
-      queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-      setAddOpen(false);
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : t("addVendorKeyFailed"));
-    },
-  });
-
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    addKeyMutation.mutate();
-  };
-
-  const providerTypeItems: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
+  const defaultProviderType: ProviderType = props.providers[0]?.providerType ?? "claude";
+  const vendorAllowedTypes: ProviderType[] = [
+    "claude",
+    "claude-auth",
+    "codex",
+    "gemini",
+    "gemini-cli",
+  ];
+  const statistics = props.statistics ?? {};
+  const statisticsLoading = props.statisticsLoading ?? false;
+  const currencyCode = props.currencyCode ?? "USD";
 
   return (
     <div className="border-b">
       <div className="px-6 py-1.5 bg-muted/10 font-medium text-sm text-muted-foreground flex items-center justify-between">
         <span>{t("vendorKeys")}</span>
-        {canEdit && (
-          <Button size="sm" className="h-7 gap-1" onClick={() => setAddOpen(true)}>
-            <Plus className="h-3.5 w-3.5" />
-            {t("addVendorKey")}
-          </Button>
-        )}
+        {canEdit ? (
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-7 gap-1">
+                <Plus className="h-3.5 w-3.5" />
+                {t("addVendorKey")}
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+              <FormErrorBoundary>
+                <ProviderForm
+                  mode="create"
+                  enableMultiProviderTypes={props.enableMultiProviderTypes}
+                  hideUrl
+                  hideWebsiteUrl
+                  allowedProviderTypes={vendorAllowedTypes}
+                  preset={{
+                    name: buildDefaultProviderName({
+                      vendorWebsiteDomain: props.vendorWebsiteDomain,
+                      providerType: defaultProviderType,
+                    }),
+                    providerType: defaultProviderType,
+                    websiteUrl: props.vendorWebsiteUrl ?? "",
+                  }}
+                  urlResolver={async (type) => {
+                    const endpoints = await getProviderEndpoints({
+                      vendorId: props.vendorId,
+                      providerType: type,
+                    });
+                    const enabled = endpoints.find((e) => e.isEnabled);
+                    return (enabled ?? endpoints[0])?.url ?? null;
+                  }}
+                  onSuccess={() => {
+                    setCreateOpen(false);
+                    queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                  }}
+                />
+              </FormErrorBoundary>
+            </DialogContent>
+          </Dialog>
+        ) : null}
       </div>
 
       {props.providers.length === 0 ? (
@@ -182,96 +145,124 @@ export function VendorKeysCompactList(props: {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="h-7 w-[160px]">{tForm("providerType")}</TableHead>
+                <TableHead className="h-7 w-10">
+                  <span className="sr-only">{tForm("providerType")}</span>
+                </TableHead>
+                <TableHead className="h-7 min-w-[140px]">{tForm("name.label")}</TableHead>
                 <TableHead className="h-7">{tForm("key.label")}</TableHead>
-                <TableHead className="h-7 w-[120px] text-right">{t("columnActions")}</TableHead>
+                <TableHead className="hidden md:table-cell h-7 w-[90px] text-right">
+                  {tList("priority")}
+                </TableHead>
+                <TableHead className="hidden md:table-cell h-7 w-[90px] text-right">
+                  {tList("weight")}
+                </TableHead>
+                <TableHead className="hidden md:table-cell h-7 w-[110px] text-right">
+                  {tList("costMultiplier")}
+                </TableHead>
+                <TableHead className="hidden lg:table-cell h-7 w-[140px] text-right">
+                  {tList("todayUsageLabel")}
+                </TableHead>
+                <TableHead className="h-7 w-[140px] text-right">{t("columnActions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {props.providers.map((provider) => (
-                <VendorKeyRow key={provider.id} provider={provider} canEdit={canEdit} />
+                <VendorKeyRow
+                  key={provider.id}
+                  provider={provider}
+                  canEdit={canEdit}
+                  statistics={statistics[provider.id]}
+                  statisticsLoading={statisticsLoading}
+                  currencyCode={currencyCode}
+                  allowedProviderTypes={vendorAllowedTypes}
+                  enableMultiProviderTypes={props.enableMultiProviderTypes}
+                />
               ))}
             </TableBody>
           </Table>
         </div>
       )}
-
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{t("addVendorKey")}</DialogTitle>
-            <DialogDescription>{t("addVendorKeyDesc")}</DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleAddSubmit} className="space-y-4">
-            {props.enableMultiProviderTypes && (
-              <div className="space-y-2">
-                <Label htmlFor="vendor-key-provider-type">{tForm("providerType")}</Label>
-                <Select
-                  value={addProviderType}
-                  onValueChange={(value) => setAddProviderType(value as ProviderType)}
-                >
-                  <SelectTrigger id="vendor-key-provider-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {providerTypeItems.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {tTypes(`${getProviderTypeTranslationKey(type)}.label`)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="vendor-key-api-key">{tForm("key.label")}</Label>
-              <Input
-                id="vendor-key-api-key"
-                value={addKeyValue}
-                onChange={(e) => setAddKeyValue(e.target.value)}
-                placeholder={tForm("key.placeholder")}
-                disabled={addKeyMutation.isPending}
-                required
-              />
-            </div>
-
-            {!isEndpointsLoading && !firstEndpointUrl && (
-              <div className="text-xs text-muted-foreground">{t("noEndpointsDesc")}</div>
-            )}
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>
-                {tCommon("cancel")}
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  addKeyMutation.isPending ||
-                  isEndpointsLoading ||
-                  !firstEndpointUrl ||
-                  addKeyValue.trim().length === 0
-                }
-              >
-                {addKeyMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {tCommon("create")}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
-function VendorKeyRow(props: { provider: ProviderDisplay; canEdit: boolean }) {
+function VendorKeyRow(props: {
+  provider: ProviderDisplay;
+  canEdit: boolean;
+  statistics?: {
+    todayCost: string;
+    todayCalls: number;
+    lastCallTime: string | null;
+    lastCallModel: string | null;
+  };
+  statisticsLoading: boolean;
+  currencyCode: CurrencyCode;
+  allowedProviderTypes: ProviderType[];
+  enableMultiProviderTypes: boolean;
+}) {
   const t = useTranslations("settings.providers");
   const tList = useTranslations("settings.providers.list");
+  const tInline = useTranslations("settings.providers.inlineEdit");
   const tTypes = useTranslations("settings.providers.types");
 
   const queryClient = useQueryClient();
+  const router = useRouter();
 
+  const validatePriority = (raw: string) => {
+    if (raw.length === 0) return tInline("priorityInvalid");
+    const value = Number(raw);
+    if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 2147483647)
+      return tInline("priorityInvalid");
+    return null;
+  };
+
+  const validateWeight = (raw: string) => {
+    if (raw.length === 0) return tInline("weightInvalid");
+    const value = Number(raw);
+    if (
+      !Number.isFinite(value) ||
+      !Number.isInteger(value) ||
+      value < PROVIDER_LIMITS.WEIGHT.MIN ||
+      value > PROVIDER_LIMITS.WEIGHT.MAX
+    )
+      return tInline("weightInvalid");
+    return null;
+  };
+
+  const validateCostMultiplier = (raw: string) => {
+    if (raw.length === 0) return tInline("costMultiplierInvalid");
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) return tInline("costMultiplierInvalid");
+    return null;
+  };
+
+  const createSaveHandler = (fieldName: "priority" | "weight" | "cost_multiplier") => {
+    return async (value: number) => {
+      try {
+        const res = await editProvider(props.provider.id, { [fieldName]: value });
+        if (res.ok) {
+          toast.success(tInline("saveSuccess"));
+          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+          router.refresh();
+          return true;
+        }
+        toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
+        return false;
+      } catch (error) {
+        console.error(`Failed to update ${fieldName}:`, error);
+        toast.error(tInline("saveFailed"), { description: tList("unknownError") });
+        return false;
+      }
+    };
+  };
+
+  const handleSavePriority = createSaveHandler("priority");
+  const handleSaveWeight = createSaveHandler("weight");
+  const handleSaveCostMultiplier = createSaveHandler("cost_multiplier");
+
+  const typeConfig = getProviderTypeConfig(props.provider.providerType);
+  const TypeIcon = typeConfig.icon;
   const typeLabel = tTypes(`${getProviderTypeTranslationKey(props.provider.providerType)}.label`);
 
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
@@ -279,6 +270,7 @@ function VendorKeyRow(props: { provider: ProviderDisplay; canEdit: boolean }) {
   const [copied, setCopied] = useState(false);
   const [clipboardAvailable, setClipboardAvailable] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   useEffect(() => {
     setClipboardAvailable(isClipboardSupported());
@@ -292,6 +284,7 @@ function VendorKeyRow(props: { provider: ProviderDisplay; canEdit: boolean }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+      router.refresh();
     },
     onError: () => {
       toast.error(t("toggleFailed"));
@@ -310,6 +303,7 @@ function VendorKeyRow(props: { provider: ProviderDisplay; canEdit: boolean }) {
       toast.success(tList("deleteSuccess"), {
         description: tList("deleteSuccessDesc", { name: props.provider.name }),
       });
+      router.refresh();
     },
     onError: () => {
       toast.error(tList("deleteFailed"));
@@ -358,8 +352,23 @@ function VendorKeyRow(props: { provider: ProviderDisplay; canEdit: boolean }) {
 
   return (
     <>
-      <TableRow className="h-8">
-        <TableCell className="py-1 text-sm font-medium">{typeLabel}</TableCell>
+      <TableRow className="h-8 group">
+        <TableCell className="py-1">
+          <div className="flex items-center gap-2">
+            <div
+              className={`h-6 w-6 rounded-md flex items-center justify-center ${typeConfig.bgColor}`}
+              title={typeLabel}
+            >
+              <TypeIcon className={`h-4 w-4 ${typeConfig.iconColor}`} />
+            </div>
+            <span className="text-sm font-medium">{typeLabel}</span>
+          </div>
+        </TableCell>
+        <TableCell className="py-1 min-w-0">
+          <div className="text-sm font-medium truncate" title={props.provider.name}>
+            {props.provider.name}
+          </div>
+        </TableCell>
         <TableCell className="py-1">
           {props.canEdit ? (
             <button
@@ -375,8 +384,105 @@ function VendorKeyRow(props: { provider: ProviderDisplay; canEdit: boolean }) {
             </span>
           )}
         </TableCell>
+        <TableCell className="hidden md:table-cell py-1 text-right text-sm tabular-nums">
+          {props.canEdit ? (
+            <InlineEditPopover
+              value={props.provider.priority}
+              label={tInline("priorityLabel")}
+              type="integer"
+              validator={validatePriority}
+              onSave={handleSavePriority}
+            />
+          ) : (
+            <span className="text-xs">{props.provider.priority}</span>
+          )}
+        </TableCell>
+        <TableCell className="hidden md:table-cell py-1 text-right text-sm tabular-nums">
+          {props.canEdit ? (
+            <InlineEditPopover
+              value={props.provider.weight}
+              label={tInline("weightLabel")}
+              type="integer"
+              validator={validateWeight}
+              onSave={handleSaveWeight}
+            />
+          ) : (
+            <span className="text-xs">{props.provider.weight}</span>
+          )}
+        </TableCell>
+        <TableCell className="hidden md:table-cell py-1 text-right text-sm tabular-nums">
+          {props.canEdit ? (
+            <InlineEditPopover
+              value={props.provider.costMultiplier}
+              label={tInline("costMultiplierLabel")}
+              validator={validateCostMultiplier}
+              onSave={handleSaveCostMultiplier}
+              suffix="x"
+              type="number"
+            />
+          ) : (
+            <span className="text-xs">{props.provider.costMultiplier}x</span>
+          )}
+        </TableCell>
+        <TableCell className="hidden lg:table-cell py-1 text-right">
+          {props.statisticsLoading ? (
+            <span className="text-xs text-muted-foreground">{tList("keyLoading")}</span>
+          ) : (
+            <div className="flex flex-col items-end">
+              <span className="text-xs tabular-nums">
+                {tList("todayUsageCount", {
+                  count: props.statistics?.todayCalls ?? props.provider.todayCallCount ?? 0,
+                })}
+              </span>
+              <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
+                {formatCurrency(
+                  parseFloat(
+                    props.statistics?.todayCost ?? props.provider.todayTotalCostUsd ?? "0"
+                  ),
+                  props.currencyCode
+                )}
+              </span>
+            </div>
+          )}
+        </TableCell>
         <TableCell className="py-1 text-right">
           <div className="flex items-center justify-end gap-2">
+            {props.canEdit ? (
+              <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={t("editProvider")}
+                  >
+                    <Edit2 className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+                  <FormErrorBoundary>
+                    <ProviderForm
+                      mode="edit"
+                      provider={props.provider}
+                      enableMultiProviderTypes={props.enableMultiProviderTypes}
+                      hideUrl
+                      hideWebsiteUrl
+                      allowedProviderTypes={
+                        props.allowedProviderTypes.includes(props.provider.providerType)
+                          ? props.allowedProviderTypes
+                          : [...props.allowedProviderTypes, props.provider.providerType]
+                      }
+                      onSuccess={() => {
+                        setEditOpen(false);
+                        queryClient.invalidateQueries({ queryKey: ["providers"] });
+                        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                        router.refresh();
+                      }}
+                    />
+                  </FormErrorBoundary>
+                </DialogContent>
+              </Dialog>
+            ) : null}
             {props.canEdit && (
               <Switch
                 checked={props.provider.isEnabled}
@@ -390,7 +496,7 @@ function VendorKeyRow(props: { provider: ProviderDisplay; canEdit: boolean }) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-destructive hover:text-destructive"
+                    className="h-7 w-7 text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                     disabled={deleteMutation.isPending}
                   >
                     {deleteMutation.isPending ? (

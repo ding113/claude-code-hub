@@ -33,6 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import {
   extractBaseUrl,
@@ -65,6 +66,16 @@ interface ProviderFormProps {
   provider?: ProviderDisplay; // edit 模式需要，create 可空
   cloneProvider?: ProviderDisplay; // create 模式用于克隆数据
   enableMultiProviderTypes: boolean;
+  hideUrl?: boolean;
+  hideWebsiteUrl?: boolean;
+  preset?: {
+    name?: string;
+    url?: string;
+    websiteUrl?: string;
+    providerType?: ProviderType;
+  };
+  urlResolver?: (providerType: ProviderType) => Promise<string | null>;
+  allowedProviderTypes?: ProviderType[];
 }
 
 function FieldLabelWithTooltip({
@@ -103,11 +114,38 @@ export function ProviderForm({
   provider,
   cloneProvider,
   enableMultiProviderTypes,
+  hideUrl = false,
+  hideWebsiteUrl = false,
+  preset,
+  urlResolver,
+  allowedProviderTypes,
 }: ProviderFormProps) {
   const t = useTranslations("settings.providers.form");
   const tUI = useTranslations("ui.tagInput");
+  const tProviders = useTranslations("settings.providers");
   const isEdit = mode === "edit";
   const [isPending, startTransition] = useTransition();
+
+  const renderProviderTypeLabel = (type: ProviderType) => {
+    switch (type) {
+      case "claude":
+        return t("providerTypes.claude");
+      case "claude-auth":
+        return t("providerTypes.claudeAuth");
+      case "codex":
+        return t("providerTypes.codex");
+      case "gemini":
+        return t("providerTypes.gemini");
+      case "gemini-cli":
+        return t("providerTypes.geminiCli");
+      case "openai-compatible":
+        return enableMultiProviderTypes
+          ? t("providerTypes.openaiCompatible")
+          : `${t("providerTypes.openaiCompatible")}${t("providerTypes.openaiCompatibleDisabled")}`;
+      default:
+        return type;
+    }
+  };
 
   // 名称输入框引用，用于自动聚焦
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -116,12 +154,16 @@ export function ProviderForm({
   const sourceProvider = isEdit ? provider : cloneProvider;
 
   const [name, setName] = useState(
-    isEdit ? (provider?.name ?? "") : cloneProvider ? `${cloneProvider.name}_Copy` : ""
+    isEdit
+      ? (provider?.name ?? "")
+      : cloneProvider
+        ? `${cloneProvider.name}_Copy`
+        : (preset?.name ?? "")
   );
-  const [url, setUrl] = useState(sourceProvider?.url ?? "");
+  const [url, setUrl] = useState(sourceProvider?.url ?? preset?.url ?? "");
   const [key, setKey] = useState(""); // 编辑时留空代表不更新
   const [providerType, setProviderType] = useState<ProviderType>(
-    sourceProvider?.providerType ?? "claude"
+    sourceProvider?.providerType ?? preset?.providerType ?? "claude"
   );
   const [preserveClientIp, setPreserveClientIp] = useState<boolean>(
     sourceProvider?.preserveClientIp ?? false
@@ -241,7 +283,35 @@ export function ProviderForm({
   });
 
   // 供应商官网地址
-  const [websiteUrl, setWebsiteUrl] = useState<string>(sourceProvider?.websiteUrl ?? "");
+  const [websiteUrl, setWebsiteUrl] = useState<string>(
+    sourceProvider?.websiteUrl ?? preset?.websiteUrl ?? ""
+  );
+  const [autoUrlPending, setAutoUrlPending] = useState(false);
+
+  useEffect(() => {
+    if (isEdit) return;
+    if (!hideUrl || !urlResolver) return;
+
+    let cancelled = false;
+    setAutoUrlPending(true);
+    urlResolver(providerType)
+      .then((resolved) => {
+        if (cancelled) return;
+        setUrl(resolved?.trim() ? resolved.trim() : "");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setUrl("");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setAutoUrlPending(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, hideUrl, urlResolver, providerType]);
 
   // MCP 透传配置
   const [mcpPassthroughType, setMcpPassthroughType] = useState<McpPassthroughType>(
@@ -347,7 +417,14 @@ export function ProviderForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim() || !url.trim() || (!isEdit && !key.trim())) {
+    if (!name.trim() || (!isEdit && !key.trim())) {
+      return;
+    }
+
+    if (!url.trim()) {
+      if (hideUrl) {
+        toast.error(tProviders("noEndpoints"));
+      }
       return;
     }
 
@@ -475,7 +552,6 @@ export function ProviderForm({
             circuit_breaker_half_open_success_threshold: halfOpenSuccessThreshold ?? 2,
             proxy_url: proxyUrl.trim() || null,
             proxy_fallback_to_direct: proxyFallbackToDirect,
-            // ⭐ 编辑模式：undefined 代表不更新(沿用数据库旧值),不能回退到默认值
             first_byte_timeout_streaming_ms:
               firstByteTimeoutStreamingSeconds != null
                 ? firstByteTimeoutStreamingSeconds * 1000
@@ -639,19 +715,33 @@ export function ProviderForm({
 
           {/* 移除描述字段 */}
 
-          <div className="space-y-2">
-            <Label htmlFor={isEdit ? "edit-url" : "url"}>{t("url.label")}</Label>
-            <Input
-              id={isEdit ? "edit-url" : "url"}
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder={t("url.placeholder")}
-              disabled={isPending}
-              required
-            />
-            {/* URL 预览组件 - 实时显示端点拼接结果 */}
-            {url.trim() && <UrlPreview baseUrl={url} providerType={providerType} />}
-          </div>
+          {!hideUrl ? (
+            <div className="space-y-2">
+              <Label htmlFor={isEdit ? "edit-url" : "url"}>{t("url.label")}</Label>
+              <Input
+                id={isEdit ? "edit-url" : "url"}
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder={t("url.placeholder")}
+                disabled={isPending}
+                required
+              />
+              {url.trim() && <UrlPreview baseUrl={url} providerType={providerType} />}
+            </div>
+          ) : null}
+
+          {hideUrl && !isEdit && !autoUrlPending && !url.trim() ? (
+            <div className="rounded-md border border-dashed p-3">
+              <div className="text-sm font-medium">{tProviders("noEndpoints")}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {tProviders("noEndpointsDesc")}
+              </div>
+            </div>
+          ) : null}
+
+          {hideUrl && !isEdit && autoUrlPending ? (
+            <div className="text-xs text-muted-foreground">{tProviders("keyLoading")}</div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor={isEdit ? "edit-key" : "key"}>
@@ -674,20 +764,22 @@ export function ProviderForm({
             ) : null}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor={isEdit ? "edit-website-url" : "website-url"}>
-              {t("websiteUrl.label")}
-            </Label>
-            <Input
-              id={isEdit ? "edit-website-url" : "website-url"}
-              type="url"
-              value={websiteUrl}
-              onChange={(e) => setWebsiteUrl(e.target.value)}
-              placeholder={t("websiteUrl.placeholder")}
-              disabled={isPending}
-            />
-            <div className="text-xs text-muted-foreground">{t("websiteUrl.desc")}</div>
-          </div>
+          {!hideWebsiteUrl ? (
+            <div className="space-y-2">
+              <Label htmlFor={isEdit ? "edit-website-url" : "website-url"}>
+                {t("websiteUrl.label")}
+              </Label>
+              <Input
+                id={isEdit ? "edit-website-url" : "website-url"}
+                type="url"
+                value={websiteUrl}
+                onChange={(e) => setWebsiteUrl(e.target.value)}
+                placeholder={t("websiteUrl.placeholder")}
+                disabled={isPending}
+              />
+              <div className="text-xs text-muted-foreground">{t("websiteUrl.desc")}</div>
+            </div>
+          ) : null}
 
           {/* 展开/折叠全部按钮 */}
           <div className="flex gap-2 py-2 border-t">
@@ -765,15 +857,34 @@ export function ProviderForm({
                       <SelectValue placeholder={t("sections.routing.providerType.placeholder")} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="claude">{t("providerTypes.claude")}</SelectItem>
-                      <SelectItem value="claude-auth">{t("providerTypes.claudeAuth")}</SelectItem>
-                      <SelectItem value="codex">{t("providerTypes.codex")}</SelectItem>
-                      <SelectItem value="gemini">{t("providerTypes.gemini")}</SelectItem>
-                      <SelectItem value="gemini-cli">{t("providerTypes.geminiCli")}</SelectItem>
-                      <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
-                        {t("providerTypes.openaiCompatible")}{" "}
-                        {!enableMultiProviderTypes && t("providerTypes.openaiCompatibleDisabled")}
-                      </SelectItem>
+                      {(
+                        allowedProviderTypes ?? [
+                          "claude",
+                          "claude-auth",
+                          "codex",
+                          "gemini",
+                          "gemini-cli",
+                          "openai-compatible",
+                        ]
+                      ).map((type) => {
+                        const typeConfig = getProviderTypeConfig(type);
+                        const TypeIcon = typeConfig.icon;
+                        const label = renderProviderTypeLabel(type);
+                        const disabled =
+                          type === "openai-compatible" ? !enableMultiProviderTypes : false;
+                        return (
+                          <SelectItem key={type} value={type} disabled={disabled}>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`inline-flex h-5 w-5 items-center justify-center rounded ${typeConfig.bgColor}`}
+                              >
+                                <TypeIcon className={`h-3.5 w-3.5 ${typeConfig.iconColor}`} />
+                              </span>
+                              <span>{label}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
@@ -957,81 +1068,106 @@ export function ProviderForm({
 
                 {/* 路由配置 - 优先级、权重、成本 */}
                 <div className="space-y-4">
-                  <div className="text-sm font-medium">
-                    {t("sections.routing.scheduleParams.title")}
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor={isEdit ? "edit-priority" : "priority"}>
-                        {t("sections.routing.scheduleParams.priority.label")}
-                      </Label>
-                      <Input
-                        id={isEdit ? "edit-priority" : "priority"}
-                        type="number"
-                        value={priority}
-                        onChange={(e) => setPriority(parseInt(e.target.value, 10) || 0)}
-                        placeholder={t("sections.routing.scheduleParams.priority.placeholder")}
-                        disabled={isPending}
-                        min="0"
-                        step="1"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {t("sections.routing.scheduleParams.priority.desc")}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor={isEdit ? "edit-weight" : "weight"}>
-                        {t("sections.routing.scheduleParams.weight.label")}
-                      </Label>
-                      <Input
-                        id={isEdit ? "edit-weight" : "weight"}
-                        type="number"
-                        value={weight}
-                        onChange={(e) => setWeight(parseInt(e.target.value, 10) || 1)}
-                        placeholder={t("sections.routing.scheduleParams.weight.placeholder")}
-                        disabled={isPending}
-                        min="1"
-                        step="1"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {t("sections.routing.scheduleParams.weight.desc")}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor={isEdit ? "edit-cost" : "cost"}>
-                        {t("sections.routing.scheduleParams.costMultiplier.label")}
-                      </Label>
-                      <Input
-                        id={isEdit ? "edit-cost" : "cost"}
-                        type="number"
-                        value={costMultiplier}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          if (value === "") {
-                            setCostMultiplier(1.0);
-                            return;
-                          }
-                          const num = parseFloat(value);
-                          setCostMultiplier(Number.isNaN(num) ? 1.0 : num);
-                        }}
-                        onFocus={(e) => e.target.select()}
-                        placeholder={t(
-                          "sections.routing.scheduleParams.costMultiplier.placeholder"
-                        )}
-                        disabled={isPending}
-                        min="0"
-                        step="0.0001"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        {t("sections.routing.scheduleParams.costMultiplier.desc")}
-                      </p>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-priority" : "priority"}>
+                      {t("sections.routing.scheduleParams.priority.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-priority" : "priority"}
+                      type="number"
+                      value={priority}
+                      onChange={(e) => setPriority(parseInt(e.target.value, 10) || 0)}
+                      placeholder={t("sections.routing.scheduleParams.priority.placeholder")}
+                      disabled={isPending}
+                      min="0"
+                      step="1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.scheduleParams.priority.desc")}
+                    </p>
                   </div>
                   <div className="space-y-2">
-                    <Label>{t("sections.routing.cacheTtl.label")}</Label>
+                    <Label htmlFor={isEdit ? "edit-weight" : "weight"}>
+                      {t("sections.routing.scheduleParams.weight.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-weight" : "weight"}
+                      type="number"
+                      value={weight}
+                      onChange={(e) => setWeight(parseInt(e.target.value, 10) || 1)}
+                      placeholder={t("sections.routing.scheduleParams.weight.placeholder")}
+                      disabled={isPending}
+                      min="1"
+                      step="1"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.scheduleParams.weight.desc")}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-cost" : "cost"}>
+                      {t("sections.routing.scheduleParams.costMultiplier.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-cost" : "cost"}
+                      type="number"
+                      value={costMultiplier}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === "") {
+                          setCostMultiplier(1.0);
+                          return;
+                        }
+                        const num = parseFloat(value);
+                        setCostMultiplier(Number.isNaN(num) ? 1.0 : num);
+                      }}
+                      onFocus={(e) => e.target.select()}
+                      placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
+                      disabled={isPending}
+                      min="0"
+                      step="0.0001"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.scheduleParams.costMultiplier.desc")}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t("sections.routing.cacheTtl.label")}</Label>
+                  <Select
+                    value={cacheTtlPreference}
+                    onValueChange={(val) => setCacheTtlPreference(val as "inherit" | "5m" | "1h")}
+                    disabled={isPending}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="inherit" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">
+                        {t("sections.routing.cacheTtl.options.inherit")}
+                      </SelectItem>
+                      <SelectItem value="5m">
+                        {t("sections.routing.cacheTtl.options.5m")}
+                      </SelectItem>
+                      <SelectItem value="1h">
+                        {t("sections.routing.cacheTtl.options.1h")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.routing.cacheTtl.desc")}
+                  </p>
+                </div>
+
+                {/* 1M Context Window 配置 - 仅 Anthropic 类型供应商显示 */}
+                {(providerType === "claude" || providerType === "claude-auth") && (
+                  <div className="space-y-2">
+                    <Label>{t("sections.routing.context1m.label")}</Label>
                     <Select
-                      value={cacheTtlPreference}
-                      onValueChange={(val) => setCacheTtlPreference(val as "inherit" | "5m" | "1h")}
+                      value={context1mPreference}
+                      onValueChange={(val) =>
+                        setContext1mPreference(val as "inherit" | "force_enable" | "disabled")
+                      }
                       disabled={isPending}
                     >
                       <SelectTrigger className="w-full">
@@ -1039,29 +1175,34 @@ export function ProviderForm({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="inherit">
-                          {t("sections.routing.cacheTtl.options.inherit")}
+                          {t("sections.routing.context1m.options.inherit")}
                         </SelectItem>
-                        <SelectItem value="5m">
-                          {t("sections.routing.cacheTtl.options.5m")}
+                        <SelectItem value="force_enable">
+                          {t("sections.routing.context1m.options.forceEnable")}
                         </SelectItem>
-                        <SelectItem value="1h">
-                          {t("sections.routing.cacheTtl.options.1h")}
+                        <SelectItem value="disabled">
+                          {t("sections.routing.context1m.options.disabled")}
                         </SelectItem>
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {t("sections.routing.cacheTtl.desc")}
+                      {t("sections.routing.context1m.desc")}
                     </p>
                   </div>
+                )}
 
-                  {/* 1M Context Window 配置 - 仅 Anthropic 类型供应商显示 */}
-                  {(providerType === "claude" || providerType === "claude-auth") && (
+                {/* Codex 参数覆写 - 仅 Codex 类型供应商显示 */}
+                {providerType === "codex" && (
+                  <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>{t("sections.routing.context1m.label")}</Label>
+                      <FieldLabelWithTooltip
+                        label={t("sections.routing.codexOverrides.reasoningEffort.label")}
+                        tooltip={t("sections.routing.codexOverrides.reasoningEffort.help")}
+                      />
                       <Select
-                        value={context1mPreference}
+                        value={codexReasoningEffortPreference}
                         onValueChange={(val) =>
-                          setContext1mPreference(val as "inherit" | "force_enable" | "disabled")
+                          setCodexReasoningEffortPreference(val as CodexReasoningEffortPreference)
                         }
                         disabled={isPending}
                       >
@@ -1070,168 +1211,123 @@ export function ProviderForm({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="inherit">
-                            {t("sections.routing.context1m.options.inherit")}
+                            {t("sections.routing.codexOverrides.reasoningEffort.options.inherit")}
                           </SelectItem>
-                          <SelectItem value="force_enable">
-                            {t("sections.routing.context1m.options.forceEnable")}
+                          <SelectItem value="minimal">
+                            {t("sections.routing.codexOverrides.reasoningEffort.options.minimal")}
                           </SelectItem>
-                          <SelectItem value="disabled">
-                            {t("sections.routing.context1m.options.disabled")}
+                          <SelectItem value="low">
+                            {t("sections.routing.codexOverrides.reasoningEffort.options.low")}
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            {t("sections.routing.codexOverrides.reasoningEffort.options.medium")}
+                          </SelectItem>
+                          <SelectItem value="high">
+                            {t("sections.routing.codexOverrides.reasoningEffort.options.high")}
+                          </SelectItem>
+                          <SelectItem value="xhigh">
+                            {t("sections.routing.codexOverrides.reasoningEffort.options.xhigh")}
+                          </SelectItem>
+                          <SelectItem value="none">
+                            {t("sections.routing.codexOverrides.reasoningEffort.options.none")}
                           </SelectItem>
                         </SelectContent>
                       </Select>
-                      <p className="text-xs text-muted-foreground">
-                        {t("sections.routing.context1m.desc")}
-                      </p>
                     </div>
-                  )}
 
-                  {/* Codex 参数覆写 - 仅 Codex 类型供应商显示 */}
-                  {providerType === "codex" && (
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <FieldLabelWithTooltip
-                          label={t("sections.routing.codexOverrides.reasoningEffort.label")}
-                          tooltip={t("sections.routing.codexOverrides.reasoningEffort.help")}
-                        />
-                        <Select
-                          value={codexReasoningEffortPreference}
-                          onValueChange={(val) =>
-                            setCodexReasoningEffortPreference(val as CodexReasoningEffortPreference)
-                          }
-                          disabled={isPending}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="inherit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="inherit">
-                              {t("sections.routing.codexOverrides.reasoningEffort.options.inherit")}
-                            </SelectItem>
-                            <SelectItem value="minimal">
-                              {t("sections.routing.codexOverrides.reasoningEffort.options.minimal")}
-                            </SelectItem>
-                            <SelectItem value="low">
-                              {t("sections.routing.codexOverrides.reasoningEffort.options.low")}
-                            </SelectItem>
-                            <SelectItem value="medium">
-                              {t("sections.routing.codexOverrides.reasoningEffort.options.medium")}
-                            </SelectItem>
-                            <SelectItem value="high">
-                              {t("sections.routing.codexOverrides.reasoningEffort.options.high")}
-                            </SelectItem>
-                            <SelectItem value="xhigh">
-                              {t("sections.routing.codexOverrides.reasoningEffort.options.xhigh")}
-                            </SelectItem>
-                            <SelectItem value="none">
-                              {t("sections.routing.codexOverrides.reasoningEffort.options.none")}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <FieldLabelWithTooltip
-                          label={t("sections.routing.codexOverrides.reasoningSummary.label")}
-                          tooltip={t("sections.routing.codexOverrides.reasoningSummary.help")}
-                        />
-                        <Select
-                          value={codexReasoningSummaryPreference}
-                          onValueChange={(val) =>
-                            setCodexReasoningSummaryPreference(
-                              val as CodexReasoningSummaryPreference
-                            )
-                          }
-                          disabled={isPending}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="inherit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="inherit">
-                              {t(
-                                "sections.routing.codexOverrides.reasoningSummary.options.inherit"
-                              )}
-                            </SelectItem>
-                            <SelectItem value="auto">
-                              {t("sections.routing.codexOverrides.reasoningSummary.options.auto")}
-                            </SelectItem>
-                            <SelectItem value="detailed">
-                              {t(
-                                "sections.routing.codexOverrides.reasoningSummary.options.detailed"
-                              )}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <FieldLabelWithTooltip
-                          label={t("sections.routing.codexOverrides.textVerbosity.label")}
-                          tooltip={t("sections.routing.codexOverrides.textVerbosity.help")}
-                        />
-                        <Select
-                          value={codexTextVerbosityPreference}
-                          onValueChange={(val) =>
-                            setCodexTextVerbosityPreference(val as CodexTextVerbosityPreference)
-                          }
-                          disabled={isPending}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="inherit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="inherit">
-                              {t("sections.routing.codexOverrides.textVerbosity.options.inherit")}
-                            </SelectItem>
-                            <SelectItem value="low">
-                              {t("sections.routing.codexOverrides.textVerbosity.options.low")}
-                            </SelectItem>
-                            <SelectItem value="medium">
-                              {t("sections.routing.codexOverrides.textVerbosity.options.medium")}
-                            </SelectItem>
-                            <SelectItem value="high">
-                              {t("sections.routing.codexOverrides.textVerbosity.options.high")}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <FieldLabelWithTooltip
-                          label={t("sections.routing.codexOverrides.parallelToolCalls.label")}
-                          tooltip={t("sections.routing.codexOverrides.parallelToolCalls.help")}
-                        />
-                        <Select
-                          value={codexParallelToolCallsPreference}
-                          onValueChange={(val) =>
-                            setCodexParallelToolCallsPreference(
-                              val as CodexParallelToolCallsPreference
-                            )
-                          }
-                          disabled={isPending}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="inherit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="inherit">
-                              {t(
-                                "sections.routing.codexOverrides.parallelToolCalls.options.inherit"
-                              )}
-                            </SelectItem>
-                            <SelectItem value="true">
-                              {t("sections.routing.codexOverrides.parallelToolCalls.options.true")}
-                            </SelectItem>
-                            <SelectItem value="false">
-                              {t("sections.routing.codexOverrides.parallelToolCalls.options.false")}
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+                    <div className="space-y-2">
+                      <FieldLabelWithTooltip
+                        label={t("sections.routing.codexOverrides.reasoningSummary.label")}
+                        tooltip={t("sections.routing.codexOverrides.reasoningSummary.help")}
+                      />
+                      <Select
+                        value={codexReasoningSummaryPreference}
+                        onValueChange={(val) =>
+                          setCodexReasoningSummaryPreference(val as CodexReasoningSummaryPreference)
+                        }
+                        disabled={isPending}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="inherit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inherit">
+                            {t("sections.routing.codexOverrides.reasoningSummary.options.inherit")}
+                          </SelectItem>
+                          <SelectItem value="auto">
+                            {t("sections.routing.codexOverrides.reasoningSummary.options.auto")}
+                          </SelectItem>
+                          <SelectItem value="detailed">
+                            {t("sections.routing.codexOverrides.reasoningSummary.options.detailed")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
-                </div>
+
+                    <div className="space-y-2">
+                      <FieldLabelWithTooltip
+                        label={t("sections.routing.codexOverrides.textVerbosity.label")}
+                        tooltip={t("sections.routing.codexOverrides.textVerbosity.help")}
+                      />
+                      <Select
+                        value={codexTextVerbosityPreference}
+                        onValueChange={(val) =>
+                          setCodexTextVerbosityPreference(val as CodexTextVerbosityPreference)
+                        }
+                        disabled={isPending}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="inherit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inherit">
+                            {t("sections.routing.codexOverrides.textVerbosity.options.inherit")}
+                          </SelectItem>
+                          <SelectItem value="low">
+                            {t("sections.routing.codexOverrides.textVerbosity.options.low")}
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            {t("sections.routing.codexOverrides.textVerbosity.options.medium")}
+                          </SelectItem>
+                          <SelectItem value="high">
+                            {t("sections.routing.codexOverrides.textVerbosity.options.high")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <FieldLabelWithTooltip
+                        label={t("sections.routing.codexOverrides.parallelToolCalls.label")}
+                        tooltip={t("sections.routing.codexOverrides.parallelToolCalls.help")}
+                      />
+                      <Select
+                        value={codexParallelToolCallsPreference}
+                        onValueChange={(val) =>
+                          setCodexParallelToolCallsPreference(
+                            val as CodexParallelToolCallsPreference
+                          )
+                        }
+                        disabled={isPending}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="inherit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inherit">
+                            {t("sections.routing.codexOverrides.parallelToolCalls.options.inherit")}
+                          </SelectItem>
+                          <SelectItem value="true">
+                            {t("sections.routing.codexOverrides.parallelToolCalls.options.true")}
+                          </SelectItem>
+                          <SelectItem value="false">
+                            {t("sections.routing.codexOverrides.parallelToolCalls.options.false")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
               </div>
             </CollapsibleContent>
           </Collapsible>

@@ -67,6 +67,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type {
@@ -91,7 +92,14 @@ interface ProviderVendorViewProps {
 }
 
 export function ProviderVendorView(props: ProviderVendorViewProps) {
-  const { providers, currentUser, enableMultiProviderTypes } = props;
+  const {
+    providers,
+    currentUser,
+    enableMultiProviderTypes,
+    statistics,
+    statisticsLoading,
+    currencyCode,
+  } = props;
 
   const { data: vendors = [], isLoading: isVendorsLoading } = useQuery({
     queryKey: ["provider-vendors"],
@@ -141,6 +149,9 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
             providers={vendorProviders}
             currentUser={currentUser}
             enableMultiProviderTypes={enableMultiProviderTypes}
+            statistics={statistics}
+            statisticsLoading={statisticsLoading}
+            currencyCode={currencyCode}
           />
         );
       })}
@@ -154,12 +165,18 @@ function VendorCard({
   providers,
   currentUser,
   enableMultiProviderTypes,
+  statistics,
+  statisticsLoading,
+  currencyCode,
 }: {
   vendor?: ProviderVendor;
   vendorId: number;
   providers: ProviderDisplay[];
   currentUser?: User;
   enableMultiProviderTypes: boolean;
+  statistics: Record<number, any>;
+  statisticsLoading: boolean;
+  currencyCode: CurrencyCode;
 }) {
   const t = useTranslations("settings.providers");
 
@@ -210,6 +227,9 @@ function VendorCard({
           providers={providers}
           currentUser={currentUser}
           enableMultiProviderTypes={enableMultiProviderTypes}
+          statistics={statistics}
+          statisticsLoading={statisticsLoading}
+          currencyCode={currencyCode}
         />
 
         {enableMultiProviderTypes && <VendorEndpointsSection vendorId={vendorId} />}
@@ -220,9 +240,10 @@ function VendorCard({
 
 function VendorEndpointsSection({ vendorId }: { vendorId: number }) {
   const t = useTranslations("settings.providers");
+  const tTypes = useTranslations("settings.providers.types");
   const [activeType, setActiveType] = useState<ProviderType>("claude");
 
-  const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
+  const providerTypes: ProviderType[] = ["claude", "claude-auth", "codex", "gemini", "gemini-cli"];
 
   return (
     <div>
@@ -234,17 +255,28 @@ function VendorEndpointsSection({ vendorId }: { vendorId: number }) {
         <div className="flex flex-col space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 bg-muted p-1 rounded-md">
-              {providerTypes.map((type) => (
-                <Button
-                  key={type}
-                  variant={activeType === type ? "default" : "ghost"}
-                  size="sm"
-                  onClick={() => setActiveType(type)}
-                  className="h-7 text-xs capitalize"
-                >
-                  {type}
-                </Button>
-              ))}
+              {providerTypes.map((type) => {
+                const typeConfig = getProviderTypeConfig(type);
+                const TypeIcon = typeConfig.icon;
+                const typeKey = getProviderTypeTranslationKey(type);
+                const label = tTypes(`${typeKey}.label`);
+                return (
+                  <Button
+                    key={type}
+                    variant={activeType === type ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setActiveType(type)}
+                    className="h-7 text-xs capitalize"
+                  >
+                    <span
+                      className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded ${typeConfig.bgColor}`}
+                    >
+                      <TypeIcon className={`h-3.5 w-3.5 ${typeConfig.iconColor}`} />
+                    </span>
+                    {label}
+                  </Button>
+                );
+              })}
             </div>
 
             <AddEndpointButton vendorId={vendorId} providerType={activeType} />
@@ -363,7 +395,7 @@ function EndpointsTable({
           <TableRow>
             <TableHead>{t("columnUrl")}</TableHead>
             <TableHead>{t("status")}</TableHead>
-            <TableHead>{t("latency")}</TableHead>
+            <TableHead className="w-[220px]">{t("latency")}</TableHead>
             <TableHead className="text-right">{t("columnActions")}</TableHead>
           </TableRow>
         </TableHeader>
