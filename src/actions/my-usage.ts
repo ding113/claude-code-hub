@@ -1,9 +1,11 @@
 "use server";
 
+import { fromZonedTime } from "date-fns-tz";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
@@ -395,15 +397,17 @@ export async function getMyUsageLogs(
     const pageSize = Math.min(rawPageSize, 100);
     const page = filters.page && filters.page > 0 ? filters.page : 1;
 
+    // Interpret date as midnight in the configured timezone (TZ)
+    const timezone = getEnvConfig().TZ;
     const parsedStart = filters.startDate
-      ? new Date(`${filters.startDate}T00:00:00`).getTime()
+      ? fromZonedTime(`${filters.startDate}T00:00:00`, timezone).getTime()
       : Number.NaN;
     const parsedEnd = filters.endDate
-      ? new Date(`${filters.endDate}T00:00:00`).getTime()
+      ? fromZonedTime(`${filters.endDate}T00:00:00`, timezone).getTime()
       : Number.NaN;
 
     const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
-    // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题
+    // endTime uses "next day midnight" as exclusive upper bound (created_at < endTime)
     const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
 
     const usageFilters: UsageLogFilters = {
@@ -543,15 +547,17 @@ export async function getMyStatsSummary(
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
-    // 日期字符串来自前端的 YYYY-MM-DD（目前使用 toISOString().split("T")[0] 生成），因此按 UTC 解析更一致。
-    // 注意：new Date("YYYY-MM-DDT00:00:00") 会按本地时区解析，可能导致跨时区边界偏移。
+    // Interpret date as midnight in the configured timezone (TZ)
+    const timezone = getEnvConfig().TZ;
     const parsedStart = filters.startDate
-      ? Date.parse(`${filters.startDate}T00:00:00.000Z`)
+      ? fromZonedTime(`${filters.startDate}T00:00:00`, timezone).getTime()
       : Number.NaN;
-    const parsedEnd = filters.endDate ? Date.parse(`${filters.endDate}T00:00:00.000Z`) : Number.NaN;
+    const parsedEnd = filters.endDate
+      ? fromZonedTime(`${filters.endDate}T00:00:00`, timezone).getTime()
+      : Number.NaN;
 
     const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
-    // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题
+    // endTime uses "next day midnight" as exclusive upper bound (created_at < endTime)
     const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
 
     // Get aggregated stats using existing repository function

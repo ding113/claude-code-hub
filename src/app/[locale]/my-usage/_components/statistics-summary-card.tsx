@@ -1,5 +1,6 @@
 "use client";
 
+import { format } from "date-fns";
 import {
   Activity,
   ArrowDownRight,
@@ -38,7 +39,7 @@ export function StatisticsSummaryCard({
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [dateRange, setDateRange] = useState<{ startDate?: string; endDate?: string }>(() => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = format(new Date(), "yyyy-MM-dd");
     return { startDate: today, endDate: today };
   });
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
