@@ -32,6 +32,7 @@ FROM node:trixie-slim AS runner
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
+ENV HOSTNAME=0.0.0.0
 WORKDIR /app
 
 # 安装 PostgreSQL 18 客户端工具（用于数据库备份/恢复功能）和 curl（用于健康检查）
