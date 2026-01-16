@@ -519,6 +519,8 @@ export interface ModelBreakdownItem {
   cost: number;
   inputTokens: number;
   outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
 }
 
 export interface MyStatsSummary extends UsageLogSummary {
@@ -567,6 +569,8 @@ export async function getMyStatsSummary(
         cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
         inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
         outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
       })
       .from(messageRequest)
       .where(
@@ -589,6 +593,8 @@ export async function getMyStatsSummary(
         cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
         inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
         outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
       })
       .from(messageRequest)
       .where(
@@ -611,6 +617,8 @@ export async function getMyStatsSummary(
         cost: Number(row.cost ?? 0),
         inputTokens: row.inputTokens,
         outputTokens: row.outputTokens,
+        cacheCreationTokens: row.cacheCreationTokens,
+        cacheReadTokens: row.cacheReadTokens,
       })),
       userModelBreakdown: userBreakdown.map((row) => ({
         model: row.model,
@@ -618,6 +626,8 @@ export async function getMyStatsSummary(
         cost: Number(row.cost ?? 0),
         inputTokens: row.inputTokens,
         outputTokens: row.outputTokens,
+        cacheCreationTokens: row.cacheCreationTokens,
+        cacheReadTokens: row.cacheReadTokens,
       })),
       currencyCode,
     };
