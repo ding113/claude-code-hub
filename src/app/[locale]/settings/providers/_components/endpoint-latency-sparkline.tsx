@@ -36,14 +36,14 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
   });
 
   if (points.length === 0) {
-    return <div className="h-6 w-24 rounded bg-muted/20" />;
+    return <div className="h-6 w-32 rounded bg-muted/20" />;
   }
 
   const lastPoint = points[points.length - 1];
   const stroke = lastPoint?.ok ? "#16a34a" : "#dc2626";
 
   return (
-    <div className="h-6 w-24">
+    <div className="h-6 w-32">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           <YAxis hide domain={[0, "dataMax + 50"]} />

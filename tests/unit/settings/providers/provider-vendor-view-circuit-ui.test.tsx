@@ -9,6 +9,7 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ProviderVendorView } from "@/app/[locale]/settings/providers/_components/provider-vendor-view";
+import type { User } from "@/types/user";
 import enMessages from "../../../../messages/en";
 
 const sonnerMocks = vi.hoisted(() => ({
@@ -22,7 +23,23 @@ vi.mock("sonner", () => sonnerMocks);
 const providerEndpointsActionMocks = vi.hoisted(() => ({
   addProviderEndpoint: vi.fn(async () => ({ ok: true, data: { endpoint: {} } })),
   editProviderEndpoint: vi.fn(async () => ({ ok: true, data: { endpoint: {} } })),
-  getProviderEndpoints: vi.fn(async () => []),
+  getProviderEndpointProbeLogs: vi.fn(async () => ({ ok: true, data: { logs: [] } })),
+  getProviderEndpoints: vi.fn(async () => [
+    {
+      id: 1,
+      vendorId: 1,
+      providerType: "claude",
+      url: "https://api.example.com/v1",
+      label: null,
+      sortOrder: 0,
+      isEnabled: true,
+      lastProbedAt: null,
+      lastOk: null,
+      lastLatencyMs: null,
+      createdAt: "2026-01-01",
+      updatedAt: "2026-01-01",
+    },
+  ]),
   getProviderVendors: vi.fn(async () => [
     {
       id: 1,
@@ -59,6 +76,22 @@ const providersActionMocks = vi.hoisted(() => ({
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: false })),
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
+
+const ADMIN_USER: User = {
+  id: 1,
+  name: "admin",
+  description: "",
+  role: "admin",
+  rpm: null,
+  dailyQuota: null,
+  providerGroup: null,
+  tags: [],
+  createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+  dailyResetMode: "fixed",
+  dailyResetTime: "00:00",
+  isEnabled: true,
+};
 
 function loadMessages() {
   return {
@@ -131,14 +164,12 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
     const { unmount } = renderWithProviders(
       <ProviderVendorView
         providers={[]}
-        currentUser={{ role: "admin" } as any}
+        currentUser={ADMIN_USER}
         enableMultiProviderTypes={true}
         healthStatus={{}}
         statistics={{}}
         statisticsLoading={false}
         currencyCode="USD"
-        as
-        any
       />
     );
 
@@ -146,6 +177,12 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
 
     expect(document.body.textContent || "").toContain("Close Circuit");
     expect(document.body.textContent || "").not.toContain("Manually Open Circuit");
+    expect(document.body.textContent || "").toContain("Gemini CLI");
+    expect(document.body.textContent || "").toContain("Claude Auth");
+    expect(document.body.textContent || "").not.toContain("OpenAI Compatible");
+
+    const latencyHeader = document.querySelector('th[class*="w-[220px]"]');
+    expect(latencyHeader?.textContent || "").toContain("Latency");
 
     unmount();
   });
@@ -166,14 +203,12 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
     const { unmount } = renderWithProviders(
       <ProviderVendorView
         providers={[]}
-        currentUser={{ role: "admin" } as any}
+        currentUser={ADMIN_USER}
         enableMultiProviderTypes={true}
         healthStatus={{}}
         statistics={{}}
         statisticsLoading={false}
         currencyCode="USD"
-        as
-        any
       />
     );
 
@@ -181,6 +216,12 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
 
     expect(document.body.textContent || "").not.toContain("Close Circuit");
     expect(document.body.textContent || "").not.toContain("Manually Open Circuit");
+    expect(document.body.textContent || "").toContain("Gemini CLI");
+    expect(document.body.textContent || "").toContain("Claude Auth");
+    expect(document.body.textContent || "").not.toContain("OpenAI Compatible");
+
+    const latencyHeader = document.querySelector('th[class*="w-[220px]"]');
+    expect(latencyHeader?.textContent || "").toContain("Latency");
 
     unmount();
   });

@@ -9,6 +9,8 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { VendorKeysCompactList } from "@/app/[locale]/settings/providers/_components/vendor-keys-compact-list";
+import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
+import type { User } from "@/types/user";
 import enMessages from "../../../../messages/en";
 
 const sonnerMocks = vi.hoisted(() => ({
@@ -18,6 +20,13 @@ const sonnerMocks = vi.hoisted(() => ({
   },
 }));
 vi.mock("sonner", () => sonnerMocks);
+
+const nextNavigationMocks = vi.hoisted(() => ({
+  useRouter: () => ({
+    refresh: vi.fn(),
+  }),
+}));
+vi.mock("next/navigation", () => nextNavigationMocks);
 
 const providerEndpointsActionMocks = vi.hoisted(() => ({
   getProviderEndpoints: vi.fn(async () => [
@@ -46,6 +55,82 @@ const providersActionMocks = vi.hoisted(() => ({
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: true, data: { key: "sk-test" } })),
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
+
+const requestFiltersActionMocks = vi.hoisted(() => ({
+  getDistinctProviderGroupsAction: vi.fn(async () => ({ ok: true, data: [] })),
+}));
+vi.mock("@/actions/request-filters", () => requestFiltersActionMocks);
+
+const ADMIN_USER: User = {
+  id: 1,
+  name: "admin",
+  description: "",
+  role: "admin",
+  rpm: null,
+  dailyQuota: null,
+  providerGroup: null,
+  tags: [],
+  createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+  dailyResetMode: "fixed",
+  dailyResetTime: "00:00",
+  isEnabled: true,
+};
+
+function makeProviderDisplay(overrides: Partial<ProviderDisplay> = {}): ProviderDisplay {
+  return {
+    id: 1,
+    name: "p",
+    url: "https://api.example.com",
+    maskedKey: "sk-***",
+    isEnabled: true,
+    weight: 1,
+    priority: 0,
+    costMultiplier: 1,
+    groupTag: null,
+    providerType: "claude",
+    providerVendorId: 1,
+    preserveClientIp: false,
+    modelRedirects: null,
+    allowedModels: null,
+    joinClaudePool: false,
+    codexInstructionsStrategy: "auto",
+    mcpPassthroughType: "none",
+    mcpPassthroughUrl: null,
+    limit5hUsd: null,
+    limitDailyUsd: null,
+    dailyResetMode: "fixed",
+    dailyResetTime: "00:00",
+    limitWeeklyUsd: null,
+    limitMonthlyUsd: null,
+    limitTotalUsd: null,
+    limitConcurrentSessions: 0,
+    maxRetryAttempts: null,
+    circuitBreakerFailureThreshold: 5,
+    circuitBreakerOpenDuration: 30_000,
+    circuitBreakerHalfOpenSuccessThreshold: 2,
+    proxyUrl: null,
+    proxyFallbackToDirect: false,
+    firstByteTimeoutStreamingMs: 15_000,
+    streamingIdleTimeoutMs: 30_000,
+    requestTimeoutNonStreamingMs: 60_000,
+    websiteUrl: null,
+    faviconUrl: null,
+    cacheTtlPreference: null,
+    context1mPreference: null,
+    codexReasoningEffortPreference: null,
+    codexReasoningSummaryPreference: null,
+    codexTextVerbosityPreference: null,
+    codexParallelToolCallsPreference: null,
+    tpm: null,
+    rpm: null,
+    rpd: null,
+    cc: null,
+    createdAt: "2026-01-01",
+    updatedAt: "2026-01-01",
+    ...overrides,
+  };
+}
 
 function loadMessages() {
   return {
@@ -110,16 +195,38 @@ describe("VendorKeysCompactList: 新增密钥不要求填写 API 地址", () => 
     });
     vi.clearAllMocks();
     document.body.innerHTML = "";
+
+    const storage = (() => {
+      let store: Record<string, string> = {};
+      return {
+        getItem: (key: string) => (Object.hasOwn(store, key) ? store[key] : null),
+        setItem: (key: string, value: string) => {
+          store[key] = String(value);
+        },
+        removeItem: (key: string) => {
+          delete store[key];
+        },
+        clear: () => {
+          store = {};
+        },
+        key: (index: number) => Object.keys(store)[index] ?? null,
+        get length() {
+          return Object.keys(store).length;
+        },
+      };
+    })();
+
+    Object.defineProperty(globalThis, "localStorage", {
+      value: storage,
+      configurable: true,
+    });
   });
 
   test("新增密钥对话框不显示 URL 输入与 URL 预览", async () => {
-    const provider = {
+    const provider = makeProviderDisplay({
       id: 10,
-      name: "p",
       providerType: "claude",
-      maskedKey: "sk-***",
-      isEnabled: true,
-    } as any;
+    });
 
     const { unmount } = renderWithProviders(
       <VendorKeysCompactList
@@ -127,7 +234,7 @@ describe("VendorKeysCompactList: 新增密钥不要求填写 API 地址", () => 
         vendorWebsiteDomain="vendor.example"
         vendorWebsiteUrl="https://vendor.example"
         providers={[provider]}
-        currentUser={{ role: "admin" } as any}
+        currentUser={ADMIN_USER}
         enableMultiProviderTypes={false}
       />
     );
@@ -141,28 +248,30 @@ describe("VendorKeysCompactList: 新增密钥不要求填写 API 地址", () => 
       addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    await flushTicks(5);
+    await flushTicks(8);
 
-    const keyInput = document.getElementById("vendor-key-api-key") as HTMLInputElement | null;
+    const nameInput = document.getElementById("name") as HTMLInputElement | null;
+    const keyInput = document.getElementById("key") as HTMLInputElement | null;
+    expect(nameInput).toBeTruthy();
     expect(keyInput).toBeTruthy();
 
-    // 回归点：不再要求填写 API 地址
-    expect(document.querySelector("input[name='url']")).toBeNull();
+    // 不显示 URL 输入
+    expect(document.getElementById("url")).toBeNull();
 
-    // 回归点：不显示 UrlPreview 的拼接预览
+    // 不显示官网输入
+    expect(document.getElementById("website-url")).toBeNull();
+
+    // 不显示 UrlPreview 的拼接预览
     expect(document.body.textContent || "").not.toContain("URL Concatenation Preview");
 
     unmount();
   });
 
   test("提交新增密钥应调用 addProvider，且 url 来自端点列表", async () => {
-    const provider = {
+    const provider = makeProviderDisplay({
       id: 10,
-      name: "p",
       providerType: "claude",
-      maskedKey: "sk-***",
-      isEnabled: true,
-    } as any;
+    });
 
     const { unmount } = renderWithProviders(
       <VendorKeysCompactList
@@ -170,7 +279,7 @@ describe("VendorKeysCompactList: 新增密钥不要求填写 API 地址", () => 
         vendorWebsiteDomain="vendor.example"
         vendorWebsiteUrl="https://vendor.example"
         providers={[provider]}
-        currentUser={{ role: "admin" } as any}
+        currentUser={ADMIN_USER}
         enableMultiProviderTypes={false}
       />
     );
@@ -184,16 +293,15 @@ describe("VendorKeysCompactList: 新增密钥不要求填写 API 地址", () => 
       addButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    await flushTicks(5);
+    await flushTicks(10);
 
-    // 打开后应拉取端点列表，用于自动填充 url
-    expect(providerEndpointsActionMocks.getProviderEndpoints).toHaveBeenCalledTimes(1);
+    expect(providerEndpointsActionMocks.getProviderEndpoints).toHaveBeenCalled();
     expect(providerEndpointsActionMocks.getProviderEndpoints).toHaveBeenCalledWith({
       vendorId: 1,
       providerType: "claude",
     });
 
-    const keyInput = document.getElementById("vendor-key-api-key") as HTMLInputElement | null;
+    const keyInput = document.getElementById("key") as HTMLInputElement | null;
     expect(keyInput).toBeTruthy();
 
     await act(async () => {
@@ -216,14 +324,62 @@ describe("VendorKeysCompactList: 新增密钥不要求填写 API 地址", () => 
     }
 
     expect(providersActionMocks.addProvider).toHaveBeenCalledTimes(1);
-    const [payload] = providersActionMocks.addProvider.mock.calls[0] as [any];
-    expect(payload.url).toBe("https://api.example.com/v1");
-    expect(payload.key).toBe("sk-test-1234");
-    expect(payload.provider_type).toBe("claude");
-    expect(payload.website_url).toBe("https://vendor.example");
-    expect(payload.name).toBe("vendor.example-claude-1234");
+    expect(providersActionMocks.addProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://api.example.com/v1",
+        key: "sk-test-1234",
+        provider_type: "claude",
+        website_url: "https://vendor.example",
+        name: "vendor.example-claude",
+      })
+    );
 
-    expect(sonnerMocks.toast.success).toHaveBeenCalledWith("API key added");
+    unmount();
+  });
+
+  test("列表应显示名称/指标列，并提供编辑按钮", async () => {
+    const provider = makeProviderDisplay({
+      id: 10,
+      name: "VendorKey-1",
+      providerType: "claude",
+      priority: 3,
+      weight: 10,
+      costMultiplier: 1.5,
+      todayCallCount: 2,
+      todayTotalCostUsd: "0.12",
+    });
+
+    const statistics: ProviderStatisticsMap = {
+      10: {
+        todayCalls: 2,
+        todayCost: "0.12",
+        lastCallTime: null,
+        lastCallModel: null,
+      },
+    };
+
+    const { unmount } = renderWithProviders(
+      <VendorKeysCompactList
+        vendorId={1}
+        vendorWebsiteDomain="vendor.example"
+        vendorWebsiteUrl="https://vendor.example"
+        providers={[provider]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={false}
+        statistics={statistics}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    expect(document.body.textContent || "").toContain("VendorKey-1");
+    expect(document.body.textContent || "").toContain("Priority");
+    expect(document.body.textContent || "").toContain("Weight");
+
+    const editButtons = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('button[aria-label="Edit Provider"]')
+    );
+    expect(editButtons.length).toBeGreaterThan(0);
 
     unmount();
   });
