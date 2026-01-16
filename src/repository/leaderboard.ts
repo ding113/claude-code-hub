@@ -435,9 +435,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   dateRange?: DateRangeParams,
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const totalTokensExpr = sql<number>`(
+  const totalInputTokensExpr = sql<number>`(
     COALESCE(${messageRequest.inputTokens}, 0) +
-    COALESCE(${messageRequest.outputTokens}, 0) +
     COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
     COALESCE(${messageRequest.cacheReadInputTokens}, 0)
   )`;
@@ -447,12 +446,12 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     OR COALESCE(${messageRequest.cacheReadInputTokens}, 0) > 0
   )`;
 
-  const sumTotalTokens = sql<number>`COALESCE(sum(${totalTokensExpr})::double precision, 0::double precision)`;
+  const sumTotalInputTokens = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
   const sumCacheReadTokens = sql<number>`COALESCE(sum(COALESCE(${messageRequest.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
   const sumCacheCreationCost = sql<string>`COALESCE(sum(CASE WHEN COALESCE(${messageRequest.cacheCreationInputTokens}, 0) > 0 THEN ${messageRequest.costUsd} ELSE 0 END), 0)`;
 
   const cacheHitRateExpr = sql<number>`COALESCE(
-    ${sumCacheReadTokens} / NULLIF(${sumTotalTokens}, 0::double precision),
+    ${sumCacheReadTokens} / NULLIF(${sumTotalInputTokens}, 0::double precision),
     0::double precision
   )`;
 
@@ -472,7 +471,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       cacheReadTokens: sumCacheReadTokens,
       cacheCreationCost: sumCacheCreationCost,
-      totalTokens: sumTotalTokens,
+      totalTokens: sumTotalInputTokens,
       cacheHitRate: cacheHitRateExpr,
     })
     .from(messageRequest)

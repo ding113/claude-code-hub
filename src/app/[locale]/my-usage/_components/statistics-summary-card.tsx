@@ -308,8 +308,9 @@ function ModelBreakdownRow({
   const t = useTranslations("myUsage.stats");
 
   const totalAllTokens = inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens;
+  const totalInputTokens = inputTokens + cacheCreationTokens + cacheReadTokens;
   const cacheHitRate =
-    totalAllTokens > 0 ? ((cacheReadTokens / totalAllTokens) * 100).toFixed(1) : "0.0";
+    totalInputTokens > 0 ? ((cacheReadTokens / totalInputTokens) * 100).toFixed(1) : "0.0";
   const costPercentage = totalCost > 0 ? ((cost / totalCost) * 100).toFixed(1) : "0.0";
 
   const cacheHitRateNum = Number.parseFloat(cacheHitRate);
