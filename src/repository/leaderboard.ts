@@ -55,6 +55,8 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   cacheCreationCost: number;
   /** Input tokens only (input + cacheCreation + cacheRead) for cache hit rate denominator */
   totalInputTokens: number;
+  /** @deprecated Use totalInputTokens instead */
+  totalTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
 }
 
@@ -494,6 +496,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     cacheReadTokens: entry.cacheReadTokens,
     cacheCreationCost: parseFloat(entry.cacheCreationCost),
     totalInputTokens: entry.totalInputTokens,
+    totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
     cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
   }));
 }
