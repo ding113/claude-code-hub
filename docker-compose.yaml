@@ -1,3 +1,5 @@
+name: ${COMPOSE_PROJECT_NAME:-claude-code-hub}
+
 services:
   postgres:
     image: postgres:18
