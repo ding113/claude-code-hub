@@ -92,7 +92,22 @@
     "keyStats": "キー",
     "userStats": "ユーザー",
     "noData": "選択期間のデータがありません",
-    "unknownModel": "不明"
+    "unknownModel": "不明",
+    "modal": {
+      "requests": "リクエスト",
+      "tokens": "トークン",
+      "totalTokens": "トークン合計",
+      "cost": "コスト",
+      "inputTokens": "入力トークン",
+      "outputTokens": "出力トークン",
+      "cacheWrite": "キャッシュ書込",
+      "cacheRead": "キャッシュ読取",
+      "cacheHitRate": "キャッシュヒット率",
+      "cacheTokens": "キャッシュトークン",
+      "performanceHigh": "高",
+      "performanceMedium": "中",
+      "performanceLow": "低"
+    }
   },
   "accessRestrictions": {
     "title": "アクセス制限",

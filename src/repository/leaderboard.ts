@@ -53,6 +53,9 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   cacheReadTokens: number;
   totalCost: number;
   cacheCreationCost: number;
+  /** Input tokens only (input + cacheCreation + cacheRead) for cache hit rate denominator */
+  totalInputTokens: number;
+  /** @deprecated Use totalInputTokens instead */
   totalTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
 }
@@ -427,7 +430,7 @@ async function findProviderLeaderboardWithTimezone(
  *
  * 计算规则：
  * - 仅统计需要缓存的请求（cache_creation_input_tokens 与 cache_read_input_tokens 不同时为 0/null）
- * - 命中率 = cache_read / (input + output + cache_creation + cache_read)
+ * - 命中率 = cache_read / (input + cache_creation + cache_read)
  */
 async function findProviderCacheHitRateLeaderboardWithTimezone(
   period: LeaderboardPeriod,
@@ -435,9 +438,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   dateRange?: DateRangeParams,
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const totalTokensExpr = sql<number>`(
+  const totalInputTokensExpr = sql<number>`(
     COALESCE(${messageRequest.inputTokens}, 0) +
-    COALESCE(${messageRequest.outputTokens}, 0) +
     COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
     COALESCE(${messageRequest.cacheReadInputTokens}, 0)
   )`;
@@ -447,12 +449,12 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     OR COALESCE(${messageRequest.cacheReadInputTokens}, 0) > 0
   )`;
 
-  const sumTotalTokens = sql<number>`COALESCE(sum(${totalTokensExpr})::double precision, 0::double precision)`;
+  const sumTotalInputTokens = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
   const sumCacheReadTokens = sql<number>`COALESCE(sum(COALESCE(${messageRequest.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
   const sumCacheCreationCost = sql<string>`COALESCE(sum(CASE WHEN COALESCE(${messageRequest.cacheCreationInputTokens}, 0) > 0 THEN ${messageRequest.costUsd} ELSE 0 END), 0)`;
 
   const cacheHitRateExpr = sql<number>`COALESCE(
-    ${sumCacheReadTokens} / NULLIF(${sumTotalTokens}, 0::double precision),
+    ${sumCacheReadTokens} / NULLIF(${sumTotalInputTokens}, 0::double precision),
     0::double precision
   )`;
 
@@ -472,7 +474,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       cacheReadTokens: sumCacheReadTokens,
       cacheCreationCost: sumCacheCreationCost,
-      totalTokens: sumTotalTokens,
+      totalInputTokens: sumTotalInputTokens,
       cacheHitRate: cacheHitRateExpr,
     })
     .from(messageRequest)
@@ -493,7 +495,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     totalCost: parseFloat(entry.totalCost),
     cacheReadTokens: entry.cacheReadTokens,
     cacheCreationCost: parseFloat(entry.cacheCreationCost),
-    totalTokens: entry.totalTokens,
+    totalInputTokens: entry.totalInputTokens,
+    totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
     cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
   }));
 }

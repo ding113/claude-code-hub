@@ -55,13 +55,7 @@ export default function MyUsagePage() {
 
   return (
     <div className="space-y-6">
-      <MyUsageHeader
-        onLogout={handleLogout}
-        keyName={quota?.keyName}
-        userName={quota?.userName}
-        keyExpiresAt={keyExpiresAt}
-        userExpiresAt={userExpiresAt}
-      />
+      <MyUsageHeader onLogout={handleLogout} keyName={quota?.keyName} userName={quota?.userName} />
 
       {/* Provider Group and Expiration info */}
       {quota ? (
@@ -80,12 +74,7 @@ export default function MyUsagePage() {
         </div>
       ) : null}
 
-      <CollapsibleQuotaCard
-        quota={quota}
-        loading={isQuotaLoading}
-        keyExpiresAt={keyExpiresAt}
-        userExpiresAt={userExpiresAt}
-      />
+      <CollapsibleQuotaCard quota={quota} loading={isQuotaLoading} />
 
       <StatisticsSummaryCard />
 

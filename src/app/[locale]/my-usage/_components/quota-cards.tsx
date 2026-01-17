@@ -3,11 +3,9 @@
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import type { MyUsageQuota } from "@/actions/my-usage";
-import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useCountdown } from "@/hooks/useCountdown";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { calculateUsagePercent, isUnlimited } from "@/lib/utils/limit-helpers";
@@ -16,66 +14,11 @@ interface QuotaCardsProps {
   quota: MyUsageQuota | null;
   loading?: boolean;
   currencyCode?: CurrencyCode;
-  keyExpiresAt?: Date | null;
-  userExpiresAt?: Date | null;
 }
 
-export function QuotaCards({
-  quota,
-  loading = false,
-  currencyCode = "USD",
-  keyExpiresAt,
-  userExpiresAt,
-}: QuotaCardsProps) {
+export function QuotaCards({ quota, loading = false, currencyCode = "USD" }: QuotaCardsProps) {
   const t = useTranslations("myUsage.quota");
-  const tExpiration = useTranslations("myUsage.expiration");
   const tCommon = useTranslations("common");
-
-  const resolvedKeyExpires = keyExpiresAt ?? quota?.expiresAt ?? null;
-  const resolvedUserExpires = userExpiresAt ?? quota?.userExpiresAt ?? null;
-
-  const shouldEnableCountdown = !(loading && !quota);
-
-  const keyCountdown = useCountdown(
-    resolvedKeyExpires,
-    shouldEnableCountdown && Boolean(resolvedKeyExpires)
-  );
-  const userCountdown = useCountdown(
-    resolvedUserExpires,
-    shouldEnableCountdown && Boolean(resolvedUserExpires)
-  );
-
-  const isExpiring = (countdown: ReturnType<typeof useCountdown>) =>
-    countdown.totalSeconds > 0 && countdown.totalSeconds <= 7 * 24 * 60 * 60;
-
-  const showKeyBadge = resolvedKeyExpires && !keyCountdown.isExpired && isExpiring(keyCountdown);
-  const showUserBadge =
-    resolvedUserExpires && !userCountdown.isExpired && isExpiring(userCountdown);
-
-  const renderExpireBadge = (
-    label: string,
-    resetAt: Date | null,
-    countdown: ReturnType<typeof useCountdown>
-  ) => {
-    if (!resetAt) return null;
-    const tone = countdown.totalSeconds <= 24 * 60 * 60 ? "danger" : "warning";
-    const toneClass =
-      tone === "danger"
-        ? "bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200"
-        : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-100";
-
-    return (
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium",
-          toneClass
-        )}
-      >
-        <span>{label}</span>
-        <QuotaCountdownCompact resetAt={resetAt} />
-      </span>
-    );
-  };
 
   const items = useMemo(() => {
     if (!quota) return [];
@@ -137,20 +80,6 @@ export function QuotaCards({
 
   return (
     <div className="space-y-3">
-      {showKeyBadge || showUserBadge ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed bg-muted/40 p-3">
-          <span className="text-xs font-medium text-muted-foreground">
-            {tExpiration("expiringWarning")}
-          </span>
-          {showKeyBadge
-            ? renderExpireBadge(tExpiration("keyExpires"), resolvedKeyExpires, keyCountdown)
-            : null}
-          {showUserBadge
-            ? renderExpireBadge(tExpiration("userExpires"), resolvedUserExpires, userCountdown)
-            : null}
-        </div>
-      ) : null}
-
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => {
           const keyPct = calculateUsagePercent(item.keyCurrent, item.keyLimit);

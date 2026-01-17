@@ -1,7 +1,7 @@
 "use client";
 
+import { Clock } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { QuotaCountdownCompact } from "@/components/quota/quota-countdown";
 import { useCountdown } from "@/hooks/useCountdown";
 import { cn } from "@/lib/utils";
 import { formatDate, getLocaleDateFormat } from "@/lib/utils/date-format";
@@ -56,6 +56,14 @@ export function ExpirationInfo({
     expired: "text-destructive",
   };
 
+  const countdownStyles: Record<ExpireStatus, string> = {
+    none: "text-muted-foreground",
+    normal: "text-emerald-600 dark:text-emerald-400",
+    warning: "text-amber-600 dark:text-amber-400",
+    danger: "text-red-600 dark:text-red-400",
+    expired: "text-destructive",
+  };
+
   const renderItem = (
     label: string,
     value: Date | null,
@@ -79,9 +87,11 @@ export function ExpirationInfo({
           </span>
         </div>
         {showCountdown ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{t("expiresIn", { time: countdown.shortFormatted })}</span>
-            <QuotaCountdownCompact resetAt={value} />
+          <div className={cn("flex items-center gap-1.5 pt-1", countdownStyles[status])}>
+            <Clock className="h-3.5 w-3.5" />
+            <span className="text-sm font-semibold font-mono tabular-nums">
+              {countdown.shortFormatted}
+            </span>
           </div>
         ) : null}
       </div>
