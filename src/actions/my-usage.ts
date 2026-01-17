@@ -25,6 +25,26 @@ import {
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
 
+/**
+ * Parse date range strings to timestamps using server timezone (TZ config).
+ * Returns startTime as midnight and endTime as next day midnight (exclusive upper bound).
+ */
+function parseDateRangeInServerTimezone(
+  startDate?: string,
+  endDate?: string
+): { startTime?: number; endTime?: number } {
+  const timezone = getEnvConfig().TZ;
+  const parsedStart = startDate
+    ? fromZonedTime(`${startDate}T00:00:00`, timezone).getTime()
+    : Number.NaN;
+  const parsedEnd = endDate ? fromZonedTime(`${endDate}T00:00:00`, timezone).getTime() : Number.NaN;
+
+  return {
+    startTime: Number.isFinite(parsedStart) ? parsedStart : undefined,
+    endTime: Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined,
+  };
+}
+
 export interface MyUsageMetadata {
   keyName: string;
   keyProviderGroup: string | null;
@@ -397,18 +417,10 @@ export async function getMyUsageLogs(
     const pageSize = Math.min(rawPageSize, 100);
     const page = filters.page && filters.page > 0 ? filters.page : 1;
 
-    // Interpret date as midnight in the configured timezone (TZ)
-    const timezone = getEnvConfig().TZ;
-    const parsedStart = filters.startDate
-      ? fromZonedTime(`${filters.startDate}T00:00:00`, timezone).getTime()
-      : Number.NaN;
-    const parsedEnd = filters.endDate
-      ? fromZonedTime(`${filters.endDate}T00:00:00`, timezone).getTime()
-      : Number.NaN;
-
-    const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
-    // endTime uses "next day midnight" as exclusive upper bound (created_at < endTime)
-    const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      filters.startDate,
+      filters.endDate
+    );
 
     const usageFilters: UsageLogFilters = {
       keyId: session.key.id,
@@ -547,18 +559,10 @@ export async function getMyStatsSummary(
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
-    // Interpret date as midnight in the configured timezone (TZ)
-    const timezone = getEnvConfig().TZ;
-    const parsedStart = filters.startDate
-      ? fromZonedTime(`${filters.startDate}T00:00:00`, timezone).getTime()
-      : Number.NaN;
-    const parsedEnd = filters.endDate
-      ? fromZonedTime(`${filters.endDate}T00:00:00`, timezone).getTime()
-      : Number.NaN;
-
-    const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
-    // endTime uses "next day midnight" as exclusive upper bound (created_at < endTime)
-    const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      filters.startDate,
+      filters.endDate
+    );
 
     // Get aggregated stats using existing repository function
     const stats = await findUsageLogsStats({

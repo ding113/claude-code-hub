@@ -324,8 +324,16 @@ function ModelBreakdownRow({
   return (
     <>
       <div
+        role="button"
+        tabIndex={0}
         className="flex items-center justify-between rounded-md border px-3 py-2 cursor-pointer hover:bg-muted/50 transition-colors group"
         onClick={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
       >
         <div className="flex flex-col text-sm min-w-0 gap-1">
           <span className="font-medium text-foreground truncate">{model || t("unknownModel")}</span>

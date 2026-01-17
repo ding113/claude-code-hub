@@ -53,7 +53,8 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   cacheReadTokens: number;
   totalCost: number;
   cacheCreationCost: number;
-  totalTokens: number;
+  /** Input tokens only (input + cacheCreation + cacheRead) for cache hit rate denominator */
+  totalInputTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
 }
 
@@ -427,7 +428,7 @@ async function findProviderLeaderboardWithTimezone(
  *
  * 计算规则：
  * - 仅统计需要缓存的请求（cache_creation_input_tokens 与 cache_read_input_tokens 不同时为 0/null）
- * - 命中率 = cache_read / (input + output + cache_creation + cache_read)
+ * - 命中率 = cache_read / (input + cache_creation + cache_read)
  */
 async function findProviderCacheHitRateLeaderboardWithTimezone(
   period: LeaderboardPeriod,
@@ -471,7 +472,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       cacheReadTokens: sumCacheReadTokens,
       cacheCreationCost: sumCacheCreationCost,
-      totalTokens: sumTotalInputTokens,
+      totalInputTokens: sumTotalInputTokens,
       cacheHitRate: cacheHitRateExpr,
     })
     .from(messageRequest)
@@ -492,7 +493,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     totalCost: parseFloat(entry.totalCost),
     cacheReadTokens: entry.cacheReadTokens,
     cacheCreationCost: parseFloat(entry.cacheCreationCost),
-    totalTokens: entry.totalTokens,
+    totalInputTokens: entry.totalInputTokens,
     cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
   }));
 }
