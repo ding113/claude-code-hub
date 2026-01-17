@@ -1,7 +1,8 @@
+name: ${COMPOSE_PROJECT_NAME:-claude-code-hub}
+
 services:
   postgres:
     image: postgres:18
-    container_name: claude-code-hub-db
     restart: unless-stopped
     # 不对外暴露数据库端口，仅允许容器内部网络访问
     # 如需调试，可取消注释下行（仅绑定本机）：
@@ -31,7 +32,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: claude-code-hub-redis
     restart: unless-stopped
     volumes:
       # 持久化 Redis 数据到本地 ./data/redis 目录
@@ -47,7 +47,6 @@ services:
 
   app:
     image: ghcr.io/ding113/claude-code-hub:latest
-    container_name: claude-code-hub-app
     depends_on:
       postgres:
         condition: service_healthy
