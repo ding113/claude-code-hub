@@ -435,6 +435,7 @@ export function UserManagementTable({
             onClick={onRefresh}
             disabled={isRefreshing}
             title={tUserMgmt("table.refresh")}
+            aria-label={tUserMgmt("table.refresh")}
           >
             <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
           </Button>

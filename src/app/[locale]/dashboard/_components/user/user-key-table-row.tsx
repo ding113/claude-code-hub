@@ -218,7 +218,7 @@ export function UserKeyTableRow({
         return;
       }
       toast.success(checked ? tUserStatus("userEnabled") : tUserStatus("userDisabled"));
-      // Инвалидировать кэш React Query для всех фильтров
+      // 使 React Query 缓存失效，确保数据刷新
       queryClient.invalidateQueries({ queryKey: ["users"] });
       // 刷新服务端数据
       router.refresh();
