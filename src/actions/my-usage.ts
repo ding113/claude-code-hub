@@ -34,14 +34,41 @@ function parseDateRangeInServerTimezone(
   endDate?: string
 ): { startTime?: number; endTime?: number } {
   const timezone = getEnvConfig().TZ;
-  const parsedStart = startDate
-    ? fromZonedTime(`${startDate}T00:00:00`, timezone).getTime()
+
+  const toIsoDate = (dateStr: string): { ok: true; value: string } | { ok: false } => {
+    return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? { ok: true, value: dateStr } : { ok: false };
+  };
+
+  const addIsoDays = (dateStr: string, days: number): string => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+    if (!match) {
+      return dateStr;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+
+    const next = new Date(Date.UTC(year, month - 1, day));
+    next.setUTCDate(next.getUTCDate() + days);
+    return next.toISOString().slice(0, 10);
+  };
+
+  const startIso = startDate ? toIsoDate(startDate) : { ok: false as const };
+  const endIso = endDate ? toIsoDate(endDate) : { ok: false as const };
+
+  const parsedStart = startIso.ok
+    ? fromZonedTime(`${startIso.value}T00:00:00`, timezone).getTime()
     : Number.NaN;
-  const parsedEnd = endDate ? fromZonedTime(`${endDate}T00:00:00`, timezone).getTime() : Number.NaN;
+
+  const endExclusiveDate = endIso.ok ? addIsoDays(endIso.value, 1) : null;
+  const parsedEndExclusive = endExclusiveDate
+    ? fromZonedTime(`${endExclusiveDate}T00:00:00`, timezone).getTime()
+    : Number.NaN;
 
   return {
     startTime: Number.isFinite(parsedStart) ? parsedStart : undefined,
-    endTime: Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined,
+    endTime: Number.isFinite(parsedEndExclusive) ? parsedEndExclusive : undefined,
   };
 }
 
