@@ -760,7 +760,7 @@
     "limitTotalUsd": {
       "label": "総消費上限 (USD)",
       "placeholder": "空白の場合は無制限",
-      "description": "累計消費上限（リセットなし）",
+      "description": "累計消費上限(リセットなし)",
       "descriptionWithUserLimit": "ユーザーの総上限を超えることはできません ({limit})"
     },
     "limitConcurrentSessions": {
@@ -1205,7 +1205,7 @@
       "neverExpires": "無期限",
       "expired": "期限切れ",
       "quickExtensionLabel": "クイック延長",
-      "quickExtensionHint": "現在の有効期限から延長（期限切れの場合は現在から）",
+      "quickExtensionHint": "現在の有効期限から延長(期限切れの場合は現在から)",
       "customDateLabel": "有効期限を設定",
       "customDateHint": "有効期限を直接指定",
       "quickOptions": {
