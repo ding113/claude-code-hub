@@ -86,8 +86,8 @@ export function shouldApplyContext1m(
     return isContext1mSupportedModel(model);
   }
 
-  // Default (inherit): passthrough client headers without modification
-  return false;
+  // Default (inherit): follow client request for supported models
+  return clientRequestedContext1m && isContext1mSupportedModel(model);
 }
 
 /**
