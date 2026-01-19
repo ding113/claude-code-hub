@@ -10,13 +10,14 @@ import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionTracker } from "@/lib/session-tracker";
-import { ProxyErrorHandler } from "../proxy/error-handler";
-import { ProxyError } from "../proxy/errors";
-import { ProxyForwarder } from "../proxy/forwarder";
-import { GuardPipelineBuilder, RequestType } from "../proxy/guard-pipeline";
-import { ProxyResponseHandler } from "../proxy/response-handler";
-import { ProxyResponses } from "../proxy/responses";
-import { ProxySession } from "../proxy/session";
+import { ProxyErrorHandler } from "@/app/v1/_lib/proxy/error-handler";
+import { ProxyError } from "@/app/v1/_lib/proxy/errors";
+import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
+import { GuardPipelineBuilder, RequestType } from "@/app/v1/_lib/proxy/guard-pipeline";
+import { attachSessionIdToErrorResponse } from "@/app/v1/_lib/proxy/error-session-id";
+import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import { ProxyResponses } from "@/app/v1/_lib/proxy/responses";
+import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { ChatCompletionRequest } from "./types/compatible";
 
 /**
@@ -45,7 +46,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     const isResponseAPIFormat = "input" in request && Array.isArray(request.input);
 
     if (!isOpenAIFormat && !isResponseAPIFormat) {
-      return new Response(
+      const response = new Response(
         JSON.stringify({
           error: {
             message:
@@ -56,6 +57,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
         }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
+      return await attachSessionIdToErrorResponse(session.sessionId, response);
     }
 
     if (isOpenAIFormat) {
@@ -144,7 +146,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
 
       // 验证必需字段
       if (!request.model) {
-        return new Response(
+        const response = new Response(
           JSON.stringify({
             error: {
               message: "Invalid request: model is required",
@@ -154,6 +156,7 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
           }),
           { status: 400, headers: { "Content-Type": "application/json" } }
         );
+        return await attachSessionIdToErrorResponse(session.sessionId, response);
       }
     }
 
@@ -161,7 +164,9 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     const pipeline = GuardPipelineBuilder.fromRequestType(type);
 
     const early = await pipeline.run(session);
-    if (early) return early;
+    if (early) {
+      return await attachSessionIdToErrorResponse(session.sessionId, early);
+    }
 
     // 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
     if (session.sessionId && !session.isCountTokensRequest()) {
@@ -187,7 +192,8 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
     const response = await ProxyForwarder.send(session);
 
     // 5. 响应处理（自动转换回 OpenAI 格式）
-    return await ProxyResponseHandler.dispatch(session, response);
+    const handled = await ProxyResponseHandler.dispatch(session, response);
+    return await attachSessionIdToErrorResponse(session.sessionId, handled);
   } catch (error) {
     logger.error("[ChatCompletions] Handler error:", error);
     if (session) {
