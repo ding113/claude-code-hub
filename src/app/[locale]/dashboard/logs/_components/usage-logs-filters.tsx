@@ -419,11 +419,11 @@ export function UsageLogsFilters({
         <div className="space-y-2 lg:col-span-4">
           <Label>{t("logs.filters.apiKey")}</Label>
           <Select
-            value={localFilters.keyId?.toString() || ""}
+            value={localFilters.keyId?.toString() || "__all__"}
             onValueChange={(value: string) =>
               setLocalFilters({
                 ...localFilters,
-                keyId: value ? parseInt(value, 10) : undefined,
+                keyId: value && value !== "__all__" ? parseInt(value, 10) : undefined,
               })
             }
             disabled={isKeysLoading || (isAdmin && !localFilters.userId && keys.length === 0)}
@@ -440,6 +440,7 @@ export function UsageLogsFilters({
               />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="__all__">{t("logs.filters.allKeys")}</SelectItem>
               {keys.map((key) => (
                 <SelectItem key={key.id} value={key.id.toString()}>
                   {key.name}
@@ -602,12 +603,17 @@ export function UsageLogsFilters({
           <Label>{t("logs.filters.statusCode")}</Label>
           <Select
             value={
-              localFilters.excludeStatusCode200 ? "!200" : localFilters.statusCode?.toString() || ""
+              localFilters.excludeStatusCode200
+                ? "!200"
+                : localFilters.statusCode?.toString() || "__all__"
             }
             onValueChange={(value: string) =>
               setLocalFilters({
                 ...localFilters,
-                statusCode: value && value !== "!200" ? parseInt(value, 10) : undefined,
+                statusCode:
+                  value && value !== "!200" && value !== "__all__"
+                    ? parseInt(value, 10)
+                    : undefined,
                 excludeStatusCode200: value === "!200",
               })
             }
@@ -617,6 +623,7 @@ export function UsageLogsFilters({
               <SelectValue placeholder={t("logs.filters.allStatusCodes")} />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="__all__">{t("logs.filters.allStatusCodes")}</SelectItem>
               <SelectItem value="!200">{t("logs.statusCodes.not200")}</SelectItem>
               <SelectItem value="200">{t("logs.statusCodes.200")}</SelectItem>
               <SelectItem value="400">{t("logs.statusCodes.400")}</SelectItem>
