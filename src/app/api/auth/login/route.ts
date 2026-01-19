@@ -31,20 +31,41 @@ function getLocaleFromRequest(request: NextRequest): Locale {
   return defaultLocale;
 }
 
+async function getAuthErrorTranslations(locale: Locale) {
+  try {
+    return await getTranslations({ locale, namespace: "auth.errors" });
+  } catch (error) {
+    logger.warn("Login route: failed to load auth.errors translations", {
+      locale,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    try {
+      return await getTranslations({ locale: defaultLocale, namespace: "auth.errors" });
+    } catch (fallbackError) {
+      logger.error("Login route: failed to load default auth.errors translations", {
+        locale: defaultLocale,
+        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      });
+      return null;
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   const locale = getLocaleFromRequest(request);
+  const t = await getAuthErrorTranslations(locale);
 
   try {
-    const t = await getTranslations({ locale, namespace: "auth.errors" });
     const { key } = await request.json();
 
     if (!key) {
-      return NextResponse.json({ error: t("apiKeyRequired") }, { status: 400 });
+      return NextResponse.json({ error: t?.("apiKeyRequired") }, { status: 400 });
     }
 
     const session = await validateKey(key, { allowReadOnlyAccess: true });
     if (!session) {
-      return NextResponse.json({ error: t("apiKeyInvalidOrExpired") }, { status: 401 });
+      return NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 });
     }
 
     // 设置认证 cookie
@@ -64,11 +85,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     logger.error("Login error:", error);
-    try {
-      const t = await getTranslations({ locale, namespace: "auth.errors" });
-      return NextResponse.json({ error: t("serverError") }, { status: 500 });
-    } catch {
-      return NextResponse.json({ error: "Server error" }, { status: 500 });
-    }
+
+    return NextResponse.json({ error: t?.("serverError") }, { status: 500 });
   }
 }
