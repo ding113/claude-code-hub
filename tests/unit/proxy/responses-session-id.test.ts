@@ -40,7 +40,10 @@ describe("ProxyResponses.attachSessionIdToErrorResponse", () => {
   });
 
   test("adds header for non-json error responses (body unchanged)", async () => {
-    const response = new Response("oops", { status: 500, headers: { "Content-Type": "text/plain" } });
+    const response = new Response("oops", {
+      status: 500,
+      headers: { "Content-Type": "text/plain" },
+    });
     const decorated = await attachSessionIdToErrorResponse("s_123", response);
 
     expect(decorated.status).toBe(500);

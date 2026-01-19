@@ -54,4 +54,3 @@ export async function attachSessionIdToErrorResponse(
 
   return new Response(text, { status: response.status, headers });
 }
-

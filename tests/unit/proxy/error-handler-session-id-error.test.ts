@@ -22,4 +22,3 @@ describe("ProxyErrorHandler.handle - session id on errors", () => {
     expect(body.error.message).toBe("boom (cch_session_id: s_123)");
   });
 });
-
