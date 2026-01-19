@@ -24,6 +24,7 @@
     "test:coverage:quota": "vitest run --config vitest.quota.config.ts --coverage",
     "test:coverage:my-usage": "vitest run --config vitest.my-usage.config.ts --coverage",
     "test:coverage:proxy-guard-pipeline": "vitest run --config vitest.proxy-guard-pipeline.config.ts --coverage",
+    "test:coverage:include-session-id-in-errors": "vitest run --config vitest.include-session-id-in-errors.config.ts --coverage",
     "test:ci": "vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml",
     "cui": "npx cui-server --host 0.0.0.0 --port 30000 --token a7564bc8882aa9a2d25d8b4ea6ea1e2e",
     "db:generate": "drizzle-kit generate && node scripts/validate-migrations.js",
