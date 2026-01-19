@@ -47,11 +47,17 @@ function sqlToString(sqlObj: unknown): string {
   return walk(sqlObj);
 }
 
+function getSelectFieldKeys(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (typeof value !== "object") return [];
+  return Object.keys(value as Record<string, unknown>);
+}
+
 describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("returns 0 and does not execute SQL when updates is empty", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 0 }));
+    const executeMock = vi.fn(async (_query: unknown) => ({ rowCount: 0 }));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -59,7 +65,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
       },
     }));
 
-    const { updateProviderPrioritiesBatch } = await import("@/repository/provider");
+    const { updateProviderPrioritiesBatch } = await import("../../../src/repository/provider");
     const result = await updateProviderPrioritiesBatch([]);
 
     expect(result).toBe(0);
@@ -69,7 +75,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("generates CASE batch update SQL and returns affected rows", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 2 }));
+    const executeMock = vi.fn(async (_query: unknown) => ({ rowCount: 2 }));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -77,7 +83,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
       },
     }));
 
-    const { updateProviderPrioritiesBatch } = await import("@/repository/provider");
+    const { updateProviderPrioritiesBatch } = await import("../../../src/repository/provider");
     const result = await updateProviderPrioritiesBatch([
       { id: 1, priority: 0 },
       { id: 2, priority: 3 },
@@ -87,7 +93,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
     expect(executeMock).toHaveBeenCalledTimes(1);
 
     const queryArg = executeMock.mock.calls[0]?.[0];
-    const sqlText = sqlToString(queryArg).replaceAll(/\s+/g, " ").trim();
+    const sqlText = sqlToString(queryArg).replace(/\s+/g, " ").trim();
 
     expect(sqlText).toContain("UPDATE providers");
     expect(sqlText).toContain("SET");
@@ -101,7 +107,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("deduplicates provider ids (last update wins)", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 1 }));
+    const executeMock = vi.fn(async (_query: unknown) => ({ rowCount: 1 }));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -109,7 +115,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
       },
     }));
 
-    const { updateProviderPrioritiesBatch } = await import("@/repository/provider");
+    const { updateProviderPrioritiesBatch } = await import("../../../src/repository/provider");
     const result = await updateProviderPrioritiesBatch([
       { id: 1, priority: 0 },
       { id: 1, priority: 2 },
@@ -119,9 +125,112 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
     expect(executeMock).toHaveBeenCalledTimes(1);
 
     const queryArg = executeMock.mock.calls[0]?.[0];
-    const sqlText = sqlToString(queryArg).replaceAll(/\s+/g, " ").trim();
+    const sqlText = sqlToString(queryArg).replace(/\s+/g, " ").trim();
 
     expect(sqlText).toContain("WHEN 1 THEN 2");
     expect(sqlText).toContain("WHERE id IN (1) AND deleted_at IS NULL");
+  });
+});
+
+describe("provider repository - sessionTtl projection", () => {
+  test("findProviderList should select sessionTtl", async () => {
+    vi.resetModules();
+
+    let capturedSelectFields: unknown;
+
+    const offsetMock = vi.fn(async () => []);
+    const limitMock = vi.fn(() => ({ offset: offsetMock }));
+    const orderByMock = vi.fn(() => ({ limit: limitMock }));
+    const whereMock = vi.fn(() => ({ orderBy: orderByMock }));
+    const fromMock = vi.fn(() => ({ where: whereMock }));
+    const selectMock = vi.fn((fields: unknown) => {
+      capturedSelectFields = fields;
+      return { from: fromMock };
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+      },
+    }));
+
+    const { findProviderList } = await import("../../../src/repository/provider");
+    await findProviderList(10, 0);
+
+    expect(getSelectFieldKeys(capturedSelectFields)).toContain("sessionTtl");
+  });
+
+  test("findAllProvidersFresh should select sessionTtl", async () => {
+    vi.resetModules();
+
+    let capturedSelectFields: unknown;
+
+    const orderByMock = vi.fn(async () => []);
+    const whereMock = vi.fn(() => ({ orderBy: orderByMock }));
+    const fromMock = vi.fn(() => ({ where: whereMock }));
+    const selectMock = vi.fn((fields: unknown) => {
+      capturedSelectFields = fields;
+      return { from: fromMock };
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+      },
+    }));
+
+    const { findAllProvidersFresh } = await import("../../../src/repository/provider");
+    await findAllProvidersFresh();
+
+    expect(getSelectFieldKeys(capturedSelectFields)).toContain("sessionTtl");
+  });
+
+  test("findProviderById should select sessionTtl", async () => {
+    vi.resetModules();
+
+    let capturedSelectFields: unknown;
+
+    const whereMock = vi.fn(async () => []);
+    const fromMock = vi.fn(() => ({ where: whereMock }));
+    const selectMock = vi.fn((fields: unknown) => {
+      capturedSelectFields = fields;
+      return { from: fromMock };
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+      },
+    }));
+
+    const { findProviderById } = await import("../../../src/repository/provider");
+    await findProviderById(1);
+
+    expect(getSelectFieldKeys(capturedSelectFields)).toContain("sessionTtl");
+  });
+
+  test("updateProvider should return sessionTtl in returning projection", async () => {
+    vi.resetModules();
+
+    let capturedReturningFields: unknown;
+
+    const returningMock = vi.fn(async (fields: unknown) => {
+      capturedReturningFields = fields;
+      return [];
+    });
+    const whereMock = vi.fn(() => ({ returning: returningMock }));
+    const setMock = vi.fn(() => ({ where: whereMock }));
+    const updateMock = vi.fn(() => ({ set: setMock }));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        update: updateMock,
+      },
+    }));
+
+    const { updateProvider } = await import("../../../src/repository/provider");
+    await updateProvider(1, { name: "provider" });
+
+    expect(getSelectFieldKeys(capturedReturningFields)).toContain("sessionTtl");
   });
 });

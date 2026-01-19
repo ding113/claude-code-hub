@@ -3,6 +3,7 @@
   "invalidWebsiteUrl": "请输入有效的供应商官网地址",
   "groupTagTooLong": "分组标签总长度不能超过 {max} 个字符",
   "addFailed": "添加服务商失败",
+  "sessionTtlOutOfRange": "Session TTL 必须在 {min} 到 {max} 秒之间",
   "updateFailed": "更新服务商失败",
   "deleteFailed": "删除服务商失败"
 }
