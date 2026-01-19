@@ -84,3 +84,6 @@ TRANSLATIONS_CHECKLIST.md
 # docs-site submodule build artifacts
 docs-site/.next/
 docs-site/node_modules/
+
+# local scratch
+tmp/
