@@ -70,14 +70,14 @@ export function AddKeyDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90dvh] max-h-[90vh] p-0 flex flex-col overflow-hidden">
         {generatedKey ? (
           <>
-            <DialogHeader>
+            <DialogHeader className="px-6 pt-6 pb-4 border-b">
               <DialogTitle>{t("successTitle")}</DialogTitle>
               <DialogDescription>{t("successDescription")}</DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 p-6">
               <div className="space-y-2">
                 <Label>{t("keyName.label")}</Label>
                 <Input value={generatedKey.name} readOnly className="bg-muted" />
@@ -106,11 +106,11 @@ export function AddKeyDialog({
                 </div>
                 <p className="text-xs text-muted-foreground">{t("generatedKey.hint")}</p>
               </div>
-              <div className="flex justify-end pt-4">
-                <Button type="button" onClick={handleClose}>
-                  {tCommon("close")}
-                </Button>
-              </div>
+            </div>
+            <div className="flex justify-end px-6 py-4 border-t">
+              <Button type="button" onClick={handleClose}>
+                {tCommon("close")}
+              </Button>
             </div>
           </>
         ) : (

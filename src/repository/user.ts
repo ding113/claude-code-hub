@@ -211,7 +211,7 @@ export async function findUserListBatch(
   }
 
   if (tagFilterCondition && keyGroupFilterCondition) {
-    conditions.push(sql`(${tagFilterCondition} OR ${keyGroupFilterCondition})`);
+    conditions.push(sql`(${tagFilterCondition}) AND (${keyGroupFilterCondition})`);
   } else if (tagFilterCondition) {
     conditions.push(tagFilterCondition);
   } else if (keyGroupFilterCondition) {

@@ -60,10 +60,13 @@
     "filters": {
       "user": "User",
       "provider": "Provider",
+      "sessionId": "Session ID",
       "searchUser": "Search users...",
       "searchProvider": "Search providers...",
+      "searchSessionId": "Search session IDs...",
       "noUserFound": "No matching users found",
       "noProviderFound": "No matching providers found",
+      "noSessionFound": "No matching session IDs found",
       "model": "Model",
       "endpoint": "Endpoint",
       "status": "Status",
@@ -96,6 +99,7 @@
       "time": "Time",
       "user": "User",
       "key": "Key",
+      "sessionId": "Session ID",
       "provider": "Provider",
       "model": "Billing Model",
       "endpoint": "Endpoint",
@@ -785,6 +789,15 @@
       "defaultDescription": "default includes providers without groupTag.",
       "descriptionWithUserGroup": "Provider groups for this key (user groups: {group}; default: default)."
     },
+    "cacheTtl": {
+      "label": "Cache TTL Override",
+      "description": "Force Anthropic prompt cache TTL for requests containing cache_control.",
+      "options": {
+        "inherit": "No override (follow provider/client)",
+        "5m": "5m",
+        "1h": "1h"
+      }
+    },
     "successTitle": "Key Created Successfully",
     "successDescription": "Your API key has been created successfully.",
     "generatedKey": {
@@ -1148,18 +1161,21 @@
         "name": "Key name",
         "key": "Key",
         "group": "Group",
-        "todayUsage": "Today's usage",
+        "todayUsage": "Requests today",
         "todayCost": "Today's cost",
+        "todayTokens": "Tokens today",
         "lastUsed": "Last used",
         "actions": "Actions",
         "quotaButton": "View Quota Usage",
         "fields": {
-          "callsLabel": "Calls",
+          "callsLabel": "Requests",
+          "tokensLabel": "Tokens",
           "costLabel": "Cost"
         }
       },
       "expand": "Expand",
       "collapse": "Collapse",
+      "refresh": "Refresh",
       "noKeys": "No keys",
       "defaultGroup": "default",
       "userStatus": {
@@ -1250,7 +1266,18 @@
       "userEnabled": "User has been enabled",
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "resetData": {
+        "title": "Reset Statistics",
+        "description": "Delete all request logs and usage data for this user. This action is irreversible.",
+        "error": "Failed to reset data",
+        "button": "Reset Statistics",
+        "confirmTitle": "Reset All Statistics?",
+        "confirmDescription": "This will permanently delete all request logs and usage statistics for this user. This action cannot be undone.",
+        "confirm": "Yes, Reset All",
+        "loading": "Resetting...",
+        "success": "All statistics have been reset"
+      }
     },
     "batchEdit": {
       "enterMode": "Batch Edit",
@@ -1351,6 +1378,41 @@
     },
     "limitRules": {
       "addRule": "Add limit rule",
+      "title": "Add Limit Rule",
+      "description": "Select limit type and set value",
+      "cancel": "Cancel",
+      "confirm": "Save",
+      "fields": {
+        "type": {
+          "label": "Limit Type",
+          "placeholder": "Select"
+        },
+        "value": {
+          "label": "Value",
+          "placeholder": "Enter"
+        }
+      },
+      "daily": {
+        "mode": {
+          "label": "Daily Reset Mode",
+          "fixed": "Fixed time reset",
+          "rolling": "Rolling window (24h)",
+          "helperRolling": "Rolling 24-hour window from first request"
+        },
+        "time": {
+          "label": "Reset Time",
+          "placeholder": "HH:mm"
+        }
+      },
+      "limitTypes": {
+        "limitRpm": "RPM Limit",
+        "limit5h": "5-Hour Limit",
+        "limitDaily": "Daily Limit",
+        "limitWeekly": "Weekly Limit",
+        "limitMonthly": "Monthly Limit",
+        "limitTotal": "Total Limit",
+        "limitSessions": "Concurrent Sessions"
+      },
       "ruleTypes": {
         "limitRpm": "RPM limit",
         "limit5h": "5-hour limit",
@@ -1360,6 +1422,12 @@
         "limitTotal": "Total limit",
         "limitSessions": "Concurrent sessions"
       },
+      "errors": {
+        "missingType": "Please select a limit type",
+        "invalidValue": "Please enter a valid value",
+        "invalidTime": "Please enter a valid time (HH:mm)"
+      },
+      "overwriteHint": "This type already exists, saving will overwrite the existing value",
       "dailyMode": {
         "fixed": "Fixed reset time",
         "rolling": "Rolling window (24h)"
@@ -1372,8 +1440,7 @@
         "500": "$500"
       },
       "alreadySet": "Configured",
-      "confirmAdd": "Add",
-      "cancel": "Cancel"
+      "confirmAdd": "Add"
     },
     "quickExpire": {
       "oneWeek": "In 1 week",
@@ -1596,6 +1663,13 @@
           }
         },
         "overwriteHint": "This type already exists, saving will overwrite the existing value"
+      },
+      "accessRestrictions": {
+        "title": "Access Restrictions",
+        "models": "Allowed Models",
+        "clients": "Allowed Clients",
+        "noRestrictions": "No restrictions",
+        "inheritedFromUser": "Inherited from user settings"
       }
     }
   },

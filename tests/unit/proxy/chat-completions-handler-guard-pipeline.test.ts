@@ -232,6 +232,28 @@ beforeEach(() => {
 });
 
 describe("handleChatCompletions：必须走 GuardPipeline", () => {
+  test("pipeline 早退错误时，应附带 x-cch-session-id 且 message 追加 cch_session_id", async () => {
+    h.session = createSession({
+      model: "gpt-4.1-mini",
+      messages: [{ role: "user", content: "hi" }],
+    });
+    h.session.sessionId = "s_123";
+    h.clientGuardResult = new Response(
+      JSON.stringify({
+        error: { message: "client blocked", type: "invalid_request_error", code: "client_blocked" },
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+
+    const { handleChatCompletions } = await import("@/app/v1/_lib/codex/chat-completions-handler");
+    const res = await handleChatCompletions({} as any);
+
+    expect(res.status).toBe(400);
+    expect(res.headers.get("x-cch-session-id")).toBe("s_123");
+    const body = await res.json();
+    expect(body.error.message).toBe("client blocked (cch_session_id: s_123)");
+  });
+
   test("请求体既不是 messages 也不是 input 时，应返回 400（不进入 pipeline）", async () => {
     h.session = createSession({});
 

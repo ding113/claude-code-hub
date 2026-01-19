@@ -1,12 +1,9 @@
-/**
- * @vitest-environment happy-dom
- */
-
 import fs from "node:fs";
 import path from "node:path";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { Dialog } from "@/components/ui/dialog";
@@ -53,8 +50,12 @@ function render(node: ReactNode) {
   document.body.appendChild(container);
   const root = createRoot(container);
 
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
   act(() => {
-    root.render(node);
+    root.render(<QueryClientProvider client={queryClient}>{node}</QueryClientProvider>);
   });
 
   return {
@@ -127,10 +128,10 @@ describe("EditKeyForm: 清除 expiresAt 后应携带 expiresAt 字段提交（�
     });
 
     expect(keysActionMocks.editKey).toHaveBeenCalledTimes(1);
-    const [, payload] = keysActionMocks.editKey.mock.calls[0] as [number, any];
+    const call = keysActionMocks.editKey.mock.calls[0] as unknown as [number, any];
+    const [, payload] = call;
 
-    // 关键点：必须显式携带 expiresAt 字段（清除时通常为 ""），后端才会识别为“清除”
-    expect(Object.hasOwn(payload, "expiresAt")).toBe(true);
+    expect("expiresAt" in payload).toBe(true);
 
     unmount();
   });
