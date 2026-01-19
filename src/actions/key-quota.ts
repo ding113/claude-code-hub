@@ -1,6 +1,7 @@
 "use server";
 
 import { and, eq, isNull } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { keys as keysTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
@@ -8,6 +9,7 @@ import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { getSystemSettings } from "@/repository/system-config";
 import { getTotalUsageForKey } from "@/repository/usage-logs";
 import type { ActionResult } from "./types";
@@ -27,11 +29,23 @@ export interface KeyQuotaUsageResult {
 }
 
 export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQuotaUsageResult>> {
+  let tError: ((key: string, params?: Record<string, string | number>) => string) | null = null;
   try {
-    const session = await getSession();
-    if (!session) return { ok: false, error: "Unauthorized" };
-    if (session.user.role !== "admin") {
-      return { ok: false, error: "Admin access required" };
+    tError = await getTranslations("errors");
+  } catch (error) {
+    logger.warn("[key-quota] failed to load errors translations", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) {
+      return {
+        ok: false,
+        error: tError?.("UNAUTHORIZED") ?? "",
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     const [keyRow] = await db
@@ -41,7 +55,20 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       .limit(1);
 
     if (!keyRow) {
-      return { ok: false, error: "Key not found" };
+      return {
+        ok: false,
+        error: tError?.("KEY_NOT_FOUND") ?? "",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    // Allow admin to view any key, users can only view their own keys
+    if (session.user.role !== "admin" && keyRow.userId !== session.user.id) {
+      return {
+        ok: false,
+        error: tError?.("PERMISSION_DENIED") ?? "",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
     }
 
     const settings = await getSystemSettings();
@@ -115,6 +142,10 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
     };
   } catch (error) {
     logger.error("[key-quota] getKeyQuotaUsage failed", error);
-    return { ok: false, error: "Failed to get key quota usage" };
+    return {
+      ok: false,
+      error: tError?.("INTERNAL_ERROR") ?? "",
+      errorCode: ERROR_CODES.INTERNAL_ERROR,
+    };
   }
 }

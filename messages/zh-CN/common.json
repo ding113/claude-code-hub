@@ -48,5 +48,15 @@
   "theme": "主题",
   "light": "浅色",
   "dark": "深色",
-  "system": "跟随系统"
+  "system": "跟随系统",
+  "relativeTimeShort": {
+    "now": "刚刚",
+    "secondsAgo": "{count}秒前",
+    "minutesAgo": "{count}分前",
+    "hoursAgo": "{count}时前",
+    "daysAgo": "{count}天前",
+    "weeksAgo": "{count}周前",
+    "monthsAgo": "{count}月前",
+    "yearsAgo": "{count}年前"
+  }
 }

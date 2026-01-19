@@ -139,7 +139,7 @@ export function UsageLogsTable({
                   >
                     <TableCell className="font-mono text-xs w-[90px] max-w-[90px] overflow-hidden">
                       <div className="truncate">
-                        <RelativeTime date={log.createdAt} fallback="-" />
+                        <RelativeTime date={log.createdAt} fallback="-" format="short" />
                       </div>
                     </TableCell>
                     <TableCell>{log.userName}</TableCell>

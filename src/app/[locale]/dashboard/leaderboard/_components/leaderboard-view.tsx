@@ -299,9 +299,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.totalTokens"),
       className: "text-right",
-      cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).totalTokens),
-      sortKey: "totalTokens",
-      getValue: (row) => (row as ProviderCacheHitRateEntry).totalTokens,
+      cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).totalInputTokens),
+      sortKey: "totalInputTokens",
+      getValue: (row) => (row as ProviderCacheHitRateEntry).totalInputTokens,
     },
   ];
 

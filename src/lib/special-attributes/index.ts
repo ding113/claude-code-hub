@@ -26,7 +26,7 @@ export const CONTEXT_1M_BETA_HEADER = "context-1m-2025-08-07";
 
 /**
  * Context 1M preference types for provider configuration
- * - 'inherit': Follow client request (default)
+ * - 'inherit': Follow client request and passthrough headers for supported models (default)
  * - 'force_enable': Force enable 1M context for supported models
  * - 'disabled': Disable 1M context even if client requests it
  */

@@ -790,6 +790,15 @@
       "defaultDescription": "default 分组包含所有未设置 groupTag 的供应商",
       "descriptionWithUserGroup": "供应商分组（默认：default；用户分组：{group}）"
     },
+    "cacheTtl": {
+      "label": "Cache TTL 覆写",
+      "description": "强制为包含 cache_control 的请求设置 Anthropic prompt cache TTL。",
+      "options": {
+        "inherit": "不覆写（跟随供应商/客户端）",
+        "5m": "5m",
+        "1h": "1h"
+      }
+    },
     "successTitle": "密钥创建成功",
     "successDescription": "您的 API 密钥已成功创建。",
     "generatedKey": {
@@ -1153,18 +1162,21 @@
         "name": "密钥名称",
         "key": "密钥",
         "group": "分组",
-        "todayUsage": "今日用量",
+        "todayUsage": "今日请求",
         "todayCost": "今日消耗",
+        "todayTokens": "今日Token",
         "lastUsed": "最后使用",
         "actions": "操作",
         "quotaButton": "查看限额用量",
         "fields": {
-          "callsLabel": "调用",
+          "callsLabel": "请求",
+          "tokensLabel": "Token",
           "costLabel": "消耗"
         }
       },
       "expand": "展开",
       "collapse": "收起",
+      "refresh": "刷新",
       "noKeys": "无密钥",
       "defaultGroup": "default",
       "userStatus": {
@@ -1255,7 +1267,18 @@
       "userEnabled": "用户已启用",
       "deleteFailed": "删除用户失败",
       "userDeleted": "用户已删除",
-      "saving": "保存中..."
+      "saving": "保存中...",
+      "resetData": {
+        "title": "重置统计",
+        "description": "删除该用户的所有请求日志和使用数据。此操作不可逆。",
+        "error": "重置数据失败",
+        "button": "重置统计",
+        "confirmTitle": "重置所有统计？",
+        "confirmDescription": "这将永久删除该用户的所有请求日志和使用统计。此操作无法撤销。",
+        "confirm": "是的，重置全部",
+        "loading": "重置中...",
+        "success": "所有统计已重置"
+      }
     },
     "batchEdit": {
       "enterMode": "批量编辑",
