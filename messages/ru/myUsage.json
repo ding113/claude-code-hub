@@ -92,7 +92,22 @@
     "keyStats": "Ключ",
     "userStats": "Пользователь",
     "noData": "Нет данных за выбранный период",
-    "unknownModel": "Неизвестно"
+    "unknownModel": "Неизвестно",
+    "modal": {
+      "requests": "Запросов",
+      "tokens": "токенов",
+      "totalTokens": "Всего токенов",
+      "cost": "Стоимость",
+      "inputTokens": "Входные токены",
+      "outputTokens": "Выходные токены",
+      "cacheWrite": "Запись кэша",
+      "cacheRead": "Чтение кэша",
+      "cacheHitRate": "Попадание кэша",
+      "cacheTokens": "Токены кэша",
+      "performanceHigh": "Высокий",
+      "performanceMedium": "Средний",
+      "performanceLow": "Низкий"
+    }
   },
   "accessRestrictions": {
     "title": "Ограничения доступа",

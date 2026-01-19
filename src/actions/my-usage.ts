@@ -1,9 +1,11 @@
 "use server";
 
+import { fromZonedTime } from "date-fns-tz";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
@@ -22,6 +24,26 @@ import {
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import type { ActionResult } from "./types";
+
+/**
+ * Parse date range strings to timestamps using server timezone (TZ config).
+ * Returns startTime as midnight and endTime as next day midnight (exclusive upper bound).
+ */
+function parseDateRangeInServerTimezone(
+  startDate?: string,
+  endDate?: string
+): { startTime?: number; endTime?: number } {
+  const timezone = getEnvConfig().TZ;
+  const parsedStart = startDate
+    ? fromZonedTime(`${startDate}T00:00:00`, timezone).getTime()
+    : Number.NaN;
+  const parsedEnd = endDate ? fromZonedTime(`${endDate}T00:00:00`, timezone).getTime() : Number.NaN;
+
+  return {
+    startTime: Number.isFinite(parsedStart) ? parsedStart : undefined,
+    endTime: Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined,
+  };
+}
 
 export interface MyUsageMetadata {
   keyName: string;
@@ -395,16 +417,10 @@ export async function getMyUsageLogs(
     const pageSize = Math.min(rawPageSize, 100);
     const page = filters.page && filters.page > 0 ? filters.page : 1;
 
-    const parsedStart = filters.startDate
-      ? new Date(`${filters.startDate}T00:00:00`).getTime()
-      : Number.NaN;
-    const parsedEnd = filters.endDate
-      ? new Date(`${filters.endDate}T00:00:00`).getTime()
-      : Number.NaN;
-
-    const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
-    // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题
-    const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      filters.startDate,
+      filters.endDate
+    );
 
     const usageFilters: UsageLogFilters = {
       keyId: session.key.id,
@@ -519,6 +535,8 @@ export interface ModelBreakdownItem {
   cost: number;
   inputTokens: number;
   outputTokens: number;
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
 }
 
 export interface MyStatsSummary extends UsageLogSummary {
@@ -541,16 +559,10 @@ export async function getMyStatsSummary(
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
-    // 日期字符串来自前端的 YYYY-MM-DD（目前使用 toISOString().split("T")[0] 生成），因此按 UTC 解析更一致。
-    // 注意：new Date("YYYY-MM-DDT00:00:00") 会按本地时区解析，可能导致跨时区边界偏移。
-    const parsedStart = filters.startDate
-      ? Date.parse(`${filters.startDate}T00:00:00.000Z`)
-      : Number.NaN;
-    const parsedEnd = filters.endDate ? Date.parse(`${filters.endDate}T00:00:00.000Z`) : Number.NaN;
-
-    const startTime = Number.isFinite(parsedStart) ? parsedStart : undefined;
-    // endTime 使用“次日零点”作为排他上界（created_at < endTime），避免 23:59:59.999 的边界问题
-    const endTime = Number.isFinite(parsedEnd) ? parsedEnd + 24 * 60 * 60 * 1000 : undefined;
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      filters.startDate,
+      filters.endDate
+    );
 
     // Get aggregated stats using existing repository function
     const stats = await findUsageLogsStats({
@@ -567,6 +579,8 @@ export async function getMyStatsSummary(
         cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
         inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
         outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
       })
       .from(messageRequest)
       .where(
@@ -589,6 +603,8 @@ export async function getMyStatsSummary(
         cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
         inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
         outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
       })
       .from(messageRequest)
       .where(
@@ -611,6 +627,8 @@ export async function getMyStatsSummary(
         cost: Number(row.cost ?? 0),
         inputTokens: row.inputTokens,
         outputTokens: row.outputTokens,
+        cacheCreationTokens: row.cacheCreationTokens,
+        cacheReadTokens: row.cacheReadTokens,
       })),
       userModelBreakdown: userBreakdown.map((row) => ({
         model: row.model,
@@ -618,6 +636,8 @@ export async function getMyStatsSummary(
         cost: Number(row.cost ?? 0),
         inputTokens: row.inputTokens,
         outputTokens: row.outputTokens,
+        cacheCreationTokens: row.cacheCreationTokens,
+        cacheReadTokens: row.cacheReadTokens,
       })),
       currencyCode,
     };

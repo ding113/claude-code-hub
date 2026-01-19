@@ -92,7 +92,22 @@
     "keyStats": "密钥",
     "userStats": "用户",
     "noData": "所选时段无数据",
-    "unknownModel": "未知"
+    "unknownModel": "未知",
+    "modal": {
+      "requests": "请求",
+      "tokens": "个token",
+      "totalTokens": "总Token",
+      "cost": "费用",
+      "inputTokens": "输入Token",
+      "outputTokens": "输出Token",
+      "cacheWrite": "缓存写入",
+      "cacheRead": "缓存读取",
+      "cacheHitRate": "缓存命中率",
+      "cacheTokens": "缓存Token",
+      "performanceHigh": "高",
+      "performanceMedium": "中",
+      "performanceLow": "低"
+    }
   },
   "accessRestrictions": {
     "title": "访问限制",
