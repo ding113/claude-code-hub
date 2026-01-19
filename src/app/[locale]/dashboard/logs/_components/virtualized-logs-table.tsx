@@ -3,7 +3,8 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { cn, formatTokenAmount } from "@/lib/utils";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
@@ -31,6 +33,7 @@ export interface VirtualizedLogsTableFilters {
   userId?: number;
   keyId?: number;
   providerId?: number;
+  sessionId?: string;
   startTime?: number;
   endTime?: number;
   statusCode?: number;
@@ -65,6 +68,18 @@ export function VirtualizedLogsTable({
     logId: number | null;
     scrollToRedirect: boolean;
   }>({ logId: null, scrollToRedirect: false });
+
+  const handleCopySessionIdClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      const sessionId = event.currentTarget.dataset.sessionId;
+      if (!sessionId) return;
+
+      void copyTextToClipboard(sessionId).then((ok) => {
+        if (ok) toast.success(t("actions.copied"));
+      });
+    },
+    [t]
+  );
 
   // Infinite query with cursor-based pagination
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
@@ -180,6 +195,12 @@ export function VirtualizedLogsTable({
               {t("logs.columns.key")}
             </div>
             <div
+              className="flex-[0.8] min-w-[80px] px-1 truncate"
+              title={t("logs.columns.sessionId")}
+            >
+              {t("logs.columns.sessionId")}
+            </div>
+            <div
               className="flex-[1.5] min-w-[100px] px-1 truncate"
               title={t("logs.columns.provider")}
             >
@@ -284,6 +305,33 @@ export function VirtualizedLogsTable({
                     title={log.keyName}
                   >
                     {log.keyName}
+                  </div>
+
+                  {/* Session ID */}
+                  <div className="flex-[0.8] min-w-[80px] px-1">
+                    {log.sessionId ? (
+                      <TooltipProvider>
+                        <Tooltip delayDuration={300}>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="w-full text-left font-mono text-xs truncate cursor-pointer hover:underline"
+                              data-session-id={log.sessionId}
+                              onClick={handleCopySessionIdClick}
+                            >
+                              {log.sessionId}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" align="start" className="max-w-[500px]">
+                            <p className="text-xs whitespace-normal break-words font-mono">
+                              {log.sessionId}
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ) : (
+                      <span className="font-mono text-xs text-muted-foreground">-</span>
+                    )}
                   </div>
 
                   {/* Provider */}

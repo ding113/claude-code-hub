@@ -1,13 +1,13 @@
 "use client";
 
-import { addDays, format, parse } from "date-fns";
+import { format } from "date-fns";
 import { Check, ChevronsUpDown, Download } from "lucide-react";
 import { useTranslations } from "next-intl";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getKeys } from "@/actions/keys";
-import { exportUsageLogs } from "@/actions/usage-logs";
+import { exportUsageLogs, getUsageLogSessionIdSuggestions } from "@/actions/usage-logs";
 import { searchUsersForFilter } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SESSION_ID_SUGGESTION_MIN_LEN } from "@/lib/constants/usage-logs.constants";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
@@ -36,6 +37,11 @@ import {
   useLazyModels,
   useLazyStatusCodes,
 } from "../_hooks/use-lazy-filter-options";
+import {
+  dateStringWithClockToTimestamp,
+  formatClockFromTimestamp,
+  inclusiveEndTimestampFromExclusive,
+} from "../_utils/time-range";
 import { LogsDateRangePicker } from "./logs-date-range-picker";
 
 // 硬编码常用状态码（首次渲染时显示，无需等待加载）
@@ -51,6 +57,7 @@ interface UsageLogsFiltersProps {
     userId?: number;
     keyId?: number;
     providerId?: number;
+    sessionId?: string;
     /** 开始时间戳（毫秒，浏览器本地时区的 00:00:00） */
     startTime?: number;
     /** 结束时间戳（毫秒，浏览器本地时区的次日 00:00:00，用于 < 比较） */
@@ -125,6 +132,12 @@ export function UsageLogsFilters({
   const [isExporting, setIsExporting] = useState(false);
   const [userPopoverOpen, setUserPopoverOpen] = useState(false);
   const [providerPopoverOpen, setProviderPopoverOpen] = useState(false);
+  const [sessionIdPopoverOpen, setSessionIdPopoverOpen] = useState(false);
+  const [isSessionIdsLoading, setIsSessionIdsLoading] = useState(false);
+  const [availableSessionIds, setAvailableSessionIds] = useState<string[]>([]);
+  const debouncedSessionIdSearchTerm = useDebounce(localFilters.sessionId ?? "", 300);
+  const sessionIdSearchRequestIdRef = useRef(0);
+  const lastLoadedSessionIdSuggestionsKeyRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -181,6 +194,84 @@ export function UsageLogsFilters({
     }
   }, [isAdmin, userPopoverOpen]);
 
+  const loadSessionIdsForFilter = useCallback(
+    async (term: string) => {
+      const requestId = ++sessionIdSearchRequestIdRef.current;
+      setIsSessionIdsLoading(true);
+      const requestKey = [
+        term,
+        isAdmin ? (localFilters.userId ?? "").toString() : "",
+        (localFilters.keyId ?? "").toString(),
+        (localFilters.providerId ?? "").toString(),
+        isAdmin ? "1" : "0",
+      ].join("|");
+      lastLoadedSessionIdSuggestionsKeyRef.current = requestKey;
+
+      try {
+        const result = await getUsageLogSessionIdSuggestions({
+          term,
+          userId: isAdmin ? localFilters.userId : undefined,
+          keyId: localFilters.keyId,
+          providerId: localFilters.providerId,
+        });
+
+        if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
+
+        if (result.ok) {
+          setAvailableSessionIds(result.data);
+        } else {
+          console.error("Failed to load sessionId suggestions:", result.error);
+          setAvailableSessionIds([]);
+        }
+      } catch (error) {
+        if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
+        console.error("Failed to load sessionId suggestions:", error);
+        setAvailableSessionIds([]);
+      } finally {
+        if (isMountedRef.current && requestId === sessionIdSearchRequestIdRef.current) {
+          setIsSessionIdsLoading(false);
+        }
+      }
+    },
+    [isAdmin, localFilters.keyId, localFilters.providerId, localFilters.userId]
+  );
+
+  useEffect(() => {
+    if (!sessionIdPopoverOpen) return;
+
+    const term = debouncedSessionIdSearchTerm.trim();
+    if (term.length < SESSION_ID_SUGGESTION_MIN_LEN) {
+      setAvailableSessionIds([]);
+      lastLoadedSessionIdSuggestionsKeyRef.current = undefined;
+      return;
+    }
+
+    const requestKey = [
+      term,
+      isAdmin ? (localFilters.userId ?? "").toString() : "",
+      (localFilters.keyId ?? "").toString(),
+      (localFilters.providerId ?? "").toString(),
+      isAdmin ? "1" : "0",
+    ].join("|");
+    if (requestKey === lastLoadedSessionIdSuggestionsKeyRef.current) return;
+    void loadSessionIdsForFilter(term);
+  }, [
+    sessionIdPopoverOpen,
+    debouncedSessionIdSearchTerm,
+    isAdmin,
+    localFilters.userId,
+    localFilters.keyId,
+    localFilters.providerId,
+    loadSessionIdsForFilter,
+  ]);
+
+  useEffect(() => {
+    if (!sessionIdPopoverOpen) {
+      setAvailableSessionIds([]);
+      lastLoadedSessionIdSuggestionsKeyRef.current = undefined;
+    }
+  }, [sessionIdPopoverOpen]);
+
   useEffect(() => {
     if (initialKeys.length > 0) {
       setKeys(initialKeys);
@@ -228,7 +319,33 @@ export function UsageLogsFilters({
   };
 
   const handleApply = () => {
-    onChange(localFilters);
+    const {
+      userId,
+      keyId,
+      providerId,
+      sessionId,
+      startTime,
+      endTime,
+      statusCode,
+      excludeStatusCode200,
+      model,
+      endpoint,
+      minRetryCount,
+    } = localFilters;
+
+    onChange({
+      userId,
+      keyId,
+      providerId,
+      sessionId,
+      startTime,
+      endTime,
+      statusCode,
+      excludeStatusCode200,
+      model,
+      endpoint,
+      minRetryCount,
+    });
   };
 
   const handleReset = () => {
@@ -272,24 +389,28 @@ export function UsageLogsFilters({
     return format(date, "yyyy-MM-dd");
   }, []);
 
-  // Helper: parse date string to timestamp (start of day in browser timezone)
-  const dateStringToTimestamp = useCallback((dateStr: string): number => {
-    const [year, month, day] = dateStr.split("-").map(Number);
-    return new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
-  }, []);
-
   // Memoized startDate for display (from timestamp)
   const displayStartDate = useMemo(() => {
     if (!localFilters.startTime) return undefined;
     return timestampToDateString(localFilters.startTime);
   }, [localFilters.startTime, timestampToDateString]);
 
-  // Memoized endDate calculation: endTime is next day 00:00, subtract 1 day to show correct end date
+  const displayStartClock = useMemo(() => {
+    if (!localFilters.startTime) return undefined;
+    return formatClockFromTimestamp(localFilters.startTime);
+  }, [localFilters.startTime]);
+
+  // Memoized endDate calculation: endTime is exclusive, use endTime-1s to infer inclusive display end date
   const displayEndDate = useMemo(() => {
     if (!localFilters.endTime) return undefined;
-    // endTime is next day 00:00, so subtract 1 day to get actual end date
-    const actualEndDate = new Date(localFilters.endTime - 24 * 60 * 60 * 1000);
-    return format(actualEndDate, "yyyy-MM-dd");
+    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
+    return format(new Date(inclusiveEndTime), "yyyy-MM-dd");
+  }, [localFilters.endTime]);
+
+  const displayEndClock = useMemo(() => {
+    if (!localFilters.endTime) return undefined;
+    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
+    return formatClockFromTimestamp(inclusiveEndTime);
   }, [localFilters.endTime]);
 
   // Memoized callback for date range changes
@@ -297,20 +418,21 @@ export function UsageLogsFilters({
     (range: { startDate?: string; endDate?: string }) => {
       if (range.startDate && range.endDate) {
         // Convert to millisecond timestamps:
-        // startTime: start of selected start date (00:00:00.000 in browser timezone)
-        // endTime: start of day AFTER selected end date (for < comparison)
-        const startTimestamp = dateStringToTimestamp(range.startDate);
-        const endDate = parse(range.endDate, "yyyy-MM-dd", new Date());
-        const nextDay = addDays(endDate, 1);
-        const endTimestamp = new Date(
-          nextDay.getFullYear(),
-          nextDay.getMonth(),
-          nextDay.getDate(),
-          0,
-          0,
-          0,
-          0
-        ).getTime();
+        // startTime: startDate + startClock (default 00:00:00)
+        // endTime: endDate + endClock as exclusive upper bound (endClock default 23:59:59)
+        const startClock = displayStartClock ?? "00:00:00";
+        const endClock = displayEndClock ?? "23:59:59";
+        const startTimestamp = dateStringWithClockToTimestamp(range.startDate, startClock);
+        const endInclusiveTimestamp = dateStringWithClockToTimestamp(range.endDate, endClock);
+        if (startTimestamp === undefined || endInclusiveTimestamp === undefined) {
+          setLocalFilters((prev) => ({
+            ...prev,
+            startTime: undefined,
+            endTime: undefined,
+          }));
+          return;
+        }
+        const endTimestamp = endInclusiveTimestamp + 1000;
         setLocalFilters((prev) => ({
           ...prev,
           startTime: startTimestamp,
@@ -324,7 +446,7 @@ export function UsageLogsFilters({
         }));
       }
     },
-    [dateStringToTimestamp]
+    [displayEndClock, displayStartClock]
   );
 
   return (
@@ -338,6 +460,56 @@ export function UsageLogsFilters({
             endDate={displayEndDate}
             onDateRangeChange={handleDateRangeChange}
           />
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t("logs.filters.startTime")}</Label>
+              <Input
+                type="time"
+                step={1}
+                value={displayStartClock ?? ""}
+                disabled={!displayStartDate}
+                onChange={(e) => {
+                  const nextClock = e.target.value || "00:00:00";
+                  setLocalFilters((prev) => {
+                    if (!prev.startTime) return prev;
+                    const dateStr = timestampToDateString(prev.startTime);
+                    const startTime = dateStringWithClockToTimestamp(dateStr, nextClock);
+                    if (startTime === undefined) return prev;
+                    return {
+                      ...prev,
+                      startTime,
+                    };
+                  });
+                }}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">{t("logs.filters.endTime")}</Label>
+              <Input
+                type="time"
+                step={1}
+                value={displayEndClock ?? ""}
+                disabled={!displayEndDate}
+                onChange={(e) => {
+                  const nextClock = e.target.value || "23:59:59";
+                  setLocalFilters((prev) => {
+                    if (!prev.endTime) return prev;
+                    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(prev.endTime);
+                    const endDateStr = timestampToDateString(inclusiveEndTime);
+                    const endInclusiveTimestamp = dateStringWithClockToTimestamp(
+                      endDateStr,
+                      nextClock
+                    );
+                    if (endInclusiveTimestamp === undefined) return prev;
+                    return {
+                      ...prev,
+                      endTime: endInclusiveTimestamp + 1000,
+                    };
+                  });
+                }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* 用户选择（仅 Admin） */}
@@ -531,6 +703,63 @@ export function UsageLogsFilters({
             </Popover>
           </div>
         )}
+
+        {/* Session ID 联想 */}
+        <div className="space-y-2 lg:col-span-4">
+          <Label>{t("logs.filters.sessionId")}</Label>
+          <Popover open={sessionIdPopoverOpen} onOpenChange={setSessionIdPopoverOpen}>
+            <PopoverAnchor asChild>
+              <Input
+                value={localFilters.sessionId ?? ""}
+                placeholder={t("logs.filters.searchSessionId")}
+                onFocus={() => {
+                  const term = (localFilters.sessionId ?? "").trim();
+                  setSessionIdPopoverOpen(term.length >= SESSION_ID_SUGGESTION_MIN_LEN);
+                }}
+                onChange={(e) => {
+                  const next = e.target.value.trim();
+                  setLocalFilters((prev) => ({ ...prev, sessionId: next || undefined }));
+                  setSessionIdPopoverOpen(next.length >= SESSION_ID_SUGGESTION_MIN_LEN);
+                }}
+              />
+            </PopoverAnchor>
+            <PopoverContent
+              className="w-[320px] p-0"
+              align="start"
+              onOpenAutoFocus={(e) => e.preventDefault()}
+              onWheel={(e) => e.stopPropagation()}
+              onTouchMove={(e) => e.stopPropagation()}
+            >
+              <Command shouldFilter={false}>
+                <CommandList className="max-h-[250px] overflow-y-auto">
+                  <CommandEmpty>
+                    {isSessionIdsLoading
+                      ? t("logs.stats.loading")
+                      : t("logs.filters.noSessionFound")}
+                  </CommandEmpty>
+                  <CommandGroup>
+                    {availableSessionIds.map((sessionId) => (
+                      <CommandItem
+                        key={sessionId}
+                        value={sessionId}
+                        onSelect={() => {
+                          setLocalFilters((prev) => ({ ...prev, sessionId }));
+                          setSessionIdPopoverOpen(false);
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <span className="flex-1 font-mono text-xs truncate">{sessionId}</span>
+                        {localFilters.sessionId === sessionId && (
+                          <Check className="h-4 w-4 text-primary" />
+                        )}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
 
         {/* 模型选择 */}
         <div className="space-y-2 lg:col-span-4">
