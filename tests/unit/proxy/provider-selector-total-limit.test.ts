@@ -139,6 +139,7 @@ describe("ProxyProviderResolver.findReusable - provider total limit", () => {
       shouldReuseProvider: () => true,
       authState: null,
       getCurrentModel: () => null,
+      getOriginalModel: () => null,
     } as any;
 
     const reused = await (ProxyProviderResolver as any).findReusable(session);

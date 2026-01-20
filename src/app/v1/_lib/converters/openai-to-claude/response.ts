@@ -418,6 +418,17 @@ export function transformClaudeNonStreamResponseToOpenAI(
           },
         });
         break;
+
+      case "tool_result": {
+        // tool_result blocks do not have a .text field; they carry data in .content.
+        // This is typically present in requests, but some proxies may echo it in responses.
+        // Ignore for OpenAI chat completions output.
+        break;
+      }
+
+      default:
+        // Unknown block types are ignored for non-stream output.
+        break;
     }
   }
 

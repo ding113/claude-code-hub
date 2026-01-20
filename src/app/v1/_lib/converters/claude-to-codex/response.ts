@@ -397,6 +397,16 @@ export function transformClaudeNonStreamResponseToCodex(
           });
           break;
         }
+
+        case "tool_result": {
+          // tool_result blocks belong to tool execution results; Codex Responses output is
+          // derived from assistant message/tool_use. Ignore if present in Claude response.
+          break;
+        }
+
+        default:
+          // Unknown block types are ignored for non-stream output.
+          break;
       }
     }
   }
