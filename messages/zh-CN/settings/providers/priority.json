@@ -1,0 +1,10 @@
+{
+  "global": "全局",
+  "globalDefaultTooltip": "全局默认优先级",
+  "globalPriorityTooltip": "全局优先级",
+  "groupPriorityTooltip": "{group} 分组优先级",
+  "groupPriorityWithGlobalTooltip": "{group} 分组优先级（全局: {global}）",
+  "moreOverrides": "其他覆盖规则",
+  "priorityBreakdown": "优先级详情",
+  "overridesCount": "{count} 条覆盖规则"
+}

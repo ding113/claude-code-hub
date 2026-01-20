@@ -1,0 +1,10 @@
+{
+  "global": "グローバル",
+  "globalDefaultTooltip": "グローバルデフォルト優先度",
+  "globalPriorityTooltip": "グローバル優先度",
+  "groupPriorityTooltip": "{group}グループ優先度",
+  "groupPriorityWithGlobalTooltip": "{group}グループ優先度（グローバル: {global}）",
+  "moreOverrides": "その他のオーバーライド",
+  "priorityBreakdown": "優先度の詳細",
+  "overridesCount": "{count}件のオーバーライド"
+}

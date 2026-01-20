@@ -1,0 +1,10 @@
+{
+  "global": "全局",
+  "globalDefaultTooltip": "全局預設優先順序",
+  "globalPriorityTooltip": "全局優先順序",
+  "groupPriorityTooltip": "{group} 分組優先順序",
+  "groupPriorityWithGlobalTooltip": "{group} 分組優先順序（全局: {global}）",
+  "moreOverrides": "其他覆寫規則",
+  "priorityBreakdown": "優先順序詳情",
+  "overridesCount": "{count} 條覆寫規則"
+}

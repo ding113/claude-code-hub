@@ -22,6 +22,7 @@ import {
   resetProviderCircuit,
   resetProviderTotalUsage,
 } from "@/actions/providers";
+import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -53,7 +54,9 @@ import { formatCurrency } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatistics } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
+import { GroupTagsEditor } from "./group-tags-editor";
 import { InlineEditPopover } from "./inline-edit-popover";
+import { PriorityCell } from "./PriorityCell";
 
 interface ProviderRichListItemProps {
   provider: ProviderDisplay;
@@ -69,6 +72,7 @@ interface ProviderRichListItemProps {
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
+  activeGroup?: string | null;
   onEdit?: () => void;
   onClone?: () => void;
   onDelete?: () => void;
@@ -82,6 +86,7 @@ export function ProviderRichListItem({
   statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
+  activeGroup,
   onEdit: onEditProp,
   onClone: onCloneProp,
   onDelete: onDeleteProp,
@@ -98,6 +103,19 @@ export function ProviderRichListItem({
   const [resetUsagePending, startResetUsageTransition] = useTransition();
   const [deletePending, startDeleteTransition] = useTransition();
   const [togglePending, startToggleTransition] = useTransition();
+  const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDistinctProviderGroupsAction()
+      .then((res) => {
+        if (res.ok && res.data) {
+          setGroupSuggestions(res.data);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load group suggestions:", err);
+      });
+  }, []);
 
   const canEdit = currentUser?.role === "admin";
   const tTypes = useTranslations("settings.providers.types");
@@ -343,6 +361,87 @@ export function ProviderRichListItem({
   const handleSaveWeight = createSaveHandler("weight");
   const handleSaveCostMultiplier = createSaveHandler("cost_multiplier");
 
+  const handleSaveGroupTags = async (newGroupTag: string): Promise<boolean> => {
+    try {
+      const res = await editProvider(provider.id, {
+        group_tag: newGroupTag || null,
+      } as Parameters<typeof editProvider>[1]);
+
+      if (res.ok) {
+        toast.success(tInline("saveSuccess"));
+        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        router.refresh();
+        return true;
+      }
+      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
+      return false;
+    } catch (error) {
+      console.error("Failed to update group tags:", error);
+      toast.error(tInline("saveFailed"), { description: tList("unknownError") });
+      return false;
+    }
+  };
+
+  const handleUpdateOverride = async (group: string, newPriority: number): Promise<boolean> => {
+    try {
+      const updatedOverrides = {
+        ...(provider.priorityOverrides || {}),
+        [group]: newPriority,
+      };
+
+      const res = await editProvider(provider.id, {
+        priority_overrides: updatedOverrides,
+      } as Parameters<typeof editProvider>[1]);
+
+      if (res.ok) {
+        toast.success(tInline("saveSuccess"));
+        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        router.refresh();
+        return true;
+      }
+      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
+      return false;
+    } catch (error) {
+      console.error("Failed to update priority override:", error);
+      toast.error(tInline("saveFailed"), { description: tList("unknownError") });
+      return false;
+    }
+  };
+
+  const handleAddOverride = async (group: string, newPriority: number): Promise<boolean> => {
+    return handleUpdateOverride(group, newPriority);
+  };
+
+  const handleDeleteOverride = async (group: string): Promise<boolean> => {
+    try {
+      const updatedOverrides = { ...(provider.priorityOverrides || {}) };
+      delete updatedOverrides[group];
+
+      const res = await editProvider(provider.id, {
+        priority_overrides: updatedOverrides,
+      } as Parameters<typeof editProvider>[1]);
+
+      if (res.ok) {
+        toast.success(tInline("saveSuccess"));
+        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        router.refresh();
+        return true;
+      }
+      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
+      return false;
+    } catch (error) {
+      console.error("Failed to delete priority override:", error);
+      toast.error(tInline("saveFailed"), { description: tList("unknownError") });
+      return false;
+    }
+  };
+
+  const providerGroups =
+    provider.groupTag
+      ?.split(",")
+      .map((g) => g.trim())
+      .filter(Boolean) || [];
+
   return (
     <>
       <div className="flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
@@ -384,37 +483,47 @@ export function ProviderRichListItem({
             {/* 名称 */}
             <span className="font-semibold truncate">{provider.name}</span>
 
-            {/* Group Tags (supports comma-separated values) */}
-            {(provider.groupTag
-              ? provider.groupTag
-                  .split(",")
-                  .map((t) => t.trim())
-                  .filter(Boolean)
-              : []
-            ).length > 0 ? (
-              provider.groupTag
-                ?.split(",")
-                .map((t) => t.trim())
-                .filter(Boolean)
-                .map((tag, index) => {
-                  const bgColor = getGroupColor(tag);
-                  return (
-                    <Badge
-                      key={`${tag}-${index}`}
-                      className="flex-shrink-0 text-xs"
-                      style={{
-                        backgroundColor: bgColor,
-                        color: getContrastTextColor(bgColor),
-                      }}
-                    >
-                      {tag}
-                    </Badge>
-                  );
-                })
+            {/* Group Tags */}
+            {canEdit ? (
+              <GroupTagsEditor
+                value={provider.groupTag || ""}
+                onSave={handleSaveGroupTags}
+                suggestions={groupSuggestions}
+              />
             ) : (
-              <Badge variant="outline" className="flex-shrink-0">
-                {PROVIDER_GROUP.DEFAULT}
-              </Badge>
+              <>
+                {(provider.groupTag
+                  ? provider.groupTag
+                      .split(",")
+                      .map((t) => t.trim())
+                      .filter(Boolean)
+                  : []
+                ).length > 0 ? (
+                  provider.groupTag
+                    ?.split(",")
+                    .map((t) => t.trim())
+                    .filter(Boolean)
+                    .map((tag, index) => {
+                      const bgColor = getGroupColor(tag);
+                      return (
+                        <Badge
+                          key={`${tag}-${index}`}
+                          className="flex-shrink-0 text-xs"
+                          style={{
+                            backgroundColor: bgColor,
+                            color: getContrastTextColor(bgColor),
+                          }}
+                        >
+                          {tag}
+                        </Badge>
+                      );
+                    })
+                ) : (
+                  <Badge variant="outline" className="flex-shrink-0">
+                    {PROVIDER_GROUP.DEFAULT}
+                  </Badge>
+                )}
+              </>
             )}
 
             {/* 熔断器警告 */}
@@ -483,17 +592,17 @@ export function ProviderRichListItem({
           <div>
             <div className="text-xs text-muted-foreground">{tList("priority")}</div>
             <div className="font-medium">
-              {canEdit ? (
-                <InlineEditPopover
-                  value={provider.priority}
-                  label={tInline("priorityLabel")}
-                  type="integer"
-                  validator={validatePriority}
-                  onSave={handleSavePriority}
-                />
-              ) : (
-                <span>{provider.priority}</span>
-              )}
+              <PriorityCell
+                priority={provider.priority}
+                overrides={provider.priorityOverrides}
+                onUpdatePriority={canEdit ? handleSavePriority : undefined}
+                validatePriority={canEdit ? validatePriority : undefined}
+                onUpdateOverride={canEdit ? handleUpdateOverride : undefined}
+                onAddOverride={canEdit ? handleAddOverride : undefined}
+                onDeleteOverride={canEdit ? handleDeleteOverride : undefined}
+                availableGroups={canEdit ? providerGroups : []}
+                activeGroup={activeGroup}
+              />
             </div>
           </div>
           <div>

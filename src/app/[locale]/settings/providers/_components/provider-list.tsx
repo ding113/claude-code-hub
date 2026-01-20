@@ -23,6 +23,7 @@ interface ProviderListProps {
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
+  activeGroup?: string | null;
 }
 
 export function ProviderList({
@@ -33,6 +34,7 @@ export function ProviderList({
   statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
+  activeGroup,
 }: ProviderListProps) {
   const t = useTranslations("settings.providers");
 
@@ -60,6 +62,7 @@ export function ProviderList({
           statisticsLoading={statisticsLoading}
           currencyCode={currencyCode}
           enableMultiProviderTypes={enableMultiProviderTypes}
+          activeGroup={activeGroup}
         />
       ))}
     </div>

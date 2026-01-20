@@ -1,0 +1,10 @@
+{
+  "global": "Global",
+  "globalDefaultTooltip": "Global default priority",
+  "globalPriorityTooltip": "Global priority",
+  "groupPriorityTooltip": "{group} group priority",
+  "groupPriorityWithGlobalTooltip": "{group} group priority (Global: {global})",
+  "moreOverrides": "More overrides",
+  "priorityBreakdown": "Priority Breakdown",
+  "overridesCount": "{count} overrides"
+}

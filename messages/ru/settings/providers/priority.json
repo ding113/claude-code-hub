@@ -1,0 +1,10 @@
+{
+  "global": "Глобальный",
+  "globalDefaultTooltip": "Глобальный приоритет по умолчанию",
+  "globalPriorityTooltip": "Глобальный приоритет",
+  "groupPriorityTooltip": "Приоритет группы {group}",
+  "groupPriorityWithGlobalTooltip": "Приоритет группы {group} (Глобальный: {global})",
+  "moreOverrides": "Другие переопределения",
+  "priorityBreakdown": "Детали приоритета",
+  "overridesCount": "{count} переопределений"
+}

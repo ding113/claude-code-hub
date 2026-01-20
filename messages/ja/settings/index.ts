@@ -14,9 +14,11 @@ import strings from "./strings.json";
 
 import providersAutoSort from "./providers/autoSort.json";
 import providersFilter from "./providers/filter.json";
+import providersGroupEditor from "./providers/groupEditor.json";
 import providersGuide from "./providers/guide.json";
 import providersInlineEdit from "./providers/inlineEdit.json";
 import providersList from "./providers/list.json";
+import providersPriority from "./providers/priority.json";
 import providersSchedulingDialog from "./providers/schedulingDialog.json";
 import providersSearch from "./providers/search.json";
 import providersSection from "./providers/section.json";
@@ -73,9 +75,11 @@ const providers = {
   autoSort: providersAutoSort,
   filter: providersFilter,
   form: providersForm,
+  groupEditor: providersGroupEditor,
   guide: providersGuide,
   inlineEdit: providersInlineEdit,
   list: providersList,
+  priority: providersPriority,
   schedulingDialog: providersSchedulingDialog,
   search: providersSearch,
   section: providersSection,

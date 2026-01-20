@@ -69,6 +69,9 @@ export function ProviderManager({
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [circuitBrokenFilter, setCircuitBrokenFilter] = useState(false);
 
+  // 识别单分组选中状态（用于上下文感知的优先级显示）
+  const activeGroup = groupFilter.length === 1 ? groupFilter[0] : null;
+
   // Count providers with circuit breaker open
   const circuitBrokenCount = useMemo(() => {
     return providers.filter((p) => healthStatus[p.id]?.circuitState === "open").length;
@@ -325,6 +328,7 @@ export function ProviderManager({
             statisticsLoading={statisticsLoading}
             currencyCode={currencyCode}
             enableMultiProviderTypes={enableMultiProviderTypes}
+            activeGroup={activeGroup}
           />
         </div>
       )}
