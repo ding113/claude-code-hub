@@ -7,6 +7,7 @@ import {
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import { attachSessionIdToErrorResponse } from "./error-session-id";
 import {
   getErrorOverrideAsync,
   isEmptyResponseError,
@@ -14,7 +15,6 @@ import {
   ProxyError,
   type RateLimitError,
 } from "./errors";
-import { attachSessionIdToErrorResponse } from "./error-session-id";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 

@@ -142,14 +142,18 @@
       "loadedCount": "已加载 {count} 条记录",
       "loadingMore": "加载更多中...",
       "noMoreData": "已加载全部记录",
-      "scrollToTop": "回到顶部"
+      "scrollToTop": "回到顶部",
+      "hideProviderColumn": "隐藏供应商列",
+      "showProviderColumn": "显示供应商列"
     },
     "actions": {
       "refresh": "刷新",
       "refreshing": "刷新中...",
       "stopAutoRefresh": "停止自动刷新",
       "startAutoRefresh": "开启自动刷新",
-      "view": "查看"
+      "view": "查看",
+      "fullscreen": "全屏显示",
+      "exitFullscreen": "退出全屏"
     },
     "error": {
       "loadFailed": "加载失败",

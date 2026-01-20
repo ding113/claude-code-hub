@@ -142,14 +142,18 @@
       "loadedCount": "Loaded {count} records",
       "loadingMore": "Loading more...",
       "noMoreData": "All records loaded",
-      "scrollToTop": "Back to top"
+      "scrollToTop": "Back to top",
+      "hideProviderColumn": "Hide Provider Column",
+      "showProviderColumn": "Show Provider Column"
     },
     "actions": {
       "refresh": "Refresh",
       "refreshing": "Refreshing...",
       "stopAutoRefresh": "Stop Auto-Refresh",
       "startAutoRefresh": "Start Auto-Refresh",
-      "view": "View"
+      "view": "View",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit Fullscreen"
     },
     "error": {
       "loadFailed": "Load Failed",

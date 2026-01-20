@@ -256,6 +256,26 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("animate-spin");
   });
 
+  test("hides provider column when hiddenColumns includes provider", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [makeLog({ id: 1, providerName: "provider" })];
+
+    const htmlWithProvider = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+    expect(htmlWithProvider).toContain("logs.columns.provider");
+
+    const htmlHidden = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} hiddenColumns={["provider"]} />
+    );
+    expect(htmlHidden).not.toContain("logs.columns.provider");
+  });
+
   test("renders provider summary and fetching state when enabled", () => {
     mockIsLoading = false;
     mockIsError = false;
