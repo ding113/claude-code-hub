@@ -1,4 +1,5 @@
 "use client";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
@@ -49,6 +50,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   const [isPending, startTransition] = useTransition();
   const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const t = useTranslations("quota.keys.editKeyForm");
   const tKeyEdit = useTranslations("dashboard.userManagement.keyEditSection.fields");
   const tBalancePage = useTranslations(
@@ -128,6 +130,8 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             return;
           }
           toast.success(t("success"));
+          queryClient.invalidateQueries({ queryKey: ["userKeyGroups"] });
+          queryClient.invalidateQueries({ queryKey: ["userTags"] });
           onSuccess?.();
           router.refresh();
         } catch (err) {

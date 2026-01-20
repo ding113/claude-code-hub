@@ -82,7 +82,7 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
         configFile: "config.json",
         configPath: {
           macos: "~/.claude",
-          windows: "C:\\Users\\你的用户名\\.claude",
+          windows: `C:\\Users\\${t("placeholders.windowsUserName")}\\.claude`,
           linux: "~/.claude",
         },
       },
@@ -95,10 +95,10 @@ function getCLIConfigs(t: (key: string) => string): Record<string, CLIConfig> {
       requiresNodeJs: true,
       vsCodeExtension: {
         name: "Codex – OpenAI's coding agent",
-        configFile: "config.toml 和 auth.json",
+        configFile: t("placeholders.codexVsCodeConfigFiles"),
         configPath: {
           macos: "~/.codex",
-          windows: "C:\\Users\\你的用户名\\.codex",
+          windows: `C:\\Users\\${t("placeholders.windowsUserName")}\\.codex`,
           linux: "~/.codex",
         },
       },
@@ -150,9 +150,9 @@ export function UsageDocContent({ origin }: UsageDocContentProps) {
           <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.macos.homebrew")}</h4>
           <CodeBlock
             language="bash"
-            code={`# 更新 Homebrew
+            code={`${t("snippets.comments.updateHomebrew")}
 brew update
-# 安装 Node.js
+${t("snippets.comments.installNodeJs")}
 brew install node`}
           />
           <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.macos.official")}</h4>
@@ -197,10 +197,10 @@ brew install node`}
           </h4>
           <CodeBlock
             language="powershell"
-            code={`# 使用 Chocolatey
+            code={`${t("snippets.comments.usingChocolatey")}
 choco install nodejs
 
-# 或使用 Scoop
+${t("snippets.comments.orUsingScoop")}
 scoop install nodejs`}
           />
           <blockquote className="space-y-1 rounded-lg border-l-2 border-primary/50 bg-muted/40 px-4 py-3">
@@ -218,9 +218,9 @@ scoop install nodejs`}
           <h4 className={headingClasses.h4}>{t("claudeCode.environmentSetup.linux.official")}</h4>
           <CodeBlock
             language="bash"
-            code={`# 添加 NodeSource 仓库
+            code={`${t("snippets.comments.addNodeSourceRepo")}
 curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-# 安装 Node.js
+${t("snippets.comments.installNodeJs")}
 sudo apt-get install -y nodejs`}
           />
           <h4 className={headingClasses.h4}>
@@ -228,11 +228,11 @@ sudo apt-get install -y nodejs`}
           </h4>
           <CodeBlock
             language="bash"
-            code={`# Ubuntu/Debian
+            code={`${t("snippets.comments.ubuntuDebian")}
 sudo apt update
 sudo apt install nodejs npm
 
-# CentOS/RHEL/Fedora
+${t("snippets.comments.centosRhelFedora")}
 sudo dnf install nodejs npm`}
           />
         </div>
@@ -308,14 +308,9 @@ npm --version`}
                 </p>
                 <CodeBlock
                   language="bash"
-                  code={`# 安装稳定版（默认）
-curl -fsSL https://claude.ai/install.sh | bash
-
-# 安装最新版
-curl -fsSL https://claude.ai/install.sh | bash -s latest
-
-# 安装指定版本
-curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
+                  code={(
+                    t.raw("claudeCode.installation.nativeInstall.macos.curls") as string[]
+                  ).join("\n")}
                 />
               </div>
             </div>
@@ -454,15 +449,22 @@ curl -fsSL https://claude.ai/install.sh | bash -s 1.0.58`}
    * 渲染 Claude Code 配置
    */
   const renderClaudeCodeConfiguration = (os: OS) => {
+    const windowsUserName = t("placeholders.windowsUserName");
     const configPath =
       os === "windows"
-        ? "C:\\Users\\你的用户名\\.claude\\settings.json"
+        ? `C:\\Users\\${windowsUserName}\\.claude\\settings.json`
         : "~/.claude/settings.json";
+    const shellConfigFile =
+      os === "linux"
+        ? t("placeholders.shellConfig.linux")
+        : os === "macos"
+          ? t("placeholders.shellConfig.macos")
+          : "";
     const shellConfig =
       os === "linux"
-        ? "~/.bashrc 或 ~/.zshrc"
+        ? t("placeholders.shellConfig.linux")
         : os === "macos"
-          ? "~/.zshrc 或 ~/.bash_profile"
+          ? t("placeholders.shellConfig.macos")
           : "";
 
     return (
@@ -546,9 +548,9 @@ export ANTHROPIC_AUTH_TOKEN="your-api-key-here"`}
               </p>
               <CodeBlock
                 language="bash"
-                code={`echo 'export ANTHROPIC_BASE_URL="${resolvedOrigin}"' >> ${shellConfig.split(" ")[0]}
-echo 'export ANTHROPIC_AUTH_TOKEN="your-api-key-here"' >> ${shellConfig.split(" ")[0]}
-source ${shellConfig.split(" ")[0]}`}
+                code={`echo 'export ANTHROPIC_BASE_URL="${resolvedOrigin}"' >> ${shellConfigFile}
+echo 'export ANTHROPIC_AUTH_TOKEN="your-api-key-here"' >> ${shellConfigFile}
+source ${shellConfigFile}`}
               />
             </>
           )}
@@ -623,12 +625,13 @@ sk_xxxxxxxxxxxxxxxxxx`}
    * 渲染 Codex 配置
    */
   const renderCodexConfiguration = (os: OS) => {
-    const configPath = os === "windows" ? "C:\\Users\\你的用户名\\.codex" : "~/.codex";
-    const shellConfig =
+    const windowsUserName = t("placeholders.windowsUserName");
+    const configPath = os === "windows" ? `C:\\Users\\${windowsUserName}\\.codex` : "~/.codex";
+    const shellConfigFile =
       os === "linux"
-        ? "~/.bashrc 或 ~/.zshrc"
+        ? t("placeholders.shellConfig.linux")
         : os === "macos"
-          ? "~/.zshrc 或 ~/.bash_profile"
+          ? t("placeholders.shellConfig.macos")
           : "";
 
     return (
@@ -742,8 +745,8 @@ network_access = true`}
                     <p>{t("codex.configuration.envVars.unix.instruction")}</p>
                     <CodeBlock
                       language="bash"
-                      code={`echo 'export CCH_API_KEY="your-api-key-here"' >> ${shellConfig.split(" ")[0]}
-source ${shellConfig.split(" ")[0]}`}
+                      code={`echo 'export CCH_API_KEY="your-api-key-here"' >> ${shellConfigFile}
+source ${shellConfigFile}`}
                     />
                   </>
                 )}
@@ -1475,7 +1478,7 @@ ${cli.cliName}`}
               code={`# ${t(cmdNotFoundUnixKey)}
 npm config get prefix
 
-# 添加到 PATH（如果不在）
+${t("snippets.comments.addToPathIfMissing")}
 echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.${os === "macos" ? "zshrc" : "bashrc"}
 source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
             />
@@ -1497,19 +1500,19 @@ source ~/.${os === "macos" ? "zshrc" : "bashrc"}`}
             ) : os === "windows" ? (
               <CodeBlock
                 language="powershell"
-                code={`# 检查环境变量
+                code={`${t("snippets.comments.checkEnvVar")}
 echo $env:${envKeyName}
 
-# 测试网络连接
+${t("snippets.comments.testNetworkConnection")}
 Test-NetConnection -ComputerName ${resolvedOrigin.replace("https://", "").replace("http://", "")} -Port 443`}
               />
             ) : (
               <CodeBlock
                 language="bash"
-                code={`# 检查环境变量
+                code={`${t("snippets.comments.checkEnvVar")}
 echo $${envKeyName}
 
-# 测试网络连接
+${t("snippets.comments.testNetworkConnection")}
 curl -I ${resolvedOrigin}`}
               />
             )}

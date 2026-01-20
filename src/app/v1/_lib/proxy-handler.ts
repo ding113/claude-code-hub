@@ -3,6 +3,7 @@ import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "./proxy/error-handler";
+import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
 import { ProxyError } from "./proxy/errors";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
@@ -54,7 +55,9 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
 
     // Run guard chain; may return early Response
     const early = await pipeline.run(session);
-    if (early) return early;
+    if (early) {
+      return await attachSessionIdToErrorResponse(session.sessionId, early);
+    }
 
     // 9. 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
     if (session.sessionId && !session.isCountTokensRequest()) {
@@ -76,7 +79,8 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     }
 
     const response = await ProxyForwarder.send(session);
-    return await ProxyResponseHandler.dispatch(session, response);
+    const handled = await ProxyResponseHandler.dispatch(session, response);
+    return await attachSessionIdToErrorResponse(session.sessionId, handled);
   } catch (error) {
     logger.error("Proxy handler error:", error);
     if (session) {

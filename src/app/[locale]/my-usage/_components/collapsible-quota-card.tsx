@@ -14,8 +14,6 @@ interface CollapsibleQuotaCardProps {
   quota: MyUsageQuota | null;
   loading?: boolean;
   currencyCode?: CurrencyCode;
-  keyExpiresAt?: Date | null;
-  userExpiresAt?: Date | null;
   defaultOpen?: boolean;
 }
 
@@ -23,8 +21,6 @@ export function CollapsibleQuotaCard({
   quota,
   loading = false,
   currencyCode = "USD",
-  keyExpiresAt,
-  userExpiresAt,
   defaultOpen = false,
 }: CollapsibleQuotaCardProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -164,13 +160,7 @@ export function CollapsibleQuotaCard({
 
         <CollapsibleContent>
           <div className="p-4">
-            <QuotaCards
-              quota={quota}
-              loading={loading}
-              currencyCode={currencyCode}
-              keyExpiresAt={keyExpiresAt}
-              userExpiresAt={userExpiresAt}
-            />
+            <QuotaCards quota={quota} loading={loading} currencyCode={currencyCode} />
           </div>
         </CollapsibleContent>
       </div>

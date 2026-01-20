@@ -20,6 +20,16 @@ export interface LeaderboardEntry {
 }
 
 /**
+ * 用户排行榜筛选参数
+ */
+export interface UserLeaderboardFilters {
+  /** 按用户标签筛选（OR 逻辑：匹配任一标签） */
+  userTags?: string[];
+  /** 按用户分组筛选（OR 逻辑：匹配任一分组） */
+  userGroups?: string[];
+}
+
+/**
  * 供应商排行榜条目类型
  */
 export interface ProviderLeaderboardEntry {
@@ -43,6 +53,9 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   cacheReadTokens: number;
   totalCost: number;
   cacheCreationCost: number;
+  /** Input tokens only (input + cacheCreation + cacheRead) for cache hit rate denominator */
+  totalInputTokens: number;
+  /** @deprecated Use totalInputTokens instead */
   totalTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
 }
@@ -62,35 +75,43 @@ export interface ModelLeaderboardEntry {
  * 查询今日消耗排行榜（不限制数量）
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于配置时区（Asia/Shanghai）
  */
-export async function findDailyLeaderboard(): Promise<LeaderboardEntry[]> {
+export async function findDailyLeaderboard(
+  userFilters?: UserLeaderboardFilters
+): Promise<LeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findLeaderboardWithTimezone("daily", timezone);
+  return findLeaderboardWithTimezone("daily", timezone, undefined, userFilters);
 }
 
 /**
  * 查询本月消耗排行榜（不限制数量）
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于配置时区（Asia/Shanghai）
  */
-export async function findMonthlyLeaderboard(): Promise<LeaderboardEntry[]> {
+export async function findMonthlyLeaderboard(
+  userFilters?: UserLeaderboardFilters
+): Promise<LeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findLeaderboardWithTimezone("monthly", timezone);
+  return findLeaderboardWithTimezone("monthly", timezone, undefined, userFilters);
 }
 
 /**
  * 查询本周消耗排行榜（不限制数量）
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"本周"基于配置时区
  */
-export async function findWeeklyLeaderboard(): Promise<LeaderboardEntry[]> {
+export async function findWeeklyLeaderboard(
+  userFilters?: UserLeaderboardFilters
+): Promise<LeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findLeaderboardWithTimezone("weekly", timezone);
+  return findLeaderboardWithTimezone("weekly", timezone, undefined, userFilters);
 }
 
 /**
  * 查询全部时间消耗排行榜（不限制数量）
  */
-export async function findAllTimeLeaderboard(): Promise<LeaderboardEntry[]> {
+export async function findAllTimeLeaderboard(
+  userFilters?: UserLeaderboardFilters
+): Promise<LeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findLeaderboardWithTimezone("allTime", timezone);
+  return findLeaderboardWithTimezone("allTime", timezone, undefined, userFilters);
 }
 
 /**
@@ -151,8 +172,40 @@ function buildDateCondition(
 async function findLeaderboardWithTimezone(
   period: LeaderboardPeriod,
   timezone: string,
-  dateRange?: DateRangeParams
+  dateRange?: DateRangeParams,
+  userFilters?: UserLeaderboardFilters
 ): Promise<LeaderboardEntry[]> {
+  const whereConditions = [
+    isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
+    buildDateCondition(period, timezone, dateRange),
+  ];
+
+  const normalizedTags = (userFilters?.userTags ?? []).map((t) => t.trim()).filter(Boolean);
+  let tagFilterCondition: ReturnType<typeof sql> | undefined;
+  if (normalizedTags.length > 0) {
+    const tagConditions = normalizedTags.map((tag) => sql`${users.tags} ? ${tag}`);
+    tagFilterCondition = sql`(${sql.join(tagConditions, sql` OR `)})`;
+  }
+
+  const normalizedGroups = (userFilters?.userGroups ?? []).map((g) => g.trim()).filter(Boolean);
+  let groupFilterCondition: ReturnType<typeof sql> | undefined;
+  if (normalizedGroups.length > 0) {
+    const groupConditions = normalizedGroups.map(
+      (group) =>
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*,\\s*'))`
+    );
+    groupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
+  }
+
+  if (tagFilterCondition && groupFilterCondition) {
+    whereConditions.push(sql`(${tagFilterCondition} OR ${groupFilterCondition})`);
+  } else if (tagFilterCondition) {
+    whereConditions.push(tagFilterCondition);
+  } else if (groupFilterCondition) {
+    whereConditions.push(groupFilterCondition);
+  }
+
   const rankings = await db
     .select({
       userId: messageRequest.userId,
@@ -171,13 +224,7 @@ async function findLeaderboardWithTimezone(
     })
     .from(messageRequest)
     .innerJoin(users, and(sql`${messageRequest.userId} = ${users.id}`, isNull(users.deletedAt)))
-    .where(
-      and(
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        buildDateCondition(period, timezone, dateRange)
-      )
-    )
+    .where(and(...whereConditions))
     .groupBy(messageRequest.userId, users.name)
     .orderBy(desc(sql`sum(${messageRequest.costUsd})`));
 
@@ -194,10 +241,11 @@ async function findLeaderboardWithTimezone(
  * 查询自定义日期范围消耗排行榜
  */
 export async function findCustomRangeLeaderboard(
-  dateRange: DateRangeParams
+  dateRange: DateRangeParams,
+  userFilters?: UserLeaderboardFilters
 ): Promise<LeaderboardEntry[]> {
   const timezone = getEnvConfig().TZ;
-  return findLeaderboardWithTimezone("custom", timezone, dateRange);
+  return findLeaderboardWithTimezone("custom", timezone, dateRange, userFilters);
 }
 
 /**
@@ -382,7 +430,7 @@ async function findProviderLeaderboardWithTimezone(
  *
  * 计算规则：
  * - 仅统计需要缓存的请求（cache_creation_input_tokens 与 cache_read_input_tokens 不同时为 0/null）
- * - 命中率 = cache_read / (input + output + cache_creation + cache_read)
+ * - 命中率 = cache_read / (input + cache_creation + cache_read)
  */
 async function findProviderCacheHitRateLeaderboardWithTimezone(
   period: LeaderboardPeriod,
@@ -390,9 +438,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   dateRange?: DateRangeParams,
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const totalTokensExpr = sql<number>`(
+  const totalInputTokensExpr = sql<number>`(
     COALESCE(${messageRequest.inputTokens}, 0) +
-    COALESCE(${messageRequest.outputTokens}, 0) +
     COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
     COALESCE(${messageRequest.cacheReadInputTokens}, 0)
   )`;
@@ -402,12 +449,12 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     OR COALESCE(${messageRequest.cacheReadInputTokens}, 0) > 0
   )`;
 
-  const sumTotalTokens = sql<number>`COALESCE(sum(${totalTokensExpr})::double precision, 0::double precision)`;
+  const sumTotalInputTokens = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
   const sumCacheReadTokens = sql<number>`COALESCE(sum(COALESCE(${messageRequest.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
   const sumCacheCreationCost = sql<string>`COALESCE(sum(CASE WHEN COALESCE(${messageRequest.cacheCreationInputTokens}, 0) > 0 THEN ${messageRequest.costUsd} ELSE 0 END), 0)`;
 
   const cacheHitRateExpr = sql<number>`COALESCE(
-    ${sumCacheReadTokens} / NULLIF(${sumTotalTokens}, 0::double precision),
+    ${sumCacheReadTokens} / NULLIF(${sumTotalInputTokens}, 0::double precision),
     0::double precision
   )`;
 
@@ -427,7 +474,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       cacheReadTokens: sumCacheReadTokens,
       cacheCreationCost: sumCacheCreationCost,
-      totalTokens: sumTotalTokens,
+      totalInputTokens: sumTotalInputTokens,
       cacheHitRate: cacheHitRateExpr,
     })
     .from(messageRequest)
@@ -448,7 +495,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     totalCost: parseFloat(entry.totalCost),
     cacheReadTokens: entry.cacheReadTokens,
     cacheCreationCost: parseFloat(entry.cacheCreationCost),
-    totalTokens: entry.totalTokens,
+    totalInputTokens: entry.totalInputTokens,
+    totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
     cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
   }));
 }

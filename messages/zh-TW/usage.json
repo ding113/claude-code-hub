@@ -19,7 +19,7 @@
   },
 
   "codeExamples": {
-    "label": "代碼示例 - ${language}",
+    "label": "代碼示例 - {language}",
     "description": "點擊代碼塊可複製到剪貼板"
   },
 
@@ -202,7 +202,7 @@
         "unix": {
           "temporary": "臨時設置（當前會話）：",
           "permanent": "永久設置：",
-          "permanentNote": "添加到您的 shell 配置文件（${shellConfig}）："
+          "permanentNote": "添加到您的 shell 配置文件（{shellConfig}）："
         }
       },
 
@@ -692,6 +692,35 @@
     "macos": "macOS",
     "windows": "Windows",
     "linux": "Linux"
+  },
+
+  "placeholders": {
+    "windowsUserName": "你的用戶名",
+    "shellConfig": {
+      "linux": "~/.bashrc",
+      "macos": "~/.zshrc"
+    },
+    "codexVsCodeConfigFiles": "config.toml 和 auth.json"
+  },
+
+  "snippets": {
+    "comments": {
+      "updateHomebrew": "# 更新 Homebrew",
+      "installNodeJs": "# 安裝 Node.js",
+      "usingChocolatey": "# 使用 Chocolatey",
+      "orUsingScoop": "# 或使用 Scoop",
+      "addNodeSourceRepo": "# 添加 NodeSource 倉庫",
+      "ubuntuDebian": "# Ubuntu/Debian",
+      "centosRhelFedora": "# CentOS/RHEL/Fedora",
+      "addToPathIfMissing": "# 添加到 PATH（如果不在）",
+      "checkEnvVar": "# 檢查環境變數",
+      "testNetworkConnection": "# 測試網路連線"
+    }
+  },
+
+  "layout": {
+    "headerTitle": "使用文檔",
+    "loginConsole": "登入控制台"
   },
 
   "ui": {

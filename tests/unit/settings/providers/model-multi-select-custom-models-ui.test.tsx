@@ -8,7 +8,11 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ModelMultiSelect } from "@/app/[locale]/settings/providers/_components/model-multi-select";
-import { loadMessages as loadTestMessages } from "../prices/test-messages";
+import commonMessages from "../../../../messages/en/common.json";
+import errorsMessages from "../../../../messages/en/errors.json";
+import formsMessages from "../../../../messages/en/forms.json";
+import settingsMessages from "../../../../messages/en/settings";
+import uiMessages from "../../../../messages/en/ui.json";
 
 const modelPricesActionMocks = vi.hoisted(() => ({
   getAvailableModelsByProviderType: vi.fn(async () => ["remote-model-1"]),
@@ -20,6 +24,16 @@ const providersActionMocks = vi.hoisted(() => ({
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: false })),
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
+
+function loadMessages() {
+  return {
+    common: commonMessages,
+    errors: errorsMessages,
+    ui: uiMessages,
+    forms: formsMessages,
+    settings: settingsMessages,
+  };
+}
 
 function render(node: ReactNode) {
   const container = document.createElement("div");
@@ -52,7 +66,7 @@ describe("ModelMultiSelect: 自定义白名单模型应可在列表中取消选�
   });
 
   test("已选中但不在 availableModels 的模型应出现在列表中，并可取消选中删除", async () => {
-    const messages = loadTestMessages("en");
+    const messages = loadMessages();
     const onChange = vi.fn();
 
     const { unmount } = render(

@@ -1,8 +1,14 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
+import {
+  SESSION_ID_SUGGESTION_LIMIT,
+  SESSION_ID_SUGGESTION_MAX_LEN,
+  SESSION_ID_SUGGESTION_MIN_LEN,
+} from "@/lib/constants/usage-logs.constants";
 import { logger } from "@/lib/logger";
 import {
+  findUsageLogSessionIdSuggestions,
   findUsageLogsBatch,
   findUsageLogsStats,
   findUsageLogsWithDetails,
@@ -276,6 +282,53 @@ export async function getFilterOptions(): Promise<ActionResult<FilterOptions>> {
   } catch (error) {
     logger.error("获取筛选器选项失败:", error);
     return { ok: false, error: "获取筛选器选项失败" };
+  }
+}
+
+export interface UsageLogSessionIdSuggestionInput {
+  term: string;
+  userId?: number;
+  keyId?: number;
+  providerId?: number;
+}
+
+export async function getUsageLogSessionIdSuggestions(
+  input: UsageLogSessionIdSuggestionInput
+): Promise<ActionResult<string[]>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未登录" };
+    }
+
+    const trimmedTerm = input.term.trim().slice(0, SESSION_ID_SUGGESTION_MAX_LEN);
+    if (trimmedTerm.length < SESSION_ID_SUGGESTION_MIN_LEN) {
+      return { ok: true, data: [] };
+    }
+
+    const finalFilters =
+      session.user.role === "admin"
+        ? {
+            term: trimmedTerm,
+            userId: input.userId,
+            keyId: input.keyId,
+            providerId: input.providerId,
+            limit: SESSION_ID_SUGGESTION_LIMIT,
+          }
+        : {
+            term: trimmedTerm,
+            userId: session.user.id,
+            keyId: input.keyId,
+            providerId: input.providerId,
+            limit: SESSION_ID_SUGGESTION_LIMIT,
+          };
+
+    const sessionIds = await findUsageLogSessionIdSuggestions(finalFilters);
+    return { ok: true, data: sessionIds };
+  } catch (error) {
+    logger.error("获取 sessionId 联想失败:", error);
+    const message = error instanceof Error ? error.message : "获取 sessionId 联想失败";
+    return { ok: false, error: message };
   }
 }
 

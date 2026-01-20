@@ -60,10 +60,13 @@
     "filters": {
       "user": "ユーザー",
       "provider": "プロバイダー",
+      "sessionId": "セッションID",
       "searchUser": "ユーザーを検索...",
       "searchProvider": "プロバイダーを検索...",
+      "searchSessionId": "セッションIDを検索...",
       "noUserFound": "一致するユーザーが見つかりません",
       "noProviderFound": "一致するプロバイダーが見つかりません",
+      "noSessionFound": "一致するセッションIDが見つかりません",
       "model": "モデル",
       "endpoint": "エンドポイント",
       "status": "ステータス",
@@ -96,6 +99,7 @@
       "time": "時間",
       "user": "ユーザー",
       "key": "キー",
+      "sessionId": "セッションID",
       "provider": "プロバイダー",
       "model": "課金モデル",
       "endpoint": "エンドポイント",
@@ -138,14 +142,18 @@
       "loadedCount": "{count} 件のレコードを読み込みました",
       "loadingMore": "読み込み中...",
       "noMoreData": "すべてのレコードを読み込みました",
-      "scrollToTop": "トップへ戻る"
+      "scrollToTop": "トップへ戻る",
+      "hideProviderColumn": "プロバイダー列を非表示",
+      "showProviderColumn": "プロバイダー列を表示"
     },
     "actions": {
       "refresh": "更新",
       "refreshing": "更新中...",
       "stopAutoRefresh": "自動更新を停止",
       "startAutoRefresh": "自動更新を開始",
-      "view": "表示"
+      "view": "表示",
+      "fullscreen": "全画面表示",
+      "exitFullscreen": "全画面を終了"
     },
     "error": {
       "loadFailed": "読み込み失敗",
@@ -321,6 +329,10 @@
       "adminAction": "この権限を有効にします。",
       "userAction": "この権限を有効にするには、管理者に連絡してください。",
       "systemSettings": "システム設定"
+    },
+    "filters": {
+      "userTagsPlaceholder": "ユーザータグでフィルタ...",
+      "userGroupsPlaceholder": "ユーザーグループでフィルタ..."
     }
   },
   "sessions": {
@@ -717,7 +729,8 @@
     "limit5hUsd": {
       "label": "5時間消費上限 (USD)",
       "placeholder": "空白の場合は無制限",
-      "description": "5時間以内の最大消費金額"
+      "description": "5時間以内の最大消費金額",
+      "descriptionWithUserLimit": "5時間以内の最大消費金額 (ユーザー上限: {limit})"
     },
     "limitDailyUsd": {
       "label": "1日の消費上限 (USD)",
@@ -743,17 +756,26 @@
     "limitWeeklyUsd": {
       "label": "週間消費上限 (USD)",
       "placeholder": "空白の場合は無制限",
-      "description": "1週間あたりの最大消費金額"
+      "description": "1週間あたりの最大消費金額",
+      "descriptionWithUserLimit": "1週間あたりの最大消費金額 (ユーザー上限: {limit})"
     },
     "limitMonthlyUsd": {
       "label": "月間消費上限 (USD)",
       "placeholder": "空白の場合は無制限",
-      "description": "1ヶ月あたりの最大消費金額"
+      "description": "1ヶ月あたりの最大消費金額",
+      "descriptionWithUserLimit": "1ヶ月あたりの最大消費金額 (ユーザー上限: {limit})"
+    },
+    "limitTotalUsd": {
+      "label": "総消費上限 (USD)",
+      "placeholder": "空白の場合は無制限",
+      "description": "累計消費上限(リセットなし)",
+      "descriptionWithUserLimit": "ユーザーの総上限を超えることはできません ({limit})"
     },
     "limitConcurrentSessions": {
       "label": "同時セッション上限",
       "placeholder": "0は無制限を意味します",
-      "description": "同時に実行される会話の数"
+      "description": "同時に実行される会話の数",
+      "descriptionWithUserLimit": "最大セッション数 (ユーザー上限: {limit})"
     },
     "providerGroup": {
       "label": "プロバイダーグループ",
@@ -761,6 +783,15 @@
       "description": "このキーのプロバイダーグループ(既定: default)",
       "defaultDescription": "default は groupTag 未設定のプロバイダーを含みます",
       "descriptionWithUserGroup": "このキーのプロバイダーグループ(ユーザーのグループ: {group}、既定: default)"
+    },
+    "cacheTtl": {
+      "label": "Cache TTL上書き",
+      "description": "cache_controlを含むリクエストに対してAnthropic prompt cache TTLを強制します。",
+      "options": {
+        "inherit": "上書きしない(プロバイダー/クライアントに従う)",
+        "5m": "5m",
+        "1h": "1h"
+      }
     },
     "successTitle": "キーが正常に作成されました",
     "successDescription": "APIキーが正常に作成されました。",
@@ -1115,18 +1146,21 @@
         "name": "キー名",
         "key": "キー",
         "group": "グループ",
-        "todayUsage": "本日の使用量",
+        "todayUsage": "本日のリクエスト",
         "todayCost": "本日の消費",
+        "todayTokens": "本日のトークン",
         "lastUsed": "最終使用",
         "actions": "アクション",
         "quotaButton": "クォータ使用状況を表示",
         "fields": {
-          "callsLabel": "呼び出し",
+          "callsLabel": "リクエスト",
+          "tokensLabel": "トークン",
           "costLabel": "消費"
         }
       },
       "expand": "展開",
       "collapse": "折りたたむ",
+      "refresh": "更新",
       "noKeys": "キーなし",
       "defaultGroup": "default",
       "userStatus": {
@@ -1178,6 +1212,10 @@
       "currentExpiry": "現在の有効期限",
       "neverExpires": "無期限",
       "expired": "期限切れ",
+      "quickExtensionLabel": "クイック延長",
+      "quickExtensionHint": "現在の有効期限から延長(期限切れの場合は現在から)",
+      "customDateLabel": "有効期限を設定",
+      "customDateHint": "有効期限を直接指定",
       "quickOptions": {
         "7days": "7 日",
         "30days": "30 日",
@@ -1186,6 +1224,7 @@
       },
       "customDate": "カスタム日付",
       "enableOnRenew": "同時にユーザーを有効化",
+      "enableKeyOnRenew": "同時にキーを有効化",
       "cancel": "キャンセル",
       "confirm": "更新を確認",
       "confirming": "更新中...",
@@ -1208,7 +1247,18 @@
       "userEnabled": "ユーザーが有効化されました",
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
-      "saving": "保存しています..."
+      "saving": "保存しています...",
+      "resetData": {
+        "title": "統計リセット",
+        "description": "このユーザーのすべてのリクエストログと使用データを削除します。この操作は元に戻せません。",
+        "error": "データのリセットに失敗しました",
+        "button": "統計をリセット",
+        "confirmTitle": "すべての統計をリセットしますか？",
+        "confirmDescription": "このユーザーのすべてのリクエストログと使用統計を完全に削除します。この操作は取り消せません。",
+        "confirm": "はい、すべてリセット",
+        "loading": "リセット中...",
+        "success": "すべての統計がリセットされました"
+      }
     },
     "batchEdit": {
       "enterMode": "一括編集",

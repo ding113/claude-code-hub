@@ -7,6 +7,7 @@ import {
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
+import { attachSessionIdToErrorResponse } from "./error-session-id";
 import {
   getErrorOverrideAsync,
   isEmptyResponseError,
@@ -60,7 +61,7 @@ export class ProxyErrorHandler {
         rateLimitMetadata
       );
 
-      return response;
+      return await attachSessionIdToErrorResponse(session.sessionId, response);
     }
 
     // 识别 ProxyError，提取详细信息（包含上游响应）
@@ -132,21 +133,27 @@ export class ProxyErrorHandler {
             });
             // 跳过响应体覆写，但仍可应用状态码覆写
             if (override.statusCode !== null) {
-              return ProxyResponses.buildError(
-                responseStatusCode,
+              return await attachSessionIdToErrorResponse(
+                session.sessionId,
+                ProxyResponses.buildError(
+                  responseStatusCode,
+                  clientErrorMessage,
+                  undefined,
+                  undefined,
+                  safeRequestId
+                )
+              );
+            }
+            // 两者都无效，返回原始错误（但仍透传 request_id，因为有覆写意图）
+            return await attachSessionIdToErrorResponse(
+              session.sessionId,
+              ProxyResponses.buildError(
+                statusCode,
                 clientErrorMessage,
                 undefined,
                 undefined,
                 safeRequestId
-              );
-            }
-            // 两者都无效，返回原始错误（但仍透传 request_id，因为有覆写意图）
-            return ProxyResponses.buildError(
-              statusCode,
-              clientErrorMessage,
-              undefined,
-              undefined,
-              safeRequestId
+              )
             );
           }
 
@@ -187,10 +194,13 @@ export class ProxyErrorHandler {
             overridden: true,
           });
 
-          return new Response(JSON.stringify(responseBody), {
-            status: responseStatusCode,
-            headers: { "Content-Type": "application/json" },
-          });
+          return await attachSessionIdToErrorResponse(
+            session.sessionId,
+            new Response(JSON.stringify(responseBody), {
+              status: responseStatusCode,
+              headers: { "Content-Type": "application/json" },
+            })
+          );
         }
 
         // 情况 2: 仅状态码覆写 - 返回客户端安全消息，但使用覆写的状态码
@@ -207,12 +217,15 @@ export class ProxyErrorHandler {
           overridden: true,
         });
 
-        return ProxyResponses.buildError(
-          responseStatusCode,
-          clientErrorMessage,
-          undefined,
-          undefined,
-          safeRequestId
+        return await attachSessionIdToErrorResponse(
+          session.sessionId,
+          ProxyResponses.buildError(
+            responseStatusCode,
+            clientErrorMessage,
+            undefined,
+            undefined,
+            safeRequestId
+          )
         );
       }
     }
@@ -223,7 +236,10 @@ export class ProxyErrorHandler {
       overridden: false,
     });
 
-    return ProxyResponses.buildError(statusCode, clientErrorMessage);
+    return await attachSessionIdToErrorResponse(
+      session.sessionId,
+      ProxyResponses.buildError(statusCode, clientErrorMessage)
+    );
   }
 
   /**
