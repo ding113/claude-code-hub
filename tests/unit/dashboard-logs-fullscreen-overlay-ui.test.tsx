@@ -2,6 +2,16 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, test, vi, beforeEach } from "vitest";
 
+const toastMocks = vi.hoisted(() => ({
+  error: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: toastMocks.error,
+  },
+}));
+
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
   useLocale: () => "en",
@@ -100,6 +110,7 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
     fullscreenMocks.request.mockClear();
     fullscreenMocks.exit.mockClear();
     invalidateQueriesMock.mockClear();
+    toastMocks.error.mockClear();
     document.body.innerHTML = "";
   });
 
@@ -140,6 +151,36 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
     await click(findButtonByText(container, "logs.actions.exitFullscreen") ?? null);
     expect(fullscreenMocks.exit).toHaveBeenCalled();
     expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+
+    await act(async () => root.unmount());
+    container.remove();
+  });
+
+  test("when fullscreen.request rejects, it should not open overlay and should toast an error", async () => {
+    fullscreenMocks.request.mockRejectedValueOnce(new Error("denied"));
+
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <UsageLogsViewVirtualized
+          isAdmin={true}
+          userId={1}
+          providers={[]}
+          initialKeys={[]}
+          searchParams={{}}
+          currencyCode="USD"
+          billingModelSource="original"
+        />
+      );
+    });
+
+    await click(findButtonByText(container, "logs.actions.fullscreen") ?? null);
+
+    expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
+    expect(toastMocks.error).toHaveBeenCalledTimes(1);
 
     await act(async () => root.unmount());
     container.remove();

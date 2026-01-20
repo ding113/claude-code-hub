@@ -5,6 +5,7 @@ import { Expand, Minimize2, Pause, Play, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { getKeys } from "@/actions/keys";
 import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
@@ -82,6 +83,12 @@ function UsageLogsViewContent({
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [hideProviderColumn, setHideProviderColumn] = useState(false);
   const wasInFullscreenRef = useRef(false);
+
+  const resetFullscreenState = useCallback(() => {
+    setIsFullscreenOpen(false);
+    setHideProviderColumn(false);
+    wasInFullscreenRef.current = false;
+  }, []);
 
   const msFormatter = useMemo(
     () =>
@@ -192,19 +199,17 @@ function UsageLogsViewContent({
 
     try {
       await fullscreen.request(document.documentElement);
-    } catch {
-      return;
+      setIsFullscreenOpen(true);
+    } catch (error) {
+      console.error("[UsageLogsViewVirtualized] Failed to enter fullscreen", error);
+      toast.error(t("logs.error.loadFailed"));
     }
-
-    setIsFullscreenOpen(true);
-  }, [fullscreen]);
+  }, [fullscreen, t]);
 
   const handleExitFullscreen = useCallback(async () => {
-    setIsFullscreenOpen(false);
-    setHideProviderColumn(false);
-    wasInFullscreenRef.current = false;
+    resetFullscreenState();
     await fullscreen.exit();
-  }, [fullscreen]);
+  }, [fullscreen, resetFullscreenState]);
 
   useEffect(() => {
     if (!isFullscreenOpen) return;
@@ -215,11 +220,9 @@ function UsageLogsViewContent({
     }
 
     if (wasInFullscreenRef.current) {
-      setIsFullscreenOpen(false);
-      setHideProviderColumn(false);
-      wasInFullscreenRef.current = false;
+      resetFullscreenState();
     }
-  }, [fullscreen.isFullscreen, isFullscreenOpen]);
+  }, [fullscreen.isFullscreen, isFullscreenOpen, resetFullscreenState]);
 
   useEffect(() => {
     if (!isFullscreenOpen) return;
