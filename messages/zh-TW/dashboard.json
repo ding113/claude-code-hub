@@ -142,14 +142,18 @@
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",
       "noMoreData": "已載入全部記錄",
-      "scrollToTop": "回到頂端"
+      "scrollToTop": "回到頂端",
+      "hideProviderColumn": "隱藏供應商欄",
+      "showProviderColumn": "顯示供應商欄"
     },
     "actions": {
       "refresh": "重新整理",
       "refreshing": "重新整理中...",
       "stopAutoRefresh": "停止自動重新整理",
       "startAutoRefresh": "啟用自動重新整理",
-      "view": "檢視"
+      "view": "檢視",
+      "fullscreen": "全螢幕顯示",
+      "exitFullscreen": "退出全螢幕"
     },
     "error": {
       "loadFailed": "載入失敗",

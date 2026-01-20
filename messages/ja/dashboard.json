@@ -142,14 +142,18 @@
       "loadedCount": "{count} 件のレコードを読み込みました",
       "loadingMore": "読み込み中...",
       "noMoreData": "すべてのレコードを読み込みました",
-      "scrollToTop": "トップへ戻る"
+      "scrollToTop": "トップへ戻る",
+      "hideProviderColumn": "プロバイダー列を非表示",
+      "showProviderColumn": "プロバイダー列を表示"
     },
     "actions": {
       "refresh": "更新",
       "refreshing": "更新中...",
       "stopAutoRefresh": "自動更新を停止",
       "startAutoRefresh": "自動更新を開始",
-      "view": "表示"
+      "view": "表示",
+      "fullscreen": "全画面表示",
+      "exitFullscreen": "全画面を終了"
     },
     "error": {
       "loadFailed": "読み込み失敗",

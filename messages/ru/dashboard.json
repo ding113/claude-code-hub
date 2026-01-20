@@ -142,14 +142,18 @@
       "loadedCount": "Загружено {count} записей",
       "loadingMore": "Загрузка...",
       "noMoreData": "Все записи загружены",
-      "scrollToTop": "Наверх"
+      "scrollToTop": "Наверх",
+      "hideProviderColumn": "Скрыть столбец провайдера",
+      "showProviderColumn": "Показать столбец провайдера"
     },
     "actions": {
       "refresh": "Обновить",
       "refreshing": "Обновление...",
       "stopAutoRefresh": "Остановить автообновление",
       "startAutoRefresh": "Начать автообновление",
-      "view": "Просмотр"
+      "view": "Просмотр",
+      "fullscreen": "Полный экран",
+      "exitFullscreen": "Выйти из полного экрана"
     },
     "error": {
       "loadFailed": "Ошибка загрузки",
