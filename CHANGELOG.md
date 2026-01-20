@@ -4,6 +4,41 @@
 
 ---
 
+## [v0.4.3](https://github.com/ding113/claude-code-hub/releases/tag/v0.4.3) - 2026-01-20
+
+### 新增
+
+- Dashboard 日志页面全屏模式，提升数据查看体验 (#632)
+- Dashboard 日志秒级时间筛选 + Session ID 精确筛选/联想/展示功能 (#611) [@YangQing-Lin](https://github.com/YangQing-Lin)
+- 用户管理增强：统计数据重置功能和 i18n 完善 (#610) [@miraserver](https://github.com/miraserver)
+- 个人使用页面统计缓存和时区修复 (#623) [@miraserver](https://github.com/miraserver)
+- 排行榜新增用户标签/分组筛选下拉建议，提升筛选体验 (#607)
+- API 错误响应中包含 Session ID，便于快速定位问题日志
+
+### 优化
+
+- 文档更新：明确 1M 上下文继承行为说明
+- UI 增强：添加无障碍标签并优化对话框样式
+- i18n 完善：修正日语全角括号显示、本地化密钥配额权限错误提示
+- 移除认证模块中的硬编码服务端错误回退
+
+### 修复
+
+- 修复模型重定向后供应商耗尽问题 (#633)
+- 修复 Dockerfile 中 HOSTNAME 环境变量设置 (#622) [@hwa](https://github.com/hwa)
+- 修复多用户环境下容器名称冲突问题 (#625) [@SaladDay](https://github.com/SaladDay)
+- 修复 1M 上下文标头兼容问题
+- 修复 my-usage 页面日期范围夏令时安全问题
+- 修复脚本中硬编码的 Docker 容器名称
+
+### 其他
+
+- 新增多项单元测试覆盖
+- 更新 README 中 Privnode 优惠详情
+- 忽略临时 scratch 目录
+
+---
+
 ## [v0.4.2](https://github.com/ding113/claude-code-hub/releases/tag/v0.4.2) - 2026-01-12
 
 ### 新增
