@@ -3,13 +3,13 @@ import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ProxyErrorHandler } from "./proxy/error-handler";
+import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
 import { ProxyError } from "./proxy/errors";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder, RequestType } from "./proxy/guard-pipeline";
 import { ProxyResponseHandler } from "./proxy/response-handler";
 import { ProxyResponses } from "./proxy/responses";
-import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
 import { ProxySession } from "./proxy/session";
 
 export async function handleProxyRequest(c: Context): Promise<Response> {
