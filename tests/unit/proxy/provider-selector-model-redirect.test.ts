@@ -39,7 +39,10 @@ describe("ProxyProviderResolver.pickRandomProvider - model redirect", () => {
       clientRequestsContext1m: () => false,
     } as any;
 
-    const { provider, context } = await (ProxyProviderResolver as any).pickRandomProvider(session, []);
+    const { provider, context } = await (ProxyProviderResolver as any).pickRandomProvider(
+      session,
+      []
+    );
 
     expect(context.requestedModel).toBe("claude-test");
     expect(provider?.id).toBe(1);
