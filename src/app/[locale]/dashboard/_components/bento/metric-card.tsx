@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 interface ComparisonData {
   value: number;
   label: string;
+  isPercentage?: boolean;
 }
 
 interface MetricCardProps {
@@ -83,7 +84,7 @@ const trendConfig = {
   },
 };
 
-function ComparisonBadge({ value, label }: ComparisonData) {
+function ComparisonBadge({ value, label, isPercentage = true }: ComparisonData) {
   const isPositive = value > 0;
   const isNegative = value < 0;
   const Icon = isPositive ? ArrowUp : isNegative ? ArrowDown : ArrowRight;
@@ -101,7 +102,8 @@ function ComparisonBadge({ value, label }: ComparisonData) {
         <Icon className="h-3 w-3" />
         <span>
           {value > 0 ? "+" : ""}
-          {value}%
+          {value}
+          {isPercentage && "%"}
         </span>
       </div>
       <span className="text-[10px] text-muted-foreground">{label}</span>

@@ -394,35 +394,70 @@ export function StatisticsChartCard({
       {/* Legend */}
       {enableUserFilter && (
         <div className="px-4 pb-4">
-          <div className="flex flex-wrap gap-1.5 justify-center">
-            {data.users.map((user, index) => {
-              const color = getUserColor(index);
-              const isSelected = selectedUserIds.has(user.id);
-              const userTotal = userTotals[user.dataKey];
-              return (
-                <button
-                  key={user.dataKey}
-                  onClick={() => toggleUserSelection(user.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-all cursor-pointer",
-                    isSelected
-                      ? "bg-muted/50 ring-1 ring-border"
-                      : "bg-muted/10 opacity-50 hover:opacity-75"
-                  )}
-                >
-                  <div
-                    className="h-2 w-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: color }}
-                  />
-                  <span className="font-medium truncate max-w-[80px]">{user.name}</span>
-                  <span className="text-muted-foreground">
-                    {activeChart === "cost"
-                      ? formatCurrency(userTotal?.cost ?? 0, currencyCode)
-                      : (userTotal?.calls ?? 0).toLocaleString()}
-                  </span>
-                </button>
-              );
-            })}
+          {/* Control buttons */}
+          <div className="flex items-center justify-center gap-2 mb-2">
+            <button
+              onClick={() => setSelectedUserIds(new Set(data.users.map((u) => u.id)))}
+              disabled={selectedUserIds.size === data.users.length}
+              className={cn(
+                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
+                selectedUserIds.size === data.users.length
+                  ? "text-muted-foreground/50 cursor-not-allowed"
+                  : "text-primary hover:text-primary/80 hover:bg-primary/10"
+              )}
+            >
+              {t("legend.selectAll")}
+            </button>
+            <span className="text-muted-foreground/30">|</span>
+            <button
+              onClick={() => {
+                if (data.users.length > 0) {
+                  setSelectedUserIds(new Set([data.users[0].id]));
+                }
+              }}
+              disabled={selectedUserIds.size === 1}
+              className={cn(
+                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
+                selectedUserIds.size === 1
+                  ? "text-muted-foreground/50 cursor-not-allowed"
+                  : "text-primary hover:text-primary/80 hover:bg-primary/10"
+              )}
+            >
+              {t("legend.deselectAll")}
+            </button>
+          </div>
+          {/* User list with max 3 rows and scroll */}
+          <div className="max-h-[72px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {data.users.map((user, index) => {
+                const color = getUserColor(index);
+                const isSelected = selectedUserIds.has(user.id);
+                const userTotal = userTotals[user.dataKey];
+                return (
+                  <button
+                    key={user.dataKey}
+                    onClick={() => toggleUserSelection(user.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-all cursor-pointer",
+                      isSelected
+                        ? "bg-muted/50 ring-1 ring-border"
+                        : "bg-muted/10 opacity-50 hover:opacity-75"
+                    )}
+                  >
+                    <div
+                      className="h-2 w-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="font-medium truncate max-w-[80px]">{user.name}</span>
+                    <span className="text-muted-foreground">
+                      {activeChart === "cost"
+                        ? formatCurrency(userTotal?.cost ?? 0, currencyCode)
+                        : (userTotal?.calls ?? 0).toLocaleString()}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

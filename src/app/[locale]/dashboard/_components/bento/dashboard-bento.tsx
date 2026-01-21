@@ -212,7 +212,9 @@ export function DashboardBento({
             icon={Activity}
             accentColor="emerald"
             className="min-h-[120px]"
-            comparisons={[{ value: metrics.recentMinuteRequests, label: t("metrics.rpm") }]}
+            comparisons={[
+              { value: metrics.recentMinuteRequests, label: t("metrics.rpm"), isPercentage: false },
+            ]}
           />
           <BentoMetricCard
             title={t("metrics.todayRequests")}

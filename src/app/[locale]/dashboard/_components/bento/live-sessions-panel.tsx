@@ -3,6 +3,7 @@
 import { Activity, AlertCircle, CheckCircle2, Circle, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
 import { BentoCard } from "./bento-grid";
@@ -141,6 +142,10 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
   );
 }
 
+const SESSION_ITEM_HEIGHT = 36; // Height of each session row in pixels
+const HEADER_HEIGHT = 48; // Height of header
+const FOOTER_HEIGHT = 36; // Height of footer
+
 /**
  * Live Sessions Panel
  * Terminal-style display of active sessions with real-time status indicators
@@ -148,17 +153,37 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
 export function LiveSessionsPanel({
   sessions,
   isLoading,
-  maxItems = 8,
+  maxItems: maxItemsProp,
   className,
 }: LiveSessionsPanelProps) {
   const t = useTranslations("customs.activeSessions");
   const router = useRouter();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dynamicMaxItems, setDynamicMaxItems] = useState(maxItemsProp ?? 8);
 
-  const displaySessions = sessions.slice(0, maxItems);
-  const hasMore = sessions.length > maxItems;
+  const calculateMaxItems = useCallback(() => {
+    if (!containerRef.current) return;
+    const containerHeight = containerRef.current.clientHeight;
+    const availableHeight = containerHeight - HEADER_HEIGHT - FOOTER_HEIGHT;
+    const calculatedItems = Math.max(1, Math.floor(availableHeight / SESSION_ITEM_HEIGHT));
+    setDynamicMaxItems(calculatedItems);
+  }, []);
+
+  useEffect(() => {
+    calculateMaxItems();
+    const resizeObserver = new ResizeObserver(calculateMaxItems);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    return () => resizeObserver.disconnect();
+  }, [calculateMaxItems]);
+
+  const displaySessions = sessions.slice(0, dynamicMaxItems);
+  const hasMore = sessions.length > dynamicMaxItems;
 
   return (
     <BentoCard
+      ref={containerRef}
       colSpan={1}
       rowSpan={2}
       className={cn(
