@@ -256,7 +256,7 @@ function VendorEndpointsSection({ vendorId }: { vendorId: number }) {
   const tTypes = useTranslations("settings.providers.types");
   const [activeType, setActiveType] = useState<ProviderType>("claude");
 
-  const providerTypes: ProviderType[] = ["claude", "claude-auth", "codex", "gemini", "gemini-cli"];
+  const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
 
   return (
     <div>

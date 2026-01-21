@@ -1,4 +1,18 @@
 {
+  "basic": {
+    "identity": {
+      "title": "プロバイダー識別",
+      "desc": "このプロバイダーを識別する一意の名前を設定"
+    },
+    "endpoint": {
+      "title": "API エンドポイント",
+      "desc": "API リクエストのベース URL を設定"
+    },
+    "auth": {
+      "title": "認証",
+      "desc": "認証用の API キーを入力"
+    }
+  },
   "apiTest": {
     "desc": "プロバイダーのモデルが利用可能かをテストします。既定ではルーティング設定で選択したプロバイダー種別に従います。",
     "summary": "プロバイダーとモデルの接続性を確認",
@@ -10,7 +24,8 @@
     "failureThreshold": {
       "desc": "何回連続失敗でブレークするか",
       "label": "失敗しきい値（回）",
-      "placeholder": "5"
+      "placeholder": "5",
+      "warning": "0に設定するとサーキットブレーカーが無効になります - 慎重に使用してください"
     },
     "maxRetryAttempts": {
       "desc": "初回呼び出しを含め、同一プロバイダーで試行する上限。超えると他のプロバイダーへ切り替えます。未入力の場合はデフォルト値を使用。",
@@ -115,6 +130,8 @@
     }
   },
   "rateLimit": {
+    "title": "レート制限",
+    "desc": "異なる時間枠での消費制限を設定してコストを管理します",
     "dailyResetMode": {
       "desc": {
         "fixed": "毎日決まった時刻にクォータをリセット",
@@ -163,6 +180,11 @@
       "weekly": "週: ${amount}"
     },
     "title": "レート制限"
+  },
+  "limits": {
+    "timeBased": "時間ベースの制限",
+    "dailyReset": "日次リセット設定",
+    "otherLimits": "その他の制限"
   },
   "routing": {
     "cacheTtl": {

@@ -79,10 +79,9 @@ export function VendorKeysCompactList(props: {
   const defaultProviderType: ProviderType = props.providers[0]?.providerType ?? "claude";
   const vendorAllowedTypes: ProviderType[] = [
     "claude",
-    "claude-auth",
     "codex",
     "gemini",
-    "gemini-cli",
+    "openai-compatible",
   ];
   const statistics = props.statistics ?? {};
   const statisticsLoading = props.statisticsLoading ?? false;

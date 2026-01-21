@@ -47,6 +47,7 @@ import providersFormWebsiteUrl from "./providers/form/websiteUrl.json";
 
 const providersForm = {
   ...providersFormStrings,
+  ...providersFormCommon,
   apiTest: providersFormApiTest,
   buttons: providersFormButtons,
   common: providersFormCommon,
