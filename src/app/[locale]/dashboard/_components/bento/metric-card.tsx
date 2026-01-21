@@ -267,7 +267,7 @@ export function BentoMetricCard({
       {comparisons && comparisons.length > 0 && (
         <div className="mt-auto pt-3 relative z-10 flex flex-wrap gap-x-4 gap-y-1">
           {comparisons.map((comparison, index) => (
-            <ComparisonBadge key={index} value={comparison.value} label={comparison.label} />
+            <ComparisonBadge key={index} {...comparison} />
           ))}
         </div>
       )}
