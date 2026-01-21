@@ -192,6 +192,15 @@ const messages = {
     copySuccess: "Copied",
     copyFailed: "Copy failed",
   },
+  ui: {
+    tagInput: {
+      emptyTag: "Empty tag",
+      duplicateTag: "Duplicate tag",
+      tooLong: "Too long",
+      invalidFormat: "Invalid format",
+      maxTags: "Too many tags",
+    },
+  },
   dashboard: {
     userManagement: {
       editDialog: {
@@ -318,6 +327,10 @@ const messages = {
         oneMonth: "1 Month",
         threeMonths: "3 Months",
         oneYear: "1 Year",
+      },
+      providerGroupSelect: {
+        providersSuffix: "providers",
+        loadFailed: "Failed to load provider groups",
       },
     },
     addKeyForm: {

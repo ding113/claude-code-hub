@@ -2,6 +2,7 @@
 
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
+import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -43,6 +44,7 @@ import {
   updateProvider,
   updateProviderPrioritiesBatch,
 } from "@/repository/provider";
+import { tryDeleteProviderVendorIfEmpty } from "@/repository/provider-endpoints";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   CodexParallelToolCallsPreference,
@@ -236,6 +238,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
         providerType: provider.providerType,
+        providerVendorId: provider.providerVendorId,
         preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
@@ -734,6 +737,7 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
 
     // 清除内存缓存（无论 Redis 是否成功都要执行）
@@ -749,6 +753,11 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
         providerId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+
+    // Auto cleanup: delete vendor if it has no active providers/endpoints.
+    if (provider) {
+      await tryDeleteProviderVendorIfEmpty(provider.providerVendorId);
     }
 
     // 广播缓存更新（跨实例即时生效）
@@ -2117,7 +2126,7 @@ async function executeProviderApiTest(
     const model = data.model || options.defaultModel;
     const path =
       typeof options.path === "function" ? options.path(model, data.apiKey) : options.path;
-    const url = normalizedProviderUrl + path;
+    const url = buildProxyUrl(normalizedProviderUrl, new URL(`https://dummy.com${path}`));
 
     try {
       const proxyConfig = createProxyAgentForProvider(tempProvider, url);

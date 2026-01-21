@@ -15,6 +15,7 @@ import {
 import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
 import type { ResponseFixerConfig } from '@/types/system-config';
+import type { ProviderType } from "@/types/provider";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -127,6 +128,22 @@ export const keys = pgTable('keys', {
   keysDeletedAtIdx: index('idx_keys_deleted_at').on(table.deletedAt),
 }));
 
+// Provider Vendors table - 以官网域名聚合的供应商实体（与 key/providerGroup 字段无关）
+export const providerVendors = pgTable('provider_vendors', {
+  id: serial('id').primaryKey(),
+  websiteDomain: varchar('website_domain', { length: 255 }).notNull(),
+  displayName: varchar('display_name', { length: 200 }),
+  websiteUrl: text('website_url'),
+  faviconUrl: text('favicon_url'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  providerVendorsWebsiteDomainUnique: uniqueIndex('uniq_provider_vendors_website_domain').on(
+    table.websiteDomain
+  ),
+  providerVendorsCreatedAtIdx: index('idx_provider_vendors_created_at').on(table.createdAt),
+}));
+
 // Providers table
 export const providers = pgTable('providers', {
   id: serial('id').primaryKey(),
@@ -134,6 +151,9 @@ export const providers = pgTable('providers', {
   description: text('description'),
   url: varchar('url').notNull(),
   key: varchar('key').notNull(),
+  providerVendorId: integer('provider_vendor_id')
+    .notNull()
+    .references(() => providerVendors.id, { onDelete: 'restrict' }),
   isEnabled: boolean('is_enabled').notNull().default(true),
   weight: integer('weight').notNull().default(1),
 
@@ -151,7 +171,7 @@ export const providers = pgTable('providers', {
   providerType: varchar('provider_type', { length: 20 })
     .notNull()
     .default('claude')
-    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible'>(),
+    .$type<ProviderType>(),
   // 是否透传客户端 IP（默认关闭，避免暴露真实来源）
   preserveClientIp: boolean('preserve_client_ip').notNull().default(false),
 
@@ -270,6 +290,76 @@ export const providers = pgTable('providers', {
   // 基础索引
   providersCreatedAtIdx: index('idx_providers_created_at').on(table.createdAt),
   providersDeletedAtIdx: index('idx_providers_deleted_at').on(table.deletedAt),
+  providersVendorTypeIdx: index('idx_providers_vendor_type').on(table.providerVendorId, table.providerType).where(sql`${table.deletedAt} IS NULL`),
+}));
+
+// Provider Endpoints table - 供应商(官网域名) + 类型 维度的端点池
+export const providerEndpoints = pgTable('provider_endpoints', {
+  id: serial('id').primaryKey(),
+  vendorId: integer('vendor_id')
+    .notNull()
+    .references(() => providerVendors.id, { onDelete: 'cascade' }),
+  providerType: varchar('provider_type', { length: 20 })
+    .notNull()
+    .default('claude')
+    .$type<ProviderType>(),
+  url: text('url').notNull(),
+  label: varchar('label', { length: 200 }),
+  sortOrder: integer('sort_order').notNull().default(0),
+  isEnabled: boolean('is_enabled').notNull().default(true),
+
+  // Last probe snapshot
+  lastProbedAt: timestamp('last_probed_at', { withTimezone: true }),
+  lastProbeOk: boolean('last_probe_ok'),
+  lastProbeStatusCode: integer('last_probe_status_code'),
+  lastProbeLatencyMs: integer('last_probe_latency_ms'),
+  lastProbeErrorType: varchar('last_probe_error_type', { length: 64 }),
+  lastProbeErrorMessage: text('last_probe_error_message'),
+
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+}, (table) => ({
+  providerEndpointsUnique: uniqueIndex('uniq_provider_endpoints_vendor_type_url').on(
+    table.vendorId,
+    table.providerType,
+    table.url
+  ),
+  providerEndpointsVendorTypeIdx: index('idx_provider_endpoints_vendor_type').on(
+    table.vendorId,
+    table.providerType
+  ).where(sql`${table.deletedAt} IS NULL`),
+  providerEndpointsEnabledIdx: index('idx_provider_endpoints_enabled').on(
+    table.isEnabled,
+    table.vendorId,
+    table.providerType
+  ).where(sql`${table.deletedAt} IS NULL`),
+  providerEndpointsCreatedAtIdx: index('idx_provider_endpoints_created_at').on(table.createdAt),
+  providerEndpointsDeletedAtIdx: index('idx_provider_endpoints_deleted_at').on(table.deletedAt),
+}));
+
+// Provider Endpoint Probe Logs table - 端点测活历史
+export const providerEndpointProbeLogs = pgTable('provider_endpoint_probe_logs', {
+  id: serial('id').primaryKey(),
+  endpointId: integer('endpoint_id')
+    .notNull()
+    .references(() => providerEndpoints.id, { onDelete: 'cascade' }),
+  source: varchar('source', { length: 20 })
+    .notNull()
+    .default('scheduled')
+    .$type<'scheduled' | 'manual' | 'runtime'>(),
+  ok: boolean('ok').notNull(),
+  statusCode: integer('status_code'),
+  latencyMs: integer('latency_ms'),
+  errorType: varchar('error_type', { length: 64 }),
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  providerEndpointProbeLogsEndpointCreatedAtIdx: index('idx_provider_endpoint_probe_logs_endpoint_created_at').on(
+    table.endpointId,
+    table.createdAt.desc()
+  ),
+  providerEndpointProbeLogsCreatedAtIdx: index('idx_provider_endpoint_probe_logs_created_at').on(table.createdAt),
 }));
 
 // Message Request table
@@ -629,8 +719,32 @@ export const keysRelations = relations(keys, ({ one, many }) => ({
   messageRequests: many(messageRequest),
 }));
 
-export const providersRelations = relations(providers, ({ many }) => ({
+export const providersRelations = relations(providers, ({ many, one }) => ({
+  vendor: one(providerVendors, {
+    fields: [providers.providerVendorId],
+    references: [providerVendors.id],
+  }),
   messageRequests: many(messageRequest),
+}));
+
+export const providerVendorsRelations = relations(providerVendors, ({ many }) => ({
+  providers: many(providers),
+  endpoints: many(providerEndpoints),
+}));
+
+export const providerEndpointsRelations = relations(providerEndpoints, ({ many, one }) => ({
+  vendor: one(providerVendors, {
+    fields: [providerEndpoints.vendorId],
+    references: [providerVendors.id],
+  }),
+  probeLogs: many(providerEndpointProbeLogs),
+}));
+
+export const providerEndpointProbeLogsRelations = relations(providerEndpointProbeLogs, ({ one }) => ({
+  endpoint: one(providerEndpoints, {
+    fields: [providerEndpointProbeLogs.endpointId],
+    references: [providerEndpoints.id],
+  }),
 }));
 
 export const messageRequestRelations = relations(messageRequest, ({ one }) => ({

@@ -5,5 +5,16 @@
   "duplicatePath": "檢測到重複路徑",
   "invalidUrl": "無效的 URL 格式",
   "invalidUrlDesc": "請輸入有效的 HTTP/HTTPS 地址",
-  "title": "URL 拼接預覽"
+  "title": "URL 拼接預覽",
+  "endpoints": {
+    "claudeMessages": "Claude 訊息",
+    "claudeCountTokens": "Claude 統計 Token",
+    "codexResponses": "Codex Responses",
+    "openaiChatCompletions": "OpenAI Chat Completions",
+    "openaiModels": "OpenAI Models",
+    "geminiGenerateContent": "Gemini 產生內容",
+    "geminiStreamContent": "Gemini 串流內容",
+    "geminiCliGenerate": "Gemini CLI 產生",
+    "geminiCliStream": "Gemini CLI 串流"
+  }
 }

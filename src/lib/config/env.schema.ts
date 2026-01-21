@@ -97,7 +97,6 @@ export const EnvSchema = z.object({
   DEBUG_MODE: z.string().default("false").transform(booleanTransform),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),
-  ENABLE_MULTI_PROVIDER_TYPES: z.string().default("false").transform(booleanTransform),
   ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: z.string().default("false").transform(booleanTransform),
   // 供应商缓存开关
   // - true (默认)：启用进程级缓存，30s TTL，提升供应商查询性能

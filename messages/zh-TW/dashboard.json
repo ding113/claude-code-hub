@@ -1023,6 +1023,28 @@
       "noData": "無資料",
       "noRequests": "無請求"
     },
+    "probeHistory": {
+      "title": "端點探測歷史",
+      "description": "查看探測日誌並手動觸發特定端點的探測",
+      "selectVendor": "選擇供應商",
+      "selectType": "選擇供應商類型",
+      "selectEndpoint": "選擇端點",
+      "noEndpoints": "未找到端點",
+      "probeNow": "立即探測",
+      "probing": "探測中...",
+      "columns": {
+        "time": "時間",
+        "method": "方法",
+        "status": "狀態碼",
+        "latency": "延遲",
+        "error": "錯誤訊息"
+      },
+      "success": "成功",
+      "manual": "手動探測",
+      "auto": "自動探測",
+      "probeSuccess": "探測成功",
+      "probeFailed": "探測失敗"
+    },
     "toast": {
       "refreshSuccess": "可用性資料已重新整理",
       "refreshFailed": "重新整理失敗，請重試"

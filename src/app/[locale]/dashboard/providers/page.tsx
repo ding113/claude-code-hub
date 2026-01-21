@@ -7,7 +7,6 @@ import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getEnvConfig } from "@/lib/config/env.schema";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +28,6 @@ export default async function DashboardProvidersPage({
   const currentUser = session!.user;
 
   const t = await getTranslations("settings");
-
-  // 读取多供应商类型支持配置
-  const enableMultiProviderTypes = getEnvConfig().ENABLE_MULTI_PROVIDER_TYPES;
 
   return (
     <div className="space-y-6">
@@ -56,10 +52,7 @@ export default async function DashboardProvidersPage({
           </>
         }
       >
-        <ProviderManagerLoader
-          currentUser={currentUser}
-          enableMultiProviderTypes={enableMultiProviderTypes}
-        />
+        <ProviderManagerLoader currentUser={currentUser} />
       </Section>
     </div>
   );

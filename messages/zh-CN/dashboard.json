@@ -1142,6 +1142,28 @@
       "noData": "无数据",
       "noRequests": "无请求"
     },
+    "probeHistory": {
+      "title": "端点探测历史",
+      "description": "查看探测日志并手动触发特定端点的探测",
+      "selectVendor": "选择供应商",
+      "selectType": "选择供应商类型",
+      "selectEndpoint": "选择端点",
+      "noEndpoints": "未找到端点",
+      "probeNow": "立即探测",
+      "probing": "探测中...",
+      "columns": {
+        "time": "时间",
+        "method": "方法",
+        "status": "状态码",
+        "latency": "延迟",
+        "error": "错误信息"
+      },
+      "success": "成功",
+      "manual": "手动探测",
+      "auto": "自动探测",
+      "probeSuccess": "探测成功",
+      "probeFailed": "探测失败"
+    },
     "toast": {
       "refreshSuccess": "可用性数据已刷新",
       "refreshFailed": "刷新失败，请重试"
