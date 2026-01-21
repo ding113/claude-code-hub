@@ -124,7 +124,7 @@ export function BasicInfoSection({ autoUrlPending }: BasicInfoSectionProps) {
       >
         <div className="space-y-4">
           <SmartInputWrapper
-            label={isEdit ? `${t("key.label")}${t("key.leaveEmpty")}` : t("key.label")}
+            label={isEdit ? t("key.labelEdit") : t("key.label")}
             description={
               isEdit && provider ? t("key.currentKey", { key: provider.maskedKey }) : undefined
             }

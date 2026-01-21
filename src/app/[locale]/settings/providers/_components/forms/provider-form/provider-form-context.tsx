@@ -1,8 +1,7 @@
 "use client";
 
 import { createContext, type ReactNode, useContext, useReducer } from "react";
-import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
-import type { ProviderDisplay } from "@/types/provider";
+import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import type {
   FormMode,
   ProviderFormAction,
@@ -19,13 +18,7 @@ export function createInitialState(
     name?: string;
     url?: string;
     websiteUrl?: string;
-    providerType?:
-      | "claude"
-      | "claude-auth"
-      | "codex"
-      | "gemini"
-      | "gemini-cli"
-      | "openai-compatible";
+    providerType?: ProviderType;
   }
 ): ProviderFormState {
   const isEdit = mode === "edit";
@@ -296,13 +289,7 @@ export function ProviderFormProvider({
     name?: string;
     url?: string;
     websiteUrl?: string;
-    providerType?:
-      | "claude"
-      | "claude-auth"
-      | "codex"
-      | "gemini"
-      | "gemini-cli"
-      | "openai-compatible";
+    providerType?: ProviderType;
   };
   groupSuggestions: string[];
 }) {

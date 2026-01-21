@@ -17,11 +17,10 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import { FormTabNav, TAB_CONFIG } from "./components/form-tab-nav";
-import { createInitialState, ProviderFormProvider, useProviderForm } from "./provider-form-context";
+import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { TabId } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
 import { LimitsSection } from "./sections/limits-section";
@@ -52,15 +51,24 @@ function ProviderFormContent({
   onSuccess,
   urlResolver,
   autoUrlPending,
+  resolvedUrl,
 }: {
   onSuccess?: () => void;
   urlResolver?: (providerType: ProviderType) => Promise<string | null>;
   autoUrlPending: boolean;
+  resolvedUrl?: string | null;
 }) {
   const t = useTranslations("settings.providers.form");
   const { state, dispatch, mode, provider, hideUrl } = useProviderForm();
   const [isPending, startTransition] = useTransition();
   const isEdit = mode === "edit";
+
+  // Update URL when resolved URL changes
+  useEffect(() => {
+    if (resolvedUrl && !state.basic.url && !isEdit) {
+      dispatch({ type: "SET_URL", payload: resolvedUrl });
+    }
+  }, [resolvedUrl, state.basic.url, isEdit, dispatch]);
 
   // Scroll navigation state - all sections stacked vertically
   const contentRef = useRef<HTMLDivElement>(null);
@@ -177,10 +185,14 @@ function ProviderFormContent({
             ? state.network.requestTimeoutNonStreamingSeconds * 1000
             : undefined;
 
+        // Handle key: in edit mode, only include if user provided a new key
+        const trimmedKey = state.basic.key.trim();
+
         const formData = {
           name: state.basic.name.trim(),
           url: state.basic.url.trim(),
-          key: state.basic.key.trim() || (isEdit ? "" : ""),
+          // In edit mode, omit key if empty to keep existing; in create mode, always include
+          ...(isEdit ? (trimmedKey ? { key: trimmedKey } : {}) : { key: trimmedKey }),
           website_url: state.basic.websiteUrl?.trim() || null,
           provider_type: state.routing.providerType,
           preserve_client_ip: state.routing.preserveClientIp,
@@ -238,6 +250,7 @@ function ProviderFormContent({
             return;
           }
           toast.success(t("success.created"));
+          dispatch({ type: "RESET_FORM" });
         }
         onSuccess?.();
       } catch (e) {
@@ -492,6 +505,7 @@ export function ProviderForm({
 }: ProviderFormProps) {
   const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [autoUrlPending, setAutoUrlPending] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
   // Fetch group suggestions
   useEffect(() => {
@@ -513,16 +527,27 @@ export function ProviderForm({
     if (urlResolver && preset?.providerType && !preset?.url) {
       setAutoUrlPending(true);
       urlResolver(preset.providerType)
-        .then((resolvedUrl) => {
-          if (resolvedUrl) {
-            // URL will be set through preset in createInitialState
+        .then((url) => {
+          if (url) {
+            setResolvedUrl(url);
           }
+        })
+        .catch((e) => {
+          console.error("Failed to resolve provider URL:", e);
         })
         .finally(() => {
           setAutoUrlPending(false);
         });
     }
   }, [urlResolver, preset?.providerType, preset?.url]);
+
+  // Build effective preset with resolved URL
+  const effectivePreset = preset
+    ? {
+        ...preset,
+        url: preset.url || resolvedUrl || undefined,
+      }
+    : undefined;
 
   return (
     <ProviderFormProvider
@@ -532,13 +557,14 @@ export function ProviderForm({
       enableMultiProviderTypes={enableMultiProviderTypes}
       hideUrl={hideUrl}
       hideWebsiteUrl={hideWebsiteUrl}
-      preset={preset}
+      preset={effectivePreset}
       groupSuggestions={groupSuggestions}
     >
       <ProviderFormContent
         onSuccess={onSuccess}
         urlResolver={urlResolver}
         autoUrlPending={autoUrlPending}
+        resolvedUrl={resolvedUrl}
       />
     </ProviderFormProvider>
   );
