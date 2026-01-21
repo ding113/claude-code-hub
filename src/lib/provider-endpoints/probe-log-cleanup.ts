@@ -15,7 +15,7 @@ function parseIntWithDefault(value: string | undefined, fallback: number): numbe
 
 const RETENTION_DAYS = Math.max(
   0,
-  parseIntWithDefault(process.env.ENDPOINT_PROBE_LOG_RETENTION_DAYS, 7)
+  parseIntWithDefault(process.env.ENDPOINT_PROBE_LOG_RETENTION_DAYS, 1)
 );
 const CLEANUP_BATCH_SIZE = Math.max(
   1,
