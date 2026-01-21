@@ -243,7 +243,11 @@ function ProviderFormContent({
           }
           toast.success(t("success.updated"));
         } else {
-          // For create: key is required
+          // For create: key is required (validated above)
+          if (!trimmedKey) {
+            toast.error(t("errors.keyRequired"));
+            return;
+          }
           const createFormData = { ...baseFormData, key: trimmedKey };
           const res = await addProvider(createFormData);
           if (!res.ok) {
