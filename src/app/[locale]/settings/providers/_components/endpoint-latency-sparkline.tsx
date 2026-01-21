@@ -31,15 +31,8 @@ function CustomTooltip({
   return (
     <div className="rounded-md bg-popover/95 backdrop-blur-sm border border-border px-2 py-1 shadow-md">
       <div className="flex items-center gap-2 text-xs">
-        <span
-          className={cn(
-            "h-2 w-2 rounded-full",
-            point.ok ? "bg-emerald-500" : "bg-red-500"
-          )}
-        />
-        <span className="font-mono font-medium">
-          {formatLatency(point.latencyMs)}
-        </span>
+        <span className={cn("h-2 w-2 rounded-full", point.ok ? "bg-emerald-500" : "bg-red-500")} />
+        <span className="font-mono font-medium">{formatLatency(point.latencyMs)}</span>
       </div>
     </div>
   );
@@ -94,11 +87,7 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
             <YAxis hide domain={[0, "dataMax + 50"]} />
-            <Tooltip
-              content={<CustomTooltip />}
-              cursor={false}
-              isAnimationActive={false}
-            />
+            <Tooltip content={<CustomTooltip />} cursor={false} isAnimationActive={false} />
             <Line
               type="monotone"
               dataKey="latencyMs"
