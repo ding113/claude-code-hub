@@ -133,18 +133,20 @@ export async function createProvider(providerData: CreateProviderData): Promise<
 
   const created = toProvider(provider);
 
-  try {
-    await ensureProviderEndpointExistsForUrl({
-      vendorId: created.providerVendorId,
-      providerType: created.providerType,
-      url: created.url,
-    });
-  } catch (error) {
-    logger.warn("[Provider] Failed to seed provider endpoint from provider.url", {
-      providerVendorId,
-      providerType: created.providerType,
-      error: error instanceof Error ? error.message : String(error),
-    });
+  if (created.providerVendorId) {
+    try {
+      await ensureProviderEndpointExistsForUrl({
+        vendorId: created.providerVendorId,
+        providerType: created.providerType,
+        url: created.url,
+      });
+    } catch (error) {
+      logger.warn("[Provider] Failed to seed provider endpoint from provider.url", {
+        providerVendorId,
+        providerType: created.providerType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return created;
@@ -560,19 +562,26 @@ export async function updateProvider(
     providerData.provider_type !== undefined ||
     providerData.website_url !== undefined
   ) {
-    try {
-      await ensureProviderEndpointExistsForUrl({
-        vendorId: transformed.providerVendorId,
-        providerType: transformed.providerType,
-        url: transformed.url,
-      });
-    } catch (error) {
-      logger.warn("[Provider] Failed to seed provider endpoint after provider update", {
-        providerId: transformed.id,
-        providerVendorId: transformed.providerVendorId,
-        providerType: transformed.providerType,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    if (
+      transformed.providerVendorId &&
+      (providerData.url !== undefined ||
+        transformed.providerVendorId !== previousVendorId ||
+        previousVendorId === null)
+    ) {
+      try {
+        await ensureProviderEndpointExistsForUrl({
+          vendorId: transformed.providerVendorId,
+          providerType: transformed.providerType,
+          url: transformed.url,
+        });
+      } catch (error) {
+        logger.warn("[Provider] Failed to seed provider endpoint after provider update", {
+          providerId: transformed.id,
+          providerVendorId: transformed.providerVendorId,
+          providerType: transformed.providerType,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 

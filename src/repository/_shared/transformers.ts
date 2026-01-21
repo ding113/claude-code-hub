@@ -66,7 +66,7 @@ export function toKey(dbKey: any): Key {
 export function toProvider(dbProvider: any): Provider {
   return {
     ...dbProvider,
-    providerVendorId: dbProvider?.providerVendorId ?? 0,
+    providerVendorId: dbProvider?.providerVendorId ?? null,
     isEnabled: dbProvider?.isEnabled ?? true,
     weight: dbProvider?.weight ?? 1,
     priority: dbProvider?.priority ?? 0,

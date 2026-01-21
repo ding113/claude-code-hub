@@ -531,6 +531,7 @@ export class ProxyProviderResolver {
 
     // 临时熔断（vendor+type）：防止会话复用绕过故障隔离
     if (
+      provider.providerVendorId &&
       provider.providerVendorId > 0 &&
       (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))
     ) {
@@ -873,6 +874,7 @@ export class ProxyProviderResolver {
 
     for (const p of filteredOut) {
       if (
+        p.providerVendorId &&
         p.providerVendorId > 0 &&
         (await isVendorTypeCircuitOpen(p.providerVendorId, p.providerType))
       ) {
@@ -966,6 +968,7 @@ export class ProxyProviderResolver {
       providers.map(async (p) => {
         // -1. 检查临时熔断（vendor+type）
         if (
+          p.providerVendorId &&
           p.providerVendorId > 0 &&
           (await isVendorTypeCircuitOpen(p.providerVendorId, p.providerType))
         ) {

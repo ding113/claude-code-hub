@@ -756,7 +756,7 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
     }
 
     // Auto cleanup: delete vendor if it has no active providers/endpoints.
-    if (provider) {
+    if (provider?.providerVendorId) {
       await tryDeleteProviderVendorIfEmpty(provider.providerVendorId);
     }
 

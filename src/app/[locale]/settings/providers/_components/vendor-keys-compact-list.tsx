@@ -117,6 +117,7 @@ export function VendorKeysCompactList(props: {
                     websiteUrl: props.vendorWebsiteUrl ?? "",
                   }}
                   urlResolver={async (type) => {
+                    if (props.vendorId <= 0) return null;
                     const endpoints = await getProviderEndpoints({
                       vendorId: props.vendorId,
                       providerType: type,

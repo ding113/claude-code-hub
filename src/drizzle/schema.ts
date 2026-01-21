@@ -151,9 +151,9 @@ export const providers = pgTable('providers', {
   description: text('description'),
   url: varchar('url').notNull(),
   key: varchar('key').notNull(),
-  providerVendorId: integer('provider_vendor_id')
-    .notNull()
-    .references(() => providerVendors.id, { onDelete: 'restrict' }),
+  providerVendorId: integer('provider_vendor_id').references(() => providerVendors.id, {
+    onDelete: 'restrict',
+  }),
   isEnabled: boolean('is_enabled').notNull().default(true),
   weight: integer('weight').notNull().default(1),
 

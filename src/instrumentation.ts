@@ -206,6 +206,24 @@ export async function register() {
         logger.info("[Instrumentation] AUTO_MIGRATE=false: skipping migrations");
       }
 
+      // 回填 provider_vendors（按域名自动聚合旧 providers）
+      try {
+        const { backfillProviderVendorsFromProviders } = await import(
+          "@/repository/provider-endpoints"
+        );
+        const vendorResult = await backfillProviderVendorsFromProviders();
+        logger.info("[Instrumentation] Provider vendors backfill completed", {
+          processed: vendorResult.processed,
+          providersUpdated: vendorResult.providersUpdated,
+          vendorsCreatedCount: vendorResult.vendorsCreated.size,
+          skippedInvalidUrl: vendorResult.skippedInvalidUrl,
+        });
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to backfill provider vendors", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       // 回填 provider_endpoints（从 providers.url/类型 生成端点池，幂等）
       try {
         const { backfillProviderEndpointsFromProviders } = await import(
@@ -287,6 +305,24 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+
+        // 回填 provider_vendors（按域名自动聚合旧 providers）
+        try {
+          const { backfillProviderVendorsFromProviders } = await import(
+            "@/repository/provider-endpoints"
+          );
+          const vendorResult = await backfillProviderVendorsFromProviders();
+          logger.info("[Instrumentation] Provider vendors backfill completed", {
+            processed: vendorResult.processed,
+            providersUpdated: vendorResult.providersUpdated,
+            vendorsCreatedCount: vendorResult.vendorsCreated.size,
+            skippedInvalidUrl: vendorResult.skippedInvalidUrl,
+          });
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to backfill provider vendors", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
 
         // 回填 provider_endpoints（幂等；避免老数据缺少端点池）
         try {

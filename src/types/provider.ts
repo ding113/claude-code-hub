@@ -42,7 +42,7 @@ export interface Provider {
   url: string;
   key: string;
   // 供应商聚合实体（按官网域名归一）
-  providerVendorId: number;
+  providerVendorId: number | null;
   // 是否启用
   isEnabled: boolean;
   // 权重（0-100）
@@ -158,7 +158,7 @@ export interface ProviderDisplay {
   // 供应商类型
   providerType: ProviderType;
   // 供应商聚合实体（按官网域名归一）
-  providerVendorId: number;
+  providerVendorId: number | null;
   // 是否透传客户端 IP
   preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;

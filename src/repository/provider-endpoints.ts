@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import {
   providerEndpointProbeLogs,
@@ -225,6 +225,115 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
     throw new Error("Failed to create provider vendor");
   }
   return fallback[0].id;
+}
+
+/**
+ * 从域名派生显示名称（直接使用域名的中间部分）
+ * 例如: anthropic.com -> Anthropic, api.openai.com -> OpenAI
+ */
+function deriveDisplayNameFromDomain(domain: string): string {
+  const parts = domain.split(".");
+  const name = parts[0] === "api" && parts[1] ? parts[1] : parts[0];
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * 为所有 provider_vendor_id 为 NULL 或 0 的 providers 创建 vendor
+ * 按照 website_url（优先）或 url 的域名进行自动聚合
+ */
+export async function backfillProviderVendorsFromProviders(): Promise<{
+  processed: number;
+  providersUpdated: number;
+  vendorsCreated: Set<number>;
+  skippedInvalidUrl: number;
+  skippedError: number;
+}> {
+  const stats = {
+    processed: 0,
+    providersUpdated: 0,
+    vendorsCreated: new Set<number>(),
+    skippedInvalidUrl: 0,
+    skippedError: 0,
+  };
+
+  const PAGE_SIZE = 100;
+  let lastId = 0;
+
+  while (true) {
+    const rows = await db
+      .select({
+        id: providers.id,
+        name: providers.name,
+        url: providers.url,
+        websiteUrl: providers.websiteUrl,
+        faviconUrl: providers.faviconUrl,
+        providerVendorId: providers.providerVendorId,
+      })
+      .from(providers)
+      .where(
+        and(
+          isNull(providers.deletedAt),
+          gt(providers.id, lastId),
+          or(isNull(providers.providerVendorId), eq(providers.providerVendorId, 0))
+        )
+      )
+      .orderBy(asc(providers.id))
+      .limit(PAGE_SIZE);
+
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      stats.processed++;
+
+      const domainSource = row.websiteUrl?.trim() || row.url;
+      const domain = normalizeWebsiteDomainFromUrl(domainSource);
+
+      if (!domain) {
+        logger.warn("[backfillVendors] Invalid URL for provider", {
+          providerId: row.id,
+          url: row.url,
+        });
+        stats.skippedInvalidUrl++;
+        lastId = Math.max(lastId, row.id);
+        continue;
+      }
+
+      try {
+        const displayName = deriveDisplayNameFromDomain(domain);
+        const vendorId = await getOrCreateProviderVendorIdFromUrls({
+          providerUrl: row.url,
+          websiteUrl: row.websiteUrl ?? null,
+          faviconUrl: row.faviconUrl ?? null,
+          displayName,
+        });
+
+        stats.vendorsCreated.add(vendorId);
+
+        await db
+          .update(providers)
+          .set({ providerVendorId: vendorId, updatedAt: new Date() })
+          .where(eq(providers.id, row.id));
+
+        stats.providersUpdated++;
+        lastId = Math.max(lastId, row.id);
+      } catch (error) {
+        logger.error("[backfillVendors] Failed to process provider", {
+          providerId: row.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        stats.skippedError++;
+        lastId = Math.max(lastId, row.id);
+      }
+    }
+  }
+
+  const { vendorsCreated, ...logStats } = stats;
+  logger.info("[backfillVendors] Backfill completed", {
+    ...logStats,
+    vendorsCreatedCount: vendorsCreated.size,
+  });
+
+  return stats;
 }
 
 export async function findProviderVendors(
