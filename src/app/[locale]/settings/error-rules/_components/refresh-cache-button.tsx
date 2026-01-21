@@ -6,6 +6,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { refreshCacheAction } from "@/actions/error-rules";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface RefreshCacheButtonProps {
   stats: {
@@ -46,6 +47,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
       variant="outline"
       onClick={handleRefresh}
       disabled={isRefreshing}
+      className="bg-white/5 border-white/10 hover:bg-white/10 hover:border-white/20"
       title={
         stats
           ? t("errorRules.cacheStats", {
@@ -54,7 +56,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
           : t("errorRules.refreshCache")
       }
     >
-      <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+      <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
       {t("errorRules.refreshCache")}
       {stats && <span className="ml-2 text-xs text-muted-foreground">({stats.totalCount})</span>}
     </Button>

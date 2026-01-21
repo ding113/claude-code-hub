@@ -69,6 +69,8 @@
   "global": {
     "description": "Enable or disable all push notification features",
     "enable": "Enable Push Notifications",
+    "off": "Off",
+    "on": "On",
     "legacyModeDescription": "You are using legacy single-URL notifications. Create a push target to switch to multi-target mode.",
     "legacyModeTitle": "Legacy Mode",
     "title": "Notification Master Switch"

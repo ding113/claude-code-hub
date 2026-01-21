@@ -128,18 +128,23 @@ export function LogCleanupPanel() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        {t("descriptionWarning").split("注意：")[0]}
+        {t("descriptionWarning").split("Note:")[0]}
         <strong>
-          {t("descriptionWarning").includes("注意：")
-            ? t("descriptionWarning").split("注意：")[1]
-            : ""}
+          {t("descriptionWarning").includes("Note:")
+            ? t("descriptionWarning").split("Note:")[1]
+            : t("descriptionWarning").includes(":")
+              ? t("descriptionWarning").split(":")[1]
+              : ""}
         </strong>
       </p>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5">
         <Label htmlFor="time-range">{t("rangeLabel")}</Label>
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger id="time-range" className="w-full sm:w-[300px]">
+          <SelectTrigger
+            id="time-range"
+            className="w-full sm:w-[300px] border-white/10 bg-white/[0.02]"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -170,7 +175,7 @@ export function LogCleanupPanel() {
               <p>{t("confirmWarning", { range: getTimeRangeDescription() })}</p>
 
               {/* Preview info */}
-              <div className="bg-muted p-3 rounded-md">
+              <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl">
                 {isPreviewLoading ? (
                   <div className="flex items-center gap-2 text-sm">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -179,7 +184,7 @@ export function LogCleanupPanel() {
                 ) : previewCount !== null ? (
                   <p className="text-sm font-medium">
                     {t("previewCount", { count: previewCount.toLocaleString() }).split(" ")[0]}{" "}
-                    <span className="text-destructive text-lg">
+                    <span className="text-destructive text-lg font-mono font-bold">
                       {previewCount.toLocaleString()}
                     </span>{" "}
                     {t("previewCount", { count: previewCount.toLocaleString() })

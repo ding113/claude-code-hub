@@ -19,10 +19,14 @@ export default async function SensitiveWordsPage() {
       <SettingsPageHeader
         title={t("sensitiveWords.title")}
         description={t("sensitiveWords.description")}
+        icon="shield-alert"
       />
       <Section
         title={t("sensitiveWords.section.title")}
         description={t("sensitiveWords.section.description")}
+        icon="shield-alert"
+        iconColor="text-primary"
+        variant="default"
         actions={
           <div className="flex gap-2">
             <Suspense fallback={<Skeleton className="h-9 w-24" />}>

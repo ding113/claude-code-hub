@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -9,12 +9,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type { ErrorRule } from "@/repository/error-rules";
 import { EditRuleDialog } from "./edit-rule-dialog";
 
 interface RuleListTableProps {
   rules: ErrorRule[];
 }
+
+const categoryColors: Record<string, { bg: string; text: string }> = {
+  prompt_limit: { bg: "bg-yellow-500/10", text: "text-yellow-400" },
+  content_filter: { bg: "bg-red-500/10", text: "text-red-400" },
+  pdf_limit: { bg: "bg-blue-500/10", text: "text-blue-400" },
+  thinking_error: { bg: "bg-purple-500/10", text: "text-purple-400" },
+  parameter_error: { bg: "bg-orange-500/10", text: "text-orange-400" },
+  invalid_request: { bg: "bg-pink-500/10", text: "text-pink-400" },
+  cache_limit: { bg: "bg-cyan-500/10", text: "text-cyan-400" },
+};
 
 export function RuleListTable({ rules }: RuleListTableProps) {
   const t = useTranslations("settings");
@@ -57,47 +68,43 @@ export function RuleListTable({ rules }: RuleListTableProps) {
 
   if (rules.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
-        {t("errorRules.emptyState")}
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 mb-4">
+          <AlertTriangle className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <p className="text-sm text-muted-foreground">{t("errorRules.emptyState")}</p>
       </div>
     );
   }
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse table-fixed">
-          <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="w-[280px] px-4 py-3 text-left text-sm font-medium">
-                {t("errorRules.table.pattern")}
-              </th>
-              <th className="w-24 px-4 py-3 text-left text-sm font-medium">
-                {t("errorRules.table.category")}
-              </th>
-              <th className="w-48 px-4 py-3 text-left text-sm font-medium">
-                {t("errorRules.table.description")}
-              </th>
-              <th className="w-20 px-4 py-3 text-left text-sm font-medium">
-                {t("errorRules.table.status")}
-              </th>
-              <th className="w-36 px-4 py-3 text-left text-sm font-medium">
-                {t("errorRules.table.createdAt")}
-              </th>
-              <th className="w-24 px-4 py-3 text-right text-sm font-medium">
-                {t("errorRules.table.actions")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rules.map((rule) => (
-              <tr key={rule.id} className="border-b hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
+      <div className="space-y-2">
+        {rules.map((rule) => {
+          const colors = categoryColors[rule.category || ""] || {
+            bg: "bg-gray-500/10",
+            text: "text-gray-400",
+          };
+
+          return (
+            <div
+              key={rule.id}
+              className={cn(
+                "p-4 rounded-xl bg-white/[0.02] border border-white/5",
+                "flex flex-col sm:flex-row sm:items-center justify-between gap-4",
+                "hover:bg-white/[0.04] hover:border-white/10 transition-colors group"
+              )}
+            >
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className={cn("p-2 rounded-lg shrink-0", colors.bg)}>
+                  <AlertTriangle className={cn("h-4 w-4", colors.text)} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <code
-                          className="block max-w-[200px] truncate rounded bg-muted px-2 py-1 text-sm cursor-help"
+                          className="text-sm font-medium text-foreground font-mono truncate max-w-[300px] cursor-help"
                           tabIndex={0}
                         >
                           {rule.pattern}
@@ -111,53 +118,61 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                       </TooltipContent>
                     </Tooltip>
                     {rule.isDefault && (
-                      <Badge variant="secondary" className="text-xs shrink-0">
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] bg-white/5 text-muted-foreground border-white/10"
+                      >
                         {t("errorRules.table.default")}
                       </Badge>
                     )}
+                    {rule.category && (
+                      <Badge
+                        variant="outline"
+                        className={cn("text-[10px] border-white/10", colors.text)}
+                      >
+                        {rule.category}
+                      </Badge>
+                    )}
                   </div>
-                </td>
-                <td className="px-4 py-3">
-                  {rule.category ? (
-                    <Badge variant="outline">{rule.category}</Badge>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">-</span>
+                  {rule.description && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                      {rule.description}
+                    </p>
                   )}
-                </td>
-                <td
-                  className="px-4 py-3 text-sm text-muted-foreground truncate"
-                  title={rule.description || undefined}
-                >
-                  {rule.description || "-"}
-                </td>
-                <td className="px-4 py-3">
-                  <Switch
-                    checked={rule.isEnabled}
-                    onCheckedChange={(checked) => handleToggleEnabled(rule.id, checked)}
-                  />
-                </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">
-                  {new Date(rule.createdAt).toLocaleString("zh-CN")}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(rule)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(rule.id, rule.pattern, rule.isDefault)}
-                      disabled={rule.isDefault}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                    {new Date(rule.createdAt).toLocaleString("zh-CN")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <Switch
+                  checked={rule.isEnabled}
+                  onCheckedChange={(checked) => handleToggleEnabled(rule.id, checked)}
+                />
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-white/10"
+                    onClick={() => handleEdit(rule)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-red-500/10 hover:text-red-400"
+                    onClick={() => handleDelete(rule.id, rule.pattern, rule.isDefault)}
+                    disabled={rule.isDefault}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {selectedRule && (

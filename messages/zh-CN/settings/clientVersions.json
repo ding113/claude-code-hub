@@ -46,6 +46,12 @@
     "noUsers": "暂无用户数据",
     "latest": "最新",
     "needsUpgrade": "需升级",
-    "unknown": "未知"
+    "unknown": "未知",
+    "stats": {
+      "clientTypes": "客户端类型",
+      "totalUsers": "用户总数",
+      "withGA": "有 GA 版本",
+      "coverage": "GA 覆盖率"
+    }
   }
 }

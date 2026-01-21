@@ -6,8 +6,8 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { UrlPreview } from "../../url-preview";
-import { useProviderForm } from "../provider-form-context";
 import { SectionCard, SmartInputWrapper } from "../components/section-card";
+import { useProviderForm } from "../provider-form-context";
 
 interface BasicInfoSectionProps {
   autoUrlPending?: boolean;

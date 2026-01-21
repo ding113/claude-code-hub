@@ -13,14 +13,20 @@ export default async function RequestFiltersPage() {
   const t = await getTranslations("settings.requestFilters");
 
   return (
-    <div className="space-y-6">
-      <SettingsPageHeader title={t("title")} description={t("description")} />
-      <Section title={t("title")} description={t("description")}>
+    <>
+      <SettingsPageHeader title={t("title")} description={t("description")} icon="filter" />
+      <Section
+        title={t("title")}
+        description={t("description")}
+        icon="filter"
+        iconColor="text-[#E25706]"
+        variant="default"
+      >
         <Suspense fallback={<RequestFiltersTableSkeleton />}>
           <RequestFiltersContent />
         </Suspense>
       </Section>
-    </div>
+    </>
   );
 }
 

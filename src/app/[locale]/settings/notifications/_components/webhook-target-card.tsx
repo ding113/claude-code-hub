@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import {
@@ -12,13 +12,18 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import type { WebhookTargetState } from "../_lib/hooks";
 import type { NotificationType } from "../_lib/schemas";
 import { TestWebhookButton } from "./test-webhook-button";
@@ -52,6 +57,7 @@ export function WebhookTargetCard({
   const t = useTranslations("settings");
   const locale = useLocale();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   const typeLabel = useMemo(() => {
     return t(`notifications.targetDialog.types.${target.providerType}` as any);
@@ -67,89 +73,104 @@ export function WebhookTargetCard({
       await onDelete(target.id);
     } finally {
       setIsDeleting(false);
+      setShowDeleteDialog(false);
     }
   };
 
   return (
-    <Card>
-      <CardHeader className="space-y-2">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-          <div className="min-w-0">
-            <CardTitle className="truncate">{target.name}</CardTitle>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">{typeLabel}</Badge>
-              <Badge variant={target.isEnabled ? "default" : "secondary"}>
-                {target.isEnabled
-                  ? t("notifications.targets.statusEnabled")
-                  : t("notifications.targets.statusDisabled")}
-              </Badge>
-              {lastTestOk !== undefined ? (
-                <Badge variant={lastTestOk ? "default" : "destructive"}>
-                  {lastTestOk
-                    ? t("notifications.targets.lastTestSuccess")
-                    : t("notifications.targets.lastTestFailed")}
-                  {lastTestLatency ? ` ${lastTestLatency}ms` : ""}
+    <>
+      <div
+        className={cn(
+          "p-4 rounded-xl bg-white/[0.02] border border-white/5",
+          "hover:bg-white/[0.04] hover:border-white/10 transition-colors"
+        )}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div className="p-2 rounded-lg bg-blue-500/10 shrink-0">
+              <ExternalLink className="h-4 w-4 text-blue-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium text-foreground truncate">{target.name}</p>
+                <Badge variant="secondary" className="text-[10px] shrink-0">
+                  {typeLabel}
                 </Badge>
-              ) : null}
+              </div>
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {lastTestOk !== undefined ? (
+                  <Badge variant={lastTestOk ? "default" : "destructive"} className="text-[10px]">
+                    {lastTestOk
+                      ? t("notifications.targets.lastTestSuccess")
+                      : t("notifications.targets.lastTestFailed")}
+                    {lastTestLatency ? ` ${lastTestLatency}ms` : ""}
+                  </Badge>
+                ) : null}
+                {lastTestText && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {t("notifications.targets.lastTestAt")}: {lastTestText}
+                  </span>
+                )}
+                {!lastTestText && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {t("notifications.targets.lastTestNever")}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => onEdit(target)}>
-              <Pencil className="mr-2 h-4 w-4" />
-              {t("notifications.targets.edit")}
-            </Button>
-
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button type="button" variant="destructive" size="sm">
+          <div className="flex items-center gap-3 shrink-0">
+            <Switch
+              checked={target.isEnabled}
+              onCheckedChange={(checked) => onToggleEnabled(target.id, checked)}
+              aria-label={t("notifications.targets.enable")}
+            />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onEdit(target)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  {t("notifications.targets.edit")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="text-destructive focus:text-destructive"
+                >
                   <Trash2 className="mr-2 h-4 w-4" />
                   {t("notifications.targets.delete")}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {t("notifications.targets.deleteConfirmTitle")}
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("notifications.targets.deleteConfirm")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
-                    {t("common.confirm")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-      </CardHeader>
 
-      <CardContent className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <Label htmlFor={`target-enabled-${target.id}`}>{t("notifications.targets.enable")}</Label>
-          <Switch
-            id={`target-enabled-${target.id}`}
-            checked={target.isEnabled}
-            onCheckedChange={(checked) => onToggleEnabled(target.id, checked)}
-          />
+        <div className="mt-4 pt-3 border-t border-white/5">
+          <TestWebhookButton targetId={target.id} disabled={!target.isEnabled} onTest={onTest} />
         </div>
+      </div>
 
-        <div className="text-muted-foreground text-sm">
-          {lastTestText ? (
-            <span>
-              {t("notifications.targets.lastTestAt")}: {lastTestText}
-            </span>
-          ) : (
-            <span>{t("notifications.targets.lastTestNever")}</span>
-          )}
-        </div>
-
-        <TestWebhookButton targetId={target.id} disabled={!target.isEnabled} onTest={onTest} />
-      </CardContent>
-    </Card>
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("notifications.targets.deleteConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("notifications.targets.deleteConfirm")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
+              {t("common.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

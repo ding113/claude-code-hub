@@ -328,7 +328,7 @@ function ProviderFormContent({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
       {/* Form Layout */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
         {/* Tab Navigation */}
         <FormTabNav
           activeTab={state.ui.activeTab}
