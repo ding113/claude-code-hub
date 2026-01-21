@@ -49,12 +49,10 @@ export interface ProviderFormProps {
 // Internal form component that uses context
 function ProviderFormContent({
   onSuccess,
-  urlResolver,
   autoUrlPending,
   resolvedUrl,
 }: {
   onSuccess?: () => void;
-  urlResolver?: (providerType: ProviderType) => Promise<string | null>;
   autoUrlPending: boolean;
   resolvedUrl?: string | null;
 }) {
@@ -188,11 +186,10 @@ function ProviderFormContent({
         // Handle key: in edit mode, only include if user provided a new key
         const trimmedKey = state.basic.key.trim();
 
-        const formData = {
+        // Base form data without key (for type safety)
+        const baseFormData = {
           name: state.basic.name.trim(),
           url: state.basic.url.trim(),
-          // In edit mode, omit key if empty to keep existing; in create mode, always include
-          ...(isEdit ? (trimmedKey ? { key: trimmedKey } : {}) : { key: trimmedKey }),
           website_url: state.basic.websiteUrl?.trim() || null,
           provider_type: state.routing.providerType,
           preserve_client_ip: state.routing.preserveClientIp,
@@ -237,14 +234,18 @@ function ProviderFormContent({
         };
 
         if (isEdit && provider) {
-          const res = await editProvider(provider.id, formData);
+          // For edit: only include key if user provided a new one
+          const editFormData = trimmedKey ? { ...baseFormData, key: trimmedKey } : baseFormData;
+          const res = await editProvider(provider.id, editFormData);
           if (!res.ok) {
             toast.error(res.error || t("errors.updateFailed"));
             return;
           }
           toast.success(t("success.updated"));
         } else {
-          const res = await addProvider(formData);
+          // For create: key is required
+          const createFormData = { ...baseFormData, key: trimmedKey };
+          const res = await addProvider(createFormData);
           if (!res.ok) {
             toast.error(res.error || t("errors.createFailed"));
             return;
@@ -562,7 +563,6 @@ export function ProviderForm({
     >
       <ProviderFormContent
         onSuccess={onSuccess}
-        urlResolver={urlResolver}
         autoUrlPending={autoUrlPending}
         resolvedUrl={resolvedUrl}
       />
