@@ -1,1 +1,0 @@
-ALTER TABLE "provider_vendors" ADD COLUMN "is_official" boolean DEFAULT false NOT NULL;

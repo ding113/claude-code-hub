@@ -1,6 +1,6 @@
 {
-  "id": "4f67adbe-ba12-42b2-a553-558d6064974f",
-  "prevId": "390e30e9-a88b-4b14-b1d7-e51ccc03a913",
+  "id": "75eef188-0cac-4ae8-9deb-9b0db4f046c2",
+  "prevId": "b40c930a-4001-4403-90b9-652a5878893c",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -633,6 +633,22 @@
           ],
           "isUnique": false,
           "where": "\"message_request\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_message_request_session_id_prefix": {
+          "name": "idx_message_request_session_id_prefix",
+          "columns": [
+            {
+              "expression": "\"session_id\" varchar_pattern_ops",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL AND (\"message_request\".\"blocked_by\" IS NULL OR \"message_request\".\"blocked_by\" <> 'warmup')",
           "concurrently": false,
           "method": "btree",
           "with": {}

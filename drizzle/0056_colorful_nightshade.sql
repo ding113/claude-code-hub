@@ -1,1 +1,0 @@
-ALTER TABLE "provider_vendors" DROP COLUMN "is_official";
