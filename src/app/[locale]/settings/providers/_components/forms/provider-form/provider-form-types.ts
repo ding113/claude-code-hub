@@ -1,6 +1,4 @@
-import type { Context1mPreference } from "@/lib/special-attributes";
 import type {
-  CodexInstructionsStrategy,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,

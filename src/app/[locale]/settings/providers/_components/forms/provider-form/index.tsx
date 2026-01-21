@@ -19,7 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
-import { FormTabNav, TAB_CONFIG } from "./components/form-tab-nav";
+import { FormTabNav } from "./components/form-tab-nav";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { TabId } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
@@ -103,7 +103,7 @@ function ProviderFormContent({
 
     const container = contentRef.current;
     const containerRect = container.getBoundingClientRect();
-    const scrollTop = container.scrollTop;
+    const _scrollTop = container.scrollTop;
 
     // Find which section is at the top of the viewport
     let activeSection: TabId = "basic";
@@ -125,7 +125,7 @@ function ProviderFormContent({
     if (state.ui.activeTab !== activeSection) {
       dispatch({ type: "SET_ACTIVE_TAB", payload: activeSection });
     }
-  }, [dispatch, state.ui.activeTab, tabOrder]);
+  }, [dispatch, state.ui.activeTab]);
 
   const handleTabChange = (tab: TabId) => {
     dispatch({ type: "SET_ACTIVE_TAB", payload: tab });
@@ -243,9 +243,12 @@ function ProviderFormContent({
           }
           toast.success(t("success.updated"));
         } else {
-          // For create: key is required
-          const createFormData = { ...baseFormData, key: trimmedKey };
-          const res = await addProvider(createFormData);
+          // For create: key is required (validated at line 151-152)
+          if (!trimmedKey) {
+            toast.error(t("errors.keyRequired"));
+            return;
+          }
+          const res = await addProvider({ ...baseFormData, key: trimmedKey });
           if (!res.ok) {
             toast.error(res.error || t("errors.createFailed"));
             return;
