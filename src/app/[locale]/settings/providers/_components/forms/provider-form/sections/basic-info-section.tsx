@@ -45,10 +45,7 @@ export function BasicInfoSection({ autoUrlPending }: BasicInfoSectionProps) {
         variant="highlight"
       >
         <div className="space-y-4">
-          <SmartInputWrapper
-            label={t("name.label")}
-            required
-          >
+          <SmartInputWrapper label={t("name.label")} required>
             <div className="relative">
               <Input
                 ref={nameInputRef}
@@ -73,10 +70,7 @@ export function BasicInfoSection({ autoUrlPending }: BasicInfoSectionProps) {
           icon={Link2}
         >
           <div className="space-y-4">
-            <SmartInputWrapper
-              label={t("url.label")}
-              required
-            >
+            <SmartInputWrapper label={t("url.label")} required>
               <div className="relative">
                 <Input
                   id={isEdit ? "edit-url" : "url"}
@@ -132,9 +126,7 @@ export function BasicInfoSection({ autoUrlPending }: BasicInfoSectionProps) {
           <SmartInputWrapper
             label={isEdit ? `${t("key.label")}${t("key.leaveEmpty")}` : t("key.label")}
             description={
-              isEdit && provider
-                ? t("key.currentKey", { key: provider.maskedKey })
-                : undefined
+              isEdit && provider ? t("key.currentKey", { key: provider.maskedKey }) : undefined
             }
             required={!isEdit}
           >

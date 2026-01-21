@@ -19,7 +19,13 @@ export function createInitialState(
     name?: string;
     url?: string;
     websiteUrl?: string;
-    providerType?: "claude" | "claude-auth" | "codex" | "gemini" | "gemini-cli" | "openai-compatible";
+    providerType?:
+      | "claude"
+      | "claude-auth"
+      | "codex"
+      | "gemini"
+      | "gemini-cli"
+      | "openai-compatible";
   }
 ): ProviderFormState {
   const isEdit = mode === "edit";
@@ -290,7 +296,13 @@ export function ProviderFormProvider({
     name?: string;
     url?: string;
     websiteUrl?: string;
-    providerType?: "claude" | "claude-auth" | "codex" | "gemini" | "gemini-cli" | "openai-compatible";
+    providerType?:
+      | "claude"
+      | "claude-auth"
+      | "codex"
+      | "gemini"
+      | "gemini-cli"
+      | "openai-compatible";
   };
   groupSuggestions: string[];
 }) {

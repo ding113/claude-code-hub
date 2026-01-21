@@ -67,12 +67,7 @@ export function RoutingSection() {
     target.startsWith("claude-")
   );
 
-  const providerTypes: ProviderType[] = [
-    "claude",
-    "codex",
-    "gemini",
-    "openai-compatible",
-  ];
+  const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
 
   return (
     <TooltipProvider>
@@ -123,7 +118,9 @@ export function RoutingSection() {
                 </SelectContent>
               </Select>
               {!enableMultiProviderTypes && state.routing.providerType === "openai-compatible" && (
-                <p className="text-xs text-amber-600">{t("sections.routing.providerTypeDisabledNote")}</p>
+                <p className="text-xs text-amber-600">
+                  {t("sections.routing.providerTypeDisabledNote")}
+                </p>
               )}
             </SmartInputWrapper>
 
@@ -165,7 +162,9 @@ export function RoutingSection() {
             <FieldGroup label={t("sections.routing.modelRedirects.label")}>
               <ModelRedirectEditor
                 value={state.routing.modelRedirects}
-                onChange={(value: Record<string, string>) => dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })}
+                onChange={(value: Record<string, string>) =>
+                  dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })
+                }
                 disabled={state.ui.isPending}
               />
             </FieldGroup>
@@ -194,7 +193,9 @@ export function RoutingSection() {
               <ModelMultiSelect
                 providerType={state.routing.providerType}
                 selectedModels={state.routing.allowedModels}
-                onChange={(value: string[]) => dispatch({ type: "SET_ALLOWED_MODELS", payload: value })}
+                onChange={(value: string[]) =>
+                  dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
+                }
                 disabled={state.ui.isPending}
                 providerUrl={state.basic.url}
                 apiKey={state.basic.key}
@@ -220,7 +221,9 @@ export function RoutingSection() {
               )}
               <p className="text-xs text-muted-foreground">
                 {state.routing.allowedModels.length === 0 ? (
-                  <span className="text-green-600">{t("sections.routing.modelWhitelist.allowAll")}</span>
+                  <span className="text-green-600">
+                    {t("sections.routing.modelWhitelist.allowAll")}
+                  </span>
                 ) : (
                   <span>
                     {t("sections.routing.modelWhitelist.selectedOnly", {
@@ -304,10 +307,7 @@ export function RoutingSection() {
         </SectionCard>
 
         {/* Advanced Settings */}
-        <SectionCard
-          title={t("sections.routing.preserveClientIp.label")}
-          icon={Settings}
-        >
+        <SectionCard title={t("sections.routing.preserveClientIp.label")} icon={Settings}>
           <div className="space-y-4">
             <ToggleRow
               label={t("sections.routing.preserveClientIp.label")}
@@ -331,7 +331,10 @@ export function RoutingSection() {
               <Select
                 value={state.routing.cacheTtlPreference}
                 onValueChange={(val) =>
-                  dispatch({ type: "SET_CACHE_TTL_PREFERENCE", payload: val as "inherit" | "5m" | "1h" })
+                  dispatch({
+                    type: "SET_CACHE_TTL_PREFERENCE",
+                    payload: val as "inherit" | "5m" | "1h",
+                  })
                 }
                 disabled={state.ui.isPending}
               >
@@ -339,7 +342,9 @@ export function RoutingSection() {
                   <SelectValue placeholder="inherit" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="inherit">{t("sections.routing.cacheTtl.options.inherit")}</SelectItem>
+                  <SelectItem value="inherit">
+                    {t("sections.routing.cacheTtl.options.inherit")}
+                  </SelectItem>
                   <SelectItem value="5m">{t("sections.routing.cacheTtl.options.5m")}</SelectItem>
                   <SelectItem value="1h">{t("sections.routing.cacheTtl.options.1h")}</SelectItem>
                 </SelectContent>
@@ -366,11 +371,15 @@ export function RoutingSection() {
                     <SelectValue placeholder="inherit" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="inherit">{t("sections.routing.context1m.options.inherit")}</SelectItem>
+                    <SelectItem value="inherit">
+                      {t("sections.routing.context1m.options.inherit")}
+                    </SelectItem>
                     <SelectItem value="force_enable">
                       {t("sections.routing.context1m.options.forceEnable")}
                     </SelectItem>
-                    <SelectItem value="disabled">{t("sections.routing.context1m.options.disabled")}</SelectItem>
+                    <SelectItem value="disabled">
+                      {t("sections.routing.context1m.options.disabled")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </SmartInputWrapper>
@@ -404,23 +413,31 @@ export function RoutingSection() {
                           <SelectValue placeholder="inherit" />
                         </SelectTrigger>
                         <SelectContent>
-                          {["inherit", "minimal", "low", "medium", "high", "xhigh", "none"].map((val) => (
-                            <SelectItem key={val} value={val}>
-                              {t(`sections.routing.codexOverrides.reasoningEffort.options.${val}`)}
-                            </SelectItem>
-                          ))}
+                          {["inherit", "minimal", "low", "medium", "high", "xhigh", "none"].map(
+                            (val) => (
+                              <SelectItem key={val} value={val}>
+                                {t(
+                                  `sections.routing.codexOverrides.reasoningEffort.options.${val}`
+                                )}
+                              </SelectItem>
+                            )
+                          )}
                         </SelectContent>
                       </Select>
                       <Info className="absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-xs">
-                    <p className="text-sm">{t("sections.routing.codexOverrides.reasoningEffort.help")}</p>
+                    <p className="text-sm">
+                      {t("sections.routing.codexOverrides.reasoningEffort.help")}
+                    </p>
                   </TooltipContent>
                 </Tooltip>
               </SmartInputWrapper>
 
-              <SmartInputWrapper label={t("sections.routing.codexOverrides.reasoningSummary.label")}>
+              <SmartInputWrapper
+                label={t("sections.routing.codexOverrides.reasoningSummary.label")}
+              >
                 <Select
                   value={state.routing.codexReasoningSummaryPreference}
                   onValueChange={(val) =>
@@ -468,7 +485,9 @@ export function RoutingSection() {
                 </Select>
               </SmartInputWrapper>
 
-              <SmartInputWrapper label={t("sections.routing.codexOverrides.parallelToolCalls.label")}>
+              <SmartInputWrapper
+                label={t("sections.routing.codexOverrides.parallelToolCalls.label")}
+              >
                 <Select
                   value={state.routing.codexParallelToolCallsPreference}
                   onValueChange={(val) =>

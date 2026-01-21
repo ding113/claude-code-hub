@@ -1,13 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  FileText,
-  FlaskConical,
-  Gauge,
-  Network,
-  Route,
-} from "lucide-react";
+import { FileText, FlaskConical, Gauge, Network, Route } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type { TabId } from "../provider-form-types";
@@ -27,12 +21,7 @@ interface FormTabNavProps {
   tabStatus?: Partial<Record<TabId, "default" | "warning" | "configured">>;
 }
 
-export function FormTabNav({
-  activeTab,
-  onTabChange,
-  disabled,
-  tabStatus = {},
-}: FormTabNavProps) {
+export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }: FormTabNavProps) {
   const t = useTranslations("settings.providers.form");
 
   const getStatusColor = (status?: "default" | "warning" | "configured") => {
@@ -79,10 +68,7 @@ export function FormTabNav({
                   )}
                 >
                   <Icon
-                    className={cn(
-                      "h-4 w-4",
-                      isActive ? "text-primary" : "text-muted-foreground"
-                    )}
+                    className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")}
                   />
                 </span>
                 <span className="flex-1 text-left">{t(tab.labelKey)}</span>

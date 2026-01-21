@@ -185,7 +185,8 @@ function ProviderFormContent({
           provider_type: state.routing.providerType,
           preserve_client_ip: state.routing.preserveClientIp,
           model_redirects: state.routing.modelRedirects,
-          allowed_models: state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
+          allowed_models:
+            state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
           join_claude_pool: state.routing.joinClaudePool,
           priority: state.routing.priority,
           weight: state.routing.weight,
@@ -207,7 +208,8 @@ function ProviderFormContent({
           limit_concurrent_sessions: state.rateLimit.limitConcurrentSessions,
           circuit_breaker_failure_threshold: state.circuitBreaker.failureThreshold,
           circuit_breaker_open_duration: openDurationMs,
-          circuit_breaker_half_open_success_threshold: state.circuitBreaker.halfOpenSuccessThreshold,
+          circuit_breaker_half_open_success_threshold:
+            state.circuitBreaker.halfOpenSuccessThreshold,
           max_retry_attempts: state.circuitBreaker.maxRetryAttempts,
           proxy_url: state.network.proxyUrl?.trim() || null,
           proxy_fallback_to_direct: state.network.proxyFallbackToDirect,
@@ -343,27 +345,47 @@ function ProviderFormContent({
         >
           <div className="space-y-8">
             {/* Basic Info Section */}
-            <div ref={(el) => { sectionRefs.current.basic = el; }}>
+            <div
+              ref={(el) => {
+                sectionRefs.current.basic = el;
+              }}
+            >
               <BasicInfoSection autoUrlPending={autoUrlPending} />
             </div>
 
             {/* Routing Section */}
-            <div ref={(el) => { sectionRefs.current.routing = el; }}>
+            <div
+              ref={(el) => {
+                sectionRefs.current.routing = el;
+              }}
+            >
               <RoutingSection />
             </div>
 
             {/* Limits Section */}
-            <div ref={(el) => { sectionRefs.current.limits = el; }}>
+            <div
+              ref={(el) => {
+                sectionRefs.current.limits = el;
+              }}
+            >
               <LimitsSection />
             </div>
 
             {/* Network Section */}
-            <div ref={(el) => { sectionRefs.current.network = el; }}>
+            <div
+              ref={(el) => {
+                sectionRefs.current.network = el;
+              }}
+            >
               <NetworkSection />
             </div>
 
             {/* Testing Section */}
-            <div ref={(el) => { sectionRefs.current.testing = el; }}>
+            <div
+              ref={(el) => {
+                sectionRefs.current.testing = el;
+              }}
+            >
               <TestingSection />
             </div>
           </div>

@@ -72,23 +72,17 @@ export function SectionCard({
               )}
               <div className="space-y-1">
                 {title && (
-                  <h3 className="text-sm font-semibold text-foreground leading-none">
-                    {title}
-                  </h3>
+                  <h3 className="text-sm font-semibold text-foreground leading-none">{title}</h3>
                 )}
                 {description && (
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {description}
-                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
                 )}
               </div>
             </div>
             {badge}
           </div>
         )}
-        <div className={cn("px-5 pb-5", !title && !description && "pt-5")}>
-          {children}
-        </div>
+        <div className={cn("px-5 pb-5", !title && !description && "pt-5")}>{children}</div>
       </div>
     </motion.div>
   );
@@ -114,23 +108,11 @@ export function FieldGroup({
     <div className={cn("space-y-3", className)}>
       {(label || description) && (
         <div className="space-y-1">
-          {label && (
-            <div className="text-sm font-medium text-foreground">{label}</div>
-          )}
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
+          {label && <div className="text-sm font-medium text-foreground">{label}</div>}
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </div>
       )}
-      <div
-        className={cn(
-          horizontal
-            ? "grid gap-4 sm:grid-cols-2"
-            : "space-y-4"
-        )}
-      >
-        {children}
-      </div>
+      <div className={cn(horizontal ? "grid gap-4 sm:grid-cols-2" : "space-y-4")}>{children}</div>
     </div>
   );
 }
@@ -211,9 +193,7 @@ export function ToggleRow({
         )}
         <div className="space-y-0.5">
           <div className="text-sm font-medium text-foreground">{label}</div>
-          {description && (
-            <p className="text-xs text-muted-foreground">{description}</p>
-          )}
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
         </div>
       </div>
       {children}

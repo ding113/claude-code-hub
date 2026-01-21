@@ -87,7 +87,10 @@ function TimeoutInput({
               min={min}
               max={max}
               step="1"
-              className={cn("pr-8 font-mono", isCore && "border-orange-200 focus:border-orange-500")}
+              className={cn(
+                "pr-8 font-mono",
+                isCore && "border-orange-200 focus:border-orange-500"
+              )}
             />
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
               s

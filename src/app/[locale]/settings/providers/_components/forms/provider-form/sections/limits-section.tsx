@@ -80,10 +80,7 @@ function LimitCard({
     >
       <div className="flex items-start gap-3">
         <span
-          className={cn(
-            "flex items-center justify-center w-10 h-10 rounded-lg shrink-0",
-            color
-          )}
+          className={cn("flex items-center justify-center w-10 h-10 rounded-lg shrink-0", color)}
         >
           <Icon className="h-5 w-5" />
         </span>
@@ -310,9 +307,7 @@ export function LimitsSection() {
                   disabled={state.ui.isPending}
                   min="0"
                   step="1"
-                  className={cn(
-                    state.circuitBreaker.failureThreshold === 0 && "border-yellow-500"
-                  )}
+                  className={cn(state.circuitBreaker.failureThreshold === 0 && "border-yellow-500")}
                 />
                 <AlertTriangle
                   className={cn(

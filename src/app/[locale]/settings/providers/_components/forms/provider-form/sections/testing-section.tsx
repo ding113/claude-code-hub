@@ -96,7 +96,9 @@ export function TestingSection() {
               <SelectContent>
                 <SelectItem value="none">
                   <div className="space-y-1">
-                    <div className="font-medium">{t("sections.mcpPassthrough.select.none.label")}</div>
+                    <div className="font-medium">
+                      {t("sections.mcpPassthrough.select.none.label")}
+                    </div>
                     <div className="text-xs text-muted-foreground max-w-xs">
                       {t("sections.mcpPassthrough.select.none.desc")}
                     </div>
@@ -114,7 +116,9 @@ export function TestingSection() {
                 </SelectItem>
                 <SelectItem value="glm">
                   <div className="space-y-1">
-                    <div className="font-medium">{t("sections.mcpPassthrough.select.glm.label")}</div>
+                    <div className="font-medium">
+                      {t("sections.mcpPassthrough.select.glm.label")}
+                    </div>
                     <div className="text-xs text-muted-foreground max-w-xs">
                       {t("sections.mcpPassthrough.select.glm.desc")}
                     </div>
