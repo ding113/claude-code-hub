@@ -228,7 +228,7 @@ export class ProxyForwarder {
 
       if (isMcpRequest) {
         endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
-      } else if (currentProvider.providerVendorId > 0) {
+      } else if (currentProvider.providerVendorId && currentProvider.providerVendorId > 0) {
         try {
           const preferred = await getPreferredProviderEndpoints({
             vendorId: currentProvider.providerVendorId,
@@ -266,6 +266,7 @@ export class ProxyForwarder {
 
       if (
         !isMcpRequest &&
+        currentProvider.providerVendorId &&
         (await isVendorTypeCircuitOpen(
           currentProvider.providerVendorId,
           currentProvider.providerType
@@ -912,7 +913,8 @@ export class ProxyForwarder {
               statusCode === 524 &&
               endpointCandidates.length > 0 &&
               endpointAttemptsEvaluated >= endpointCandidates.length &&
-              allEndpointAttemptsTimedOut
+              allEndpointAttemptsTimedOut &&
+              currentProvider.providerVendorId
             ) {
               await recordVendorTypeAllEndpointsTimeout(
                 currentProvider.providerVendorId,

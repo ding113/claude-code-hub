@@ -481,7 +481,7 @@ export class ProxySession {
     const item: ProviderChainItem = {
       id: provider.id,
       name: provider.name,
-      vendorId: provider.providerVendorId,
+      vendorId: provider.providerVendorId ?? undefined,
       providerType: provider.providerType,
       endpointId: metadata?.endpointId,
       endpointUrl: metadata?.endpointUrl,

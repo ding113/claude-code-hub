@@ -109,13 +109,24 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
 
   const providersByVendor = useMemo(() => {
     const grouped: Record<number, ProviderDisplay[]> = {};
+    const orphaned: ProviderDisplay[] = [];
+
     providers.forEach((p) => {
-      const vendorId = p.providerVendorId || 0;
-      if (!grouped[vendorId]) {
-        grouped[vendorId] = [];
+      const vendorId = p.providerVendorId;
+      if (!vendorId || vendorId <= 0) {
+        orphaned.push(p);
+      } else {
+        if (!grouped[vendorId]) {
+          grouped[vendorId] = [];
+        }
+        grouped[vendorId].push(p);
       }
-      grouped[vendorId].push(p);
     });
+
+    if (orphaned.length > 0) {
+      grouped[-1] = orphaned;
+    }
+
     return grouped;
   }, [providers]);
 
@@ -181,7 +192,9 @@ function VendorCard({
   const t = useTranslations("settings.providers");
 
   const displayName =
-    vendor?.displayName || vendor?.websiteDomain || t("vendorFallbackName", { id: vendorId });
+    vendorId === -1
+      ? t("orphanedProviders")
+      : vendor?.displayName || vendor?.websiteDomain || t("vendorFallbackName", { id: vendorId });
   const websiteUrl = vendor?.websiteUrl;
   const faviconUrl = vendor?.faviconUrl;
 
@@ -214,7 +227,7 @@ function VendorCard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <DeleteVendorDialog vendor={vendor} vendorId={vendorId} />
+            {vendorId > 0 && <DeleteVendorDialog vendor={vendor} vendorId={vendorId} />}
           </div>
         </div>
       </CardHeader>
@@ -232,7 +245,7 @@ function VendorCard({
           currencyCode={currencyCode}
         />
 
-        {enableMultiProviderTypes && <VendorEndpointsSection vendorId={vendorId} />}
+        {enableMultiProviderTypes && vendorId > 0 && <VendorEndpointsSection vendorId={vendorId} />}
       </CardContent>
     </Card>
   );
