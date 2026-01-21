@@ -2,7 +2,7 @@
 
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { getOverviewMetrics as getOverviewMetricsFromDB } from "@/repository/overview";
+import { getOverviewMetricsWithComparison } from "@/repository/overview";
 import { getSystemSettings } from "@/repository/system-config";
 import { getConcurrentSessions as getConcurrentSessionsCount } from "./concurrent-sessions";
 import type { ActionResult } from "./types";
@@ -21,11 +21,21 @@ export interface OverviewData {
   avgResponseTime: number;
   /** 今日错误率（百分比） */
   todayErrorRate: number;
+  /** 昨日同时段请求数 */
+  yesterdaySamePeriodRequests: number;
+  /** 昨日同时段消耗 */
+  yesterdaySamePeriodCost: number;
+  /** 昨日同时段平均响应时间 */
+  yesterdaySamePeriodAvgResponseTime: number;
+  /** 最近1分钟请求数 (RPM) */
+  recentMinuteRequests: number;
 }
 
 /**
  * 获取概览数据（首页实时面板使用）
- * 权限控制：管理员或 allowGlobalUsageView=true 时显示全站数据
+ * 权限控制：
+ * - 管理员或 allowGlobalUsageView=true 时显示全站数据
+ * - 否则显示当前用户自己的数据
  */
 export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
   try {
@@ -42,40 +52,24 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
     const isAdmin = session.user.role === "admin";
     const canViewGlobalData = isAdmin || settings.allowGlobalUsageView;
 
+    // 根据权限决定查询范围
+    const userId = canViewGlobalData ? undefined : session.user.id;
+
     // 并行查询所有数据
     const [concurrentResult, metricsData] = await Promise.all([
-      getConcurrentSessionsCount(),
-      getOverviewMetricsFromDB(),
+      // 并发数只有管理员能看全站的
+      isAdmin ? getConcurrentSessionsCount() : Promise.resolve({ ok: true as const, data: 0 }),
+      getOverviewMetricsWithComparison(userId),
     ]);
 
-    // 根据权限决定显示范围
-    if (!canViewGlobalData) {
-      // 普通用户且无权限：全站指标设为 0
-      logger.debug("Overview: User without global view permission", {
-        userId: session.user.id,
-        userName: session.user.name,
-      });
-
-      return {
-        ok: true,
-        data: {
-          concurrentSessions: 0, // 无权限时不显示全站并发数
-          todayRequests: 0, // 无权限时不显示全站请求数
-          todayCost: 0, // 无权限时不显示全站消耗
-          avgResponseTime: 0, // 无权限时不显示全站平均响应时间
-          todayErrorRate: 0, // 无权限时不显示全站错误率
-        },
-      };
-    }
-
-    // 管理员或有权限：显示全站数据
     const concurrentSessions = concurrentResult.ok ? concurrentResult.data : 0;
 
-    logger.debug("Overview: User with global view permission", {
+    logger.debug("Overview: Fetching data", {
       userId: session.user.id,
       userName: session.user.name,
       isAdmin,
-      allowGlobalUsageView: settings.allowGlobalUsageView,
+      canViewGlobalData,
+      queryScope: userId ? "user" : "global",
     });
 
     return {
@@ -86,6 +80,10 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
         todayCost: metricsData.todayCost,
         avgResponseTime: metricsData.avgResponseTime,
         todayErrorRate: metricsData.todayErrorRate,
+        yesterdaySamePeriodRequests: metricsData.yesterdaySamePeriodRequests,
+        yesterdaySamePeriodCost: metricsData.yesterdaySamePeriodCost,
+        yesterdaySamePeriodAvgResponseTime: metricsData.yesterdaySamePeriodAvgResponseTime,
+        recentMinuteRequests: metricsData.recentMinuteRequests,
       },
     };
   } catch (error) {

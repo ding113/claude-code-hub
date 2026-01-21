@@ -26,11 +26,13 @@
     "viewRelease": "リリースを表示"
   },
   "metrics": {
-    "concurrent": "同時実行",
+    "concurrent": "アクティブセッション数",
     "todayRequests": "本日のリクエスト",
     "todayCost": "本日のコスト",
     "avgResponse": "平均応答時間",
-    "viewDetails": "詳細を表示"
+    "viewDetails": "詳細を表示",
+    "rpm": "RPM",
+    "vsYesterday": "前日同時間帯比"
   },
   "activeSessions": {
     "title": "アクティブなセッション",

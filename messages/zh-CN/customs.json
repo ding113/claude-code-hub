@@ -26,11 +26,13 @@
     "viewRelease": "查看发布"
   },
   "metrics": {
-    "concurrent": "并发数",
+    "concurrent": "活跃 Session 数",
     "todayRequests": "今日请求",
     "todayCost": "今日消费",
     "avgResponse": "平均响应时间",
-    "viewDetails": "查看详情"
+    "viewDetails": "查看详情",
+    "rpm": "RPM",
+    "vsYesterday": "较昨日同期"
   },
   "activeSessions": {
     "title": "活跃 Session",

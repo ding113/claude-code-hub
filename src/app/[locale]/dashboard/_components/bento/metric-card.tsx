@@ -257,9 +257,7 @@ export function BentoMetricCard({
           >
             {formattedValue}
           </h3>
-          {trend?.label && (
-            <p className="text-xs text-muted-foreground mt-1">{trend.label}</p>
-          )}
+          {trend?.label && <p className="text-xs text-muted-foreground mt-1">{trend.label}</p>}
         </div>
       </div>
 

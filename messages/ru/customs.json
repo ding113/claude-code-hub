@@ -26,11 +26,13 @@
     "viewRelease": "Просмотр релиза"
   },
   "metrics": {
-    "concurrent": "Одновременно",
+    "concurrent": "Активные сессии",
     "todayRequests": "Запросы сегодня",
     "todayCost": "Стоимость сегодня",
     "avgResponse": "Среднее время ответа",
-    "viewDetails": "Просмотр деталей"
+    "viewDetails": "Просмотр деталей",
+    "rpm": "RPM",
+    "vsYesterday": "к вчера"
   },
   "activeSessions": {
     "title": "Активные сеансы",

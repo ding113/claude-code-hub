@@ -94,6 +94,16 @@ async function fetchLeaderboard(scope: "user" | "provider" | "model"): Promise<L
   }));
 }
 
+/**
+ * Calculate percentage change between current and previous values
+ */
+function calcPercentageChange(current: number, previous: number): number {
+  if (previous === 0) {
+    return current > 0 ? 100 : 0;
+  }
+  return Math.round(((current - previous) / previous) * 100);
+}
+
 export function DashboardBento({
   isAdmin,
   currencyCode,
@@ -105,12 +115,11 @@ export function DashboardBento({
 
   const [timeRange, setTimeRange] = useState<TimeRange>(DEFAULT_TIME_RANGE);
 
-  // Overview metrics
+  // Overview metrics (available to all users, but shows different data based on permissions)
   const { data: overview } = useQuery<OverviewData>({
     queryKey: ["overview-data"],
     queryFn: fetchOverviewData,
     refetchInterval: REFRESH_INTERVAL,
-    enabled: isAdmin,
   });
 
   // Active sessions
@@ -159,12 +168,27 @@ export function DashboardBento({
     todayCost: 0,
     avgResponseTime: 0,
     todayErrorRate: 0,
+    yesterdaySamePeriodRequests: 0,
+    yesterdaySamePeriodCost: 0,
+    yesterdaySamePeriodAvgResponseTime: 0,
+    recentMinuteRequests: 0,
   };
 
   const formatResponseTime = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
   };
+
+  // Calculate comparisons
+  const requestsChange = calcPercentageChange(
+    metrics.todayRequests,
+    metrics.yesterdaySamePeriodRequests
+  );
+  const costChange = calcPercentageChange(metrics.todayCost, metrics.yesterdaySamePeriodCost);
+  const responseTimeChange = calcPercentageChange(
+    metrics.avgResponseTime,
+    metrics.yesterdaySamePeriodAvgResponseTime
+  );
 
   // Sessions with lastActivityAt for LiveSessionsPanel
   const sessionsWithActivity = useMemo(() => {
@@ -188,6 +212,7 @@ export function DashboardBento({
             icon={Activity}
             accentColor="emerald"
             className="min-h-[120px]"
+            comparisons={[{ value: metrics.recentMinuteRequests, label: t("metrics.rpm") }]}
           />
           <BentoMetricCard
             title={t("metrics.todayRequests")}
@@ -195,6 +220,7 @@ export function DashboardBento({
             icon={TrendingUp}
             accentColor="blue"
             className="min-h-[120px]"
+            comparisons={[{ value: requestsChange, label: t("metrics.vsYesterday") }]}
           />
           <BentoMetricCard
             title={t("metrics.todayCost")}
@@ -202,6 +228,7 @@ export function DashboardBento({
             icon={DollarSign}
             accentColor="amber"
             className="min-h-[120px]"
+            comparisons={[{ value: costChange, label: t("metrics.vsYesterday") }]}
           />
           <BentoMetricCard
             title={t("metrics.avgResponse")}
@@ -210,6 +237,7 @@ export function DashboardBento({
             formatter={formatResponseTime}
             accentColor="purple"
             className="min-h-[120px]"
+            comparisons={[{ value: -responseTimeChange, label: t("metrics.vsYesterday") }]}
           />
         </BentoGrid>
       )}
