@@ -71,7 +71,7 @@ function DarkInput({
       placeholder={placeholder}
       required={required}
       className={cn(
-        "w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-foreground",
+        "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
         "placeholder:text-muted-foreground/50",
         "focus:border-[#E25706] focus:ring-1 focus:ring-[#E25706] outline-none transition-all",
         className
@@ -104,7 +104,7 @@ function DarkTextarea({
       placeholder={placeholder}
       rows={rows}
       className={cn(
-        "w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-foreground resize-none",
+        "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground resize-none",
         "placeholder:text-muted-foreground/50",
         "focus:border-[#E25706] focus:ring-1 focus:ring-[#E25706] outline-none transition-all",
         className
@@ -260,7 +260,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   };
 
   const content = (
-    <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-white/10">
+    <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
       <DialogHeader className="flex-shrink-0">
         <DialogTitle className="text-foreground">
           {mode === "create" ? t("dialog.createTitle") : t("dialog.editTitle")}
@@ -290,11 +290,11 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
               <Select value={bindingType} onValueChange={handleBindingTypeChange}>
                 <SelectTrigger
                   id="binding-type"
-                  className="bg-black/20 border-white/10 focus:border-[#E25706] focus:ring-[#E25706]"
+                  className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
                 >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-card border-white/10">
+                <SelectContent className="bg-card border-border">
                   <SelectItem value="global">{t("dialog.bindingGlobal")}</SelectItem>
                   <SelectItem value="providers">{t("dialog.bindingProviders")}</SelectItem>
                   <SelectItem value="groups">{t("dialog.bindingGroups")}</SelectItem>
@@ -336,11 +336,11 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
             <Select value={scope} onValueChange={(val) => setScope(val as RequestFilter["scope"])}>
               <SelectTrigger
                 id="filter-scope"
-                className="bg-black/20 border-white/10 focus:border-[#E25706] focus:ring-[#E25706]"
+                className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-card border-white/10">
+              <SelectContent className="bg-card border-border">
                 <SelectItem value="header">{t("scopeLabel.header")}</SelectItem>
                 <SelectItem value="body">{t("scopeLabel.body")}</SelectItem>
               </SelectContent>
@@ -357,11 +357,11 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
             >
               <SelectTrigger
                 id="filter-action"
-                className="bg-black/20 border-white/10 focus:border-[#E25706] focus:ring-[#E25706]"
+                className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
               >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-card border-white/10">
+              <SelectContent className="bg-card border-border">
                 {actionOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
@@ -382,11 +382,11 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
               >
                 <SelectTrigger
                   id="filter-match-type"
-                  className="bg-black/20 border-white/10 focus:border-[#E25706] focus:ring-[#E25706]"
+                  className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
                 >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-card border-white/10">
+                <SelectContent className="bg-card border-border">
                   <SelectItem value="contains">{t("dialog.matchTypeContains")}</SelectItem>
                   <SelectItem value="exact">{t("dialog.matchTypeExact")}</SelectItem>
                   <SelectItem value="regex">{t("dialog.matchTypeRegex")}</SelectItem>
@@ -440,7 +440,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
             />
           </div>
 
-          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/5">
+          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-white/[0.02] border border-border/50">
             <div className="grid gap-1">
               <Label htmlFor="filter-priority" className="text-sm font-medium text-foreground">
                 {t("dialog.priority")}
@@ -470,13 +470,13 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           </div>
         </div>
 
-        <DialogFooter className="flex-shrink-0 pt-4 border-t border-white/5 mt-4">
+        <DialogFooter className="flex-shrink-0 pt-4 border-t border-border/50 mt-4">
           <Button
             type="button"
             variant="outline"
             onClick={() => setDialogOpen(false)}
             disabled={isSubmitting}
-            className="bg-black/20 border-white/10 hover:bg-white/10 hover:border-white/20"
+            className="bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
           >
             {tCommon("common.cancel")}
           </Button>

@@ -64,7 +64,7 @@ export function GroupMultiSelect({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className="w-full justify-between bg-black/20 border-white/10 hover:bg-white/10 hover:border-white/20"
+          className="w-full justify-between bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
         >
           {selectedGroupTags.length === 0 ? (
             <span className="text-muted-foreground">{t("selectGroups")}</span>
@@ -86,13 +86,13 @@ export function GroupMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[400px] p-0 bg-card border-white/10"
+        className="w-[400px] p-0 bg-card border-border"
         align="start"
         onWheel={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
         <Command shouldFilter={true} className="bg-transparent">
-          <CommandInput placeholder={t("searchGroups")} className="border-white/10" />
+          <CommandInput placeholder={t("searchGroups")} className="border-border" />
           <CommandList className="max-h-[300px] overflow-y-auto">
             <CommandEmpty>{loading ? t("loading") : t("noGroupsFound")}</CommandEmpty>
 
@@ -104,7 +104,7 @@ export function GroupMultiSelect({
                       size="sm"
                       variant="outline"
                       onClick={selectAll}
-                      className="flex-1 bg-black/20 border-white/10 hover:bg-white/10"
+                      className="flex-1 bg-muted/50 border-border hover:bg-white/10"
                       type="button"
                     >
                       {t("selectAll")}
@@ -114,7 +114,7 @@ export function GroupMultiSelect({
                       variant="outline"
                       onClick={clearAll}
                       disabled={selectedGroupTags.length === 0}
-                      className="flex-1 bg-black/20 border-white/10 hover:bg-white/10"
+                      className="flex-1 bg-muted/50 border-border hover:bg-white/10"
                       type="button"
                     >
                       {t("clear")}

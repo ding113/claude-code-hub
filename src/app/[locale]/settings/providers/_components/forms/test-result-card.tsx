@@ -238,7 +238,7 @@ export function TestResultCard({ result }: TestResultCardProps) {
 
       {/* Content preview if success */}
       {result.content && result.status !== "red" && (
-        <div className="mt-3 p-2 rounded bg-white/50 dark:bg-black/20 text-xs">
+        <div className="mt-3 p-2 rounded bg-white/50 dark:bg-muted/50 text-xs">
           <span className="font-medium text-muted-foreground">
             {t("resultCard.labels.responsePreview")}:
           </span>

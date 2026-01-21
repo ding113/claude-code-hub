@@ -63,7 +63,7 @@ export function WordListTable({ words }: WordListTableProps) {
 
   if (words.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center rounded-lg bg-black/10 border border-white/5 text-sm text-muted-foreground">
+      <div className="flex h-32 items-center justify-center rounded-lg bg-black/10 border border-border/50 text-sm text-muted-foreground">
         {t("sensitiveWords.emptyState")}
       </div>
     );
@@ -71,10 +71,10 @@ export function WordListTable({ words }: WordListTableProps) {
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-white/10 bg-black/20 backdrop-blur-sm">
+      <div className="overflow-x-auto rounded-lg border border-border bg-muted/50 backdrop-blur-sm">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b border-white/10 bg-white/[0.03]">
+            <tr className="border-b border-border bg-white/[0.03]">
               <th className="px-4 py-3 text-left text-sm font-medium text-foreground/80">
                 {t("sensitiveWords.table.word")}
               </th>
@@ -99,10 +99,10 @@ export function WordListTable({ words }: WordListTableProps) {
             {words.map((word) => (
               <tr
                 key={word.id}
-                className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                className="border-b border-border/50 hover:bg-white/[0.02] transition-colors"
               >
                 <td className="py-3 px-4 text-sm text-foreground">
-                  <code className="rounded-md bg-black/30 border border-white/10 px-2 py-1 text-sm font-mono">
+                  <code className="rounded-md bg-black/30 border border-border px-2 py-1 text-sm font-mono">
                     {word.word}
                   </code>
                 </td>

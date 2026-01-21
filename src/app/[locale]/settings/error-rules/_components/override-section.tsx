@@ -100,7 +100,7 @@ export function OverrideSection({
   );
 
   return (
-    <div className="rounded-xl bg-white/[0.02] border border-white/5 p-4 space-y-4">
+    <div className="rounded-xl bg-white/[0.02] border border-border/50 p-4 space-y-4">
       <div className="flex items-center space-x-2">
         <Checkbox
           id={`${idPrefix}-enableOverride`}
@@ -173,12 +173,12 @@ export function OverrideSection({
               placeholder={DEFAULT_OVERRIDE_RESPONSE}
               rows={6}
               className={cn(
-                "w-full bg-black/20 border rounded-lg py-2.5 px-3 text-sm text-foreground font-mono",
+                "w-full bg-muted/50 border rounded-lg py-2.5 px-3 text-sm text-foreground font-mono",
                 "placeholder:text-muted-foreground/50 resize-none",
                 "focus:ring-1 outline-none transition-all",
                 jsonStatus.state === "invalid"
                   ? "border-red-500/50 focus:border-red-500 focus:ring-red-500"
-                  : "border-white/10 focus:border-primary focus:ring-primary"
+                  : "border-border focus:border-primary focus:ring-primary"
               )}
             />
             {/* JSON parse error details */}
@@ -203,7 +203,7 @@ export function OverrideSection({
               onChange={(e) => onOverrideStatusCodeChange(e.target.value)}
               placeholder={t("errorRules.dialog.overrideStatusCodePlaceholder")}
               className={cn(
-                "w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-foreground",
+                "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                 "placeholder:text-muted-foreground/50",
                 "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
               )}

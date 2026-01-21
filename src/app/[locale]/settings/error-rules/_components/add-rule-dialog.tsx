@@ -131,7 +131,7 @@ export function AddRuleDialog() {
           {t("errorRules.add")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-white/10">
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>{t("errorRules.dialog.addTitle")}</DialogTitle>
@@ -153,7 +153,7 @@ export function AddRuleDialog() {
                 placeholder={t("errorRules.dialog.patternPlaceholder")}
                 required
                 className={cn(
-                  "w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-foreground font-mono",
+                  "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground font-mono",
                   "placeholder:text-muted-foreground/50",
                   "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                 )}
@@ -169,7 +169,7 @@ export function AddRuleDialog() {
                 {t("errorRules.dialog.categoryLabel")}
               </Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger id="category" className="bg-black/20 border-white/10">
+                <SelectTrigger id="category" className="bg-muted/50 border-border">
                   <SelectValue placeholder={t("errorRules.dialog.categoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -211,7 +211,7 @@ export function AddRuleDialog() {
                 placeholder={t("errorRules.dialog.descriptionPlaceholder")}
                 rows={3}
                 className={cn(
-                  "w-full bg-black/20 border border-white/10 rounded-lg py-2.5 px-3 text-sm text-foreground",
+                  "w-full bg-muted/50 border border-border rounded-lg py-2.5 px-3 text-sm text-foreground",
                   "placeholder:text-muted-foreground/50 resize-none",
                   "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                 )}
@@ -238,7 +238,7 @@ export function AddRuleDialog() {
             )}
           </div>
 
-          <DialogFooter className="flex-shrink-0 pt-4 border-t border-white/5">
+          <DialogFooter className="flex-shrink-0 pt-4 border-t border-border/50">
             <Button
               type="button"
               variant="ghost"

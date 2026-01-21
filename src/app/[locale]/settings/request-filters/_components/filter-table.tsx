@@ -65,7 +65,7 @@ export function FilterTable({ filters, providers }: Props) {
 
   if (filters.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center gap-4 py-12 rounded-xl bg-white/[0.02] border border-white/5">
+      <div className="flex flex-col items-center justify-center gap-4 py-12 rounded-xl bg-white/[0.02] border border-border/50">
         <p className="text-sm text-muted-foreground">{t("empty")}</p>
         <FilterDialog
           mode="create"
@@ -89,7 +89,7 @@ export function FilterTable({ filters, providers }: Props) {
             variant="outline"
             size="sm"
             onClick={handleRefresh}
-            className="bg-black/20 border-white/10 hover:bg-white/10 hover:border-white/20"
+            className="bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             {t("refreshCache")}
@@ -107,19 +107,19 @@ export function FilterTable({ filters, providers }: Props) {
         />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-white/5">
+      <div className="overflow-x-auto rounded-xl border border-border/50">
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-white/[0.02] text-left text-sm font-medium text-muted-foreground">
-              <th className="px-4 py-3 border-b border-white/5">{t("table.name")}</th>
-              <th className="px-4 py-3 border-b border-white/5">{t("table.scope")}</th>
-              <th className="px-4 py-3 border-b border-white/5">{t("table.action")}</th>
-              <th className="px-4 py-3 border-b border-white/5">{t("table.target")}</th>
-              <th className="px-4 py-3 border-b border-white/5">{t("table.replacement")}</th>
-              <th className="px-2 py-3 w-20 border-b border-white/5">{t("table.priority")}</th>
-              <th className="px-2 py-3 w-24 border-b border-white/5">{t("table.apply")}</th>
-              <th className="px-2 py-3 w-20 border-b border-white/5">{t("table.status")}</th>
-              <th className="px-2 py-3 text-right w-24 border-b border-white/5">
+              <th className="px-4 py-3 border-b border-border/50">{t("table.name")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.scope")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.action")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.target")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.replacement")}</th>
+              <th className="px-2 py-3 w-20 border-b border-border/50">{t("table.priority")}</th>
+              <th className="px-2 py-3 w-24 border-b border-border/50">{t("table.apply")}</th>
+              <th className="px-2 py-3 w-20 border-b border-border/50">{t("table.status")}</th>
+              <th className="px-2 py-3 text-right w-24 border-b border-border/50">
                 {t("table.actions")}
               </th>
             </tr>
@@ -130,7 +130,7 @@ export function FilterTable({ filters, providers }: Props) {
                 key={filter.id}
                 className={cn(
                   "hover:bg-white/[0.04] transition-colors",
-                  index !== filters.length - 1 && "border-b border-white/5"
+                  index !== filters.length - 1 && "border-b border-border/50"
                 )}
               >
                 <td className="px-4 py-3 text-sm max-w-[200px]">
@@ -149,7 +149,7 @@ export function FilterTable({ filters, providers }: Props) {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  <Badge variant="outline" className="bg-white/5 border-white/10">
+                  <Badge variant="outline" className="bg-white/5 border-border">
                     {t(`scopeLabel.${filter.scope}`)}
                   </Badge>
                 </td>
@@ -160,7 +160,7 @@ export function FilterTable({ filters, providers }: Props) {
                 </td>
                 <td className="px-4 py-3 text-sm max-w-[250px]">
                   <code
-                    className="block rounded-lg bg-black/20 border border-white/10 px-2 py-1 text-xs truncate font-mono"
+                    className="block rounded-lg bg-muted/50 border border-border px-2 py-1 text-xs truncate font-mono"
                     title={filter.target}
                   >
                     {filter.target}

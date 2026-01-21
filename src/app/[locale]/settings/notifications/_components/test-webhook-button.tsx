@@ -52,7 +52,7 @@ export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookBut
       >
         <SelectTrigger
           className={cn(
-            "w-full sm:w-56 bg-black/20 border-white/10",
+            "w-full sm:w-56 bg-muted/50 border-border",
             "focus:border-primary focus:ring-1 focus:ring-primary"
           )}
         >

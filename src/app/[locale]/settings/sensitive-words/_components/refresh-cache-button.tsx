@@ -45,7 +45,7 @@ export function RefreshCacheButton({ stats }: RefreshCacheButtonProps) {
       variant="outline"
       onClick={handleRefresh}
       disabled={isRefreshing}
-      className="bg-black/20 border-white/10 hover:bg-white/10 hover:border-white/20"
+      className="bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
       title={
         stats
           ? t("sensitiveWords.cacheStats", {

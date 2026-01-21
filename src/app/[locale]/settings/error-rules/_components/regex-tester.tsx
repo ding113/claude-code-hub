@@ -45,7 +45,7 @@ export function RegexTester({ pattern }: RegexTesterProps) {
   }, [pattern, testMessage]);
 
   return (
-    <div className="space-y-3 rounded-xl bg-white/[0.02] border border-white/5 p-4">
+    <div className="space-y-3 rounded-xl bg-white/[0.02] border border-border/50 p-4">
       <div className="space-y-2">
         <label
           htmlFor="test-message"
@@ -60,7 +60,7 @@ export function RegexTester({ pattern }: RegexTesterProps) {
           onChange={(e) => setTestMessage(e.target.value)}
           placeholder={t("errorRules.dialog.testMessagePlaceholder")}
           className={cn(
-            "w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-foreground",
+            "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
             "placeholder:text-muted-foreground/50",
             "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
           )}
@@ -87,7 +87,7 @@ export function RegexTester({ pattern }: RegexTesterProps) {
                   </div>
                   <Badge
                     variant="secondary"
-                    className="bg-white/5 text-muted-foreground border-white/10 text-[10px]"
+                    className="bg-white/5 text-muted-foreground border-border text-[10px]"
                   >
                     {t("errorRules.dialog.matchFailed")}
                   </Badge>
@@ -112,7 +112,7 @@ export function RegexTester({ pattern }: RegexTesterProps) {
               <p className="text-xs font-medium text-muted-foreground">
                 {t("errorRules.dialog.matchedText")}:
               </p>
-              <code className="block rounded-lg bg-black/20 border border-white/5 px-3 py-2 text-sm font-mono text-foreground">
+              <code className="block rounded-lg bg-muted/50 border border-border/50 px-3 py-2 text-sm font-mono text-foreground">
                 {matchResult.matchedText}
               </code>
             </div>

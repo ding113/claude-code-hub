@@ -80,7 +80,7 @@ export function LogLevelForm() {
           onChange={(e) => setSelectedLevel(e.target.value as LogLevel)}
           disabled={isPending || isLoading}
           className={cn(
-            "w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-sm text-foreground",
+            "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
             "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
             "appearance-none cursor-pointer",
             "disabled:opacity-50 disabled:cursor-not-allowed"
@@ -96,7 +96,7 @@ export function LogLevelForm() {
         <p className="text-xs text-muted-foreground">{t("form.effectiveImmediately")}</p>
       </div>
 
-      <div className="rounded-lg bg-black/20 border border-white/10 px-4 py-3 space-y-2">
+      <div className="rounded-lg bg-muted/30 border border-border/50 px-4 py-3 space-y-2">
         <h4 className="text-sm font-medium text-foreground">{t("form.levelGuideTitle")}</h4>
         <ul className="text-xs text-muted-foreground space-y-1">
           <li>{t("form.levelGuideFatal")}</li>

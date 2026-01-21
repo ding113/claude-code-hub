@@ -55,28 +55,28 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
     <div className="space-y-6">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-border/50">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
             <Package className="h-4 w-4" />
             <span>{t("stats.clientTypes")}</span>
           </div>
           <p className="text-lg font-mono font-bold text-foreground">{totalClients}</p>
         </div>
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-border/50">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
             <Users className="h-4 w-4" />
             <span>{t("stats.totalUsers")}</span>
           </div>
           <p className="text-lg font-mono font-bold text-foreground">{totalUsers}</p>
         </div>
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-border/50">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
             <Tag className="h-4 w-4" />
             <span>{t("stats.withGA")}</span>
           </div>
           <p className="text-lg font-mono font-bold text-foreground">{clientsWithGA}</p>
         </div>
-        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-border/50">
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
             <Check className="h-4 w-4" />
             <span>{t("stats.coverage")}</span>
@@ -95,7 +95,7 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
         return (
           <div key={clientStats.clientType} className="space-y-3">
             {/* Client Type Header */}
-            <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5">
+            <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-border/50">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-lg bg-[#E25706]/10 shrink-0">
                   <IconComponent className="h-4 w-4 text-[#E25706]" />
@@ -104,12 +104,12 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                   <h3 className="text-sm font-semibold text-foreground">{displayName}</h3>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {t("internalType")}
-                    <code className="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-black/20 font-mono">
+                    <code className="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-muted/50 font-mono">
                       {clientStats.clientType}
                     </code>
                     <span className="mx-2">|</span>
                     {t("currentGA")}
-                    <Badge variant="outline" className="ml-1 text-[10px] h-5 border-white/10">
+                    <Badge variant="outline" className="ml-1 text-[10px] h-5 border-border">
                       {clientStats.gaVersion || tCommon("none")}
                     </Badge>
                   </p>
@@ -124,10 +124,10 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
             </div>
 
             {/* Users Table */}
-            <div className="rounded-xl border border-white/5 overflow-hidden bg-black/10">
+            <div className="rounded-xl border border-border/50 overflow-hidden bg-black/10">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-white/5 hover:bg-transparent">
+                  <TableRow className="border-border/50 hover:bg-transparent">
                     <TableHead className="text-xs text-muted-foreground font-medium">
                       {t("user")}
                     </TableHead>
@@ -144,7 +144,7 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                 </TableHeader>
                 <TableBody>
                   {clientStats.users.length === 0 ? (
-                    <TableRow className="border-white/5 hover:bg-white/[0.02]">
+                    <TableRow className="border-border/50 hover:bg-white/[0.02]">
                       <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                         {t("noUsers")}
                       </TableCell>
@@ -153,11 +153,11 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                     clientStats.users.map((user) => (
                       <TableRow
                         key={`${user.userId}-${user.version}`}
-                        className="border-white/5 hover:bg-white/[0.02]"
+                        className="border-border/50 hover:bg-white/[0.02]"
                       >
                         <TableCell className="font-medium text-sm">{user.username}</TableCell>
                         <TableCell>
-                          <code className="text-xs px-2 py-1 rounded bg-black/20 font-mono text-muted-foreground">
+                          <code className="text-xs px-2 py-1 rounded bg-muted/50 font-mono text-muted-foreground">
                             {user.version}
                           </code>
                         </TableCell>
@@ -184,7 +184,7 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
                           ) : (
                             <Badge
                               variant="outline"
-                              className="bg-white/5 text-muted-foreground border-white/10 gap-1"
+                              className="bg-white/5 text-muted-foreground border-border gap-1"
                             >
                               <HelpCircle className="h-3 w-3" />
                               {t("unknown")}

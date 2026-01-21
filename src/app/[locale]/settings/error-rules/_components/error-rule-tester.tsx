@@ -72,7 +72,7 @@ export function ErrorRuleTester() {
           placeholder={t("errorRules.tester.inputPlaceholder")}
           rows={3}
           className={cn(
-            "w-full bg-black/20 border border-white/10 rounded-lg py-2.5 px-3 text-sm text-foreground",
+            "w-full bg-muted/50 border border-border rounded-lg py-2.5 px-3 text-sm text-foreground",
             "placeholder:text-muted-foreground/50 resize-none",
             "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
           )}
@@ -91,7 +91,7 @@ export function ErrorRuleTester() {
       </Button>
 
       {result && (
-        <div className="space-y-4 rounded-xl bg-white/[0.02] border border-white/5 p-4">
+        <div className="space-y-4 rounded-xl bg-white/[0.02] border border-border/50 p-4">
           {/* Match Status */}
           <div className="flex flex-wrap items-center gap-2">
             {result.matched ? (
@@ -122,14 +122,14 @@ export function ErrorRuleTester() {
                 {t("errorRules.tester.ruleInfo")}
               </p>
               {result.rule ? (
-                <div className="space-y-2 rounded-lg bg-black/20 border border-white/5 px-3 py-2.5">
+                <div className="space-y-2 rounded-lg bg-muted/50 border border-border/50 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-xs text-muted-foreground">
                       {t("errorRules.tester.category")}
                     </span>
                     <Badge
                       variant="secondary"
-                      className="bg-white/5 text-foreground border-white/10 text-[10px]"
+                      className="bg-white/5 text-foreground border-border text-[10px]"
                     >
                       {result.rule.category}
                     </Badge>
@@ -138,7 +138,7 @@ export function ErrorRuleTester() {
                     <span className="text-xs text-muted-foreground">
                       {t("errorRules.tester.matchType")}
                     </span>
-                    <Badge variant="outline" className="border-white/10 text-[10px]">
+                    <Badge variant="outline" className="border-border text-[10px]">
                       {result.rule.matchType}
                     </Badge>
                   </div>
@@ -151,11 +151,11 @@ export function ErrorRuleTester() {
                     </code>
                   </div>
                   {result.rule.overrideStatusCode !== null && (
-                    <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/5">
+                    <div className="flex items-center justify-between gap-4 pt-2 border-t border-border/50">
                       <span className="text-xs text-muted-foreground">
                         {t("errorRules.tester.overrideStatusCode")}
                       </span>
-                      <Badge variant="outline" className="border-white/10 text-[10px]">
+                      <Badge variant="outline" className="border-border text-[10px]">
                         {result.rule.overrideStatusCode}
                       </Badge>
                     </div>
@@ -194,17 +194,17 @@ export function ErrorRuleTester() {
                     {t("errorRules.tester.finalResponse")}
                   </p>
                   {result.finalStatusCode !== null && (
-                    <Badge variant="outline" className="border-white/10 text-[10px]">
+                    <Badge variant="outline" className="border-border text-[10px]">
                       HTTP {result.finalStatusCode}
                     </Badge>
                   )}
                 </div>
                 {result.finalResponse ? (
-                  <pre className="rounded-lg bg-black/30 border border-white/5 px-3 py-2.5 text-xs font-mono text-foreground overflow-x-auto max-h-48">
+                  <pre className="rounded-lg bg-black/30 border border-border/50 px-3 py-2.5 text-xs font-mono text-foreground overflow-x-auto max-h-48">
                     {JSON.stringify(result.finalResponse, null, 2)}
                   </pre>
                 ) : (
-                  <p className="text-xs text-muted-foreground rounded-lg bg-black/20 border border-white/5 px-3 py-2.5">
+                  <p className="text-xs text-muted-foreground rounded-lg bg-muted/50 border border-border/50 px-3 py-2.5">
                     {t("errorRules.tester.statusCodeOnlyOverride")}
                   </p>
                 )}
