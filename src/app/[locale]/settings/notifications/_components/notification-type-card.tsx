@@ -120,7 +120,12 @@ export function NotificationTypeCard({
       {/* Compact Header with toggle */}
       <div className="p-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className={cn("w-10 h-10 flex items-center justify-center rounded-xl shrink-0", typeConfig.iconBgColor)}>
+          <div
+            className={cn(
+              "w-10 h-10 flex items-center justify-center rounded-xl shrink-0",
+              typeConfig.iconBgColor
+            )}
+          >
             <IconComponent className={cn("h-5 w-5", typeConfig.iconColor)} />
           </div>
           <div className="min-w-0">

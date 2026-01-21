@@ -125,8 +125,12 @@ export function WebhookTargetsSection({
             <Link2 className="h-5 w-5 text-blue-400" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-foreground">{t("notifications.targets.title")}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{t("notifications.targets.description")}</p>
+            <p className="text-sm font-semibold text-foreground">
+              {t("notifications.targets.title")}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t("notifications.targets.description")}
+            </p>
           </div>
         </div>
         <Button type="button" onClick={openCreate} size="sm">

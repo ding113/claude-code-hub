@@ -184,7 +184,12 @@ export function SettingsToggleRow({
     >
       <div className="flex items-start gap-3 min-w-0">
         {Icon && (
-          <div className={cn("w-8 h-8 flex items-center justify-center rounded-lg shrink-0", iconBgColor)}>
+          <div
+            className={cn(
+              "w-8 h-8 flex items-center justify-center rounded-lg shrink-0",
+              iconBgColor
+            )}
+          >
             <Icon className={cn("h-4 w-4", iconColor)} />
           </div>
         )}
