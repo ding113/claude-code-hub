@@ -42,7 +42,7 @@ function TimeoutInput({
   isCore,
 }: TimeoutInputProps) {
   const t = useTranslations("settings.providers.form");
-  const displayValue = value ?? defaultValue;
+  const _displayValue = value ?? defaultValue;
   const isCustom = value !== undefined;
 
   return (
