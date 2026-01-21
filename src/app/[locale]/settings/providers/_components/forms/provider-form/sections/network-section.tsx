@@ -8,8 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
 import { ProxyTestButton } from "../../proxy-test-button";
-import { useProviderForm } from "../provider-form-context";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
+import { useProviderForm } from "../provider-form-context";
 
 // Timeout input component with visual indicator
 interface TimeoutInputProps {
@@ -42,7 +42,7 @@ function TimeoutInput({
   isCore,
 }: TimeoutInputProps) {
   const t = useTranslations("settings.providers.form");
-  const displayValue = value ?? defaultValue;
+  const _displayValue = value ?? defaultValue;
   const isCustom = value !== undefined;
 
   return (

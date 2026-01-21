@@ -14,8 +14,8 @@ import {
 import { extractBaseUrl } from "@/lib/utils/validation";
 import type { McpPassthroughType } from "@/types/provider";
 import { ApiTestButton } from "../../api-test-button";
-import { useProviderForm } from "../provider-form-context";
 import { SectionCard, SmartInputWrapper } from "../components/section-card";
+import { useProviderForm } from "../provider-form-context";
 
 export function TestingSection() {
   const t = useTranslations("settings.providers.form");

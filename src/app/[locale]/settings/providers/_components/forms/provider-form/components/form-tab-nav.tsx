@@ -150,7 +150,7 @@ export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }:
       {/* Mobile: Bottom Navigation */}
       <nav className="flex md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
         <div className="flex items-center justify-around w-full px-2 py-1">
-          {TAB_CONFIG.map((tab, index) => {
+          {TAB_CONFIG.map((tab, _index) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];

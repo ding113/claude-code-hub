@@ -17,11 +17,10 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
-import { FormTabNav, TAB_CONFIG } from "./components/form-tab-nav";
-import { createInitialState, ProviderFormProvider, useProviderForm } from "./provider-form-context";
+import { FormTabNav } from "./components/form-tab-nav";
+import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { TabId } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
 import { LimitsSection } from "./sections/limits-section";
@@ -97,7 +96,7 @@ function ProviderFormContent({
 
     const container = contentRef.current;
     const containerRect = container.getBoundingClientRect();
-    const scrollTop = container.scrollTop;
+    const _scrollTop = container.scrollTop;
 
     // Find which section is at the top of the viewport
     let activeSection: TabId = "basic";
@@ -119,7 +118,7 @@ function ProviderFormContent({
     if (state.ui.activeTab !== activeSection) {
       dispatch({ type: "SET_ACTIVE_TAB", payload: activeSection });
     }
-  }, [dispatch, state.ui.activeTab, tabOrder]);
+  }, [dispatch, state.ui.activeTab]);
 
   const handleTabChange = (tab: TabId) => {
     dispatch({ type: "SET_ACTIVE_TAB", payload: tab });

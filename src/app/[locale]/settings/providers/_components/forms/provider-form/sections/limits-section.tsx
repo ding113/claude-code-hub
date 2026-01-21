@@ -22,8 +22,8 @@ import {
 } from "@/components/ui/select";
 import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
-import { useProviderForm } from "../provider-form-context";
 import { FieldGroup, SectionCard, SmartInputWrapper } from "../components/section-card";
+import { useProviderForm } from "../provider-form-context";
 
 // Validation helpers
 function validatePositiveDecimalField(value: string): number | null {

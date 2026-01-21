@@ -1,7 +1,6 @@
 "use client";
 
-import { createContext, useContext, useReducer, type ReactNode } from "react";
-import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
+import { createContext, type ReactNode, useContext, useReducer } from "react";
 import type { ProviderDisplay } from "@/types/provider";
 import type {
   FormMode,

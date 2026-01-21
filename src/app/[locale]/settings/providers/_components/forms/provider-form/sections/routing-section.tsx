@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -27,8 +26,8 @@ import type {
 } from "@/types/provider";
 import { ModelMultiSelect } from "../../../model-multi-select";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
-import { useProviderForm } from "../provider-form-context";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
+import { useProviderForm } from "../provider-form-context";
 
 const GROUP_TAG_MAX_TOTAL_LENGTH = 50;
 
