@@ -2,11 +2,7 @@ import "server-only";
 
 import { recordEndpointFailure } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
-import {
-  findProviderEndpointById,
-  recordProviderEndpointProbeResult,
-  updateProviderEndpointProbeSnapshot,
-} from "@/repository";
+import { findProviderEndpointById, recordProviderEndpointProbeResult } from "@/repository";
 import type { ProviderEndpoint, ProviderEndpointProbeSource } from "@/types/provider";
 
 export type EndpointProbeMethod = "HEAD" | "GET";
@@ -28,10 +24,6 @@ function parseIntWithDefault(value: string | undefined, fallback: number): numbe
 const DEFAULT_TIMEOUT_MS = Math.max(
   1,
   parseIntWithDefault(process.env.ENDPOINT_PROBE_TIMEOUT_MS, 5_000)
-);
-const SUCCESS_LOG_MIN_INTERVAL_MS = Math.max(
-  0,
-  parseIntWithDefault(process.env.ENDPOINT_PROBE_SUCCESS_LOG_MIN_INTERVAL_MS, 60_000)
 );
 
 function safeUrlForLog(rawUrl: string): string {
@@ -139,19 +131,6 @@ export async function probeEndpointUrl(
 
 type ProbeTarget = Pick<ProviderEndpoint, "id" | "url" | "lastProbedAt" | "lastProbeOk">;
 
-function shouldLogScheduledSuccess(endpoint: ProbeTarget, probedAt: Date): boolean {
-  if (!endpoint.lastProbedAt) {
-    return true;
-  }
-
-  if (endpoint.lastProbeOk !== true) {
-    return true;
-  }
-
-  const elapsedMs = probedAt.getTime() - endpoint.lastProbedAt.getTime();
-  return elapsedMs >= SUCCESS_LOG_MIN_INTERVAL_MS;
-}
-
 export async function probeProviderEndpointAndRecordByEndpoint(input: {
   endpoint: ProbeTarget;
   source: ProviderEndpointProbeSource;
@@ -169,28 +148,10 @@ export async function probeProviderEndpointAndRecordByEndpoint(input: {
     await recordEndpointFailure(input.endpoint.id, new Error(message));
   }
 
-  const shouldWriteLog =
-    input.source !== "scheduled" ||
-    !result.ok ||
-    shouldLogScheduledSuccess(input.endpoint, probedAt);
-
-  if (shouldWriteLog) {
-    await recordProviderEndpointProbeResult({
-      endpointId: input.endpoint.id,
-      source: input.source,
-      ok: result.ok,
-      statusCode: result.statusCode,
-      latencyMs: result.latencyMs,
-      errorType: result.errorType,
-      errorMessage: result.errorMessage,
-      probedAt,
-    });
-
-    return result;
-  }
-
-  await updateProviderEndpointProbeSnapshot({
+  // Always record probe results to history table (removed filtering logic)
+  await recordProviderEndpointProbeResult({
     endpointId: input.endpoint.id,
+    source: input.source,
     ok: result.ok,
     statusCode: result.statusCode,
     latencyMs: result.latencyMs,

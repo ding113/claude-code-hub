@@ -329,14 +329,13 @@ describe("provider-endpoints: probe", () => {
     expect(recordFailureMock).not.toHaveBeenCalled();
   });
 
-  test("probeProviderEndpointAndRecord: scheduled 成功按间隔采样写日志，其余仅更新快照", async () => {
+  test("probeProviderEndpointAndRecord: scheduled 成功总是写入探测日志记录", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:30.000Z"));
 
     vi.resetModules();
 
     const recordMock = vi.fn(async () => {});
-    const snapshotMock = vi.fn(async () => {});
     const recordFailureMock = vi.fn(async () => {});
 
     const endpoint = makeEndpoint({
@@ -359,7 +358,6 @@ describe("provider-endpoints: probe", () => {
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(async () => endpoint),
       recordProviderEndpointProbeResult: recordMock,
-      updateProviderEndpointProbeSnapshot: snapshotMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
       recordEndpointFailure: recordFailureMock,
@@ -374,8 +372,7 @@ describe("provider-endpoints: probe", () => {
     const result = await probeProviderEndpointAndRecord({ endpointId: 1, source: "scheduled" });
 
     expect(result).toEqual(expect.objectContaining({ ok: true, statusCode: 200 }));
-    expect(recordMock).not.toHaveBeenCalled();
-    expect(snapshotMock).toHaveBeenCalledTimes(1);
+    expect(recordMock).toHaveBeenCalledTimes(1);
     expect(recordFailureMock).not.toHaveBeenCalled();
   });
 
@@ -383,7 +380,6 @@ describe("provider-endpoints: probe", () => {
     vi.resetModules();
 
     const recordMock = vi.fn(async () => {});
-    const snapshotMock = vi.fn(async () => {});
     const recordFailureMock = vi.fn(async () => {});
 
     vi.doMock("@/lib/logger", () => ({
@@ -401,7 +397,6 @@ describe("provider-endpoints: probe", () => {
         makeEndpoint({ id: 123, url: "https://example.com" })
       ),
       recordProviderEndpointProbeResult: recordMock,
-      updateProviderEndpointProbeSnapshot: snapshotMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
       recordEndpointFailure: recordFailureMock,
@@ -419,6 +414,5 @@ describe("provider-endpoints: probe", () => {
 
     expect(recordFailureMock).toHaveBeenCalledTimes(2);
     expect(recordMock).toHaveBeenCalledTimes(2);
-    expect(snapshotMock).not.toHaveBeenCalled();
   });
 });
