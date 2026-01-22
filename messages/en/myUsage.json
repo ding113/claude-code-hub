@@ -78,7 +78,7 @@
     "inheritedFromUser": "Inherited from User"
   },
   "stats": {
-    "title": "Statistics Summary",
+    "title": "Key Statistics",
     "autoRefresh": "Auto refresh every {seconds}s",
     "totalRequests": "Total Requests",
     "totalCost": "Total Cost",
@@ -116,7 +116,7 @@
     "noRestrictions": "No restrictions"
   },
   "quotaCollapsible": {
-    "title": "Quota Usage",
+    "title": "Quota User Usage",
     "daily": "Daily",
     "monthly": "Monthly",
     "total": "Total"
