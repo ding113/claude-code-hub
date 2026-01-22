@@ -41,7 +41,7 @@ vi.mock("@/repository/user", async (importOriginal) => {
 });
 
 const syncUserProviderGroupFromKeysMock = vi.fn(async () => undefined);
-vi.mock("../../src/actions/users", () => ({
+vi.mock("@/actions/users", () => ({
   syncUserProviderGroupFromKeys: syncUserProviderGroupFromKeysMock,
 }));
 
@@ -114,7 +114,7 @@ describe("keys limit validation", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("并发Session上限");
+      expect(result.error).toBe("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT");
     }
     expect(createKeyMock).not.toHaveBeenCalled();
   });
@@ -146,7 +146,7 @@ describe("keys limit validation", () => {
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain("并发Session上限");
+      expect(result.error).toBe("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT");
     }
     expect(updateKeyMock).not.toHaveBeenCalled();
   });

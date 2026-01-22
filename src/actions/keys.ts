@@ -191,7 +191,10 @@ export async function addKey(data: {
     ) {
       return {
         ok: false,
-        error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+        error: tError("KEY_LIMIT_5H_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limit5hUsd),
+          userLimit: String(user.limit5hUsd),
+        }),
       };
     }
 
@@ -204,7 +207,10 @@ export async function addKey(data: {
     ) {
       return {
         ok: false,
-        error: `Key的日消费上限（${validatedData.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
+        error: tError("KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitDailyUsd),
+          userLimit: String(user.dailyQuota),
+        }),
       };
     }
 
@@ -217,7 +223,10 @@ export async function addKey(data: {
     ) {
       return {
         ok: false,
-        error: `Key的周消费上限（${validatedData.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
+        error: tError("KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitWeeklyUsd),
+          userLimit: String(user.limitWeeklyUsd),
+        }),
       };
     }
 
@@ -230,7 +239,10 @@ export async function addKey(data: {
     ) {
       return {
         ok: false,
-        error: `Key的月消费上限（${validatedData.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+        error: tError("KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitMonthlyUsd),
+          userLimit: String(user.limitMonthlyUsd),
+        }),
       };
     }
 
@@ -243,7 +255,10 @@ export async function addKey(data: {
     ) {
       return {
         ok: false,
-        error: `Key的总消费上限（${validatedData.limitTotalUsd}）不能超过用户限额（${user.limitTotalUsd}）`,
+        error: tError("KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitTotalUsd),
+          userLimit: String(user.limitTotalUsd),
+        }),
       };
     }
 
@@ -256,7 +271,10 @@ export async function addKey(data: {
     ) {
       return {
         ok: false,
-        error: `Key的并发Session上限（${validatedData.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
+        error: tError("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitConcurrentSessions),
+          userLimit: String(user.limitConcurrentSessions),
+        }),
       };
     }
 
@@ -390,7 +408,10 @@ export async function editKey(
     ) {
       return {
         ok: false,
-        error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+        error: tError("KEY_LIMIT_5H_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limit5hUsd),
+          userLimit: String(user.limit5hUsd),
+        }),
       };
     }
 
@@ -403,7 +424,10 @@ export async function editKey(
     ) {
       return {
         ok: false,
-        error: `Key的日消费上限（${validatedData.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
+        error: tError("KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitDailyUsd),
+          userLimit: String(user.dailyQuota),
+        }),
       };
     }
 
@@ -416,7 +440,10 @@ export async function editKey(
     ) {
       return {
         ok: false,
-        error: `Key的周消费上限（${validatedData.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
+        error: tError("KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitWeeklyUsd),
+          userLimit: String(user.limitWeeklyUsd),
+        }),
       };
     }
 
@@ -429,7 +456,10 @@ export async function editKey(
     ) {
       return {
         ok: false,
-        error: `Key的月消费上限（${validatedData.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+        error: tError("KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitMonthlyUsd),
+          userLimit: String(user.limitMonthlyUsd),
+        }),
       };
     }
 
@@ -442,7 +472,10 @@ export async function editKey(
     ) {
       return {
         ok: false,
-        error: `Key的总消费上限（${validatedData.limitTotalUsd}）不能超过用户限额（${user.limitTotalUsd}）`,
+        error: tError("KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitTotalUsd),
+          userLimit: String(user.limitTotalUsd),
+        }),
       };
     }
 
@@ -455,7 +488,10 @@ export async function editKey(
     ) {
       return {
         ok: false,
-        error: `Key的并发Session上限（${validatedData.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
+        error: tError("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitConcurrentSessions),
+          userLimit: String(user.limitConcurrentSessions),
+        }),
       };
     }
 

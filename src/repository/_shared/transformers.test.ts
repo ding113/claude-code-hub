@@ -76,10 +76,10 @@ describe("src/repository/_shared/transformers.ts", () => {
       it.each([
         { title: "limit5hUsd = null -> null", field: "limit5hUsd", value: null, expected: null },
         {
-          title: "limit5hUsd = undefined -> null",
+          title: "limit5hUsd = undefined -> undefined",
           field: "limit5hUsd",
           value: undefined,
-          expected: null,
+          expected: undefined,
         },
         { title: 'limit5hUsd = "0" -> 0', field: "limit5hUsd", value: "0", expected: 0 },
         {
@@ -89,30 +89,16 @@ describe("src/repository/_shared/transformers.ts", () => {
           expected: 1.25,
         },
         { title: "limitWeeklyUsd = 0 -> 0", field: "limitWeeklyUsd", value: 0, expected: 0 },
+        { title: "limitMonthlyUsd = 2.5 -> 2.5", field: "limitMonthlyUsd", value: 2.5, expected: 2.5 },
+        { title: "limitConcurrentSessions = null -> null", field: "limitConcurrentSessions", value: null, expected: null },
         {
-          title: "limitMonthlyUsd = 2.5 -> 2.5",
-          field: "limitMonthlyUsd",
-          value: 2.5,
-          expected: 2.5,
-        },
-        {
-          title: "limitConcurrentSessions = null -> null",
+          title: "limitConcurrentSessions = undefined -> undefined",
           field: "limitConcurrentSessions",
-          value: null,
-          expected: null,
+          value: undefined,
+          expected: undefined,
         },
-        {
-          title: "limitConcurrentSessions = 0 -> 0",
-          field: "limitConcurrentSessions",
-          value: 0,
-          expected: 0,
-        },
-        {
-          title: "limitConcurrentSessions = 3 -> 3",
-          field: "limitConcurrentSessions",
-          value: 3,
-          expected: 3,
-        },
+        { title: "limitConcurrentSessions = 0 -> 0", field: "limitConcurrentSessions", value: 0, expected: 0 },
+        { title: "limitConcurrentSessions = 3 -> 3", field: "limitConcurrentSessions", value: 3, expected: 3 },
       ])("$title", ({ field, value, expected }) => {
         const result = toUser({ ...baseDbUser, [field]: value });
         expect((result as Record<string, unknown>)[field]).toBe(expected);
