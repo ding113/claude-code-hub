@@ -89,16 +89,36 @@ describe("src/repository/_shared/transformers.ts", () => {
           expected: 1.25,
         },
         { title: "limitWeeklyUsd = 0 -> 0", field: "limitWeeklyUsd", value: 0, expected: 0 },
-        { title: "limitMonthlyUsd = 2.5 -> 2.5", field: "limitMonthlyUsd", value: 2.5, expected: 2.5 },
-        { title: "limitConcurrentSessions = null -> null", field: "limitConcurrentSessions", value: null, expected: null },
+        {
+          title: "limitMonthlyUsd = 2.5 -> 2.5",
+          field: "limitMonthlyUsd",
+          value: 2.5,
+          expected: 2.5,
+        },
+        {
+          title: "limitConcurrentSessions = null -> null",
+          field: "limitConcurrentSessions",
+          value: null,
+          expected: null,
+        },
         {
           title: "limitConcurrentSessions = undefined -> undefined",
           field: "limitConcurrentSessions",
           value: undefined,
           expected: undefined,
         },
-        { title: "limitConcurrentSessions = 0 -> 0", field: "limitConcurrentSessions", value: 0, expected: 0 },
-        { title: "limitConcurrentSessions = 3 -> 3", field: "limitConcurrentSessions", value: 3, expected: 3 },
+        {
+          title: "limitConcurrentSessions = 0 -> 0",
+          field: "limitConcurrentSessions",
+          value: 0,
+          expected: 0,
+        },
+        {
+          title: "limitConcurrentSessions = 3 -> 3",
+          field: "limitConcurrentSessions",
+          value: 3,
+          expected: 3,
+        },
       ])("$title", ({ field, value, expected }) => {
         const result = toUser({ ...baseDbUser, [field]: value });
         expect((result as Record<string, unknown>)[field]).toBe(expected);
