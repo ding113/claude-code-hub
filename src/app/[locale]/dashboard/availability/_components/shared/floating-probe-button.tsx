@@ -37,6 +37,7 @@ export function FloatingProbeButton({ onProbeComplete, className }: FloatingProb
 
   return (
     <button
+      type="button"
       onClick={handleProbeAll}
       disabled={isProbing}
       className={cn(

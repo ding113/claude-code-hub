@@ -108,12 +108,18 @@ export interface AgentPool {
 /**
  * Generate cache key for Agent lookup
  *
- * Format: "${endpointOrigin}|${proxyUrl || 'direct'}|${h2 ? 'h2' : 'h1'}"
+ * Format: "${endpointOrigin}|${proxyOrigin || 'direct'}|${h2 ? 'h2' : 'h1'}"
+ * Note: Only uses proxy origin (without credentials) to avoid exposing sensitive data in logs/metrics
  */
 export function generateAgentCacheKey(params: GetAgentParams): string {
   const url = new URL(params.endpointUrl);
   const origin = url.origin;
-  const proxy = params.proxyUrl || "direct";
+  let proxy = "direct";
+  if (params.proxyUrl) {
+    const proxyUrl = new URL(params.proxyUrl);
+    // Use only origin (protocol + host + port) to avoid exposing credentials
+    proxy = proxyUrl.origin;
+  }
   const protocol = params.enableHttp2 ? "h2" : "h1";
   return `${origin}|${proxy}|${protocol}`;
 }
