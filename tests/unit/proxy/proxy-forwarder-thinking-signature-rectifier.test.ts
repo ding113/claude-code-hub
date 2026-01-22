@@ -402,15 +402,11 @@ describe("ProxyForwarder - thinking signature rectifier", () => {
     const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
 
     doForward.mockImplementationOnce(async () => {
-      throw new ProxyError(
-        "content.1.tool_use.signature: Extra inputs are not permitted",
-        400,
-        {
-          body: "",
-          providerId: 1,
-          providerName: "anthropic-1",
-        }
-      );
+      throw new ProxyError("content.1.tool_use.signature: Extra inputs are not permitted", 400, {
+        body: "",
+        providerId: 1,
+        providerName: "anthropic-1",
+      });
     });
 
     doForward.mockImplementationOnce(async (s: ProxySession) => {

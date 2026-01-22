@@ -85,9 +85,7 @@ describe("thinking-signature-rectifier", () => {
 
       // 大小写混合
       expect(
-        detectThinkingSignatureRectifierTrigger(
-          "Signature: EXTRA INPUTS ARE NOT PERMITTED"
-        )
+        detectThinkingSignatureRectifierTrigger("Signature: EXTRA INPUTS ARE NOT PERMITTED")
       ).toBe("invalid_signature_in_thinking_block");
     });
   });
