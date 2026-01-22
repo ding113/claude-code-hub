@@ -4,6 +4,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type * as React from "react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -89,10 +90,28 @@ export function GroupTagEditPopover({
 
   const handleAddGroup = () => {
     const trimmed = newGroup.trim();
-    if (trimmed && !selectedGroups.has(trimmed)) {
-      setSelectedGroups((prev) => new Set(prev).add(trimmed));
-      setNewGroup("");
+    if (!trimmed) return;
+
+    // Validate: no comma allowed
+    if (trimmed.includes(",")) {
+      toast.error(t("commaNotAllowed"));
+      return;
     }
+
+    // Validate: reserved names (case-insensitive)
+    const lowerTrimmed = trimmed.toLowerCase();
+    if (lowerTrimmed === PROVIDER_GROUP.DEFAULT || lowerTrimmed === PROVIDER_GROUP.ALL) {
+      toast.error(t("reservedGroupName"));
+      return;
+    }
+
+    // Validate: no duplicates
+    if (selectedGroups.has(trimmed)) {
+      return;
+    }
+
+    setSelectedGroups((prev) => new Set(prev).add(trimmed));
+    setNewGroup("");
   };
 
   const handleSave = async () => {
@@ -140,7 +159,7 @@ export function GroupTagEditPopover({
             })
           ) : (
             <Badge variant="outline" className="flex-shrink-0 hover:bg-muted transition-colors">
-              {PROVIDER_GROUP.DEFAULT}
+              {t("defaultGroup")}
             </Badge>
           )}
         </button>

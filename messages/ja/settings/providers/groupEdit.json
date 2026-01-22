@@ -4,5 +4,9 @@
   "add": "追加",
   "saveSuccess": "グループを更新しました",
   "saveFailed": "グループの更新に失敗しました",
-  "noGroups": "利用可能なグループがありません"
+  "noGroups": "利用可能なグループがありません",
+  "defaultGroup": "デフォルト",
+  "invalidGroupName": "無効なグループ名",
+  "reservedGroupName": "予約されたグループ名",
+  "commaNotAllowed": "グループ名にカンマは使用できません"
 }

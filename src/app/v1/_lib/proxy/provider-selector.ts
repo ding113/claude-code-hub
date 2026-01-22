@@ -1262,4 +1262,4 @@ export class ProxyProviderResolver {
 }
 
 // Export for testing
-export { checkProviderGroupMatch };
+export { checkProviderGroupMatch, getEffectivePriority };

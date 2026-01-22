@@ -4,5 +4,9 @@
   "add": "Add",
   "saveSuccess": "Group updated",
   "saveFailed": "Failed to update group",
-  "noGroups": "No groups available"
+  "noGroups": "No groups available",
+  "defaultGroup": "default",
+  "invalidGroupName": "Invalid group name",
+  "reservedGroupName": "Reserved group name",
+  "commaNotAllowed": "Comma is not allowed in group name"
 }

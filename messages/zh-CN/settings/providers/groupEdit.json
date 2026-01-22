@@ -4,5 +4,9 @@
   "add": "添加",
   "saveSuccess": "分组已更新",
   "saveFailed": "更新分组失败",
-  "noGroups": "暂无可用分组"
+  "noGroups": "暂无可用分组",
+  "defaultGroup": "默认",
+  "invalidGroupName": "无效的分组名",
+  "reservedGroupName": "保留的分组名",
+  "commaNotAllowed": "分组名不能包含逗号"
 }
