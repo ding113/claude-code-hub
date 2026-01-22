@@ -458,7 +458,9 @@ describe("Provider Batch Actions", () => {
     it("should maintain operation isolation on errors", async () => {
       updateProvidersBatchMock.mockRejectedValueOnce(new Error("update error"));
 
-      const { batchUpdateProviders, batchResetProviderCircuits } = await import("@/actions/providers");
+      const { batchUpdateProviders, batchResetProviderCircuits } = await import(
+        "@/actions/providers"
+      );
 
       const updateResult = await batchUpdateProviders({
         providerIds: [1],
