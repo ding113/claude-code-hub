@@ -121,7 +121,7 @@ describe("src/repository/_shared/transformers.ts", () => {
         },
       ])("$title", ({ field, value, expected }) => {
         const result = toUser({ ...baseDbUser, [field]: value });
-        expect((result as Record<string, unknown>)[field]).toBe(expected);
+        expect((result as unknown as Record<string, unknown>)[field]).toBe(expected);
       });
     });
 
