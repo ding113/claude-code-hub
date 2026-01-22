@@ -5,8 +5,8 @@ import { Section } from "@/components/section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSession } from "@/lib/auth";
-import { AvailabilityViewSkeleton } from "./_components/availability-skeleton";
-import { AvailabilityView } from "./_components/availability-view";
+import { AvailabilityDashboard } from "./_components/availability-dashboard";
+import { AvailabilityDashboardSkeleton } from "./_components/availability-skeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -44,8 +44,8 @@ export default async function AvailabilityPage() {
   return (
     <div className="space-y-6">
       <Section title={t("availability.title")} description={t("availability.description")}>
-        <Suspense fallback={<AvailabilityViewSkeleton />}>
-          <AvailabilityView />
+        <Suspense fallback={<AvailabilityDashboardSkeleton />}>
+          <AvailabilityDashboard />
         </Suspense>
       </Section>
     </div>
