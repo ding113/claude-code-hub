@@ -182,41 +182,63 @@ export async function addKey(data: {
     }
 
     // 验证各个限额字段
-    if (data.limit5hUsd && user.limit5hUsd && data.limit5hUsd > user.limit5hUsd) {
-      return {
-        ok: false,
-        error: `Key的5小时消费上限（${data.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
-      };
-    }
-
-    if (data.limitDailyUsd && user.dailyQuota && data.limitDailyUsd > user.dailyQuota) {
-      return {
-        ok: false,
-        error: `Key的日消费上限（${data.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
-      };
-    }
-
-    if (data.limitWeeklyUsd && user.limitWeeklyUsd && data.limitWeeklyUsd > user.limitWeeklyUsd) {
-      return {
-        ok: false,
-        error: `Key的周消费上限（${data.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
-      };
-    }
-
     if (
-      data.limitMonthlyUsd &&
-      user.limitMonthlyUsd &&
-      data.limitMonthlyUsd > user.limitMonthlyUsd
+      validatedData.limit5hUsd != null &&
+      validatedData.limit5hUsd > 0 &&
+      user.limit5hUsd != null &&
+      user.limit5hUsd > 0 &&
+      validatedData.limit5hUsd > user.limit5hUsd
     ) {
       return {
         ok: false,
-        error: `Key的月消费上限（${data.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+        error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
       };
     }
 
     if (
-      validatedData.limitTotalUsd &&
-      user.limitTotalUsd &&
+      validatedData.limitDailyUsd != null &&
+      validatedData.limitDailyUsd > 0 &&
+      user.dailyQuota != null &&
+      user.dailyQuota > 0 &&
+      validatedData.limitDailyUsd > user.dailyQuota
+    ) {
+      return {
+        ok: false,
+        error: `Key的日消费上限（${validatedData.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
+      };
+    }
+
+    if (
+      validatedData.limitWeeklyUsd != null &&
+      validatedData.limitWeeklyUsd > 0 &&
+      user.limitWeeklyUsd != null &&
+      user.limitWeeklyUsd > 0 &&
+      validatedData.limitWeeklyUsd > user.limitWeeklyUsd
+    ) {
+      return {
+        ok: false,
+        error: `Key的周消费上限（${validatedData.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
+      };
+    }
+
+    if (
+      validatedData.limitMonthlyUsd != null &&
+      validatedData.limitMonthlyUsd > 0 &&
+      user.limitMonthlyUsd != null &&
+      user.limitMonthlyUsd > 0 &&
+      validatedData.limitMonthlyUsd > user.limitMonthlyUsd
+    ) {
+      return {
+        ok: false,
+        error: `Key的月消费上限（${validatedData.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+      };
+    }
+
+    if (
+      validatedData.limitTotalUsd != null &&
+      validatedData.limitTotalUsd > 0 &&
+      user.limitTotalUsd != null &&
+      user.limitTotalUsd > 0 &&
       validatedData.limitTotalUsd > user.limitTotalUsd
     ) {
       return {
@@ -226,13 +248,15 @@ export async function addKey(data: {
     }
 
     if (
-      data.limitConcurrentSessions &&
-      user.limitConcurrentSessions &&
-      data.limitConcurrentSessions > user.limitConcurrentSessions
+      validatedData.limitConcurrentSessions != null &&
+      validatedData.limitConcurrentSessions > 0 &&
+      user.limitConcurrentSessions != null &&
+      user.limitConcurrentSessions > 0 &&
+      validatedData.limitConcurrentSessions > user.limitConcurrentSessions
     ) {
       return {
         ok: false,
-        error: `Key的并发Session上限（${data.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
+        error: `Key的并发Session上限（${validatedData.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
       };
     }
 
@@ -357,7 +381,13 @@ export async function editKey(
     }
 
     // 验证各个限额字段
-    if (validatedData.limit5hUsd && user.limit5hUsd && validatedData.limit5hUsd > user.limit5hUsd) {
+    if (
+      validatedData.limit5hUsd != null &&
+      validatedData.limit5hUsd > 0 &&
+      user.limit5hUsd != null &&
+      user.limit5hUsd > 0 &&
+      validatedData.limit5hUsd > user.limit5hUsd
+    ) {
       return {
         ok: false,
         error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
@@ -365,8 +395,10 @@ export async function editKey(
     }
 
     if (
-      validatedData.limitDailyUsd &&
-      user.dailyQuota &&
+      validatedData.limitDailyUsd != null &&
+      validatedData.limitDailyUsd > 0 &&
+      user.dailyQuota != null &&
+      user.dailyQuota > 0 &&
       validatedData.limitDailyUsd > user.dailyQuota
     ) {
       return {
@@ -376,8 +408,10 @@ export async function editKey(
     }
 
     if (
-      validatedData.limitWeeklyUsd &&
-      user.limitWeeklyUsd &&
+      validatedData.limitWeeklyUsd != null &&
+      validatedData.limitWeeklyUsd > 0 &&
+      user.limitWeeklyUsd != null &&
+      user.limitWeeklyUsd > 0 &&
       validatedData.limitWeeklyUsd > user.limitWeeklyUsd
     ) {
       return {
@@ -387,8 +421,10 @@ export async function editKey(
     }
 
     if (
-      validatedData.limitMonthlyUsd &&
-      user.limitMonthlyUsd &&
+      validatedData.limitMonthlyUsd != null &&
+      validatedData.limitMonthlyUsd > 0 &&
+      user.limitMonthlyUsd != null &&
+      user.limitMonthlyUsd > 0 &&
       validatedData.limitMonthlyUsd > user.limitMonthlyUsd
     ) {
       return {
@@ -398,8 +434,10 @@ export async function editKey(
     }
 
     if (
-      validatedData.limitTotalUsd &&
-      user.limitTotalUsd &&
+      validatedData.limitTotalUsd != null &&
+      validatedData.limitTotalUsd > 0 &&
+      user.limitTotalUsd != null &&
+      user.limitTotalUsd > 0 &&
       validatedData.limitTotalUsd > user.limitTotalUsd
     ) {
       return {
@@ -409,8 +447,10 @@ export async function editKey(
     }
 
     if (
-      validatedData.limitConcurrentSessions &&
-      user.limitConcurrentSessions &&
+      validatedData.limitConcurrentSessions != null &&
+      validatedData.limitConcurrentSessions > 0 &&
+      user.limitConcurrentSessions != null &&
+      user.limitConcurrentSessions > 0 &&
       validatedData.limitConcurrentSessions > user.limitConcurrentSessions
     ) {
       return {
