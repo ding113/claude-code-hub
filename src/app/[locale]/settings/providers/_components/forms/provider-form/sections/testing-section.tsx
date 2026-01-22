@@ -91,7 +91,9 @@ export function TestingSection() {
               disabled={state.ui.isPending}
             >
               <SelectTrigger id={isEdit ? "edit-mcp-passthrough" : "mcp-passthrough"}>
-                <SelectValue />
+                <SelectValue>
+                  {t(`sections.mcpPassthrough.select.${state.mcp.mcpPassthroughType}.label`)}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">

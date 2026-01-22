@@ -418,8 +418,8 @@ function TestResultDetails({
       {(result.rawResponse || result.content) && (
         <div className="space-y-2">
           <h4 className="font-semibold text-sm">{t("resultCard.rawResponse.title")}</h4>
-          <div className="rounded-md border bg-muted/50 p-3 max-h-96 overflow-y-auto">
-            <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+          <div className="rounded-md border bg-muted/50 p-3 max-h-96 overflow-auto">
+            <pre className="text-xs whitespace-pre-wrap break-all font-mono overflow-x-hidden">
               {result.rawResponse || result.content}
             </pre>
           </div>
