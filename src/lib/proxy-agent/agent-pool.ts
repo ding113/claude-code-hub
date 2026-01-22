@@ -185,9 +185,9 @@ export class AgentPoolImpl implements AgentPool {
     if (pending) {
       // Wait for the pending creation and return its result
       const result = await pending;
-      // Update stats for cache hit (since we're reusing the pending result)
+      // Count as cache hit - we're reusing the pending result, not creating a new agent
+      // Note: Don't decrement cacheMisses here since we never incremented it for this request
       this.stats.cacheHits++;
-      this.stats.cacheMisses--; // Adjust since we counted it as miss initially
       return { ...result, isNew: false };
     }
 
