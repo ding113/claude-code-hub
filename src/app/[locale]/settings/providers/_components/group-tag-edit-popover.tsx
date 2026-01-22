@@ -176,19 +176,24 @@ export function GroupTagEditPopover({
         <div className="grid gap-3">
           <div className="text-sm font-medium">{t("title")}</div>
 
-          <div className="max-h-48 overflow-y-auto space-y-2">
+          <div className="max-h-48 overflow-y-auto flex flex-wrap gap-2">
             {allDisplayGroups.length > 0 ? (
               allDisplayGroups.map((group) => (
                 <label
                   key={group}
-                  className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-1 rounded"
+                  className={`inline-flex items-center gap-1.5 cursor-pointer px-2.5 py-1 rounded-md border text-xs transition-colors ${
+                    selectedGroups.has(group)
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-background hover:bg-accent border-input"
+                  }`}
                 >
                   <Checkbox
                     checked={selectedGroups.has(group)}
                     onCheckedChange={() => handleToggleGroup(group)}
                     disabled={saving}
+                    className="h-3.5 w-3.5"
                   />
-                  <span className="text-sm">{group}</span>
+                  <span>{group}</span>
                 </label>
               ))
             ) : (

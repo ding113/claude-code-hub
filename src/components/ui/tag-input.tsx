@@ -107,9 +107,9 @@ export function TagInput({
     return normalizedSuggestions.filter((s) => {
       const keywords = s.keywords?.join(" ") || "";
       const haystack = `${s.label} ${s.value} ${keywords}`.toLowerCase();
-      return haystack.includes(search) && (allowDuplicates || !value.includes(s.value));
+      return haystack.includes(search);
     });
-  }, [normalizedSuggestions, inputValue, value, allowDuplicates]);
+  }, [normalizedSuggestions, inputValue]);
 
   // 基础验证函数（不包含默认格式校验）
   const validateBaseTag = React.useCallback(
@@ -307,10 +307,18 @@ export function TagInput({
 
   const handleSuggestionClick = React.useCallback(
     (suggestionValue: string) => {
-      addTag(suggestionValue, true); // keepOpen=true 保持下拉展开
+      if (value.includes(suggestionValue)) {
+        // Already selected -> deselect (remove tag)
+        const nextTags = value.filter((v) => v !== suggestionValue);
+        onChange(nextTags);
+        onChangeCommit?.(nextTags);
+      } else {
+        // Not selected -> select (add tag)
+        addTag(suggestionValue, true);
+      }
       inputRef.current?.focus();
     },
-    [addTag]
+    [value, onChange, onChangeCommit, addTag]
   );
 
   const handleClear = React.useCallback(() => {
@@ -405,14 +413,17 @@ export function TagInput({
       )}
       {/* 建议下拉列表 */}
       {showSuggestions && filteredSuggestions.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-auto">
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-auto flex flex-wrap gap-2 p-2">
           {filteredSuggestions.map((suggestion, index) => (
             <button
               key={suggestion.value}
               type="button"
               className={cn(
-                "w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer",
-                index === highlightedIndex && "bg-accent text-accent-foreground"
+                "inline-flex px-2.5 py-1 text-xs rounded-md border transition-colors cursor-pointer",
+                value.includes(suggestion.value)
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background hover:bg-accent border-input",
+                index === highlightedIndex && "ring-2 ring-ring ring-offset-1"
               )}
               onMouseDown={(e) => {
                 e.preventDefault(); // 阻止 blur 事件
