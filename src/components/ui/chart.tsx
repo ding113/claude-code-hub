@@ -63,7 +63,7 @@ function ChartContainer({
         <RechartsPrimitive.ResponsiveContainer
           width="100%"
           height="100%"
-          initialDimension={{ width: 0, height: 1 }}
+          initialDimension={{ width: 300, height: 200 }}
         >
           {children}
         </RechartsPrimitive.ResponsiveContainer>
