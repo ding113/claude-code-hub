@@ -870,6 +870,85 @@ export function isHttp2Error(error: Error): boolean {
   return HTTP2_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toUpperCase()));
 }
 
+/**
+ * SSL/TLS Certificate Error Detection Patterns
+ *
+ * Covers common SSL certificate validation errors:
+ * - Certificate hostname mismatch (altname validation)
+ * - Self-signed certificates
+ * - Expired certificates
+ * - Certificate chain validation failures
+ * - Unable to verify issuer
+ */
+const SSL_ERROR_PATTERNS = [
+  "certificate",
+  "ssl",
+  "tls",
+  "cert_",
+  "unable to verify",
+  "self signed",
+  "hostname mismatch",
+  "unable_to_get_issuer_cert",
+  "cert_has_expired",
+  "depth_zero_self_signed_cert",
+  "unable_to_verify_leaf_signature",
+  "err_tls_cert_altname_invalid",
+  "cert_untrusted",
+  "altnames",
+];
+
+/**
+ * Detect if an error is an SSL/TLS certificate error
+ *
+ * SSL certificate errors occur during TLS handshake when:
+ * - Certificate hostname doesn't match the requested domain
+ * - Certificate is self-signed and not trusted
+ * - Certificate has expired
+ * - Certificate chain cannot be verified
+ *
+ * Detection logic:
+ * 1. Check error name
+ * 2. Check error message
+ * 3. Check error code (Node.js style)
+ * 4. Check nested cause (for wrapped errors)
+ *
+ * @param error - Error object to check
+ * @returns true if the error is an SSL certificate error
+ *
+ * @example
+ * // Certificate hostname mismatch
+ * isSSLCertificateError(new Error('ERR_TLS_CERT_ALTNAME_INVALID')) // true
+ *
+ * // Self-signed certificate
+ * isSSLCertificateError(new Error('self signed certificate')) // true
+ *
+ * // Non-SSL error
+ * isSSLCertificateError(new Error('Connection refused')) // false
+ */
+export function isSSLCertificateError(error: unknown): boolean {
+  // Handle non-Error objects
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  // Combine error information for detection
+  const errorString = [error.name, error.message, (error as NodeJS.ErrnoException).code ?? ""]
+    .join(" ")
+    .toLowerCase();
+
+  // Check if any SSL pattern matches
+  if (SSL_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toLowerCase()))) {
+    return true;
+  }
+
+  // Check nested cause (for wrapped errors like "Request failed" with SSL cause)
+  if (error.cause instanceof Error) {
+    return isSSLCertificateError(error.cause);
+  }
+
+  return false;
+}
+
 const SENSITIVE_HEADERS = new Set([
   "authorization",
   "proxy-authorization", // 代理认证
