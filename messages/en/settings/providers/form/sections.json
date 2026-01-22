@@ -1,4 +1,18 @@
 {
+  "basic": {
+    "identity": {
+      "title": "Provider Identity",
+      "desc": "Set a unique name to identify this provider"
+    },
+    "endpoint": {
+      "title": "API Endpoint",
+      "desc": "Configure the base URL for API requests"
+    },
+    "auth": {
+      "title": "Authentication",
+      "desc": "Provide your API key for authentication"
+    }
+  },
   "apiTest": {
     "desc": "Validate whether the selected provider type and model respond correctly. Defaults to the routing configuration unless overridden.",
     "summary": "Verify provider & model connectivity",
@@ -10,7 +24,8 @@
     "failureThreshold": {
       "desc": "Number of consecutive failures to trigger break",
       "label": "Failure Threshold",
-      "placeholder": "5"
+      "placeholder": "5",
+      "warning": "Setting to 0 disables the circuit breaker - use with caution"
     },
     "maxRetryAttempts": {
       "desc": "Total tries (including the first call) before switching providers. Leave empty to use the system default.",
@@ -129,6 +144,7 @@
     "dailyResetTime": {
       "label": "Daily Reset Time (HH:mm)"
     },
+    "desc": "Configure spending limits to control costs across different time windows",
     "limit5h": {
       "label": "5h Spend Limit (USD)",
       "placeholder": "Leave empty for unlimited"
@@ -163,6 +179,11 @@
       "weekly": "Week: ${amount}"
     },
     "title": "Rate Limit"
+  },
+  "limits": {
+    "timeBased": "Time-based Limits",
+    "dailyReset": "Daily Reset Settings",
+    "otherLimits": "Other Limits"
   },
   "routing": {
     "cacheTtl": {

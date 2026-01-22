@@ -37,6 +37,7 @@ import providersFormModelSelect from "./providers/form/modelSelect.json";
 import providersFormName from "./providers/form/name.json";
 import providersFormProviderTypes from "./providers/form/providerTypes.json";
 import providersFormProxyTest from "./providers/form/proxyTest.json";
+import providersFormQuickPaste from "./providers/form/quickPaste.json";
 import providersFormSections from "./providers/form/sections.json";
 import providersFormStrings from "./providers/form/strings.json";
 import providersFormSuccess from "./providers/form/success.json";
@@ -47,6 +48,7 @@ import providersFormWebsiteUrl from "./providers/form/websiteUrl.json";
 
 const providersForm = {
   ...providersFormStrings,
+  ...providersFormCommon,
   apiTest: providersFormApiTest,
   buttons: providersFormButtons,
   common: providersFormCommon,
@@ -60,6 +62,7 @@ const providersForm = {
   name: providersFormName,
   providerTypes: providersFormProviderTypes,
   proxyTest: providersFormProxyTest,
+  quickPaste: providersFormQuickPaste,
   sections: providersFormSections,
   success: providersFormSuccess,
   title: providersFormTitle,

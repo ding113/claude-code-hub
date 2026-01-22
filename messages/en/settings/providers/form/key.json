@@ -1,6 +1,7 @@
 {
   "currentKey": "Current key: {key}",
   "label": "API Key",
+  "labelEdit": "API Key (Leave empty to keep unchanged)",
   "leaveEmpty": "(Leave empty to keep unchanged)",
   "leaveEmptyDesc": "Leave empty to keep existing key",
   "placeholder": "Enter API Key"

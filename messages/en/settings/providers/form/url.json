@@ -1,4 +1,4 @@
 {
-  "label": "API Address *",
+  "label": "API Address",
   "placeholder": "e.g. https://open.bigmodel.cn/api/anthropic"
 }

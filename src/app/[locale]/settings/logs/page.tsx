@@ -10,9 +10,18 @@ export default async function SettingsLogsPage() {
 
   return (
     <>
-      <SettingsPageHeader title={t("logs.title")} description={t("logs.description")} />
+      <SettingsPageHeader
+        title={t("logs.title")}
+        description={t("logs.description")}
+        icon="file-text"
+      />
 
-      <Section title={t("logs.section.title")} description={t("logs.section.description")}>
+      <Section
+        title={t("logs.section.title")}
+        description={t("logs.section.description")}
+        icon="file-text"
+        variant="default"
+      >
         <LogLevelForm />
       </Section>
     </>

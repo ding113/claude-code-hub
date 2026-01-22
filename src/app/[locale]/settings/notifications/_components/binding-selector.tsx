@@ -1,14 +1,13 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, ChevronRight, Save, Settings2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, Save, Settings2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -18,9 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import type {
   ClientActionResult,
   NotificationBindingState,
@@ -73,7 +71,7 @@ function parseJsonObjectOrNull(value: string | null | undefined): Record<string,
   if (!trimmed) return null;
   const parsed = JSON.parse(trimmed) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("模板覆盖必须是 JSON 对象");
+    throw new Error("Template override must be a JSON object");
   }
   return parsed as Record<string, unknown>;
 }
@@ -168,7 +166,9 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
   return (
     <div className="space-y-3">
       {!hasTargets ? (
-        <div className="text-muted-foreground text-sm">{t("notifications.bindings.noTargets")}</div>
+        <div className="p-6 rounded-xl bg-white/[0.02] border border-white/5 text-center">
+          <p className="text-sm text-muted-foreground">{t("notifications.bindings.noTargets")}</p>
+        </div>
       ) : (
         <div className="grid gap-3">
           {targets.map((target, index) => {
@@ -178,7 +178,13 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
             const isRowExpanded = expanded[target.id] ?? false;
 
             return (
-              <Card key={target.id} className="p-4">
+              <div
+                key={target.id}
+                className={cn(
+                  "p-4 rounded-xl bg-white/[0.02] border border-white/5",
+                  "hover:bg-white/[0.04] hover:border-white/10 transition-colors"
+                )}
+              >
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div className="flex items-start gap-3">
                     <Checkbox
@@ -187,21 +193,27 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
                         setValue(`rows.${index}.isBound`, Boolean(checked), { shouldDirty: true })
                       }
                       aria-label={t("notifications.bindings.bindTarget")}
+                      className="mt-1"
                     />
 
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{target.name}</div>
-                      <div className="text-muted-foreground text-xs">
-                        {t(`notifications.targetDialog.types.${target.providerType}` as any)}
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="p-2 rounded-lg bg-blue-500/10 shrink-0">
+                        <ExternalLink className="h-4 w-4 text-blue-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-sm">{target.name}</div>
+                        <div className="text-muted-foreground text-xs mt-0.5">
+                          {t(`notifications.targetDialog.types.${target.providerType}` as any)}
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 md:justify-end">
+                  <div className="flex items-center gap-3 md:justify-end">
                     <div className="flex items-center gap-2">
-                      <Label htmlFor={`binding-enabled-${type}-${target.id}`} className="text-sm">
+                      <span className="text-xs text-muted-foreground">
                         {t("notifications.bindings.enable")}
-                      </Label>
+                      </span>
                       <Switch
                         id={`binding-enabled-${type}-${target.id}`}
                         checked={row?.isEnabled ?? true}
@@ -217,78 +229,101 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
                       onOpenChange={(open) => setExpanded((p) => ({ ...p, [target.id]: open }))}
                     >
                       <CollapsibleTrigger asChild>
-                        <Button type="button" variant="outline" size="sm" disabled={!isBound}>
-                          <Settings2 className="mr-2 h-4 w-4" />
+                        <Button type="button" variant="ghost" size="sm" disabled={!isBound}>
+                          <Settings2 className="mr-1.5 h-3.5 w-3.5" />
                           {t("notifications.bindings.advanced")}
                           {isRowExpanded ? (
-                            <ChevronDown className="ml-2 h-4 w-4" />
+                            <ChevronDown className="ml-1 h-3.5 w-3.5" />
                           ) : (
-                            <ChevronRight className="ml-2 h-4 w-4" />
+                            <ChevronRight className="ml-1 h-3.5 w-3.5" />
                           )}
                         </Button>
                       </CollapsibleTrigger>
 
                       <CollapsibleContent className="mt-4 space-y-4">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor={`scheduleCron-${type}-${target.id}`}>
-                              {t("notifications.bindings.scheduleCron")}
-                            </Label>
-                            <Input
-                              id={`scheduleCron-${type}-${target.id}`}
-                              value={row?.scheduleCron ?? ""}
-                              onChange={(e) =>
-                                setValue(`rows.${index}.scheduleCron`, e.target.value, {
-                                  shouldDirty: true,
-                                })
-                              }
-                              placeholder={t("notifications.bindings.scheduleCronPlaceholder")}
-                            />
+                        <div className="p-4 rounded-lg bg-muted/30 border border-border/50 space-y-4">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <label
+                                htmlFor={`scheduleCron-${type}-${target.id}`}
+                                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              >
+                                {t("notifications.bindings.scheduleCron")}
+                              </label>
+                              <input
+                                id={`scheduleCron-${type}-${target.id}`}
+                                value={row?.scheduleCron ?? ""}
+                                onChange={(e) =>
+                                  setValue(`rows.${index}.scheduleCron`, e.target.value, {
+                                    shouldDirty: true,
+                                  })
+                                }
+                                placeholder={t("notifications.bindings.scheduleCronPlaceholder")}
+                                className={cn(
+                                  "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground font-mono",
+                                  "placeholder:text-muted-foreground/50",
+                                  "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                                )}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <label
+                                htmlFor={`scheduleTimezone-${type}-${target.id}`}
+                                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+                              >
+                                {t("notifications.bindings.scheduleTimezone")}
+                              </label>
+                              <input
+                                id={`scheduleTimezone-${type}-${target.id}`}
+                                value={row?.scheduleTimezone ?? ""}
+                                onChange={(e) =>
+                                  setValue(`rows.${index}.scheduleTimezone`, e.target.value, {
+                                    shouldDirty: true,
+                                  })
+                                }
+                                placeholder="Asia/Shanghai"
+                                className={cn(
+                                  "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                                  "placeholder:text-muted-foreground/50",
+                                  "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                                )}
+                              />
+                            </div>
                           </div>
-                          <div className="space-y-2">
-                            <Label htmlFor={`scheduleTimezone-${type}-${target.id}`}>
-                              {t("notifications.bindings.scheduleTimezone")}
-                            </Label>
-                            <Input
-                              id={`scheduleTimezone-${type}-${target.id}`}
-                              value={row?.scheduleTimezone ?? ""}
-                              onChange={(e) =>
-                                setValue(`rows.${index}.scheduleTimezone`, e.target.value, {
-                                  shouldDirty: true,
-                                })
-                              }
-                              placeholder="Asia/Shanghai"
-                            />
-                          </div>
-                        </div>
 
-                        {target.providerType === "custom" ? (
-                          <div className="space-y-2">
-                            <Label>{t("notifications.bindings.templateOverride")}</Label>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              disabled={!canEditTemplate}
-                              onClick={() => openTemplateDialog(target.id)}
-                            >
-                              {t("notifications.bindings.editTemplateOverride")}
-                            </Button>
-                          </div>
-                        ) : null}
+                          {target.providerType === "custom" && (
+                            <div className="space-y-2">
+                              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                {t("notifications.bindings.templateOverride")}
+                              </label>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={!canEditTemplate}
+                                onClick={() => openTemplateDialog(target.id)}
+                                className="w-full justify-start"
+                              >
+                                {t("notifications.bindings.editTemplateOverride")}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </CollapsibleContent>
                     </Collapsible>
                   </div>
                 </div>
-              </Card>
+              </div>
             );
           })}
         </div>
       )}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end pt-2">
         <Button
           type="button"
           variant="default"
+          size="sm"
           disabled={!hasTargets || !isDirty}
           onClick={handleSubmit(save)}
         >

@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import type { NotificationType } from "../_lib/schemas";
 
 interface TestWebhookButtonProps {
@@ -49,7 +50,12 @@ export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookBut
         onValueChange={(v) => setType(v as NotificationType)}
         disabled={disabled || isTesting}
       >
-        <SelectTrigger className="w-full sm:w-56">
+        <SelectTrigger
+          className={cn(
+            "w-full sm:w-56 bg-muted/50 border-border",
+            "focus:border-primary focus:ring-1 focus:ring-primary"
+          )}
+        >
           <SelectValue placeholder={t("notifications.targets.testSelectType")} />
         </SelectTrigger>
         <SelectContent>
@@ -64,6 +70,7 @@ export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookBut
       <Button
         type="button"
         variant="secondary"
+        size="sm"
         className="w-full sm:w-auto"
         disabled={disabled || isTesting}
         onClick={handleTest}

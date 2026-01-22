@@ -26,16 +26,27 @@
     "viewRelease": "查看發佈"
   },
   "metrics": {
-    "concurrent": "並發數",
+    "concurrent": "活躍 Session 數",
     "todayRequests": "今日請求",
     "todayCost": "今日消費",
     "avgResponse": "平均回應時間",
-    "viewDetails": "查看詳情"
+    "viewDetails": "查看詳情",
+    "rpm": "RPM",
+    "vsYesterday": "較昨日同期"
   },
   "activeSessions": {
     "title": "活躍 Session",
     "summary": "{count} 個 Session，{minutes} 分鐘內",
     "empty": "暫無活躍 Session",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "loading": "載入中...",
+    "unknownUser": "未知",
+    "status": {
+      "running": "執行中",
+      "init": "初始化",
+      "idle": "閒置",
+      "error": "錯誤",
+      "done": "完成"
+    }
   }
 }

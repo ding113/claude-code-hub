@@ -1,0 +1,15 @@
+{
+  "button": "快速粘贴",
+  "title": "快速粘贴",
+  "description": "粘贴包含供应商信息的文本(URL、API 密钥等)，系统将自动提取。",
+  "placeholder": "在此粘贴供应商配置文本...",
+  "preview": "检测到的信息",
+  "type": "类型",
+  "name": "名称",
+  "url": "URL",
+  "key": "API 密钥",
+  "notFound": "未检测到",
+  "parseError": "无法从文本中解析供应商信息",
+  "cancel": "取消",
+  "confirm": "应用"
+}

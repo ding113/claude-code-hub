@@ -39,10 +39,11 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <SettingsPageHeader
         title={t("notifications.title")}
         description={t("notifications.description")}
+        icon="bell"
       />
 
       {loadError ? (
@@ -67,7 +68,7 @@ export default function NotificationsPage() {
         onTest={testTarget}
       />
 
-      <div className="grid gap-6">
+      <div className="grid gap-4">
         {NOTIFICATION_TYPES.map((type) => (
           <NotificationTypeCard
             key={type}

@@ -11,17 +11,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
-/** JSON 验证状态类型 */
+/** JSON validation state type */
 type JsonValidationState =
   | { state: "empty" }
   | { state: "valid" }
   | { state: "invalid"; message: string };
 
-/** Claude 格式的覆写响应模板 */
+/** Claude format override response template */
 const CLAUDE_OVERRIDE_TEMPLATE = `{
   "type": "error",
   "error": {
@@ -30,7 +29,7 @@ const CLAUDE_OVERRIDE_TEMPLATE = `{
   }
 }`;
 
-/** Gemini 格式的覆写响应模板 */
+/** Gemini format override response template */
 const GEMINI_OVERRIDE_TEMPLATE = `{
   "error": {
     "code": 400,
@@ -39,7 +38,7 @@ const GEMINI_OVERRIDE_TEMPLATE = `{
   }
 }`;
 
-/** OpenAI 格式的覆写响应模板 */
+/** OpenAI format override response template */
 const OPENAI_OVERRIDE_TEMPLATE = `{
   "error": {
     "message": "Your custom error message here",
@@ -49,11 +48,11 @@ const OPENAI_OVERRIDE_TEMPLATE = `{
   }
 }`;
 
-/** 默认的覆写响应模板（保持向后兼容） */
+/** Default override response template */
 const DEFAULT_OVERRIDE_RESPONSE = CLAUDE_OVERRIDE_TEMPLATE;
 
 interface OverrideSectionProps {
-  /** 输入框 ID 前缀，用于区分 add/edit 对话框 */
+  /** Input ID prefix for add/edit dialogs */
   idPrefix: string;
   enableOverride: boolean;
   onEnableOverrideChange: (enabled: boolean) => void;
@@ -74,7 +73,7 @@ export function OverrideSection({
 }: OverrideSectionProps) {
   const t = useTranslations("settings");
 
-  /** 实时 JSON 格式验证 */
+  /** Real-time JSON format validation */
   const jsonStatus = useMemo((): JsonValidationState => {
     const trimmed = overrideResponse.trim();
     if (!trimmed) {
@@ -88,10 +87,9 @@ export function OverrideSection({
     }
   }, [overrideResponse]);
 
-  /** 处理使用模板按钮点击 */
+  /** Handle use template button click */
   const handleUseTemplate = useCallback(
     (template: string) => {
-      // 如果输入框已有内容，弹出确认对话框
       if (overrideResponse.trim().length > 0) {
         const confirmed = window.confirm(t("errorRules.dialog.useTemplateConfirm"));
         if (!confirmed) return;
@@ -102,14 +100,17 @@ export function OverrideSection({
   );
 
   return (
-    <div className="rounded-lg border p-4 space-y-4">
+    <div className="rounded-xl bg-white/[0.02] border border-border/50 p-4 space-y-4">
       <div className="flex items-center space-x-2">
         <Checkbox
           id={`${idPrefix}-enableOverride`}
           checked={enableOverride}
           onCheckedChange={(checked) => onEnableOverrideChange(checked === true)}
         />
-        <Label htmlFor={`${idPrefix}-enableOverride`} className="font-medium cursor-pointer">
+        <Label
+          htmlFor={`${idPrefix}-enableOverride`}
+          className="font-medium cursor-pointer text-sm"
+        >
           {t("errorRules.dialog.enableOverride")}
         </Label>
       </div>
@@ -117,28 +118,36 @@ export function OverrideSection({
 
       {enableOverride && (
         <div className="space-y-4 pt-2">
-          <div className="grid gap-2">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor={`${idPrefix}-overrideResponse`}>
+              <Label
+                htmlFor={`${idPrefix}-overrideResponse`}
+                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+              >
                 {t("errorRules.dialog.overrideResponseLabel")}
               </Label>
               <div className="flex items-center gap-3">
-                {/* JSON 验证状态指示器 */}
+                {/* JSON validation status indicator */}
                 {jsonStatus.state === "valid" && (
-                  <span className="flex items-center gap-1 text-xs text-emerald-600">
+                  <span className="flex items-center gap-1 text-xs text-green-400">
                     <CheckCircle2 className="h-3 w-3" />
                     {t("errorRules.dialog.validJson")}
                   </span>
                 )}
                 {jsonStatus.state === "invalid" && (
-                  <span className="flex items-center gap-1 text-xs text-destructive">
+                  <span className="flex items-center gap-1 text-xs text-red-400">
                     <XCircle className="h-3 w-3" />
                     {t("errorRules.dialog.invalidJson")}
                   </span>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="ghost" size="sm" className="h-6 text-xs">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 text-xs hover:bg-white/10"
+                    >
                       {t("errorRules.dialog.useTemplate")}
                       <ChevronDown className="ml-1 h-3 w-3" />
                     </Button>
@@ -157,25 +166,35 @@ export function OverrideSection({
                 </DropdownMenu>
               </div>
             </div>
-            <Textarea
+            <textarea
               id={`${idPrefix}-overrideResponse`}
               value={overrideResponse}
               onChange={(e) => onOverrideResponseChange(e.target.value)}
               placeholder={DEFAULT_OVERRIDE_RESPONSE}
               rows={6}
-              className={`font-mono text-sm ${jsonStatus.state === "invalid" ? "border-destructive" : ""}`}
+              className={cn(
+                "w-full bg-muted/50 border rounded-lg py-2.5 px-3 text-sm text-foreground font-mono",
+                "placeholder:text-muted-foreground/50 resize-none",
+                "focus:ring-1 outline-none transition-all",
+                jsonStatus.state === "invalid"
+                  ? "border-red-500/50 focus:border-red-500 focus:ring-red-500"
+                  : "border-border focus:border-primary focus:ring-primary"
+              )}
             />
-            {/* JSON 解析错误详情 */}
+            {/* JSON parse error details */}
             {jsonStatus.state === "invalid" && (
-              <p className="text-xs text-destructive">{jsonStatus.message}</p>
+              <p className="text-xs text-red-400">{jsonStatus.message}</p>
             )}
           </div>
 
-          <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}-overrideStatusCode`}>
+          <div className="space-y-2">
+            <Label
+              htmlFor={`${idPrefix}-overrideStatusCode`}
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+            >
               {t("errorRules.dialog.overrideStatusCodeLabel")}
             </Label>
-            <Input
+            <input
               id={`${idPrefix}-overrideStatusCode`}
               type="number"
               min={400}
@@ -183,6 +202,11 @@ export function OverrideSection({
               value={overrideStatusCode}
               onChange={(e) => onOverrideStatusCodeChange(e.target.value)}
               placeholder={t("errorRules.dialog.overrideStatusCodePlaceholder")}
+              className={cn(
+                "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                "placeholder:text-muted-foreground/50",
+                "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+              )}
             />
             <p className="text-xs text-muted-foreground">
               {t("errorRules.dialog.overrideStatusCodeHint")}

@@ -5,6 +5,8 @@
     "title": "通知总开关",
     "description": "启用或禁用所有消息推送功能",
     "enable": "启用消息推送",
+    "on": "已开启",
+    "off": "已关闭",
     "legacyModeTitle": "兼容模式",
     "legacyModeDescription": "当前使用旧版单 URL 推送配置。创建推送目标后将自动切换到多目标模式。"
   },

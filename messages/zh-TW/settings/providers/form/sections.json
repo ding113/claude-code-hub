@@ -1,4 +1,18 @@
 {
+  "basic": {
+    "identity": {
+      "title": "供應商身份",
+      "desc": "設定唯一名稱以識別此供應商"
+    },
+    "endpoint": {
+      "title": "API 端點",
+      "desc": "設定 API 請求的基礎 URL"
+    },
+    "auth": {
+      "title": "身份驗證",
+      "desc": "提供用於驗證的 API 金鑰"
+    }
+  },
   "apiTest": {
     "desc": "測試供應商模型是否可用，預設與路由設定中選擇的供應商類型保持一致。",
     "summary": "驗證供應商與模型連通性",
@@ -10,7 +24,8 @@
     "failureThreshold": {
       "desc": "連續失敗多少次後觸發熔斷",
       "label": "失敗閾值（次）",
-      "placeholder": "5"
+      "placeholder": "5",
+      "warning": "設為 0 將停用斷路器 - 請謹慎使用"
     },
     "maxRetryAttempts": {
       "desc": "包含首次呼叫在內，單一供應商最多嘗試次數，超過即切換。留空使用系統預設值。",
@@ -115,6 +130,8 @@
     }
   },
   "rateLimit": {
+    "title": "流量限制",
+    "desc": "設定不同時間視窗的消費限制以控制成本",
     "dailyResetMode": {
       "desc": {
         "fixed": "每天固定時間點重置額度",
@@ -163,6 +180,11 @@
       "weekly": "週：${amount}"
     },
     "title": "流量限制"
+  },
+  "limits": {
+    "timeBased": "時間維度限制",
+    "dailyReset": "每日重置設定",
+    "otherLimits": "其他限制"
   },
   "routing": {
     "cacheTtl": {

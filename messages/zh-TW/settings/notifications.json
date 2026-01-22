@@ -69,6 +69,8 @@
   "global": {
     "description": "啟用或停用所有訊息推送功能",
     "enable": "啟用訊息推送",
+    "off": "已關閉",
+    "on": "已開啟",
     "legacyModeDescription": "目前使用舊版單一 URL 推送設定。建立推送目標後將自動切換為多目標模式。",
     "legacyModeTitle": "相容模式",
     "title": "通知總開關"

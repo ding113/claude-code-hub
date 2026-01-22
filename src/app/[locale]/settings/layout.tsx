@@ -3,6 +3,7 @@ import { redirect } from "@/i18n/routing";
 
 import { getSession } from "@/lib/auth";
 import { DashboardHeader } from "../dashboard/_components/dashboard-header";
+import { PageTransition } from "./_components/page-transition";
 import { SettingsNav } from "./_components/settings-nav";
 import { getTranslatedNavItems } from "./_lib/nav-items";
 
@@ -32,13 +33,22 @@ export default async function SettingsLayout({
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader session={session} />
-      <main className="mx-auto w-full max-w-7xl px-6 py-8">
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8 pb-24 md:pb-8">
         <div className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-[220px_1fr]">
-            <aside className="lg:sticky lg:top-24 lg:self-start">
+          {/* Desktop: Grid layout with sidebar */}
+          <div className="lg:grid lg:gap-6 lg:grid-cols-[220px_1fr]">
+            {/* Desktop sidebar */}
+            <aside className="hidden lg:block lg:sticky lg:top-24 lg:self-start">
               <SettingsNav items={translatedNavItems} />
             </aside>
-            <div className="space-y-6">{children}</div>
+            {/* Content area */}
+            <div className="space-y-6">
+              {/* Tablet: Horizontal nav shown above content */}
+              <div className="lg:hidden">
+                <SettingsNav items={translatedNavItems} />
+              </div>
+              <PageTransition>{children}</PageTransition>
+            </div>
           </div>
         </div>
       </main>

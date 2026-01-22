@@ -16,7 +16,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -26,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type {
   RequestFilter,
   RequestFilterBindingType,
@@ -43,6 +42,75 @@ interface Props {
   filter?: RequestFilter | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+}
+
+// Dark themed input component
+function DarkInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+  required,
+  type = "text",
+  className,
+}: {
+  id: string;
+  value: string | number;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  required?: boolean;
+  type?: string;
+  className?: string;
+}) {
+  return (
+    <input
+      id={id}
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      className={cn(
+        "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+        "placeholder:text-muted-foreground/50",
+        "focus:border-[#E25706] focus:ring-1 focus:ring-[#E25706] outline-none transition-all",
+        className
+      )}
+    />
+  );
+}
+
+// Dark themed textarea component
+function DarkTextarea({
+  id,
+  value,
+  onChange,
+  placeholder,
+  rows = 3,
+  className,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder?: string;
+  rows?: number;
+  className?: string;
+}) {
+  return (
+    <textarea
+      id={id}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      rows={rows}
+      className={cn(
+        "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground resize-none",
+        "placeholder:text-muted-foreground/50",
+        "focus:border-[#E25706] focus:ring-1 focus:ring-[#E25706] outline-none transition-all",
+        className
+      )}
+    />
+  );
 }
 
 export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Props) {
@@ -147,7 +215,6 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       const raw = replacement.trim();
       if (raw.length > 0) {
         try {
-          // 尝试解析 JSON，失败则按字符串处理
           parsedReplacement = JSON.parse(raw);
         } catch {
           parsedReplacement = raw;
@@ -193,19 +260,21 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   };
 
   const content = (
-    <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+    <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
       <DialogHeader className="flex-shrink-0">
-        <DialogTitle>
+        <DialogTitle className="text-foreground">
           {mode === "create" ? t("dialog.createTitle") : t("dialog.editTitle")}
         </DialogTitle>
-        <DialogDescription>{t("description")}</DialogDescription>
+        <DialogDescription className="text-muted-foreground">{t("description")}</DialogDescription>
       </DialogHeader>
 
       <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
         <div className="grid gap-4 overflow-y-auto pr-2 flex-1">
           <div className="grid gap-2">
-            <Label htmlFor="filter-name">{t("dialog.name")}</Label>
-            <Input
+            <Label htmlFor="filter-name" className="text-sm font-medium text-foreground">
+              {t("dialog.name")}
+            </Label>
+            <DarkInput
               id="filter-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -215,12 +284,17 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
 
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="binding-type">{t("dialog.bindingType")}</Label>
+              <Label htmlFor="binding-type" className="text-sm font-medium text-foreground">
+                {t("dialog.bindingType")}
+              </Label>
               <Select value={bindingType} onValueChange={handleBindingTypeChange}>
-                <SelectTrigger id="binding-type">
+                <SelectTrigger
+                  id="binding-type"
+                  className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+                >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-card border-border">
                   <SelectItem value="global">{t("dialog.bindingGlobal")}</SelectItem>
                   <SelectItem value="providers">{t("dialog.bindingProviders")}</SelectItem>
                   <SelectItem value="groups">{t("dialog.bindingGroups")}</SelectItem>
@@ -230,7 +304,9 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
 
             {bindingType === "providers" && (
               <div className="grid gap-2">
-                <Label>{t("dialog.selectProviders")}</Label>
+                <Label className="text-sm font-medium text-foreground">
+                  {t("dialog.selectProviders")}
+                </Label>
                 <ProviderMultiSelect
                   selectedProviderIds={providerIds}
                   onChange={setProviderIds}
@@ -241,7 +317,9 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
 
             {bindingType === "groups" && (
               <div className="grid gap-2">
-                <Label>{t("dialog.selectGroups")}</Label>
+                <Label className="text-sm font-medium text-foreground">
+                  {t("dialog.selectGroups")}
+                </Label>
                 <GroupMultiSelect
                   selectedGroupTags={groupTags}
                   onChange={setGroupTags}
@@ -252,12 +330,17 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="filter-scope">{t("dialog.scope")}</Label>
+            <Label htmlFor="filter-scope" className="text-sm font-medium text-foreground">
+              {t("dialog.scope")}
+            </Label>
             <Select value={scope} onValueChange={(val) => setScope(val as RequestFilter["scope"])}>
-              <SelectTrigger id="filter-scope">
+              <SelectTrigger
+                id="filter-scope"
+                className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+              >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-card border-border">
                 <SelectItem value="header">{t("scopeLabel.header")}</SelectItem>
                 <SelectItem value="body">{t("scopeLabel.body")}</SelectItem>
               </SelectContent>
@@ -265,15 +348,20 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="filter-action">{t("dialog.action")}</Label>
+            <Label htmlFor="filter-action" className="text-sm font-medium text-foreground">
+              {t("dialog.action")}
+            </Label>
             <Select
               value={action}
               onValueChange={(val) => setAction(val as RequestFilter["action"])}
             >
-              <SelectTrigger id="filter-action">
+              <SelectTrigger
+                id="filter-action"
+                className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+              >
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-card border-border">
                 {actionOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
@@ -285,15 +373,20 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
 
           {showMatchType && (
             <div className="grid gap-2">
-              <Label htmlFor="filter-match-type">{t("dialog.matchType")}</Label>
+              <Label htmlFor="filter-match-type" className="text-sm font-medium text-foreground">
+                {t("dialog.matchType")}
+              </Label>
               <Select
                 value={matchType ?? "contains"}
                 onValueChange={(val) => setMatchType(val as RequestFilterMatchType)}
               >
-                <SelectTrigger id="filter-match-type">
+                <SelectTrigger
+                  id="filter-match-type"
+                  className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+                >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="bg-card border-border">
                   <SelectItem value="contains">{t("dialog.matchTypeContains")}</SelectItem>
                   <SelectItem value="exact">{t("dialog.matchTypeExact")}</SelectItem>
                   <SelectItem value="regex">{t("dialog.matchTypeRegex")}</SelectItem>
@@ -303,8 +396,10 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="filter-target">{t("dialog.target")}</Label>
-            <Input
+            <Label htmlFor="filter-target" className="text-sm font-medium text-foreground">
+              {t("dialog.target")}
+            </Label>
+            <DarkInput
               id="filter-target"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
@@ -319,8 +414,10 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
 
           {showReplacement && (
             <div className="grid gap-2">
-              <Label htmlFor="filter-replacement">{t("dialog.replacement")}</Label>
-              <Textarea
+              <Label htmlFor="filter-replacement" className="text-sm font-medium text-foreground">
+                {t("dialog.replacement")}
+              </Label>
+              <DarkTextarea
                 id="filter-replacement"
                 value={replacement}
                 onChange={(e) => setReplacement(e.target.value)}
@@ -331,8 +428,10 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           )}
 
           <div className="grid gap-2">
-            <Label htmlFor="filter-description">{t("dialog.description")}</Label>
-            <Textarea
+            <Label htmlFor="filter-description" className="text-sm font-medium text-foreground">
+              {t("dialog.description")}
+            </Label>
+            <DarkTextarea
               id="filter-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -341,19 +440,22 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
             />
           </div>
 
-          <div className="flex items-center justify-between gap-4">
-            <div className="grid gap-1 text-sm text-muted-foreground">
-              <Label htmlFor="filter-priority">{t("dialog.priority")}</Label>
-              <Input
+          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-white/[0.02] border border-border/50">
+            <div className="grid gap-1">
+              <Label htmlFor="filter-priority" className="text-sm font-medium text-foreground">
+                {t("dialog.priority")}
+              </Label>
+              <DarkInput
                 id="filter-priority"
                 type="number"
                 value={priority}
                 onChange={(e) => setPriority(Number(e.target.value))}
+                className="w-24"
               />
             </div>
 
             {mode === "edit" && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <Switch
                   id="filter-enabled"
                   checked={isEnabled}
@@ -368,16 +470,21 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           </div>
         </div>
 
-        <DialogFooter className="flex-shrink-0 pt-4">
+        <DialogFooter className="flex-shrink-0 pt-4 border-t border-border/50 mt-4">
           <Button
             type="button"
             variant="outline"
             onClick={() => setDialogOpen(false)}
             disabled={isSubmitting}
+            className="bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
           >
             {tCommon("common.cancel")}
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button
+            type="submit"
+            disabled={isSubmitting}
+            className="bg-[#E25706] hover:bg-[#E25706]/90"
+          >
             {isSubmitting ? t("dialog.saving") : t("dialog.save")}
           </Button>
         </DialogFooter>

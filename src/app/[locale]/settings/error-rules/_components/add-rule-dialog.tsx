@@ -15,7 +15,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -24,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import { OverrideSection } from "./override-section";
 import { RegexTester } from "./regex-tester";
@@ -127,12 +126,12 @@ export function AddRuleDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button className="bg-primary hover:bg-primary/90">
           <Plus className="mr-2 h-4 w-4" />
           {t("errorRules.add")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>{t("errorRules.dialog.addTitle")}</DialogTitle>
@@ -140,22 +139,37 @@ export function AddRuleDialog() {
           </DialogHeader>
 
           <div className="grid gap-4 py-4 overflow-y-auto pr-2 flex-1">
-            <div className="grid gap-2">
-              <Label htmlFor="pattern">{t("errorRules.dialog.patternLabel")}</Label>
-              <Input
+            <div className="space-y-2">
+              <Label
+                htmlFor="pattern"
+                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+              >
+                {t("errorRules.dialog.patternLabel")}
+              </Label>
+              <input
                 id="pattern"
                 value={pattern}
                 onChange={(e) => setPattern(e.target.value)}
                 placeholder={t("errorRules.dialog.patternPlaceholder")}
                 required
+                className={cn(
+                  "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground font-mono",
+                  "placeholder:text-muted-foreground/50",
+                  "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                )}
               />
               <p className="text-xs text-muted-foreground">{t("errorRules.dialog.patternHint")}</p>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="category">{t("errorRules.dialog.categoryLabel")}</Label>
+            <div className="space-y-2">
+              <Label
+                htmlFor="category"
+                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+              >
+                {t("errorRules.dialog.categoryLabel")}
+              </Label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger id="category">
+                <SelectTrigger id="category" className="bg-muted/50 border-border">
                   <SelectValue placeholder={t("errorRules.dialog.categoryPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -183,14 +197,24 @@ export function AddRuleDialog() {
               <p className="text-xs text-muted-foreground">{t("errorRules.dialog.categoryHint")}</p>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="description">{t("errorRules.dialog.descriptionLabel")}</Label>
-              <Textarea
+            <div className="space-y-2">
+              <Label
+                htmlFor="description"
+                className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+              >
+                {t("errorRules.dialog.descriptionLabel")}
+              </Label>
+              <textarea
                 id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t("errorRules.dialog.descriptionPlaceholder")}
                 rows={3}
+                className={cn(
+                  "w-full bg-muted/50 border border-border rounded-lg py-2.5 px-3 text-sm text-foreground",
+                  "placeholder:text-muted-foreground/50 resize-none",
+                  "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                )}
               />
             </div>
 
@@ -205,23 +229,30 @@ export function AddRuleDialog() {
             />
 
             {pattern && (
-              <div className="grid gap-2">
-                <Label>{t("errorRules.dialog.regexTester")}</Label>
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {t("errorRules.dialog.regexTester")}
+                </Label>
                 <RegexTester pattern={pattern} />
               </div>
             )}
           </div>
 
-          <DialogFooter className="flex-shrink-0 pt-4">
+          <DialogFooter className="flex-shrink-0 pt-4 border-t border-border/50">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               onClick={() => setOpen(false)}
               disabled={isSubmitting}
+              className="hover:bg-white/10"
             >
               {t("common.cancel")}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-primary hover:bg-primary/90"
+            >
               {isSubmitting ? t("errorRules.dialog.creating") : t("common.create")}
             </Button>
           </DialogFooter>

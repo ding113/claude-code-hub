@@ -1,13 +1,12 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Shield, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { saveSystemSettings } from "@/actions/system-config";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { SettingsToggleRow } from "../../_components/ui/settings-ui";
 
 interface ClientVersionToggleProps {
   enabled: boolean;
@@ -35,50 +34,61 @@ export function ClientVersionToggle({ enabled }: ClientVersionToggleProps) {
 
   return (
     <div className="space-y-4">
-      {/* 开关 */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <Label htmlFor="enable-version-check">{t("toggle.enable")}</Label>
-          <p className="text-sm text-muted-foreground">{t("toggle.description")}</p>
+      {/* Toggle Row */}
+      <SettingsToggleRow
+        title={t("toggle.enable")}
+        description={t("toggle.description")}
+        icon={isEnabled ? ShieldCheck : Shield}
+        iconBgColor={isEnabled ? "bg-[#E25706]/10" : "bg-muted/50"}
+        iconColor={isEnabled ? "text-[#E25706]" : "text-muted-foreground"}
+        checked={isEnabled}
+        onCheckedChange={handleToggle}
+        disabled={isPending}
+      />
+
+      {/* Feature Alert */}
+      <div
+        className={cn(
+          "p-4 rounded-xl border transition-colors",
+          isEnabled ? "bg-[#E25706]/5 border-[#E25706]/20" : "bg-white/[0.02] border-white/5"
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <div
+            className={cn("p-2 rounded-lg shrink-0", isEnabled ? "bg-[#E25706]/10" : "bg-white/5")}
+          >
+            <AlertCircle
+              className={cn("h-4 w-4", isEnabled ? "text-[#E25706]" : "text-muted-foreground")}
+            />
+          </div>
+          <div className="space-y-3 min-w-0">
+            <p className="text-sm font-medium text-foreground">{t("features.title")}</p>
+            <div className="text-xs text-muted-foreground space-y-2">
+              <p className="font-medium">{t("features.whatHappens")}</p>
+              <ul className="list-inside list-disc space-y-1 ml-1">
+                <li>{t("features.autoDetect")}</li>
+                <li>
+                  <span className="font-medium">{t("features.gaRule")}</span>
+                  {t("features.gaRuleDesc")}
+                </li>
+                <li>
+                  <span className="font-medium">{t("features.activeWindow")}</span>
+                  {t("features.activeWindowDesc")}
+                </li>
+                <li className={isEnabled ? "text-[#E25706] font-medium" : ""}>
+                  {t("features.blockOldVersion")}
+                </li>
+                <li>{t("features.errorMessage")}</li>
+              </ul>
+
+              <div className="mt-3 pt-3 border-t border-white/5">
+                <span className="font-medium">{t("features.recommendation")}</span>
+                <span className="ml-1">{t("features.recommendationDesc")}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <Switch
-          id="enable-version-check"
-          checked={isEnabled}
-          onCheckedChange={handleToggle}
-          disabled={isPending}
-        />
       </div>
-
-      {/* 详细说明 */}
-      <Alert variant={isEnabled ? "destructive" : "default"}>
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>{t("features.title")}</AlertTitle>
-        <AlertDescription className="space-y-3">
-          <div>
-            <strong>{t("features.whatHappens")}</strong>
-          </div>
-          <ul className="list-inside list-disc space-y-1">
-            <li>{t("features.autoDetect")}</li>
-            <li>
-              <strong>{t("features.gaRule")}</strong>
-              {t("features.gaRuleDesc")}
-            </li>
-            <li>
-              <strong>{t("features.activeWindow")}</strong>
-              {t("features.activeWindowDesc")}
-            </li>
-            <li className={isEnabled ? "text-destructive font-semibold" : ""}>
-              {t("features.blockOldVersion")}
-            </li>
-            <li>{t("features.errorMessage")}</li>
-          </ul>
-
-          <div className="mt-3 pt-3 border-t">
-            <strong>{t("features.recommendation")}</strong>
-            <span className="ml-2">{t("features.recommendationDesc")}</span>
-          </div>
-        </AlertDescription>
-      </Alert>
     </div>
   );
 }

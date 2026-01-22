@@ -2,10 +2,10 @@ import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { fetchClientVersionStats } from "@/actions/client-versions";
 import { fetchSystemSettings } from "@/actions/system-config";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { SettingsPageHeader } from "../_components/settings-page-header";
+import { SettingsSection } from "../_components/ui/settings-ui";
 import { ClientVersionStatsTable } from "./_components/client-version-stats-table";
 import { ClientVersionToggle } from "./_components/client-version-toggle";
 import {
@@ -33,32 +33,31 @@ export default async function ClientVersionsPage({
       <SettingsPageHeader
         title={t("clientVersions.title")}
         description={t("clientVersions.description")}
+        icon="smartphone"
       />
-      {/* 功能开关和说明 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("clientVersions.section.settings.title")}</CardTitle>
-          <CardDescription>{t("clientVersions.section.settings.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<ClientVersionsSettingsSkeleton />}>
-            <ClientVersionsSettingsContent />
-          </Suspense>
-        </CardContent>
-      </Card>
+      {/* Settings Toggle Section */}
+      <SettingsSection
+        title={t("clientVersions.section.settings.title")}
+        description={t("clientVersions.section.settings.description")}
+        icon="smartphone"
+        iconColor="text-[#E25706]"
+      >
+        <Suspense fallback={<ClientVersionsSettingsSkeleton />}>
+          <ClientVersionsSettingsContent />
+        </Suspense>
+      </SettingsSection>
 
-      {/* 版本统计表格 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("clientVersions.section.distribution.title")}</CardTitle>
-          <CardDescription>{t("clientVersions.section.distribution.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Suspense fallback={<ClientVersionsTableSkeleton />}>
-            <ClientVersionsStatsContent />
-          </Suspense>
-        </CardContent>
-      </Card>
+      {/* Version Distribution Section */}
+      <SettingsSection
+        title={t("clientVersions.section.distribution.title")}
+        description={t("clientVersions.section.distribution.description")}
+        icon="smartphone"
+        iconColor="text-[#E25706]"
+      >
+        <Suspense fallback={<ClientVersionsTableSkeleton />}>
+          <ClientVersionsStatsContent />
+        </Suspense>
+      </SettingsSection>
     </div>
   );
 }
@@ -79,7 +78,7 @@ async function ClientVersionsStatsContent() {
 
   if (!stats || stats.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="flex flex-col items-center justify-center py-12 text-center rounded-xl bg-white/[0.02] border border-white/5">
         <p className="text-muted-foreground">{t("clientVersions.empty.title")}</p>
         <p className="mt-2 text-sm text-muted-foreground">
           {t("clientVersions.empty.description")}

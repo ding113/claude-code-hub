@@ -1,3 +1,10 @@
 {
-  "core": "核心設定"
+  "core": "核心設定",
+  "tabs": {
+    "basic": "基本資訊",
+    "routing": "路由",
+    "limits": "限制",
+    "network": "網路",
+    "testing": "測試"
+  }
 }

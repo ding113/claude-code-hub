@@ -1,3 +1,10 @@
 {
-  "core": "Core"
+  "core": "Core",
+  "tabs": {
+    "basic": "Basic",
+    "routing": "Routing",
+    "limits": "Limits",
+    "network": "Network",
+    "testing": "Testing"
+  }
 }

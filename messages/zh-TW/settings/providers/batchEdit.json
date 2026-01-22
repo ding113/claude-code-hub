@@ -1,0 +1,43 @@
+{
+  "enterMode": "批次編輯",
+  "exitMode": "退出",
+  "selectAll": "全選",
+  "invertSelection": "反選",
+  "selectedCount": "已選 {count} 項",
+  "editSelected": "編輯選中項",
+  "actions": {
+    "edit": "編輯",
+    "delete": "刪除",
+    "resetCircuit": "重置熔斷"
+  },
+  "dialog": {
+    "editTitle": "批次編輯供應商",
+    "editDesc": "修改將應用於 {count} 個供應商",
+    "deleteTitle": "刪除供應商",
+    "deleteDesc": "確定永久刪除 {count} 個供應商?",
+    "resetCircuitTitle": "重置熔斷器",
+    "resetCircuitDesc": "確定重置 {count} 個供應商的熔斷器?",
+    "next": "下一步",
+    "noFieldEnabled": "請至少啟用一個要更新的欄位"
+  },
+  "fields": {
+    "isEnabled": "狀態",
+    "priority": "優先級",
+    "weight": "權重",
+    "costMultiplier": "價格倍率",
+    "groupTag": "分組標籤"
+  },
+  "confirm": {
+    "title": "確認操作",
+    "cancel": "取消",
+    "confirm": "確認",
+    "goBack": "返回",
+    "processing": "處理中..."
+  },
+  "toast": {
+    "updated": "已更新 {count} 個供應商",
+    "deleted": "已刪除 {count} 個供應商",
+    "circuitReset": "已重置 {count} 個熔斷器",
+    "failed": "操作失敗: {error}"
+  }
+}

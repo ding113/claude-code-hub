@@ -182,7 +182,7 @@ export function DatabaseImport() {
             accept=".dump"
             onChange={handleFileChange}
             disabled={isImporting}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-10 w-full rounded-xl border border-border bg-white/[0.02] px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E25706]/50 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
         {selectedFile && (
@@ -196,7 +196,7 @@ export function DatabaseImport() {
       </div>
 
       {/* Import options */}
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 p-3 rounded-xl bg-white/[0.02] border border-border/50">
         <Checkbox
           id="clean-first"
           checked={cleanFirst}
@@ -218,7 +218,7 @@ export function DatabaseImport() {
       <Button
         onClick={handleImportClick}
         disabled={!selectedFile || isImporting}
-        className="w-full sm:w-auto"
+        className="w-full sm:w-auto bg-[#E25706] hover:bg-[#E25706]/90 text-white"
       >
         <Upload className="mr-2 h-4 w-4" />
         {isImporting ? t("importing") : t("button")}
@@ -226,11 +226,11 @@ export function DatabaseImport() {
 
       {/* Progress display */}
       {progressMessages.length > 0 && (
-        <div className="mt-2 rounded-md border border-border bg-muted/30 p-3">
+        <div className="mt-2 rounded-xl border border-border/50 bg-white/[0.02] p-3">
           <h3 className="text-sm font-medium mb-2">{t("progressTitle")}</h3>
           <div
             ref={progressContainerRef}
-            className="max-h-60 overflow-y-auto rounded bg-background p-2 font-mono text-xs space-y-1"
+            className="max-h-60 overflow-y-auto rounded-lg bg-muted/50 p-2 font-mono text-xs space-y-1"
           >
             {progressMessages.map((message, index) => (
               <div key={index} className="text-muted-foreground">

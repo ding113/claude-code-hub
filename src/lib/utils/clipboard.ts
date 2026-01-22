@@ -56,3 +56,30 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
 export async function copyToClipboard(text: string): Promise<boolean> {
   return copyTextToClipboard(text);
 }
+
+/**
+ * 检测 Clipboard 读取 API 是否可用
+ */
+export function isClipboardReadSupported(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.isSecureContext && !!navigator.clipboard?.readText;
+}
+
+/**
+ * 从剪贴板读取文本
+ * @returns 剪贴板文本内容，失败或不支持时返回 null
+ */
+export async function readFromClipboard(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+
+  if (isClipboardReadSupported()) {
+    try {
+      return await navigator.clipboard.readText();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
