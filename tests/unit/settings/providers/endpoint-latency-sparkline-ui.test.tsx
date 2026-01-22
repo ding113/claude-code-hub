@@ -32,6 +32,7 @@ vi.mock("recharts", async () => {
         "data-stroke": stroke,
         "data-key": dataKey,
       }),
+    Tooltip: () => React.createElement("div", { "data-testid": "recharts-tooltip" }),
   };
 });
 

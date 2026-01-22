@@ -40,48 +40,49 @@ function getSessionStatus(session: ActiveSessionInfo & { lastActivityAt?: number
 
 const statusConfig: Record<
   SessionStatus,
-  { icon: typeof Circle; color: string; pulse?: boolean; label: string }
+  { icon: typeof Circle; color: string; pulse?: boolean; labelKey: string }
 > = {
   running: {
     icon: Circle,
     color: "text-emerald-500 dark:text-emerald-400",
     pulse: true,
-    label: "RUNNING",
+    labelKey: "status.running",
   },
   init: {
     icon: Circle,
     color: "text-amber-500 dark:text-amber-400",
     pulse: true,
-    label: "INIT",
+    labelKey: "status.init",
   },
   idle: {
     icon: Circle,
     color: "text-muted-foreground/50",
     pulse: false,
-    label: "IDLE",
+    labelKey: "status.idle",
   },
   error: {
     icon: XCircle,
     color: "text-rose-500 dark:text-rose-400",
     pulse: true,
-    label: "ERROR",
+    labelKey: "status.error",
   },
   done: {
     icon: CheckCircle2,
     color: "text-muted-foreground/50",
     pulse: false,
-    label: "DONE",
+    labelKey: "status.done",
   },
 };
 
 function SessionItem({ session }: { session: ActiveSessionInfo }) {
   const router = useRouter();
+  const t = useTranslations("customs.activeSessions");
   const status = getSessionStatus(session);
   const config = statusConfig[status];
   const StatusIcon = config.icon;
 
   const shortId = session.sessionId.slice(-6);
-  const userName = session.userName || "unknown";
+  const userName = session.userName || t("unknownUser");
 
   return (
     <button
@@ -136,7 +137,7 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
           status === "idle" && "font-normal"
         )}
       >
-        {config.label}
+        {t(config.labelKey)}
       </span>
     </button>
   );
@@ -165,9 +166,12 @@ export function LiveSessionsPanel({
     if (!containerRef.current) return;
     const containerHeight = containerRef.current.clientHeight;
     const availableHeight = containerHeight - HEADER_HEIGHT - FOOTER_HEIGHT;
-    const calculatedItems = Math.max(1, Math.floor(availableHeight / SESSION_ITEM_HEIGHT));
+    let calculatedItems = Math.max(1, Math.floor(availableHeight / SESSION_ITEM_HEIGHT));
+    if (maxItemsProp !== undefined) {
+      calculatedItems = Math.min(calculatedItems, maxItemsProp);
+    }
     setDynamicMaxItems(calculatedItems);
-  }, []);
+  }, [maxItemsProp]);
 
   useEffect(() => {
     calculateMaxItems();
@@ -226,7 +230,7 @@ export function LiveSessionsPanel({
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span>Loading...</span>
+              <span>{t("loading")}</span>
             </div>
           </div>
         ) : sessions.length === 0 ? (

@@ -38,6 +38,15 @@
     "title": "活跃 Session",
     "summary": "{count} 个 Session，{minutes} 分钟内",
     "empty": "暂无活跃 Session",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "loading": "加载中...",
+    "unknownUser": "未知",
+    "status": {
+      "running": "运行中",
+      "init": "初始化",
+      "idle": "空闲",
+      "error": "错误",
+      "done": "完成"
+    }
   }
 }

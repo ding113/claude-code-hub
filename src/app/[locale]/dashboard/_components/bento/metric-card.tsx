@@ -128,6 +128,7 @@ export function BentoMetricCard({
   const colors = accentColors[accentColor];
 
   useEffect(() => {
+    let cancelled = false;
     if (typeof value === "number" && typeof prevValueRef.current === "number") {
       if (value !== prevValueRef.current) {
         setIsAnimating(true);
@@ -137,6 +138,7 @@ export function BentoMetricCard({
         const startTime = Date.now();
 
         const animate = () => {
+          if (cancelled) return;
           const elapsed = Date.now() - startTime;
           const progress = Math.min(elapsed / duration, 1);
           const easeProgress = 1 - (1 - progress) ** 3;
@@ -158,6 +160,9 @@ export function BentoMetricCard({
       setDisplayValue(value);
       prevValueRef.current = value;
     }
+    return () => {
+      cancelled = true;
+    };
   }, [value]);
 
   const formattedValue =
@@ -173,9 +178,11 @@ export function BentoMetricCard({
   const trendStyle = trend ? trendConfig[trend.direction] : null;
 
   const Component = onClick ? "button" : "div";
+  const componentProps = onClick ? { type: "button" as const } : {};
 
   return (
     <Component
+      {...componentProps}
       onClick={onClick}
       className={cn(
         // Glass card base

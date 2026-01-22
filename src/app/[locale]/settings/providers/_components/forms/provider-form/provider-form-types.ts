@@ -1,3 +1,4 @@
+import type { Dispatch } from "react";
 import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
@@ -172,7 +173,7 @@ export interface ProviderFormProps {
 // Context value
 export interface ProviderFormContextValue {
   state: ProviderFormState;
-  dispatch: React.Dispatch<ProviderFormAction>;
+  dispatch: Dispatch<ProviderFormAction>;
   mode: FormMode;
   provider?: ProviderDisplay;
   enableMultiProviderTypes: boolean;

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, type ReactNode } from "react";
+import { forwardRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 interface BentoGridProps {
@@ -55,10 +55,20 @@ const rowSpanClasses = {
  */
 export const BentoCard = forwardRef<HTMLDivElement, BentoCardProps>(
   ({ children, className, colSpan = 1, rowSpan = 1, interactive = false, onClick }, ref) => {
+    const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+      if (interactive && onClick && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        onClick();
+      }
+    };
+
     return (
       <div
         ref={ref}
         onClick={onClick}
+        onKeyDown={interactive ? handleKeyDown : undefined}
+        role={interactive ? "button" : undefined}
+        tabIndex={interactive ? 0 : undefined}
         className={cn(
           // Base styles - Glass morphism (subtle)
           "relative overflow-hidden rounded-2xl",

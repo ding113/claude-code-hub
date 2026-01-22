@@ -38,6 +38,15 @@
     "title": "Active Sessions",
     "summary": "{count} sessions in the last {minutes} minutes",
     "empty": "No active sessions",
-    "viewAll": "View All"
+    "viewAll": "View All",
+    "loading": "Loading...",
+    "unknownUser": "unknown",
+    "status": {
+      "running": "RUNNING",
+      "init": "INIT",
+      "idle": "IDLE",
+      "error": "ERROR",
+      "done": "DONE"
+    }
   }
 }
