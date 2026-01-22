@@ -555,7 +555,7 @@ export const UpdateProviderSchema = z
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
     // Group-level priority overrides: { [groupTag]: priority }
     group_priorities: z
-      .record(z.string(), z.number().int().min(0).max(2147483647))
+      .record(z.string().max(50), z.number().int().min(0).max(2147483647))
       .nullable()
       .optional(),
     // Codex 支持:供应商类型和模型重定向
