@@ -246,7 +246,7 @@ export function NetworkSection() {
                   dispatch({ type: "SET_REQUEST_TIMEOUT_NON_STREAMING", payload: value })
                 }
                 disabled={state.ui.isPending}
-                min="60"
+                min="0"
                 max="1200"
                 icon={Clock}
                 isCore={true}
