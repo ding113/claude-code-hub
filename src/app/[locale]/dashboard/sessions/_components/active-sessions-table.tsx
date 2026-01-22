@@ -29,10 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
-import {
-  getSessionDisplayStatus,
-  SESSION_DISPLAY_STATUS,
-} from "@/lib/session-status";
+import { getSessionDisplayStatus, SESSION_DISPLAY_STATUS } from "@/lib/session-status";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -74,8 +71,7 @@ function SessionStatusCell({
     status: session.status,
   });
 
-  const StatusIcon =
-    statusInfo.label === "FAIL" ? XCircle : Circle;
+  const StatusIcon = statusInfo.label === "FAIL" ? XCircle : Circle;
 
   return (
     <TooltipProvider delayDuration={300}>
