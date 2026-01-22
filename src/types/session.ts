@@ -37,6 +37,7 @@ export interface ActiveSessionInfo {
   // 派生字段
   durationMs?: number; // 总耗时
   requestCount?: number; // 请求次数
+  concurrentCount?: number; // 并发请求数（用于实时状态计算）
 }
 
 /**

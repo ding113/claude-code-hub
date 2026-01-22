@@ -600,6 +600,62 @@ export class SessionTracker {
   }
 
   /**
+   * 批量获取多个 session 的并发计数
+   * 用于 dashboard 显示优化，避免 N+1 查询
+   *
+   * @param sessionIds - Session ID 数组
+   * @returns Map<sessionId, concurrentCount>
+   */
+  static async getConcurrentCountBatch(sessionIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+
+    if (sessionIds.length === 0) {
+      return result;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      for (const id of sessionIds) {
+        result.set(id, 0);
+      }
+      return result;
+    }
+
+    try {
+      const pipeline = redis.pipeline();
+      for (const sessionId of sessionIds) {
+        pipeline.get(`session:${sessionId}:concurrent_count`);
+      }
+
+      const results = await pipeline.exec();
+      if (!results) {
+        for (const id of sessionIds) {
+          result.set(id, 0);
+        }
+        return result;
+      }
+
+      for (let i = 0; i < sessionIds.length; i++) {
+        const [err, count] = results[i];
+        result.set(sessionIds[i], !err && count ? parseInt(count as string, 10) : 0);
+      }
+
+      logger.trace("SessionTracker: Got concurrent count batch", {
+        count: sessionIds.length,
+        nonZero: Array.from(result.values()).filter((v) => v > 0).length,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("SessionTracker: Failed to get concurrent count batch", { error });
+      for (const id of sessionIds) {
+        result.set(id, 0);
+      }
+      return result;
+    }
+  }
+
+  /**
    * 获取 session 当前并发计数
    *
    * 调用时机：SessionManager 分配 session ID 时
