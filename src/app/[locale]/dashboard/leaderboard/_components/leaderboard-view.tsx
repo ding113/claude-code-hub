@@ -284,8 +284,16 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.cacheHitRate"),
       className: "text-right",
-      cell: (row) =>
-        `${(Number((row as ProviderCacheHitRateEntry).cacheHitRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => {
+        const rate = Number((row as ProviderCacheHitRateEntry).cacheHitRate || 0) * 100;
+        const colorClass =
+          rate >= 85
+            ? "text-green-600 dark:text-green-400"
+            : rate >= 60
+              ? "text-yellow-600 dark:text-yellow-400"
+              : "text-orange-600 dark:text-orange-400";
+        return <span className={colorClass}>{rate.toFixed(1)}%</span>;
+      },
       sortKey: "cacheHitRate",
       getValue: (row) => (row as ProviderCacheHitRateEntry).cacheHitRate,
     },
