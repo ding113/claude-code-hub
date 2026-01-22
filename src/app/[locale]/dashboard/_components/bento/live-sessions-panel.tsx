@@ -1,88 +1,61 @@
 "use client";
 
-import { Activity, AlertCircle, CheckCircle2, Circle, XCircle } from "lucide-react";
+import { Activity, AlertCircle, Circle, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  getSessionDisplayStatus,
+  SESSION_DISPLAY_STATUS,
+  type SessionStatusInfo,
+} from "@/lib/session-status";
 import { cn } from "@/lib/utils";
 import type { ActiveSessionInfo } from "@/types/session";
 import { BentoCard } from "./bento-grid";
 
 interface LiveSessionsPanelProps {
-  sessions: (ActiveSessionInfo & { lastActivityAt?: number })[];
+  sessions: ActiveSessionInfo[];
   isLoading?: boolean;
   maxItems?: number;
   className?: string;
 }
 
-type SessionStatus = "running" | "idle" | "error" | "done" | "init";
-
-function getSessionStatus(session: ActiveSessionInfo & { lastActivityAt?: number }): SessionStatus {
-  // Determine status based on session activity and startTime
-  const now = Date.now();
-  const lastActivity = session.lastActivityAt ?? session.startTime;
-  const idleThreshold = 60 * 1000; // 1 minute
-
-  if (session.status === "error" || (session as { status?: string }).status === "error") {
-    return "error";
-  }
-
-  if (now - lastActivity < 5000) {
-    return "running";
-  }
-
-  if (now - lastActivity < idleThreshold) {
-    return "init";
-  }
-
-  return "idle";
-}
-
-const statusConfig: Record<
-  SessionStatus,
-  { icon: typeof Circle; color: string; pulse?: boolean; labelKey: string }
-> = {
-  running: {
-    icon: Circle,
-    color: "text-emerald-500 dark:text-emerald-400",
-    pulse: true,
-    labelKey: "status.running",
-  },
-  init: {
-    icon: Circle,
-    color: "text-amber-500 dark:text-amber-400",
-    pulse: true,
-    labelKey: "status.init",
-  },
-  idle: {
-    icon: Circle,
-    color: "text-muted-foreground/50",
-    pulse: false,
-    labelKey: "status.idle",
-  },
-  error: {
-    icon: XCircle,
-    color: "text-rose-500 dark:text-rose-400",
-    pulse: true,
-    labelKey: "status.error",
-  },
-  done: {
-    icon: CheckCircle2,
-    color: "text-muted-foreground/50",
-    pulse: false,
-    labelKey: "status.done",
-  },
-};
-
 function SessionItem({ session }: { session: ActiveSessionInfo }) {
   const router = useRouter();
   const t = useTranslations("customs.activeSessions");
-  const status = getSessionStatus(session);
-  const config = statusConfig[status];
-  const StatusIcon = config.icon;
+  const statusInfo = getSessionDisplayStatus({
+    concurrentCount: session.concurrentCount,
+    requestCount: session.requestCount,
+    status: session.status,
+  });
 
   const shortId = session.sessionId.slice(-6);
   const userName = session.userName || t("unknownUser");
+
+  // Determine ping animation color based on status
+  const getPingColor = (info: SessionStatusInfo) => {
+    if (info.status === SESSION_DISPLAY_STATUS.IN_PROGRESS) {
+      return info.label === "ERROR" ? "bg-rose-500" : "bg-emerald-500";
+    }
+    if (info.status === SESSION_DISPLAY_STATUS.INITIALIZING) {
+      return "bg-amber-500";
+    }
+    return "";
+  };
+
+  // Determine user name color based on status
+  const getUserNameColor = (info: SessionStatusInfo) => {
+    if (info.status === SESSION_DISPLAY_STATUS.IN_PROGRESS) {
+      return info.label === "ERROR"
+        ? "text-rose-500 dark:text-rose-400"
+        : "text-blue-500 dark:text-blue-400";
+    }
+    if (info.status === SESSION_DISPLAY_STATUS.INITIALIZING) {
+      return "text-amber-600 dark:text-amber-300";
+    }
+    return "text-muted-foreground";
+  };
 
   return (
     <button
@@ -96,49 +69,52 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
     >
       {/* Status Indicator */}
       <div className="relative flex-shrink-0">
-        {config.pulse && (
+        {statusInfo.pulse && (
           <span
             className={cn(
               "absolute inset-0 rounded-full animate-ping opacity-75",
-              status === "running" && "bg-emerald-500",
-              status === "init" && "bg-amber-500",
-              status === "error" && "bg-rose-500"
+              getPingColor(statusInfo)
             )}
             style={{ animationDuration: "1.5s" }}
           />
         )}
-        <StatusIcon className={cn("h-2.5 w-2.5 relative", config.color)} fill="currentColor" />
+        {statusInfo.label === "ERROR" ? (
+          <XCircle className={cn("h-2.5 w-2.5 relative", statusInfo.color)} fill="currentColor" />
+        ) : (
+          <Circle className={cn("h-2.5 w-2.5 relative", statusInfo.color)} fill="currentColor" />
+        )}
       </div>
 
       {/* Session ID */}
       <span className="text-xs font-mono text-muted-foreground">#{shortId}</span>
 
       {/* User Name */}
-      <span
-        className={cn(
-          "text-xs font-medium truncate",
-          status === "running" && "text-blue-500 dark:text-blue-400",
-          status === "init" && "text-amber-600 dark:text-amber-300",
-          status === "error" && "text-rose-500 dark:text-rose-400",
-          (status === "idle" || status === "done") && "text-muted-foreground"
-        )}
-      >
+      <span className={cn("text-xs font-medium truncate", getUserNameColor(statusInfo))}>
         {userName}
       </span>
 
       {/* Dotted Line */}
       <span className="flex-1 border-b border-dashed border-border/50 dark:border-white/10 mx-1" />
 
-      {/* Status Label */}
-      <span
-        className={cn(
-          "text-xs font-mono font-bold tracking-wide",
-          config.color,
-          status === "idle" && "font-normal"
-        )}
-      >
-        {t(config.labelKey)}
-      </span>
+      {/* Status Label with Tooltip */}
+      <TooltipProvider delayDuration={300}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                "text-xs font-mono font-bold tracking-wide cursor-help",
+                statusInfo.color,
+                statusInfo.status === SESSION_DISPLAY_STATUS.IDLE && "font-normal"
+              )}
+            >
+              {statusInfo.label}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-[200px]">
+            <p className="text-xs">{t(statusInfo.tooltipKey)}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </button>
   );
 }
