@@ -24,6 +24,10 @@ export function DatabaseStatusDisplay() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        // Use translated message for connection unavailable error
+        if (response.status === 503) {
+          throw new Error(t("connectionUnavailable"));
+        }
         throw new Error(errorData.error || t("error"));
       }
 
@@ -110,7 +114,7 @@ export function DatabaseStatusDisplay() {
       {/* Error message */}
       {status.error && (
         <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-3 text-sm text-orange-400">
-          {status.error}
+          {status.isAvailable === false ? t("connectionUnavailable") : status.error}
         </div>
       )}
     </div>
