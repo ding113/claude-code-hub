@@ -1213,7 +1213,22 @@
       "columns": {
         "model": "Модель",
         "calls": "Вызовы",
+        "tokens": "Токены",
         "cost": "Стоимость"
+      },
+      "modal": {
+        "requests": "Запросов",
+        "totalTokens": "Всего токенов",
+        "cost": "Стоимость",
+        "inputTokens": "Входные токены",
+        "outputTokens": "Выходные токены",
+        "cacheWrite": "Запись кэша",
+        "cacheRead": "Чтение кэша",
+        "cacheHitRate": "Попадание кэша",
+        "cacheTokens": "Токены кэша",
+        "performanceHigh": "Высокий",
+        "performanceMedium": "Средний",
+        "performanceLow": "Низкий"
       },
       "noData": "Нет записей использования за сегодня",
       "totalCalls": "Всего вызовов",

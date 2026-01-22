@@ -59,6 +59,10 @@ export interface KeyRowItemProps {
       model: string;
       callCount: number;
       totalCost: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheCreationTokens: number;
+      cacheReadTokens: number;
     }>;
   };
   /** User-level provider groups (used when key inherits providerGroup). */

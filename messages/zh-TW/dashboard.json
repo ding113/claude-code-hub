@@ -1211,7 +1211,22 @@
       "columns": {
         "model": "Model",
         "calls": "呼叫次數",
+        "tokens": "Token",
         "cost": "消費金額"
+      },
+      "modal": {
+        "requests": "請求",
+        "totalTokens": "總Token",
+        "cost": "費用",
+        "inputTokens": "輸入Token",
+        "outputTokens": "輸出Token",
+        "cacheWrite": "快取寫入",
+        "cacheRead": "快取讀取",
+        "cacheHitRate": "快取命中率",
+        "cacheTokens": "快取Token",
+        "performanceHigh": "高",
+        "performanceMedium": "中",
+        "performanceLow": "低"
       },
       "noData": "今日暫無使用記錄",
       "totalCalls": "今日總呼叫",

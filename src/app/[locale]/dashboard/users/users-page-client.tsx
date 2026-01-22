@@ -27,6 +27,7 @@ import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
 import { CreateUserDialog } from "../_components/user/create-user-dialog";
+import { clearUsageCache } from "../_components/user/user-limit-badge";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
 const queryClient = new QueryClient({
@@ -704,7 +705,10 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             onSelectKey={handleSelectKey}
             onOpenBatchEdit={handleOpenBatchEdit}
             translations={tableTranslations}
-            onRefresh={() => refetch()}
+            onRefresh={() => {
+              clearUsageCache();
+              refetch();
+            }}
             isRefreshing={isRefreshing}
           />
         </div>

@@ -1225,7 +1225,22 @@
       "columns": {
         "model": "Model",
         "calls": "Calls",
+        "tokens": "Tokens",
         "cost": "Cost"
+      },
+      "modal": {
+        "requests": "Requests",
+        "totalTokens": "Total Tokens",
+        "cost": "Cost",
+        "inputTokens": "Input Tokens",
+        "outputTokens": "Output Tokens",
+        "cacheWrite": "Cache Write",
+        "cacheRead": "Cache Read",
+        "cacheHitRate": "Cache Hit Rate",
+        "cacheTokens": "Cache Tokens",
+        "performanceHigh": "High",
+        "performanceMedium": "Medium",
+        "performanceLow": "Low"
       },
       "noData": "No usage records today",
       "totalCalls": "Total Calls",
