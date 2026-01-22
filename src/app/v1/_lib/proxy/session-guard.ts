@@ -138,9 +138,11 @@ export class ProxySessionGuard {
       // 5. 追踪 session（添加到活跃集合）
       // Warmup 拦截请求不应计入并发会话（避免影响后续真实请求的限额判断）
       if (!warmupMaybeIntercepted) {
-        void SessionTracker.trackSession(sessionId, keyId).catch((err) => {
-          logger.error("[ProxySessionGuard] Failed to track session:", err);
-        });
+        void SessionTracker.trackSession(sessionId, keyId, session.authState?.user?.id).catch(
+          (err) => {
+            logger.error("[ProxySessionGuard] Failed to track session:", err);
+          }
+        );
       }
 
       // 6. 存储 session 详细信息到 Redis（用于实时监控，带重试机制）

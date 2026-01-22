@@ -1951,9 +1951,11 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     );
 
     // 刷新 session 时间戳（滑动窗口）
-    void SessionTracker.refreshSession(session.sessionId, key.id, provider.id).catch((error) => {
-      logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
-    });
+    void SessionTracker.refreshSession(session.sessionId, key.id, provider.id, user.id).catch(
+      (error) => {
+        logger.error("[ResponseHandler] Failed to refresh session tracker:", error);
+      }
+    );
   } catch (error) {
     logger.error("[ResponseHandler] Failed to track cost to Redis, skipping", {
       error: error instanceof Error ? error.message : String(error),

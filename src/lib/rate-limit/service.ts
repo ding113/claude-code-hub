@@ -500,12 +500,12 @@ export class RateLimitService {
   /**
    * 检查并发 Session 限制（仅检查，不追踪）
    *
-   * 注意：此方法仅用于非供应商级别的限流检查（如 key 级）
+   * 注意：此方法仅用于非供应商级别的限流检查（如 key / user 级）
    * 供应商级别请使用 checkAndTrackProviderSession 保证原子性
    */
   static async checkSessionLimit(
     id: number,
-    type: "key" | "provider",
+    type: "key" | "provider" | "user",
     limit: number
   ): Promise<{ allowed: boolean; reason?: string }> {
     if (limit <= 0) {
@@ -517,12 +517,15 @@ export class RateLimitService {
       const count =
         type === "key"
           ? await SessionTracker.getKeySessionCount(id)
-          : await SessionTracker.getProviderSessionCount(id);
+          : type === "provider"
+            ? await SessionTracker.getProviderSessionCount(id)
+            : await SessionTracker.getUserSessionCount(id);
 
       if (count >= limit) {
+        const typeLabel = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
         return {
           allowed: false,
-          reason: `${type === "key" ? "Key" : "供应商"}并发 Session 上限已达到（${count}/${limit}）`,
+          reason: `${typeLabel}并发 Session 上限已达到（${count}/${limit}）`,
         };
       }
 
@@ -963,6 +966,22 @@ export class RateLimitService {
       logger.error(`[RateLimit] User RPM check failed for user ${userId}:`, error);
       return { allowed: true }; // Fail Open
     }
+  }
+
+  /**
+   * 检查 RPM（每分钟请求数）限制
+   * 目前仅支持 user 级别
+   */
+  static async checkRpmLimit(
+    id: number,
+    type: "user",
+    limit: number
+  ): Promise<{ allowed: boolean; reason?: string; current?: number }> {
+    if (type === "user") {
+      return RateLimitService.checkUserRPM(id, limit);
+    }
+
+    return { allowed: true };
   }
 
   /**
