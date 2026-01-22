@@ -934,6 +934,17 @@
     "title": "Provider Availability Monitor",
     "description": "Real-time monitoring of provider availability and performance metrics",
     "nav": "Availability Monitor",
+    "tabs": {
+      "provider": "Provider Availability",
+      "endpoint": "Endpoint Health"
+    },
+    "overview": {
+      "systemAvailability": "System Availability",
+      "avgLatency": "Avg Latency",
+      "errorRate": "Error Rate",
+      "activeProbes": "Active Probes",
+      "load": "Load"
+    },
     "status": {
       "green": "Healthy",
       "red": "Unhealthy",
@@ -957,6 +968,11 @@
     },
     "timeRange": {
       "label": "Time Range",
+      "15min": "15 min",
+      "1h": "1 hour",
+      "6h": "6 hours",
+      "24h": "24 hours",
+      "7d": "7 days",
       "last15min": "Last 15 minutes",
       "last1h": "Last 1 hour",
       "last6h": "Last 6 hours",
@@ -1007,7 +1023,13 @@
       "autoRefresh": "Auto Refresh",
       "stopAutoRefresh": "Stop Auto Refresh",
       "viewDetails": "View Details",
-      "testProvider": "Test Provider"
+      "testProvider": "Test Provider",
+      "retry": "Retry",
+      "probeNow": "Probe Now",
+      "probing": "Probing...",
+      "probeAll": "Probe All",
+      "probeSuccess": "Probe successful",
+      "probeFailed": "Probe failed"
     },
     "states": {
       "loading": "Loading...",
@@ -1058,6 +1080,62 @@
       "auto": "Auto Probe",
       "probeSuccess": "Probe successful",
       "probeFailed": "Probe failed"
+    },
+    "laneChart": {
+      "title": "Provider Availability Timeline",
+      "noData": "No data available",
+      "requests": "{count} requests",
+      "availability": "{value}% available",
+      "noRequests": "No requests",
+      "denseData": "Dense",
+      "sparseData": "Sparse",
+      "latency": "Latency"
+    },
+    "latencyChart": {
+      "title": "Latency Distribution",
+      "p50": "P50",
+      "p95": "P95",
+      "p99": "P99",
+      "noData": "No latency data available"
+    },
+    "latencyCurve": {
+      "title": "Latency Trend",
+      "noData": "No latency data available",
+      "avg": "Avg",
+      "min": "Min",
+      "max": "Max",
+      "latency": "Latency"
+    },
+    "terminal": {
+      "title": "Probe Logs",
+      "live": "LIVE",
+      "download": "Download logs",
+      "noLogs": "No probe logs available",
+      "manual": "MANUAL",
+      "auto": "AUTO",
+      "filterPlaceholder": "Filter logs..."
+    },
+    "probeGrid": {
+      "title": "Endpoint Status",
+      "noEndpoints": "No endpoints configured",
+      "lastProbe": "Last probe",
+      "status": {
+        "unknown": "Unknown",
+        "healthy": "Healthy",
+        "unhealthy": "Unhealthy"
+      }
+    },
+    "endpoint": {
+      "selectVendor": "Select vendor",
+      "selectType": "Select type"
+    },
+    "confidence": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "lowTooltip": "Less than {count} requests. Data may not be representative.",
+      "mediumTooltip": "Moderate request volume. Data is reasonably reliable.",
+      "highTooltip": "High request volume. Data is reliable."
     },
     "toast": {
       "refreshSuccess": "Availability data refreshed",

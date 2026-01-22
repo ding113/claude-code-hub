@@ -920,6 +920,82 @@
     "title": "供應商可用性監控",
     "description": "即時監控供應商的可用性狀態和效能指標",
     "nav": "可用性監控",
+    "tabs": {
+      "provider": "供應商可用性",
+      "endpoint": "端點健康"
+    },
+    "overview": {
+      "systemAvailability": "系統可用性",
+      "avgLatency": "平均延遲",
+      "errorRate": "錯誤率",
+      "activeProbes": "活躍探測",
+      "load": "負載"
+    },
+    "timeRange": {
+      "15min": "15 分鐘",
+      "1h": "1 小時",
+      "6h": "6 小時",
+      "24h": "24 小時",
+      "7d": "7 天"
+    },
+    "laneChart": {
+      "title": "供應商可用性時間軸",
+      "noData": "暫無資料",
+      "requests": "{count} 個請求",
+      "availability": "{value}% 可用",
+      "noRequests": "無請求"
+    },
+    "latencyChart": {
+      "title": "延遲分佈",
+      "p50": "P50",
+      "p95": "P95",
+      "p99": "P99",
+      "noData": "暫無延遲資料"
+    },
+    "latencyCurve": {
+      "title": "延遲趨勢",
+      "noData": "暫無延遲資料",
+      "avg": "平均",
+      "min": "最小",
+      "max": "最大",
+      "latency": "延遲"
+    },
+    "terminal": {
+      "title": "探測日誌",
+      "live": "即時",
+      "download": "下載日誌",
+      "noLogs": "暫無探測日誌",
+      "manual": "手動",
+      "auto": "自動",
+      "filterPlaceholder": "篩選日誌..."
+    },
+    "probeGrid": {
+      "noEndpoints": "未設定端點",
+      "lastProbe": "最後探測",
+      "status": {
+        "unknown": "未知",
+        "healthy": "健康",
+        "unhealthy": "異常"
+      }
+    },
+    "endpoint": {
+      "selectVendor": "選擇供應商",
+      "selectType": "選擇類型"
+    },
+    "confidence": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "lowTooltip": "少於 {count} 個請求。資料可能不具代表性。",
+      "mediumTooltip": "中等請求量。資料相對可靠。",
+      "highTooltip": "高請求量。資料可靠。"
+    },
+    "actions": {
+      "probeNow": "立即探測",
+      "probing": "探測中...",
+      "probeSuccess": "探測成功",
+      "probeFailed": "探測失敗"
+    },
     "status": {
       "green": "良好",
       "red": "異常",
@@ -943,6 +1019,11 @@
     },
     "timeRange": {
       "label": "時間範圍",
+      "15min": "15 分鐘",
+      "1h": "1 小時",
+      "6h": "6 小時",
+      "24h": "24 小時",
+      "7d": "7 天",
       "last15min": "最近 15 分鐘",
       "last1h": "最近 1 小時",
       "last6h": "最近 6 小時",
@@ -993,7 +1074,13 @@
       "autoRefresh": "自動重新整理",
       "stopAutoRefresh": "停止自動重新整理",
       "viewDetails": "檢視詳情",
-      "testProvider": "測試供應商"
+      "testProvider": "測試供應商",
+      "retry": "重試",
+      "probeNow": "立即探測",
+      "probing": "探測中...",
+      "probeAll": "探測全部",
+      "probeSuccess": "探測成功",
+      "probeFailed": "探測失敗"
     },
     "states": {
       "loading": "載入中...",
@@ -1044,6 +1131,62 @@
       "auto": "自動探測",
       "probeSuccess": "探測成功",
       "probeFailed": "探測失敗"
+    },
+    "laneChart": {
+      "title": "供應商可用性時間軸",
+      "noData": "暫無資料",
+      "requests": "{count} 個請求",
+      "availability": "可用性 {value}%",
+      "noRequests": "無請求",
+      "denseData": "密集",
+      "sparseData": "稀疏",
+      "latency": "延遲"
+    },
+    "latencyChart": {
+      "title": "延遲分佈",
+      "p50": "P50",
+      "p95": "P95",
+      "p99": "P99",
+      "noData": "暫無延遲資料"
+    },
+    "latencyCurve": {
+      "title": "延遲趨勢",
+      "noData": "暫無延遲資料",
+      "avg": "平均",
+      "min": "最小",
+      "max": "最大",
+      "latency": "延遲"
+    },
+    "terminal": {
+      "title": "探測日誌",
+      "live": "即時",
+      "download": "下載日誌",
+      "noLogs": "暫無探測日誌",
+      "manual": "手動",
+      "auto": "自動",
+      "filterPlaceholder": "篩選日誌..."
+    },
+    "probeGrid": {
+      "title": "端點狀態",
+      "noEndpoints": "未設定端點",
+      "lastProbe": "最後探測",
+      "status": {
+        "unknown": "未知",
+        "healthy": "健康",
+        "unhealthy": "異常"
+      }
+    },
+    "endpoint": {
+      "selectVendor": "選擇供應商",
+      "selectType": "選擇類型"
+    },
+    "confidence": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "lowTooltip": "請求數少於 {count}，資料可能不具代表性。",
+      "mediumTooltip": "請求量適中，資料較為可靠。",
+      "highTooltip": "請求量充足，資料可靠。"
     },
     "toast": {
       "refreshSuccess": "可用性資料已重新整理",
