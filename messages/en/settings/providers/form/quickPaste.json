@@ -1,0 +1,15 @@
+{
+  "button": "Quick Paste",
+  "title": "Quick Paste Provider Info",
+  "description": "Paste text containing provider details (URL, API key, etc.) and we'll extract the information automatically.",
+  "placeholder": "Paste provider configuration text here...",
+  "preview": "Detected Information",
+  "type": "Type",
+  "name": "Name",
+  "url": "URL",
+  "key": "API Key",
+  "notFound": "Not detected",
+  "parseError": "Could not parse provider information from the text",
+  "cancel": "Cancel",
+  "confirm": "Apply"
+}

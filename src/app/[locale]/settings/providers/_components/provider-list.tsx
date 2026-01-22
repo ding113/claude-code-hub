@@ -23,6 +23,9 @@ interface ProviderListProps {
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
+  isMultiSelectMode?: boolean;
+  selectedProviderIds?: Set<number>;
+  onSelectProvider?: (providerId: number, checked: boolean) => void;
 }
 
 export function ProviderList({
@@ -33,6 +36,9 @@ export function ProviderList({
   statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
+  isMultiSelectMode = false,
+  selectedProviderIds = new Set(),
+  onSelectProvider,
 }: ProviderListProps) {
   const t = useTranslations("settings.providers");
 
@@ -60,6 +66,11 @@ export function ProviderList({
           statisticsLoading={statisticsLoading}
           currencyCode={currencyCode}
           enableMultiProviderTypes={enableMultiProviderTypes}
+          isMultiSelectMode={isMultiSelectMode}
+          isSelected={selectedProviderIds.has(provider.id)}
+          onSelectChange={
+            onSelectProvider ? (checked) => onSelectProvider(provider.id, checked) : undefined
+          }
         />
       ))}
     </div>

@@ -1,0 +1,43 @@
+{
+  "enterMode": "Массовое редактирование",
+  "exitMode": "Выход",
+  "selectAll": "Выбрать все",
+  "invertSelection": "Инвертировать",
+  "selectedCount": "Выбрано: {count}",
+  "editSelected": "Редактировать выбранные",
+  "actions": {
+    "edit": "Редактировать",
+    "delete": "Удалить",
+    "resetCircuit": "Сбросить прерыватель"
+  },
+  "dialog": {
+    "editTitle": "Массовое редактирование поставщиков",
+    "editDesc": "Изменения будут применены к {count} поставщикам",
+    "deleteTitle": "Удалить поставщиков",
+    "deleteDesc": "Удалить {count} поставщиков навсегда?",
+    "resetCircuitTitle": "Сбросить прерыватели",
+    "resetCircuitDesc": "Сбросить прерыватель для {count} поставщиков?",
+    "next": "Далее",
+    "noFieldEnabled": "Пожалуйста, включите хотя бы одно поле для обновления"
+  },
+  "fields": {
+    "isEnabled": "Статус",
+    "priority": "Приоритет",
+    "weight": "Вес",
+    "costMultiplier": "Множитель стоимости",
+    "groupTag": "Тег группы"
+  },
+  "confirm": {
+    "title": "Подтвердите операцию",
+    "cancel": "Отмена",
+    "confirm": "Подтвердить",
+    "goBack": "Назад",
+    "processing": "Обработка..."
+  },
+  "toast": {
+    "updated": "Обновлено поставщиков: {count}",
+    "deleted": "Удалено поставщиков: {count}",
+    "circuitReset": "Сброшено прерывателей: {count}",
+    "failed": "Операция не удалась: {error}"
+  }
+}

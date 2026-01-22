@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { UrlPreview } from "../../url-preview";
+import { QuickPasteDialog } from "../components/quick-paste-dialog";
 import { SectionCard, SmartInputWrapper } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
 
@@ -43,6 +44,7 @@ export function BasicInfoSection({ autoUrlPending }: BasicInfoSectionProps) {
         description={t("sections.basic.identity.desc")}
         icon={User}
         variant="highlight"
+        badge={!isEdit && <QuickPasteDialog disabled={state.ui.isPending} />}
       >
         <div className="space-y-4">
           <SmartInputWrapper label={t("name.label")} required>

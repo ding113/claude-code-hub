@@ -992,6 +992,168 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
   }
 }
 
+const BATCH_OPERATION_MAX_SIZE = 500;
+
+export interface BatchUpdateProvidersParams {
+  providerIds: number[];
+  updates: {
+    is_enabled?: boolean;
+    priority?: number;
+    weight?: number;
+    cost_multiplier?: number;
+    group_tag?: string | null;
+  };
+}
+
+export async function batchUpdateProviders(
+  params: BatchUpdateProvidersParams
+): Promise<ActionResult<{ updatedCount: number }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const { providerIds, updates } = params;
+
+    if (!providerIds || providerIds.length === 0) {
+      return { ok: false, error: "请选择要更新的供应商" };
+    }
+
+    if (providerIds.length > BATCH_OPERATION_MAX_SIZE) {
+      return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
+    }
+
+    const hasUpdates = Object.values(updates).some((v) => v !== undefined);
+    if (!hasUpdates) {
+      return { ok: false, error: "请指定要更新的字段" };
+    }
+
+    const { updateProvidersBatch } = await import("@/repository/provider");
+
+    const repositoryUpdates: Parameters<typeof updateProvidersBatch>[1] = {};
+    if (updates.is_enabled !== undefined) repositoryUpdates.isEnabled = updates.is_enabled;
+    if (updates.priority !== undefined) repositoryUpdates.priority = updates.priority;
+    if (updates.weight !== undefined) repositoryUpdates.weight = updates.weight;
+    if (updates.cost_multiplier !== undefined) {
+      repositoryUpdates.costMultiplier = updates.cost_multiplier.toString();
+    }
+    if (updates.group_tag !== undefined) repositoryUpdates.groupTag = updates.group_tag;
+
+    const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
+
+    await broadcastProviderCacheInvalidation({
+      operation: "edit",
+      providerId: providerIds[0],
+    });
+
+    logger.info("batchUpdateProviders:completed", {
+      requestedCount: providerIds.length,
+      updatedCount,
+      fields: Object.keys(updates).filter((k) => updates[k as keyof typeof updates] !== undefined),
+    });
+
+    return { ok: true, data: { updatedCount } };
+  } catch (error) {
+    logger.error("批量更新供应商失败:", error);
+    const message = error instanceof Error ? error.message : "批量更新供应商失败";
+    return { ok: false, error: message };
+  }
+}
+
+export interface BatchDeleteProvidersParams {
+  providerIds: number[];
+}
+
+export async function batchDeleteProviders(
+  params: BatchDeleteProvidersParams
+): Promise<ActionResult<{ deletedCount: number }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const { providerIds } = params;
+
+    if (!providerIds || providerIds.length === 0) {
+      return { ok: false, error: "请选择要删除的供应商" };
+    }
+
+    if (providerIds.length > BATCH_OPERATION_MAX_SIZE) {
+      return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
+    }
+
+    const { deleteProvidersBatch } = await import("@/repository/provider");
+
+    const deletedCount = await deleteProvidersBatch(providerIds);
+
+    for (const id of providerIds) {
+      clearProviderState(id);
+      clearConfigCache(id);
+    }
+
+    await broadcastProviderCacheInvalidation({
+      operation: "remove",
+      providerId: providerIds[0],
+    });
+
+    logger.info("batchDeleteProviders:completed", {
+      requestedCount: providerIds.length,
+      deletedCount,
+    });
+
+    return { ok: true, data: { deletedCount } };
+  } catch (error) {
+    logger.error("批量删除供应商失败:", error);
+    const message = error instanceof Error ? error.message : "批量删除供应商失败";
+    return { ok: false, error: message };
+  }
+}
+
+export interface BatchResetCircuitParams {
+  providerIds: number[];
+}
+
+export async function batchResetProviderCircuits(
+  params: BatchResetCircuitParams
+): Promise<ActionResult<{ resetCount: number }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const { providerIds } = params;
+
+    if (!providerIds || providerIds.length === 0) {
+      return { ok: false, error: "请选择要重置的供应商" };
+    }
+
+    if (providerIds.length > BATCH_OPERATION_MAX_SIZE) {
+      return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
+    }
+
+    let resetCount = 0;
+    for (const id of providerIds) {
+      resetCircuit(id);
+      clearConfigCache(id);
+      resetCount++;
+    }
+
+    logger.info("batchResetProviderCircuits:completed", {
+      requestedCount: providerIds.length,
+      resetCount,
+    });
+
+    return { ok: true, data: { resetCount } };
+  } catch (error) {
+    logger.error("批量重置熔断器失败:", error);
+    const message = error instanceof Error ? error.message : "批量重置熔断器失败";
+    return { ok: false, error: message };
+  }
+}
+
 /**
  * 获取供应商限额使用情况
  */

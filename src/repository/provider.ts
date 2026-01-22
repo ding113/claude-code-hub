@@ -639,8 +639,92 @@ export async function deleteProvider(id: number): Promise<boolean> {
   return result.length > 0;
 }
 
+export interface BatchProviderUpdates {
+  isEnabled?: boolean;
+  priority?: number;
+  weight?: number;
+  costMultiplier?: string;
+  groupTag?: string | null;
+}
+
+export async function updateProvidersBatch(
+  ids: number[],
+  updates: BatchProviderUpdates
+): Promise<number> {
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const uniqueIds = [...new Set(ids)];
+  const setClauses: Record<string, unknown> = { updatedAt: new Date() };
+
+  if (updates.isEnabled !== undefined) {
+    setClauses.isEnabled = updates.isEnabled;
+  }
+  if (updates.priority !== undefined) {
+    setClauses.priority = updates.priority;
+  }
+  if (updates.weight !== undefined) {
+    setClauses.weight = updates.weight;
+  }
+  if (updates.costMultiplier !== undefined) {
+    setClauses.costMultiplier = updates.costMultiplier;
+  }
+  if (updates.groupTag !== undefined) {
+    setClauses.groupTag = updates.groupTag;
+  }
+
+  if (Object.keys(setClauses).length === 1) {
+    return 0;
+  }
+
+  const idList = sql.join(
+    uniqueIds.map((id) => sql`${id}`),
+    sql`, `
+  );
+
+  const result = await db
+    .update(providers)
+    .set(setClauses)
+    .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
+    .returning({ id: providers.id });
+
+  logger.debug("updateProvidersBatch:completed", {
+    requestedIds: uniqueIds.length,
+    updatedCount: result.length,
+    fields: Object.keys(setClauses).filter((k) => k !== "updatedAt"),
+  });
+
+  return result.length;
+}
+
+export async function deleteProvidersBatch(ids: number[]): Promise<number> {
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const uniqueIds = [...new Set(ids)];
+  const idList = sql.join(
+    uniqueIds.map((id) => sql`${id}`),
+    sql`, `
+  );
+
+  const result = await db
+    .update(providers)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
+    .returning({ id: providers.id });
+
+  logger.debug("deleteProvidersBatch:completed", {
+    requestedIds: uniqueIds.length,
+    deletedCount: result.length,
+  });
+
+  return result.length;
+}
+
 /**
- * 手动重置供应商“总消费”统计起点
+ * 手动重置供应商"总消费"统计起点
  *
  * 说明：
  * - 不删除 message_request 历史记录，仅通过 resetAt 作为聚合下限实现“从 0 重新累计”。
