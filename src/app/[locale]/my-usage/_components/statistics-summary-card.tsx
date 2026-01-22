@@ -119,10 +119,9 @@ export function StatisticsSummaryCard({
             <BarChart3 className="h-4 w-4" />
             {t("title")}
           </CardTitle>
-          <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-            <p>{t("autoRefresh", { seconds: autoRefreshSeconds })}</p>
-            <p>{t("serverTime")}</p>
-          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("autoRefresh", { seconds: autoRefreshSeconds })}
+          </p>
         </div>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <LogsDateRangePicker
