@@ -258,11 +258,7 @@ export function DashboardBento({
 
         {/* Live Sessions Panel - Right sidebar, spans 2 rows */}
         {isAdmin && (
-          <LiveSessionsPanel
-            sessions={sessionsWithActivity}
-            isLoading={sessionsLoading}
-            maxItems={8}
-          />
+          <LiveSessionsPanel sessions={sessionsWithActivity} isLoading={sessionsLoading} />
         )}
 
         {/* Leaderboard Cards - Below chart, 3 columns */}
