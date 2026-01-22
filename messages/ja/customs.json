@@ -42,11 +42,10 @@
     "loading": "読み込み中...",
     "unknownUser": "不明",
     "status": {
-      "running": "実行中",
-      "init": "初期化",
-      "idle": "アイドル",
-      "error": "エラー",
-      "done": "完了"
+      "inProgressTooltip": "セッションはアクティブなリクエストを処理中です",
+      "initializingTooltip": "セッションは最初のリクエストで初期化中です",
+      "idleTooltip": "セッションはアイドル状態で、アクティブなリクエストはありません",
+      "errorTooltip": "セッション処理中にエラーが発生しました"
     }
   }
 }

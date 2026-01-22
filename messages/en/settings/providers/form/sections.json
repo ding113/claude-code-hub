@@ -312,21 +312,21 @@
     "disableHint": "Set to 0 to disable the timeout (for canary rollback scenarios only, not recommended)",
     "nonStreamingTotal": {
       "core": "true",
-      "desc": "Non-streaming request total timeout, range 60-1200 seconds, default 600 seconds (10 minutes)",
+      "desc": "Non-streaming request total timeout, range 60-1200 seconds, enter 0 to disable (default: no limit)",
       "label": "Non-streaming Total Timeout (seconds)",
-      "placeholder": "600"
+      "placeholder": "0"
     },
     "streamingFirstByte": {
       "core": "true",
-      "desc": "Streaming request first byte timeout, range 1-120 seconds, default 30 seconds",
+      "desc": "Streaming request first byte timeout, range 1-180 seconds, enter 0 to disable (default: no limit)",
       "label": "Streaming First Byte Timeout (seconds)",
-      "placeholder": "30"
+      "placeholder": "0"
     },
     "streamingIdle": {
       "core": "true",
-      "desc": "Streaming request idle timeout, range 60-600 seconds, enter 0 to disable (prevent mid-stream stalling)",
+      "desc": "Streaming request idle timeout, range 60-600 seconds, enter 0 to disable (default: no limit)",
       "label": "Streaming Idle Timeout (seconds)",
-      "placeholder": "60"
+      "placeholder": "0"
     },
     "summary": "First byte: {streaming}s | Stream interval: {idle}s | Non-streaming: {nonStreaming}s",
     "title": "Timeout Configuration"

@@ -1039,6 +1039,17 @@
     "title": "供应商可用性监控",
     "description": "实时监控供应商的可用性状态和性能指标",
     "nav": "可用性监控",
+    "tabs": {
+      "provider": "供应商可用性",
+      "endpoint": "端点健康"
+    },
+    "overview": {
+      "systemAvailability": "系统可用性",
+      "avgLatency": "平均延迟",
+      "errorRate": "错误率",
+      "activeProbes": "活跃探测",
+      "load": "负载"
+    },
     "status": {
       "green": "正常",
       "red": "异常",
@@ -1062,6 +1073,11 @@
     },
     "timeRange": {
       "label": "时间范围",
+      "15min": "15 分钟",
+      "1h": "1 小时",
+      "6h": "6 小时",
+      "24h": "24 小时",
+      "7d": "7 天",
       "last15min": "最近 15 分钟",
       "last1h": "最近 1 小时",
       "last6h": "最近 6 小时",
@@ -1112,7 +1128,13 @@
       "autoRefresh": "自动刷新",
       "stopAutoRefresh": "停止自动刷新",
       "viewDetails": "查看详情",
-      "testProvider": "测试供应商"
+      "testProvider": "测试供应商",
+      "retry": "重试",
+      "probeNow": "立即探测",
+      "probing": "探测中...",
+      "probeAll": "探测全部",
+      "probeSuccess": "探测成功",
+      "probeFailed": "探测失败"
     },
     "states": {
       "loading": "加载中...",
@@ -1163,6 +1185,62 @@
       "auto": "自动探测",
       "probeSuccess": "探测成功",
       "probeFailed": "探测失败"
+    },
+    "laneChart": {
+      "title": "供应商可用性时间线",
+      "noData": "暂无数据",
+      "requests": "{count} 个请求",
+      "availability": "可用性 {value}%",
+      "noRequests": "无请求",
+      "denseData": "密集",
+      "sparseData": "稀疏",
+      "latency": "延迟"
+    },
+    "latencyChart": {
+      "title": "延迟分布",
+      "p50": "P50",
+      "p95": "P95",
+      "p99": "P99",
+      "noData": "暂无延迟数据"
+    },
+    "latencyCurve": {
+      "title": "延迟趋势",
+      "noData": "暂无延迟数据",
+      "avg": "平均",
+      "min": "最小",
+      "max": "最大",
+      "latency": "延迟"
+    },
+    "terminal": {
+      "title": "探测日志",
+      "live": "实时",
+      "download": "下载日志",
+      "noLogs": "暂无探测日志",
+      "manual": "手动",
+      "auto": "自动",
+      "filterPlaceholder": "筛选日志..."
+    },
+    "probeGrid": {
+      "title": "端点状态",
+      "noEndpoints": "未配置端点",
+      "lastProbe": "最后探测",
+      "status": {
+        "unknown": "未知",
+        "healthy": "健康",
+        "unhealthy": "异常"
+      }
+    },
+    "endpoint": {
+      "selectVendor": "选择供应商",
+      "selectType": "选择类型"
+    },
+    "confidence": {
+      "low": "低",
+      "medium": "中",
+      "high": "高",
+      "lowTooltip": "请求数少于 {count}，数据可能不具代表性。",
+      "mediumTooltip": "请求量适中，数据较为可靠。",
+      "highTooltip": "请求量充足，数据可靠。"
     },
     "toast": {
       "refreshSuccess": "可用性数据已刷新",
