@@ -101,18 +101,19 @@ export function TagInput({
   }, [showSuggestions, onSuggestionsClose]);
 
   // Calculate dropdown position when showing suggestions
+  // Using fixed positioning, so use viewport coordinates directly (no scroll offset)
   React.useEffect(() => {
     if (showSuggestions && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       setDropdownPosition({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
+        top: rect.bottom + 4,
+        left: rect.left,
         width: rect.width,
       });
     }
   }, [showSuggestions]);
 
-  // Update position on scroll/resize
+  // Update position on scroll/resize (recalculate viewport coords)
   React.useEffect(() => {
     if (!showSuggestions) return;
 
@@ -120,8 +121,8 @@ export function TagInput({
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
         setDropdownPosition({
-          top: rect.bottom + window.scrollY + 4,
-          left: rect.left + window.scrollX,
+          top: rect.bottom + 4,
+          left: rect.left,
           width: rect.width,
         });
       }
