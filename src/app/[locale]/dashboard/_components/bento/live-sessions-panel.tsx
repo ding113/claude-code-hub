@@ -36,7 +36,7 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
   // Determine ping animation color based on status
   const getPingColor = (info: SessionStatusInfo) => {
     if (info.status === SESSION_DISPLAY_STATUS.IN_PROGRESS) {
-      return info.label === "ERROR" ? "bg-rose-500" : "bg-emerald-500";
+      return info.label === "FAIL" ? "bg-rose-500" : "bg-emerald-500";
     }
     if (info.status === SESSION_DISPLAY_STATUS.INITIALIZING) {
       return "bg-amber-500";
@@ -47,7 +47,7 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
   // Determine user name color based on status
   const getUserNameColor = (info: SessionStatusInfo) => {
     if (info.status === SESSION_DISPLAY_STATUS.IN_PROGRESS) {
-      return info.label === "ERROR"
+      return info.label === "FAIL"
         ? "text-rose-500 dark:text-rose-400"
         : "text-blue-500 dark:text-blue-400";
     }
@@ -78,7 +78,7 @@ function SessionItem({ session }: { session: ActiveSessionInfo }) {
             style={{ animationDuration: "1.5s" }}
           />
         )}
-        {statusInfo.label === "ERROR" ? (
+        {statusInfo.label === "FAIL" ? (
           <XCircle className={cn("h-2.5 w-2.5 relative", statusInfo.color)} fill="currentColor" />
         ) : (
           <Circle className={cn("h-2.5 w-2.5 relative", statusInfo.color)} fill="currentColor" />

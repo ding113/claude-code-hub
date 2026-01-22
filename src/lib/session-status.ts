@@ -53,7 +53,7 @@ export function getSessionDisplayStatus(session: SessionStatusInput): SessionSta
   if (status === "error") {
     return {
       status: SESSION_DISPLAY_STATUS.IN_PROGRESS,
-      label: "ERROR",
+      label: "FAIL",
       tooltipKey: "status.errorTooltip",
       color: "text-rose-500 dark:text-rose-400",
       pulse: true,
@@ -64,7 +64,7 @@ export function getSessionDisplayStatus(session: SessionStatusInput): SessionSta
   if (requestCount <= 1 && concurrentCount > 0) {
     return {
       status: SESSION_DISPLAY_STATUS.INITIALIZING,
-      label: SESSION_DISPLAY_STATUS.INITIALIZING,
+      label: "INIT",
       tooltipKey: "status.initializingTooltip",
       color: "text-amber-500 dark:text-amber-400",
       pulse: true,
@@ -75,7 +75,7 @@ export function getSessionDisplayStatus(session: SessionStatusInput): SessionSta
   if (concurrentCount > 0) {
     return {
       status: SESSION_DISPLAY_STATUS.IN_PROGRESS,
-      label: SESSION_DISPLAY_STATUS.IN_PROGRESS,
+      label: "BUSY",
       tooltipKey: "status.inProgressTooltip",
       color: "text-emerald-500 dark:text-emerald-400",
       pulse: true,
@@ -85,7 +85,7 @@ export function getSessionDisplayStatus(session: SessionStatusInput): SessionSta
   // IDLE: no active requests
   return {
     status: SESSION_DISPLAY_STATUS.IDLE,
-    label: SESSION_DISPLAY_STATUS.IDLE,
+    label: "IDLE",
     tooltipKey: "status.idleTooltip",
     color: "text-muted-foreground/50",
     pulse: false,
