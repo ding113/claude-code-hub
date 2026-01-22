@@ -285,9 +285,9 @@
         "placeholder": "1.0"
       },
       "group": {
-        "desc": "分組標籤。僅供 providerGroup 與此值相符的用戶使用。例：設為「premium」表示僅供 providerGroup=\"premium\" 的用戶使用",
+        "desc": "分組標籤。從列表選擇或輸入新名稱後按 Enter 創建（最多50字符）。只有 providerGroup 匹配的用戶才能使用此供應商。",
         "label": "供應商分組",
-        "placeholder": "例如：premium, economy"
+        "placeholder": "例如 premium, economy"
       },
       "priority": {
         "desc": "數值越小，優先級越高（0 最高）。系統只會從最高優先級的供應商中選擇。建議：主力=0，備用=1，緊急備援=2",

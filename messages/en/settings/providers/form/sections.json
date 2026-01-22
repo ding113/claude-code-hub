@@ -284,7 +284,7 @@
         "placeholder": "1.0"
       },
       "group": {
-        "desc": "Group tag. Only users whose providerGroup matches can use this provider. Example: set to \"premium\" to serve users with providerGroup=\"premium\" only",
+        "desc": "Group tag. Select from list or type a new name and press Enter to create (max 50 chars). Only users whose providerGroup matches can use this provider.",
         "label": "Provider Group",
         "placeholder": "e.g. premium, economy"
       },
