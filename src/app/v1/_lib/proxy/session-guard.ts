@@ -140,7 +140,7 @@ export class ProxySessionGuard {
       if (!warmupMaybeIntercepted) {
         void SessionTracker.trackSession(sessionId, keyId, session.authState?.user?.id).catch(
           (err) => {
-          logger.error("[ProxySessionGuard] Failed to track session:", err);
+            logger.error("[ProxySessionGuard] Failed to track session:", err);
           }
         );
       }
