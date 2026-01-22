@@ -33,6 +33,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     costMultiplier:
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0",
     groupTag: providerData.group_tag,
+    groupPriorities: providerData.group_priorities ?? null,
     providerType: providerData.provider_type,
     preserveClientIp: providerData.preserve_client_ip ?? false,
     modelRedirects: providerData.model_redirects,
@@ -88,6 +89,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     priority: providers.priority,
     costMultiplier: providers.costMultiplier,
     groupTag: providers.groupTag,
+    groupPriorities: providers.groupPriorities,
     providerType: providers.providerType,
     preserveClientIp: providers.preserveClientIp,
     modelRedirects: providers.modelRedirects,
@@ -168,6 +170,7 @@ export async function findProviderList(
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      groupPriorities: providers.groupPriorities,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
@@ -244,6 +247,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      groupPriorities: providers.groupPriorities,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
@@ -324,6 +328,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      groupPriorities: providers.groupPriorities,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
@@ -396,6 +401,8 @@ export async function updateProvider(
     dbData.costMultiplier =
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0";
   if (providerData.group_tag !== undefined) dbData.groupTag = providerData.group_tag;
+  if (providerData.group_priorities !== undefined)
+    dbData.groupPriorities = providerData.group_priorities;
   if (providerData.provider_type !== undefined) dbData.providerType = providerData.provider_type;
   if (providerData.preserve_client_ip !== undefined)
     dbData.preserveClientIp = providerData.preserve_client_ip;
@@ -511,6 +518,7 @@ export async function updateProvider(
       priority: providers.priority,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
+      groupPriorities: providers.groupPriorities,
       providerType: providers.providerType,
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,

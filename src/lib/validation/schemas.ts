@@ -553,6 +553,11 @@ export const UpdateProviderSchema = z
       .optional(),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
+    // Group-level priority overrides: { [groupTag]: priority }
+    group_priorities: z
+      .record(z.string(), z.number().int().min(0).max(2147483647))
+      .nullable()
+      .optional(),
     // Codex 支持:供应商类型和模型重定向
     provider_type: z
       .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])

@@ -54,6 +54,8 @@ import { formatCurrency } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatistics } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
+import { GroupPriorityPopover } from "./group-priority-popover";
+import { GroupTagEditPopover } from "./group-tag-edit-popover";
 import { InlineEditPopover } from "./inline-edit-popover";
 
 interface ProviderRichListItemProps {
@@ -76,6 +78,8 @@ interface ProviderRichListItemProps {
   onEdit?: () => void;
   onClone?: () => void;
   onDelete?: () => void;
+  selectedGroup?: string | null;
+  availableGroups?: string[];
 }
 
 export function ProviderRichListItem({
@@ -92,6 +96,8 @@ export function ProviderRichListItem({
   onEdit: onEditProp,
   onClone: onCloneProp,
   onDelete: onDeleteProp,
+  selectedGroup = null,
+  availableGroups = [],
 }: ProviderRichListItemProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -111,6 +117,7 @@ export function ProviderRichListItem({
   const tList = useTranslations("settings.providers.list");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
   const tInline = useTranslations("settings.providers.inlineEdit");
+  const tGroupEdit = useTranslations("settings.providers.groupEdit");
 
   const validatePriority = (raw: string) => {
     if (raw.length === 0) return tInline("priorityInvalid");
@@ -351,6 +358,70 @@ export function ProviderRichListItem({
   const handleSaveWeight = createSaveHandler("weight");
   const handleSaveCostMultiplier = createSaveHandler("cost_multiplier");
 
+  // Handler for group priority popover (saves both priority and groupPriorities)
+  const handleSaveGroupPriority = async (
+    priority: number,
+    groupPriorities: Record<string, number> | null
+  ) => {
+    try {
+      const res = await editProvider(provider.id, {
+        priority,
+        group_priorities: groupPriorities,
+      });
+      if (res.ok) {
+        toast.success(tInline("saveSuccess"));
+        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        router.refresh();
+        return true;
+      }
+      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
+      return false;
+    } catch (error) {
+      console.error("Failed to update group priorities:", error);
+      toast.error(tInline("saveFailed"), { description: tList("unknownError") });
+      return false;
+    }
+  };
+
+  // Handler for group tag edit popover
+  const handleSaveGroupTag = async (groupTag: string | null) => {
+    try {
+      const res = await editProvider(provider.id, { group_tag: groupTag });
+      if (res.ok) {
+        toast.success(tGroupEdit("saveSuccess"));
+        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        router.refresh();
+        return true;
+      }
+      toast.error(tGroupEdit("saveFailed"), { description: res.error || tList("unknownError") });
+      return false;
+    } catch (error) {
+      console.error("Failed to update group tag:", error);
+      toast.error(tGroupEdit("saveFailed"), { description: tList("unknownError") });
+      return false;
+    }
+  };
+
+  // Check if provider has multiple groups
+  const groupTags = provider.groupTag
+    ? provider.groupTag
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [];
+  const hasMultipleGroups = groupTags.length > 1;
+
+  // Calculate display priority based on selected group filter
+  const displayPriority = (() => {
+    if (!selectedGroup || selectedGroup === "default") {
+      return provider.priority;
+    }
+    if (provider.groupPriorities?.[selectedGroup] !== undefined) {
+      return provider.groupPriorities[selectedGroup];
+    }
+    return provider.priority;
+  })();
+
   return (
     <>
       <div className="flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
@@ -403,13 +474,19 @@ export function ProviderRichListItem({
             <span className="font-semibold truncate">{provider.name}</span>
 
             {/* Group Tags (supports comma-separated values) */}
-            {(provider.groupTag
-              ? provider.groupTag
-                  .split(",")
-                  .map((t) => t.trim())
-                  .filter(Boolean)
-              : []
-            ).length > 0 ? (
+            {canEdit ? (
+              <GroupTagEditPopover
+                groupTag={provider.groupTag}
+                availableGroups={availableGroups}
+                onSave={handleSaveGroupTag}
+              />
+            ) : (provider.groupTag
+                ? provider.groupTag
+                    .split(",")
+                    .map((t) => t.trim())
+                    .filter(Boolean)
+                : []
+              ).length > 0 ? (
               provider.groupTag
                 ?.split(",")
                 .map((t) => t.trim())
@@ -502,15 +579,25 @@ export function ProviderRichListItem({
             <div className="text-xs text-muted-foreground">{tList("priority")}</div>
             <div className="font-medium">
               {canEdit ? (
-                <InlineEditPopover
-                  value={provider.priority}
-                  label={tInline("priorityLabel")}
-                  type="integer"
-                  validator={validatePriority}
-                  onSave={handleSavePriority}
-                />
+                hasMultipleGroups ? (
+                  <GroupPriorityPopover
+                    priority={provider.priority}
+                    groupPriorities={provider.groupPriorities}
+                    groupTag={provider.groupTag}
+                    onSave={handleSaveGroupPriority}
+                    displayPriority={displayPriority}
+                  />
+                ) : (
+                  <InlineEditPopover
+                    value={provider.priority}
+                    label={tInline("priorityLabel")}
+                    type="integer"
+                    validator={validatePriority}
+                    onSave={handleSavePriority}
+                  />
+                )
               ) : (
-                <span>{provider.priority}</span>
+                <span>{displayPriority}</span>
               )}
             </div>
           </div>

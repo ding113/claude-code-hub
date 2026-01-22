@@ -52,6 +52,37 @@ function parseGroupString(groupString: string): string[] {
 }
 
 /**
+ * Get effective priority for a provider in the context of user's group
+ *
+ * Group-level priority overrides allow providers to have different priorities
+ * for different user groups. For example, a provider might be high priority
+ * for "cli" group but low priority for "chat" group.
+ *
+ * @param provider - The provider to get priority for
+ * @param userGroup - The user's group string (may be comma-separated)
+ * @returns The effective priority value
+ */
+function getEffectivePriority(provider: Provider, userGroup: string | null): number {
+  // No group or no overrides: use global priority
+  if (!userGroup || !provider.groupPriorities) {
+    return provider.priority;
+  }
+
+  // Parse user groups (may be comma-separated)
+  const userGroups = parseGroupString(userGroup);
+
+  // Return first matching group's priority
+  for (const group of userGroups) {
+    if (group in provider.groupPriorities) {
+      return provider.groupPriorities[group];
+    }
+  }
+
+  // No match: use global priority
+  return provider.priority;
+}
+
+/**
  * 获取有效的供应商分组（优先级：key.providerGroup > user.providerGroup）
  *
  * @param session - 代理会话对象
@@ -912,12 +943,17 @@ export class ProxyProviderResolver {
     }
 
     // Step 5: 优先级分层（只选择最高优先级的供应商）
-    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
-    const priorities = [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
-      (a, b) => a - b
+    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
+      healthyProviders,
+      effectiveGroupPick
     );
+    const priorities = [
+      ...new Set(healthyProviders.map((p) => getEffectivePriority(p, effectiveGroupPick))),
+    ].sort((a, b) => a - b);
     context.priorityLevels = priorities;
-    context.selectedPriority = Math.min(...healthyProviders.map((p) => p.priority || 0));
+    context.selectedPriority = Math.min(
+      ...healthyProviders.map((p) => getEffectivePriority(p, effectiveGroupPick))
+    );
 
     // Step 6: 成本排序 + 加权选择 + 计算概率
     const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
@@ -1034,17 +1070,19 @@ export class ProxyProviderResolver {
 
   /**
    * 优先级分层：只选择最高优先级的供应商
+   * @param providers - 候选供应商列表
+   * @param userGroup - 用户分组（用于获取分组级别的优先级覆盖）
    */
-  private static selectTopPriority(providers: Provider[]): Provider[] {
+  private static selectTopPriority(providers: Provider[], userGroup: string | null): Provider[] {
     if (providers.length === 0) {
       return [];
     }
 
-    // 找到最小的优先级值（最高优先级）
-    const minPriority = Math.min(...providers.map((p) => p.priority || 0));
+    // 找到最小的优先级值（最高优先级），使用分组级别的优先级覆盖
+    const minPriority = Math.min(...providers.map((p) => getEffectivePriority(p, userGroup)));
 
     // 只返回该优先级的供应商
-    return providers.filter((p) => (p.priority || 0) === minPriority);
+    return providers.filter((p) => getEffectivePriority(p, userGroup) === minPriority);
   }
 
   /**
@@ -1183,7 +1221,10 @@ export class ProxyProviderResolver {
     }
 
     // 优先级分层
-    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
+    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
+      healthyProviders,
+      effectiveGroupPick
+    );
 
     // 成本排序 + 加权随机选择
     const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
@@ -1210,10 +1251,10 @@ export class ProxyProviderResolver {
         beforeHealthCheck: typeFiltered.length,
         afterHealthCheck: healthyProviders.length,
         filteredProviders: [],
-        priorityLevels: [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
-          (a, b) => a - b
-        ),
-        selectedPriority: selected.priority || 0,
+        priorityLevels: [
+          ...new Set(healthyProviders.map((p) => getEffectivePriority(p, effectiveGroupPick))),
+        ].sort((a, b) => a - b),
+        selectedPriority: getEffectivePriority(selected, effectiveGroupPick),
         candidatesAtPriority: candidates,
       },
     };

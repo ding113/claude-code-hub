@@ -161,6 +161,9 @@ export const providers = pgTable('providers', {
   priority: integer('priority').notNull().default(0),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
+  // Group-level priority overrides: { [groupTag]: number }
+  // When set, provider can have different priorities for different groups
+  groupPriorities: jsonb('group_priorities').$type<Record<string, number> | null>().default(null),
 
   // 供应商类型：扩展支持 5 种类型
   // - claude: Anthropic 提供商（标准认证）

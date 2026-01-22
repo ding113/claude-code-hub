@@ -52,6 +52,8 @@ export interface Provider {
   priority: number;
   costMultiplier: number;
   groupTag: string | null;
+  // Group-level priority overrides: { [groupTag]: number }
+  groupPriorities: Record<string, number> | null;
 
   // 供应商类型：扩展支持 4 种类型
   providerType: ProviderType;
@@ -155,6 +157,8 @@ export interface ProviderDisplay {
   priority: number;
   costMultiplier: number;
   groupTag: string | null;
+  // Group-level priority overrides: { [groupTag]: number }
+  groupPriorities: Record<string, number> | null;
   // 供应商类型
   providerType: ProviderType;
   // 供应商聚合实体（按官网域名归一）
@@ -245,6 +249,7 @@ export interface CreateProviderData {
   priority?: number;
   cost_multiplier?: number;
   group_tag?: string | null;
+  group_priorities?: Record<string, number> | null;
 
   // 供应商类型和模型配置
   provider_type?: ProviderType;
@@ -315,6 +320,7 @@ export interface UpdateProviderData {
   priority?: number;
   cost_multiplier?: number;
   group_tag?: string | null;
+  group_priorities?: Record<string, number> | null;
 
   // 供应商类型和模型配置
   provider_type?: ProviderType;

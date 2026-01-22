@@ -1,0 +1,8 @@
+{
+  "title": "选择分组",
+  "addPlaceholder": "添加新分组...",
+  "add": "添加",
+  "saveSuccess": "分组已更新",
+  "saveFailed": "更新分组失败",
+  "noGroups": "暂无可用分组"
+}

@@ -439,6 +439,8 @@ export function ProviderManager({
               isMultiSelectMode={isMultiSelectMode}
               selectedProviderIds={selectedProviderIds}
               onSelectProvider={handleSelectProvider}
+              selectedGroup={groupFilter.length === 1 ? groupFilter[0] : null}
+              availableGroups={allGroups}
             />
           ) : (
             <ProviderVendorView

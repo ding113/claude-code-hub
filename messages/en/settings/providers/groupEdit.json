@@ -1,0 +1,8 @@
+{
+  "title": "Select Groups",
+  "addPlaceholder": "Add new group...",
+  "add": "Add",
+  "saveSuccess": "Group updated",
+  "saveFailed": "Failed to update group",
+  "noGroups": "No groups available"
+}
