@@ -19,12 +19,16 @@ export function RateLimitEventsChart({ data }: RateLimitEventsChartProps) {
   const t = useTranslations("dashboard.rateLimits.chart");
   const locale = useLocale();
 
-  const chartConfig = {
-    count: {
-      label: t("events"),
-      color: "hsl(var(--chart-1))",
-    },
-  } satisfies ChartConfig;
+  const chartConfig = React.useMemo(
+    () =>
+      ({
+        count: {
+          label: t("events"),
+          color: "hsl(var(--chart-1))",
+        },
+      }) satisfies ChartConfig,
+    [t]
+  );
 
   // 格式化小时显示
   const formatHour = (hourStr: string) => {

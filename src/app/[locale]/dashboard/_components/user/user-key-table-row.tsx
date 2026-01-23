@@ -12,7 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { removeKey } from "@/actions/keys";
 import { toggleUserEnabled } from "@/actions/users";
@@ -186,7 +186,7 @@ export function UserKeyTableRow({
   const expiryStatus = getExpiryStatus(localIsEnabled, localExpiresAt ?? null);
 
   // 计算剩余天数（仅用于 user mode 显示）
-  const daysLeft = getDaysLeft(localExpiresAt ?? null);
+  const daysLeft = useMemo(() => getDaysLeft(localExpiresAt ?? null), [localExpiresAt]);
   const showExpiryBadge = !isAdmin && daysLeft !== null && daysLeft <= 7;
 
   // 处理 Provider Group：拆分成数组
