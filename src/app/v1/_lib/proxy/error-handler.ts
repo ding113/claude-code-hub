@@ -12,6 +12,7 @@ import {
   getErrorOverrideAsync,
   isEmptyResponseError,
   isRateLimitError,
+  isSSEErrorResponseError,
   ProxyError,
   type RateLimitError,
 } from "./errors";
@@ -76,6 +77,11 @@ export class ProxyErrorHandler {
       clientErrorMessage = error.getClientSafeMessage();
       logErrorMessage = error.message; // 日志保留完整信息
       statusCode = 502; // Bad Gateway
+    } else if (isSSEErrorResponseError(error)) {
+      // SSEErrorResponseError: SSE 流中首块返回错误
+      clientErrorMessage = error.getClientSafeMessage();
+      logErrorMessage = error.message; // 日志保留完整信息（包含供应商名称）
+      statusCode = 502; // Bad Gateway - 上游返回了有效 HTTP 200 但内容是错误
     } else if (error instanceof Error) {
       clientErrorMessage = error.message;
       logErrorMessage = error.message;

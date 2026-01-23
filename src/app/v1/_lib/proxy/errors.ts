@@ -745,6 +745,53 @@ export function isEmptyResponseError(error: unknown): error is EmptyResponseErro
 }
 
 /**
+ * SSE 首块错误响应 - 用于检测上游返回 HTTP 200 但 SSE 首个 event 为 error 的情况
+ *
+ * 场景：某些上游服务在高并发时返回 HTTP 200 + text/event-stream，
+ * 但实际内容是 error event，需要触发重试和熔断器记录
+ */
+export class SSEErrorResponseError extends Error {
+  constructor(
+    public readonly providerId: number,
+    public readonly providerName: string,
+    public readonly errorCode: string | undefined,
+    public readonly errorMessage: string,
+    public readonly rawData: string
+  ) {
+    super(`SSE error response from provider ${providerName}: ${errorMessage}`);
+    this.name = "SSEErrorResponseError";
+  }
+
+  /**
+   * 获取适合返回给客户端的安全错误信息
+   */
+  getClientSafeMessage(): string {
+    return this.errorMessage || "Upstream returned error in SSE stream";
+  }
+
+  /**
+   * 获取适合记录的 JSON 元数据
+   */
+  toJSON() {
+    return {
+      type: "sse_error_response",
+      provider_id: this.providerId,
+      provider_name: this.providerName,
+      error_code: this.errorCode,
+      error_message: this.errorMessage,
+      raw_data: this.rawData.slice(0, 500),
+    };
+  }
+}
+
+/**
+ * 类型守卫：检查是否为 SSEErrorResponseError
+ */
+export function isSSEErrorResponseError(error: unknown): error is SSEErrorResponseError {
+  return error instanceof SSEErrorResponseError;
+}
+
+/**
  * 判断错误类型（异步版本）
  *
  * 分类规则（优先级从高到低）：
@@ -799,6 +846,11 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
   // 优先级 3.2: 空响应错误 - 计入熔断器 + 触发故障切换
   if (error instanceof EmptyResponseError) {
     return ErrorCategory.PROVIDER_ERROR; // 空响应视为供应商问题
+  }
+
+  // 优先级 3.3: SSE 首块错误响应 - 计入熔断器 + 触发故障切换
+  if (error instanceof SSEErrorResponseError) {
+    return ErrorCategory.PROVIDER_ERROR; // SSE 错误响应视为供应商问题
   }
 
   // 优先级 4: 其他所有错误都是系统错误

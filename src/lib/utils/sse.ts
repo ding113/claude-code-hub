@@ -96,3 +96,81 @@ export function parseSSEDataForDisplay(sseText: string): ParsedSSEEvent[] {
     return evt.data.trim() !== "[DONE]";
   });
 }
+
+/**
+ * SSE 首块错误检测结果
+ */
+export interface SSEFirstBlockError {
+  errorCode?: string;
+  errorMessage: string;
+  rawData: string;
+}
+
+/**
+ * 检测 SSE 文本首个 event 是否为 error
+ *
+ * 支持的 error 格式：
+ * 1. event: error + data: {...}
+ * 2. 首个 data block 中包含 error 对象（type: "error" 或顶层 error 字段）
+ *
+ * @param sseText - SSE 文本（首块或完整）
+ * @returns 如果是 error event，返回解析后的错误信息；否则返回 null
+ */
+export function detectSSEFirstBlockError(sseText: string): SSEFirstBlockError | null {
+  const events = parseSSEData(sseText);
+
+  if (events.length === 0) {
+    return null;
+  }
+
+  const firstEvent = events[0];
+
+  // 情况 1：显式的 event: error
+  if (firstEvent.event === "error") {
+    const data = firstEvent.data;
+    if (typeof data === "object" && data !== null) {
+      const errorObj = (data as Record<string, unknown>).error as
+        | Record<string, unknown>
+        | undefined;
+      return {
+        errorCode: (errorObj?.code as string | undefined) ?? (errorObj?.type as string | undefined),
+        errorMessage:
+          (errorObj?.message as string) ||
+          ((data as Record<string, unknown>).message as string) ||
+          "Unknown SSE error",
+        rawData: sseText.slice(0, 500),
+      };
+    }
+    return {
+      errorMessage: typeof data === "string" ? data : "Unknown SSE error",
+      rawData: sseText.slice(0, 500),
+    };
+  }
+
+  // 情况 2：首个 data block 类型为 error（如 Claude 的 type: "error"）
+  if (typeof firstEvent.data === "object" && firstEvent.data !== null) {
+    const data = firstEvent.data as Record<string, unknown>;
+
+    // 2.1: type: "error" 格式（Claude API 错误格式）
+    if (data.type === "error") {
+      const errorObj = data.error as Record<string, unknown> | undefined;
+      return {
+        errorCode: (errorObj?.type as string | undefined) ?? (data.code as string | undefined),
+        errorMessage: (errorObj?.message as string) || (data.message as string) || "Unknown error",
+        rawData: sseText.slice(0, 500),
+      };
+    }
+
+    // 2.2: 顶层 error 字段（某些服务直接返回 data: {"error": {...}}）
+    if (data.error && typeof data.error === "object") {
+      const errorObj = data.error as Record<string, unknown>;
+      return {
+        errorCode: (errorObj.code as string | undefined) ?? (errorObj.type as string | undefined),
+        errorMessage: (errorObj.message as string) || "Unknown SSE error",
+        rawData: sseText.slice(0, 500),
+      };
+    }
+  }
+
+  return null;
+}

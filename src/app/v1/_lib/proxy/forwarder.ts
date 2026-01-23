@@ -23,6 +23,7 @@ import {
 } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
+import { detectSSEFirstBlockError } from "@/lib/utils/sse";
 import {
   isVendorTypeCircuitOpen,
   recordVendorTypeAllEndpointsTimeout,
@@ -47,6 +48,7 @@ import {
   isHttp2Error,
   isSSLCertificateError,
   ProxyError,
+  SSEErrorResponseError,
   sanitizeUrl,
 } from "./errors";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
@@ -404,6 +406,71 @@ export class ProxyForwarder {
                 logger.debug("ProxyForwarder: Non-JSON response body, skipping content check", {
                   providerId: currentProvider.id,
                   contentType,
+                });
+              }
+            }
+          } else {
+            // ========== SSE 首块错误检测（流式）==========
+            // 场景：HTTP 200 但首个 SSE event 是 error（如高并发时某些服务返回错误）
+            // 策略：预读首块（通常 < 1KB），检测后使用原始 Response（clone 保护原始流）
+            const clonedResponse = response.clone();
+            const reader = clonedResponse.body?.getReader();
+
+            if (reader) {
+              try {
+                // 读取首块（设置超时保护，避免首块读取阻塞过久）
+                const firstChunk = await Promise.race([
+                  reader.read(),
+                  new Promise<never>((_, reject) =>
+                    setTimeout(() => reject(new Error("SSE first chunk read timeout")), 5000)
+                  ),
+                ]);
+
+                if (!firstChunk.done && firstChunk.value) {
+                  const decoder = new TextDecoder();
+                  const firstChunkText = decoder.decode(firstChunk.value, { stream: true });
+
+                  // 检测是否为 error event
+                  const sseError = detectSSEFirstBlockError(firstChunkText);
+
+                  if (sseError) {
+                    // 取消 reader 避免资源泄漏
+                    await reader.cancel();
+
+                    logger.warn("ProxyForwarder: SSE first block contains error", {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      errorCode: sseError.errorCode,
+                      errorMessage: sseError.errorMessage,
+                      attemptNumber: attemptCount,
+                    });
+
+                    throw new SSEErrorResponseError(
+                      currentProvider.id,
+                      currentProvider.name,
+                      sseError.errorCode,
+                      sseError.errorMessage,
+                      sseError.rawData
+                    );
+                  }
+                }
+
+                // 正常 SSE：取消克隆的 reader（原始 response.body 未被消费）
+                await reader.cancel();
+              } catch (error) {
+                // 确保 reader 被取消，避免资源泄漏
+                await reader.cancel().catch(() => {});
+
+                // 如果是 SSEErrorResponseError，直接抛出（触发重试）
+                if (error instanceof SSEErrorResponseError) {
+                  throw error;
+                }
+
+                // 超时或其他错误：记录日志但不阻止流程（降级到原有行为）
+                logger.debug("ProxyForwarder: SSE first chunk detection failed, proceeding", {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  error: error instanceof Error ? error.message : String(error),
                 });
               }
             }
