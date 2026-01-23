@@ -332,11 +332,14 @@ export function UserKeyTableRow({
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="start">
-                  <ul className="text-xs space-y-1">
-                    {userGroups.map((group) => (
-                      <li key={group}>{group}</li>
-                    ))}
-                  </ul>
+                  <div className="max-w-xs">
+                    <p className="font-medium mb-1">{translations.keyRow?.fields?.group}:</p>
+                    <ul className="text-xs list-disc list-inside">
+                      {userGroups.map((group) => (
+                        <li key={group}>{group}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </TooltipContent>
               </Tooltip>
             ) : null}
