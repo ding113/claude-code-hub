@@ -78,24 +78,26 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
   const baseHeaders = getTestHeaders(config.providerType, config.apiKey);
   const headers = config.customHeaders ? { ...baseHeaders, ...config.customHeaders } : baseHeaders;
 
-  // Create proxy agent if proxy URL is configured
-  let dispatcher: unknown | undefined;
+  // Track proxy usage (declared outside try for catch block access)
   let usedProxy = false;
-  if (config.proxyUrl) {
-    const tempProvider: ProviderProxyConfig = {
-      id: -1,
-      name: "test-provider",
-      proxyUrl: config.proxyUrl,
-      proxyFallbackToDirect: config.proxyFallbackToDirect ?? false,
-    };
-    const proxyConfig = createProxyAgentForProvider(tempProvider, url);
-    if (proxyConfig) {
-      dispatcher = proxyConfig.agent;
-      usedProxy = true;
-    }
-  }
 
   try {
+    // Create proxy agent if proxy URL is configured
+    let dispatcher: unknown | undefined;
+    if (config.proxyUrl) {
+      const tempProvider: ProviderProxyConfig = {
+        id: -1,
+        name: "test-provider",
+        proxyUrl: config.proxyUrl,
+        proxyFallbackToDirect: config.proxyFallbackToDirect ?? false,
+      };
+      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
+      if (proxyConfig) {
+        dispatcher = proxyConfig.agent;
+        usedProxy = true;
+      }
+    }
+
     // Create abort controller for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);

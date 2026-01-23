@@ -23,11 +23,11 @@ export function DatabaseStatusDisplay() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        // Use translated message for connection unavailable error
+        // Check 503 before parsing JSON (response may not have JSON body)
         if (response.status === 503) {
           throw new Error(t("connectionUnavailable"));
         }
+        const errorData = await response.json();
         throw new Error(errorData.error || t("error"));
       }
 

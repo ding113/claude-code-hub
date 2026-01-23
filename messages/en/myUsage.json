@@ -116,7 +116,7 @@
     "noRestrictions": "No restrictions"
   },
   "quotaCollapsible": {
-    "title": "Quota User Usage",
+    "title": "User Quota Usage",
     "daily": "Daily",
     "monthly": "Monthly",
     "total": "Total"

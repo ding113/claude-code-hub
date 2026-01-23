@@ -111,9 +111,9 @@ function getDaysLeft(expiresAt: Date | null | undefined): number | null {
   if (!expiresAt) return null;
   const now = Date.now();
   const expTs = expiresAt.getTime();
-  if (!Number.isFinite(expTs)) return null;
+  if (!Number.isFinite(expTs) || expTs <= now) return null;
   const msLeft = expTs - now;
-  return Math.max(0, Math.ceil(msLeft / (1000 * 60 * 60 * 24)));
+  return Math.ceil(msLeft / (1000 * 60 * 60 * 24));
 }
 
 function normalizeLimitValue(value: unknown): number | null {
