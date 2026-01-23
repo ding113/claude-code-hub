@@ -1527,7 +1527,8 @@
       "clickToEnableUser": "クリックしてユーザーを有効化",
       "operationFailed": "操作に失敗しました",
       "deleteFailed": "削除に失敗しました",
-      "deleteSuccess": "削除しました"
+      "deleteSuccess": "削除しました",
+      "daysLeft": "{days, plural, =0 {本日期限} =1 {残り1日} other {残り#日}}"
     },
     "userEditSection": {
       "sections": {

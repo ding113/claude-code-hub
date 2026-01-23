@@ -1580,7 +1580,8 @@
       "clickToEnableUser": "Нажмите, чтобы включить пользователя",
       "operationFailed": "Операция не удалась",
       "deleteFailed": "Не удалось удалить",
-      "deleteSuccess": "Удаление успешно"
+      "deleteSuccess": "Удаление успешно",
+      "daysLeft": "{days, plural, =0 {Истекает сегодня} =1 {Остался 1 день} few {Осталось # дня} many {Осталось # дней} other {Осталось # дней}}"
     },
     "userEditSection": {
       "sections": {

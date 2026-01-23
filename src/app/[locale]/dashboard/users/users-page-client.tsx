@@ -470,6 +470,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       editDialog: {},
       actions: {
         edit: tCommon("edit"),
+        status: tCommon("status"),
         details: tKeyList("detailsButton"),
         logs: tKeyList("logsButton"),
         delete: tCommon("delete"),

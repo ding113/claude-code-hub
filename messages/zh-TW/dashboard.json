@@ -1536,7 +1536,8 @@
       "clickToEnableUser": "點擊啟用使用者",
       "operationFailed": "操作失敗",
       "deleteFailed": "刪除失敗",
-      "deleteSuccess": "刪除成功"
+      "deleteSuccess": "刪除成功",
+      "daysLeft": "{days, plural, =0 {今天到期} =1 {剩餘1天} other {剩餘#天}}"
     },
     "userEditSection": {
       "sections": {

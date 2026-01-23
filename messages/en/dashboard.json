@@ -1592,7 +1592,8 @@
       "clickToEnableUser": "Click to enable user",
       "operationFailed": "Operation failed",
       "deleteFailed": "Delete failed",
-      "deleteSuccess": "Delete successful"
+      "deleteSuccess": "Delete successful",
+      "daysLeft": "{days, plural, =0 {Expires today} =1 {1 day left} other {# days left}}"
     },
     "userEditSection": {
       "sections": {
