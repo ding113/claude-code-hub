@@ -68,7 +68,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 });
 
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
-import { ProxyError } from "@/app/v1/_lib/proxy/errors";
+import { ProxyError, ErrorCategory, categorizeErrorAsync } from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider, ProviderEndpoint, ProviderType } from "@/types/provider";
 
@@ -251,14 +251,21 @@ describe("ProxyForwarder - retry limit enforcement", () => {
         }),
       ]);
 
+      // Use SYSTEM_ERROR to trigger endpoint switching on retry
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.SYSTEM_ERROR);
+
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
         "doForward"
       );
 
-      // First attempt fails, second succeeds
+      // Create a network-like error
+      const networkError = new TypeError("fetch failed");
+      Object.assign(networkError, { code: "ECONNREFUSED" });
+
+      // First attempt fails with network error, second succeeds
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("endpoint 1 failed", 500);
+        throw networkError;
       });
       doForward.mockResolvedValueOnce(
         new Response("{}", {
@@ -282,7 +289,7 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       expect(chain[0].endpointId).toBe(1);
       expect(chain[0].attemptNumber).toBe(1);
 
-      // Second attempt should use endpoint 2 (second lowest latency)
+      // Second attempt should use endpoint 2 (SYSTEM_ERROR advances endpoint)
       expect(chain[1].endpointId).toBe(2);
       expect(chain[1].attemptNumber).toBe(2);
 
@@ -292,7 +299,7 @@ describe("ProxyForwarder - retry limit enforcement", () => {
     }
   });
 
-  test("endpoints < maxRetry: should cycle through all endpoints up to maxRetry times", async () => {
+  test("endpoints < maxRetry: should stay at last endpoint after exhausting all (no wrap-around)", async () => {
     vi.useFakeTimers();
 
     try {
@@ -322,27 +329,33 @@ describe("ProxyForwarder - retry limit enforcement", () => {
         }),
       ]);
 
+      // Use SYSTEM_ERROR to trigger endpoint switching
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.SYSTEM_ERROR);
+
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
         "doForward"
       );
 
+      const networkError = new TypeError("fetch failed");
+      Object.assign(networkError, { code: "ECONNREFUSED" });
+
       // All attempts fail except the last one
       doForward.mockImplementation(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
       // 5th attempt succeeds
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
       doForward.mockResolvedValueOnce(
         new Response("{}", {
@@ -362,18 +375,18 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       const chain = session.getProviderChain();
       expect(chain).toHaveLength(5);
 
-      // Verify cycling pattern: 1, 2, 1, 2, 1
+      // Verify NO wrap-around pattern: 1, 2, 2, 2, 2 (stays at last endpoint)
       expect(chain[0].endpointId).toBe(1);
       expect(chain[1].endpointId).toBe(2);
-      expect(chain[2].endpointId).toBe(1);
+      expect(chain[2].endpointId).toBe(2); // stays at endpoint 2
       expect(chain[3].endpointId).toBe(2);
-      expect(chain[4].endpointId).toBe(1);
+      expect(chain[4].endpointId).toBe(2);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  test("endpoints = maxRetry: each endpoint should be tried exactly once", async () => {
+  test("endpoints = maxRetry: each endpoint should be tried exactly once with SYSTEM_ERROR", async () => {
     vi.useFakeTimers();
 
     try {
@@ -410,17 +423,23 @@ describe("ProxyForwarder - retry limit enforcement", () => {
         }),
       ]);
 
+      // Use SYSTEM_ERROR to trigger endpoint switching
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.SYSTEM_ERROR);
+
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
         "doForward"
       );
 
-      // First two fail, third succeeds
+      const networkError = new TypeError("fetch failed");
+      Object.assign(networkError, { code: "ECONNREFUSED" });
+
+      // First two fail with network error, third succeeds
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
       doForward.mockResolvedValueOnce(
         new Response("{}", {
@@ -439,7 +458,7 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       const chain = session.getProviderChain();
       expect(chain).toHaveLength(3);
 
-      // Each endpoint tried exactly once
+      // Each endpoint tried exactly once (SYSTEM_ERROR advances endpoint)
       expect(chain[0].endpointId).toBe(1);
       expect(chain[1].endpointId).toBe(2);
       expect(chain[2].endpointId).toBe(3);
@@ -596,14 +615,20 @@ describe("ProxyForwarder - retry limit enforcement", () => {
         }),
       ]);
 
+      // Use SYSTEM_ERROR to trigger endpoint switching
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.SYSTEM_ERROR);
+
       const doForward = vi.spyOn(
         ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
         "doForward"
       );
 
+      const networkError = new TypeError("fetch failed");
+      Object.assign(networkError, { code: "ECONNREFUSED" });
+
       // All attempts fail
       doForward.mockImplementation(async () => {
-        throw new ProxyError("failed", 500);
+        throw networkError;
       });
 
       const sendPromise = ProxyForwarder.send(session);
@@ -619,6 +644,359 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       expect(chain).toHaveLength(2);
       expect(chain[0].endpointId).toBe(1);
       expect(chain[1].endpointId).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ProxyForwarder - endpoint stickiness on retry", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset to default PROVIDER_ERROR behavior
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
+  });
+
+  test("SYSTEM_ERROR: should switch to next endpoint on each network error retry", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider = createProvider({
+        providerType: "claude",
+        providerVendorId: 123,
+        maxRetryAttempts: 3,
+      });
+      session.setProvider(provider);
+
+      // 3 endpoints sorted by latency
+      mocks.getPreferredProviderEndpoints.mockResolvedValue([
+        makeEndpoint({
+          id: 1,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep1.example.com",
+          lastProbeLatencyMs: 100,
+        }),
+        makeEndpoint({
+          id: 2,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep2.example.com",
+          lastProbeLatencyMs: 200,
+        }),
+        makeEndpoint({
+          id: 3,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep3.example.com",
+          lastProbeLatencyMs: 300,
+        }),
+      ]);
+
+      // Mock categorizeErrorAsync to return SYSTEM_ERROR (network error)
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.SYSTEM_ERROR);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+
+      // Create a network-like error (not ProxyError)
+      const networkError = new TypeError("fetch failed");
+      Object.assign(networkError, { code: "ECONNREFUSED" });
+
+      // First two fail with network error, third succeeds
+      doForward.mockImplementationOnce(async () => {
+        throw networkError;
+      });
+      doForward.mockImplementationOnce(async () => {
+        throw networkError;
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(300);
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(3);
+
+      const chain = session.getProviderChain();
+      expect(chain).toHaveLength(3);
+
+      // Network error should switch to next endpoint on each retry
+      // attempt 1: endpoint 1, attempt 2: endpoint 2, attempt 3: endpoint 3
+      expect(chain[0].endpointId).toBe(1);
+      expect(chain[0].attemptNumber).toBe(1);
+      expect(chain[1].endpointId).toBe(2);
+      expect(chain[1].attemptNumber).toBe(2);
+      expect(chain[2].endpointId).toBe(3);
+      expect(chain[2].attemptNumber).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("PROVIDER_ERROR: should keep same endpoint on non-network error retry", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider = createProvider({
+        providerType: "claude",
+        providerVendorId: 123,
+        maxRetryAttempts: 3,
+      });
+      session.setProvider(provider);
+
+      // 3 endpoints sorted by latency
+      mocks.getPreferredProviderEndpoints.mockResolvedValue([
+        makeEndpoint({
+          id: 1,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep1.example.com",
+          lastProbeLatencyMs: 100,
+        }),
+        makeEndpoint({
+          id: 2,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep2.example.com",
+          lastProbeLatencyMs: 200,
+        }),
+        makeEndpoint({
+          id: 3,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep3.example.com",
+          lastProbeLatencyMs: 300,
+        }),
+      ]);
+
+      // Mock categorizeErrorAsync to return PROVIDER_ERROR (HTTP error, not network)
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+
+      // First two fail with HTTP 500, third succeeds
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError("server error", 500);
+      });
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError("server error", 500);
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(300);
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(3);
+
+      const chain = session.getProviderChain();
+      expect(chain).toHaveLength(3);
+
+      // Non-network error should keep same endpoint on all retries
+      // All 3 attempts should use endpoint 1 (sticky)
+      expect(chain[0].endpointId).toBe(1);
+      expect(chain[0].attemptNumber).toBe(1);
+      expect(chain[1].endpointId).toBe(1);
+      expect(chain[1].attemptNumber).toBe(2);
+      expect(chain[2].endpointId).toBe(1);
+      expect(chain[2].attemptNumber).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("SYSTEM_ERROR: should not wrap around when endpoints exhausted", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider = createProvider({
+        providerType: "claude",
+        providerVendorId: 123,
+        maxRetryAttempts: 4, // More retries than endpoints
+      });
+      session.setProvider(provider);
+
+      // Only 2 endpoints available
+      mocks.getPreferredProviderEndpoints.mockResolvedValue([
+        makeEndpoint({
+          id: 1,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep1.example.com",
+          lastProbeLatencyMs: 100,
+        }),
+        makeEndpoint({
+          id: 2,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep2.example.com",
+          lastProbeLatencyMs: 200,
+        }),
+      ]);
+
+      // Mock categorizeErrorAsync to return SYSTEM_ERROR (network error)
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.SYSTEM_ERROR);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+
+      // Create a network-like error
+      const networkError = new TypeError("fetch failed");
+      Object.assign(networkError, { code: "ETIMEDOUT" });
+
+      // All 4 attempts fail with network error, then mock switches provider
+      doForward.mockImplementation(async () => {
+        throw networkError;
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(500);
+
+      // Should fail eventually (no successful response)
+      await expect(sendPromise).rejects.toThrow();
+
+      const chain = session.getProviderChain();
+
+      // Should have attempted with both endpoints, but NOT wrap around
+      // Pattern should be: endpoint 1, endpoint 2, endpoint 2, endpoint 2 (stay at last)
+      // NOT: endpoint 1, endpoint 2, endpoint 1, endpoint 2 (wrap around)
+      expect(chain.length).toBeGreaterThanOrEqual(2);
+
+      // First attempt uses endpoint 1
+      expect(chain[0].endpointId).toBe(1);
+      // Second attempt uses endpoint 2
+      expect(chain[1].endpointId).toBe(2);
+
+      // Subsequent attempts should stay at endpoint 2 (no wrap-around)
+      if (chain.length > 2) {
+        expect(chain[2].endpointId).toBe(2);
+      }
+      if (chain.length > 3) {
+        expect(chain[3].endpointId).toBe(2);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("mixed errors: PROVIDER_ERROR should not advance endpoint index", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider = createProvider({
+        providerType: "claude",
+        providerVendorId: 123,
+        maxRetryAttempts: 4,
+      });
+      session.setProvider(provider);
+
+      // 3 endpoints
+      mocks.getPreferredProviderEndpoints.mockResolvedValue([
+        makeEndpoint({
+          id: 1,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep1.example.com",
+          lastProbeLatencyMs: 100,
+        }),
+        makeEndpoint({
+          id: 2,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep2.example.com",
+          lastProbeLatencyMs: 200,
+        }),
+        makeEndpoint({
+          id: 3,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep3.example.com",
+          lastProbeLatencyMs: 300,
+        }),
+      ]);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+
+      // Create errors
+      const networkError = new TypeError("fetch failed");
+      Object.assign(networkError, { code: "ECONNREFUSED" });
+      const httpError = new ProxyError("server error", 500);
+
+      // Attempt 1: SYSTEM_ERROR (switch endpoint)
+      // Attempt 2: PROVIDER_ERROR (keep endpoint)
+      // Attempt 3: SYSTEM_ERROR (switch endpoint)
+      // Attempt 4: success
+      let attemptCount = 0;
+      vi.mocked(categorizeErrorAsync).mockImplementation(async () => {
+        attemptCount++;
+        if (attemptCount === 1) return ErrorCategory.SYSTEM_ERROR;
+        if (attemptCount === 2) return ErrorCategory.PROVIDER_ERROR;
+        if (attemptCount === 3) return ErrorCategory.SYSTEM_ERROR;
+        return ErrorCategory.PROVIDER_ERROR;
+      });
+
+      doForward.mockImplementationOnce(async () => {
+        throw networkError; // SYSTEM_ERROR -> advance to ep2
+      });
+      doForward.mockImplementationOnce(async () => {
+        throw httpError; // PROVIDER_ERROR -> stay at ep2
+      });
+      doForward.mockImplementationOnce(async () => {
+        throw networkError; // SYSTEM_ERROR -> advance to ep3
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(500);
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(4);
+
+      const chain = session.getProviderChain();
+      expect(chain).toHaveLength(4);
+
+      // Verify endpoint progression:
+      // attempt 1: ep1 (SYSTEM_ERROR -> advance)
+      // attempt 2: ep2 (PROVIDER_ERROR -> stay)
+      // attempt 3: ep2 (SYSTEM_ERROR -> advance)
+      // attempt 4: ep3 (success)
+      expect(chain[0].endpointId).toBe(1);
+      expect(chain[1].endpointId).toBe(2);
+      expect(chain[2].endpointId).toBe(2);
+      expect(chain[3].endpointId).toBe(3);
     } finally {
       vi.useRealTimers();
     }
