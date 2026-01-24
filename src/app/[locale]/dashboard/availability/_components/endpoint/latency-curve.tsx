@@ -20,7 +20,7 @@ interface LatencyCurveProps {
 const chartConfig = {
   latency: {
     label: "Latency",
-    color: "hsl(var(--primary))",
+    color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
@@ -98,8 +98,8 @@ export function LatencyCurve({ logs, className }: LatencyCurveProps) {
         <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--color-latency)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="var(--color-latency)" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/30" />
@@ -139,7 +139,7 @@ export function LatencyCurve({ logs, className }: LatencyCurveProps) {
           <Line
             type="monotone"
             dataKey="latency"
-            stroke="hsl(var(--primary))"
+            stroke="var(--color-latency)"
             strokeWidth={2}
             dot={(props) => {
               const { cx, cy, payload } = props;
@@ -150,8 +150,8 @@ export function LatencyCurve({ logs, className }: LatencyCurveProps) {
                     cx={cx}
                     cy={cy}
                     r={4}
-                    fill="hsl(var(--destructive))"
-                    stroke="hsl(var(--destructive))"
+                    fill="var(--destructive)"
+                    stroke="var(--destructive)"
                   />
                 );
               }
@@ -159,8 +159,8 @@ export function LatencyCurve({ logs, className }: LatencyCurveProps) {
             }}
             activeDot={{
               r: 6,
-              fill: "hsl(var(--primary))",
-              stroke: "hsl(var(--background))",
+              fill: "var(--color-latency)",
+              stroke: "var(--background)",
               strokeWidth: 2,
             }}
           />

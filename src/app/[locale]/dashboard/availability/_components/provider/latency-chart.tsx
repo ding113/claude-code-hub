@@ -20,15 +20,15 @@ interface LatencyChartProps {
 const chartConfig = {
   p50: {
     label: "P50",
-    color: "hsl(var(--chart-2))",
+    color: "var(--chart-2)",
   },
   p95: {
     label: "P95",
-    color: "hsl(var(--chart-4))",
+    color: "var(--chart-4)",
   },
   p99: {
     label: "P99",
-    color: "hsl(var(--chart-1))",
+    color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
 
@@ -102,15 +102,15 @@ export function LatencyChart({ providers, className }: LatencyChartProps) {
         <h3 className="text-sm font-medium text-muted-foreground">{t("title")}</h3>
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-0.5 rounded bg-[hsl(var(--chart-2))]" />
+            <div className="w-3 h-0.5 rounded" style={{ backgroundColor: "var(--chart-2)" }} />
             <span className="text-muted-foreground">{t("p50")}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-0.5 rounded bg-[hsl(var(--chart-4))]" />
+            <div className="w-3 h-0.5 rounded" style={{ backgroundColor: "var(--chart-4)" }} />
             <span className="text-muted-foreground">{t("p95")}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-0.5 rounded bg-[hsl(var(--chart-1))]" />
+            <div className="w-3 h-0.5 rounded" style={{ backgroundColor: "var(--chart-1)" }} />
             <span className="text-muted-foreground">{t("p99")}</span>
           </div>
         </div>
@@ -120,16 +120,16 @@ export function LatencyChart({ providers, className }: LatencyChartProps) {
         <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <defs>
             <linearGradient id="fillP50" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--color-p50)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="var(--color-p50)" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="fillP95" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--chart-4))" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="hsl(var(--chart-4))" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--color-p95)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="var(--color-p95)" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="fillP99" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+              <stop offset="5%" stopColor="var(--color-p99)" stopOpacity={0.3} />
+              <stop offset="95%" stopColor="var(--color-p99)" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-border/30" />
@@ -178,21 +178,21 @@ export function LatencyChart({ providers, className }: LatencyChartProps) {
           <Area
             type="monotone"
             dataKey="p50"
-            stroke="hsl(var(--chart-2))"
+            stroke="var(--color-p50)"
             fill="url(#fillP50)"
             strokeWidth={2}
           />
           <Area
             type="monotone"
             dataKey="p95"
-            stroke="hsl(var(--chart-4))"
+            stroke="var(--color-p95)"
             fill="url(#fillP95)"
             strokeWidth={2}
           />
           <Area
             type="monotone"
             dataKey="p99"
-            stroke="hsl(var(--chart-1))"
+            stroke="var(--color-p99)"
             fill="url(#fillP99)"
             strokeWidth={2}
           />
