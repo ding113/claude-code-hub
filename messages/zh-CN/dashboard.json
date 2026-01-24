@@ -1304,7 +1304,22 @@
       "columns": {
         "model": "模型",
         "calls": "调用次数",
+        "tokens": "Token数",
         "cost": "消费金额"
+      },
+      "modal": {
+        "requests": "请求",
+        "totalTokens": "总Token",
+        "cost": "费用",
+        "inputTokens": "输入Token",
+        "outputTokens": "输出Token",
+        "cacheWrite": "缓存写入",
+        "cacheRead": "缓存读取",
+        "cacheHitRate": "缓存命中率",
+        "cacheTokens": "缓存Token",
+        "performanceHigh": "高",
+        "performanceMedium": "中",
+        "performanceLow": "低"
       },
       "noData": "今日暂无使用记录",
       "totalCalls": "总调用",
@@ -1614,7 +1629,8 @@
       "clickToEnableUser": "点击启用用户",
       "operationFailed": "操作失败",
       "deleteFailed": "删除失败",
-      "deleteSuccess": "删除成功"
+      "deleteSuccess": "删除成功",
+      "daysLeft": "{days, plural, =0 {今天到期} =1 {剩余1天} other {剩余#天}}"
     },
     "userEditSection": {
       "sections": {

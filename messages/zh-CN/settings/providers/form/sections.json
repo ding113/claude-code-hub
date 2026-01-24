@@ -69,8 +69,8 @@
       },
       "group": {
         "label": "供应商分组",
-        "placeholder": "输入分组标签",
-        "desc": "供应商分组标签（支持多个，逗号分隔）。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。留空=对所有用户开放"
+        "placeholder": "例如 premium, economy",
+        "desc": "分组标签。从列表选择或输入新名称后按 Enter 创建（最多50字符）。只有 providerGroup 匹配的用户才能使用此供应商。"
       }
     },
     "cacheTtl": {

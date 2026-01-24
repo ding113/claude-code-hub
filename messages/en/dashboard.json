@@ -1303,7 +1303,22 @@
       "columns": {
         "model": "Model",
         "calls": "Calls",
+        "tokens": "Tokens",
         "cost": "Cost"
+      },
+      "modal": {
+        "requests": "Requests",
+        "totalTokens": "Total Tokens",
+        "cost": "Cost",
+        "inputTokens": "Input Tokens",
+        "outputTokens": "Output Tokens",
+        "cacheWrite": "Cache Write",
+        "cacheRead": "Cache Read",
+        "cacheHitRate": "Cache Hit Rate",
+        "cacheTokens": "Cache Tokens",
+        "performanceHigh": "High",
+        "performanceMedium": "Medium",
+        "performanceLow": "Low"
       },
       "noData": "No usage records today",
       "totalCalls": "Total Calls",
@@ -1655,7 +1670,8 @@
       "clickToEnableUser": "Click to enable user",
       "operationFailed": "Operation failed",
       "deleteFailed": "Delete failed",
-      "deleteSuccess": "Delete successful"
+      "deleteSuccess": "Delete successful",
+      "daysLeft": "{days, plural, =0 {Expires today} =1 {1 day left} other {# days left}}"
     },
     "userEditSection": {
       "sections": {

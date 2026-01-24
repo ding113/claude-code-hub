@@ -285,7 +285,7 @@
         "placeholder": "1.0"
       },
       "group": {
-        "desc": "グループタグ。ユーザーの providerGroup が一致する場合のみ利用可能。例: \"premium\" に設定すると providerGroup=\"premium\" のユーザーのみ対象",
+        "desc": "グループタグ。リストから選択するか、新しい名前を入力して Enter で作成（最大50文字）。providerGroup が一致するユーザーのみがこのプロバイダーを使用できます。",
         "label": "プロバイダーグループ",
         "placeholder": "例: premium, economy"
       },

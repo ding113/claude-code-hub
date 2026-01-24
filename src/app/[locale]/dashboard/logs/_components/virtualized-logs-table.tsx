@@ -199,10 +199,10 @@ export function VirtualizedLogsTable({
         {/* Fixed header */}
         <div className="bg-muted/50 border-b">
           <div className="flex items-center h-10 text-sm font-medium text-muted-foreground">
-            <div className="flex-[0.8] min-w-[80px] pl-2 truncate" title={t("logs.columns.time")}>
+            <div className="flex-[0.6] min-w-[56px] pl-2 truncate" title={t("logs.columns.time")}>
               {t("logs.columns.time")}
             </div>
-            <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.user")}>
+            <div className="flex-[0.8] min-w-[50px] px-1 truncate" title={t("logs.columns.user")}>
               {t("logs.columns.user")}
             </div>
             <div className="flex-[0.6] min-w-[50px] px-1 truncate" title={t("logs.columns.key")}>
@@ -310,12 +310,12 @@ export function VirtualizedLogsTable({
                   )}
                 >
                   {/* Time */}
-                  <div className="flex-[0.8] min-w-[80px] font-mono text-xs truncate pl-2">
+                  <div className="flex-[0.6] min-w-[56px] font-mono text-xs truncate pl-2">
                     <RelativeTime date={log.createdAt} fallback="-" format="short" />
                   </div>
 
                   {/* User */}
-                  <div className="flex-[0.6] min-w-[50px] truncate px-1" title={log.userName}>
+                  <div className="flex-[0.8] min-w-[50px] truncate px-1" title={log.userName}>
                     {log.userName}
                   </div>
 

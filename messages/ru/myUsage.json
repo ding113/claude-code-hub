@@ -78,7 +78,7 @@
     "inheritedFromUser": "Наследовано от пользователя"
   },
   "stats": {
-    "title": "Сводка статистики",
+    "title": "Статистика ключа",
     "autoRefresh": "Автообновление каждые {seconds}с",
     "totalRequests": "Всего запросов",
     "totalCost": "Общая стоимость",
@@ -116,7 +116,7 @@
     "noRestrictions": "Без ограничений"
   },
   "quotaCollapsible": {
-    "title": "Использование квоты",
+    "title": "Квота пользователя",
     "daily": "День",
     "monthly": "Месяц",
     "total": "Всего"

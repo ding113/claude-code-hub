@@ -8,6 +8,7 @@
  * 3. Content validation (success_contains)
  */
 
+import { createProxyAgentForProvider, type ProviderProxyConfig } from "@/lib/proxy-agent";
 import { getPreset, getPresetPayload } from "./presets";
 import type {
   ProviderTestConfig,
@@ -77,19 +78,42 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
   const baseHeaders = getTestHeaders(config.providerType, config.apiKey);
   const headers = config.customHeaders ? { ...baseHeaders, ...config.customHeaders } : baseHeaders;
 
+  // Track proxy usage (declared outside try for catch block access)
+  let usedProxy = false;
+
   try {
+    // Create proxy agent if proxy URL is configured
+    let dispatcher: unknown | undefined;
+    if (config.proxyUrl) {
+      const tempProvider: ProviderProxyConfig = {
+        id: -1,
+        name: "test-provider",
+        proxyUrl: config.proxyUrl,
+        proxyFallbackToDirect: config.proxyFallbackToDirect ?? false,
+      };
+      const proxyConfig = createProxyAgentForProvider(tempProvider, url);
+      if (proxyConfig) {
+        dispatcher = proxyConfig.agent;
+        usedProxy = true;
+      }
+    }
+
     // Create abort controller for timeout
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       // Execute request
-      const response = await fetch(url, {
+      const fetchOptions: RequestInit & { dispatcher?: unknown } = {
         method: "POST",
         headers,
         body: JSON.stringify(body),
         signal: controller.signal,
-      });
+      };
+      if (dispatcher) {
+        fetchOptions.dispatcher = dispatcher;
+      }
+      const response = await fetch(url, fetchOptions);
 
       firstByteMs = Date.now() - startTime;
 
@@ -145,6 +169,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
         rawResponse: responseBody.slice(0, 5000), // Full response for detailed inspection
         testedAt: new Date(),
         validationDetails,
+        usedProxy,
       };
     } finally {
       clearTimeout(timeoutId);
@@ -175,6 +200,7 @@ export async function executeProviderTest(config: ProviderTestConfig): Promise<P
       rawError: error,
       testedAt: new Date(),
       validationDetails,
+      usedProxy,
     };
   }
 }

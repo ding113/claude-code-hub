@@ -78,7 +78,7 @@
     "inheritedFromUser": "ユーザーから継承"
   },
   "stats": {
-    "title": "統計サマリー",
+    "title": "キー統計",
     "autoRefresh": "{seconds}秒ごとに自動更新",
     "totalRequests": "リクエスト総数",
     "totalCost": "総コスト",
@@ -116,7 +116,7 @@
     "noRestrictions": "制限なし"
   },
   "quotaCollapsible": {
-    "title": "クォータ使用状況",
+    "title": "ユーザークォータ使用状況",
     "daily": "日次",
     "monthly": "月次",
     "total": "合計"

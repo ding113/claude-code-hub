@@ -1349,7 +1349,22 @@
       "columns": {
         "model": "モデル",
         "calls": "呼び出し回数",
+        "tokens": "トークン",
         "cost": "消費金額"
+      },
+      "modal": {
+        "requests": "リクエスト",
+        "totalTokens": "トークン合計",
+        "cost": "コスト",
+        "inputTokens": "入力トークン",
+        "outputTokens": "出力トークン",
+        "cacheWrite": "キャッシュ書込",
+        "cacheRead": "キャッシュ読取",
+        "cacheHitRate": "キャッシュヒット率",
+        "cacheTokens": "キャッシュトークン",
+        "performanceHigh": "高",
+        "performanceMedium": "中",
+        "performanceLow": "低"
       },
       "noData": "本日の使用記録はありません",
       "totalCalls": "総呼び出し数",
@@ -1655,7 +1670,8 @@
       "clickToEnableUser": "クリックしてユーザーを有効化",
       "operationFailed": "操作に失敗しました",
       "deleteFailed": "削除に失敗しました",
-      "deleteSuccess": "削除しました"
+      "deleteSuccess": "削除しました",
+      "daysLeft": "{days, plural, =0 {本日期限} =1 {残り1日} other {残り#日}}"
     },
     "userEditSection": {
       "sections": {

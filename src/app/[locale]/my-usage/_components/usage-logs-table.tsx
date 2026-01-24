@@ -83,7 +83,7 @@ export function UsageLogsTable({
                     {log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"}
                   </TableCell>
                   <TableCell className="space-y-1">
-                    <div className="font-medium text-sm">{log.model ?? t("unknownModel")}</div>
+                    <div className="text-sm">{log.model ?? t("unknownModel")}</div>
                     {log.modelRedirect ? (
                       <div className="text-xs text-muted-foreground">{log.modelRedirect}</div>
                     ) : null}

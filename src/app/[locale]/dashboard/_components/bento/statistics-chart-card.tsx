@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
@@ -41,6 +41,7 @@ export function StatisticsChartCard({
   className,
 }: StatisticsChartCardProps) {
   const t = useTranslations("dashboard.statistics");
+  const locale = useLocale();
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
   const [chartMode, setChartMode] = React.useState<"stacked" | "overlay">("overlay");
 
@@ -151,22 +152,22 @@ export function StatisticsChartCard({
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     if (data.resolution === "hour") {
-      return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+      return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
     }
-    return date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+    return date.toLocaleDateString(locale, { month: "numeric", day: "numeric" });
   };
 
   const formatTooltipDate = (dateStr: string) => {
     const date = new Date(dateStr);
     if (data.resolution === "hour") {
-      return date.toLocaleString("zh-CN", {
+      return date.toLocaleString(locale, {
         month: "long",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       });
     }
-    return date.toLocaleDateString("zh-CN", {
+    return date.toLocaleDateString(locale, {
       year: "numeric",
       month: "long",
       day: "numeric",

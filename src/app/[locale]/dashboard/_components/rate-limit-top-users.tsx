@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpDown } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import { getUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ type SortDirection = "asc" | "desc";
  */
 export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
   const t = useTranslations("dashboard.rateLimits.topUsers");
+  const locale = useLocale();
   const [users, setUsers] = React.useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = React.useState(true);
   const [sortField, setSortField] = React.useState<SortField>("count");
@@ -53,14 +54,14 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
       }))
       .sort((a, b) => {
         if (sortField === "name") {
-          const comparison = a.username.localeCompare(b.username, "zh-CN");
+          const comparison = a.username.localeCompare(b.username, locale);
           return sortDirection === "asc" ? comparison : -comparison;
         } else {
           const comparison = a.eventCount - b.eventCount;
           return sortDirection === "asc" ? comparison : -comparison;
         }
       });
-  }, [users, data, sortField, sortDirection]);
+  }, [users, data, sortField, sortDirection, locale]);
 
   // 切换排序
   const toggleSort = (field: SortField) => {
