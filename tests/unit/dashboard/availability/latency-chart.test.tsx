@@ -41,9 +41,8 @@ vi.mock("recharts", async (importOriginal) => {
 // Mock chart.tsx to expose ChartStyle for testing
 vi.mock("@/components/ui/chart", async () => {
   const React = await import("react");
-  const actual = await vi.importActual<typeof import("@/components/ui/chart")>(
-    "@/components/ui/chart"
-  );
+  const actual =
+    await vi.importActual<typeof import("@/components/ui/chart")>("@/components/ui/chart");
   return {
     ...actual,
     ChartContainer: ({
