@@ -276,6 +276,12 @@ export class ProxyForwarder {
       let endpointAttemptsEvaluated = 0;
       let allEndpointAttemptsTimedOut = true;
 
+      // Endpoint stickiness: track current endpoint index separately from attemptCount
+      // - SYSTEM_ERROR (network error): advance to next endpoint
+      // - PROVIDER_ERROR (HTTP error): stay at current endpoint
+      // - No wrap-around: if exhausted, stay at last endpoint
+      let currentEndpointIndex = 0;
+
       logger.info("ProxyForwarder: Trying provider", {
         providerId: currentProvider.id,
         providerName: currentProvider.name,
@@ -311,8 +317,14 @@ export class ProxyForwarder {
       while (attemptCount < maxAttemptsPerProvider) {
         attemptCount++;
 
+        // Use currentEndpointIndex for endpoint selection (sticky behavior)
+        // - currentEndpointIndex is advanced only on SYSTEM_ERROR (network errors)
+        // - PROVIDER_ERROR keeps the same endpoint (no advancement)
+        // - No wrap-around: clamped to last endpoint if exhausted
         const endpointIndex =
-          endpointCandidates.length > 0 ? (attemptCount - 1) % endpointCandidates.length : 0;
+          endpointCandidates.length > 0
+            ? Math.min(currentEndpointIndex, endpointCandidates.length - 1)
+            : 0;
         const activeEndpoint = endpointCandidates[endpointIndex];
         const endpointAudit = {
           endpointId: activeEndpoint.endpointId,
@@ -781,8 +793,19 @@ export class ProxyForwarder {
 
             // 第1次失败：等待100ms后重试当前供应商
             if (attemptCount < maxAttemptsPerProvider) {
+              // Network error: advance to next endpoint for retry
+              // This implements "endpoint stickiness" where network errors switch endpoints
+              // but non-network errors (PROVIDER_ERROR) keep the same endpoint
+              currentEndpointIndex++;
+              logger.debug("ProxyForwarder: Advancing endpoint index due to network error", {
+                providerId: currentProvider.id,
+                previousEndpointIndex: currentEndpointIndex - 1,
+                newEndpointIndex: currentEndpointIndex,
+                maxEndpointIndex: endpointCandidates.length - 1,
+              });
+
               await new Promise((resolve) => setTimeout(resolve, 100));
-              continue; // ⭐ 继续内层循环（重试当前供应商）
+              continue; // Continue retry with next endpoint
             }
 
             // 第2次失败：跳出内层循环，切换供应商
