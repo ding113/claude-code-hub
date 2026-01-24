@@ -427,37 +427,43 @@ export function StatisticsChartCard({
               {t("legend.deselectAll")}
             </button>
           </div>
-          {/* User list with max 3 rows and scroll */}
+          {/* User list with max 3 rows and scroll - only show users with non-zero usage */}
           <div className="max-h-[72px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
             <div className="flex flex-wrap gap-1.5 justify-center">
-              {data.users.map((user, index) => {
-                const color = getUserColor(index);
-                const isSelected = selectedUserIds.has(user.id);
-                const userTotal = userTotals[user.dataKey];
-                return (
-                  <button
-                    key={user.dataKey}
-                    onClick={() => toggleUserSelection(user.id)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-all cursor-pointer",
-                      isSelected
-                        ? "bg-muted/50 ring-1 ring-border"
-                        : "bg-muted/10 opacity-50 hover:opacity-75"
-                    )}
-                  >
-                    <div
-                      className="h-2 w-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: color }}
-                    />
-                    <span className="font-medium truncate max-w-[80px]">{user.name}</span>
-                    <span className="text-muted-foreground">
-                      {activeChart === "cost"
-                        ? formatCurrency(userTotal?.cost ?? 0, currencyCode)
-                        : (userTotal?.calls ?? 0).toLocaleString()}
-                    </span>
-                  </button>
-                );
-              })}
+              {data.users
+                .map((user, originalIndex) => ({ user, originalIndex }))
+                .filter(({ user }) => {
+                  const total = userTotals[user.dataKey];
+                  return total && (total.cost.greaterThan(0) || total.calls > 0);
+                })
+                .map(({ user, originalIndex }) => {
+                  const color = getUserColor(originalIndex);
+                  const isSelected = selectedUserIds.has(user.id);
+                  const userTotal = userTotals[user.dataKey];
+                  return (
+                    <button
+                      key={user.dataKey}
+                      onClick={() => toggleUserSelection(user.id)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-all cursor-pointer",
+                        isSelected
+                          ? "bg-muted/50 ring-1 ring-border"
+                          : "bg-muted/10 opacity-50 hover:opacity-75"
+                      )}
+                    >
+                      <div
+                        className="h-2 w-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: color }}
+                      />
+                      <span className="font-medium truncate max-w-[80px]">{user.name}</span>
+                      <span className="text-muted-foreground">
+                        {activeChart === "cost"
+                          ? formatCurrency(userTotal?.cost ?? 0, currencyCode)
+                          : (userTotal?.calls ?? 0).toLocaleString()}
+                      </span>
+                    </button>
+                  );
+                })}
             </div>
           </div>
         </div>
