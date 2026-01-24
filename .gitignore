@@ -90,3 +90,4 @@ docs-site/node_modules/
 # local scratch
 tmp/
 .trae/
+.sisyphus
