@@ -197,8 +197,12 @@ export function ProviderChainPopover({
                     {/* Priority and candidates */}
                     <div className="text-[10px] space-y-0.5 pl-1">
                       <div className="flex items-center gap-1">
-                        <span className="text-zinc-400 dark:text-zinc-500">{tChain("details.priority")}:</span>
-                        <span className="text-zinc-200 dark:text-zinc-700 font-medium">P{selectionContext.selectedPriority}</span>
+                        <span className="text-zinc-400 dark:text-zinc-500">
+                          {tChain("details.priority")}:
+                        </span>
+                        <span className="text-zinc-200 dark:text-zinc-700 font-medium">
+                          P{selectionContext.selectedPriority}
+                        </span>
                         {selectionContext.candidatesAtPriority && (
                           <span className="text-zinc-400 dark:text-zinc-500">
                             ({selectionContext.candidatesAtPriority.length} candidates)
@@ -206,21 +210,30 @@ export function ProviderChainPopover({
                         )}
                       </div>
                       {/* Show candidates with probability */}
-                      {selectionContext.candidatesAtPriority && selectionContext.candidatesAtPriority.length > 1 && (
-                        <div className="text-zinc-400 dark:text-zinc-500">
-                          {selectionContext.candidatesAtPriority.map((c, i) => (
-                            <span key={c.id}>
-                              {i > 0 && ", "}
-                              <span className={c.name === displayName ? "text-zinc-200 dark:text-zinc-700 font-medium" : ""}>
-                                {c.name}
+                      {selectionContext.candidatesAtPriority &&
+                        selectionContext.candidatesAtPriority.length > 1 && (
+                          <div className="text-zinc-400 dark:text-zinc-500">
+                            {selectionContext.candidatesAtPriority.map((c, i) => (
+                              <span key={c.id}>
+                                {i > 0 && ", "}
+                                <span
+                                  className={
+                                    c.name === displayName
+                                      ? "text-zinc-200 dark:text-zinc-700 font-medium"
+                                      : ""
+                                  }
+                                >
+                                  {c.name}
+                                </span>
+                                {c.probability !== undefined && (
+                                  <span className="text-zinc-500 dark:text-zinc-400">
+                                    ({c.probability}%)
+                                  </span>
+                                )}
                               </span>
-                              {c.probability !== undefined && (
-                                <span className="text-zinc-500 dark:text-zinc-400">({c.probability}%)</span>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                            ))}
+                          </div>
+                        )}
                     </div>
                     {/* Provider config */}
                     {initialSelection && (
@@ -228,13 +241,17 @@ export function ProviderChainPopover({
                         {initialSelection.weight !== undefined && (
                           <div>
                             <span>{tChain("details.weight")}:</span>{" "}
-                            <span className="text-zinc-200 dark:text-zinc-700">{initialSelection.weight}</span>
+                            <span className="text-zinc-200 dark:text-zinc-700">
+                              {initialSelection.weight}
+                            </span>
                           </div>
                         )}
                         {initialSelection.costMultiplier !== undefined && (
                           <div>
                             <span>{tChain("details.costMultiplier")}:</span>{" "}
-                            <span className="text-zinc-200 dark:text-zinc-700">x{initialSelection.costMultiplier}</span>
+                            <span className="text-zinc-200 dark:text-zinc-700">
+                              x{initialSelection.costMultiplier}
+                            </span>
                           </div>
                         )}
                       </div>
