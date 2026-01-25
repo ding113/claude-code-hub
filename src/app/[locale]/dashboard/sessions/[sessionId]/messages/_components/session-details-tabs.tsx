@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { CodeDisplay } from "@/components/ui/code-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { redactMessages, redactRequestBody } from "@/lib/utils/message-redaction";
 import { isSSEText } from "@/lib/utils/sse";
 
 export type SessionMessages = Record<string, unknown> | Record<string, unknown>[];
@@ -72,12 +73,14 @@ export function SessionMessagesDetailsTabs({
 
   const requestBodyContent = useMemo(() => {
     if (requestBody === null) return null;
-    return JSON.stringify(requestBody, null, 2);
+    const redacted = redactRequestBody(requestBody);
+    return JSON.stringify(redacted, null, 2);
   }, [requestBody]);
 
   const requestMessagesContent = useMemo(() => {
     if (messages === null) return null;
-    return JSON.stringify(messages, null, 2);
+    const redacted = redactMessages(messages);
+    return JSON.stringify(redacted, null, 2);
   }, [messages]);
 
   const specialSettingsContent = useMemo(() => {

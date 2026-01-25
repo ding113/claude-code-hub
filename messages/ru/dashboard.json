@@ -21,7 +21,8 @@
     "keysQuotas": "Статистика квот ключей",
     "providersQuotas": "Статистика квот поставщиков",
     "usageLogsDescription": "Просмотр журналов вызовов API и статистики использования",
-    "filterCriteria": "Критерии фильтрации"
+    "filterCriteria": "Критерии фильтрации",
+    "filterCriteriaDescription": "Фильтруйте журналы по времени, пользователю, поставщику и другим параметрам"
   },
   "description": {
     "viewApiCallLogs": "Просмотр журналов вызовов API и статистики использования",
@@ -93,7 +94,28 @@
       "export": "Экспорт",
       "exporting": "Экспорт...",
       "exportSuccess": "Экспорт завершен",
-      "exportError": "Ошибка экспорта"
+      "exportError": "Ошибка экспорта",
+      "quickFilters": {
+        "today": "Сегодня",
+        "thisWeek": "Эта неделя",
+        "errorsOnly": "Только ошибки",
+        "showRetries": "С ретраями"
+      },
+      "activeFilters": {
+        "title": "Активные фильтры",
+        "remove": "Удалить фильтр",
+        "clearAll": "Очистить все"
+      },
+      "groups": {
+        "time": "Период времени",
+        "timeDesc": "Фильтр по дате и времени",
+        "identity": "Идентификация",
+        "identityDesc": "Фильтр по пользователю и ключу",
+        "request": "Запрос",
+        "requestDesc": "Фильтр по поставщику, модели, эндпоинту",
+        "status": "Статус",
+        "statusDesc": "Фильтр по коду состояния и ретраям"
+      }
     },
     "columns": {
       "time": "Время",
@@ -116,9 +138,7 @@
     },
     "stats": {
       "title": "Сводка статистики",
-      "description": "Нажмите для просмотра агрегированной статистики по текущим фильтрам",
-      "expand": "Развернуть",
-      "collapse": "Свернуть",
+      "description": "Агрегированная статистика по текущим фильтрам",
       "totalAmount": "Общая сумма расходов",
       "totalTokens": "Общее количество токенов",
       "cacheTokens": "Токены кэша",
@@ -144,7 +164,8 @@
       "noMoreData": "Все записи загружены",
       "scrollToTop": "Наверх",
       "hideProviderColumn": "Скрыть столбец провайдера",
-      "showProviderColumn": "Показать столбец провайдера"
+      "showProviderColumn": "Показать столбец провайдера",
+      "columnVisibility": "Видимость столбцов"
     },
     "actions": {
       "refresh": "Обновить",
@@ -161,12 +182,27 @@
     },
     "details": {
       "title": "Детали запроса",
-      "statusTitle": "Детали запроса - код состояния {status}",
+      "statusTitle": "Статус: {status}",
       "inProgress": "В процессе",
       "unknown": "Неизвестно",
       "success": "Запрос успешно выполнен",
       "error": "Запрос не выполнен, ниже подробная информация об ошибке и цепочке решений поставщика",
       "processing": "Запрос находится в процессе выполнения и еще не завершен",
+      "tabs": {
+        "summary": "Обзор",
+        "logicTrace": "Цепочка решений",
+        "performance": "Производительность",
+        "metadata": "Метаданные"
+      },
+      "summary": {
+        "keyMetrics": "Ключевые показатели",
+        "totalCost": "Общая стоимость",
+        "totalTokens": "Всего токенов",
+        "duration": "Длительность",
+        "outputRate": "Скорость вывода",
+        "viewFullError": "Показать полную ошибку",
+        "viewSession": "Просмотр сеанса"
+      },
       "specialSettings": {
         "title": "Особые настройки"
       },
@@ -207,6 +243,7 @@
         "billingRedirected": "оплата: факт."
       },
       "errorMessage": "Сообщение об ошибке",
+      "filteredProviders": "Отфильтрованные поставщики",
       "providerChain": {
         "title": "Хронология цепочки решений поставщика",
         "totalDuration": "Общая продолжительность: {duration}мс"
@@ -223,13 +260,63 @@
         "circuitOpen": "Размыкатель цепи открыт"
       },
       "billingDetails": {
-        "title": "Детали биллинга"
+        "title": "Детали биллинга",
+        "input": "Входные",
+        "output": "Выходные",
+        "cacheWrite5m": "Запись кэша (5m)",
+        "cacheWrite1h": "Запись кэша (1h)",
+        "cacheRead": "Чтение кэша",
+        "cacheTtl": "TTL кэша",
+        "multiplier": "Множитель поставщика",
+        "totalCost": "Общая стоимость",
+        "context1m": "1M контекст",
+        "context1mPricing": "Вход 2x >200k, Выход 1.5x >200k"
       },
       "performance": {
         "title": "Производительность",
         "ttfb": "TTFB",
         "duration": "Общее время",
         "outputRate": "Скорость вывода"
+      },
+      "performanceTab": {
+        "noPerformanceData": "Нет данных о производительности",
+        "ttfbGauge": "Время до первого байта",
+        "outputRateGauge": "Скорость вывода",
+        "latencyBreakdown": "Разбивка задержки",
+        "generationTime": "Время генерации",
+        "assessment": {
+          "excellent": "Отлично",
+          "good": "Хорошо",
+          "warning": "Предупреждение",
+          "poor": "Плохо"
+        },
+        "thresholds": {
+          "ttfbGood": "TTFB < 1с",
+          "ttfbWarning": "TTFB 1-2с",
+          "ttfbPoor": "TTFB > 3с"
+        }
+      },
+      "metadata": {
+        "noMetadata": "Нет метаданных",
+        "sessionInfo": "Информация о сеансе",
+        "clientInfo": "Информация о клиенте",
+        "billingInfo": "Информация о биллинге",
+        "technicalTimeline": "Техническая хронология",
+        "copyTimeline": "Копировать хронологию"
+      },
+      "logicTrace": {
+        "title": "Цепочка решений",
+        "noDecisionData": "Нет данных о решениях",
+        "providersCount": "{count} поставщиков",
+        "healthyCount": "{count} исправных",
+        "initialSelection": "Начальный выбор",
+        "healthCheck": "Проверка работоспособности",
+        "prioritySelection": "Выбор по приоритету",
+        "attemptProvider": "Попытка: {provider}",
+        "retryAttempt": "Повтор #{number}",
+        "sessionReuse": "Повторное использование сессии",
+        "sessionReuseDesc": "Провайдер из кэша сессии",
+        "sessionReuseTitle": "Привязка сессии"
       }
     },
     "providerChain": {

@@ -21,7 +21,8 @@
     "usersQuotas": "用户限额统计",
     "keysQuotas": "密钥限额统计",
     "providersQuotas": "供应商限额统计",
-    "filterCriteria": "筛选条件"
+    "filterCriteria": "筛选条件",
+    "filterCriteriaDescription": "按时间、用户、供应商等条件缩小日志范围"
   },
   "description": {
     "viewApiCallLogs": "查看 API 调用日志和使用统计",
@@ -93,7 +94,28 @@
       "export": "导出",
       "exporting": "导出中...",
       "exportSuccess": "导出成功",
-      "exportError": "导出失败"
+      "exportError": "导出失败",
+      "quickFilters": {
+        "today": "今天",
+        "thisWeek": "本周",
+        "errorsOnly": "仅错误",
+        "showRetries": "有重试"
+      },
+      "activeFilters": {
+        "title": "已激活筛选",
+        "remove": "移除筛选",
+        "clearAll": "清除全部"
+      },
+      "groups": {
+        "time": "时间范围",
+        "timeDesc": "按日期和时间筛选",
+        "identity": "身份信息",
+        "identityDesc": "按用户和密钥筛选",
+        "request": "请求参数",
+        "requestDesc": "按供应商、模型、端点筛选",
+        "status": "状态信息",
+        "statusDesc": "按状态码和重试次数筛选"
+      }
     },
     "columns": {
       "time": "时间",
@@ -116,9 +138,7 @@
     },
     "stats": {
       "title": "统计汇总",
-      "description": "点击展开查看当前筛选条件下的聚合统计",
-      "expand": "展开",
-      "collapse": "收起",
+      "description": "当前筛选条件下的聚合统计",
       "totalRequests": "总请求数",
       "totalAmount": "总消耗金额",
       "totalTokens": "总 Token 数",
@@ -144,7 +164,8 @@
       "noMoreData": "已加载全部记录",
       "scrollToTop": "回到顶部",
       "hideProviderColumn": "隐藏供应商列",
-      "showProviderColumn": "显示供应商列"
+      "showProviderColumn": "显示供应商列",
+      "columnVisibility": "显示/隐藏列"
     },
     "actions": {
       "refresh": "刷新",
@@ -161,12 +182,27 @@
     },
     "details": {
       "title": "请求详情",
-      "statusTitle": "请求详情 - 状态码 {status}",
+      "statusTitle": "状态: {status}",
       "inProgress": "请求中",
       "unknown": "未知",
       "success": "请求成功完成",
       "error": "请求失败，以下是详细的错误信息和供应商决策链",
       "processing": "请求正在进行中，尚未完成",
+      "tabs": {
+        "summary": "概览",
+        "logicTrace": "决策链",
+        "performance": "性能",
+        "metadata": "元数据"
+      },
+      "summary": {
+        "keyMetrics": "关键指标",
+        "totalCost": "总费用",
+        "totalTokens": "总令牌数",
+        "duration": "耗时",
+        "outputRate": "输出速率",
+        "viewFullError": "查看完整错误",
+        "viewSession": "查看会话"
+      },
       "specialSettings": {
         "title": "特殊设置"
       },
@@ -224,13 +260,63 @@
         "circuitOpen": "熔断器打开"
       },
       "billingDetails": {
-        "title": "计费详情"
+        "title": "计费详情",
+        "input": "输入",
+        "output": "输出",
+        "cacheWrite5m": "缓存写入 (5m)",
+        "cacheWrite1h": "缓存写入 (1h)",
+        "cacheRead": "缓存读取",
+        "cacheTtl": "缓存 TTL",
+        "multiplier": "供应商倍率",
+        "totalCost": "总费用",
+        "context1m": "1M 上下文",
+        "context1mPricing": "输入 2x >200k, 输出 1.5x >200k"
       },
       "performance": {
         "title": "性能数据",
         "ttfb": "首字节时间（TTFB）",
         "duration": "总耗时",
         "outputRate": "输出速率"
+      },
+      "performanceTab": {
+        "noPerformanceData": "暂无性能数据",
+        "ttfbGauge": "首字节时间",
+        "outputRateGauge": "输出速率",
+        "latencyBreakdown": "延迟分解",
+        "generationTime": "生成时间",
+        "assessment": {
+          "excellent": "优秀",
+          "good": "良好",
+          "warning": "警告",
+          "poor": "较差"
+        },
+        "thresholds": {
+          "ttfbGood": "TTFB < 1s",
+          "ttfbWarning": "TTFB 1-2s",
+          "ttfbPoor": "TTFB > 3s"
+        }
+      },
+      "metadata": {
+        "noMetadata": "暂无元数据",
+        "sessionInfo": "会话信息",
+        "clientInfo": "客户端信息",
+        "billingInfo": "计费信息",
+        "technicalTimeline": "技术时间线",
+        "copyTimeline": "复制时间线"
+      },
+      "logicTrace": {
+        "title": "决策链",
+        "noDecisionData": "暂无决策数据",
+        "providersCount": "{count} 个供应商",
+        "healthyCount": "{count} 个健康",
+        "initialSelection": "初始选择",
+        "healthCheck": "健康检查",
+        "prioritySelection": "优先级选择",
+        "attemptProvider": "尝试: {provider}",
+        "retryAttempt": "重试 #{number}",
+        "sessionReuse": "会话复用",
+        "sessionReuseDesc": "从会话缓存复用供应商",
+        "sessionReuseTitle": "会话绑定"
       }
     },
     "providerChain": {

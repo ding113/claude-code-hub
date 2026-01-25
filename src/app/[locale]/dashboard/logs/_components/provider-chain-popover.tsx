@@ -1,6 +1,6 @@
 "use client";
 
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, Link2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import type { ProviderChainItem } from "@/types/message";
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
   finalProvider: string;
-  /** 是否会显示倍率 Badge，影响名称最大宽度 */
+  /** Whether a cost badge is displayed, affects name max width */
   hasCostBadge?: boolean;
 }
 
@@ -43,28 +43,43 @@ export function ProviderChainPopover({
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
 
-  // 计算实际请求次数（排除中间状态）
+  // Calculate actual request count (excluding intermediate states)
   const requestCount = chain.filter(isActualRequest).length;
 
-  // 空字符串兜底
+  // Fallback for empty string
   const displayName = finalProvider || "-";
 
-  // 根据是否有倍率 Badge 决定名称最大宽度
+  // Determine max width based on whether cost badge is present
   const maxWidthClass = hasCostBadge ? "max-w-[140px]" : "max-w-[180px]";
 
-  // 如果只有一次请求，不显示 popover，只显示带 Tooltip 的名称
+  // Check if this is a session reuse (single request from session cache)
+  const isSessionReuse = chain[0]?.reason === "session_reuse" ||
+    chain[0]?.selectionMethod === "session_reuse";
+
+  // If only one request, don't show popover, just show name with Tooltip
   if (requestCount <= 1) {
     return (
       <div className={`${maxWidthClass} min-w-0 w-full`}>
         <TooltipProvider>
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
-              <span className="truncate block cursor-help" dir="auto">
-                {displayName}
+              <span className="truncate flex items-center gap-1 cursor-help" dir="auto">
+                {isSessionReuse && (
+                  <Link2 className="h-3 w-3 shrink-0 text-violet-500" />
+                )}
+                <span className="truncate">{displayName}</span>
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start">
-              <p className="text-xs">{displayName}</p>
+              <div className="text-xs">
+                {isSessionReuse && (
+                  <div className="flex items-center gap-1 text-violet-500 mb-1">
+                    <Link2 className="h-3 w-3" />
+                    <span>{tChain("reasons.session_reuse")}</span>
+                  </div>
+                )}
+                <p>{displayName}</p>
+              </div>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

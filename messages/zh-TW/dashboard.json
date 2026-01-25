@@ -21,7 +21,8 @@
     "keysQuotas": "密鑰額度統計",
     "providersQuotas": "供應商額度統計",
     "usageLogsDescription": "查看 API 調用日誌和使用統計",
-    "filterCriteria": "篩選條件"
+    "filterCriteria": "篩選條件",
+    "filterCriteriaDescription": "依時間、用戶、供應商等條件縮小日誌範圍"
   },
   "description": {
     "viewApiCallLogs": "查看 API 呼叫日誌和使用統計",
@@ -93,7 +94,28 @@
       "export": "匯出",
       "exporting": "匯出中...",
       "exportSuccess": "匯出成功",
-      "exportError": "匯出失敗"
+      "exportError": "匯出失敗",
+      "quickFilters": {
+        "today": "今天",
+        "thisWeek": "本週",
+        "errorsOnly": "僅錯誤",
+        "showRetries": "有重試"
+      },
+      "activeFilters": {
+        "title": "已啟用篩選",
+        "remove": "移除篩選",
+        "clearAll": "清除全部"
+      },
+      "groups": {
+        "time": "時間範圍",
+        "timeDesc": "依日期與時間篩選",
+        "identity": "身分資訊",
+        "identityDesc": "依使用者與金鑰篩選",
+        "request": "請求參數",
+        "requestDesc": "依供應商、模型、端點篩選",
+        "status": "狀態資訊",
+        "statusDesc": "依狀態碼與重試次數篩選"
+      }
     },
     "columns": {
       "time": "時間",
@@ -116,9 +138,7 @@
     },
     "stats": {
       "title": "統計匯總",
-      "description": "點擊展開查看當前篩選條件下的彙總統計",
-      "expand": "展開",
-      "collapse": "收合",
+      "description": "當前篩選條件下的彙總統計",
       "totalAmount": "總消耗金額",
       "totalTokens": "總 Token 數",
       "cacheTokens": "快取 Token",
@@ -144,7 +164,8 @@
       "noMoreData": "已載入全部記錄",
       "scrollToTop": "回到頂端",
       "hideProviderColumn": "隱藏供應商欄",
-      "showProviderColumn": "顯示供應商欄"
+      "showProviderColumn": "顯示供應商欄",
+      "columnVisibility": "顯示/隱藏欄位"
     },
     "actions": {
       "refresh": "重新整理",
@@ -161,12 +182,27 @@
     },
     "details": {
       "title": "請求詳情",
-      "statusTitle": "請求詳情 - 狀態碼 {status}",
+      "statusTitle": "狀態: {status}",
       "inProgress": "請求中",
       "unknown": "未知狀態",
       "success": "請求成功完成",
       "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",
       "processing": "請求正在進行中，尚未完成",
+      "tabs": {
+        "summary": "概覽",
+        "logicTrace": "決策鏈",
+        "performance": "效能",
+        "metadata": "中繼資料"
+      },
+      "summary": {
+        "keyMetrics": "關鍵指標",
+        "totalCost": "總費用",
+        "totalTokens": "總令牌數",
+        "duration": "耗時",
+        "outputRate": "輸出速率",
+        "viewFullError": "查看完整錯誤",
+        "viewSession": "查看工作階段"
+      },
       "specialSettings": {
         "title": "特殊設定"
       },
@@ -224,13 +260,63 @@
         "circuitOpen": "斷路器開啟"
       },
       "billingDetails": {
-        "title": "計費詳情"
+        "title": "計費詳情",
+        "input": "輸入",
+        "output": "輸出",
+        "cacheWrite5m": "快取寫入（5m）",
+        "cacheWrite1h": "快取寫入（1h）",
+        "cacheRead": "快取讀取",
+        "cacheTtl": "快取 TTL",
+        "multiplier": "供應商倍率",
+        "totalCost": "總費用",
+        "context1m": "1M 上下文",
+        "context1mPricing": "輸入 2x >200k, 輸出 1.5x >200k"
       },
       "performance": {
         "title": "效能資料",
         "ttfb": "首字節時間（TTFB）",
         "duration": "總耗時",
         "outputRate": "輸出速率"
+      },
+      "performanceTab": {
+        "noPerformanceData": "暫無效能資料",
+        "ttfbGauge": "首字節時間",
+        "outputRateGauge": "輸出速率",
+        "latencyBreakdown": "延遲分解",
+        "generationTime": "生成時間",
+        "assessment": {
+          "excellent": "優秀",
+          "good": "良好",
+          "warning": "警告",
+          "poor": "較差"
+        },
+        "thresholds": {
+          "ttfbGood": "TTFB < 1s",
+          "ttfbWarning": "TTFB 1-2s",
+          "ttfbPoor": "TTFB > 3s"
+        }
+      },
+      "metadata": {
+        "noMetadata": "暫無中繼資料",
+        "sessionInfo": "工作階段資訊",
+        "clientInfo": "用戶端資訊",
+        "billingInfo": "計費資訊",
+        "technicalTimeline": "技術時間軸",
+        "copyTimeline": "複製時間軸"
+      },
+      "logicTrace": {
+        "title": "決策鏈",
+        "noDecisionData": "暫無決策資料",
+        "providersCount": "{count} 個供應商",
+        "healthyCount": "{count} 個健康",
+        "initialSelection": "初始選擇",
+        "healthCheck": "健康檢查",
+        "prioritySelection": "優先順序選擇",
+        "attemptProvider": "嘗試: {provider}",
+        "retryAttempt": "重試 #{number}",
+        "sessionReuse": "會話複用",
+        "sessionReuseDesc": "從會話快取複用供應商",
+        "sessionReuseTitle": "會話綁定"
       }
     },
     "providerChain": {
