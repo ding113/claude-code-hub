@@ -2,7 +2,7 @@
 
 import { FileText, Gauge, GitBranch } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { hasSessionMessages } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,7 @@ export function ErrorDetailsDialog({
   const [hasMessages, setHasMessages] = useState(false);
   const [checkingMessages, setCheckingMessages] = useState(false);
   const [activeTab, setActiveTab] = useState<TabValue>("summary");
+  const messageCheckRequestIdRef = useRef(0);
 
   // Support external and internal control
   const isControlled = externalOpen !== undefined;
@@ -104,18 +105,23 @@ export function ErrorDetailsDialog({
   // Check if session has messages data
   useEffect(() => {
     if (open && sessionId) {
+      const requestId = ++messageCheckRequestIdRef.current;
       setCheckingMessages(true);
       hasSessionMessages(sessionId, requestSequence ?? undefined)
         .then((result) => {
+          if (requestId !== messageCheckRequestIdRef.current) return;
           if (result.ok) {
             setHasMessages(result.data);
           }
         })
         .catch((err) => {
+          if (requestId !== messageCheckRequestIdRef.current) return;
           console.error("Failed to check session messages:", err);
         })
         .finally(() => {
-          setCheckingMessages(false);
+          if (requestId === messageCheckRequestIdRef.current) {
+            setCheckingMessages(false);
+          }
         });
     } else {
       setHasMessages(false);

@@ -342,6 +342,7 @@ function UsageLogsViewContent({
                   size="sm"
                   onClick={() => void handleEnterFullscreen()}
                   className="gap-1.5 h-8"
+                  aria-label={t("logs.actions.fullscreen")}
                 >
                   <Expand className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">{t("logs.actions.fullscreen")}</span>
@@ -353,6 +354,7 @@ function UsageLogsViewContent({
                   onClick={handleManualRefresh}
                   className="gap-1.5 h-8"
                   disabled={isFullscreenOpen}
+                  aria-label={t("logs.actions.refresh")}
                 >
                   <RefreshCw
                     className={`h-3.5 w-3.5 ${isManualRefreshing ? "animate-spin" : ""}`}
@@ -366,6 +368,11 @@ function UsageLogsViewContent({
                   onClick={() => setIsAutoRefresh(!isAutoRefresh)}
                   className="gap-1.5 h-8"
                   disabled={isFullscreenOpen}
+                  aria-label={
+                    isAutoRefresh
+                      ? t("logs.actions.stopAutoRefresh")
+                      : t("logs.actions.startAutoRefresh")
+                  }
                 >
                   {isAutoRefresh ? (
                     <>

@@ -106,7 +106,11 @@ export function PerformanceTab({ durationMs, ttfbMs, outputTokens }: Performance
   const ttfbAssessment = getTtfbAssessment(normalizedTtfbMs);
   const rateAssessment = getOutputRateAssessment(outputRate);
 
-  const hasData = normalizedDurationMs !== null || normalizedTtfbMs !== null || outputRate !== null;
+  const hasData =
+    normalizedDurationMs !== null ||
+    normalizedTtfbMs !== null ||
+    outputRate !== null ||
+    normalizedOutputTokens !== null;
 
   if (!hasData) {
     return (

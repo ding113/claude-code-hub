@@ -63,7 +63,7 @@ export function MetadataTab({
     userAgent ||
     endpoint ||
     specialSettingsContent ||
-    costUsd ||
+    costUsd != null ||
     (providerChain && providerChain.length > 0);
 
   if (!hasAnyData) {
@@ -140,7 +140,7 @@ export function MetadataTab({
       )}
 
       {/* Billing Details */}
-      {costUsd && (
+      {costUsd != null && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold flex items-center gap-2">
             <DollarSign className="h-4 w-4 text-emerald-600" />

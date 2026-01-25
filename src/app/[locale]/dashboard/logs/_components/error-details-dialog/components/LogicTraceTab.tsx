@@ -79,13 +79,16 @@ export function LogicTraceTab({
   const tChain = useTranslations("provider-chain");
   const [timelineCopied, setTimelineCopied] = useState(false);
 
-  const handleCopyTimeline = () => {
+  const handleCopyTimeline = async () => {
     if (!providerChain) return;
     const { timeline } = formatProviderTimeline(providerChain, tChain);
-    navigator.clipboard.writeText(timeline).then(() => {
+    try {
+      await navigator.clipboard.writeText(timeline);
       setTimelineCopied(true);
       setTimeout(() => setTimelineCopied(false), 2000);
-    });
+    } catch {
+      // Clipboard write failed - ignore silently
+    }
   };
 
   const isWarmupSkipped = blockedBy === "warmup";
@@ -107,9 +110,7 @@ export function LogicTraceTab({
   // Extract filtered providers from all chain items (not applicable for session reuse)
   const filteredProviders = isSessionReuseFlow
     ? []
-    : providerChain
-        ?.flatMap((item) => item.decisionContext?.filteredProviders || [])
-        .filter((p) => p.reason === "rate_limited" || p.reason === "circuit_open") || [];
+    : providerChain?.flatMap((item) => item.decisionContext?.filteredProviders || []) || [];
 
   // Get base timestamp for relative time calculations
   const baseTimestamp = providerChain?.[0]?.timestamp || 0;

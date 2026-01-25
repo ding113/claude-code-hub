@@ -227,7 +227,7 @@ export function ProviderChainPopover({
                                 </span>
                                 {c.probability !== undefined && (
                                   <span className="text-zinc-500 dark:text-zinc-400">
-                                    ({c.probability}%)
+                                    ({c.probability <= 1 ? (c.probability * 100).toFixed(0) : c.probability}%)
                                   </span>
                                 )}
                               </span>

@@ -2,7 +2,6 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Activity, ChevronRight, Clock, Cpu, Key, Loader2, User, XCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { getActiveSessions } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
@@ -142,7 +141,6 @@ interface ActiveSessionsCardsProps {
 }
 
 export function ActiveSessionsCards({ currencyCode = "USD", className }: ActiveSessionsCardsProps) {
-  const router = useRouter();
   const tc = useTranslations("customs");
 
   const { data = [], isLoading } = useQuery<ActiveSessionInfo[], Error>({
@@ -166,14 +164,13 @@ export function ActiveSessionsCards({ currencyCode = "USD", className }: ActiveS
               </CardDescription>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => router.push("/dashboard/sessions")}
+          <Link
+            href="/dashboard/sessions"
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             {tc("activeSessions.viewAll")}
             <ChevronRight className="h-3.5 w-3.5" />
-          </button>
+          </Link>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
