@@ -21,7 +21,8 @@
     "keysQuotas": "キー クォータ統計",
     "providersQuotas": "プロバイダー クォータ統計",
     "usageLogsDescription": "API 呼び出しログと使用統計を表示します",
-    "filterCriteria": "フィルター条件"
+    "filterCriteria": "フィルター条件",
+    "filterCriteriaDescription": "時間、ユーザー、プロバイダーなどでログを絞り込む"
   },
   "description": {
     "viewApiCallLogs": "API 呼び出しログと使用統計を表示します",
@@ -93,7 +94,28 @@
       "export": "エクスポート",
       "exporting": "エクスポート中...",
       "exportSuccess": "エクスポートが完了しました",
-      "exportError": "エクスポートに失敗しました"
+      "exportError": "エクスポートに失敗しました",
+      "quickFilters": {
+        "today": "今日",
+        "thisWeek": "今週",
+        "errorsOnly": "エラーのみ",
+        "showRetries": "リトライあり"
+      },
+      "activeFilters": {
+        "title": "有効なフィルター",
+        "remove": "フィルターを削除",
+        "clearAll": "すべてクリア"
+      },
+      "groups": {
+        "time": "時間範囲",
+        "timeDesc": "日付と時間でフィルター",
+        "identity": "ID情報",
+        "identityDesc": "ユーザーとキーでフィルター",
+        "request": "リクエスト",
+        "requestDesc": "プロバイダー、モデル、エンドポイントでフィルター",
+        "status": "ステータス",
+        "statusDesc": "ステータスコードとリトライでフィルター"
+      }
     },
     "columns": {
       "time": "時間",
@@ -116,9 +138,7 @@
     },
     "stats": {
       "title": "統計サマリー",
-      "description": "クリックして現在のフィルター条件の集計統計を表示",
-      "expand": "展開",
-      "collapse": "折りたたむ",
+      "description": "現在のフィルター条件の集計統計",
       "totalAmount": "総消費金額",
       "totalTokens": "総トークン数",
       "cacheTokens": "キャッシュトークン",
@@ -144,7 +164,8 @@
       "noMoreData": "すべてのレコードを読み込みました",
       "scrollToTop": "トップへ戻る",
       "hideProviderColumn": "プロバイダー列を非表示",
-      "showProviderColumn": "プロバイダー列を表示"
+      "showProviderColumn": "プロバイダー列を表示",
+      "columnVisibility": "列の表示/非表示"
     },
     "actions": {
       "refresh": "更新",
@@ -161,12 +182,27 @@
     },
     "details": {
       "title": "リクエスト詳細",
-      "statusTitle": "リクエスト詳細 - ステータスコード {status}",
+      "statusTitle": "ステータス: {status}",
       "inProgress": "処理中",
       "unknown": "不明",
       "success": "リクエストが正常に完了しました",
       "error": "リクエスト失敗、詳細なエラー情報とプロバイダー決定チェーンは以下の通りです",
       "processing": "リクエストは処理中であり、まだ完了していません",
+      "tabs": {
+        "summary": "概要",
+        "logicTrace": "決定チェーン",
+        "performance": "パフォーマンス",
+        "metadata": "メタデータ"
+      },
+      "summary": {
+        "keyMetrics": "主要指標",
+        "totalCost": "総コスト",
+        "totalTokens": "総トークン数",
+        "duration": "所要時間",
+        "outputRate": "出力速度",
+        "viewFullError": "完全なエラーを表示",
+        "viewSession": "セッションを表示"
+      },
       "specialSettings": {
         "title": "特殊設定"
       },
@@ -207,6 +243,7 @@
         "billingRedirected": "課金: 実際"
       },
       "errorMessage": "エラーメッセージ",
+      "filteredProviders": "フィルタされたプロバイダー",
       "providerChain": {
         "title": "プロバイダー決定チェーンタイムライン",
         "totalDuration": "合計所要時間: {duration}ms"
@@ -223,13 +260,63 @@
         "circuitOpen": "サーキットブレーカー開放"
       },
       "billingDetails": {
-        "title": "課金詳細"
+        "title": "課金詳細",
+        "input": "入力",
+        "output": "出力",
+        "cacheWrite5m": "キャッシュ書き込み (5m)",
+        "cacheWrite1h": "キャッシュ書き込み (1h)",
+        "cacheRead": "キャッシュ読み取り",
+        "cacheTtl": "キャッシュ TTL",
+        "multiplier": "プロバイダー倍率",
+        "totalCost": "総コスト",
+        "context1m": "1M コンテキスト",
+        "context1mPricing": "入力 2x >200k, 出力 1.5x >200k"
       },
       "performance": {
         "title": "パフォーマンス",
         "ttfb": "TTFB",
         "duration": "総所要時間",
         "outputRate": "出力速度"
+      },
+      "performanceTab": {
+        "noPerformanceData": "パフォーマンスデータがありません",
+        "ttfbGauge": "初バイト到達時間",
+        "outputRateGauge": "出力速度",
+        "latencyBreakdown": "レイテンシ内訳",
+        "generationTime": "生成時間",
+        "assessment": {
+          "excellent": "優秀",
+          "good": "良好",
+          "warning": "警告",
+          "poor": "不良"
+        },
+        "thresholds": {
+          "ttfbGood": "TTFB < 1s",
+          "ttfbWarning": "TTFB 1-2s",
+          "ttfbPoor": "TTFB > 3s"
+        }
+      },
+      "metadata": {
+        "noMetadata": "メタデータがありません",
+        "sessionInfo": "セッション情報",
+        "clientInfo": "クライアント情報",
+        "billingInfo": "課金情報",
+        "technicalTimeline": "技術タイムライン",
+        "copyTimeline": "タイムラインをコピー"
+      },
+      "logicTrace": {
+        "title": "決定チェーン",
+        "noDecisionData": "決定データがありません",
+        "providersCount": "{count} プロバイダー",
+        "healthyCount": "{count} 健全",
+        "initialSelection": "初期選択",
+        "healthCheck": "ヘルスチェック",
+        "prioritySelection": "優先度選択",
+        "attemptProvider": "試行: {provider}",
+        "retryAttempt": "再試行 #{number}",
+        "sessionReuse": "セッション再利用",
+        "sessionReuseDesc": "セッションキャッシュからプロバイダーを再利用",
+        "sessionReuseTitle": "セッションバインディング"
       }
     },
     "providerChain": {

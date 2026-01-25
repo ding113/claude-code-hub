@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Agentation } from "agentation";
 import { ThemeProvider } from "next-themes";
 import { type ReactNode, useState } from "react";
 
@@ -22,6 +23,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         disableTransitionOnChange
       >
         {children}
+        {process.env.NODE_ENV === "development" && <Agentation />}
       </ThemeProvider>
     </QueryClientProvider>
   );
