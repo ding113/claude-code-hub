@@ -60,9 +60,7 @@ export function StatusFilters({ filters, onFiltersChange }: StatusFiltersProps) 
         <Label>{t("logs.filters.statusCode")}</Label>
         <Select
           value={
-            filters.excludeStatusCode200
-              ? "!200"
-              : filters.statusCode?.toString() || "__all__"
+            filters.excludeStatusCode200 ? "!200" : filters.statusCode?.toString() || "__all__"
           }
           onValueChange={handleStatusCodeChange}
           onOpenChange={onStatusCodesOpenChange}

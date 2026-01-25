@@ -72,33 +72,36 @@ export function IdentityFilters({
     };
   }, []);
 
-  const loadUsersForFilter = useCallback(async (term?: string) => {
-    const requestId = ++userSearchRequestIdRef.current;
-    setIsUsersLoading(true);
-    lastLoadedUserSearchTermRef.current = term;
+  const loadUsersForFilter = useCallback(
+    async (term?: string) => {
+      const requestId = ++userSearchRequestIdRef.current;
+      setIsUsersLoading(true);
+      lastLoadedUserSearchTermRef.current = term;
 
-    try {
-      const result = await searchUsersForFilter(term);
-      if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
+      try {
+        const result = await searchUsersForFilter(term);
+        if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
 
-      if (result.ok) {
-        setAvailableUsers(result.data);
-        onUsersChange?.(result.data);
-      } else {
-        console.error("Failed to load users for filter:", result.error);
+        if (result.ok) {
+          setAvailableUsers(result.data);
+          onUsersChange?.(result.data);
+        } else {
+          console.error("Failed to load users for filter:", result.error);
+          setAvailableUsers([]);
+        }
+      } catch (error) {
+        if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
+
+        console.error("Failed to load users for filter:", error);
         setAvailableUsers([]);
+      } finally {
+        if (isMountedRef.current && requestId === userSearchRequestIdRef.current) {
+          setIsUsersLoading(false);
+        }
       }
-    } catch (error) {
-      if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
-
-      console.error("Failed to load users for filter:", error);
-      setAvailableUsers([]);
-    } finally {
-      if (isMountedRef.current && requestId === userSearchRequestIdRef.current) {
-        setIsUsersLoading(false);
-      }
-    }
-  }, [onUsersChange]);
+    },
+    [onUsersChange]
+  );
 
   useEffect(() => {
     if (!isAdmin) return;

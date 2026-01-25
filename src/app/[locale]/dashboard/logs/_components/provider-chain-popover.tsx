@@ -53,8 +53,8 @@ export function ProviderChainPopover({
   const maxWidthClass = hasCostBadge ? "max-w-[140px]" : "max-w-[180px]";
 
   // Check if this is a session reuse (single request from session cache)
-  const isSessionReuse = chain[0]?.reason === "session_reuse" ||
-    chain[0]?.selectionMethod === "session_reuse";
+  const isSessionReuse =
+    chain[0]?.reason === "session_reuse" || chain[0]?.selectionMethod === "session_reuse";
 
   // If only one request, don't show popover, just show name with Tooltip
   if (requestCount <= 1) {
@@ -64,9 +64,7 @@ export function ProviderChainPopover({
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
               <span className="truncate flex items-center gap-1 cursor-help" dir="auto">
-                {isSessionReuse && (
-                  <Link2 className="h-3 w-3 shrink-0 text-violet-500" />
-                )}
+                {isSessionReuse && <Link2 className="h-3 w-3 shrink-0 text-violet-500" />}
                 <span className="truncate">{displayName}</span>
               </span>
             </TooltipTrigger>

@@ -93,7 +93,8 @@ export function LogicTraceTab({
   const parsedBlockedReason = parseBlockedReason(blockedReason);
 
   // Check if this is a session reuse flow (provider reused from session cache)
-  const isSessionReuseFlow = providerChain?.[0]?.reason === "session_reuse" ||
+  const isSessionReuseFlow =
+    providerChain?.[0]?.reason === "session_reuse" ||
     providerChain?.[0]?.selectionMethod === "session_reuse";
 
   // Extract session reuse context from first chain item
@@ -237,7 +238,9 @@ export function LogicTraceTab({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-4">
                       {sessionReuseContext?.sessionId && (
                         <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">{t("logicTrace.sessionIdLabel")}:</span>
+                          <span className="text-muted-foreground">
+                            {t("logicTrace.sessionIdLabel")}:
+                          </span>
                           <code className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono truncate max-w-[120px]">
                             {sessionReuseContext.sessionId.slice(0, 8)}...
                           </code>
@@ -245,13 +248,17 @@ export function LogicTraceTab({
                       )}
                       {requestSequence !== undefined && requestSequence !== null && (
                         <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">{t("logicTrace.requestSequence")}:</span>
+                          <span className="text-muted-foreground">
+                            {t("logicTrace.requestSequence")}:
+                          </span>
                           <span className="font-mono">#{requestSequence}</span>
                         </div>
                       )}
                       {sessionReuseContext?.sessionAge !== undefined && (
                         <div className="flex items-center gap-2">
-                          <span className="text-muted-foreground">{t("logicTrace.sessionAge")}:</span>
+                          <span className="text-muted-foreground">
+                            {t("logicTrace.sessionAge")}:
+                          </span>
                           <span className="font-mono">{sessionReuseContext.sessionAge}s</span>
                         </div>
                       )}
@@ -275,13 +282,17 @@ export function LogicTraceTab({
                       </div>
                       {sessionReuseProvider.priority !== undefined && (
                         <div>
-                          <span className="text-muted-foreground">{tChain("details.priority")}:</span>{" "}
+                          <span className="text-muted-foreground">
+                            {tChain("details.priority")}:
+                          </span>{" "}
                           <span className="font-mono">P{sessionReuseProvider.priority}</span>
                         </div>
                       )}
                       {sessionReuseProvider.costMultiplier !== undefined && (
                         <div>
-                          <span className="text-muted-foreground">{tChain("details.costMultiplier")}:</span>{" "}
+                          <span className="text-muted-foreground">
+                            {tChain("details.costMultiplier")}:
+                          </span>{" "}
                           <span className="font-mono">x{sessionReuseProvider.costMultiplier}</span>
                         </div>
                       )}
@@ -421,7 +432,8 @@ export function LogicTraceTab({
 
             const status = getRequestStatus(item);
             const isRetry = item.attemptNumber && item.attemptNumber > 1;
-            const isSessionReuse = item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
+            const isSessionReuse =
+              item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
 
             // Determine icon based on type
             const stepIcon = isSessionReuse
@@ -475,7 +487,9 @@ export function LogicTraceTab({
                         <div className="grid grid-cols-1 gap-1.5">
                           {item.decisionContext.sessionId && (
                             <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground">{tChain("timeline.sessionId", { id: "" }).replace(": ", ":")}</span>
+                              <span className="text-muted-foreground">
+                                {tChain("timeline.sessionId", { id: "" }).replace(": ", ":")}
+                              </span>
                               <code className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono">
                                 {item.decisionContext.sessionId}
                               </code>
