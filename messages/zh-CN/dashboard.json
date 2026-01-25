@@ -316,7 +316,16 @@
         "retryAttempt": "重试 #{number}",
         "sessionReuse": "会话复用",
         "sessionReuseDesc": "从会话缓存复用供应商",
-        "sessionReuseTitle": "会话绑定"
+        "sessionReuseTitle": "会话绑定",
+        "sessionReuseSelection": "会话复用选择",
+        "sessionReuseSelectionDesc": "从会话缓存中选择供应商",
+        "sessionInfo": "会话信息",
+        "sessionIdLabel": "会话 ID",
+        "requestSequence": "请求序号",
+        "sessionAge": "会话年龄",
+        "reusedProvider": "复用的供应商",
+        "executeRequest": "执行请求",
+        "cacheOptimizationHint": "会话复用通过在同一对话中保持供应商亲和性来优化性能，减少选择开销并提高缓存命中率。"
       }
     },
     "providerChain": {

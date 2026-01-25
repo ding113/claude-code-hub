@@ -316,7 +316,16 @@
         "retryAttempt": "Retry #{number}",
         "sessionReuse": "Session Reuse",
         "sessionReuseDesc": "Reusing provider from session cache",
-        "sessionReuseTitle": "Session Binding"
+        "sessionReuseTitle": "Session Binding",
+        "sessionReuseSelection": "Session Reuse Selection",
+        "sessionReuseSelectionDesc": "Provider selected from session cache",
+        "sessionInfo": "Session Information",
+        "sessionIdLabel": "Session ID",
+        "requestSequence": "Request Sequence",
+        "sessionAge": "Session Age",
+        "reusedProvider": "Reused Provider",
+        "executeRequest": "Execute Request",
+        "cacheOptimizationHint": "Session reuse optimizes performance by maintaining provider affinity within the same conversation, reducing selection overhead and improving cache hit rates."
       }
     },
     "providerChain": {
