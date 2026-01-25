@@ -316,7 +316,16 @@
         "retryAttempt": "Повтор #{number}",
         "sessionReuse": "Повторное использование сессии",
         "sessionReuseDesc": "Провайдер из кэша сессии",
-        "sessionReuseTitle": "Привязка сессии"
+        "sessionReuseTitle": "Привязка сессии",
+        "sessionReuseSelection": "Выбор с повторным использованием сессии",
+        "sessionReuseSelectionDesc": "Провайдер выбран из кэша сессии",
+        "sessionInfo": "Информация о сессии",
+        "sessionIdLabel": "ID сессии",
+        "requestSequence": "Номер запроса",
+        "sessionAge": "Возраст сессии",
+        "reusedProvider": "Повторно используемый провайдер",
+        "executeRequest": "Выполнить запрос",
+        "cacheOptimizationHint": "Повторное использование сессии оптимизирует производительность, поддерживая привязку к провайдеру в рамках одного разговора, снижая накладные расходы на выбор и повышая частоту попаданий в кэш."
       }
     },
     "providerChain": {

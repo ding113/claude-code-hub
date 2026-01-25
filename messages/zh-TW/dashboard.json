@@ -316,7 +316,16 @@
         "retryAttempt": "重試 #{number}",
         "sessionReuse": "會話複用",
         "sessionReuseDesc": "從會話快取複用供應商",
-        "sessionReuseTitle": "會話綁定"
+        "sessionReuseTitle": "會話綁定",
+        "sessionReuseSelection": "會話複用選擇",
+        "sessionReuseSelectionDesc": "從會話快取中選擇供應商",
+        "sessionInfo": "會話資訊",
+        "sessionIdLabel": "會話 ID",
+        "requestSequence": "請求序號",
+        "sessionAge": "會話年齡",
+        "reusedProvider": "複用的供應商",
+        "executeRequest": "執行請求",
+        "cacheOptimizationHint": "會話複用通過在同一對話中保持供應商親和性來優化效能，減少選擇開銷並提高快取命中率。"
       }
     },
     "providerChain": {

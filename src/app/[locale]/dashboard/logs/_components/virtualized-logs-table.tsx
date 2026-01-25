@@ -551,15 +551,15 @@ export function VirtualizedLogsTable({
                             <TooltipTrigger asChild>
                               <div className="cursor-help flex flex-col items-end leading-tight tabular-nums">
                                 <div className="flex items-center gap-1">
-                                  <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
                                   {log.cacheTtlApplied ? (
                                     <Badge
                                       variant="outline"
-                                      className="text-[10px] leading-tight px-1"
+                                      className="text-[10px] leading-tight px-1 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
                                     >
                                       {log.cacheTtlApplied}
                                     </Badge>
                                   ) : null}
+                                  <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
                                 </div>
                                 <span className="text-muted-foreground">
                                   {formatTokenAmount(log.cacheReadInputTokens)}

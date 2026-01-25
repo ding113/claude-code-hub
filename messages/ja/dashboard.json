@@ -316,7 +316,16 @@
         "retryAttempt": "再試行 #{number}",
         "sessionReuse": "セッション再利用",
         "sessionReuseDesc": "セッションキャッシュからプロバイダーを再利用",
-        "sessionReuseTitle": "セッションバインディング"
+        "sessionReuseTitle": "セッションバインディング",
+        "sessionReuseSelection": "セッション再利用選択",
+        "sessionReuseSelectionDesc": "セッションキャッシュからプロバイダーを選択",
+        "sessionInfo": "セッション情報",
+        "sessionIdLabel": "セッション ID",
+        "requestSequence": "リクエスト番号",
+        "sessionAge": "セッション経過時間",
+        "reusedProvider": "再利用プロバイダー",
+        "executeRequest": "リクエスト実行",
+        "cacheOptimizationHint": "セッション再利用は、同じ会話内でプロバイダーの親和性を維持することでパフォーマンスを最適化し、選択オーバーヘッドを削減してキャッシュヒット率を向上させます。"
       }
     },
     "providerChain": {
