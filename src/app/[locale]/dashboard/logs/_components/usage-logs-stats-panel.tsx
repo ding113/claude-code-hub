@@ -1,13 +1,11 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { BarChart3 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { getUsageLogsStats } from "@/actions/usage-logs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatTokenAmount } from "@/lib/utils";
+import { cn, formatTokenAmount } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { UsageLogSummary } from "@/repository/usage-logs";
@@ -30,31 +28,21 @@ interface UsageLogsStatsPanelProps {
 }
 
 /**
- * 可折叠统计面板组件
- * 默认折叠，展开时按需加载聚合统计数据
- * 筛选条件变更时清除缓存，再次展开时重新加载
+ * Stats panel component with glass morphism UI
+ * Always expanded (not collapsible), loads data asynchronously
+ * Re-fetches when filters change
  */
 export function UsageLogsStatsPanel({ filters, currencyCode = "USD" }: UsageLogsStatsPanelProps) {
   const t = useTranslations("dashboard");
-  const [isOpen, setIsOpen] = useState(false);
   const [stats, setStats] = useState<UsageLogSummary | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 创建筛选条件的稳定键用于依赖比较
+  // Create stable filter key for dependency comparison
   const filtersKey = JSON.stringify(filters);
 
-  // 筛选条件变更时清除缓存
-  // biome-ignore lint/correctness/useExhaustiveDependencies: filtersKey is used to detect filter changes
-  useEffect(() => {
-    setStats(null);
-    setError(null);
-  }, [filtersKey]);
-
-  // 加载统计数据
+  // Load stats data
   const loadStats = useCallback(async () => {
-    if (stats !== null || isLoading) return;
-
     setIsLoading(true);
     setError(null);
 
@@ -71,59 +59,70 @@ export function UsageLogsStatsPanel({ filters, currencyCode = "USD" }: UsageLogs
     } finally {
       setIsLoading(false);
     }
-  }, [filters, stats, isLoading, t]);
+  }, [filters, t]);
 
-  // 展开时加载数据
+  // Load data on mount and when filters change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: filtersKey is used to detect filter changes
   useEffect(() => {
-    if (isOpen && stats === null && !isLoading) {
-      loadStats();
-    }
-  }, [isOpen, stats, isLoading, loadStats]);
+    loadStats();
+  }, [filtersKey, loadStats]);
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <Card>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-lg">{t("logs.stats.title")}</CardTitle>
-                <CardDescription>{t("logs.stats.description")}</CardDescription>
-              </div>
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="text-sm">
-                  {isOpen ? t("logs.stats.collapse") : t("logs.stats.expand")}
-                </span>
-                {isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-              </div>
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
+    <div
+      className={cn(
+        // Glass morphism base
+        "relative overflow-hidden rounded-xl border bg-card/30 backdrop-blur-sm",
+        "transition-all duration-200",
+        "border-border/50 hover:border-border"
+      )}
+    >
+      {/* Glassmorphism gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
 
-        <CollapsibleContent>
-          <CardContent className="pt-0">
-            {isLoading ? (
-              <StatsSkeletons />
-            ) : error ? (
-              <div className="text-center py-4 text-destructive">{error}</div>
-            ) : stats ? (
-              <StatsContent stats={stats} currencyCode={currencyCode} />
-            ) : null}
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
+      <div className="relative z-10">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border/30">
+          <span
+            className={cn(
+              "flex items-center justify-center w-8 h-8 rounded-lg shrink-0",
+              "bg-muted text-muted-foreground"
+            )}
+          >
+            <BarChart3 className="h-4 w-4" />
+          </span>
+          <div className="space-y-0.5">
+            <h3 className="text-sm font-semibold text-foreground leading-none">
+              {t("logs.stats.title")}
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed hidden sm:block">
+              {t("logs.stats.description")}
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="px-4 py-4">
+          {isLoading ? (
+            <StatsSkeletons />
+          ) : error ? (
+            <div className="text-center py-4 text-destructive">{error}</div>
+          ) : stats ? (
+            <StatsContent stats={stats} currencyCode={currencyCode} />
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }
 
 /**
- * 统计数据骨架屏
+ * Stats data skeletons
  */
 function StatsSkeletons() {
   return (
     <div className="grid gap-4 md:grid-cols-4">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="space-y-2 p-4 border rounded-lg">
+        <div key={i} className="space-y-2 p-4 border border-border/50 rounded-lg bg-card/20">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-8 w-32" />
         </div>
@@ -133,7 +132,7 @@ function StatsSkeletons() {
 }
 
 /**
- * 统计数据内容
+ * Stats data content
  */
 function StatsContent({
   stats,
@@ -146,24 +145,24 @@ function StatsContent({
 
   return (
     <div className="grid gap-4 md:grid-cols-4">
-      {/* 总请求数 */}
-      <div className="p-4 border rounded-lg">
+      {/* Total Requests */}
+      <div className="p-4 border border-border/50 rounded-lg bg-card/20">
         <div className="text-sm text-muted-foreground mb-1">{t("logs.stats.totalRequests")}</div>
         <div className="text-2xl font-mono font-semibold">
           {stats.totalRequests.toLocaleString()}
         </div>
       </div>
 
-      {/* 总金额 */}
-      <div className="p-4 border rounded-lg">
+      {/* Total Amount */}
+      <div className="p-4 border border-border/50 rounded-lg bg-card/20">
         <div className="text-sm text-muted-foreground mb-1">{t("logs.stats.totalAmount")}</div>
         <div className="text-2xl font-mono font-semibold">
           {formatCurrency(stats.totalCost, currencyCode)}
         </div>
       </div>
 
-      {/* 总 Tokens */}
-      <div className="p-4 border rounded-lg">
+      {/* Total Tokens */}
+      <div className="p-4 border border-border/50 rounded-lg bg-card/20">
         <div className="text-sm text-muted-foreground mb-1">{t("logs.stats.totalTokens")}</div>
         <div className="text-2xl font-mono font-semibold">
           {formatTokenAmount(stats.totalTokens)}
@@ -180,8 +179,8 @@ function StatsContent({
         </div>
       </div>
 
-      {/* 缓存 Tokens */}
-      <div className="p-4 border rounded-lg">
+      {/* Cache Tokens */}
+      <div className="p-4 border border-border/50 rounded-lg bg-card/20">
         <div className="text-sm text-muted-foreground mb-1">{t("logs.stats.cacheTokens")}</div>
         <div className="text-2xl font-mono font-semibold">
           {formatTokenAmount(stats.totalCacheCreationTokens + stats.totalCacheReadTokens)}

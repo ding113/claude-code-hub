@@ -21,7 +21,8 @@
     "usersQuotas": "User Quota Statistics",
     "keysQuotas": "Key Quota Statistics",
     "providersQuotas": "Provider Quota Statistics",
-    "filterCriteria": "Filter Criteria"
+    "filterCriteria": "Filter Criteria",
+    "filterCriteriaDescription": "Narrow down logs by time, user, provider, and more"
   },
   "description": {
     "viewApiCallLogs": "View API call logs and usage statistics",
@@ -93,7 +94,28 @@
       "export": "Export",
       "exporting": "Exporting...",
       "exportSuccess": "Export completed successfully",
-      "exportError": "Export failed"
+      "exportError": "Export failed",
+      "quickFilters": {
+        "today": "Today",
+        "thisWeek": "This Week",
+        "errorsOnly": "Errors Only",
+        "showRetries": "With Retries"
+      },
+      "activeFilters": {
+        "title": "Active Filters",
+        "remove": "Remove filter",
+        "clearAll": "Clear all"
+      },
+      "groups": {
+        "time": "Time Range",
+        "timeDesc": "Filter by date and time",
+        "identity": "Identity",
+        "identityDesc": "Filter by user and key",
+        "request": "Request",
+        "requestDesc": "Filter by provider, model, endpoint",
+        "status": "Status",
+        "statusDesc": "Filter by status code and retry"
+      }
     },
     "columns": {
       "time": "Time",
@@ -116,9 +138,7 @@
     },
     "stats": {
       "title": "Statistics Summary",
-      "description": "Click to view aggregated statistics for the current filters",
-      "expand": "Expand",
-      "collapse": "Collapse",
+      "description": "Aggregated statistics for the current filters",
       "totalRequests": "Total Requests",
       "totalAmount": "Total Consumption",
       "totalTokens": "Total Tokens",
@@ -144,7 +164,8 @@
       "noMoreData": "All records loaded",
       "scrollToTop": "Back to top",
       "hideProviderColumn": "Hide Provider Column",
-      "showProviderColumn": "Show Provider Column"
+      "showProviderColumn": "Show Provider Column",
+      "columnVisibility": "Column Visibility"
     },
     "actions": {
       "refresh": "Refresh",
@@ -161,12 +182,27 @@
     },
     "details": {
       "title": "Request Details",
-      "statusTitle": "Request Details - Status Code {status}",
+      "statusTitle": "Status: {status}",
       "inProgress": "In Progress",
       "unknown": "Unknown",
       "success": "Request completed successfully",
       "error": "Request failed, here are the detailed error messages and provider decision chain",
       "processing": "Request is in progress, not yet completed",
+      "tabs": {
+        "summary": "Summary",
+        "logicTrace": "Logic Trace",
+        "performance": "Performance",
+        "metadata": "Metadata"
+      },
+      "summary": {
+        "keyMetrics": "Key Metrics",
+        "totalCost": "Total Cost",
+        "totalTokens": "Total Tokens",
+        "duration": "Duration",
+        "outputRate": "Output Rate",
+        "viewFullError": "View full error",
+        "viewSession": "View Session"
+      },
       "specialSettings": {
         "title": "Special settings"
       },
@@ -224,13 +260,72 @@
         "circuitOpen": "Circuit Breaker Open"
       },
       "billingDetails": {
-        "title": "Billing Details"
+        "title": "Billing Details",
+        "input": "Input",
+        "output": "Output",
+        "cacheWrite5m": "Cache Write (5m)",
+        "cacheWrite1h": "Cache Write (1h)",
+        "cacheRead": "Cache Read",
+        "cacheTtl": "Cache TTL",
+        "multiplier": "Provider Multiplier",
+        "totalCost": "Total Cost",
+        "context1m": "1M Context",
+        "context1mPricing": "Input 2x >200k, Output 1.5x >200k"
       },
       "performance": {
         "title": "Performance",
         "ttfb": "TTFB",
         "duration": "Total Duration",
         "outputRate": "Output Rate"
+      },
+      "performanceTab": {
+        "noPerformanceData": "No performance data available",
+        "ttfbGauge": "Time to First Byte",
+        "outputRateGauge": "Output Rate",
+        "latencyBreakdown": "Latency Breakdown",
+        "generationTime": "Generation Time",
+        "assessment": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "warning": "Warning",
+          "poor": "Poor"
+        },
+        "thresholds": {
+          "ttfbGood": "TTFB < 1s",
+          "ttfbWarning": "TTFB 1-2s",
+          "ttfbPoor": "TTFB > 3s"
+        }
+      },
+      "metadata": {
+        "noMetadata": "No metadata available",
+        "sessionInfo": "Session Info",
+        "clientInfo": "Client Info",
+        "billingInfo": "Billing Info",
+        "technicalTimeline": "Technical Timeline",
+        "copyTimeline": "Copy Timeline"
+      },
+      "logicTrace": {
+        "title": "Decision Chain",
+        "noDecisionData": "No decision data available",
+        "providersCount": "{count} providers",
+        "healthyCount": "{count} healthy",
+        "initialSelection": "Initial Selection",
+        "healthCheck": "Health Check",
+        "prioritySelection": "Priority Selection",
+        "attemptProvider": "Attempt: {provider}",
+        "retryAttempt": "Retry #{number}",
+        "sessionReuse": "Session Reuse",
+        "sessionReuseDesc": "Reusing provider from session cache",
+        "sessionReuseTitle": "Session Binding",
+        "sessionReuseSelection": "Session Reuse Selection",
+        "sessionReuseSelectionDesc": "Provider selected from session cache",
+        "sessionInfo": "Session Information",
+        "sessionIdLabel": "Session ID",
+        "requestSequence": "Request Sequence",
+        "sessionAge": "Session Age",
+        "reusedProvider": "Reused Provider",
+        "executeRequest": "Execute Request",
+        "cacheOptimizationHint": "Session reuse optimizes performance by maintaining provider affinity within the same conversation, reducing selection overhead and improving cache hit rates."
       }
     },
     "providerChain": {

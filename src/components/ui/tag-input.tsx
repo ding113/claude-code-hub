@@ -1,8 +1,8 @@
 "use client";
 
+import * as Portal from "@radix-ui/react-portal";
 import { X } from "lucide-react";
 import * as React from "react";
-import { createPortal } from "react-dom";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { Badge } from "./badge";
@@ -468,12 +468,9 @@ export function TagInput({
           <X className="h-3.5 w-3.5" />
         </button>
       )}
-      {/* 建议下拉列表 */}
-      {showSuggestions &&
-        filteredSuggestions.length > 0 &&
-        dropdownPosition &&
-        typeof document !== "undefined" &&
-        createPortal(
+      {/* 建议下拉列表 - 使用 Radix Portal 确保在 Dialog 中正确渲染 */}
+      {showSuggestions && filteredSuggestions.length > 0 && dropdownPosition && (
+        <Portal.Root>
           <div
             ref={dropdownRef}
             className="fixed z-[9999] rounded-md border bg-popover shadow-md max-h-48 overflow-auto"
@@ -500,9 +497,9 @@ export function TagInput({
                 {suggestion.label}
               </button>
             ))}
-          </div>,
-          document.body
-        )}
+          </div>
+        </Portal.Root>
+      )}
     </div>
   );
 }

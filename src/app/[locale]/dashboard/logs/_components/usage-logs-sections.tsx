@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { ActiveSessionsPanel } from "@/components/customs/active-sessions-panel";
+import { ActiveSessionsCards } from "@/components/customs/active-sessions-cards";
 import { getSystemSettings } from "@/repository/system-config";
 import { UsageLogsViewVirtualized } from "./usage-logs-view-virtualized";
 
@@ -13,7 +13,7 @@ interface UsageLogsDataSectionProps {
 
 export async function UsageLogsActiveSessionsSection() {
   const systemSettings = await getCachedSystemSettings();
-  return <ActiveSessionsPanel currencyCode={systemSettings.currencyDisplay} />;
+  return <ActiveSessionsCards currencyCode={systemSettings.currencyDisplay} />;
 }
 
 export async function UsageLogsDataSection({
