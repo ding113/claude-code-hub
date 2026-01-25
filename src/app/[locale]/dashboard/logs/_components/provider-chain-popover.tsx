@@ -107,39 +107,138 @@ export function ProviderChainPopover({
 
   // Single request: show name with icon and compact tooltip
   if (requestCount <= 1) {
+    // Get session reuse context for detailed tooltip
+    const sessionReuseItem = chain.find(
+      (item) => item.reason === "session_reuse" || item.selectionMethod === "session_reuse"
+    );
+    const sessionReuseContext = sessionReuseItem?.decisionContext;
+
     return (
       <div className={`${maxWidthClass} min-w-0 w-full`}>
         <TooltipProvider>
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
               <span className="truncate flex items-center gap-1 cursor-help" dir="auto">
+                {/* Session reuse indicator */}
                 {isSessionReuse && <Link2 className="h-3 w-3 shrink-0 text-violet-500" />}
+                {/* Initial selection: show compact priority badge before name */}
+                {!isSessionReuse && selectionContext && (
+                  <span className="shrink-0 text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+                    P{selectionContext.selectedPriority}
+                  </span>
+                )}
                 <span className="truncate">{displayName}</span>
               </span>
             </TooltipTrigger>
-            <TooltipContent side="bottom" align="start" className="max-w-[280px]">
-              <div className="space-y-1.5">
+            <TooltipContent side="bottom" align="start" className="max-w-[320px]">
+              <div className="space-y-2">
                 {/* Provider name */}
                 <div className="font-medium text-xs">{displayName}</div>
 
-                {/* Session reuse indicator */}
+                {/* Session reuse detailed info */}
                 {isSessionReuse && (
-                  <div className="flex items-center gap-1.5 text-[10px] text-violet-600 dark:text-violet-400">
-                    <Link2 className="h-3 w-3" />
-                    <span>{tChain("reasons.session_reuse")}</span>
+                  <div className="space-y-1.5 pt-1 border-t border-zinc-600 dark:border-zinc-300">
+                    <div className="flex items-center gap-1.5 text-[10px] text-violet-400 dark:text-violet-600 font-medium">
+                      <Link2 className="h-3 w-3" />
+                      <span>{tChain("reasons.session_reuse")}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] pl-1">
+                      {sessionReuseContext?.sessionAge !== undefined && (
+                        <div>
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            {tChain("timeline.sessionAge") || "Age"}:
+                          </span>{" "}
+                          <span className="text-zinc-200 dark:text-zinc-700">
+                            {sessionReuseContext.sessionAge}s
+                          </span>
+                        </div>
+                      )}
+                      {sessionReuseItem?.priority !== undefined && (
+                        <div>
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            {tChain("details.priority")}:
+                          </span>{" "}
+                          <span className="text-zinc-200 dark:text-zinc-700">
+                            P{sessionReuseItem.priority}
+                          </span>
+                        </div>
+                      )}
+                      {sessionReuseItem?.costMultiplier !== undefined && (
+                        <div>
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            {tChain("details.costMultiplier")}:
+                          </span>{" "}
+                          <span className="text-zinc-200 dark:text-zinc-700">
+                            x{sessionReuseItem.costMultiplier}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
-                {/* Selection context for initial selection */}
+                {/* Initial selection detailed info */}
                 {!isSessionReuse && selectionContext && (
-                  <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <span>{selectionContext.enabledProviders}</span>
-                    <ChevronRight className="h-2.5 w-2.5" />
-                    <span>{selectionContext.afterHealthCheck}</span>
-                    <ChevronRight className="h-2.5 w-2.5" />
-                    <span className="text-foreground font-medium">
-                      P{selectionContext.selectedPriority}
-                    </span>
+                  <div className="space-y-1.5 pt-1 border-t border-zinc-600 dark:border-zinc-300">
+                    <div className="text-[10px] text-zinc-300 dark:text-zinc-600 font-medium">
+                      {tChain("timeline.initialSelection") || "Initial Selection"}
+                    </div>
+                    {/* Selection funnel */}
+                    <div className="flex items-center gap-1 text-[10px] text-zinc-200 dark:text-zinc-700">
+                      <span>{selectionContext.totalProviders}</span>
+                      <span className="text-zinc-400 dark:text-zinc-500">total</span>
+                      <ChevronRight className="h-2.5 w-2.5" />
+                      <span>{selectionContext.enabledProviders}</span>
+                      <span className="text-zinc-400 dark:text-zinc-500">enabled</span>
+                      <ChevronRight className="h-2.5 w-2.5" />
+                      <span>{selectionContext.afterHealthCheck}</span>
+                      <span className="text-zinc-400 dark:text-zinc-500">healthy</span>
+                    </div>
+                    {/* Priority and candidates */}
+                    <div className="text-[10px] space-y-0.5 pl-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-zinc-400 dark:text-zinc-500">{tChain("details.priority")}:</span>
+                        <span className="text-zinc-200 dark:text-zinc-700 font-medium">P{selectionContext.selectedPriority}</span>
+                        {selectionContext.candidatesAtPriority && (
+                          <span className="text-zinc-400 dark:text-zinc-500">
+                            ({selectionContext.candidatesAtPriority.length} candidates)
+                          </span>
+                        )}
+                      </div>
+                      {/* Show candidates with probability */}
+                      {selectionContext.candidatesAtPriority && selectionContext.candidatesAtPriority.length > 1 && (
+                        <div className="text-zinc-400 dark:text-zinc-500">
+                          {selectionContext.candidatesAtPriority.map((c, i) => (
+                            <span key={c.id}>
+                              {i > 0 && ", "}
+                              <span className={c.name === displayName ? "text-zinc-200 dark:text-zinc-700 font-medium" : ""}>
+                                {c.name}
+                              </span>
+                              {c.probability !== undefined && (
+                                <span className="text-zinc-500 dark:text-zinc-400">({c.probability}%)</span>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Provider config */}
+                    {initialSelection && (
+                      <div className="grid grid-cols-3 gap-x-2 text-[10px] text-zinc-400 dark:text-zinc-500 pt-1">
+                        {initialSelection.weight !== undefined && (
+                          <div>
+                            <span>{tChain("details.weight")}:</span>{" "}
+                            <span className="text-zinc-200 dark:text-zinc-700">{initialSelection.weight}</span>
+                          </div>
+                        )}
+                        {initialSelection.costMultiplier !== undefined && (
+                          <div>
+                            <span>{tChain("details.costMultiplier")}:</span>{" "}
+                            <span className="text-zinc-200 dark:text-zinc-700">x{initialSelection.costMultiplier}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -153,6 +252,18 @@ export function ProviderChainPopover({
   // Multiple requests: show popover with visual chain
   const actualRequests = chain.filter(isActualRequest);
 
+  // Get the successful provider's costMultiplier and groupTag
+  const successfulProvider = [...chain]
+    .reverse()
+    .find((item) => item.reason === "request_success" || item.reason === "retry_success");
+  const finalCostMultiplier = successfulProvider?.costMultiplier;
+  const finalGroupTag = successfulProvider?.groupTag;
+  const hasFinalCostBadge =
+    finalCostMultiplier !== undefined &&
+    finalCostMultiplier !== null &&
+    Number.isFinite(finalCostMultiplier) &&
+    finalCostMultiplier !== 1;
+
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -163,24 +274,39 @@ export function ProviderChainPopover({
           aria-label={`${displayName} - ${requestCount}${t("logs.table.times")}`}
         >
           <span className="flex w-full items-center gap-1 min-w-0">
-            <div className={`${maxWidthClass} min-w-0 flex-1`}>
-              <TooltipProvider>
-                <Tooltip delayDuration={300}>
-                  <TooltipTrigger asChild>
-                    <span className="truncate block cursor-help" dir="auto">
-                      {displayName}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" align="start">
-                    <p className="text-xs">{displayName}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-            <Badge variant="secondary" className="shrink-0 ml-1">
+            {/* Request count badge */}
+            <Badge variant="secondary" className="shrink-0">
               {requestCount}
               {t("logs.table.times")}
             </Badge>
+            {/* Provider name */}
+            <span className="truncate min-w-0" dir="auto">
+              {displayName}
+            </span>
+            {/* Cost multiplier badge (if not 1) */}
+            {hasFinalCostBadge && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] px-1 py-0 shrink-0",
+                  finalCostMultiplier > 1
+                    ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                    : "bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800"
+                )}
+              >
+                x{finalCostMultiplier.toFixed(2)}
+              </Badge>
+            )}
+            {/* Group tag badge (if present) */}
+            {finalGroupTag && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1 py-0 shrink-0 bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-700"
+              >
+                {finalGroupTag}
+              </Badge>
+            )}
+            {/* Info icon */}
             <InfoIcon className="h-3 w-3 text-muted-foreground shrink-0" aria-hidden="true" />
           </span>
         </Button>

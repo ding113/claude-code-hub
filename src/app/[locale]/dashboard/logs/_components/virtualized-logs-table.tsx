@@ -20,7 +20,6 @@ import {
   formatDuration,
   NON_BILLING_ENDPOINT,
 } from "@/lib/utils/performance-formatter";
-import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
@@ -465,28 +464,6 @@ export function VirtualizedLogsTable({
                                 );
                               })()}
                             </div>
-                            {log.providerChain &&
-                              log.providerChain.length > 0 &&
-                              formatProviderSummary(log.providerChain, tChain) && (
-                                <TooltipProvider>
-                                  <Tooltip delayDuration={300}>
-                                    <TooltipTrigger asChild>
-                                      <span className="text-xs text-muted-foreground cursor-help truncate max-w-[180px] block text-left">
-                                        {formatProviderSummary(log.providerChain, tChain)}
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                      side="bottom"
-                                      align="start"
-                                      className="max-w-[500px]"
-                                    >
-                                      <p className="text-xs whitespace-normal break-words font-mono">
-                                        {formatProviderSummary(log.providerChain, tChain)}
-                                      </p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
                           </div>
                         )}
                       </div>
