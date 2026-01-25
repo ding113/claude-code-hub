@@ -116,7 +116,13 @@ export function UsageLogsFilters({
     if (localFilters.endpoint) count++;
     if (localFilters.sessionId) count++;
     return count;
-  }, [isAdmin, localFilters.providerId, localFilters.model, localFilters.endpoint, localFilters.sessionId]);
+  }, [
+    isAdmin,
+    localFilters.providerId,
+    localFilters.model,
+    localFilters.endpoint,
+    localFilters.sessionId,
+  ]);
 
   const statusActiveCount = useMemo(() => {
     let count = 0;
@@ -164,58 +170,61 @@ export function UsageLogsFilters({
     }
   };
 
-  const handlePresetToggle = useCallback((preset: FilterPreset) => {
-    const now = new Date();
+  const handlePresetToggle = useCallback(
+    (preset: FilterPreset) => {
+      const now = new Date();
 
-    if (preset === activePreset) {
-      // Toggle off - clear the preset-related filters
-      setActivePreset(null);
-      setLocalFilters((prev) => {
-        const next = { ...prev };
-        if (preset === "today" || preset === "this-week") {
-          delete next.startTime;
-          delete next.endTime;
-        } else if (preset === "errors-only") {
-          delete next.excludeStatusCode200;
-        } else if (preset === "show-retries") {
-          delete next.minRetryCount;
-        }
-        return next;
-      });
-      return;
-    }
+      if (preset === activePreset) {
+        // Toggle off - clear the preset-related filters
+        setActivePreset(null);
+        setLocalFilters((prev) => {
+          const next = { ...prev };
+          if (preset === "today" || preset === "this-week") {
+            delete next.startTime;
+            delete next.endTime;
+          } else if (preset === "errors-only") {
+            delete next.excludeStatusCode200;
+          } else if (preset === "show-retries") {
+            delete next.minRetryCount;
+          }
+          return next;
+        });
+        return;
+      }
 
-    setActivePreset(preset);
+      setActivePreset(preset);
 
-    if (preset === "today") {
-      const todayStart = startOfDay(now).getTime();
-      const todayEnd = todayStart + 24 * 60 * 60 * 1000;
-      setLocalFilters((prev) => ({
-        ...prev,
-        startTime: todayStart,
-        endTime: todayEnd,
-      }));
-    } else if (preset === "this-week") {
-      const weekStart = startOfWeek(now, { weekStartsOn: 1 }).getTime();
-      const weekEnd = weekStart + 7 * 24 * 60 * 60 * 1000;
-      setLocalFilters((prev) => ({
-        ...prev,
-        startTime: weekStart,
-        endTime: weekEnd,
-      }));
-    } else if (preset === "errors-only") {
-      setLocalFilters((prev) => ({
-        ...prev,
-        excludeStatusCode200: true,
-        statusCode: undefined,
-      }));
-    } else if (preset === "show-retries") {
-      setLocalFilters((prev) => ({
-        ...prev,
-        minRetryCount: 1,
-      }));
-    }
-  }, [activePreset]);
+      if (preset === "today") {
+        const todayStart = startOfDay(now).getTime();
+        const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+        setLocalFilters((prev) => ({
+          ...prev,
+          startTime: todayStart,
+          endTime: todayEnd,
+        }));
+      } else if (preset === "this-week") {
+        const weekStart = startOfWeek(now, { weekStartsOn: 1 }).getTime();
+        const weekEnd = weekStart + 7 * 24 * 60 * 60 * 1000;
+        setLocalFilters((prev) => ({
+          ...prev,
+          startTime: weekStart,
+          endTime: weekEnd,
+        }));
+      } else if (preset === "errors-only") {
+        setLocalFilters((prev) => ({
+          ...prev,
+          excludeStatusCode200: true,
+          statusCode: undefined,
+        }));
+      } else if (preset === "show-retries") {
+        setLocalFilters((prev) => ({
+          ...prev,
+          minRetryCount: 1,
+        }));
+      }
+    },
+    [activePreset]
+  );
 
   const handleRemoveFilter = useCallback((key: keyof UsageLogFilters) => {
     setLocalFilters((prev) => {

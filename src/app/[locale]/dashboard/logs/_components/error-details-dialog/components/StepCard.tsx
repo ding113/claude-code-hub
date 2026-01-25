@@ -5,7 +5,13 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-export type StepStatus = "success" | "failure" | "warning" | "pending" | "skipped" | "session_reuse";
+export type StepStatus =
+  | "success"
+  | "failure"
+  | "warning"
+  | "pending"
+  | "skipped"
+  | "session_reuse";
 
 interface StepCardProps {
   /** Step number (1-based) */

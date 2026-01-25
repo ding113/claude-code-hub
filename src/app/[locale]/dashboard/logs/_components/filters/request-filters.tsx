@@ -26,10 +26,7 @@ import {
 import { SESSION_ID_SUGGESTION_MIN_LEN } from "@/lib/constants/usage-logs.constants";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { ProviderDisplay } from "@/types/provider";
-import {
-  useLazyEndpoints,
-  useLazyModels,
-} from "../../_hooks/use-lazy-filter-options";
+import { useLazyEndpoints, useLazyModels } from "../../_hooks/use-lazy-filter-options";
 import type { UsageLogFilters } from "./types";
 
 interface RequestFiltersProps {
@@ -180,9 +177,7 @@ export function RequestFilters({
                   (providerMap.get(filters.providerId) ?? filters.providerId.toString())
                 ) : (
                   <span className="text-muted-foreground">
-                    {isProvidersLoading
-                      ? t("logs.stats.loading")
-                      : t("logs.filters.allProviders")}
+                    {isProvidersLoading ? t("logs.stats.loading") : t("logs.filters.allProviders")}
                   </span>
                 )}
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -256,9 +251,7 @@ export function RequestFilters({
         >
           <SelectTrigger>
             <SelectValue
-              placeholder={
-                isModelsLoading ? t("logs.stats.loading") : t("logs.filters.allModels")
-              }
+              placeholder={isModelsLoading ? t("logs.stats.loading") : t("logs.filters.allModels")}
             />
           </SelectTrigger>
           <SelectContent>
@@ -339,9 +332,7 @@ export function RequestFilters({
             <Command shouldFilter={false}>
               <CommandList className="max-h-[250px] overflow-y-auto">
                 <CommandEmpty>
-                  {isSessionIdsLoading
-                    ? t("logs.stats.loading")
-                    : t("logs.filters.noSessionFound")}
+                  {isSessionIdsLoading ? t("logs.stats.loading") : t("logs.filters.noSessionFound")}
                 </CommandEmpty>
                 <CommandGroup>
                   {availableSessionIds.map((sessionId) => (

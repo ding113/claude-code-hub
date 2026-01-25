@@ -72,7 +72,10 @@ export function ActiveFiltersDisplay({
       result.push({
         key: "sessionId",
         label: t("sessionId"),
-        value: filters.sessionId.length > 12 ? `${filters.sessionId.slice(0, 12)}...` : filters.sessionId,
+        value:
+          filters.sessionId.length > 12
+            ? `${filters.sessionId.slice(0, 12)}...`
+            : filters.sessionId,
       });
     }
 
@@ -160,11 +163,7 @@ export function ActiveFiltersDisplay({
       </span>
 
       {activeFilters.map(({ key, label, value }) => (
-        <Badge
-          key={key}
-          variant="secondary"
-          className="gap-1 pr-1.5 pl-2 py-1 h-auto shrink-0"
-        >
+        <Badge key={key} variant="secondary" className="gap-1 pr-1.5 pl-2 py-1 h-auto shrink-0">
           <span className="text-xs">
             {label}: <span className="font-semibold">{value}</span>
           </span>

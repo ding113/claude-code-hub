@@ -137,7 +137,9 @@ export function ProviderChainPopover({
                     <ChevronRight className="h-2.5 w-2.5" />
                     <span>{selectionContext.afterHealthCheck}</span>
                     <ChevronRight className="h-2.5 w-2.5" />
-                    <span className="text-foreground font-medium">P{selectionContext.selectedPriority}</span>
+                    <span className="text-foreground font-medium">
+                      P{selectionContext.selectedPriority}
+                    </span>
                   </div>
                 )}
               </div>
