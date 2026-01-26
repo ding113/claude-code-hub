@@ -114,13 +114,7 @@ vi.mock("@/components/ui/tabs", () => {
 vi.mock(
   "@/app/[locale]/dashboard/logs/_components/error-details-dialog/components/StepCard",
   () => {
-    type StepStatus =
-      | "success"
-      | "failure"
-      | "warning"
-      | "pending"
-      | "skipped"
-      | "session_reuse";
+    type StepStatus = "success" | "failure" | "warning" | "pending" | "skipped" | "session_reuse";
 
     interface StepCardProps {
       step: number;
@@ -135,13 +129,7 @@ vi.mock(
       className?: string;
     }
 
-    function StepCard({
-      step,
-      icon: Icon,
-      title,
-      subtitle,
-      details,
-    }: StepCardProps) {
+    function StepCard({ step, icon: Icon, title, subtitle, details }: StepCardProps) {
       return (
         <div data-slot="step-card" data-step={step}>
           <Icon className="step-icon" />
@@ -902,9 +890,7 @@ describe("error-details-dialog probability formatting", () => {
                 afterHealthCheck: 1,
                 selectedPriority: 1,
                 priorityLevels: [1],
-                candidatesAtPriority: [
-                  { id: 1, name: "p1", weight: 100, costMultiplier: 1 },
-                ],
+                candidatesAtPriority: [{ id: 1, name: "p1", weight: 100, costMultiplier: 1 }],
               },
             },
             {
