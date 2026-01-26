@@ -71,14 +71,15 @@ export function ProbeTerminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const [userScrolled, setUserScrolled] = useState(false);
   const [filter, setFilter] = useState("");
+  const lastLogId = logs[logs.length - 1]?.id;
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
-    if (logs.length === 0) return;
+    if (!lastLogId) return;
     if (autoScroll && !userScrolled && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs.length, autoScroll, userScrolled]);
+  }, [lastLogId, autoScroll, userScrolled]);
 
   // Detect user scroll
   const handleScroll = () => {
