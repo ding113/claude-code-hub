@@ -72,6 +72,7 @@ export function TagInput({
     left: number;
     width: number;
   } | null>(null);
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
@@ -100,42 +101,58 @@ export function TagInput({
     previousShowSuggestions.current = showSuggestions;
   }, [showSuggestions, onSuggestionsClose]);
 
-  // Calculate dropdown position when showing suggestions
-  // Using fixed positioning, so use viewport coordinates directly (no scroll offset)
-  React.useEffect(() => {
-    if (showSuggestions && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + 4,
-        left: rect.left,
+  React.useLayoutEffect(() => {
+    if (!containerRef.current) return;
+    const dialogContent = containerRef.current.closest('[data-slot="dialog-content"]');
+    setPortalContainer(dialogContent instanceof HTMLElement ? dialogContent : null);
+  }, []);
+
+  const getDropdownPosition = React.useCallback(() => {
+    if (!containerRef.current) return null;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (portalContainer) {
+      const containerRect = portalContainer.getBoundingClientRect();
+      return {
+        top: rect.bottom - containerRect.top + portalContainer.scrollTop + 4,
+        left: rect.left - containerRect.left + portalContainer.scrollLeft,
         width: rect.width,
-      });
+      };
     }
-  }, [showSuggestions]);
+    return {
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    };
+  }, [portalContainer]);
+
+  React.useEffect(() => {
+    if (!showSuggestions) return;
+    const position = getDropdownPosition();
+    if (position) {
+      setDropdownPosition(position);
+    }
+  }, [showSuggestions, getDropdownPosition]);
 
   // Update position on scroll/resize (recalculate viewport coords)
   React.useEffect(() => {
     if (!showSuggestions) return;
 
     const updatePosition = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setDropdownPosition({
-          top: rect.bottom + 4,
-          left: rect.left,
-          width: rect.width,
-        });
+      const position = getDropdownPosition();
+      if (position) {
+        setDropdownPosition(position);
       }
     };
 
-    window.addEventListener("scroll", updatePosition, true);
+    const scrollTarget: HTMLElement | Window = portalContainer ?? window;
+    scrollTarget.addEventListener("scroll", updatePosition, true);
     window.addEventListener("resize", updatePosition);
 
     return () => {
-      window.removeEventListener("scroll", updatePosition, true);
+      scrollTarget.removeEventListener("scroll", updatePosition, true);
       window.removeEventListener("resize", updatePosition);
     };
-  }, [showSuggestions]);
+  }, [showSuggestions, getDropdownPosition, portalContainer]);
 
   // Close dropdown when clicking outside
   React.useEffect(() => {
@@ -470,10 +487,13 @@ export function TagInput({
       )}
       {/* 建议下拉列表 - 使用 Radix Portal 确保在 Dialog 中正确渲染 */}
       {showSuggestions && filteredSuggestions.length > 0 && dropdownPosition && (
-        <Portal.Root>
+        <Portal.Root container={portalContainer ?? undefined}>
           <div
             ref={dropdownRef}
-            className="fixed z-[9999] rounded-md border bg-popover shadow-md max-h-48 overflow-auto"
+            className={cn(
+              portalContainer ? "absolute" : "fixed",
+              "z-[9999] rounded-md border bg-popover shadow-md max-h-48 overflow-auto"
+            )}
             style={{
               top: dropdownPosition.top,
               left: dropdownPosition.left,
