@@ -7,7 +7,13 @@ import { useState } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, test, afterEach } from "vitest";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TagInput } from "@/components/ui/tag-input";
 
 function render(node: ReactNode) {
