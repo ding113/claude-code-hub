@@ -3,7 +3,13 @@ import "server-only";
 import crypto from "node:crypto";
 import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import {
+  redactMessages,
+  redactRequestBody,
+  redactResponseBody,
+} from "@/lib/utils/message-redaction";
 import { normalizeRequestSequence } from "@/lib/utils/request-sequence";
 import type {
   ActiveSessionInfo,
@@ -79,13 +85,21 @@ type SessionResponseMeta = {
  */
 export class SessionManager {
   private static readonly SESSION_TTL = parseInt(process.env.SESSION_TTL || "300", 10); // 5 分钟
-  private static readonly STORE_MESSAGES = process.env.STORE_SESSION_MESSAGES === "true";
   private static readonly SHORT_CONTEXT_THRESHOLD = parseInt(
     process.env.SHORT_CONTEXT_THRESHOLD || "2",
     10
   ); // 短上下文阈值
   private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
     process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
+
+  /**
+   * 获取 STORE_SESSION_MESSAGES 配置
+   * - true：原样存储 message 内容
+   * - false（默认）：存储但对 message 内容脱敏 [REDACTED]
+   */
+  private static get STORE_MESSAGES(): boolean {
+    return getEnvConfig().STORE_SESSION_MESSAGES;
+  }
 
   /**
    * 从客户端请求中提取 session_id（支持 metadata 或 header）
@@ -917,7 +931,11 @@ export class SessionManager {
   }
 
   /**
-   * 存储 session 请求 messages（可选，受环境变量控制）
+   * 存储 session 请求 messages
+   *
+   * 存储策略受 STORE_SESSION_MESSAGES 控制：
+   * - true：原样存储 message 内容
+   * - false（默认）：存储但对 message 内容脱敏 [REDACTED]
    *
    * @param sessionId - Session ID
    * @param messages - 消息内容
@@ -928,16 +946,13 @@ export class SessionManager {
     messages: unknown,
     requestSequence?: number
   ): Promise<void> {
-    if (!SessionManager.STORE_MESSAGES) {
-      logger.trace("SessionManager: STORE_SESSION_MESSAGES is disabled, skipping");
-      return;
-    }
-
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
     try {
-      const messagesJson = JSON.stringify(messages);
+      // 根据配置决定是否脱敏
+      const messagesToStore = SessionManager.STORE_MESSAGES ? messages : redactMessages(messages);
+      const messagesJson = JSON.stringify(messagesToStore);
       // 新格式：session:{sessionId}:req:{sequence}:messages（独立存储每个请求）
       // 旧格式：session:{sessionId}:messages（向后兼容）
       const key = requestSequence
@@ -948,6 +963,7 @@ export class SessionManager {
         sessionId,
         requestSequence,
         key,
+        redacted: !SessionManager.STORE_MESSAGES,
       });
     } catch (error) {
       logger.error("SessionManager: Failed to store session messages", {
@@ -1233,17 +1249,12 @@ export class SessionManager {
    *
    * @param sessionId - Session ID
    * @param requestSequence - 可选，请求序号。提供时读取特定请求的消息
-   * @returns 消息内容（解析后的 JSON 对象）
+   * @returns 消息内容（解析后的 JSON 对象，可能已脱敏）
    */
   static async getSessionMessages(
     sessionId: string,
     requestSequence?: number
   ): Promise<unknown | null> {
-    if (!SessionManager.STORE_MESSAGES) {
-      logger.warn("SessionManager: STORE_SESSION_MESSAGES is disabled");
-      return null;
-    }
-
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return null;
 
@@ -1281,10 +1292,6 @@ export class SessionManager {
    * @returns 是否存在任意 messages
    */
   static async hasAnySessionMessages(sessionId: string): Promise<boolean> {
-    if (!SessionManager.STORE_MESSAGES) {
-      return false;
-    }
-
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return false;
 
@@ -1325,6 +1332,10 @@ export class SessionManager {
   /**
    * 存储 session 响应体（临时存储，5分钟过期）
    *
+   * 存储策略受 STORE_SESSION_MESSAGES 控制：
+   * - true：原样存储响应内容
+   * - false（默认）：对 JSON 响应体中的 message 内容脱敏 [REDACTED]
+   *
    * @param sessionId - Session ID
    * @param response - 响应体内容（字符串或对象）
    * @param requestSequence - 可选，请求序号。提供时使用新的 key 格式存储独立响应
@@ -1338,7 +1349,27 @@ export class SessionManager {
     if (!redis || redis.status !== "ready") return;
 
     try {
-      const responseString = typeof response === "string" ? response : JSON.stringify(response);
+      let responseString: string;
+
+      if (SessionManager.STORE_MESSAGES) {
+        // 原样存储
+        responseString = typeof response === "string" ? response : JSON.stringify(response);
+      } else {
+        // 尝试解析 JSON 并脱敏
+        if (typeof response === "object") {
+          responseString = JSON.stringify(redactResponseBody(response));
+        } else {
+          // 字符串响应 - 尝试解析为 JSON
+          try {
+            const parsed = JSON.parse(response);
+            responseString = JSON.stringify(redactResponseBody(parsed));
+          } catch {
+            // 非 JSON（如 SSE 流），原样存储
+            responseString = response;
+          }
+        }
+      }
+
       // 新格式：session:{sessionId}:req:{sequence}:response（独立存储每个请求）
       // 旧格式：session:{sessionId}:response（向后兼容）
       const key = requestSequence
@@ -1349,6 +1380,7 @@ export class SessionManager {
         sessionId,
         requestSequence,
         size: responseString.length,
+        redacted: !SessionManager.STORE_MESSAGES,
       });
     } catch (error) {
       logger.error("SessionManager: Failed to store session response", {
@@ -1360,7 +1392,9 @@ export class SessionManager {
   /**
    * 存储 session 完整请求体（客户端原始请求体，临时存储，5分钟过期）
    *
-   * 注意：此数据可能较大且包含用户输入，仅在 STORE_SESSION_MESSAGES=true 时启用。
+   * 存储策略受 STORE_SESSION_MESSAGES 控制：
+   * - true：原样存储请求体内容
+   * - false（默认）：存储但对 message 内容脱敏 [REDACTED]
    *
    * @param sessionId - Session ID
    * @param requestBody - 请求体（完整 JSON）
@@ -1371,24 +1405,24 @@ export class SessionManager {
     requestBody: unknown,
     requestSequence?: number
   ): Promise<void> {
-    if (!SessionManager.STORE_MESSAGES) {
-      logger.trace("SessionManager: STORE_SESSION_MESSAGES is disabled, skipping request body");
-      return;
-    }
-
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
     try {
       const sequence = normalizeRequestSequence(requestSequence) ?? 1;
       const key = `session:${sessionId}:req:${sequence}:requestBody`;
-      const payload = JSON.stringify(requestBody);
+      // 根据配置决定是否脱敏
+      const bodyToStore = SessionManager.STORE_MESSAGES
+        ? requestBody
+        : redactRequestBody(requestBody);
+      const payload = JSON.stringify(bodyToStore);
       await redis.setex(key, SessionManager.SESSION_TTL, payload);
       logger.trace("SessionManager: Stored session request body", {
         sessionId,
         requestSequence: sequence,
         key,
         size: payload.length,
+        redacted: !SessionManager.STORE_MESSAGES,
       });
     } catch (error) {
       logger.error("SessionManager: Failed to store session request body", { error, sessionId });
@@ -1396,21 +1430,16 @@ export class SessionManager {
   }
 
   /**
-   * 获取 session 完整请求体（客户端原始请求体）
+   * 获取 session 完整请求体（客户端原始请求体，可能已脱敏）
    *
    * @param sessionId - Session ID
    * @param requestSequence - 请求序号
-   * @returns 解析后的 JSON 对象
+   * @returns 解析后的 JSON 对象（可能已脱敏）
    */
   static async getSessionRequestBody(
     sessionId: string,
     requestSequence?: number
   ): Promise<unknown | null> {
-    if (!SessionManager.STORE_MESSAGES) {
-      logger.warn("SessionManager: STORE_SESSION_MESSAGES is disabled");
-      return null;
-    }
-
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return null;
 

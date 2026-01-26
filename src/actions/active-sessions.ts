@@ -378,7 +378,10 @@ export async function getAllSessions(
 
 /**
  * 获取指定 session 的 messages 内容
- * 仅当 STORE_SESSION_MESSAGES=true 时可用
+ *
+ * 存储策略受 STORE_SESSION_MESSAGES 控制：
+ * - false（默认）：存储但对 message 内容脱敏 [REDACTED]
+ * - true：原样存储 message 内容
  *
  * 安全修复：添加用户权限检查
  */

@@ -104,6 +104,9 @@ vi.mock("@/drizzle/schema", () => ({
     updatedAt: "users.updatedAt",
     deletedAt: "users.deletedAt",
   },
+  messageRequest: {
+    blockedBy: "messageRequest.blockedBy",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({

@@ -71,7 +71,8 @@ describe("generateAgentCacheKey", () => {
       proxyUrl: "https://secure-proxy.example.com:443",
       enableHttp2: true,
     });
-    expect(key).toBe("https://api.anthropic.com|https://secure-proxy.example.com:443|h2");
+    // URL API strips default port 443 for HTTPS
+    expect(key).toBe("https://api.anthropic.com|https://secure-proxy.example.com|h2");
   });
 
   it("should use origin only (strip path and query)", () => {

@@ -57,7 +57,7 @@ describe("Session Status Logic", () => {
       const result = getSessionDisplayStatus(input);
 
       expect(result.status).toBe(SESSION_DISPLAY_STATUS.INITIALIZING);
-      expect(result.label).toBe("INITIALIZING");
+      expect(result.label).toBe("INIT");
       expect(result.pulse).toBe(true);
       expect(result.tooltipKey).toBe("status.initializingTooltip");
       expect(result.color).toContain("amber");
@@ -73,7 +73,7 @@ describe("Session Status Logic", () => {
       const result = getSessionDisplayStatus(input);
 
       expect(result.status).toBe(SESSION_DISPLAY_STATUS.INITIALIZING);
-      expect(result.label).toBe("INITIALIZING");
+      expect(result.label).toBe("INIT");
       expect(result.pulse).toBe(true);
     });
 
@@ -87,7 +87,7 @@ describe("Session Status Logic", () => {
       const result = getSessionDisplayStatus(input);
 
       expect(result.status).toBe(SESSION_DISPLAY_STATUS.IN_PROGRESS);
-      expect(result.label).toBe("IN_PROGRESS");
+      expect(result.label).toBe("BUSY");
       expect(result.pulse).toBe(true);
       expect(result.tooltipKey).toBe("status.inProgressTooltip");
       expect(result.color).toContain("emerald");
@@ -103,7 +103,7 @@ describe("Session Status Logic", () => {
       const result = getSessionDisplayStatus(input);
 
       expect(result.status).toBe(SESSION_DISPLAY_STATUS.IN_PROGRESS);
-      expect(result.label).toBe("IN_PROGRESS");
+      expect(result.label).toBe("BUSY");
       expect(result.pulse).toBe(true);
     });
 
@@ -117,7 +117,7 @@ describe("Session Status Logic", () => {
       const result = getSessionDisplayStatus(input);
 
       expect(result.status).toBe(SESSION_DISPLAY_STATUS.IN_PROGRESS);
-      expect(result.label).toBe("ERROR");
+      expect(result.label).toBe("FAIL");
       expect(result.pulse).toBe(true);
       expect(result.tooltipKey).toBe("status.errorTooltip");
       expect(result.color).toContain("rose");
@@ -132,7 +132,7 @@ describe("Session Status Logic", () => {
 
       const result = getSessionDisplayStatus(input);
 
-      expect(result.label).toBe("ERROR");
+      expect(result.label).toBe("FAIL");
       expect(result.pulse).toBe(true);
     });
 
@@ -154,7 +154,7 @@ describe("Session Status Logic", () => {
       const result = getSessionDisplayStatus(input);
 
       expect(result.status).toBe(SESSION_DISPLAY_STATUS.INITIALIZING);
-      expect(result.label).toBe("INITIALIZING");
+      expect(result.label).toBe("INIT");
     });
 
     test("handles partial input with only requestCount", () => {
@@ -178,7 +178,7 @@ describe("Session Status Logic", () => {
       const result = getSessionDisplayStatus(input);
 
       expect(result.status).toBe(SESSION_DISPLAY_STATUS.IN_PROGRESS);
-      expect(result.label).toBe("IN_PROGRESS");
+      expect(result.label).toBe("BUSY");
       expect(result.pulse).toBe(true);
     });
   });
@@ -235,21 +235,21 @@ describe("Session Status Logic", () => {
         requestCount: 0,
         status: "error",
       };
-      expect(getSessionDisplayStatus(errorDuringInit).label).toBe("ERROR");
+      expect(getSessionDisplayStatus(errorDuringInit).label).toBe("FAIL");
 
       const errorDuringProgress: SessionStatusInput = {
         concurrentCount: 3,
         requestCount: 10,
         status: "error",
       };
-      expect(getSessionDisplayStatus(errorDuringProgress).label).toBe("ERROR");
+      expect(getSessionDisplayStatus(errorDuringProgress).label).toBe("FAIL");
 
       const errorAfterComplete: SessionStatusInput = {
         concurrentCount: 0,
         requestCount: 5,
         status: "error",
       };
-      expect(getSessionDisplayStatus(errorAfterComplete).label).toBe("ERROR");
+      expect(getSessionDisplayStatus(errorAfterComplete).label).toBe("FAIL");
     });
   });
 });

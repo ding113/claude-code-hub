@@ -125,6 +125,6 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     await ProxySessionGuard.ensure(session);
 
     expect(trackSessionMock).toHaveBeenCalledTimes(1);
-    expect(trackSessionMock).toHaveBeenCalledWith("session_assigned", 1);
+    expect(trackSessionMock).toHaveBeenCalledWith("session_assigned", 1, 1);
   });
 });

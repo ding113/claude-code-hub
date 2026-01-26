@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => {
     })),
     isVendorTypeCircuitOpen: vi.fn(async () => false),
     recordVendorTypeAllEndpointsTimeout: vi.fn(async () => {}),
+    categorizeErrorAsync: vi.fn(),
   };
 });
 
@@ -53,7 +54,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/app/v1/_lib/proxy/errors")>();
   return {
     ...actual,
-    categorizeErrorAsync: vi.fn(async () => actual.ErrorCategory.PROVIDER_ERROR),
+    categorizeErrorAsync: mocks.categorizeErrorAsync,
   };
 });
 
@@ -278,9 +279,15 @@ describe("ProxyForwarder - endpoint audit", () => {
         ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
         "doForward"
       );
+      // Throw network error (SYSTEM_ERROR) to trigger endpoint switching
+      // PROVIDER_ERROR (HTTP 4xx/5xx) doesn't trigger endpoint switch, only SYSTEM_ERROR does
       doForward.mockImplementationOnce(async () => {
-        throw new ProxyError("boom", 500);
+        const err = new Error("ECONNREFUSED") as NodeJS.ErrnoException;
+        err.code = "ECONNREFUSED";
+        throw err;
       });
+      // Configure categorizeErrorAsync to return SYSTEM_ERROR for network errors
+      mocks.categorizeErrorAsync.mockResolvedValueOnce(1); // ErrorCategory.SYSTEM_ERROR = 1
       doForward.mockResolvedValueOnce(
         new Response("{}", {
           status: 200,
@@ -304,7 +311,7 @@ describe("ProxyForwarder - endpoint audit", () => {
 
       expect(first).toEqual(
         expect.objectContaining({
-          reason: "retry_failed",
+          reason: "system_error",
           attemptNumber: 1,
           vendorId: 123,
           providerType: "openai-compatible",

@@ -6,7 +6,9 @@
  * 2. 智能截断：JSON 完整保存，文本限制 500 字符
  * 3. 可读性优先：纯文本格式化，便于排查问题
  */
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { type ErrorDetectionResult, errorRuleDetector } from "@/lib/error-rule-detector";
+import { redactJsonString } from "@/lib/utils/message-redaction";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import type { ProviderChainItem } from "@/types/message";
 import type { ProxySession } from "./session";
@@ -1160,13 +1162,21 @@ export function truncateRequestBody(body: string | null | undefined): {
  *
  * 从 ProxySession 提取请求信息，自动进行脱敏和截断处理
  *
+ * 存储策略受 STORE_SESSION_MESSAGES 控制：
+ * - false（默认）：请求体中的 message 内容脱敏为 [REDACTED]
+ * - true：原样存储请求体内容
+ *
  * @param session - 代理会话对象
  * @returns 脱敏和截断后的请求详情
  */
 export function buildRequestDetails(
   session: ProxySession
 ): NonNullable<ProviderChainItem["errorDetails"]>["request"] {
-  const { body, truncated } = truncateRequestBody(session.request.log);
+  const { body: rawBody, truncated } = truncateRequestBody(session.request.log);
+
+  // 根据配置决定是否脱敏请求体
+  const storeMessages = getEnvConfig().STORE_SESSION_MESSAGES;
+  const body = storeMessages ? rawBody : redactJsonString(rawBody);
 
   return {
     url: sanitizeUrl(session.requestUrl),

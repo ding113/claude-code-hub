@@ -195,6 +195,7 @@ function createSession(requestUrl: URL = new URL("https://example.com/v1/message
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
+    providersSnapshot: [],
     isHeaderModified: () => false,
   });
 
@@ -632,9 +633,15 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      await vi.advanceTimersByTimeAsync(200);
+      // Attach catch handler immediately to prevent unhandled rejection warnings
+      let caughtError: Error | null = null;
+      sendPromise.catch((e) => {
+        caughtError = e;
+      });
+      await vi.runAllTimersAsync();
 
-      await expect(sendPromise).rejects.toThrow();
+      expect(caughtError).not.toBeNull();
+      expect(caughtError).toBeInstanceOf(ProxyError);
 
       // Should only call doForward twice (maxRetryAttempts=2), NOT 4 times
       expect(doForward).toHaveBeenCalledTimes(2);
@@ -873,10 +880,16 @@ describe("ProxyForwarder - endpoint stickiness on retry", () => {
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      await vi.advanceTimersByTimeAsync(500);
+      // Attach catch handler immediately to prevent unhandled rejection warnings
+      let caughtError: Error | null = null;
+      sendPromise.catch((e) => {
+        caughtError = e;
+      });
+      await vi.runAllTimersAsync();
 
       // Should fail eventually (no successful response)
-      await expect(sendPromise).rejects.toThrow();
+      expect(caughtError).not.toBeNull();
+      expect(caughtError).toBeInstanceOf(ProxyError);
 
       const chain = session.getProviderChain();
 

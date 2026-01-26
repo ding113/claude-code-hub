@@ -23,30 +23,10 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { redactJsonString } from "@/lib/utils/message-redaction";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
 import { StepCard, type StepStatus } from "./StepCard";
-
-/**
- * Redact sensitive message content in errorDetails.request.body
- */
-function redactErrorDetails(
-  errorDetails: NonNullable<ProviderChainItem["errorDetails"]>
-): NonNullable<ProviderChainItem["errorDetails"]> {
-  if (!errorDetails.request?.body) {
-    return errorDetails;
-  }
-
-  return {
-    ...errorDetails,
-    request: {
-      ...errorDetails.request,
-      body: redactJsonString(errorDetails.request.body),
-    },
-  };
-}
 
 function getRequestStatus(item: ProviderChainItem): StepStatus {
   // Check for session reuse first
@@ -608,6 +588,7 @@ export function LogicTraceTab({
                     )}
 
                     {/* Error Details */}
+                    {/* 后端 buildRequestDetails 已根据 STORE_SESSION_MESSAGES 配置进行脱敏 */}
                     {item.errorDetails && (
                       <Collapsible>
                         <CollapsibleTrigger className="flex items-center gap-1 text-muted-foreground hover:text-foreground text-[10px]">
@@ -615,7 +596,7 @@ export function LogicTraceTab({
                         </CollapsibleTrigger>
                         <CollapsibleContent className="mt-1">
                           <pre className="text-[10px] bg-rose-50 dark:bg-rose-950/20 p-2 rounded whitespace-pre-wrap break-words font-mono">
-                            {JSON.stringify(redactErrorDetails(item.errorDetails), null, 2)}
+                            {JSON.stringify(item.errorDetails, null, 2)}
                           </pre>
                         </CollapsibleContent>
                       </Collapsible>

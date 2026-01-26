@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { CodeDisplay } from "@/components/ui/code-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { redactMessages, redactRequestBody } from "@/lib/utils/message-redaction";
 import { isSSEText } from "@/lib/utils/sse";
 
 export type SessionMessages = Record<string, unknown> | Record<string, unknown>[];
@@ -71,16 +70,16 @@ export function SessionMessagesDetailsTabs({
   const t = useTranslations("dashboard.sessions");
   const codeExpandedMaxHeight = "calc(100vh - 260px)";
 
+  // 后端已根据 STORE_SESSION_MESSAGES 配置进行脱敏，前端直接显示
   const requestBodyContent = useMemo(() => {
     if (requestBody === null) return null;
-    const redacted = redactRequestBody(requestBody);
-    return JSON.stringify(redacted, null, 2);
+    return JSON.stringify(requestBody, null, 2);
   }, [requestBody]);
 
+  // 后端已根据 STORE_SESSION_MESSAGES 配置进行脱敏，前端直接显示
   const requestMessagesContent = useMemo(() => {
     if (messages === null) return null;
-    const redacted = redactMessages(messages);
-    return JSON.stringify(redacted, null, 2);
+    return JSON.stringify(messages, null, 2);
   }, [messages]);
 
   const specialSettingsContent = useMemo(() => {

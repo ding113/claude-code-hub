@@ -242,11 +242,17 @@ describe("provider-chain-popover layout", () => {
     expect(buttonClass).toContain("w-full");
     expect(buttonClass).toContain("min-w-0");
 
-    const nameContainer = document.querySelector("#root button .flex-1.min-w-0");
+    // The button contains a span with flex+min-w-0, and inside it the provider name span has truncate+min-w-0
+    const buttonInnerSpan = document.querySelector("#root button span.flex.min-w-0");
+    expect(buttonInnerSpan).not.toBeNull();
+
+    // The name container has truncate and min-w-0
+    const nameContainer = document.querySelector("#root button span.truncate.min-w-0");
     expect(nameContainer).not.toBeNull();
 
+    // Find the count badge by checking content (it should contain "times" text from translation)
     const countBadge = Array.from(document.querySelectorAll('#root [data-slot="badge"]')).find(
-      (node) => (node.getAttribute("class") ?? "").includes("ml-1")
+      (node) => (node.textContent ?? "").includes("times")
     );
     expect(countBadge).not.toBeUndefined();
   });

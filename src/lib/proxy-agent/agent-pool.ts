@@ -116,9 +116,24 @@ export function generateAgentCacheKey(params: GetAgentParams): string {
   const origin = url.origin;
   let proxy = "direct";
   if (params.proxyUrl) {
-    const proxyUrl = new URL(params.proxyUrl);
-    // Use only origin (protocol + host + port) to avoid exposing credentials
-    proxy = proxyUrl.origin;
+    // SOCKS URLs (socks4://, socks5://) are not standard HTTP URLs and the URL API
+    // returns "null" for origin. Handle them specially by extracting protocol://host:port
+    if (params.proxyUrl.startsWith("socks4://") || params.proxyUrl.startsWith("socks5://")) {
+      // Parse manually: socks5://[user:pass@]host:port
+      const match = params.proxyUrl.match(/^(socks[45]):\/\/(?:[^@]+@)?([^:/?#]+)(?::(\d+))?/);
+      if (match) {
+        const protocol = match[1];
+        const host = match[2];
+        const port = match[3] || (protocol === "socks5" ? "1080" : "1080");
+        proxy = `${protocol}://${host}:${port}`;
+      } else {
+        proxy = params.proxyUrl; // Fallback to original URL
+      }
+    } else {
+      const proxyUrl = new URL(params.proxyUrl);
+      // Use only origin (protocol + host + port) to avoid exposing credentials
+      proxy = proxyUrl.origin;
+    }
   }
   const protocol = params.enableHttp2 ? "h2" : "h1";
   return `${origin}|${proxy}|${protocol}`;

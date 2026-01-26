@@ -276,7 +276,7 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(htmlHidden).not.toContain("logs.columns.provider");
   });
 
-  test("renders provider summary and fetching state when enabled", () => {
+  test("renders provider chain and fetching state when enabled", () => {
     mockIsLoading = false;
     mockIsError = false;
     mockError = null;
@@ -294,7 +294,9 @@ describe("virtualized-logs-table multiplier badge", () => {
     const html = renderToStaticMarkup(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
-    expect(html).toContain("provider summary");
+    // VirtualizedLogsTable uses ProviderChainPopover which renders the provider name directly,
+    // not via formatProviderSummary (which is only used in other contexts)
+    expect(html).toContain("p1");
     expect(html).toContain("logs.table.loadingMore");
   });
 

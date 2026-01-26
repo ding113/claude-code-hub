@@ -6,6 +6,9 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, test, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
 import { UsageLogsFilters } from "@/app/[locale]/dashboard/logs/_components/usage-logs-filters";
 
 vi.mock("next-intl", () => ({
@@ -115,6 +118,62 @@ vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+}));
+
+// Mock Collapsible to always show content (bypass collapsed state)
+vi.mock("@/components/ui/collapsible", () => ({
+  Collapsible: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CollapsibleTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CollapsibleContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+}));
+
+// Mock Select components
+vi.mock("@/components/ui/select", () => ({
+  Select: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SelectTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SelectContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SelectValue: () => <span />,
+}));
+
+// Mock Command components for provider/sessionId dropdowns
+vi.mock("@/components/ui/command", () => ({
+  Command: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CommandInput: ({ placeholder }: { placeholder?: string }) => <input placeholder={placeholder} />,
+  CommandList: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CommandEmpty: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CommandGroup: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CommandItem: ({
+    children,
+    onSelect,
+  }: {
+    children?: ReactNode;
+    value?: string;
+    onSelect?: () => void;
+  }) => (
+    <div cmdk-item="" onClick={onSelect}>
+      {children}
+    </div>
+  ),
+}));
+
+// Mock lazy filter hooks
+vi.mock("@/app/[locale]/dashboard/logs/_hooks/use-lazy-filter-options", () => ({
+  useLazyModels: () => ({
+    data: [],
+    isLoading: false,
+    onOpenChange: vi.fn(),
+  }),
+  useLazyEndpoints: () => ({
+    data: [],
+    isLoading: false,
+    onOpenChange: vi.fn(),
+  }),
+  useLazyStatusCodes: () => ({
+    data: [],
+    isLoading: false,
+    onOpenChange: vi.fn(),
+  }),
 }));
 
 async function flushMicrotasks() {

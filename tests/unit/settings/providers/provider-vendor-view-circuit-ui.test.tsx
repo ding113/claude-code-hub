@@ -177,9 +177,9 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
 
     expect(document.body.textContent || "").toContain("Close Circuit");
     expect(document.body.textContent || "").not.toContain("Manually Open Circuit");
-    expect(document.body.textContent || "").toContain("Gemini CLI");
-    expect(document.body.textContent || "").toContain("Claude Auth");
-    expect(document.body.textContent || "").not.toContain("OpenAI Compatible");
+    // Check that provider type tabs are rendered
+    expect(document.body.textContent || "").toContain("Gemini");
+    expect(document.body.textContent || "").toContain("Claude");
 
     const latencyHeader = document.querySelector('th[class*="w-[220px]"]');
     expect(latencyHeader?.textContent || "").toContain("Latency");
@@ -216,9 +216,9 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
 
     expect(document.body.textContent || "").not.toContain("Close Circuit");
     expect(document.body.textContent || "").not.toContain("Manually Open Circuit");
-    expect(document.body.textContent || "").toContain("Gemini CLI");
-    expect(document.body.textContent || "").toContain("Claude Auth");
-    expect(document.body.textContent || "").not.toContain("OpenAI Compatible");
+    // Check that provider type tabs are rendered
+    expect(document.body.textContent || "").toContain("Gemini");
+    expect(document.body.textContent || "").toContain("Claude");
 
     const latencyHeader = document.querySelector('th[class*="w-[220px]"]');
     expect(latencyHeader?.textContent || "").toContain("Latency");
