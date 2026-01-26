@@ -231,7 +231,7 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
  * 从域名派生显示名称（直接使用域名的中间部分）
  * 例如: anthropic.com -> Anthropic, api.openai.com -> OpenAI
  */
-export function deriveDisplayNameFromDomain(domain: string): string {
+export async function deriveDisplayNameFromDomain(domain: string): Promise<string> {
   const parts = domain
     .split(".")
     .map((part) => part.trim())
@@ -311,7 +311,7 @@ export async function backfillProviderVendorsFromProviders(): Promise<{
       }
 
       try {
-        const displayName = deriveDisplayNameFromDomain(domain);
+        const displayName = await deriveDisplayNameFromDomain(domain);
         const vendorId = await getOrCreateProviderVendorIdFromUrls({
           providerUrl: row.url,
           websiteUrl: row.websiteUrl ?? null,
