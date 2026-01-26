@@ -1,5 +1,6 @@
 import { socksDispatcher } from "fetch-socks";
 import { Agent, type Dispatcher, ProxyAgent, setGlobalDispatcher } from "undici";
+import { getGlobalAgentPool as getPool } from "@/lib/proxy-agent/agent-pool";
 import type { Provider } from "@/types/provider";
 import { getEnvConfig } from "./config/env.schema";
 import { logger } from "./logger";
@@ -238,4 +239,72 @@ export function isValidProxyUrl(proxyUrl: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Re-export from agent-pool module
+export {
+  type AgentPool,
+  type AgentPoolConfig,
+  type AgentPoolStats,
+  generateAgentCacheKey,
+  getGlobalAgentPool,
+  resetGlobalAgentPool,
+} from "./proxy-agent/agent-pool";
+
+/**
+ * Extended ProxyConfig with cache key for health management
+ */
+export interface ProxyConfigWithCacheKey extends ProxyConfig {
+  /** Cache key for marking agent as unhealthy on SSL errors */
+  cacheKey: string;
+}
+
+/**
+ * Get proxy agent for provider using the global Agent Pool
+ *
+ * This is the recommended way to get a proxy agent as it:
+ * 1. Reuses agents across requests to the same endpoint
+ * 2. Isolates connections between different endpoints
+ * 3. Supports health management (mark unhealthy on SSL errors)
+ *
+ * @param provider Provider configuration
+ * @param targetUrl Target request URL
+ * @param enableHttp2 Whether to enable HTTP/2 (default: false)
+ * @returns ProxyConfig with cacheKey, or null if no proxy configured
+ */
+export async function getProxyAgentForProvider(
+  provider: Provider | ProviderProxyConfig,
+  targetUrl: string,
+  enableHttp2 = false
+): Promise<ProxyConfigWithCacheKey | null> {
+  // No proxy configured
+  if (!provider.proxyUrl) {
+    return null;
+  }
+
+  const proxyUrl = provider.proxyUrl.trim();
+  if (!proxyUrl) {
+    return null;
+  }
+
+  const pool = getPool();
+
+  const { agent, cacheKey } = await pool.getAgent({
+    endpointUrl: targetUrl,
+    proxyUrl,
+    enableHttp2,
+  });
+
+  // Determine actual HTTP/2 status (SOCKS doesn't support HTTP/2)
+  const parsedProxy = new URL(proxyUrl);
+  const isSocks = parsedProxy.protocol === "socks5:" || parsedProxy.protocol === "socks4:";
+  const actualHttp2Enabled = isSocks ? false : enableHttp2;
+
+  return {
+    agent,
+    fallbackToDirect: provider.proxyFallbackToDirect ?? false,
+    proxyUrl: maskProxyUrl(proxyUrl),
+    http2Enabled: actualHttp2Enabled,
+    cacheKey,
+  };
 }

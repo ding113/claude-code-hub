@@ -14,6 +14,7 @@ import { getRedisClient } from "./redis";
  * - global:active_sessions (ZSET): score = timestamp, member = sessionId
  * - key:${keyId}:active_sessions (ZSET): 同上
  * - provider:${providerId}:active_sessions (ZSET): 同上
+ * - user:${userId}:active_sessions (ZSET): 同上
  */
 export class SessionTracker {
   private static readonly SESSION_TTL = 300000; // 5 分钟（毫秒）
@@ -54,14 +55,15 @@ export class SessionTracker {
   }
 
   /**
-   * 追踪 session（添加到全局和 key 级集合）
+   * 追踪 session（添加到全局、key 级集合，可选 user 级集合）
    *
    * 调用时机：SessionGuard 分配 sessionId 后
    *
    * @param sessionId - Session ID
    * @param keyId - API Key ID
+   * @param userId - User ID（可选）
    */
-  static async trackSession(sessionId: string, keyId: number): Promise<void> {
+  static async trackSession(sessionId: string, keyId: number, userId?: number): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
@@ -76,6 +78,11 @@ export class SessionTracker {
       // 添加到 key 级集合（ZSET）
       pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
       pipeline.expire(`key:${keyId}:active_sessions`, 3600);
+
+      if (userId !== undefined) {
+        pipeline.zadd(`user:${userId}:active_sessions`, now, sessionId);
+        pipeline.expire(`user:${userId}:active_sessions`, 3600);
+      }
 
       const results = await pipeline.exec();
 
@@ -153,8 +160,14 @@ export class SessionTracker {
    * @param sessionId - Session ID
    * @param keyId - API Key ID
    * @param providerId - Provider ID
+   * @param userId - User ID（可选）
    */
-  static async refreshSession(sessionId: string, keyId: number, providerId: number): Promise<void> {
+  static async refreshSession(
+    sessionId: string,
+    keyId: number,
+    providerId: number,
+    userId?: number
+  ): Promise<void> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
@@ -166,6 +179,9 @@ export class SessionTracker {
       pipeline.zadd("global:active_sessions", now, sessionId);
       pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
       pipeline.zadd(`provider:${providerId}:active_sessions`, now, sessionId);
+      if (userId !== undefined) {
+        pipeline.zadd(`user:${userId}:active_sessions`, now, sessionId);
+      }
 
       // 修复 Bug：同步刷新 session 绑定信息的 TTL
       //
@@ -295,6 +311,39 @@ export class SessionTracker {
       return 0;
     } catch (error) {
       logger.error("SessionTracker: Failed to get provider session count", { error, providerId });
+      return 0;
+    }
+  }
+
+  /**
+   * 获取 User 级活跃 session 计数
+   *
+   * @param userId - User ID
+   * @returns 活跃 session 数量
+   */
+  static async getUserSessionCount(userId: number): Promise<number> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return 0;
+
+    try {
+      const key = `user:${userId}:active_sessions`;
+      const exists = await redis.exists(key);
+
+      if (exists === 1) {
+        const type = await redis.type(key);
+
+        if (type !== "zset") {
+          logger.warn("SessionTracker: Key is not ZSET, deleting", { key, type });
+          await redis.del(key);
+          return 0;
+        }
+
+        return await SessionTracker.countFromZSet(key);
+      }
+
+      return 0;
+    } catch (error) {
+      logger.error("SessionTracker: Failed to get user session count", { error, userId });
       return 0;
     }
   }
@@ -547,6 +596,62 @@ export class SessionTracker {
       logger.trace("SessionTracker: Decremented concurrent count", { sessionId, newCount });
     } catch (error) {
       logger.error("SessionTracker: Failed to decrement concurrent count", { error, sessionId });
+    }
+  }
+
+  /**
+   * 批量获取多个 session 的并发计数
+   * 用于 dashboard 显示优化，避免 N+1 查询
+   *
+   * @param sessionIds - Session ID 数组
+   * @returns Map<sessionId, concurrentCount>
+   */
+  static async getConcurrentCountBatch(sessionIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+
+    if (sessionIds.length === 0) {
+      return result;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      for (const id of sessionIds) {
+        result.set(id, 0);
+      }
+      return result;
+    }
+
+    try {
+      const pipeline = redis.pipeline();
+      for (const sessionId of sessionIds) {
+        pipeline.get(`session:${sessionId}:concurrent_count`);
+      }
+
+      const results = await pipeline.exec();
+      if (!results) {
+        for (const id of sessionIds) {
+          result.set(id, 0);
+        }
+        return result;
+      }
+
+      for (let i = 0; i < sessionIds.length; i++) {
+        const [err, count] = results[i];
+        result.set(sessionIds[i], !err && count ? parseInt(count as string, 10) : 0);
+      }
+
+      logger.trace("SessionTracker: Got concurrent count batch", {
+        count: sessionIds.length,
+        nonZero: Array.from(result.values()).filter((v) => v > 0).length,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("SessionTracker: Failed to get concurrent count batch", { error });
+      for (const id of sessionIds) {
+        result.set(id, 0);
+      }
+      return result;
     }
   }
 

@@ -1,6 +1,53 @@
 import type { ProviderChainItem } from "@/types/message";
 
 /**
+ * Format probability value for display.
+ *
+ * Handles:
+ * - Normal 0-1 range: multiply by 100 (e.g., 0.5 -> "50.0%")
+ * - Out-of-range values > 1: treat as already percentage, cap at 100 (e.g., 100 -> "100.0%")
+ * - Invalid values (undefined, null, NaN, negative): returns null (hide badge)
+ *
+ * @param probability - The probability value (expected 0-1, but handles out-of-range)
+ * @param decimals - Number of decimal places (default 1)
+ * @returns Formatted percentage string or null if invalid
+ */
+export function formatProbability(
+  probability: number | undefined | null,
+  decimals = 1
+): string | null {
+  // Invalid values: hide badge
+  if (probability === undefined || probability === null || Number.isNaN(probability)) {
+    return null;
+  }
+
+  // Negative values: hide badge
+  if (probability < 0) {
+    return null;
+  }
+
+  // Normalize: if value > 1, it's likely already a percentage or out-of-range
+  // Cap at 100% to prevent 10000.0% display
+  let percentage: number;
+  if (probability > 1) {
+    // Value is already percentage-like or out-of-range, cap at 100
+    percentage = Math.min(probability, 100);
+  } else {
+    // Normal 0-1 range, convert to percentage
+    percentage = probability * 100;
+  }
+
+  return `${percentage.toFixed(decimals)}%`;
+}
+
+/**
+ * Format probability for popover display (0 decimals).
+ */
+export function formatProbabilityCompact(probability: number | undefined | null): string | null {
+  return formatProbability(probability, 0);
+}
+
+/**
  * 辅助函数：判断供应商请求状态
  *
  * ⚠️ 注意：retry_success 有两种含义
@@ -403,20 +450,24 @@ export function formatProviderTimeline(
         }
 
         // 熔断状态
-        if (item.circuitFailureCount !== undefined && item.circuitFailureThreshold) {
+        if (item.circuitFailureCount !== undefined && item.circuitFailureThreshold !== undefined) {
           timeline += `\n${t("timeline.circuitStatus")}:\n`;
-          timeline += `${t("timeline.circuitCurrent", {
-            state: translateCircuitState(item.circuitState, t),
-          })}\n`;
-          timeline += `${t("timeline.failureCount", {
-            current: item.circuitFailureCount,
-            threshold: item.circuitFailureThreshold,
-          })}\n`;
-          const remaining = item.circuitFailureThreshold - item.circuitFailureCount;
-          if (remaining > 0) {
-            timeline += `${t("timeline.circuitRemaining", { remaining })}\n`;
+          if (item.circuitFailureThreshold === 0) {
+            timeline += `${t("timeline.circuitDisabled")}\n`;
           } else {
-            timeline += `${t("timeline.circuitTriggered")}\n`;
+            timeline += `${t("timeline.circuitCurrent", {
+              state: translateCircuitState(item.circuitState, t),
+            })}\n`;
+            timeline += `${t("timeline.failureCount", {
+              current: item.circuitFailureCount,
+              threshold: item.circuitFailureThreshold,
+            })}\n`;
+            const remaining = item.circuitFailureThreshold - item.circuitFailureCount;
+            if (remaining > 0) {
+              timeline += `${t("timeline.circuitRemaining", { remaining })}\n`;
+            } else {
+              timeline += `${t("timeline.circuitTriggered")}\n`;
+            }
           }
         }
 

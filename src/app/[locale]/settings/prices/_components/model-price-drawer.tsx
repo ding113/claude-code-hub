@@ -364,7 +364,7 @@ export function ModelPriceDrawer({
                             value={`${name} ${item.modelName} ${providerName}`.trim()}
                             onSelect={() => applyPrefill(item)}
                             disabled={loading}
-                            className="cursor-pointer hover:bg-white/[0.02]"
+                            className="cursor-pointer"
                           >
                             <div className="flex w-full items-center justify-between gap-2">
                               <div className="min-w-0">

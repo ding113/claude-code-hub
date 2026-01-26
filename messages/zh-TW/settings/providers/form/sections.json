@@ -285,9 +285,9 @@
         "placeholder": "1.0"
       },
       "group": {
-        "desc": "分組標籤。僅供 providerGroup 與此值相符的用戶使用。例：設為「premium」表示僅供 providerGroup=\"premium\" 的用戶使用",
+        "desc": "分組標籤。從列表選擇或輸入新名稱後按 Enter 創建（最多50字符）。只有 providerGroup 匹配的用戶才能使用此供應商。",
         "label": "供應商分組",
-        "placeholder": "例如：premium, economy"
+        "placeholder": "例如 premium, economy"
       },
       "priority": {
         "desc": "數值越小，優先級越高（0 最高）。系統只會從最高優先級的供應商中選擇。建議：主力=0，備用=1，緊急備援=2",
@@ -313,21 +313,21 @@
     "disableHint": "設為 0 表示禁用該超時（僅用於灰度回退場景，不推薦）",
     "nonStreamingTotal": {
       "core": "true",
-      "desc": "非串流請求總超時，範圍 60-1200 秒，預設 600 秒（10 分鐘）",
+      "desc": "非串流請求總超時，範圍 60-1200 秒，填 0 禁用（預設不限制）",
       "label": "非串流總超時（秒）",
-      "placeholder": "600"
+      "placeholder": "0"
     },
     "streamingFirstByte": {
       "core": "true",
-      "desc": "串流請求首字節超時，範圍 1-120 秒，預設 30 秒",
+      "desc": "串流請求首字節超時，範圍 1-180 秒，填 0 禁用（預設不限制）",
       "label": "串流首字節超時（秒）",
-      "placeholder": "30"
+      "placeholder": "0"
     },
     "streamingIdle": {
       "core": "true",
-      "desc": "串流請求靜默期超時，範圍 60-600 秒，填 0 禁用（防止中途卡住）",
+      "desc": "串流請求靜默期超時，範圍 60-600 秒，填 0 禁用（預設不限制）",
       "label": "串流靜默期超時（秒）",
-      "placeholder": "60"
+      "placeholder": "0"
     },
     "summary": "首字: {streaming}s | 串流間隔: {idle}s | 非串流: {nonStreaming}s",
     "title": "超時配置"

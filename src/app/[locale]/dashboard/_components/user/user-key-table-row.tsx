@@ -12,7 +12,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { removeKey } from "@/actions/keys";
 import { toggleUserEnabled } from "@/actions/users";
@@ -106,6 +106,16 @@ function getExpiryStatus(
   return { label: "active", variant: "default" };
 }
 
+// Calculate days left until expiry (for user mode badge)
+function getDaysLeft(expiresAt: Date | null | undefined): number | null {
+  if (!expiresAt) return null;
+  const now = Date.now();
+  const expTs = expiresAt.getTime();
+  if (!Number.isFinite(expTs) || expTs <= now) return null;
+  const msLeft = expTs - now;
+  return Math.ceil(msLeft / (1000 * 60 * 60 * 24));
+}
+
 function normalizeLimitValue(value: unknown): number | null {
   const raw = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   if (!Number.isFinite(raw) || raw <= 0) return null;
@@ -174,6 +184,10 @@ export function UserKeyTableRow({
 
   // 计算用户过期状态
   const expiryStatus = getExpiryStatus(localIsEnabled, localExpiresAt ?? null);
+
+  // 计算剩余天数（仅用于 user mode 显示）
+  const daysLeft = useMemo(() => getDaysLeft(localExpiresAt ?? null), [localExpiresAt]);
+  const showExpiryBadge = !isAdmin && daysLeft !== null && daysLeft <= 7;
 
   // 处理 Provider Group：拆分成数组
   const userGroups = splitGroups(user.providerGroup);
@@ -332,11 +346,14 @@ export function UserKeyTableRow({
                   </div>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" align="start">
-                  <ul className="text-xs space-y-1">
-                    {userGroups.map((group) => (
-                      <li key={group}>{group}</li>
-                    ))}
-                  </ul>
+                  <div className="max-w-xs">
+                    <p className="font-medium mb-1">{translations.keyRow?.fields?.group}:</p>
+                    <ul className="text-xs list-disc list-inside">
+                      {userGroups.map((group) => (
+                        <li key={group}>{group}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </TooltipContent>
               </Tooltip>
             ) : null}
@@ -482,7 +499,27 @@ export function UserKeyTableRow({
                 <SquarePen className="h-4 w-4" />
               </Button>
             </>
-          ) : null}
+          ) : (
+            showExpiryBadge && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant={daysLeft === 0 ? "destructive" : "outline"}
+                    className={cn(
+                      "text-xs cursor-help",
+                      daysLeft > 0 &&
+                        daysLeft <= 7 &&
+                        "border-amber-500 text-amber-600 dark:text-amber-400"
+                    )}
+                  >
+                    <Clock className="h-3 w-3 mr-1" />
+                    {daysLeft}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>{tUserStatus("daysLeft", { days: daysLeft })}</TooltipContent>
+              </Tooltip>
+            )
+          )}
         </div>
       </div>
 

@@ -74,6 +74,12 @@
   "UPDATE_KEY_FAILED": "Failed to update key, please try again later",
   "DELETE_KEY_FAILED": "Failed to delete key, please try again later",
   "CANNOT_DISABLE_LAST_KEY": "Cannot disable the last active key. Users must have at least one enabled key",
+  "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT": "Key 5-hour limit ({keyLimit}) cannot exceed user limit ({userLimit})",
+  "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT": "Key daily limit ({keyLimit}) cannot exceed user limit ({userLimit})",
+  "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT": "Key weekly limit ({keyLimit}) cannot exceed user limit ({userLimit})",
+  "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT": "Key monthly limit ({keyLimit}) cannot exceed user limit ({userLimit})",
+  "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT": "Key total limit ({keyLimit}) cannot exceed user limit ({userLimit})",
+  "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT": "Key concurrent session limit ({keyLimit}) cannot exceed user limit ({userLimit})",
   "NO_DEFAULT_GROUP_PERMISSION": "No permission to use default group. You don't have a Key with default group",
   "NO_GROUP_PERMISSION": "No permission to use the following groups: {groups}"
 }

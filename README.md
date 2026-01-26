@@ -39,19 +39,6 @@ Cubence 为 CCH 的使用用户提供了特别的优惠折扣：在购买时使�
 <table>
 <tr>
 <td width="200">
-<a href="https://privnode.com/with-cch?utm_source=refLink">
-<img src="public/readme/privnode.png" alt="Privnode Logo" width="180"/>
-</a>
-</td>
-<td>
-<a href="https://privnode.com/with-cch?utm_source=refLink">Privnode</a> 是一家平价的 AI API 聚合平台，为 Claude、Codex 等主流模型提供一站式中转服务，以良好的稳定性和较高的性价比，服务于开发者与团队的实际需求。 → <a href="https://privnode.com/with-cch?utm_source=refLink">立即访问</a>
-</td>
-</tr>
-</table>
-
-<table>
-<tr>
-<td width="200">
 <a href="https://www.packyapi.com/register?aff=withcch">
 <img src="public/readme/packycode.png" alt="PackyCode Logo" width="180"/>
 </a>

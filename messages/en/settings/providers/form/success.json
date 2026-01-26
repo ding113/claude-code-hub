@@ -1,4 +1,6 @@
 {
   "created": "Provider added successfully",
-  "createdDesc": "Provider \"{name}\" has been added"
+  "createdDesc": "Provider \"{name}\" has been added",
+  "updated": "Provider updated successfully",
+  "updatedDesc": "Provider \"{name}\" has been updated"
 }

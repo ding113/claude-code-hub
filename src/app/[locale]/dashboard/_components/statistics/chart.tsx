@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,6 +57,7 @@ export function UserStatisticsChart({
   currencyCode = "USD",
 }: UserStatisticsChartProps) {
   const t = useTranslations("dashboard.statistics");
+  const locale = useLocale();
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
   const [chartMode, setChartMode] = React.useState<"stacked" | "overlay">("overlay");
 
@@ -229,12 +230,12 @@ export function UserStatisticsChart({
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     if (data.resolution === "hour") {
-      return date.toLocaleTimeString("zh-CN", {
+      return date.toLocaleTimeString(locale, {
         hour: "2-digit",
         minute: "2-digit",
       });
     } else {
-      return date.toLocaleDateString("zh-CN", {
+      return date.toLocaleDateString(locale, {
         month: "numeric",
         day: "numeric",
       });
@@ -245,14 +246,14 @@ export function UserStatisticsChart({
   const formatTooltipDate = (dateStr: string) => {
     const date = new Date(dateStr);
     if (data.resolution === "hour") {
-      return date.toLocaleString("zh-CN", {
+      return date.toLocaleString(locale, {
         month: "long",
         day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
       });
     } else {
-      return date.toLocaleDateString("zh-CN", {
+      return date.toLocaleDateString(locale, {
         year: "numeric",
         month: "long",
         day: "numeric",

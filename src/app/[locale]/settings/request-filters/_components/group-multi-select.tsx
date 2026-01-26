@@ -128,7 +128,7 @@ export function GroupMultiSelect({
                       key={groupTag}
                       value={groupTag}
                       onSelect={() => toggleGroup(groupTag)}
-                      className="cursor-pointer hover:bg-white/5"
+                      className="cursor-pointer"
                     >
                       <Checkbox
                         checked={selectedGroupTags.includes(groupTag)}

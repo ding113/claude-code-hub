@@ -9,12 +9,99 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
-import { ErrorDetailsDialog } from "@/app/[locale]/dashboard/logs/_components/error-details-dialog";
 
-// 测试环境不加载 next-intl/navigation -> next/navigation 的真实实现（避免 Next.js 运行时依赖）
+// Mock routing
 vi.mock("@/i18n/routing", () => ({
   Link: ({ children }: { children: ReactNode }) => children,
 }));
+
+// Mock Sheet to render content directly (not via portal)
+vi.mock("@/components/ui/sheet", () => {
+  type PropsWithChildren = { children?: ReactNode };
+
+  function Sheet({ children }: PropsWithChildren & { open?: boolean }) {
+    return <div data-slot="sheet-root">{children}</div>;
+  }
+
+  function SheetTrigger({ children }: PropsWithChildren) {
+    return <div data-slot="sheet-trigger">{children}</div>;
+  }
+
+  function SheetContent({ children, className }: PropsWithChildren & { className?: string }) {
+    return (
+      <div data-slot="sheet-content" className={className}>
+        {children}
+      </div>
+    );
+  }
+
+  function SheetHeader({ children }: PropsWithChildren) {
+    return <div data-slot="sheet-header">{children}</div>;
+  }
+
+  function SheetTitle({ children }: PropsWithChildren) {
+    return <div data-slot="sheet-title">{children}</div>;
+  }
+
+  function SheetDescription({ children }: PropsWithChildren) {
+    return <div data-slot="sheet-description">{children}</div>;
+  }
+
+  return {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle,
+    SheetTrigger,
+  };
+});
+
+// Mock Tabs to render all content for testing
+vi.mock("@/components/ui/tabs", () => {
+  type PropsWithChildren = { children?: ReactNode };
+
+  function Tabs({ children, className }: PropsWithChildren & { className?: string }) {
+    return (
+      <div data-slot="tabs-root" className={className}>
+        {children}
+      </div>
+    );
+  }
+
+  function TabsList({ children, className }: PropsWithChildren & { className?: string }) {
+    return (
+      <div data-slot="tabs-list" className={className}>
+        {children}
+      </div>
+    );
+  }
+
+  function TabsTrigger({ children, className }: PropsWithChildren & { className?: string }) {
+    return (
+      <div data-slot="tabs-trigger" className={className}>
+        {children}
+      </div>
+    );
+  }
+
+  function TabsContent({ children, className }: PropsWithChildren & { className?: string }) {
+    return (
+      <div data-slot="tabs-content" className={className}>
+        {children}
+      </div>
+    );
+  }
+
+  return {
+    Tabs,
+    TabsList,
+    TabsTrigger,
+    TabsContent,
+  };
+});
+
+import { ErrorDetailsDialog } from "@/app/[locale]/dashboard/logs/_components/error-details-dialog";
 
 const dashboardMessages = JSON.parse(
   fs.readFileSync(path.join(process.cwd(), "messages/en/dashboard.json"), "utf8")
@@ -49,9 +136,9 @@ function renderWithIntl(node: ReactNode) {
   };
 }
 
-describe("ErrorDetailsDialog - warmup 跳过标注", () => {
-  test("blockedBy=warmup 时应展示 Skipped/Warmup Fast Response 提示，且不应显示 Blocking Information", () => {
-    const { unmount } = renderWithIntl(
+describe("ErrorDetailsDialog - warmup skip indicator", () => {
+  test("blockedBy=warmup should display Skipped/Warmup Fast Response and not show Blocking Information", () => {
+    const { container, unmount } = renderWithIntl(
       <ErrorDetailsDialog
         statusCode={200}
         errorMessage={null}
@@ -82,10 +169,11 @@ describe("ErrorDetailsDialog - warmup 跳过标注", () => {
       />
     );
 
-    // DialogContent 通常通过 Portal 渲染到 document.body
-    expect(document.body.textContent).toContain("Warmup Fast Response (CCH)");
-    expect(document.body.textContent).toContain("Skipped");
-    expect(document.body.textContent).not.toContain("Blocking Information");
+    // With mocked Sheet and Tabs, content is rendered in-place (not via Portal)
+    const textContent = container.textContent || "";
+    expect(textContent).toContain("Warmup Fast Response (CCH)");
+    expect(textContent).toContain("Skipped");
+    expect(textContent).not.toContain("Blocking Information");
 
     unmount();
   });

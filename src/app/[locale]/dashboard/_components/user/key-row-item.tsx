@@ -59,6 +59,10 @@ export interface KeyRowItemProps {
       model: string;
       callCount: number;
       totalCost: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheCreationTokens: number;
+      cacheReadTokens: number;
     }>;
   };
   /** User-level provider groups (used when key inherits providerGroup). */
@@ -429,11 +433,14 @@ export function KeyRowItem({
               </div>
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start" className="max-w-[420px]">
-              <ul className="text-xs space-y-1 font-mono">
-                {effectiveGroups.map((group) => (
-                  <li key={group}>{group}</li>
-                ))}
-              </ul>
+              <div className="max-w-xs">
+                <p className="font-medium mb-1">{translations.fields.group}:</p>
+                <ul className="text-xs list-disc list-inside font-mono">
+                  {effectiveGroups.map((group) => (
+                    <li key={group}>{group}</li>
+                  ))}
+                </ul>
+              </div>
             </TooltipContent>
           </Tooltip>
         </div>

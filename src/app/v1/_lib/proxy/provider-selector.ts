@@ -962,7 +962,7 @@ export class ProxyProviderResolver {
       name: p.name,
       weight: p.weight,
       costMultiplier: p.costMultiplier,
-      probability: totalWeight > 0 ? Math.round((p.weight / totalWeight) * 100) : 0,
+      probability: totalWeight > 0 ? p.weight / totalWeight : 0,
     }));
 
     const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);

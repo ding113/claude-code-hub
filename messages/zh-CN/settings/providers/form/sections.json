@@ -69,8 +69,8 @@
       },
       "group": {
         "label": "供应商分组",
-        "placeholder": "输入分组标签",
-        "desc": "供应商分组标签（支持多个，逗号分隔）。只有用户的 providerGroup 与此值匹配时，该用户才能使用此供应商。留空=对所有用户开放"
+        "placeholder": "例如 premium, economy",
+        "desc": "分组标签。从列表选择或输入新名称后按 Enter 创建（最多50字符）。只有 providerGroup 匹配的用户才能使用此供应商。"
       }
     },
     "cacheTtl": {
@@ -246,20 +246,20 @@
     "desc": "配置请求超时时间，0 表示禁用超时",
     "streamingFirstByte": {
       "label": "流式首字节超时（秒）",
-      "placeholder": "30",
-      "desc": "流式请求首字节超时，范围 1-120 秒，默认 30 秒",
+      "placeholder": "0",
+      "desc": "流式请求首字节超时，范围 1-180 秒，填 0 禁用（默认不限制）",
       "core": "true"
     },
     "streamingIdle": {
       "label": "流式静默期超时（秒）",
-      "placeholder": "60",
-      "desc": "流式请求静默期超时，范围 60-600 秒，填 0 禁用（防止中途卡住）",
+      "placeholder": "0",
+      "desc": "流式请求静默期超时，范围 60-600 秒，填 0 禁用（默认不限制）",
       "core": "true"
     },
     "nonStreamingTotal": {
       "label": "非流式总超时（秒）",
-      "placeholder": "600",
-      "desc": "非流式请求总超时，范围 60-1200 秒，默认 600 秒（10 分钟）",
+      "placeholder": "0",
+      "desc": "非流式请求总超时，范围 60-1200 秒，填 0 禁用（默认不限制）",
       "core": "true"
     },
     "disableHint": "设为 0 表示禁用该超时（仅用于灰度回退场景，不推荐）"

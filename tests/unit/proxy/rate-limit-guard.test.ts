@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const rateLimitServiceMock = {
   checkTotalCostLimit: vi.fn(),
   checkSessionLimit: vi.fn(),
-  checkUserRPM: vi.fn(),
+  checkRpmLimit: vi.fn(),
   checkCostLimits: vi.fn(),
   checkUserDailyCost: vi.fn(),
 };
@@ -52,6 +52,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
+      limitConcurrentSessions: number | null;
     }>;
     key?: Partial<{
       id: number;
@@ -78,6 +79,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
           limitWeeklyUsd: null,
           limitMonthlyUsd: null,
           limitTotalUsd: null,
+          limitConcurrentSessions: null,
           ...overrides?.user,
         },
         key: {
@@ -102,7 +104,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
 
     rateLimitServiceMock.checkTotalCostLimit.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkSessionLimit.mockResolvedValue({ allowed: true });
-    rateLimitServiceMock.checkUserRPM.mockResolvedValue({ allowed: true });
+    rateLimitServiceMock.checkRpmLimit.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkUserDailyCost.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkCostLimits.mockResolvedValue({ allowed: true });
   });
@@ -250,10 +252,30 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     });
   });
 
+  it("User 并发 Session 超限应拦截（concurrent_sessions）", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    rateLimitServiceMock.checkSessionLimit
+      .mockResolvedValueOnce({ allowed: true }) // key session
+      .mockResolvedValueOnce({ allowed: false, reason: "User并发 Session 上限已达到（2/1）" });
+
+    const session = createSession({
+      user: { limitConcurrentSessions: 1 },
+      key: { limitConcurrentSessions: 10 },
+    });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).rejects.toMatchObject({
+      name: "RateLimitError",
+      limitType: "concurrent_sessions",
+      currentUsage: 2,
+      limitValue: 1,
+    });
+  });
+
   it("User RPM 超限应拦截（rpm）", async () => {
     const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
 
-    rateLimitServiceMock.checkUserRPM.mockResolvedValueOnce({
+    rateLimitServiceMock.checkRpmLimit.mockResolvedValueOnce({
       allowed: false,
       current: 10,
       reason: "用户每分钟请求数上限已达到（10/5）",

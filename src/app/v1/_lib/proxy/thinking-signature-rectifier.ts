@@ -60,6 +60,16 @@ export function detectThinkingSignatureRectifierTrigger(
     return "invalid_signature_in_thinking_block"; // 复用现有触发类型，整流逻辑相同
   }
 
+  // 检测：signature 字段不被接受（上游 API 返回 "xxx.signature: Extra inputs are not permitted"）
+  // 场景：请求体中存在 signature 字段但上游 API 不支持（如非 Anthropic 官方 API）
+  // 常见于从 Anthropic 官方渠道切换到第三方渠道时，历史 content block 包含 signature 字段
+  const looksLikeExtraSignatureField =
+    lower.includes("signature") && lower.includes("extra inputs are not permitted");
+
+  if (looksLikeExtraSignatureField) {
+    return "invalid_signature_in_thinking_block"; // 复用现有触发类型，整流逻辑相同
+  }
+
   // 与默认错误规则保持一致（Issue #432 / Rule 6）
   if (/非法请求|illegal request|invalid request/i.test(errorMessage)) {
     return "invalid_request";

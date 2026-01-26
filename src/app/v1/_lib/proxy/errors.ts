@@ -6,7 +6,9 @@
  * 2. 智能截断：JSON 完整保存，文本限制 500 字符
  * 3. 可读性优先：纯文本格式化，便于排查问题
  */
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { type ErrorDetectionResult, errorRuleDetector } from "@/lib/error-rule-detector";
+import { redactJsonString } from "@/lib/utils/message-redaction";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import type { ProviderChainItem } from "@/types/message";
 import type { ProxySession } from "./session";
@@ -870,6 +872,85 @@ export function isHttp2Error(error: Error): boolean {
   return HTTP2_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toUpperCase()));
 }
 
+/**
+ * SSL/TLS Certificate Error Detection Patterns
+ *
+ * Covers common SSL certificate validation errors:
+ * - Certificate hostname mismatch (altname validation)
+ * - Self-signed certificates
+ * - Expired certificates
+ * - Certificate chain validation failures
+ * - Unable to verify issuer
+ */
+const SSL_ERROR_PATTERNS = [
+  "certificate",
+  "ssl",
+  "tls",
+  "cert_",
+  "unable to verify",
+  "self signed",
+  "hostname mismatch",
+  "unable_to_get_issuer_cert",
+  "cert_has_expired",
+  "depth_zero_self_signed_cert",
+  "unable_to_verify_leaf_signature",
+  "err_tls_cert_altname_invalid",
+  "cert_untrusted",
+  "altnames",
+];
+
+/**
+ * Detect if an error is an SSL/TLS certificate error
+ *
+ * SSL certificate errors occur during TLS handshake when:
+ * - Certificate hostname doesn't match the requested domain
+ * - Certificate is self-signed and not trusted
+ * - Certificate has expired
+ * - Certificate chain cannot be verified
+ *
+ * Detection logic:
+ * 1. Check error name
+ * 2. Check error message
+ * 3. Check error code (Node.js style)
+ * 4. Check nested cause (for wrapped errors)
+ *
+ * @param error - Error object to check
+ * @returns true if the error is an SSL certificate error
+ *
+ * @example
+ * // Certificate hostname mismatch
+ * isSSLCertificateError(new Error('ERR_TLS_CERT_ALTNAME_INVALID')) // true
+ *
+ * // Self-signed certificate
+ * isSSLCertificateError(new Error('self signed certificate')) // true
+ *
+ * // Non-SSL error
+ * isSSLCertificateError(new Error('Connection refused')) // false
+ */
+export function isSSLCertificateError(error: unknown): boolean {
+  // Handle non-Error objects
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  // Combine error information for detection
+  const errorString = [error.name, error.message, (error as NodeJS.ErrnoException).code ?? ""]
+    .join(" ")
+    .toLowerCase();
+
+  // Check if any SSL pattern matches
+  if (SSL_ERROR_PATTERNS.some((pattern) => errorString.includes(pattern.toLowerCase()))) {
+    return true;
+  }
+
+  // Check nested cause (for wrapped errors like "Request failed" with SSL cause)
+  if (error.cause instanceof Error) {
+    return isSSLCertificateError(error.cause);
+  }
+
+  return false;
+}
+
 const SENSITIVE_HEADERS = new Set([
   "authorization",
   "proxy-authorization", // 代理认证
@@ -1081,13 +1162,21 @@ export function truncateRequestBody(body: string | null | undefined): {
  *
  * 从 ProxySession 提取请求信息，自动进行脱敏和截断处理
  *
+ * 存储策略受 STORE_SESSION_MESSAGES 控制：
+ * - false（默认）：请求体中的 message 内容脱敏为 [REDACTED]
+ * - true：原样存储请求体内容
+ *
  * @param session - 代理会话对象
  * @returns 脱敏和截断后的请求详情
  */
 export function buildRequestDetails(
   session: ProxySession
 ): NonNullable<ProviderChainItem["errorDetails"]>["request"] {
-  const { body, truncated } = truncateRequestBody(session.request.log);
+  const { body: rawBody, truncated } = truncateRequestBody(session.request.log);
+
+  // 根据配置决定是否脱敏请求体
+  const storeMessages = getEnvConfig().STORE_SESSION_MESSAGES;
+  const body = storeMessages ? rawBody : redactJsonString(rawBody);
 
   return {
     url: sanitizeUrl(session.requestUrl),

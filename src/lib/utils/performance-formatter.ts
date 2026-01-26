@@ -32,3 +32,28 @@ export function calculateOutputRate(
   if (generationTimeMs <= 0) return null;
   return outputTokens / (generationTimeMs / 1000);
 }
+
+/**
+ * Determine if output rate should be hidden due to blocked streaming request.
+ * Rule: Hide when generationTimeMs / durationMs < 0.1 AND outputRate > 5000
+ * This indicates TTFB is very close to total duration with abnormally high tok/s.
+ */
+export function shouldHideOutputRate(
+  outputRate: number | null,
+  durationMs: number | null,
+  ttfbMs: number | null
+): boolean {
+  if (
+    outputRate == null ||
+    !Number.isFinite(outputRate) ||
+    durationMs == null ||
+    durationMs <= 0 ||
+    ttfbMs == null
+  ) {
+    return false;
+  }
+  const generationTimeMs = durationMs - ttfbMs;
+  if (generationTimeMs <= 0) return false;
+  const ratio = generationTimeMs / durationMs;
+  return ratio < 0.1 && outputRate > 5000;
+}

@@ -35,6 +35,9 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
   const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
   const t = useTranslations("dashboard.addKeyForm");
+  const tBalancePage = useTranslations(
+    "dashboard.userManagement.keyEditSection.fields.balanceQueryPage"
+  );
   const tUI = useTranslations("ui.tagInput");
   const tCommon = useTranslations("common");
   const tErrors = useTranslations("errors");
@@ -176,9 +179,13 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
       <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
         <div>
           <Label htmlFor="can-login-web-ui" className="text-sm font-medium">
-            {t("canLoginWebUi.label")}
+            {tBalancePage("label")}
           </Label>
-          <p className="text-xs text-muted-foreground mt-1">{t("canLoginWebUi.description")}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {form.values.canLoginWebUi
+              ? tBalancePage("descriptionDisabled")
+              : tBalancePage("descriptionEnabled")}
+          </p>
         </div>
         <Switch
           id="can-login-web-ui"

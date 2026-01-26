@@ -123,6 +123,7 @@
   },
   "status": {
     "connected": "資料庫連線正常",
+    "connectionUnavailable": "資料庫連線不可用，請檢查資料庫服務狀態",
     "error": "取得資料庫狀態失敗",
     "loading": "載入中...",
     "retry": "重試",

@@ -123,6 +123,7 @@
   },
   "status": {
     "connected": "Database connected",
+    "connectionUnavailable": "Database connection unavailable, please check database service status",
     "error": "Failed to get database status",
     "loading": "Loading...",
     "retry": "Retry",

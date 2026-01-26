@@ -94,6 +94,10 @@ export const EnvSchema = z.object({
   ENABLE_RATE_LIMIT: z.string().default("true").transform(booleanTransform),
   ENABLE_SECURE_COOKIES: z.string().default("true").transform(booleanTransform),
   SESSION_TTL: z.coerce.number().default(300),
+  // 会话消息存储控制
+  // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]
+  // - true：原样存储 message 内容（注意隐私和存储空间影响）
+  STORE_SESSION_MESSAGES: z.string().default("false").transform(booleanTransform),
   DEBUG_MODE: z.string().default("false").transform(booleanTransform),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),

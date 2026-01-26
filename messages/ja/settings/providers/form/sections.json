@@ -285,7 +285,7 @@
         "placeholder": "1.0"
       },
       "group": {
-        "desc": "グループタグ。ユーザーの providerGroup が一致する場合のみ利用可能。例: \"premium\" に設定すると providerGroup=\"premium\" のユーザーのみ対象",
+        "desc": "グループタグ。リストから選択するか、新しい名前を入力して Enter で作成（最大50文字）。providerGroup が一致するユーザーのみがこのプロバイダーを使用できます。",
         "label": "プロバイダーグループ",
         "placeholder": "例: premium, economy"
       },
@@ -313,21 +313,21 @@
     "disableHint": "0に設定するとタイムアウトを無効にします（カナリアロールバックシナリオのみ、非推奨）",
     "nonStreamingTotal": {
       "core": "true",
-      "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、デフォルト600秒（10分）",
+      "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、0で無効化（デフォルト: 無制限）",
       "label": "非ストリーミング総タイムアウト（秒）",
-      "placeholder": "600"
+      "placeholder": "0"
     },
     "streamingFirstByte": {
       "core": "true",
-      "desc": "ストリーミングリクエストの初バイトタイムアウト、範囲1～120秒、デフォルト30秒",
+      "desc": "ストリーミングリクエストの初バイトタイムアウト、範囲1～180秒、0で無効化（デフォルト: 無制限）",
       "label": "ストリーミング初バイトタイムアウト（秒）",
-      "placeholder": "30"
+      "placeholder": "0"
     },
     "streamingIdle": {
       "core": "true",
-      "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲60～600秒、0で無効化（途中停止防止）",
+      "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲60～600秒、0で無効化（デフォルト: 無制限）",
       "label": "ストリーミングアイドルタイムアウト（秒）",
-      "placeholder": "60"
+      "placeholder": "0"
     },
     "summary": "初回バイト: {streaming}s | ストリーム間隔: {idle}s | 非ストリーミング: {nonStreaming}s",
     "title": "タイムアウト設定"

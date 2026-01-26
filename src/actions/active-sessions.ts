@@ -43,33 +43,42 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       // 过滤：管理员可查看所有，普通用户只能查看自己的
       const filteredData = isAdmin ? cached : cached.filter((s) => s.userId === currentUserId);
 
+      // 获取并发计数（即使缓存命中也需要实时获取）
+      const { SessionTracker } = await import("@/lib/session-tracker");
+      const cachedSessionIds = filteredData.map((s) => s.sessionId);
+      const concurrentCounts = await SessionTracker.getConcurrentCountBatch(cachedSessionIds);
+
       return {
         ok: true,
-        data: filteredData.map((s) => ({
-          sessionId: s.sessionId,
-          userName: s.userName,
-          userId: s.userId,
-          keyId: s.keyId,
-          keyName: s.keyName,
-          providerId: s.providers[0]?.id || null,
-          providerName: s.providers.map((p) => p.name).join(", ") || null,
-          model: s.models.join(", ") || null,
-          apiType: (s.apiType as "chat" | "codex") || "chat",
-          startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
-          inputTokens: s.totalInputTokens,
-          outputTokens: s.totalOutputTokens,
-          cacheCreationInputTokens: s.totalCacheCreationTokens,
-          cacheReadInputTokens: s.totalCacheReadTokens,
-          totalTokens:
-            s.totalInputTokens +
-            s.totalOutputTokens +
-            s.totalCacheCreationTokens +
-            s.totalCacheReadTokens,
-          costUsd: s.totalCostUsd,
-          status: "completed",
-          durationMs: s.totalDurationMs,
-          requestCount: s.requestCount,
-        })),
+        data: filteredData.map((s) => {
+          const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
+          return {
+            sessionId: s.sessionId,
+            userName: s.userName,
+            userId: s.userId,
+            keyId: s.keyId,
+            keyName: s.keyName,
+            providerId: s.providers[0]?.id || null,
+            providerName: s.providers.map((p) => p.name).join(", ") || null,
+            model: s.models.join(", ") || null,
+            apiType: (s.apiType as "chat" | "codex") || "chat",
+            startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
+            inputTokens: s.totalInputTokens,
+            outputTokens: s.totalOutputTokens,
+            cacheCreationInputTokens: s.totalCacheCreationTokens,
+            cacheReadInputTokens: s.totalCacheReadTokens,
+            totalTokens:
+              s.totalInputTokens +
+              s.totalOutputTokens +
+              s.totalCacheCreationTokens +
+              s.totalCacheReadTokens,
+            costUsd: s.totalCostUsd,
+            status: concurrentCount > 0 ? "in_progress" : "completed",
+            durationMs: s.totalDurationMs,
+            requestCount: s.requestCount,
+            concurrentCount,
+          };
+        }),
       };
     }
 
@@ -85,6 +94,10 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
     const { aggregateMultipleSessionStats } = await import("@/repository/message");
     const sessionsData = await aggregateMultipleSessionStats(sessionIds);
 
+    // 3.1 批量获取并发计数（用于实时状态计算）
+    const allSessionIds = sessionsData.map((s) => s.sessionId);
+    const concurrentCounts = await SessionTracker.getConcurrentCountBatch(allSessionIds);
+
     // 4. 写入缓存
     setActiveSessionsCache(sessionsData);
 
@@ -94,31 +107,35 @@ export async function getActiveSessions(): Promise<ActionResult<ActiveSessionInf
       : sessionsData.filter((s) => s.userId === currentUserId);
 
     // 6. 转换格式
-    const sessions: ActiveSessionInfo[] = filteredSessions.map((s) => ({
-      sessionId: s.sessionId,
-      userName: s.userName,
-      userId: s.userId,
-      keyId: s.keyId,
-      keyName: s.keyName,
-      providerId: s.providers[0]?.id || null,
-      providerName: s.providers.map((p) => p.name).join(", ") || null,
-      model: s.models.join(", ") || null,
-      apiType: (s.apiType as "chat" | "codex") || "chat",
-      startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
-      inputTokens: s.totalInputTokens,
-      outputTokens: s.totalOutputTokens,
-      cacheCreationInputTokens: s.totalCacheCreationTokens,
-      cacheReadInputTokens: s.totalCacheReadTokens,
-      totalTokens:
-        s.totalInputTokens +
-        s.totalOutputTokens +
-        s.totalCacheCreationTokens +
-        s.totalCacheReadTokens,
-      costUsd: s.totalCostUsd,
-      status: "completed",
-      durationMs: s.totalDurationMs,
-      requestCount: s.requestCount,
-    }));
+    const sessions: ActiveSessionInfo[] = filteredSessions.map((s) => {
+      const concurrentCount = concurrentCounts.get(s.sessionId) ?? 0;
+      return {
+        sessionId: s.sessionId,
+        userName: s.userName,
+        userId: s.userId,
+        keyId: s.keyId,
+        keyName: s.keyName,
+        providerId: s.providers[0]?.id || null,
+        providerName: s.providers.map((p) => p.name).join(", ") || null,
+        model: s.models.join(", ") || null,
+        apiType: (s.apiType as "chat" | "codex") || "chat",
+        startTime: s.firstRequestAt ? new Date(s.firstRequestAt).getTime() : Date.now(),
+        inputTokens: s.totalInputTokens,
+        outputTokens: s.totalOutputTokens,
+        cacheCreationInputTokens: s.totalCacheCreationTokens,
+        cacheReadInputTokens: s.totalCacheReadTokens,
+        totalTokens:
+          s.totalInputTokens +
+          s.totalOutputTokens +
+          s.totalCacheCreationTokens +
+          s.totalCacheReadTokens,
+        costUsd: s.totalCostUsd,
+        status: concurrentCount > 0 ? "in_progress" : "completed",
+        durationMs: s.totalDurationMs,
+        requestCount: s.requestCount,
+        concurrentCount,
+      };
+    });
 
     logger.debug(
       `[SessionCache] Active sessions fetched and cached, count: ${sessions.length} (filtered for user: ${currentUserId})`
@@ -361,7 +378,10 @@ export async function getAllSessions(
 
 /**
  * 获取指定 session 的 messages 内容
- * 仅当 STORE_SESSION_MESSAGES=true 时可用
+ *
+ * 存储策略受 STORE_SESSION_MESSAGES 控制：
+ * - false（默认）：存储但对 message 内容脱敏 [REDACTED]
+ * - true：原样存储 message 内容
  *
  * 安全修复：添加用户权限检查
  */

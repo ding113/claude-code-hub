@@ -73,6 +73,12 @@
   "UPDATE_KEY_FAILED": "更新密钥失败，请稍后重试",
   "DELETE_KEY_FAILED": "删除密钥失败，请稍后重试",
   "CANNOT_DISABLE_LAST_KEY": "无法禁用最后一个可用密钥，用户至少需要保留一个启用的密钥",
+  "KEY_LIMIT_5H_EXCEEDS_USER_LIMIT": "Key的5小时消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
+  "KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT": "Key的日消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
+  "KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT": "Key的周消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
+  "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT": "Key的月消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
+  "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT": "Key的总消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
+  "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT": "Key的并发Session上限（{keyLimit}）不能超过用户限额（{userLimit}）",
   "NO_DEFAULT_GROUP_PERMISSION": "无权使用 default 分组，您当前没有 default 分组的 Key",
   "NO_GROUP_PERMISSION": "无权使用以下分组: {groups}"
 }

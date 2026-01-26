@@ -16,7 +16,11 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
-import { createProxyAgentForProvider } from "@/lib/proxy-agent";
+import {
+  getGlobalAgentPool,
+  getProxyAgentForProvider,
+  type ProxyConfigWithCacheKey,
+} from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import {
@@ -41,6 +45,7 @@ import {
   isClientAbortError,
   isEmptyResponseError,
   isHttp2Error,
+  isSSLCertificateError,
   ProxyError,
   sanitizeUrl,
 } from "./errors";
@@ -252,16 +257,43 @@ export class ProxyForwarder {
         endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
       }
 
-      maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, endpointCandidates.length);
+      // Truncate endpoints to maxRetryAttempts count
+      // Ensures only the N lowest-latency endpoints are used (N = maxRetryAttempts)
+      // Note: getPreferredProviderEndpoints already returns endpoints sorted by latency (ascending)
+      if (endpointCandidates.length > maxAttemptsPerProvider) {
+        const originalCount = endpointCandidates.length;
+        endpointCandidates.length = maxAttemptsPerProvider;
+
+        logger.debug("ProxyForwarder: Truncated endpoint candidates to match maxRetryAttempts", {
+          providerId: currentProvider.id,
+          providerName: currentProvider.name,
+          originalEndpointCount: originalCount,
+          truncatedTo: maxAttemptsPerProvider,
+          selectedEndpointIds: endpointCandidates.map((e) => e.endpointId),
+        });
+      }
 
       let endpointAttemptsEvaluated = 0;
       let allEndpointAttemptsTimedOut = true;
+
+      // Endpoint stickiness: track current endpoint index separately from attemptCount
+      // - SYSTEM_ERROR (network error): advance to next endpoint
+      // - PROVIDER_ERROR (HTTP error): stay at current endpoint
+      // - No wrap-around: if exhausted, stay at last endpoint
+      let currentEndpointIndex = 0;
 
       logger.info("ProxyForwarder: Trying provider", {
         providerId: currentProvider.id,
         providerName: currentProvider.name,
         totalProvidersAttempted,
         maxRetryAttempts: maxAttemptsPerProvider,
+        endpointCount: endpointCandidates.length,
+        endpointSelectionCriteria: "latency_ascending",
+        selectedEndpoints: endpointCandidates.map((e, idx) => ({
+          index: idx,
+          endpointId: e.endpointId,
+          baseUrl: sanitizeUrl(e.baseUrl),
+        })),
       });
 
       if (
@@ -285,8 +317,14 @@ export class ProxyForwarder {
       while (attemptCount < maxAttemptsPerProvider) {
         attemptCount++;
 
+        // Use currentEndpointIndex for endpoint selection (sticky behavior)
+        // - currentEndpointIndex is advanced only on SYSTEM_ERROR (network errors)
+        // - PROVIDER_ERROR keeps the same endpoint (no advancement)
+        // - No wrap-around: clamped to last endpoint if exhausted
         const endpointIndex =
-          endpointCandidates.length > 0 ? (attemptCount - 1) % endpointCandidates.length : 0;
+          endpointCandidates.length > 0
+            ? Math.min(currentEndpointIndex, endpointCandidates.length - 1)
+            : 0;
         const activeEndpoint = endpointCandidates[endpointIndex];
         const endpointAudit = {
           endpointId: activeEndpoint.endpointId,
@@ -755,8 +793,19 @@ export class ProxyForwarder {
 
             // 第1次失败：等待100ms后重试当前供应商
             if (attemptCount < maxAttemptsPerProvider) {
+              // Network error: advance to next endpoint for retry
+              // This implements "endpoint stickiness" where network errors switch endpoints
+              // but non-network errors (PROVIDER_ERROR) keep the same endpoint
+              currentEndpointIndex++;
+              logger.debug("ProxyForwarder: Advancing endpoint index due to network error", {
+                providerId: currentProvider.id,
+                previousEndpointIndex: currentEndpointIndex - 1,
+                newEndpointIndex: currentEndpointIndex,
+                maxEndpointIndex: endpointCandidates.length - 1,
+              });
+
               await new Promise((resolve) => setTimeout(resolve, 100));
-              continue; // ⭐ 继续内层循环（重试当前供应商）
+              continue; // Continue retry with next endpoint
             }
 
             // 第2次失败：跳出内层循环，切换供应商
@@ -1550,8 +1599,11 @@ export class ProxyForwarder {
     // ⭐ 获取 HTTP/2 全局开关设置
     const enableHttp2 = await isHttp2Enabled();
 
-    // ⭐ 应用代理配置（如果配置了）
-    const proxyConfig = createProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+    // ⭐ 应用代理配置（如果配置了）- 使用 Agent Pool 缓存连接
+    const proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+    // 用于直连场景的 cacheKey（SSL 错误时标记不健康）
+    let directConnectionCacheKey: string | null = null;
+
     if (proxyConfig) {
       init.dispatcher = proxyConfig.agent;
       logger.info("ProxyForwarder: Using proxy", {
@@ -1563,11 +1615,19 @@ export class ProxyForwarder {
         http2Enabled: proxyConfig.http2Enabled,
       });
     } else if (enableHttp2) {
-      // 直连场景：创建支持 HTTP/2 的 Agent
-      init.dispatcher = new Agent({ allowH2: true });
-      logger.debug("ProxyForwarder: Using HTTP/2 Agent for direct connection", {
+      // 直连场景：使用 Agent Pool 获取缓存的 HTTP/2 Agent（避免内存泄漏）
+      const pool = getGlobalAgentPool();
+      const { agent, cacheKey } = await pool.getAgent({
+        endpointUrl: proxyUrl,
+        proxyUrl: null,
+        enableHttp2: true,
+      });
+      init.dispatcher = agent;
+      directConnectionCacheKey = cacheKey;
+      logger.debug("ProxyForwarder: Using cached HTTP/2 Agent for direct connection", {
         providerId: provider.id,
         providerName: provider.name,
+        cacheKey,
       });
     }
 
@@ -1619,6 +1679,21 @@ export class ProxyForwarder {
         errno?: number;
         syscall?: string; // 系统调用：如 'getaddrinfo'、'connect'、'read'、'write'
       };
+
+      // ⭐ SSL 证书错误检测：标记 Agent 为不健康，下次请求将创建新 Agent
+      const sslErrorCacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+      if (isSSLCertificateError(err) && sslErrorCacheKey) {
+        const pool = getGlobalAgentPool();
+        pool.markUnhealthy(sslErrorCacheKey, err.message);
+        logger.warn("ProxyForwarder: SSL certificate error detected, marked agent as unhealthy", {
+          providerId: provider.id,
+          providerName: provider.name,
+          cacheKey: sslErrorCacheKey,
+          connectionType: proxyConfig ? "proxy" : "direct",
+          errorMessage: err.message,
+          errorCode: err.code,
+        });
+      }
 
       // ⭐ 超时错误检测（优先级：response > client）
 
@@ -1764,9 +1839,21 @@ export class ProxyForwarder {
         const http1FallbackInit = { ...init };
         delete http1FallbackInit.dispatcher;
 
+        // ⭐ 标记 HTTP/2 Agent 为不健康，避免后续请求重复失败
+        const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+        if (http2CacheKey) {
+          const pool = getGlobalAgentPool();
+          pool.markUnhealthy(http2CacheKey, `HTTP/2 protocol error: ${err.message}`);
+          logger.debug("ProxyForwarder: Marked HTTP/2 agent as unhealthy due to protocol error", {
+            providerId: provider.id,
+            providerName: provider.name,
+            cacheKey: http2CacheKey,
+          });
+        }
+
         // 如果使用了代理，创建不支持 HTTP/2 的代理 Agent
         if (proxyConfig) {
-          const http1ProxyConfig = createProxyAgentForProvider(provider, proxyUrl, false);
+          const http1ProxyConfig = await getProxyAgentForProvider(provider, proxyUrl, false);
           if (http1ProxyConfig) {
             http1FallbackInit.dispatcher = http1ProxyConfig.agent;
           }
