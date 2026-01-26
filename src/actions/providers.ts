@@ -237,6 +237,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         priority: provider.priority,
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
+        groupPriorities: provider.groupPriorities,
         providerType: provider.providerType,
         providerVendorId: provider.providerVendorId,
         preserveClientIp: provider.preserveClientIp,
@@ -607,6 +608,7 @@ export async function editProvider(
     priority?: number;
     cost_multiplier?: number;
     group_tag?: string | null;
+    group_priorities?: Record<string, number> | null;
     provider_type?: ProviderType;
     preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;

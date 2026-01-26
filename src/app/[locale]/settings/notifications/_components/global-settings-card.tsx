@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Power } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";

@@ -1,0 +1,6 @@
+{
+  "title": "分组优先级",
+  "default": "默认",
+  "emptyHint": "留空则使用默认值",
+  "hasOverrides": "存在分组级别的优先级覆盖"
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Expand, Filter, ListOrdered, Minimize2, Pause, Play, RefreshCw } from "lucide-react";
+import { Expand, Minimize2, Pause, Play, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -11,17 +11,15 @@ import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
 import { getProviders } from "@/actions/providers";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { useFullscreen } from "@/hooks/use-fullscreen";
-import { getHiddenColumns, type LogsTableColumn } from "@/lib/column-visibility";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import type { BillingModelSource, SystemSettings } from "@/types/system-config";
 import { buildLogsUrlQuery, parseLogsUrlFilters } from "../_utils/logs-query";
-import { ColumnVisibilityDropdown } from "./column-visibility-dropdown";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
@@ -85,13 +83,6 @@ function UsageLogsViewContent({
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [hideProviderColumn, setHideProviderColumn] = useState(false);
   const wasInFullscreenRef = useRef(false);
-  const [hiddenColumns, setHiddenColumns] = useState<LogsTableColumn[]>([]);
-
-  // Load initial hidden columns from localStorage
-  useEffect(() => {
-    const stored = getHiddenColumns(userId, "usage-logs");
-    setHiddenColumns(stored);
-  }, [userId]);
 
   const resetFullscreenState = useCallback(() => {
     setIsFullscreenOpen(false);
@@ -267,8 +258,7 @@ function UsageLogsViewContent({
 
   return (
     <>
-      <div className="space-y-4">
-        {/* Stats Summary - Collapsible */}
+      <div className="space-y-6">
         <UsageLogsStatsPanel
           filters={{
             userId: filters.userId,
@@ -286,22 +276,11 @@ function UsageLogsViewContent({
           currencyCode={resolvedCurrencyCode}
         />
 
-        {/* Filter Criteria */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted/50">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <CardTitle className="text-base">{t("title.filterCriteria")}</CardTitle>
-                <CardDescription className="text-xs">
-                  {t("title.filterCriteriaDescription")}
-                </CardDescription>
-              </div>
-            </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>{t("title.filterCriteria")}</CardTitle>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent>
             <UsageLogsFilters
               isAdmin={isAdmin}
               providers={resolvedProviders}
@@ -315,36 +294,18 @@ function UsageLogsViewContent({
           </CardContent>
         </Card>
 
-        {/* Usage Records Table */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted/50">
-                  <ListOrdered className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div>
-                  <CardTitle className="text-base">{t("title.usageLogs")}</CardTitle>
-                  <CardDescription className="text-xs">
-                    {t("title.usageLogsDescription")}
-                  </CardDescription>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <ColumnVisibilityDropdown
-                  userId={userId}
-                  tableId="usage-logs"
-                  onVisibilityChange={setHiddenColumns}
-                />
-
+        <Card className="border-0 md:border rounded-none md:rounded-xl shadow-none md:shadow-sm py-0 md:py-6">
+          <CardHeader>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle>{t("title.usageLogs")}</CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => void handleEnterFullscreen()}
-                  className="gap-1.5 h-8"
-                  aria-label={t("logs.actions.fullscreen")}
+                  className="gap-2"
                 >
-                  <Expand className="h-3.5 w-3.5" />
+                  <Expand className="h-4 w-4" />
                   <span className="hidden sm:inline">{t("logs.actions.fullscreen")}</span>
                 </Button>
 
@@ -352,13 +313,10 @@ function UsageLogsViewContent({
                   variant="outline"
                   size="sm"
                   onClick={handleManualRefresh}
-                  className="gap-1.5 h-8"
+                  className="gap-2"
                   disabled={isFullscreenOpen}
-                  aria-label={t("logs.actions.refresh")}
                 >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${isManualRefreshing ? "animate-spin" : ""}`}
-                  />
+                  <RefreshCw className={`h-4 w-4 ${isManualRefreshing ? "animate-spin" : ""}`} />
                   <span className="hidden sm:inline">{t("logs.actions.refresh")}</span>
                 </Button>
 
@@ -366,22 +324,17 @@ function UsageLogsViewContent({
                   variant={isAutoRefresh ? "default" : "outline"}
                   size="sm"
                   onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-                  className="gap-1.5 h-8"
+                  className="gap-2"
                   disabled={isFullscreenOpen}
-                  aria-label={
-                    isAutoRefresh
-                      ? t("logs.actions.stopAutoRefresh")
-                      : t("logs.actions.startAutoRefresh")
-                  }
                 >
                   {isAutoRefresh ? (
                     <>
-                      <Pause className="h-3.5 w-3.5" />
+                      <Pause className="h-4 w-4" />
                       <span className="hidden sm:inline">{t("logs.actions.stopAutoRefresh")}</span>
                     </>
                   ) : (
                     <>
-                      <Play className="h-3.5 w-3.5" />
+                      <Play className="h-4 w-4" />
                       <span className="hidden sm:inline">{t("logs.actions.startAutoRefresh")}</span>
                     </>
                   )}
@@ -389,14 +342,13 @@ function UsageLogsViewContent({
               </div>
             </div>
           </CardHeader>
-          <CardContent className="px-0 pt-0">
+          <CardContent className="px-0">
             <VirtualizedLogsTable
               filters={filters}
               currencyCode={resolvedCurrencyCode}
               billingModelSource={resolvedBillingModelSource}
               autoRefreshEnabled={!isFullscreenOpen && isAutoRefresh}
               autoRefreshIntervalMs={5000}
-              hiddenColumns={hiddenColumns}
             />
           </CardContent>
         </Card>

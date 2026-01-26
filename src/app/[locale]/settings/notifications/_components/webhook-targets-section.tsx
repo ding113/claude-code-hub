@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import type {
   ClientActionResult,
   WebhookTargetCreateInput,

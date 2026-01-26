@@ -2,7 +2,7 @@ import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
-import { Agent, request as undiciRequest } from "undici";
+import { request as undiciRequest } from "undici";
 import {
   getCircuitState,
   getProviderHealthInfo,
@@ -16,11 +16,7 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
-import {
-  getGlobalAgentPool,
-  getProxyAgentForProvider,
-  type ProxyConfigWithCacheKey,
-} from "@/lib/proxy-agent";
+import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import {

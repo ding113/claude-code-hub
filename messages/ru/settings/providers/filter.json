@@ -1,13 +1,23 @@
 {
+  "apply": "Применить фильтры",
   "circuitBroken": "Сбой соединения",
   "groups": {
     "all": "Все",
     "default": "default",
     "label": "Группы:"
   },
+  "reset": "Сбросить",
+  "sort": {
+    "label": "Сортировка:"
+  },
   "status": {
     "active": "Активные",
     "all": "Все статусы",
-    "inactive": "Неактивные"
+    "inactive": "Неактивные",
+    "label": "Статус:"
+  },
+  "title": "Параметры фильтра",
+  "type": {
+    "label": "Тип:"
   }
 }

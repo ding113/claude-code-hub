@@ -172,9 +172,9 @@ export function TagInput({
     return normalizedSuggestions.filter((s) => {
       const keywords = s.keywords?.join(" ") || "";
       const haystack = `${s.label} ${s.value} ${keywords}`.toLowerCase();
-      return haystack.includes(search) && (allowDuplicates || !value.includes(s.value));
+      return haystack.includes(search);
     });
-  }, [normalizedSuggestions, inputValue, value, allowDuplicates]);
+  }, [normalizedSuggestions, inputValue]);
 
   // 基础验证函数（不包含默认格式校验）
   const validateBaseTag = React.useCallback(
@@ -372,10 +372,18 @@ export function TagInput({
 
   const handleSuggestionClick = React.useCallback(
     (suggestionValue: string) => {
-      addTag(suggestionValue, true); // keepOpen=true 保持下拉展开
+      if (value.includes(suggestionValue)) {
+        // Already selected -> deselect (remove tag)
+        const nextTags = value.filter((v) => v !== suggestionValue);
+        onChange(nextTags);
+        onChangeCommit?.(nextTags);
+      } else {
+        // Not selected -> select (add tag)
+        addTag(suggestionValue, true);
+      }
       inputRef.current?.focus();
     },
-    [addTag]
+    [value, onChange, onChangeCommit, addTag]
   );
 
   const handleClear = React.useCallback(() => {
@@ -468,12 +476,12 @@ export function TagInput({
           <X className="h-3.5 w-3.5" />
         </button>
       )}
-      {/* 建议下拉列表 - 使用 Radix Portal 确保在 Dialog 中正确渲染 */}
+      {/* 建议下拉列表 - 使用 Radix Portal 确保在 Dialog 中正确渲染 + 水平流式布局 */}
       {showSuggestions && filteredSuggestions.length > 0 && dropdownPosition && (
         <Portal.Root>
           <div
             ref={dropdownRef}
-            className="fixed z-[9999] rounded-md border bg-popover shadow-md max-h-48 overflow-auto"
+            className="fixed z-[9999] rounded-md border bg-popover shadow-md max-h-48 overflow-auto flex flex-wrap gap-2 p-2"
             style={{
               top: dropdownPosition.top,
               left: dropdownPosition.left,
@@ -485,8 +493,11 @@ export function TagInput({
                 key={suggestion.value}
                 type="button"
                 className={cn(
-                  "w-full px-3 py-2 text-left text-sm hover:bg-primary hover:text-primary-foreground cursor-pointer",
-                  index === highlightedIndex && "bg-primary text-primary-foreground"
+                  "inline-flex px-2.5 py-1 text-xs rounded-md border transition-colors cursor-pointer",
+                  value.includes(suggestion.value)
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background hover:bg-accent border-input",
+                  index === highlightedIndex && "ring-2 ring-ring ring-offset-1"
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();

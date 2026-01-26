@@ -26,6 +26,8 @@ interface ProviderListProps {
   isMultiSelectMode?: boolean;
   selectedProviderIds?: Set<number>;
   onSelectProvider?: (providerId: number, checked: boolean) => void;
+  selectedGroup?: string | null;
+  availableGroups?: string[];
 }
 
 export function ProviderList({
@@ -39,6 +41,8 @@ export function ProviderList({
   isMultiSelectMode = false,
   selectedProviderIds = new Set(),
   onSelectProvider,
+  selectedGroup = null,
+  availableGroups = [],
 }: ProviderListProps) {
   const t = useTranslations("settings.providers");
 
@@ -71,6 +75,8 @@ export function ProviderList({
           onSelectChange={
             onSelectProvider ? (checked) => onSelectProvider(provider.id, checked) : undefined
           }
+          selectedGroup={selectedGroup}
+          availableGroups={availableGroups}
         />
       ))}
     </div>

@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagInput } from "@/components/ui/tag-input";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
   DateRangeParams,
@@ -21,6 +22,7 @@ import type {
 import type { ProviderType } from "@/types/provider";
 import { DateRangePicker } from "./date-range-picker";
 import { type ColumnDef, LeaderboardTable } from "./leaderboard-table";
+import { MobileLeaderboardCard } from "./mobile-leaderboard-card";
 
 interface LeaderboardViewProps {
   isAdmin: boolean;
@@ -38,6 +40,7 @@ const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTi
 export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const t = useTranslations("dashboard.leaderboard");
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
 
   const urlScope = searchParams.get("scope") as LeaderboardScope | null;
   const initialScope: LeaderboardScope =
@@ -60,6 +63,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const [data, setData] = useState<AnyEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -386,14 +390,26 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       <div className="flex flex-wrap gap-4 items-center mb-4">
         <Tabs value={scope} onValueChange={(v) => setScope(v as LeaderboardScope)}>
           <TabsList className={isAdmin ? "grid grid-cols-4" : ""}>
-            <TabsTrigger value="user">{t("tabs.userRanking")}</TabsTrigger>
-            {isAdmin && <TabsTrigger value="provider">{t("tabs.providerRanking")}</TabsTrigger>}
+            <TabsTrigger value="user">
+              {isMobile ? t("tabs.userRankingShort") : t("tabs.userRanking")}
+            </TabsTrigger>
             {isAdmin && (
-              <TabsTrigger value="providerCacheHitRate">
-                {t("tabs.providerCacheHitRateRanking")}
+              <TabsTrigger value="provider">
+                {isMobile ? t("tabs.providerRankingShort") : t("tabs.providerRanking")}
               </TabsTrigger>
             )}
-            {isAdmin && <TabsTrigger value="model">{t("tabs.modelRanking")}</TabsTrigger>}
+            {isAdmin && (
+              <TabsTrigger value="providerCacheHitRate">
+                {isMobile
+                  ? t("tabs.providerCacheHitRateRankingShort")
+                  : t("tabs.providerCacheHitRateRanking")}
+              </TabsTrigger>
+            )}
+            {isAdmin && (
+              <TabsTrigger value="model">
+                {isMobile ? t("tabs.modelRankingShort") : t("tabs.modelRanking")}
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
 
@@ -407,8 +423,8 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       </div>
 
       {scope === "user" && isAdmin && (
-        <div className="flex flex-wrap gap-4 mb-4">
-          <div className="flex-1 min-w-[200px] max-w-[300px]">
+        <div className={isMobile ? "flex flex-col gap-3 mb-4" : "flex flex-wrap gap-4 mb-4"}>
+          <div className={isMobile ? "w-full" : "flex-1 min-w-[200px] max-w-[300px]"}>
             <TagInput
               value={userTagFilters}
               onChange={setUserTagFilters}
@@ -421,7 +437,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
               validateTag={(tag) => tagSuggestions.length === 0 || tagSuggestions.includes(tag)}
             />
           </div>
-          <div className="flex-1 min-w-[200px] max-w-[300px]">
+          <div className={isMobile ? "w-full" : "flex-1 min-w-[200px] max-w-[300px]"}>
             <TagInput
               value={userGroupFilters}
               onChange={setUserGroupFilters}
@@ -446,34 +462,42 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         />
       </div>
 
-      {/* 数据表格 */}
+      {/* 数据表格 / 移动端卡片 */}
       <div>
         {loading ? (
           <Card>
             <CardContent className="py-6 space-y-4">
-              <div className="space-y-3">
-                <div className="grid gap-4" style={skeletonGridStyle}>
-                  {Array.from({ length: skeletonColumns }).map((_, index) => (
-                    <Skeleton key={`leaderboard-head-${index}`} className="h-4 w-full" />
+              {isMobile ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <Skeleton key={`mobile-skeleton-${index}`} className="h-16 w-full rounded-lg" />
                   ))}
                 </div>
-                <div className="space-y-2">
-                  {Array.from({ length: 6 }).map((_, rowIndex) => (
-                    <div
-                      key={`leaderboard-row-${rowIndex}`}
-                      className="grid gap-4"
-                      style={skeletonGridStyle}
-                    >
-                      {Array.from({ length: skeletonColumns }).map((_, colIndex) => (
-                        <Skeleton
-                          key={`leaderboard-cell-${rowIndex}-${colIndex}`}
-                          className="h-4 w-full"
-                        />
-                      ))}
-                    </div>
-                  ))}
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid gap-4" style={skeletonGridStyle}>
+                    {Array.from({ length: skeletonColumns }).map((_, index) => (
+                      <Skeleton key={`leaderboard-head-${index}`} className="h-4 w-full" />
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    {Array.from({ length: 6 }).map((_, rowIndex) => (
+                      <div
+                        key={`leaderboard-row-${rowIndex}`}
+                        className="grid gap-4"
+                        style={skeletonGridStyle}
+                      >
+                        {Array.from({ length: skeletonColumns }).map((_, colIndex) => (
+                          <Skeleton
+                            key={`leaderboard-cell-${rowIndex}-${colIndex}`}
+                            className="h-4 w-full"
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="text-center text-xs text-muted-foreground">{t("states.loading")}</div>
             </CardContent>
           </Card>
@@ -483,6 +507,35 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
               <div className="text-center text-destructive">{error}</div>
             </CardContent>
           </Card>
+        ) : isMobile ? (
+          data.length === 0 ? (
+            <Card>
+              <CardContent className="py-8">
+                <div className="text-center text-muted-foreground">
+                  {period === "daily"
+                    ? t("states.todayNoData")
+                    : period === "weekly"
+                      ? t("states.weekNoData")
+                      : period === "monthly"
+                        ? t("states.monthNoData")
+                        : t("states.noData")}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {data.map((entry, index) => (
+                <MobileLeaderboardCard
+                  key={rowKey(entry)}
+                  rank={index + 1}
+                  data={entry}
+                  scope={scope}
+                  expanded={expandedIndex === index}
+                  onToggle={() => setExpandedIndex(expandedIndex === index ? null : index)}
+                />
+              ))}
+            </div>
+          )
         ) : (
           <LeaderboardTable data={data} period={period} columns={columns} getRowKey={rowKey} />
         )}

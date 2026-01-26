@@ -15,6 +15,8 @@ import strings from "./strings.json";
 import providersAutoSort from "./providers/autoSort.json";
 import providersBatchEdit from "./providers/batchEdit.json";
 import providersFilter from "./providers/filter.json";
+import providersGroupEdit from "./providers/groupEdit.json";
+import providersGroupPriority from "./providers/groupPriority.json";
 import providersGuide from "./providers/guide.json";
 import providersInlineEdit from "./providers/inlineEdit.json";
 import providersList from "./providers/list.json";
@@ -78,6 +80,8 @@ const providers = {
   batchEdit: providersBatchEdit,
   filter: providersFilter,
   form: providersForm,
+  groupEdit: providersGroupEdit,
+  groupPriority: providersGroupPriority,
   guide: providersGuide,
   inlineEdit: providersInlineEdit,
   list: providersList,

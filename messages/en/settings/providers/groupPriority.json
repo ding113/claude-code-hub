@@ -1,0 +1,6 @@
+{
+  "title": "Group Priority",
+  "default": "Default",
+  "emptyHint": "Leave empty to use default",
+  "hasOverrides": "Has group-level priority overrides"
+}

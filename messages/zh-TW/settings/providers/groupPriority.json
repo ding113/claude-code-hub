@@ -1,0 +1,6 @@
+{
+  "title": "分組優先級",
+  "default": "預設",
+  "emptyHint": "留空則使用預設值",
+  "hasOverrides": "存在分組級別的優先級覆蓋"
+}

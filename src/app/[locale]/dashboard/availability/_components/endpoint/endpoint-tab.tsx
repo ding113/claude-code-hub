@@ -1,6 +1,6 @@
 "use client";
 
-import { Radio, RefreshCw } from "lucide-react";
+import { Radio } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
