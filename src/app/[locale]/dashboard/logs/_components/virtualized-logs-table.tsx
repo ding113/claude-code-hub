@@ -527,8 +527,8 @@ export function VirtualizedLogsTable({
                         <TooltipProvider>
                           <Tooltip delayDuration={250}>
                             <TooltipTrigger asChild>
-                              <div className="cursor-help flex flex-col items-end leading-tight tabular-nums">
-                                <div className="flex items-center gap-1">
+                              <div className="cursor-help flex flex-col w-full leading-tight tabular-nums">
+                                <div className="flex items-center gap-1 w-full">
                                   {log.cacheTtlApplied ? (
                                     <Badge
                                       variant="outline"
@@ -537,9 +537,11 @@ export function VirtualizedLogsTable({
                                       {log.cacheTtlApplied}
                                     </Badge>
                                   ) : null}
-                                  <span>{formatTokenAmount(log.cacheCreationInputTokens)}</span>
+                                  <span className="ml-auto text-right">
+                                    {formatTokenAmount(log.cacheCreationInputTokens)}
+                                  </span>
                                 </div>
-                                <span className="text-muted-foreground">
+                                <span className="text-muted-foreground text-right">
                                   {formatTokenAmount(log.cacheReadInputTokens)}
                                 </span>
                               </div>

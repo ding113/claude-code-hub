@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { ActiveSessionsCards } from "@/components/customs/active-sessions-cards";
+import { getEnvConfig } from "@/lib/config";
 import { getSystemSettings } from "@/repository/system-config";
 import { UsageLogsViewVirtualized } from "./usage-logs-view-virtualized";
 
@@ -22,12 +23,14 @@ export async function UsageLogsDataSection({
   searchParams,
 }: UsageLogsDataSectionProps) {
   const resolvedSearchParams = await searchParams;
+  const { TZ } = getEnvConfig();
 
   return (
     <UsageLogsViewVirtualized
       isAdmin={isAdmin}
       userId={userId}
       searchParams={resolvedSearchParams}
+      serverTimeZone={TZ}
     />
   );
 }

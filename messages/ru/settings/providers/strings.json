@@ -65,6 +65,7 @@
   "circuitStatus": "Состояние цепи",
   "vendorTypeCircuit": "Цепь по типу провайдера",
   "vendorFallbackName": "Поставщик #{id}",
+  "vendorAggregationRule": "Группировка по домену сайта",
   "orphanedProviders": "Неизвестный поставщик",
   "vendorTypeCircuitUpdated": "Цепь типа поставщика обновлена",
   "noEndpoints": "Эндпоинты не настроены",

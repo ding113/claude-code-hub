@@ -65,6 +65,7 @@
   "circuitStatus": "回路状態",
   "vendorTypeCircuit": "ベンダー種別回路",
   "vendorFallbackName": "ベンダー #{id}",
+  "vendorAggregationRule": "公式ドメインで集約",
   "orphanedProviders": "不明なベンダー",
   "vendorTypeCircuitUpdated": "ベンダータイプサーキットが更新されました",
   "noEndpoints": "エンドポイントが設定されていません",

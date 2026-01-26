@@ -65,6 +65,7 @@
   "circuitStatus": "Circuit Status",
   "vendorTypeCircuit": "Vendor Type Circuit",
   "vendorFallbackName": "Vendor #{id}",
+  "vendorAggregationRule": "Grouped by website domain.",
   "orphanedProviders": "Unknown Vendor",
   "vendorTypeCircuitUpdated": "Vendor type circuit updated",
   "noEndpoints": "No endpoints configured",

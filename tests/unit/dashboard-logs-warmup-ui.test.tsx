@@ -102,3 +102,56 @@ describe("UsageLogsTable - warmup 跳过展示", () => {
     unmount();
   });
 });
+
+describe("UsageLogsTable - cache badge alignment", () => {
+  test("badge renders before numbers and keeps right-aligned tokens", () => {
+    const cacheLog: UsageLogRow = {
+      id: 2,
+      createdAt: new Date(),
+      sessionId: "session_cache",
+      requestSequence: 1,
+      userName: "user",
+      keyName: "key",
+      providerName: "provider",
+      model: "claude-sonnet-4-5-20250929",
+      originalModel: "claude-sonnet-4-5-20250929",
+      endpoint: "/v1/messages",
+      statusCode: 200,
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheCreationInputTokens: 10,
+      cacheReadInputTokens: 5,
+      cacheCreation5mInputTokens: 10,
+      cacheCreation1hInputTokens: 0,
+      cacheTtlApplied: "1h",
+      totalTokens: 15,
+      costUsd: "0.000001",
+      costMultiplier: null,
+      durationMs: 10,
+      ttfbMs: 5,
+      errorMessage: null,
+      providerChain: null,
+      blockedBy: null,
+      blockedReason: null,
+      userAgent: "claude_cli/1.0",
+      messagesCount: 1,
+      context1mApplied: false,
+    };
+
+    const { container, unmount } = renderWithIntl(
+      <UsageLogsTable
+        logs={[cacheLog]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(container.innerHTML).toContain("1h");
+    expect(container.innerHTML).toContain("ml-auto");
+
+    unmount();
+  });
+});

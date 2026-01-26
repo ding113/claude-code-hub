@@ -6,6 +6,7 @@ import {
   Activity,
   Edit2,
   ExternalLink,
+  InfoIcon,
   Loader2,
   MoreHorizontal,
   Play,
@@ -67,6 +68,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { getErrorMessage } from "@/lib/utils/error-messages";
@@ -150,7 +152,7 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
         const vendor = vendors.find((v) => v.id === vendorId);
         const vendorProviders = providersByVendor[vendorId] || [];
 
-        if (!vendor && vendorProviders.length === 0) return null;
+        if (vendorProviders.length === 0) return null;
 
         return (
           <VendorCard
@@ -210,6 +212,18 @@ function VendorCard({
             <div>
               <CardTitle className="flex items-center gap-2">
                 {displayName}
+                {vendorId > 0 && (
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="text-muted-foreground hover:text-foreground">
+                          <InfoIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("vendorAggregationRule")}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
                 {websiteUrl && (
                   <a
                     href={websiteUrl}
@@ -427,6 +441,7 @@ function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
   const tCommon = useTranslations("settings.common");
   const queryClient = useQueryClient();
   const [isProbing, setIsProbing] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
 
   const probeMutation = useMutation({
     mutationFn: async () => {
@@ -469,11 +484,30 @@ function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
     },
   });
 
+  const toggleMutation = useMutation({
+    mutationFn: async (nextEnabled: boolean) => {
+      const res = await editProviderEndpoint({
+        endpointId: endpoint.id,
+        isEnabled: nextEnabled,
+      });
+      if (!res.ok) throw new Error(res.error);
+      return res.data;
+    },
+    onMutate: () => setIsToggling(true),
+    onSettled: () => setIsToggling(false),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      toast.success(t("endpointUpdateSuccess"));
+    },
+    onError: () => {
+      toast.error(t("endpointUpdateFailed"));
+    },
+  });
+
   return (
     <TableRow>
       <TableCell className="font-mono text-xs max-w-[200px] truncate" title={endpoint.url}>
         {endpoint.url}
-        {endpoint.label && <div className="text-muted-foreground font-sans">{endpoint.label}</div>}
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
@@ -487,6 +521,12 @@ function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
           ) : (
             <Badge variant="outline">{t("disabledStatus")}</Badge>
           )}
+          <Switch
+            checked={endpoint.isEnabled}
+            onCheckedChange={(checked) => toggleMutation.mutate(checked)}
+            disabled={isToggling}
+            aria-label={t("enabledStatus")}
+          />
         </div>
       </TableCell>
       <TableCell>
@@ -568,14 +608,13 @@ function AddEndpointButton({
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     const endpointUrl = formData.get("url") as string;
-    const label = formData.get("label") as string;
 
     try {
       const res = await addProviderEndpoint({
         vendorId,
         providerType,
         url: endpointUrl,
-        label: label || null,
+        label: null,
         sortOrder: 0,
         isEnabled: true,
       });
@@ -618,10 +657,6 @@ function AddEndpointButton({
               onChange={(e) => setUrl(e.target.value)}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="label">{t("endpointLabelOptional")}</Label>
-            <Input id="label" name="label" placeholder={t("endpointLabelPlaceholder")} />
-          </div>
 
           <UrlPreview baseUrl={url} providerType={providerType} />
 
@@ -652,14 +687,12 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     const url = formData.get("url") as string;
-    const label = formData.get("label") as string;
     const isEnabled = formData.get("isEnabled") === "on";
 
     try {
       const res = await editProviderEndpoint({
         endpointId: endpoint.id,
         url,
-        label: label || null,
         isEnabled,
       });
 
@@ -692,10 +725,6 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
           <div className="space-y-2">
             <Label htmlFor="url">{t("endpointUrlLabel")}</Label>
             <Input id="url" name="url" defaultValue={endpoint.url} required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="label">{t("endpointLabelOptional")}</Label>
-            <Input id="label" name="label" defaultValue={endpoint.label || ""} />
           </div>
           <div className="flex items-center space-x-2">
             <Switch id="isEnabled" name="isEnabled" defaultChecked={endpoint.isEnabled} />

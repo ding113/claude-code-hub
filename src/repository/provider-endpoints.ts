@@ -231,9 +231,18 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
  * 从域名派生显示名称（直接使用域名的中间部分）
  * 例如: anthropic.com -> Anthropic, api.openai.com -> OpenAI
  */
-function deriveDisplayNameFromDomain(domain: string): string {
-  const parts = domain.split(".");
-  const name = parts[0] === "api" && parts[1] ? parts[1] : parts[0];
+export function deriveDisplayNameFromDomain(domain: string): string {
+  const parts = domain.split(".").map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) {
+    const name = parts[0];
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  let name = parts[parts.length - 2];
+  if (name === "api" && parts.length >= 3) {
+    name = parts[parts.length - 3];
+  }
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 

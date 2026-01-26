@@ -1,6 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo } from "react";
 import { Input } from "@/components/ui/input";
@@ -16,16 +17,20 @@ import type { UsageLogFilters } from "./types";
 interface TimeFiltersProps {
   filters: UsageLogFilters;
   onFiltersChange: (filters: UsageLogFilters) => void;
+  serverTimeZone?: string;
 }
 
-export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
+export function TimeFilters({ filters, onFiltersChange, serverTimeZone }: TimeFiltersProps) {
   const t = useTranslations("dashboard.logs.filters");
 
   // Helper: convert timestamp to display date string (YYYY-MM-DD)
   const timestampToDateString = useCallback((timestamp: number): string => {
     const date = new Date(timestamp);
+    if (serverTimeZone) {
+      return formatInTimeZone(date, serverTimeZone, "yyyy-MM-dd");
+    }
     return format(date, "yyyy-MM-dd");
-  }, []);
+  }, [serverTimeZone]);
 
   // Memoized startDate for display (from timestamp)
   const displayStartDate = useMemo(() => {
@@ -35,8 +40,8 @@ export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
 
   const displayStartClock = useMemo(() => {
     if (!filters.startTime) return undefined;
-    return formatClockFromTimestamp(filters.startTime);
-  }, [filters.startTime]);
+    return formatClockFromTimestamp(filters.startTime, serverTimeZone);
+  }, [filters.startTime, serverTimeZone]);
 
   // Memoized endDate calculation: endTime is exclusive, use endTime-1s to infer inclusive display end date
   const displayEndDate = useMemo(() => {
@@ -48,8 +53,8 @@ export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
   const displayEndClock = useMemo(() => {
     if (!filters.endTime) return undefined;
     const inclusiveEndTime = inclusiveEndTimestampFromExclusive(filters.endTime);
-    return formatClockFromTimestamp(inclusiveEndTime);
-  }, [filters.endTime]);
+    return formatClockFromTimestamp(inclusiveEndTime, serverTimeZone);
+  }, [filters.endTime, serverTimeZone]);
 
   // Memoized callback for date range changes
   const handleDateRangeChange = useCallback(
@@ -57,8 +62,16 @@ export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
       if (range.startDate && range.endDate) {
         const startClock = displayStartClock ?? "00:00:00";
         const endClock = displayEndClock ?? "23:59:59";
-        const startTimestamp = dateStringWithClockToTimestamp(range.startDate, startClock);
-        const endInclusiveTimestamp = dateStringWithClockToTimestamp(range.endDate, endClock);
+        const startTimestamp = dateStringWithClockToTimestamp(
+          range.startDate,
+          startClock,
+          serverTimeZone
+        );
+        const endInclusiveTimestamp = dateStringWithClockToTimestamp(
+          range.endDate,
+          endClock,
+          serverTimeZone
+        );
         if (startTimestamp === undefined || endInclusiveTimestamp === undefined) {
           onFiltersChange({
             ...filters,
@@ -81,7 +94,7 @@ export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
         });
       }
     },
-    [displayEndClock, displayStartClock, filters, onFiltersChange]
+    [displayEndClock, displayStartClock, filters, onFiltersChange, serverTimeZone]
   );
 
   const handleStartTimeChange = useCallback(
@@ -89,14 +102,14 @@ export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
       const nextClock = e.target.value || "00:00:00";
       if (!filters.startTime) return;
       const dateStr = timestampToDateString(filters.startTime);
-      const startTime = dateStringWithClockToTimestamp(dateStr, nextClock);
+      const startTime = dateStringWithClockToTimestamp(dateStr, nextClock, serverTimeZone);
       if (startTime === undefined) return;
       onFiltersChange({
         ...filters,
         startTime,
       });
     },
-    [filters, onFiltersChange, timestampToDateString]
+    [filters, onFiltersChange, timestampToDateString, serverTimeZone]
   );
 
   const handleEndTimeChange = useCallback(
@@ -105,14 +118,18 @@ export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
       if (!filters.endTime) return;
       const inclusiveEndTime = inclusiveEndTimestampFromExclusive(filters.endTime);
       const endDateStr = timestampToDateString(inclusiveEndTime);
-      const endInclusiveTimestamp = dateStringWithClockToTimestamp(endDateStr, nextClock);
+      const endInclusiveTimestamp = dateStringWithClockToTimestamp(
+        endDateStr,
+        nextClock,
+        serverTimeZone
+      );
       if (endInclusiveTimestamp === undefined) return;
       onFiltersChange({
         ...filters,
         endTime: endInclusiveTimestamp + 1000,
       });
     },
-    [filters, onFiltersChange, timestampToDateString]
+    [filters, onFiltersChange, timestampToDateString, serverTimeZone]
   );
 
   return (
@@ -123,6 +140,7 @@ export function TimeFilters({ filters, onFiltersChange }: TimeFiltersProps) {
           startDate={displayStartDate}
           endDate={displayEndDate}
           onDateRangeChange={handleDateRangeChange}
+          serverTimeZone={serverTimeZone}
         />
       </div>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
