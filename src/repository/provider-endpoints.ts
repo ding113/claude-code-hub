@@ -232,7 +232,10 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
  * 例如: anthropic.com -> Anthropic, api.openai.com -> OpenAI
  */
 export function deriveDisplayNameFromDomain(domain: string): string {
-  const parts = domain.split(".").map((part) => part.trim()).filter(Boolean);
+  const parts = domain
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
   if (parts.length === 0) return "";
   if (parts.length === 1) {
     const name = parts[0];

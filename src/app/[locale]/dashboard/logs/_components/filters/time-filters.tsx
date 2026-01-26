@@ -24,13 +24,16 @@ export function TimeFilters({ filters, onFiltersChange, serverTimeZone }: TimeFi
   const t = useTranslations("dashboard.logs.filters");
 
   // Helper: convert timestamp to display date string (YYYY-MM-DD)
-  const timestampToDateString = useCallback((timestamp: number): string => {
-    const date = new Date(timestamp);
-    if (serverTimeZone) {
-      return formatInTimeZone(date, serverTimeZone, "yyyy-MM-dd");
-    }
-    return format(date, "yyyy-MM-dd");
-  }, [serverTimeZone]);
+  const timestampToDateString = useCallback(
+    (timestamp: number): string => {
+      const date = new Date(timestamp);
+      if (serverTimeZone) {
+        return formatInTimeZone(date, serverTimeZone, "yyyy-MM-dd");
+      }
+      return format(date, "yyyy-MM-dd");
+    },
+    [serverTimeZone]
+  );
 
   // Memoized startDate for display (from timestamp)
   const displayStartDate = useMemo(() => {

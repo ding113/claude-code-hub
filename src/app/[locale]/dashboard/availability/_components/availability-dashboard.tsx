@@ -165,7 +165,6 @@ export function AvailabilityDashboard() {
           <EndpointTab />
         </TabsContent>
       </Tabs>
-
     </div>
   );
 }

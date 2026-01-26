@@ -9,24 +9,15 @@ import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
 import { AvailabilityDashboard } from "@/app/[locale]/dashboard/availability/_components/availability-dashboard";
 
-vi.mock(
-  "@/app/[locale]/dashboard/availability/_components/overview/overview-section",
-  () => ({
-    OverviewSection: () => <div data-testid="overview-section" />,
-  })
-);
-vi.mock(
-  "@/app/[locale]/dashboard/availability/_components/provider/provider-tab",
-  () => ({
-    ProviderTab: () => <div data-testid="provider-tab" />,
-  })
-);
-vi.mock(
-  "@/app/[locale]/dashboard/availability/_components/endpoint/endpoint-tab",
-  () => ({
-    EndpointTab: () => <div data-testid="endpoint-tab" />,
-  })
-);
+vi.mock("@/app/[locale]/dashboard/availability/_components/overview/overview-section", () => ({
+  OverviewSection: () => <div data-testid="overview-section" />,
+}));
+vi.mock("@/app/[locale]/dashboard/availability/_components/provider/provider-tab", () => ({
+  ProviderTab: () => <div data-testid="provider-tab" />,
+}));
+vi.mock("@/app/[locale]/dashboard/availability/_components/endpoint/endpoint-tab", () => ({
+  EndpointTab: () => <div data-testid="endpoint-tab" />,
+}));
 
 function renderWithIntl(node: ReactNode) {
   const container = document.createElement("div");

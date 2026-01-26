@@ -185,15 +185,15 @@ export function UsageLogsView({
           <CardTitle>{t("title.filterCriteria")}</CardTitle>
         </CardHeader>
         <CardContent>
-        <UsageLogsFilters
-          isAdmin={isAdmin}
-          providers={providers}
-          initialKeys={initialKeys}
-          filters={filters}
-          onChange={handleFilterChange}
-          onReset={() => router.push("/dashboard/logs")}
-          serverTimeZone={serverTimeZone}
-        />
+          <UsageLogsFilters
+            isAdmin={isAdmin}
+            providers={providers}
+            initialKeys={initialKeys}
+            filters={filters}
+            onChange={handleFilterChange}
+            onReset={() => router.push("/dashboard/logs")}
+            serverTimeZone={serverTimeZone}
+          />
         </CardContent>
       </Card>
 

@@ -216,7 +216,10 @@ function VendorCard({
                   <TooltipProvider>
                     <Tooltip delayDuration={200}>
                       <TooltipTrigger asChild>
-                        <button type="button" className="text-muted-foreground hover:text-foreground">
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground"
+                        >
                           <InfoIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                       </TooltipTrigger>
