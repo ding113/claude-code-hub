@@ -427,15 +427,11 @@ export function StatisticsChartCard({
               {t("legend.deselectAll")}
             </button>
           </div>
-          {/* User list with max 3 rows and scroll - only show users with non-zero usage */}
+          {/* User list with max 3 rows and scroll */}
           <div className="max-h-[72px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
             <div className="flex flex-wrap gap-1.5 justify-center">
               {data.users
                 .map((user, originalIndex) => ({ user, originalIndex }))
-                .filter(({ user }) => {
-                  const total = userTotals[user.dataKey];
-                  return total && (total.cost.greaterThan(0) || total.calls > 0);
-                })
                 .map(({ user, originalIndex }) => {
                   const color = getUserColor(originalIndex);
                   const isSelected = selectedUserIds.has(user.id);
