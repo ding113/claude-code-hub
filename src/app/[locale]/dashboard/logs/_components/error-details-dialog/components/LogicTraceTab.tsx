@@ -49,7 +49,6 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
 }
 
 export function LogicTraceTab({
-  statusCode,
   providerChain,
   blockedBy,
   blockedReason,

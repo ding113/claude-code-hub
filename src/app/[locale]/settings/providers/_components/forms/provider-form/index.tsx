@@ -502,7 +502,6 @@ export function ProviderForm({
   hideWebsiteUrl = false,
   preset,
   urlResolver,
-  allowedProviderTypes,
 }: ProviderFormProps) {
   const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [autoUrlPending, setAutoUrlPending] = useState(false);
