@@ -439,9 +439,9 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
   const totalInputTokensExpr = sql<number>`(
-    COALESCE(${messageRequest.inputTokens}, 0) +
-    COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
-    COALESCE(${messageRequest.cacheReadInputTokens}, 0)
+    COALESCE(${messageRequest.inputTokens}, 0)::double precision +
+    COALESCE(${messageRequest.cacheCreationInputTokens}, 0)::double precision +
+    COALESCE(${messageRequest.cacheReadInputTokens}, 0)::double precision
   )`;
 
   const cacheRequiredCondition = sql`(
