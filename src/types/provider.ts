@@ -41,6 +41,8 @@ export interface Provider {
   name: string;
   url: string;
   key: string;
+  // 供应商聚合实体（按官网域名归一）
+  providerVendorId: number | null;
   // 是否启用
   isEnabled: boolean;
   // 权重（0-100）
@@ -155,6 +157,8 @@ export interface ProviderDisplay {
   groupTag: string | null;
   // 供应商类型
   providerType: ProviderType;
+  // 供应商聚合实体（按官网域名归一）
+  providerVendorId: number | null;
   // 是否透传客户端 IP
   preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;
@@ -366,4 +370,47 @@ export interface UpdateProviderData {
   rpd?: number | null;
   // CC (Concurrent Connections/Requests): 同一时刻能同时处理的请求数量
   cc?: number | null;
+}
+
+export interface ProviderVendor {
+  id: number;
+  websiteDomain: string;
+  displayName: string | null;
+  websiteUrl: string | null;
+  faviconUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type ProviderEndpointProbeSource = "scheduled" | "manual" | "runtime";
+
+export interface ProviderEndpoint {
+  id: number;
+  vendorId: number;
+  providerType: ProviderType;
+  url: string;
+  label: string | null;
+  sortOrder: number;
+  isEnabled: boolean;
+  lastProbedAt: Date | null;
+  lastProbeOk: boolean | null;
+  lastProbeStatusCode: number | null;
+  lastProbeLatencyMs: number | null;
+  lastProbeErrorType: string | null;
+  lastProbeErrorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+}
+
+export interface ProviderEndpointProbeLog {
+  id: number;
+  endpointId: number;
+  source: ProviderEndpointProbeSource;
+  ok: boolean;
+  statusCode: number | null;
+  latencyMs: number | null;
+  errorType: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
 }

@@ -91,6 +91,7 @@ export function AddWordDialog() {
                 value={word}
                 onChange={(e) => setWord(e.target.value)}
                 placeholder={t("sensitiveWords.dialog.wordPlaceholder")}
+                className="bg-muted/50 border border-border rounded-lg focus:border-[#E25706]/50 focus:ring-[#E25706]/20"
                 required
               />
             </div>
@@ -101,7 +102,7 @@ export function AddWordDialog() {
                 value={matchType}
                 onValueChange={(value) => setMatchType(value as "contains" | "exact" | "regex")}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-muted/50 border border-border rounded-lg focus:border-[#E25706]/50 focus:ring-[#E25706]/20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -121,6 +122,7 @@ export function AddWordDialog() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t("sensitiveWords.dialog.descriptionPlaceholder")}
+                className="bg-muted/50 border border-border rounded-lg focus:border-[#E25706]/50 focus:ring-[#E25706]/20"
                 rows={3}
               />
             </div>

@@ -1,0 +1,43 @@
+{
+  "enterMode": "Batch Edit",
+  "exitMode": "Exit",
+  "selectAll": "Select All",
+  "invertSelection": "Invert",
+  "selectedCount": "{count} selected",
+  "editSelected": "Edit Selected",
+  "actions": {
+    "edit": "Edit",
+    "delete": "Delete",
+    "resetCircuit": "Reset Circuit"
+  },
+  "dialog": {
+    "editTitle": "Batch Edit Providers",
+    "editDesc": "Changes will apply to {count} providers",
+    "deleteTitle": "Delete Providers",
+    "deleteDesc": "Permanently delete {count} providers?",
+    "resetCircuitTitle": "Reset Circuit Breakers",
+    "resetCircuitDesc": "Reset circuit breaker for {count} providers?",
+    "next": "Next",
+    "noFieldEnabled": "Please enable at least one field to update"
+  },
+  "fields": {
+    "isEnabled": "Status",
+    "priority": "Priority",
+    "weight": "Weight",
+    "costMultiplier": "Cost Multiplier",
+    "groupTag": "Group Tag"
+  },
+  "confirm": {
+    "title": "Confirm Operation",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "goBack": "Go Back",
+    "processing": "Processing..."
+  },
+  "toast": {
+    "updated": "Updated {count} providers",
+    "deleted": "Deleted {count} providers",
+    "circuitReset": "Reset {count} circuit breakers",
+    "failed": "Operation failed: {error}"
+  }
+}

@@ -17,17 +17,26 @@ export default async function ErrorRulesPage() {
 
   return (
     <>
-      <SettingsPageHeader title={t("errorRules.title")} description={t("errorRules.description")} />
+      <SettingsPageHeader
+        title={t("errorRules.title")}
+        description={t("errorRules.description")}
+        icon="alert-triangle"
+      />
       <div className="space-y-6">
         <Section
           title={t("errorRules.tester.title")}
           description={t("errorRules.tester.description")}
+          icon="flask-conical"
+          iconColor="text-blue-400"
         >
           <ErrorRuleTester />
         </Section>
 
         <Section
           title={t("errorRules.section.title")}
+          icon="alert-triangle"
+          iconColor="text-orange-400"
+          variant="warning"
           actions={
             <div className="flex gap-2">
               <Suspense fallback={<Skeleton className="h-9 w-24" />}>

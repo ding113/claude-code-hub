@@ -21,7 +21,8 @@
     "keysQuotas": "Статистика квот ключей",
     "providersQuotas": "Статистика квот поставщиков",
     "usageLogsDescription": "Просмотр журналов вызовов API и статистики использования",
-    "filterCriteria": "Критерии фильтрации"
+    "filterCriteria": "Критерии фильтрации",
+    "filterCriteriaDescription": "Фильтруйте журналы по времени, пользователю, поставщику и другим параметрам"
   },
   "description": {
     "viewApiCallLogs": "Просмотр журналов вызовов API и статистики использования",
@@ -93,7 +94,28 @@
       "export": "Экспорт",
       "exporting": "Экспорт...",
       "exportSuccess": "Экспорт завершен",
-      "exportError": "Ошибка экспорта"
+      "exportError": "Ошибка экспорта",
+      "quickFilters": {
+        "today": "Сегодня",
+        "thisWeek": "Эта неделя",
+        "errorsOnly": "Только ошибки",
+        "showRetries": "С ретраями"
+      },
+      "activeFilters": {
+        "title": "Активные фильтры",
+        "remove": "Удалить фильтр",
+        "clearAll": "Очистить все"
+      },
+      "groups": {
+        "time": "Период времени",
+        "timeDesc": "Фильтр по дате и времени",
+        "identity": "Идентификация",
+        "identityDesc": "Фильтр по пользователю и ключу",
+        "request": "Запрос",
+        "requestDesc": "Фильтр по поставщику, модели, эндпоинту",
+        "status": "Статус",
+        "statusDesc": "Фильтр по коду состояния и ретраям"
+      }
     },
     "columns": {
       "time": "Время",
@@ -116,9 +138,7 @@
     },
     "stats": {
       "title": "Сводка статистики",
-      "description": "Нажмите для просмотра агрегированной статистики по текущим фильтрам",
-      "expand": "Развернуть",
-      "collapse": "Свернуть",
+      "description": "Агрегированная статистика по текущим фильтрам",
       "totalAmount": "Общая сумма расходов",
       "totalTokens": "Общее количество токенов",
       "cacheTokens": "Токены кэша",
@@ -144,7 +164,8 @@
       "noMoreData": "Все записи загружены",
       "scrollToTop": "Наверх",
       "hideProviderColumn": "Скрыть столбец провайдера",
-      "showProviderColumn": "Показать столбец провайдера"
+      "showProviderColumn": "Показать столбец провайдера",
+      "columnVisibility": "Видимость столбцов"
     },
     "actions": {
       "refresh": "Обновить",
@@ -161,12 +182,27 @@
     },
     "details": {
       "title": "Детали запроса",
-      "statusTitle": "Детали запроса - код состояния {status}",
+      "statusTitle": "Статус: {status}",
       "inProgress": "В процессе",
       "unknown": "Неизвестно",
       "success": "Запрос успешно выполнен",
       "error": "Запрос не выполнен, ниже подробная информация об ошибке и цепочке решений поставщика",
       "processing": "Запрос находится в процессе выполнения и еще не завершен",
+      "tabs": {
+        "summary": "Обзор",
+        "logicTrace": "Цепочка решений",
+        "performance": "Производительность",
+        "metadata": "Метаданные"
+      },
+      "summary": {
+        "keyMetrics": "Ключевые показатели",
+        "totalCost": "Общая стоимость",
+        "totalTokens": "Всего токенов",
+        "duration": "Длительность",
+        "outputRate": "Скорость вывода",
+        "viewFullError": "Показать полную ошибку",
+        "viewSession": "Просмотр сеанса"
+      },
       "specialSettings": {
         "title": "Особые настройки"
       },
@@ -207,6 +243,7 @@
         "billingRedirected": "оплата: факт."
       },
       "errorMessage": "Сообщение об ошибке",
+      "filteredProviders": "Отфильтрованные поставщики",
       "providerChain": {
         "title": "Хронология цепочки решений поставщика",
         "totalDuration": "Общая продолжительность: {duration}мс"
@@ -223,13 +260,72 @@
         "circuitOpen": "Размыкатель цепи открыт"
       },
       "billingDetails": {
-        "title": "Детали биллинга"
+        "title": "Детали биллинга",
+        "input": "Входные",
+        "output": "Выходные",
+        "cacheWrite5m": "Запись кэша (5m)",
+        "cacheWrite1h": "Запись кэша (1h)",
+        "cacheRead": "Чтение кэша",
+        "cacheTtl": "TTL кэша",
+        "multiplier": "Множитель поставщика",
+        "totalCost": "Общая стоимость",
+        "context1m": "1M контекст",
+        "context1mPricing": "Вход 2x >200k, Выход 1.5x >200k"
       },
       "performance": {
         "title": "Производительность",
         "ttfb": "TTFB",
         "duration": "Общее время",
         "outputRate": "Скорость вывода"
+      },
+      "performanceTab": {
+        "noPerformanceData": "Нет данных о производительности",
+        "ttfbGauge": "Время до первого байта",
+        "outputRateGauge": "Скорость вывода",
+        "latencyBreakdown": "Разбивка задержки",
+        "generationTime": "Время генерации",
+        "assessment": {
+          "excellent": "Отлично",
+          "good": "Хорошо",
+          "warning": "Предупреждение",
+          "poor": "Плохо"
+        },
+        "thresholds": {
+          "ttfbGood": "TTFB < 1с",
+          "ttfbWarning": "TTFB 1-2с",
+          "ttfbPoor": "TTFB > 3с"
+        }
+      },
+      "metadata": {
+        "noMetadata": "Нет метаданных",
+        "sessionInfo": "Информация о сеансе",
+        "clientInfo": "Информация о клиенте",
+        "billingInfo": "Информация о биллинге",
+        "technicalTimeline": "Техническая хронология",
+        "copyTimeline": "Копировать хронологию"
+      },
+      "logicTrace": {
+        "title": "Цепочка решений",
+        "noDecisionData": "Нет данных о решениях",
+        "providersCount": "{count} поставщиков",
+        "healthyCount": "{count} исправных",
+        "initialSelection": "Начальный выбор",
+        "healthCheck": "Проверка работоспособности",
+        "prioritySelection": "Выбор по приоритету",
+        "attemptProvider": "Попытка: {provider}",
+        "retryAttempt": "Повтор #{number}",
+        "sessionReuse": "Повторное использование сессии",
+        "sessionReuseDesc": "Провайдер из кэша сессии",
+        "sessionReuseTitle": "Привязка сессии",
+        "sessionReuseSelection": "Выбор с повторным использованием сессии",
+        "sessionReuseSelectionDesc": "Провайдер выбран из кэша сессии",
+        "sessionInfo": "Информация о сессии",
+        "sessionIdLabel": "ID сессии",
+        "requestSequence": "Номер запроса",
+        "sessionAge": "Возраст сессии",
+        "reusedProvider": "Повторно используемый провайдер",
+        "executeRequest": "Выполнить запрос",
+        "cacheOptimizationHint": "Повторное использование сессии оптимизирует производительность, поддерживая привязку к провайдеру в рамках одного разговора, снижая накладные расходы на выбор и повышая частоту попаданий в кэш."
       }
     },
     "providerChain": {
@@ -922,6 +1018,95 @@
     "title": "Мониторинг доступности провайдеров",
     "description": "Мониторинг доступности и показателей производительности провайдеров в реальном времени",
     "nav": "Мониторинг доступности",
+    "tabs": {
+      "provider": "Доступность провайдеров",
+      "endpoint": "Здоровье эндпоинтов"
+    },
+    "overview": {
+      "systemAvailability": "Доступность системы",
+      "avgLatency": "Средняя задержка",
+      "errorRate": "Коэффициент ошибок",
+      "activeProbes": "Активные проверки",
+      "load": "Нагрузка"
+    },
+    "timeRange": {
+      "label": "Временной диапазон",
+      "15min": "15 мин",
+      "1h": "1 час",
+      "6h": "6 часов",
+      "24h": "24 часа",
+      "7d": "7 дней",
+      "last15min": "Последние 15 минут",
+      "last1h": "Последний час",
+      "last6h": "Последние 6 часов",
+      "last24h": "Последние 24 часа",
+      "last7d": "7д",
+      "custom": "Настраиваемый"
+    },
+    "laneChart": {
+      "title": "Хронология доступности провайдеров",
+      "noData": "Нет данных",
+      "requests": "{count} запросов",
+      "availability": "{value}% доступно",
+      "noRequests": "Нет запросов",
+      "denseData": "Плотные",
+      "sparseData": "Разреженные",
+      "latency": "Задержка"
+    },
+    "latencyChart": {
+      "title": "Распределение задержки",
+      "p50": "P50",
+      "p95": "P95",
+      "p99": "P99",
+      "noData": "Нет данных о задержке"
+    },
+    "latencyCurve": {
+      "title": "Тренд задержки",
+      "noData": "Нет данных о задержке",
+      "avg": "Средн.",
+      "min": "Мин.",
+      "max": "Макс.",
+      "latency": "Задержка"
+    },
+    "terminal": {
+      "title": "Журнал проверок",
+      "live": "LIVE",
+      "download": "Скачать журнал",
+      "noLogs": "Нет журналов проверок",
+      "manual": "Ручная",
+      "auto": "Авто",
+      "filterPlaceholder": "Фильтр журналов..."
+    },
+    "probeGrid": {
+      "title": "Статус эндпоинтов",
+      "noEndpoints": "Эндпоинты не настроены",
+      "lastProbe": "Последняя проверка",
+      "status": {
+        "unknown": "Неизвестно",
+        "healthy": "Здоров",
+        "unhealthy": "Нездоров"
+      }
+    },
+    "endpoint": {
+      "selectVendor": "Выберите вендора",
+      "selectType": "Выберите тип"
+    },
+    "confidence": {
+      "low": "Низкая",
+      "medium": "Средняя",
+      "high": "Высокая",
+      "lowTooltip": "Менее {count} запросов. Данные могут быть нерепрезентативными.",
+      "mediumTooltip": "Умеренный объём запросов. Данные достаточно надёжны.",
+      "highTooltip": "Высокий объём запросов. Данные надёжны."
+    },
+    "actions": {
+      "retry": "Повторить",
+      "probeNow": "Проверить сейчас",
+      "probing": "Проверка...",
+      "probeAll": "Проверить все",
+      "probeSuccess": "Проверка успешна",
+      "probeFailed": "Проверка не удалась"
+    },
     "status": {
       "green": "Здоров",
       "red": "Недоступен",
@@ -942,15 +1127,6 @@
       "p99Latency": "P99 задержка",
       "lastRequest": "Последний запрос",
       "requestCount": "Кол-во запросов"
-    },
-    "timeRange": {
-      "label": "Временной диапазон",
-      "last15min": "Последние 15 минут",
-      "last1h": "Последний час",
-      "last6h": "Последние 6 часов",
-      "last24h": "Последние 24 часа",
-      "last7d": "7д",
-      "custom": "Настраиваемый"
     },
     "filters": {
       "provider": "Провайдер",
@@ -1024,6 +1200,28 @@
       "requests": "запросов",
       "noData": "Нет данных",
       "noRequests": "Нет запросов"
+    },
+    "probeHistory": {
+      "title": "История проверок эндпоинтов",
+      "description": "Просмотр журналов проверок и запуск ручной проверки для конкретного эндпоинта",
+      "selectVendor": "Выберите вендора",
+      "selectType": "Выберите тип провайдера",
+      "selectEndpoint": "Выберите эндпоинт",
+      "noEndpoints": "Эндпоинты не найдены",
+      "probeNow": "Проверить",
+      "probing": "Проверяем...",
+      "columns": {
+        "time": "Время",
+        "method": "Метод",
+        "status": "Статус",
+        "latency": "Задержка",
+        "error": "Ошибка"
+      },
+      "success": "Успех",
+      "manual": "Ручная проверка",
+      "auto": "Автоматическая проверка",
+      "probeSuccess": "Проверка успешна",
+      "probeFailed": "Проверка не удалась"
     },
     "toast": {
       "refreshSuccess": "Данные о доступности обновлены",
@@ -1191,7 +1389,22 @@
       "columns": {
         "model": "Модель",
         "calls": "Вызовы",
+        "tokens": "Токены",
         "cost": "Стоимость"
+      },
+      "modal": {
+        "requests": "Запросов",
+        "totalTokens": "Всего токенов",
+        "cost": "Стоимость",
+        "inputTokens": "Входные токены",
+        "outputTokens": "Выходные токены",
+        "cacheWrite": "Запись кэша",
+        "cacheRead": "Чтение кэша",
+        "cacheHitRate": "Попадание кэша",
+        "cacheTokens": "Токены кэша",
+        "performanceHigh": "Высокий",
+        "performanceMedium": "Средний",
+        "performanceLow": "Низкий"
       },
       "noData": "Нет записей использования за сегодня",
       "totalCalls": "Всего вызовов",
@@ -1338,7 +1551,7 @@
           "limitDaily": "Дневной лимит (USD)",
           "limitWeekly": "Недельный лимит (USD)",
           "limitMonthly": "Месячный лимит (USD)",
-          "canLoginWebUi": "Разрешить вход в Web UI",
+          "canLoginWebUi": "Независимая страница использования",
           "keyEnabled": "Статус ключа"
         },
         "placeholders": {
@@ -1543,7 +1756,8 @@
       "clickToEnableUser": "Нажмите, чтобы включить пользователя",
       "operationFailed": "Операция не удалась",
       "deleteFailed": "Не удалось удалить",
-      "deleteSuccess": "Удаление успешно"
+      "deleteSuccess": "Удаление успешно",
+      "daysLeft": "{days, plural, =0 {Истекает сегодня} =1 {Остался 1 день} few {Осталось # дня} many {Осталось # дней} other {Осталось # дней}}"
     },
     "userEditSection": {
       "sections": {

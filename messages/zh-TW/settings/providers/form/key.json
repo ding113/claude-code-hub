@@ -1,6 +1,7 @@
 {
   "currentKey": "當前金鑰：{key}",
   "label": "API 金鑰",
+  "labelEdit": "API 金鑰（留空不變更）",
   "leaveEmpty": "（留空不變更）",
   "leaveEmptyDesc": "留空則不變更金鑰",
   "placeholder": "輸入 API 金鑰"

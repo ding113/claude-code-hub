@@ -5,13 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
 
@@ -77,31 +71,33 @@ export function LogLevelForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
-        <Label htmlFor="log-level">{t("form.currentLevel")}</Label>
-        <Select
+        <Label htmlFor="log-level" className="text-sm font-medium text-foreground">
+          {t("form.currentLevel")}
+        </Label>
+        <select
+          id="log-level"
           value={selectedLevel}
-          onValueChange={(value) => setSelectedLevel(value as LogLevel)}
+          onChange={(e) => setSelectedLevel(e.target.value as LogLevel)}
+          disabled={isPending || isLoading}
+          className={cn(
+            "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+            "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+            "appearance-none cursor-pointer",
+            "disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
         >
-          <SelectTrigger id="log-level" disabled={isPending || isLoading}>
-            <SelectValue placeholder={isLoading ? tCommon("loading") : t("form.selectLevel")} />
-          </SelectTrigger>
-          <SelectContent>
-            {LOG_LEVELS.map((level) => (
-              <SelectItem key={level.value} value={level.value}>
-                <div className="flex flex-col">
-                  <span className="font-medium">{level.label}</span>
-                  <span className="text-xs text-muted-foreground">{level.description}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {LOG_LEVELS.map((level) => (
+            <option key={level.value} value={level.value}>
+              {level.label} - {level.description}
+            </option>
+          ))}
+        </select>
         {isLoading ? <p className="text-xs text-muted-foreground">{tCommon("loading")}</p> : null}
         <p className="text-xs text-muted-foreground">{t("form.effectiveImmediately")}</p>
       </div>
 
-      <div className="rounded-lg border border-dashed border-border px-4 py-3 space-y-2">
-        <h4 className="text-sm font-medium">{t("form.levelGuideTitle")}</h4>
+      <div className="rounded-lg bg-muted/30 border border-border/50 px-4 py-3 space-y-2">
+        <h4 className="text-sm font-medium text-foreground">{t("form.levelGuideTitle")}</h4>
         <ul className="text-xs text-muted-foreground space-y-1">
           <li>{t("form.levelGuideFatal")}</li>
           <li>{t("form.levelGuideWarn")}</li>
@@ -112,8 +108,8 @@ export function LogLevelForm() {
       </div>
 
       {selectedLevel !== currentLevel && (
-        <div className="rounded-lg bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 px-4 py-3">
-          <p className="text-sm text-orange-800 dark:text-orange-200">
+        <div className="rounded-lg bg-primary/10 border border-primary/30 px-4 py-3">
+          <p className="text-sm text-primary">
             {t("form.changeNotice", {
               current: currentLevel.toUpperCase(),
               selected: selectedLevel.toUpperCase(),

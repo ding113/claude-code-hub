@@ -26,16 +26,26 @@
     "viewRelease": "View Release"
   },
   "metrics": {
-    "concurrent": "Concurrent",
+    "concurrent": "Active Sessions",
     "todayRequests": "Today's Requests",
     "todayCost": "Today's Cost",
     "avgResponse": "Average Response Time",
-    "viewDetails": "View Details"
+    "viewDetails": "View Details",
+    "rpm": "RPM",
+    "vsYesterday": "vs Yesterday"
   },
   "activeSessions": {
     "title": "Active Sessions",
     "summary": "{count} sessions in the last {minutes} minutes",
     "empty": "No active sessions",
-    "viewAll": "View All"
+    "viewAll": "View All",
+    "loading": "Loading...",
+    "unknownUser": "unknown",
+    "status": {
+      "inProgressTooltip": "Session has active requests being processed",
+      "initializingTooltip": "Session is initializing with its first request",
+      "idleTooltip": "Session is idle with no active requests",
+      "errorTooltip": "Session encountered an error during processing"
+    }
   }
 }

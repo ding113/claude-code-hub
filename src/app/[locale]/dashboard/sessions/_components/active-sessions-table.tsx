@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, XCircle } from "lucide-react";
+import { Circle, Eye, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -27,7 +27,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "@/i18n/routing";
+import { getSessionDisplayStatus, SESSION_DISPLAY_STATUS } from "@/lib/session-status";
 import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -53,6 +55,67 @@ function formatDuration(durationMs: number | undefined): string {
     const seconds = Math.floor((durationMs % 60000) / 1000);
     return `${minutes}m ${seconds}s`;
   }
+}
+
+function SessionStatusCell({
+  session,
+  inactive,
+}: {
+  session: ActiveSessionInfo;
+  inactive?: boolean;
+}) {
+  const t = useTranslations("customs.activeSessions");
+  const statusInfo = getSessionDisplayStatus({
+    concurrentCount: inactive ? 0 : session.concurrentCount,
+    requestCount: session.requestCount,
+    status: session.status,
+  });
+
+  const StatusIcon = statusInfo.label === "FAIL" ? XCircle : Circle;
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="inline-flex items-center gap-1.5 cursor-help">
+            <div className="relative">
+              {statusInfo.pulse && (
+                <span
+                  className={cn(
+                    "absolute inset-0 rounded-full animate-ping opacity-75",
+                    statusInfo.status === SESSION_DISPLAY_STATUS.IN_PROGRESS
+                      ? statusInfo.label === "FAIL"
+                        ? "bg-rose-500"
+                        : "bg-emerald-500"
+                      : statusInfo.status === SESSION_DISPLAY_STATUS.INITIALIZING
+                        ? "bg-amber-500"
+                        : ""
+                  )}
+                  style={{ animationDuration: "1.5s" }}
+                />
+              )}
+              <StatusIcon
+                className={cn("h-2.5 w-2.5 relative", statusInfo.color)}
+                fill="currentColor"
+              />
+            </div>
+            <span
+              className={cn(
+                "text-xs font-mono font-bold tracking-wide",
+                statusInfo.color,
+                statusInfo.status === SESSION_DISPLAY_STATUS.IDLE && "font-normal"
+              )}
+            >
+              {statusInfo.label}
+            </span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[200px]">
+          <p className="text-xs">{t(statusInfo.tooltipKey)}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 export function ActiveSessionsTable({
@@ -190,7 +253,7 @@ export function ActiveSessionsTable({
     }
   };
 
-  const totalColumns = showSelection ? 12 : 11;
+  const totalColumns = showSelection ? 13 : 12;
   const showLoadingRows = isLoading && sessions.length === 0;
   const allSelected =
     showSelection &&
@@ -269,6 +332,7 @@ export function ActiveSessionsTable({
                 </TableHead>
               )}
               <TableHead>{t("columns.sessionId")}</TableHead>
+              <TableHead className="text-center">{t("columns.status")}</TableHead>
               <TableHead>{t("columns.user")}</TableHead>
               <TableHead>{t("columns.key")}</TableHead>
               <TableHead>{t("columns.provider")}</TableHead>
@@ -315,6 +379,9 @@ export function ActiveSessionsTable({
                   )}
                   <TableCell className="font-mono text-xs">
                     {session.sessionId.substring(0, 16)}...
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <SessionStatusCell session={session} inactive={inactive} />
                   </TableCell>
                   <TableCell>{session.userName}</TableCell>
                   <TableCell className="font-mono text-xs">{session.keyName}</TableCell>

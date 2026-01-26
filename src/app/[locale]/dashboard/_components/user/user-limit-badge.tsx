@@ -28,6 +28,14 @@ interface LimitUsageData {
 const usageCache = new Map<number, { data: LimitUsageData; timestamp: number }>();
 const CACHE_TTL = 60 * 1000; // 1 minute
 
+export function clearUsageCache(userId?: number): void {
+  if (userId !== undefined) {
+    usageCache.delete(userId);
+  } else {
+    usageCache.clear();
+  }
+}
+
 function formatPercentage(usage: number, limit: number): string {
   const percentage = Math.min(Math.round((usage / limit) * 100), 999);
   return `${percentage}%`;

@@ -238,7 +238,7 @@ export function TestResultCard({ result }: TestResultCardProps) {
 
       {/* Content preview if success */}
       {result.content && result.status !== "red" && (
-        <div className="mt-3 p-2 rounded bg-white/50 dark:bg-black/20 text-xs">
+        <div className="mt-3 p-2 rounded bg-white/50 dark:bg-muted/50 text-xs">
           <span className="font-medium text-muted-foreground">
             {t("resultCard.labels.responsePreview")}:
           </span>
@@ -418,8 +418,8 @@ function TestResultDetails({
       {(result.rawResponse || result.content) && (
         <div className="space-y-2">
           <h4 className="font-semibold text-sm">{t("resultCard.rawResponse.title")}</h4>
-          <div className="rounded-md border bg-muted/50 p-3 max-h-96 overflow-y-auto">
-            <pre className="text-xs whitespace-pre-wrap break-words font-mono">
+          <div className="rounded-md border bg-muted/50 p-3 max-h-96 overflow-auto">
+            <pre className="text-xs whitespace-pre-wrap break-all font-mono overflow-x-hidden">
               {result.rawResponse || result.content}
             </pre>
           </div>

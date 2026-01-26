@@ -1,0 +1,15 @@
+{
+  "button": "快速貼上",
+  "title": "快速貼上",
+  "description": "貼上包含供應商資訊的文字(URL、API 金鑰等)，系統將自動擷取。",
+  "placeholder": "在此貼上供應商設定文字...",
+  "preview": "偵測到的資訊",
+  "type": "類型",
+  "name": "名稱",
+  "url": "URL",
+  "key": "API 金鑰",
+  "notFound": "未偵測到",
+  "parseError": "無法從文字中解析供應商資訊",
+  "cancel": "取消",
+  "confirm": "套用"
+}

@@ -4,7 +4,6 @@ import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getEnvConfig } from "@/lib/config/env.schema";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { AutoSortPriorityDialog } from "./_components/auto-sort-priority-dialog";
 import { ProviderManagerLoader } from "./_components/provider-manager-loader";
@@ -15,9 +14,6 @@ export const dynamic = "force-dynamic";
 export default async function SettingsProvidersPage() {
   const t = await getTranslations("settings");
   const session = await getSession();
-
-  // 读取多供应商类型支持配置
-  const enableMultiProviderTypes = getEnvConfig().ENABLE_MULTI_PROVIDER_TYPES;
 
   return (
     <>
@@ -39,10 +35,7 @@ export default async function SettingsProvidersPage() {
           </>
         }
       >
-        <ProviderManagerLoader
-          currentUser={session?.user}
-          enableMultiProviderTypes={enableMultiProviderTypes}
-        />
+        <ProviderManagerLoader currentUser={session?.user} />
       </Section>
     </>
   );

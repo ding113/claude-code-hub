@@ -1,4 +1,18 @@
 {
+  "basic": {
+    "identity": {
+      "title": "プロバイダー識別",
+      "desc": "このプロバイダーを識別する一意の名前を設定"
+    },
+    "endpoint": {
+      "title": "API エンドポイント",
+      "desc": "API リクエストのベース URL を設定"
+    },
+    "auth": {
+      "title": "認証",
+      "desc": "認証用の API キーを入力"
+    }
+  },
   "apiTest": {
     "desc": "プロバイダーのモデルが利用可能かをテストします。既定ではルーティング設定で選択したプロバイダー種別に従います。",
     "summary": "プロバイダーとモデルの接続性を確認",
@@ -10,7 +24,8 @@
     "failureThreshold": {
       "desc": "何回連続失敗でブレークするか",
       "label": "失敗しきい値（回）",
-      "placeholder": "5"
+      "placeholder": "5",
+      "warning": "0に設定するとサーキットブレーカーが無効になります - 慎重に使用してください"
     },
     "maxRetryAttempts": {
       "desc": "初回呼び出しを含め、同一プロバイダーで試行する上限。超えると他のプロバイダーへ切り替えます。未入力の場合はデフォルト値を使用。",
@@ -115,6 +130,8 @@
     }
   },
   "rateLimit": {
+    "title": "レート制限",
+    "desc": "異なる時間枠での消費制限を設定してコストを管理します",
     "dailyResetMode": {
       "desc": {
         "fixed": "毎日決まった時刻にクォータをリセット",
@@ -163,6 +180,11 @@
       "weekly": "週: ${amount}"
     },
     "title": "レート制限"
+  },
+  "limits": {
+    "timeBased": "時間ベースの制限",
+    "dailyReset": "日次リセット設定",
+    "otherLimits": "その他の制限"
   },
   "routing": {
     "cacheTtl": {
@@ -263,7 +285,7 @@
         "placeholder": "1.0"
       },
       "group": {
-        "desc": "グループタグ。ユーザーの providerGroup が一致する場合のみ利用可能。例: \"premium\" に設定すると providerGroup=\"premium\" のユーザーのみ対象",
+        "desc": "グループタグ。リストから選択するか、新しい名前を入力して Enter で作成（最大50文字）。providerGroup が一致するユーザーのみがこのプロバイダーを使用できます。",
         "label": "プロバイダーグループ",
         "placeholder": "例: premium, economy"
       },
@@ -291,21 +313,21 @@
     "disableHint": "0に設定するとタイムアウトを無効にします（カナリアロールバックシナリオのみ、非推奨）",
     "nonStreamingTotal": {
       "core": "true",
-      "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、デフォルト600秒（10分）",
+      "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、0で無効化（デフォルト: 無制限）",
       "label": "非ストリーミング総タイムアウト（秒）",
-      "placeholder": "600"
+      "placeholder": "0"
     },
     "streamingFirstByte": {
       "core": "true",
-      "desc": "ストリーミングリクエストの初バイトタイムアウト、範囲1～120秒、デフォルト30秒",
+      "desc": "ストリーミングリクエストの初バイトタイムアウト、範囲1～180秒、0で無効化（デフォルト: 無制限）",
       "label": "ストリーミング初バイトタイムアウト（秒）",
-      "placeholder": "30"
+      "placeholder": "0"
     },
     "streamingIdle": {
       "core": "true",
-      "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲60～600秒、0で無効化（途中停止防止）",
+      "desc": "ストリーミングリクエストのアイドルタイムアウト、範囲60～600秒、0で無効化（デフォルト: 無制限）",
       "label": "ストリーミングアイドルタイムアウト（秒）",
-      "placeholder": "60"
+      "placeholder": "0"
     },
     "summary": "初回バイト: {streaming}s | ストリーム間隔: {idle}s | 非ストリーミング: {nonStreaming}s",
     "title": "タイムアウト設定"

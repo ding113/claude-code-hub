@@ -26,16 +26,26 @@
     "viewRelease": "リリースを表示"
   },
   "metrics": {
-    "concurrent": "同時実行",
+    "concurrent": "アクティブセッション数",
     "todayRequests": "本日のリクエスト",
     "todayCost": "本日のコスト",
     "avgResponse": "平均応答時間",
-    "viewDetails": "詳細を表示"
+    "viewDetails": "詳細を表示",
+    "rpm": "RPM",
+    "vsYesterday": "前日同時間帯比"
   },
   "activeSessions": {
     "title": "アクティブなセッション",
     "summary": "過去{minutes}分間の{count}個のセッション",
     "empty": "アクティブなセッションがありません",
-    "viewAll": "すべて表示"
+    "viewAll": "すべて表示",
+    "loading": "読み込み中...",
+    "unknownUser": "不明",
+    "status": {
+      "inProgressTooltip": "セッションはアクティブなリクエストを処理中です",
+      "initializingTooltip": "セッションは最初のリクエストで初期化中です",
+      "idleTooltip": "セッションはアイドル状態で、アクティブなリクエストはありません",
+      "errorTooltip": "セッション処理中にエラーが発生しました"
+    }
   }
 }

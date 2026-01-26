@@ -26,16 +26,26 @@
     "viewRelease": "查看發佈"
   },
   "metrics": {
-    "concurrent": "並發數",
+    "concurrent": "活躍 Session 數",
     "todayRequests": "今日請求",
     "todayCost": "今日消費",
     "avgResponse": "平均回應時間",
-    "viewDetails": "查看詳情"
+    "viewDetails": "查看詳情",
+    "rpm": "RPM",
+    "vsYesterday": "較昨日同期"
   },
   "activeSessions": {
     "title": "活躍 Session",
     "summary": "{count} 個 Session，{minutes} 分鐘內",
     "empty": "暫無活躍 Session",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "loading": "載入中...",
+    "unknownUser": "未知",
+    "status": {
+      "inProgressTooltip": "會話正在處理活躍請求",
+      "initializingTooltip": "會話正在初始化首個請求",
+      "idleTooltip": "會話閒置，無活躍請求",
+      "errorTooltip": "會話處理過程中發生錯誤"
+    }
   }
 }

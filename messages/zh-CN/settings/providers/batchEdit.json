@@ -1,0 +1,43 @@
+{
+  "enterMode": "批量编辑",
+  "exitMode": "退出",
+  "selectAll": "全选",
+  "invertSelection": "反选",
+  "selectedCount": "已选 {count} 项",
+  "editSelected": "编辑选中项",
+  "actions": {
+    "edit": "编辑",
+    "delete": "删除",
+    "resetCircuit": "重置熔断"
+  },
+  "dialog": {
+    "editTitle": "批量编辑供应商",
+    "editDesc": "修改将应用于 {count} 个供应商",
+    "deleteTitle": "删除供应商",
+    "deleteDesc": "确定永久删除 {count} 个供应商?",
+    "resetCircuitTitle": "重置熔断器",
+    "resetCircuitDesc": "确定重置 {count} 个供应商的熔断器?",
+    "next": "下一步",
+    "noFieldEnabled": "请至少启用一个要更新的字段"
+  },
+  "fields": {
+    "isEnabled": "状态",
+    "priority": "优先级",
+    "weight": "权重",
+    "costMultiplier": "价格倍率",
+    "groupTag": "分组标签"
+  },
+  "confirm": {
+    "title": "确认操作",
+    "cancel": "取消",
+    "confirm": "确认",
+    "goBack": "返回",
+    "processing": "处理中..."
+  },
+  "toast": {
+    "updated": "已更新 {count} 个供应商",
+    "deleted": "已删除 {count} 个供应商",
+    "circuitReset": "已重置 {count} 个熔断器",
+    "failed": "操作失败: {error}"
+  }
+}

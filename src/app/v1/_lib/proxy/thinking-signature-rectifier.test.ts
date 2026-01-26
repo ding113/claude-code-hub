@@ -66,6 +66,28 @@ describe("thinking-signature-rectifier", () => {
         "invalid_signature_in_thinking_block"
       );
     });
+
+    test("应命中：signature Extra inputs are not permitted（上游不支持 signature 字段）", () => {
+      // 从 Anthropic 官方渠道切换到第三方渠道时，历史 content block 包含 signature 字段
+      // 第三方渠道不支持该字段，返回 "Extra inputs are not permitted" 错误
+      expect(
+        detectThinkingSignatureRectifierTrigger(
+          "content.1.tool_use.signature: Extra inputs are not permitted"
+        )
+      ).toBe("invalid_signature_in_thinking_block");
+
+      // 完整错误消息格式（含 request id）
+      expect(
+        detectThinkingSignatureRectifierTrigger(
+          '{"error":{"type":"<nil>","message":"***.***content.1.tool_use.signature: Extra inputs are not permitted (request id: 20260122042750493345237oUastQMk)"}}'
+        )
+      ).toBe("invalid_signature_in_thinking_block");
+
+      // 大小写混合
+      expect(
+        detectThinkingSignatureRectifierTrigger("Signature: EXTRA INPUTS ARE NOT PERMITTED")
+      ).toBe("invalid_signature_in_thinking_block");
+    });
   });
 
   describe("rectifyAnthropicRequestMessage", () => {

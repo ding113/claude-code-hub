@@ -18,11 +18,17 @@ export default function SettingsDataPage() {
 
   return (
     <>
-      <SettingsPageHeader title={t("data.title")} description={t("data.description")} />
+      <SettingsPageHeader
+        title={t("data.title")}
+        description={t("data.description")}
+        icon="database"
+      />
 
       <Section
         title={t("data.section.status.title")}
         description={t("data.section.status.description")}
+        icon="hard-drive"
+        variant="highlight"
       >
         <DatabaseStatusDisplay />
       </Section>
@@ -30,6 +36,8 @@ export default function SettingsDataPage() {
       <Section
         title={t("data.section.cleanup.title")}
         description={t("data.section.cleanup.description")}
+        icon="trash"
+        variant="warning"
       >
         <LogCleanupPanel />
       </Section>
@@ -37,6 +45,7 @@ export default function SettingsDataPage() {
       <Section
         title={t("data.section.export.title")}
         description={t("data.section.export.description")}
+        icon="download"
       >
         <DatabaseExport />
       </Section>
@@ -44,12 +53,13 @@ export default function SettingsDataPage() {
       <Section
         title={t("data.section.import.title")}
         description={t("data.section.import.description")}
+        icon="upload"
       >
         <DatabaseImport />
       </Section>
 
-      {/* 折叠式使用说明 */}
-      <div className="bg-card text-card-foreground border border-border rounded-xl shadow-sm p-5">
+      {/* Collapsible usage guide */}
+      <div className="bg-card/50 text-card-foreground border border-border/50 hover:border-border/80 rounded-xl backdrop-blur-sm transition-colors duration-200 p-5">
         <Collapsible open={isUsageGuideOpen} onOpenChange={setIsUsageGuideOpen}>
           <CollapsibleTrigger asChild>
             <Button

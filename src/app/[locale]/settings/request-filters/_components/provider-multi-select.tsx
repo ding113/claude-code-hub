@@ -64,7 +64,7 @@ export function ProviderMultiSelect({
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className="w-full justify-between"
+          className="w-full justify-between bg-muted/50 border-border hover:bg-white/10 hover:border-white/20"
         >
           {selectedProviderIds.length === 0 ? (
             <span className="text-muted-foreground">{t("selectProviders")}</span>
@@ -73,7 +73,7 @@ export function ProviderMultiSelect({
               <span className="truncate">
                 {t("providersSelected", { count: selectedProviderIds.length })}
               </span>
-              <Badge variant="secondary" className="ml-auto">
+              <Badge variant="secondary" className="ml-auto bg-[#E25706]/20 text-[#E25706]">
                 {selectedProviderIds.length}
               </Badge>
             </div>
@@ -86,13 +86,13 @@ export function ProviderMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[400px] p-0"
+        className="w-[400px] p-0 bg-card border-border"
         align="start"
         onWheel={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
       >
-        <Command shouldFilter={true}>
-          <CommandInput placeholder={t("searchProviders")} />
+        <Command shouldFilter={true} className="bg-transparent">
+          <CommandInput placeholder={t("searchProviders")} className="border-border" />
           <CommandList className="max-h-[300px] overflow-y-auto">
             <CommandEmpty>{loading ? t("loading") : t("noProvidersFound")}</CommandEmpty>
 
@@ -104,7 +104,7 @@ export function ProviderMultiSelect({
                       size="sm"
                       variant="outline"
                       onClick={selectAll}
-                      className="flex-1"
+                      className="flex-1 bg-muted/50 border-border hover:bg-white/10"
                       type="button"
                     >
                       {t("selectAll")}
@@ -114,7 +114,7 @@ export function ProviderMultiSelect({
                       variant="outline"
                       onClick={clearAll}
                       disabled={selectedProviderIds.length === 0}
-                      className="flex-1"
+                      className="flex-1 bg-muted/50 border-border hover:bg-white/10"
                       type="button"
                     >
                       {t("clear")}
@@ -132,7 +132,7 @@ export function ProviderMultiSelect({
                     >
                       <Checkbox
                         checked={selectedProviderIds.includes(provider.id)}
-                        className="mr-2"
+                        className="mr-2 border-white/20"
                       />
                       <div className="flex-1">
                         <span className="font-medium">{provider.name}</span>
@@ -141,7 +141,7 @@ export function ProviderMultiSelect({
                         </span>
                       </div>
                       {selectedProviderIds.includes(provider.id) && (
-                        <Check className="h-4 w-4 text-primary" />
+                        <Check className="h-4 w-4 text-[#E25706]" />
                       )}
                     </CommandItem>
                   ))}

@@ -38,7 +38,13 @@
     "unknown": "不明",
     "user": "用戶",
     "usersCount": "{count} 位用戶",
-    "version": "目前版本"
+    "version": "目前版本",
+    "stats": {
+      "clientTypes": "用戶端類型",
+      "totalUsers": "用戶總數",
+      "withGA": "有 GA 版本",
+      "coverage": "GA 覆蓋率"
+    }
   },
   "title": "用戶端升級提醒",
   "toggle": {

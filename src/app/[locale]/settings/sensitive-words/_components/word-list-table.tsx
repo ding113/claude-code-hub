@@ -63,7 +63,7 @@ export function WordListTable({ words }: WordListTableProps) {
 
   if (words.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-muted-foreground">
+      <div className="flex h-32 items-center justify-center rounded-lg bg-black/10 border border-border/50 text-sm text-muted-foreground">
         {t("sensitiveWords.emptyState")}
       </div>
     );
@@ -71,63 +71,74 @@ export function WordListTable({ words }: WordListTableProps) {
 
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto rounded-lg border border-border bg-muted/50 backdrop-blur-sm">
         <table className="w-full border-collapse">
           <thead>
-            <tr className="border-b bg-muted/50">
-              <th className="px-4 py-3 text-left text-sm font-medium">
+            <tr className="border-b border-border bg-white/[0.03]">
+              <th className="px-4 py-3 text-left text-sm font-medium text-foreground/80">
                 {t("sensitiveWords.table.word")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="px-4 py-3 text-left text-sm font-medium text-foreground/80">
                 {t("sensitiveWords.table.matchType")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="px-4 py-3 text-left text-sm font-medium text-foreground/80">
                 {t("sensitiveWords.table.description")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="px-4 py-3 text-left text-sm font-medium text-foreground/80">
                 {t("sensitiveWords.table.status")}
               </th>
-              <th className="px-4 py-3 text-left text-sm font-medium">
+              <th className="px-4 py-3 text-left text-sm font-medium text-foreground/80">
                 {t("sensitiveWords.table.createdAt")}
               </th>
-              <th className="px-4 py-3 text-right text-sm font-medium">
+              <th className="px-4 py-3 text-right text-sm font-medium text-foreground/80">
                 {t("sensitiveWords.table.actions")}
               </th>
             </tr>
           </thead>
           <tbody>
             {words.map((word) => (
-              <tr key={word.id} className="border-b hover:bg-muted/30">
-                <td className="px-4 py-3">
-                  <code className="rounded bg-muted px-2 py-1 text-sm">{word.word}</code>
+              <tr
+                key={word.id}
+                className="border-b border-border/50 hover:bg-white/[0.02] transition-colors"
+              >
+                <td className="py-3 px-4 text-sm text-foreground">
+                  <code className="rounded-md bg-black/30 border border-border px-2 py-1 text-sm font-mono">
+                    {word.word}
+                  </code>
                 </td>
-                <td className="px-4 py-3">
+                <td className="py-3 px-4">
                   <Badge variant={matchTypeColors[word.matchType as keyof typeof matchTypeColors]}>
                     {matchTypeLabels[word.matchType as keyof typeof matchTypeLabels] ||
                       word.matchType}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">
+                <td className="py-3 px-4 text-sm text-muted-foreground">
                   {word.description || "-"}
                 </td>
-                <td className="px-4 py-3">
+                <td className="py-3 px-4">
                   <Switch
                     checked={word.isEnabled}
                     onCheckedChange={(checked) => handleToggleEnabled(word.id, checked)}
                   />
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">
+                <td className="py-3 px-4 text-sm text-muted-foreground">
                   {new Date(word.createdAt).toLocaleString("zh-CN")}
                 </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(word)}>
+                <td className="py-3 px-4 text-right">
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleEdit(word)}
+                      className="h-8 w-8 p-0 hover:bg-white/10"
+                    >
                       <Pencil className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleDelete(word.id, word.word)}
+                      className="h-8 w-8 p-0 hover:bg-white/10 hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

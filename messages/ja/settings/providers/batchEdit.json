@@ -1,0 +1,43 @@
+{
+  "enterMode": "一括編集",
+  "exitMode": "終了",
+  "selectAll": "全選択",
+  "invertSelection": "反転",
+  "selectedCount": "{count} 件選択中",
+  "editSelected": "選択項目を編集",
+  "actions": {
+    "edit": "編集",
+    "delete": "削除",
+    "resetCircuit": "サーキット リセット"
+  },
+  "dialog": {
+    "editTitle": "プロバイダーの一括編集",
+    "editDesc": "{count} 件のプロバイダーに変更が適用されます",
+    "deleteTitle": "プロバイダーの削除",
+    "deleteDesc": "{count} 件のプロバイダーを完全に削除しますか?",
+    "resetCircuitTitle": "サーキットブレーカーのリセット",
+    "resetCircuitDesc": "{count} 件のプロバイダーのサーキットブレーカーをリセットしますか?",
+    "next": "次へ",
+    "noFieldEnabled": "更新するフィールドを少なくとも1つ有効にしてください"
+  },
+  "fields": {
+    "isEnabled": "ステータス",
+    "priority": "優先度",
+    "weight": "重み",
+    "costMultiplier": "価格倍率",
+    "groupTag": "グループタグ"
+  },
+  "confirm": {
+    "title": "操作の確認",
+    "cancel": "キャンセル",
+    "confirm": "確認",
+    "goBack": "戻る",
+    "processing": "処理中..."
+  },
+  "toast": {
+    "updated": "{count} 件のプロバイダーを更新しました",
+    "deleted": "{count} 件のプロバイダーを削除しました",
+    "circuitReset": "{count} 件のサーキットブレーカーをリセットしました",
+    "failed": "操作に失敗しました: {error}"
+  }
+}

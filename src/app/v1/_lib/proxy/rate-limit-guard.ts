@@ -23,9 +23,9 @@ export class ProxyRateLimitGuard {
    *
    * 检查顺序（基于 Codex 专业分析）：
    * 1-2. 永久硬限制：Key 总限额 → User 总限额
-   * 3-4. 资源/频率保护：Key 并发 → User RPM
-   * 5-8. 短期周期限额：Key 5h → User 5h → Key 每日 → User 每日
-   * 9-12. 中长期周期限额：Key 周 → User 周 → Key 月 → User 月
+   * 3-5. 资源/频率保护：Key 并发 → User 并发 → User RPM
+   * 6-9. 短期周期限额：Key 5h → User 5h → Key 每日 → User 每日
+   * 10-13. 中长期周期限额：Key 周 → User 周 → Key 月 → User 月
    *
    * 设计原则：
    * - 硬上限优先于周期上限
@@ -110,7 +110,7 @@ export class ProxyRateLimitGuard {
     const sessionCheck = await RateLimitService.checkSessionLimit(
       key.id,
       "key",
-      key.limitConcurrentSessions || 0
+      key.limitConcurrentSessions ?? 0
     );
 
     if (!sessionCheck.allowed) {
@@ -142,9 +142,49 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 4. User RPM（频率闸门，挡住高频噪声）- null 表示无限制
-    if (user.rpm !== null) {
-      const rpmCheck = await RateLimitService.checkUserRPM(user.id, user.rpm);
+    // 4. User 并发 Session（账号级并发保护）
+    if (user.limitConcurrentSessions != null && user.limitConcurrentSessions > 0) {
+      const userSessionCheck = await RateLimitService.checkSessionLimit(
+        user.id,
+        "user",
+        user.limitConcurrentSessions
+      );
+
+      if (!userSessionCheck.allowed) {
+        logger.warn(
+          `[RateLimit] User session limit exceeded: user=${user.id}, ${userSessionCheck.reason}`
+        );
+
+        const { currentUsage, limitValue } = parseLimitInfo(userSessionCheck.reason!);
+
+        const resetTime = new Date().toISOString();
+
+        const { getLocale } = await import("next-intl/server");
+        const locale = await getLocale();
+        const message = await getErrorMessageServer(
+          locale,
+          ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
+          {
+            current: String(currentUsage),
+            limit: String(limitValue),
+          }
+        );
+
+        throw new RateLimitError(
+          "rate_limit_error",
+          message,
+          "concurrent_sessions",
+          currentUsage,
+          limitValue,
+          resetTime,
+          null
+        );
+      }
+    }
+
+    // 5. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制
+    if (user.rpm != null && user.rpm > 0) {
+      const rpmCheck = await RateLimitService.checkRpmLimit(user.id, "user", user.rpm);
       if (!rpmCheck.allowed) {
         logger.warn(`[RateLimit] User RPM exceeded: user=${user.id}, ${rpmCheck.reason}`);
 

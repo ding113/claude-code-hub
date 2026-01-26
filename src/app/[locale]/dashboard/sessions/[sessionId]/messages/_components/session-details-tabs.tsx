@@ -70,11 +70,13 @@ export function SessionMessagesDetailsTabs({
   const t = useTranslations("dashboard.sessions");
   const codeExpandedMaxHeight = "calc(100vh - 260px)";
 
+  // 后端已根据 STORE_SESSION_MESSAGES 配置进行脱敏，前端直接显示
   const requestBodyContent = useMemo(() => {
     if (requestBody === null) return null;
     return JSON.stringify(requestBody, null, 2);
   }, [requestBody]);
 
+  // 后端已根据 STORE_SESSION_MESSAGES 配置进行脱敏，前端直接显示
   const requestMessagesContent = useMemo(() => {
     if (messages === null) return null;
     return JSON.stringify(messages, null, 2);

@@ -38,14 +38,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { copyToClipboard } from "@/lib/utils/clipboard";
@@ -420,7 +412,7 @@ export function PriceList({
             placeholder={t("searchPlaceholder")}
             value={searchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-9"
+            className="pl-9 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50 focus:ring-[#E25706]/20"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -429,7 +421,7 @@ export function PriceList({
             value={pageSize.toString()}
             onValueChange={(value) => handlePageSizeChange(parseInt(value, 10))}
           >
-            <SelectTrigger className="w-20">
+            <SelectTrigger className="w-20 bg-white/[0.02] border-white/10">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -443,39 +435,50 @@ export function PriceList({
       </div>
 
       {/* 价格表格 */}
-      <div className="border rounded-lg">
-        <Table className="table-fixed">
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-72 whitespace-normal">{t("table.modelName")}</TableHead>
-              <TableHead className="w-40 whitespace-normal">{t("table.capabilities")}</TableHead>
-              <TableHead className="w-48 whitespace-normal text-right">
+      <div className="rounded-lg overflow-hidden border border-white/10 bg-white/[0.02]">
+        <table className="w-full table-fixed">
+          <thead>
+            <tr className="border-b border-white/10">
+              <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-72">
+                {t("table.modelName")}
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-40">
+                {t("table.capabilities")}
+              </th>
+              <th className="py-3 px-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-48">
                 {t("table.price")}
-              </TableHead>
-              <TableHead className="w-36 whitespace-normal text-right">
+              </th>
+              <th className="py-3 px-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-36">
                 {t("table.cacheReadPrice")}
-              </TableHead>
-              <TableHead className="w-44 whitespace-normal text-right">
+              </th>
+              <th className="py-3 px-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wide w-44">
                 {t("table.cacheCreationPrice")}
-              </TableHead>
-              <TableHead className="w-32">{t("table.updatedAt")}</TableHead>
-              <TableHead className="w-20">{t("table.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-32">
+                {t("table.updatedAt")}
+              </th>
+              <th className="py-3 px-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-20">
+                {t("table.actions")}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
             {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+              <tr>
+                <td colSpan={7} className="text-center py-8">
                   <div className="flex items-center justify-center gap-2 text-muted-foreground">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-current"></div>
                     <span>{t("table.loading")}</span>
                   </div>
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             ) : filteredPrices.length > 0 ? (
               filteredPrices.map((price) => (
-                <TableRow key={price.id}>
-                  <TableCell className="whitespace-normal break-words">
+                <tr
+                  key={price.id}
+                  className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                >
+                  <td className="py-3 px-4 text-sm text-foreground whitespace-normal break-words">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">
                         {price.priceData.display_name?.trim() || price.modelName}
@@ -504,8 +507,8 @@ export function PriceList({
                         <TooltipContent sideOffset={4}>{t("table.copyModelId")}</TooltipContent>
                       </Tooltip>
                     </div>
-                  </TableCell>
-                  <TableCell>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-foreground">
                     <div className="flex flex-wrap gap-1">
                       {capabilityItems.map(({ key, icon: Icon, label }) => {
                         const enabled = price.priceData[key] === true;
@@ -521,7 +524,7 @@ export function PriceList({
                                 aria-label={tooltipText}
                                 className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
                                   enabled
-                                    ? "bg-primary/10 text-primary border-primary/20"
+                                    ? "bg-[#E25706]/10 text-[#E25706] border-[#E25706]/20"
                                     : "bg-muted/30 text-muted-foreground/40 border-transparent"
                                 }`}
                               >
@@ -533,8 +536,8 @@ export function PriceList({
                         );
                       })}
                     </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm text-right">
+                  </td>
+                  <td className="py-3 px-4 font-mono text-sm text-right">
                     <div className="space-y-1">
                       <div className="flex items-center justify-end gap-2">
                         <span className="text-xs text-muted-foreground">
@@ -570,8 +573,8 @@ export function PriceList({
                         </div>
                       ) : null}
                     </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm text-right">
+                  </td>
+                  <td className="py-3 px-4 font-mono text-sm text-right">
                     <span className="text-muted-foreground">
                       {price.priceData.supports_prompt_caching === true
                         ? formatPerMillionTokenPriceLabel(
@@ -579,8 +582,8 @@ export function PriceList({
                           )
                         : "-"}
                     </span>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm text-right">
+                  </td>
+                  <td className="py-3 px-4 font-mono text-sm text-right">
                     {price.priceData.supports_prompt_caching === true ? (
                       <div className="space-y-1">
                         <div className="flex items-center justify-end gap-2">
@@ -607,11 +610,11 @@ export function PriceList({
                     ) : (
                       <span className="text-muted-foreground">-</span>
                     )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
+                  </td>
+                  <td className="py-3 px-4 text-sm text-muted-foreground">
                     {new Date(price.updatedAt ?? price.createdAt).toLocaleDateString(locale)}
-                  </TableCell>
-                  <TableCell>
+                  </td>
+                  <td className="py-3 px-4">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -663,12 +666,12 @@ export function PriceList({
                         />
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ))
             ) : (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+              <tr>
+                <td colSpan={7} className="text-center py-8">
                   <div className="flex flex-col items-center gap-2 text-muted-foreground">
                     {searchTerm ? (
                       <>
@@ -683,11 +686,11 @@ export function PriceList({
                       </>
                     )}
                   </div>
-                </TableCell>
-              </TableRow>
+                </td>
+              </tr>
             )}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
 
       {/* 分页控件 */}

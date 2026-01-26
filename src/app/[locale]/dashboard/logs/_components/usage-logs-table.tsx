@@ -23,6 +23,7 @@ import {
   calculateOutputRate,
   formatDuration,
   NON_BILLING_ENDPOINT,
+  shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
 import type { UsageLogRow } from "@/repository/usage-logs";
@@ -429,11 +430,12 @@ export function UsageLogsTable({
                           log.durationMs,
                           log.ttfbMs
                         );
+                        const hideRate = shouldHideOutputRate(rate, log.durationMs, log.ttfbMs);
                         const secondLine = [
                           log.ttfbMs != null &&
                             log.ttfbMs > 0 &&
                             `TTFB ${formatDuration(log.ttfbMs)}`,
-                          rate !== null && `${rate.toFixed(0)} tok/s`,
+                          rate !== null && !hideRate && `${rate.toFixed(0)} tok/s`,
                         ]
                           .filter(Boolean)
                           .join(" | ");
@@ -462,7 +464,7 @@ export function UsageLogsTable({
                                     {formatDuration(log.ttfbMs)}
                                   </div>
                                 )}
-                                {rate !== null && (
+                                {rate !== null && !hideRate && (
                                   <div>
                                     {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
                                     tok/s

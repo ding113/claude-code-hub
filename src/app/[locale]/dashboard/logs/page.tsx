@@ -1,6 +1,4 @@
-import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
-import { Section } from "@/components/section";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { ActiveSessionsSkeleton } from "./_components/active-sessions-skeleton";
@@ -19,7 +17,6 @@ export default async function UsageLogsPage({
   params: Promise<{ locale: string }>;
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  // Await params to ensure locale is available in the async context
   const { locale } = await params;
 
   const session = await getSession();
@@ -29,23 +26,21 @@ export default async function UsageLogsPage({
 
   const isAdmin = session.user.role === "admin";
 
-  const t = await getTranslations("dashboard");
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Active Sessions - Horizontal scrolling cards */}
       <Suspense fallback={<ActiveSessionsSkeleton />}>
         <UsageLogsActiveSessionsSection />
       </Suspense>
 
-      <Section title={t("title.usageLogs")} description={t("title.usageLogsDescription")}>
-        <Suspense fallback={<UsageLogsSkeleton />}>
-          <UsageLogsDataSection
-            isAdmin={isAdmin}
-            userId={session.user.id}
-            searchParams={searchParams}
-          />
-        </Suspense>
-      </Section>
+      {/* Stats + Filters + Logs Table */}
+      <Suspense fallback={<UsageLogsSkeleton />}>
+        <UsageLogsDataSection
+          isAdmin={isAdmin}
+          userId={session.user.id}
+          searchParams={searchParams}
+        />
+      </Suspense>
     </div>
   );
 }

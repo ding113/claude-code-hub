@@ -38,7 +38,13 @@
     "unknown": "不明",
     "user": "ユーザー",
     "usersCount": "{count}名のユーザー",
-    "version": "現在のバージョン"
+    "version": "現在のバージョン",
+    "stats": {
+      "clientTypes": "クライアントタイプ",
+      "totalUsers": "ユーザー総数",
+      "withGA": "GA版あり",
+      "coverage": "GAカバレッジ"
+    }
   },
   "title": "クライアント更新リマインダー",
   "toggle": {

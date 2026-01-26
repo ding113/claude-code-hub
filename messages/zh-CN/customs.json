@@ -26,16 +26,26 @@
     "viewRelease": "查看发布"
   },
   "metrics": {
-    "concurrent": "并发数",
+    "concurrent": "活跃 Session 数",
     "todayRequests": "今日请求",
     "todayCost": "今日消费",
     "avgResponse": "平均响应时间",
-    "viewDetails": "查看详情"
+    "viewDetails": "查看详情",
+    "rpm": "RPM",
+    "vsYesterday": "较昨日同期"
   },
   "activeSessions": {
     "title": "活跃 Session",
     "summary": "{count} 个 Session，{minutes} 分钟内",
     "empty": "暂无活跃 Session",
-    "viewAll": "查看全部"
+    "viewAll": "查看全部",
+    "loading": "加载中...",
+    "unknownUser": "未知",
+    "status": {
+      "inProgressTooltip": "会话正在处理活跃请求",
+      "initializingTooltip": "会话正在初始化首个请求",
+      "idleTooltip": "会话空闲，无活跃请求",
+      "errorTooltip": "会话处理过程中发生错误"
+    }
   }
 }

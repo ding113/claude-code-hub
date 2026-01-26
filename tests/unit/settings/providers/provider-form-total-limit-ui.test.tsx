@@ -23,6 +23,10 @@ const providersActionMocks = vi.hoisted(() => ({
   addProvider: vi.fn(async () => ({ ok: true })),
   editProvider: vi.fn(async () => ({ ok: true })),
   removeProvider: vi.fn(async () => ({ ok: true })),
+  getUnmaskedProviderKey: vi.fn(async () => ({ ok: true, data: { key: "test-key" } })),
+  getProviderTestPresets: vi.fn(async () => ({ ok: true, data: [] })),
+  getModelSuggestionsByProviderGroup: vi.fn(async () => []),
+  fetchUpstreamModels: vi.fn(async () => ({ ok: true, data: { models: [] } })),
 }));
 vi.mock("@/actions/providers", () => providersActionMocks);
 
@@ -30,6 +34,11 @@ const requestFiltersActionMocks = vi.hoisted(() => ({
   getDistinctProviderGroupsAction: vi.fn(async () => ({ ok: true, data: [] })),
 }));
 vi.mock("@/actions/request-filters", () => requestFiltersActionMocks);
+
+const modelPricesActionMocks = vi.hoisted(() => ({
+  getAvailableModelsByProviderType: vi.fn(async () => []),
+}));
+vi.mock("@/actions/model-prices", () => modelPricesActionMocks);
 
 function loadMessages() {
   return {

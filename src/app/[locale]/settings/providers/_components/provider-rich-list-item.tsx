@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -69,6 +70,9 @@ interface ProviderRichListItemProps {
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
+  isMultiSelectMode?: boolean;
+  isSelected?: boolean;
+  onSelectChange?: (checked: boolean) => void;
   onEdit?: () => void;
   onClone?: () => void;
   onDelete?: () => void;
@@ -82,6 +86,9 @@ export function ProviderRichListItem({
   statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
+  isMultiSelectMode = false,
+  isSelected = false,
+  onSelectChange,
   onEdit: onEditProp,
   onClone: onCloneProp,
   onDelete: onDeleteProp,
@@ -176,6 +183,7 @@ export function ProviderRichListItem({
             });
             queryClient.invalidateQueries({ queryKey: ["providers"] });
             queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+            queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
             router.refresh();
           } else {
             toast.error(tList("deleteFailed"), {
@@ -346,6 +354,16 @@ export function ProviderRichListItem({
   return (
     <>
       <div className="flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
+        {/* 多选模式下显示 checkbox */}
+        {isMultiSelectMode && (
+          <Checkbox
+            checked={isSelected}
+            onCheckedChange={(checked) => onSelectChange?.(Boolean(checked))}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Select ${provider.name}`}
+          />
+        )}
+
         {/* 左侧：状态和类型图标 */}
         <div className="flex items-center gap-2">
           {/* 启用状态指示器 */}

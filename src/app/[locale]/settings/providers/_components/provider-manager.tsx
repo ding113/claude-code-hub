@@ -1,7 +1,7 @@
 "use client";
-import { AlertTriangle, Loader2, Search } from "lucide-react";
+import { AlertTriangle, LayoutGrid, LayoutList, Loader2, Search } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,9 +18,16 @@ import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
+import {
+  type BatchActionMode,
+  ProviderBatchActions,
+  ProviderBatchDialog,
+  ProviderBatchToolbar,
+} from "./batch-edit";
 import { ProviderList } from "./provider-list";
 import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
+import { ProviderVendorView } from "./provider-vendor-view";
 
 interface ProviderManagerProps {
   providers: ProviderDisplay[];
@@ -57,17 +64,25 @@ export function ProviderManager({
   addDialogSlot,
 }: ProviderManagerProps) {
   const t = useTranslations("settings.providers.search");
+  const tStrings = useTranslations("settings.providers");
   const tFilter = useTranslations("settings.providers.filter");
   const tCommon = useTranslations("settings.common");
   const [typeFilter, setTypeFilter] = useState<ProviderType | "all">("all");
   const [sortBy, setSortBy] = useState<SortKey>("priority");
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "vendor">("list");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   // Status and group filters
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [circuitBrokenFilter, setCircuitBrokenFilter] = useState(false);
+
+  // Batch edit state
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedProviderIds, setSelectedProviderIds] = useState<Set<number>>(new Set());
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [batchActionMode, setBatchActionMode] = useState<BatchActionMode>(null);
 
   // Count providers with circuit breaker open
   const circuitBrokenCount = useMemo(() => {
@@ -196,12 +211,106 @@ export function ProviderManager({
     healthStatus,
   ]);
 
+  // Batch selection handlers
+  const handleSelectAll = useCallback(
+    (checked: boolean) => {
+      if (checked) {
+        setSelectedProviderIds(new Set(filteredProviders.map((p) => p.id)));
+      } else {
+        setSelectedProviderIds(new Set());
+      }
+    },
+    [filteredProviders]
+  );
+
+  const handleInvertSelection = useCallback(() => {
+    const currentIds = filteredProviders.map((p) => p.id);
+    const inverted = new Set(currentIds.filter((id) => !selectedProviderIds.has(id)));
+    setSelectedProviderIds(inverted);
+  }, [filteredProviders, selectedProviderIds]);
+
+  const handleSelectProvider = useCallback((providerId: number, checked: boolean) => {
+    setSelectedProviderIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(providerId);
+      } else {
+        next.delete(providerId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleEnterMultiSelectMode = useCallback(() => {
+    setIsMultiSelectMode(true);
+  }, []);
+
+  const handleExitMultiSelectMode = useCallback(() => {
+    setIsMultiSelectMode(false);
+    setSelectedProviderIds(new Set());
+  }, []);
+
+  const handleOpenBatchEdit = useCallback(() => {
+    setBatchActionMode("edit");
+    setBatchDialogOpen(true);
+  }, []);
+
+  const handleBatchAction = useCallback((mode: BatchActionMode) => {
+    setBatchActionMode(mode);
+    setBatchDialogOpen(true);
+  }, []);
+
+  const handleBatchSuccess = useCallback(() => {
+    setSelectedProviderIds(new Set());
+    setIsMultiSelectMode(false);
+  }, []);
+
+  const allSelected =
+    filteredProviders.length > 0 && selectedProviderIds.size === filteredProviders.length;
+
   return (
     <div className="space-y-4">
-      {addDialogSlot ? <div className="flex justify-end">{addDialogSlot}</div> : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <ProviderBatchToolbar
+          isMultiSelectMode={isMultiSelectMode}
+          allSelected={allSelected}
+          selectedCount={selectedProviderIds.size}
+          totalCount={filteredProviders.length}
+          onEnterMode={handleEnterMultiSelectMode}
+          onExitMode={handleExitMultiSelectMode}
+          onSelectAll={handleSelectAll}
+          onInvertSelection={handleInvertSelection}
+          onOpenBatchEdit={handleOpenBatchEdit}
+        />
+        {addDialogSlot ? <div className="ml-auto">{addDialogSlot}</div> : null}
+      </div>
       {/* 筛选条件 */}
       <div className="flex flex-col gap-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center border rounded-md bg-muted/50 p-1">
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 gap-1.5 text-xs"
+              onClick={() => setViewMode("list")}
+              title={tStrings("viewModeList")}
+            >
+              <LayoutList className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{tStrings("viewModeList")}</span>
+            </Button>
+            <Button
+              variant={viewMode === "vendor" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2 gap-1.5 text-xs"
+              onClick={() => setViewMode("vendor")}
+              title={tStrings("viewModeVendor")}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">{tStrings("viewModeVendor")}</span>
+            </Button>
+          </div>
+
           <ProviderTypeFilter value={typeFilter} onChange={setTypeFilter} disabled={loading} />
 
           {/* Status filter */}
@@ -317,17 +426,48 @@ export function ProviderManager({
       ) : (
         <div className="space-y-3">
           {refreshing ? <InlineLoading label={tCommon("loading")} /> : null}
-          <ProviderList
-            providers={filteredProviders}
-            currentUser={currentUser}
-            healthStatus={healthStatus}
-            statistics={statistics}
-            statisticsLoading={statisticsLoading}
-            currencyCode={currencyCode}
-            enableMultiProviderTypes={enableMultiProviderTypes}
-          />
+
+          {viewMode === "list" ? (
+            <ProviderList
+              providers={filteredProviders}
+              currentUser={currentUser}
+              healthStatus={healthStatus}
+              statistics={statistics}
+              statisticsLoading={statisticsLoading}
+              currencyCode={currencyCode}
+              enableMultiProviderTypes={enableMultiProviderTypes}
+              isMultiSelectMode={isMultiSelectMode}
+              selectedProviderIds={selectedProviderIds}
+              onSelectProvider={handleSelectProvider}
+            />
+          ) : (
+            <ProviderVendorView
+              providers={filteredProviders}
+              currentUser={currentUser}
+              enableMultiProviderTypes={enableMultiProviderTypes}
+              healthStatus={healthStatus}
+              statistics={statistics}
+              statisticsLoading={statisticsLoading}
+              currencyCode={currencyCode}
+            />
+          )}
         </div>
       )}
+
+      <ProviderBatchActions
+        selectedCount={selectedProviderIds.size}
+        isVisible={isMultiSelectMode}
+        onAction={handleBatchAction}
+        onClose={handleExitMultiSelectMode}
+      />
+
+      <ProviderBatchDialog
+        open={batchDialogOpen}
+        mode={batchActionMode}
+        onOpenChange={setBatchDialogOpen}
+        selectedProviderIds={selectedProviderIds}
+        onSuccess={handleBatchSuccess}
+      />
     </div>
   );
 }

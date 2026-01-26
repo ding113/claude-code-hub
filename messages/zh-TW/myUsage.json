@@ -78,7 +78,7 @@
     "inheritedFromUser": "繼承自使用者"
   },
   "stats": {
-    "title": "統計摘要",
+    "title": "金鑰統計",
     "autoRefresh": "每{seconds}秒自動刷新",
     "totalRequests": "總請求數",
     "totalCost": "總費用",
@@ -116,7 +116,7 @@
     "noRestrictions": "無限制"
   },
   "quotaCollapsible": {
-    "title": "配額使用",
+    "title": "用戶配額使用",
     "daily": "每日",
     "monthly": "每月",
     "total": "總計"

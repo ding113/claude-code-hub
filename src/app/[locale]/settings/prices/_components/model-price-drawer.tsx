@@ -307,7 +307,10 @@ export function ModelPriceDrawer({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{trigger || defaultTrigger}</SheetTrigger>
-      <SheetContent side="right" className="w-[90vw] sm:w-[440px] overflow-y-auto">
+      <SheetContent
+        side="right"
+        className="w-[90vw] sm:w-[440px] overflow-y-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      >
         <SheetHeader>
           <SheetTitle>{mode === "create" ? t("addModel") : t("editModel")}</SheetTitle>
           <SheetDescription>
@@ -326,13 +329,16 @@ export function ModelPriceDrawer({
                   value={prefillQuery}
                   onChange={(event) => setPrefillQuery(event.target.value)}
                   placeholder={t("searchPlaceholder")}
-                  className="pl-9"
+                  className="pl-9 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                   disabled={loading}
                 />
               </div>
 
               {prefillStatus !== "idle" && (
-                <Command shouldFilter={false} className="rounded-md border bg-card">
+                <Command
+                  shouldFilter={false}
+                  className="rounded-md border border-white/10 bg-white/[0.02]"
+                >
                   <CommandList className="max-h-56">
                     <CommandEmpty>
                       {prefillStatus === "loading" ? (
@@ -396,6 +402,7 @@ export function ModelPriceDrawer({
                 value={modelName}
                 onChange={(e) => setModelName(e.target.value)}
                 placeholder={t("form.modelNamePlaceholder")}
+                className="bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                 disabled={mode === "edit" || loading}
               />
             </div>
@@ -407,6 +414,7 @@ export function ModelPriceDrawer({
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={t("form.displayNamePlaceholder")}
+                className="bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                 disabled={loading}
               />
             </div>
@@ -418,7 +426,7 @@ export function ModelPriceDrawer({
                 onValueChange={(value: ModelMode) => setModelMode(value)}
                 disabled={loading}
               >
-                <SelectTrigger id="modelMode">
+                <SelectTrigger id="modelMode" className="bg-white/[0.02] border-white/10">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -436,6 +444,7 @@ export function ModelPriceDrawer({
                 value={provider}
                 onChange={(e) => setProvider(e.target.value)}
                 placeholder={t("form.providerPlaceholder")}
+                className="bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                 disabled={loading}
               />
             </div>
@@ -454,7 +463,7 @@ export function ModelPriceDrawer({
                   value={inputPricePerRequest}
                   onChange={(e) => setInputPricePerRequest(e.target.value)}
                   placeholder="0.00"
-                  className="pl-7 pr-12"
+                  className="pl-7 pr-12 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                   disabled={loading}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
@@ -478,7 +487,7 @@ export function ModelPriceDrawer({
                     value={inputPrice}
                     onChange={(e) => setInputPrice(e.target.value)}
                     placeholder="0.00"
-                    className="pl-7 pr-12"
+                    className="pl-7 pr-12 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                     disabled={loading}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
@@ -506,7 +515,7 @@ export function ModelPriceDrawer({
                   value={outputPrice}
                   onChange={(e) => setOutputPrice(e.target.value)}
                   placeholder="0.00"
-                  className="pl-7 pr-16"
+                  className="pl-7 pr-16 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                   disabled={loading}
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
@@ -515,7 +524,7 @@ export function ModelPriceDrawer({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-white/[0.02] p-3">
               <div className="space-y-1">
                 <div className="text-sm font-medium">{t("capabilities.promptCaching")}</div>
                 <div className="text-xs text-muted-foreground">{t("drawer.promptCachingHint")}</div>
@@ -528,7 +537,7 @@ export function ModelPriceDrawer({
               />
             </div>
 
-            <div className="space-y-4 rounded-md border p-3">
+            <div className="space-y-4 rounded-md border border-white/10 bg-white/[0.02] p-3">
               <div className="text-sm font-medium">{t("drawer.cachePricingTitle")}</div>
 
               <div className="space-y-2">
@@ -545,7 +554,7 @@ export function ModelPriceDrawer({
                     value={cacheReadPrice}
                     onChange={(e) => setCacheReadPrice(e.target.value)}
                     placeholder="0.00"
-                    className="pl-7 pr-12"
+                    className="pl-7 pr-12 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                     disabled={loading || !supportsPromptCaching}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
@@ -568,7 +577,7 @@ export function ModelPriceDrawer({
                     value={cacheCreation5mPrice}
                     onChange={(e) => setCacheCreation5mPrice(e.target.value)}
                     placeholder="0.00"
-                    className="pl-7 pr-12"
+                    className="pl-7 pr-12 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                     disabled={loading || !supportsPromptCaching}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
@@ -591,7 +600,7 @@ export function ModelPriceDrawer({
                     value={cacheCreation1hPrice}
                     onChange={(e) => setCacheCreation1hPrice(e.target.value)}
                     placeholder="0.00"
-                    className="pl-7 pr-12"
+                    className="pl-7 pr-12 bg-white/[0.02] border-white/10 focus:border-[#E25706]/50"
                     disabled={loading || !supportsPromptCaching}
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
@@ -603,12 +612,16 @@ export function ModelPriceDrawer({
           </div>
         </div>
 
-        <SheetFooter className="border-t">
+        <SheetFooter className="border-t border-white/10">
           <div className="flex w-full items-center justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
               {tCommon("cancel")}
             </Button>
-            <Button onClick={handleSubmit} disabled={loading}>
+            <Button
+              onClick={handleSubmit}
+              disabled={loading}
+              className="bg-[#E25706] hover:bg-[#E25706]/90"
+            >
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {tCommon("confirm")}
             </Button>

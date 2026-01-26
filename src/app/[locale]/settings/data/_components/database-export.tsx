@@ -54,7 +54,11 @@ export function DatabaseExport() {
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">{t("descriptionFull")}</p>
 
-      <Button onClick={handleExport} disabled={isExporting} className="w-full sm:w-auto">
+      <Button
+        onClick={handleExport}
+        disabled={isExporting}
+        className="w-full sm:w-auto bg-[#E25706] hover:bg-[#E25706]/90 text-white"
+      >
         <Download className="mr-2 h-4 w-4" />
         {isExporting ? t("exporting") : t("button")}
       </Button>

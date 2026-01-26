@@ -1,51 +1,47 @@
 "use client";
 
-import { format } from "date-fns";
-import { Check, ChevronsUpDown, Download } from "lucide-react";
+import { format, startOfDay, startOfWeek } from "date-fns";
+import { Clock, Download, Network, Server, User } from "lucide-react";
 import { useTranslations } from "next-intl";
-
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { getKeys } from "@/actions/keys";
-import { exportUsageLogs, getUsageLogSessionIdSuggestions } from "@/actions/usage-logs";
-import { searchUsersForFilter } from "@/actions/users";
+import { exportUsageLogs } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { SESSION_ID_SUGGESTION_MIN_LEN } from "@/lib/constants/usage-logs.constants";
-import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
-import {
-  useLazyEndpoints,
-  useLazyModels,
-  useLazyStatusCodes,
-} from "../_hooks/use-lazy-filter-options";
-import {
-  dateStringWithClockToTimestamp,
-  formatClockFromTimestamp,
-  inclusiveEndTimestampFromExclusive,
-} from "../_utils/time-range";
-import { LogsDateRangePicker } from "./logs-date-range-picker";
+import { ActiveFiltersDisplay } from "./filters/active-filters-display";
+import { FilterSection } from "./filters/filter-section";
+import { IdentityFilters } from "./filters/identity-filters";
+import { type FilterPreset, QuickFiltersBar } from "./filters/quick-filters-bar";
+import { RequestFilters } from "./filters/request-filters";
+import { StatusFilters } from "./filters/status-filters";
+import { TimeFilters } from "./filters/time-filters";
+import type { UsageLogFilters } from "./filters/types";
 
-// 硬编码常用状态码（首次渲染时显示，无需等待加载）
-const COMMON_STATUS_CODES: number[] = [200, 400, 401, 429, 500];
+// Valid keys for UsageLogFilters - strip any runtime-leaked fields like 'page'
+const VALID_FILTER_KEYS: (keyof UsageLogFilters)[] = [
+  "userId",
+  "keyId",
+  "providerId",
+  "sessionId",
+  "startTime",
+  "endTime",
+  "statusCode",
+  "excludeStatusCode200",
+  "model",
+  "endpoint",
+  "minRetryCount",
+];
+
+function sanitizeFilters(filters: UsageLogFilters): UsageLogFilters {
+  const result: UsageLogFilters = {};
+  for (const key of VALID_FILTER_KEYS) {
+    if (filters[key] !== undefined) {
+      (result as Record<string, unknown>)[key] = filters[key];
+    }
+  }
+  return result;
+}
 
 interface UsageLogsFiltersProps {
   isAdmin: boolean;
@@ -53,22 +49,8 @@ interface UsageLogsFiltersProps {
   initialKeys: Key[];
   isProvidersLoading?: boolean;
   isKeysLoading?: boolean;
-  filters: {
-    userId?: number;
-    keyId?: number;
-    providerId?: number;
-    sessionId?: string;
-    /** 开始时间戳（毫秒，浏览器本地时区的 00:00:00） */
-    startTime?: number;
-    /** 结束时间戳（毫秒，浏览器本地时区的次日 00:00:00，用于 < 比较） */
-    endTime?: number;
-    statusCode?: number;
-    excludeStatusCode200?: boolean;
-    model?: string;
-    endpoint?: string;
-    minRetryCount?: number;
-  };
-  onChange: (filters: UsageLogsFiltersProps["filters"]) => void;
+  filters: UsageLogFilters;
+  onChange: (filters: UsageLogFilters) => void;
   onReset: () => void;
 }
 
@@ -84,275 +66,81 @@ export function UsageLogsFilters({
 }: UsageLogsFiltersProps) {
   const t = useTranslations("dashboard");
 
-  const [isUsersLoading, setIsUsersLoading] = useState(false);
-  const [userSearchTerm, setUserSearchTerm] = useState("");
-  const debouncedUserSearchTerm = useDebounce(userSearchTerm, 300);
+  const [localFilters, setLocalFilters] = useState<UsageLogFilters>(filters);
+  const [isExporting, setIsExporting] = useState(false);
+  const [activePreset, setActivePreset] = useState<FilterPreset | null>(null);
+
+  // Track users and keys for display name resolution
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: number; name: string }>>([]);
-  const userSearchRequestIdRef = useRef(0);
-  const lastLoadedUserSearchTermRef = useRef<string | undefined>(undefined);
-  const isMountedRef = useRef(true);
-
-  // 惰性加载 hooks - 下拉展开时才加载数据
-  const {
-    data: models,
-    isLoading: isModelsLoading,
-    onOpenChange: onModelsOpenChange,
-  } = useLazyModels();
-
-  const {
-    data: dynamicStatusCodes,
-    isLoading: isStatusCodesLoading,
-    onOpenChange: onStatusCodesOpenChange,
-  } = useLazyStatusCodes();
-
-  const {
-    data: endpoints,
-    isLoading: isEndpointsLoading,
-    onOpenChange: onEndpointsOpenChange,
-  } = useLazyEndpoints();
-
-  // 合并硬编码和动态状态码（去重）
-  const allStatusCodes = useMemo(() => {
-    const dynamicOnly = dynamicStatusCodes.filter((code) => !COMMON_STATUS_CODES.includes(code));
-    return dynamicOnly;
-  }, [dynamicStatusCodes]);
+  const [keys, setKeys] = useState<Key[]>(initialKeys);
 
   const userMap = useMemo(
     () => new Map(availableUsers.map((user) => [user.id, user.name])),
     [availableUsers]
   );
 
+  const keyMap = useMemo(() => new Map(keys.map((key) => [key.id, key.name])), [keys]);
+
   const providerMap = useMemo(
     () => new Map(providers.map((provider) => [provider.id, provider.name])),
     [providers]
   );
 
-  const [keys, setKeys] = useState<Key[]>(initialKeys);
-  const [localFilters, setLocalFilters] = useState(filters);
-  const [isExporting, setIsExporting] = useState(false);
-  const [userPopoverOpen, setUserPopoverOpen] = useState(false);
-  const [providerPopoverOpen, setProviderPopoverOpen] = useState(false);
-  const [sessionIdPopoverOpen, setSessionIdPopoverOpen] = useState(false);
-  const [isSessionIdsLoading, setIsSessionIdsLoading] = useState(false);
-  const [availableSessionIds, setAvailableSessionIds] = useState<string[]>([]);
-  const debouncedSessionIdSearchTerm = useDebounce(localFilters.sessionId ?? "", 300);
-  const sessionIdSearchRequestIdRef = useRef(0);
-  const lastLoadedSessionIdSuggestionsKeyRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  const loadUsersForFilter = useCallback(async (term?: string) => {
-    const requestId = ++userSearchRequestIdRef.current;
-    setIsUsersLoading(true);
-    lastLoadedUserSearchTermRef.current = term;
-
-    try {
-      const result = await searchUsersForFilter(term);
-      if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
-
-      if (result.ok) {
-        setAvailableUsers(result.data);
-      } else {
-        console.error("Failed to load users for filter:", result.error);
-        setAvailableUsers([]);
-      }
-    } catch (error) {
-      if (!isMountedRef.current || requestId !== userSearchRequestIdRef.current) return;
-
-      console.error("Failed to load users for filter:", error);
-      setAvailableUsers([]);
-    } finally {
-      if (isMountedRef.current && requestId === userSearchRequestIdRef.current) {
-        setIsUsersLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    void loadUsersForFilter(undefined);
-  }, [isAdmin, loadUsersForFilter]);
-
-  useEffect(() => {
-    if (!isAdmin || !userPopoverOpen) return;
-
-    const term = debouncedUserSearchTerm.trim() || undefined;
-    if (term === lastLoadedUserSearchTermRef.current) return;
-
-    void loadUsersForFilter(term);
-  }, [isAdmin, userPopoverOpen, debouncedUserSearchTerm, loadUsersForFilter]);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    if (!userPopoverOpen) {
-      setUserSearchTerm("");
-    }
-  }, [isAdmin, userPopoverOpen]);
-
-  const loadSessionIdsForFilter = useCallback(
-    async (term: string) => {
-      const requestId = ++sessionIdSearchRequestIdRef.current;
-      setIsSessionIdsLoading(true);
-      const requestKey = [
-        term,
-        isAdmin ? (localFilters.userId ?? "").toString() : "",
-        (localFilters.keyId ?? "").toString(),
-        (localFilters.providerId ?? "").toString(),
-        isAdmin ? "1" : "0",
-      ].join("|");
-      lastLoadedSessionIdSuggestionsKeyRef.current = requestKey;
-
-      try {
-        const result = await getUsageLogSessionIdSuggestions({
-          term,
-          userId: isAdmin ? localFilters.userId : undefined,
-          keyId: localFilters.keyId,
-          providerId: localFilters.providerId,
-        });
-
-        if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
-
-        if (result.ok) {
-          setAvailableSessionIds(result.data);
-        } else {
-          console.error("Failed to load sessionId suggestions:", result.error);
-          setAvailableSessionIds([]);
-        }
-      } catch (error) {
-        if (!isMountedRef.current || requestId !== sessionIdSearchRequestIdRef.current) return;
-        console.error("Failed to load sessionId suggestions:", error);
-        setAvailableSessionIds([]);
-      } finally {
-        if (isMountedRef.current && requestId === sessionIdSearchRequestIdRef.current) {
-          setIsSessionIdsLoading(false);
-        }
-      }
-    },
-    [isAdmin, localFilters.keyId, localFilters.providerId, localFilters.userId]
+  const displayNames = useMemo(
+    () => ({
+      getUserName: (id: number) => userMap.get(id),
+      getKeyName: (id: number) => keyMap.get(id),
+      getProviderName: (id: number) => providerMap.get(id),
+    }),
+    [userMap, keyMap, providerMap]
   );
 
-  useEffect(() => {
-    if (!sessionIdPopoverOpen) return;
+  // Count active filters for each section
+  const timeActiveCount = useMemo(() => {
+    let count = 0;
+    if (localFilters.startTime && localFilters.endTime) count++;
+    return count;
+  }, [localFilters.startTime, localFilters.endTime]);
 
-    const term = debouncedSessionIdSearchTerm.trim();
-    if (term.length < SESSION_ID_SUGGESTION_MIN_LEN) {
-      setAvailableSessionIds([]);
-      lastLoadedSessionIdSuggestionsKeyRef.current = undefined;
-      return;
-    }
+  const identityActiveCount = useMemo(() => {
+    let count = 0;
+    if (isAdmin && localFilters.userId !== undefined) count++;
+    if (localFilters.keyId !== undefined) count++;
+    return count;
+  }, [isAdmin, localFilters.userId, localFilters.keyId]);
 
-    const requestKey = [
-      term,
-      isAdmin ? (localFilters.userId ?? "").toString() : "",
-      (localFilters.keyId ?? "").toString(),
-      (localFilters.providerId ?? "").toString(),
-      isAdmin ? "1" : "0",
-    ].join("|");
-    if (requestKey === lastLoadedSessionIdSuggestionsKeyRef.current) return;
-    void loadSessionIdsForFilter(term);
+  const requestActiveCount = useMemo(() => {
+    let count = 0;
+    if (isAdmin && localFilters.providerId !== undefined) count++;
+    if (localFilters.model) count++;
+    if (localFilters.endpoint) count++;
+    if (localFilters.sessionId) count++;
+    return count;
   }, [
-    sessionIdPopoverOpen,
-    debouncedSessionIdSearchTerm,
     isAdmin,
-    localFilters.userId,
-    localFilters.keyId,
     localFilters.providerId,
-    loadSessionIdsForFilter,
+    localFilters.model,
+    localFilters.endpoint,
+    localFilters.sessionId,
   ]);
 
-  useEffect(() => {
-    if (!sessionIdPopoverOpen) {
-      setAvailableSessionIds([]);
-      lastLoadedSessionIdSuggestionsKeyRef.current = undefined;
-    }
-  }, [sessionIdPopoverOpen]);
+  const statusActiveCount = useMemo(() => {
+    let count = 0;
+    if (localFilters.statusCode !== undefined || localFilters.excludeStatusCode200) count++;
+    if (localFilters.minRetryCount !== undefined && localFilters.minRetryCount > 0) count++;
+    return count;
+  }, [localFilters.statusCode, localFilters.excludeStatusCode200, localFilters.minRetryCount]);
 
-  useEffect(() => {
-    if (initialKeys.length > 0) {
-      setKeys(initialKeys);
-    }
-  }, [initialKeys]);
+  const handleApply = useCallback(() => {
+    onChange(sanitizeFilters(localFilters));
+  }, [localFilters, onChange]);
 
-  // 管理员用户首次加载时，如果 URL 中有 userId 参数，需要加载该用户的 keys
-  // biome-ignore lint/correctness/useExhaustiveDependencies: 故意仅在组件挂载时执行一次
-  useEffect(() => {
-    const loadInitialKeys = async () => {
-      if (isAdmin && filters.userId && initialKeys.length === 0) {
-        try {
-          const keysResult = await getKeys(filters.userId);
-          if (keysResult.ok && keysResult.data) {
-            setKeys(keysResult.data);
-          }
-        } catch (error) {
-          console.error("Failed to load initial keys:", error);
-        }
-      }
-    };
-    loadInitialKeys();
-  }, []);
-
-  // 处理用户选择变更
-  const handleUserChange = async (userId: string) => {
-    const newUserId = userId ? parseInt(userId, 10) : undefined;
-    const newFilters = { ...localFilters, userId: newUserId, keyId: undefined };
-    setLocalFilters(newFilters);
-
-    // 加载该用户的 keys
-    if (newUserId) {
-      try {
-        const keysResult = await getKeys(newUserId);
-        if (keysResult.ok && keysResult.data) {
-          setKeys(keysResult.data);
-        }
-      } catch (error) {
-        console.error("Failed to load keys:", error);
-        toast.error(t("logs.error.loadKeysFailed"));
-      }
-    } else {
-      setKeys([]);
-    }
-  };
-
-  const handleApply = () => {
-    const {
-      userId,
-      keyId,
-      providerId,
-      sessionId,
-      startTime,
-      endTime,
-      statusCode,
-      excludeStatusCode200,
-      model,
-      endpoint,
-      minRetryCount,
-    } = localFilters;
-
-    onChange({
-      userId,
-      keyId,
-      providerId,
-      sessionId,
-      startTime,
-      endTime,
-      statusCode,
-      excludeStatusCode200,
-      model,
-      endpoint,
-      minRetryCount,
-    });
-  };
-
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     setLocalFilters({});
     setKeys([]);
+    setActivePreset(null);
     onReset();
-  };
+  }, [onReset]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -363,7 +151,6 @@ export function UsageLogsFilters({
         return;
       }
 
-      // Create and download the file
       const blob = new Blob([result.data], { type: "text/csv;charset=utf-8;" });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -383,517 +170,148 @@ export function UsageLogsFilters({
     }
   };
 
-  // Helper: convert timestamp to display date string (YYYY-MM-DD)
-  const timestampToDateString = useCallback((timestamp: number): string => {
-    const date = new Date(timestamp);
-    return format(date, "yyyy-MM-dd");
-  }, []);
+  const handlePresetToggle = useCallback(
+    (preset: FilterPreset) => {
+      const now = new Date();
 
-  // Memoized startDate for display (from timestamp)
-  const displayStartDate = useMemo(() => {
-    if (!localFilters.startTime) return undefined;
-    return timestampToDateString(localFilters.startTime);
-  }, [localFilters.startTime, timestampToDateString]);
+      if (preset === activePreset) {
+        // Toggle off - clear the preset-related filters
+        setActivePreset(null);
+        setLocalFilters((prev) => {
+          const next = { ...prev };
+          if (preset === "today" || preset === "this-week") {
+            delete next.startTime;
+            delete next.endTime;
+          } else if (preset === "errors-only") {
+            delete next.excludeStatusCode200;
+          } else if (preset === "show-retries") {
+            delete next.minRetryCount;
+          }
+          return next;
+        });
+        return;
+      }
 
-  const displayStartClock = useMemo(() => {
-    if (!localFilters.startTime) return undefined;
-    return formatClockFromTimestamp(localFilters.startTime);
-  }, [localFilters.startTime]);
+      setActivePreset(preset);
 
-  // Memoized endDate calculation: endTime is exclusive, use endTime-1s to infer inclusive display end date
-  const displayEndDate = useMemo(() => {
-    if (!localFilters.endTime) return undefined;
-    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
-    return format(new Date(inclusiveEndTime), "yyyy-MM-dd");
-  }, [localFilters.endTime]);
-
-  const displayEndClock = useMemo(() => {
-    if (!localFilters.endTime) return undefined;
-    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(localFilters.endTime);
-    return formatClockFromTimestamp(inclusiveEndTime);
-  }, [localFilters.endTime]);
-
-  // Memoized callback for date range changes
-  const handleDateRangeChange = useCallback(
-    (range: { startDate?: string; endDate?: string }) => {
-      if (range.startDate && range.endDate) {
-        // Convert to millisecond timestamps:
-        // startTime: startDate + startClock (default 00:00:00)
-        // endTime: endDate + endClock as exclusive upper bound (endClock default 23:59:59)
-        const startClock = displayStartClock ?? "00:00:00";
-        const endClock = displayEndClock ?? "23:59:59";
-        const startTimestamp = dateStringWithClockToTimestamp(range.startDate, startClock);
-        const endInclusiveTimestamp = dateStringWithClockToTimestamp(range.endDate, endClock);
-        if (startTimestamp === undefined || endInclusiveTimestamp === undefined) {
-          setLocalFilters((prev) => ({
-            ...prev,
-            startTime: undefined,
-            endTime: undefined,
-          }));
-          return;
-        }
-        const endTimestamp = endInclusiveTimestamp + 1000;
+      if (preset === "today") {
+        const todayStart = startOfDay(now).getTime();
+        const todayEnd = todayStart + 24 * 60 * 60 * 1000;
         setLocalFilters((prev) => ({
           ...prev,
-          startTime: startTimestamp,
-          endTime: endTimestamp,
+          startTime: todayStart,
+          endTime: todayEnd,
         }));
-      } else {
+      } else if (preset === "this-week") {
+        const weekStart = startOfWeek(now, { weekStartsOn: 1 }).getTime();
+        const weekEnd = weekStart + 7 * 24 * 60 * 60 * 1000;
         setLocalFilters((prev) => ({
           ...prev,
-          startTime: undefined,
-          endTime: undefined,
+          startTime: weekStart,
+          endTime: weekEnd,
+        }));
+      } else if (preset === "errors-only") {
+        setLocalFilters((prev) => ({
+          ...prev,
+          excludeStatusCode200: true,
+          statusCode: undefined,
+        }));
+      } else if (preset === "show-retries") {
+        setLocalFilters((prev) => ({
+          ...prev,
+          minRetryCount: 1,
         }));
       }
     },
-    [displayEndClock, displayStartClock]
+    [activePreset]
   );
+
+  const handleRemoveFilter = useCallback((key: keyof UsageLogFilters) => {
+    setLocalFilters((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setActivePreset(null);
+  }, []);
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12">
-        {/* 时间范围 - 使用日期范围选择器 */}
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.dateRange")}</Label>
-          <LogsDateRangePicker
-            startDate={displayStartDate}
-            endDate={displayEndDate}
-            onDateRangeChange={handleDateRangeChange}
+      {/* Quick Filters Bar */}
+      <QuickFiltersBar activePreset={activePreset} onPresetToggle={handlePresetToggle} />
+
+      {/* Active Filters Display */}
+      <ActiveFiltersDisplay
+        filters={localFilters}
+        onRemove={handleRemoveFilter}
+        onClearAll={handleReset}
+        displayNames={displayNames}
+        isAdmin={isAdmin}
+      />
+
+      {/* Filter Sections */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Time Range Section */}
+        <FilterSection
+          title={t("logs.filters.groups.time")}
+          description={t("logs.filters.groups.timeDesc")}
+          icon={Clock}
+          activeCount={timeActiveCount}
+          defaultOpen={true}
+        >
+          <TimeFilters filters={localFilters} onFiltersChange={setLocalFilters} />
+        </FilterSection>
+
+        {/* Identity Section (Admin only for User, all for Key) */}
+        <FilterSection
+          title={t("logs.filters.groups.identity")}
+          description={t("logs.filters.groups.identityDesc")}
+          icon={User}
+          activeCount={identityActiveCount}
+          defaultOpen={true}
+        >
+          <IdentityFilters
+            isAdmin={isAdmin}
+            filters={localFilters}
+            onFiltersChange={setLocalFilters}
+            initialKeys={initialKeys}
+            isKeysLoading={isKeysLoading}
+            onKeysChange={setKeys}
+            onUsersChange={setAvailableUsers}
           />
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">{t("logs.filters.startTime")}</Label>
-              <Input
-                type="time"
-                step={1}
-                value={displayStartClock ?? ""}
-                disabled={!displayStartDate}
-                onChange={(e) => {
-                  const nextClock = e.target.value || "00:00:00";
-                  setLocalFilters((prev) => {
-                    if (!prev.startTime) return prev;
-                    const dateStr = timestampToDateString(prev.startTime);
-                    const startTime = dateStringWithClockToTimestamp(dateStr, nextClock);
-                    if (startTime === undefined) return prev;
-                    return {
-                      ...prev,
-                      startTime,
-                    };
-                  });
-                }}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">{t("logs.filters.endTime")}</Label>
-              <Input
-                type="time"
-                step={1}
-                value={displayEndClock ?? ""}
-                disabled={!displayEndDate}
-                onChange={(e) => {
-                  const nextClock = e.target.value || "23:59:59";
-                  setLocalFilters((prev) => {
-                    if (!prev.endTime) return prev;
-                    const inclusiveEndTime = inclusiveEndTimestampFromExclusive(prev.endTime);
-                    const endDateStr = timestampToDateString(inclusiveEndTime);
-                    const endInclusiveTimestamp = dateStringWithClockToTimestamp(
-                      endDateStr,
-                      nextClock
-                    );
-                    if (endInclusiveTimestamp === undefined) return prev;
-                    return {
-                      ...prev,
-                      endTime: endInclusiveTimestamp + 1000,
-                    };
-                  });
-                }}
-              />
-            </div>
-          </div>
-        </div>
+        </FilterSection>
 
-        {/* 用户选择（仅 Admin） */}
-        {isAdmin && (
-          <div className="space-y-2 lg:col-span-4">
-            <Label>{t("logs.filters.user")}</Label>
-            <Popover open={userPopoverOpen} onOpenChange={setUserPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={userPopoverOpen}
-                  type="button"
-                  className="w-full justify-between"
-                >
-                  {localFilters.userId ? (
-                    (userMap.get(localFilters.userId) ?? localFilters.userId.toString())
-                  ) : (
-                    <span className="text-muted-foreground">
-                      {isUsersLoading ? t("logs.stats.loading") : t("logs.filters.allUsers")}
-                    </span>
-                  )}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-[320px] p-0"
-                align="start"
-                onWheel={(e) => e.stopPropagation()}
-                onTouchMove={(e) => e.stopPropagation()}
-              >
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder={t("logs.filters.searchUser")}
-                    value={userSearchTerm}
-                    onValueChange={(value) => setUserSearchTerm(value)}
-                  />
-                  <CommandList className="max-h-[250px] overflow-y-auto">
-                    <CommandEmpty>
-                      {isUsersLoading ? t("logs.stats.loading") : t("logs.filters.noUserFound")}
-                    </CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value={t("logs.filters.allUsers")}
-                        onSelect={() => {
-                          void handleUserChange("");
-                          setUserPopoverOpen(false);
-                        }}
-                        className="cursor-pointer"
-                      >
-                        <span className="flex-1">{t("logs.filters.allUsers")}</span>
-                        {!localFilters.userId && <Check className="h-4 w-4 text-primary" />}
-                      </CommandItem>
-                      {availableUsers.map((user) => (
-                        <CommandItem
-                          key={user.id}
-                          value={user.name}
-                          onSelect={() => {
-                            void handleUserChange(user.id.toString());
-                            setUserPopoverOpen(false);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <span className="flex-1">{user.name}</span>
-                          {localFilters.userId === user.id && (
-                            <Check className="h-4 w-4 text-primary" />
-                          )}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-        )}
-
-        {/* Key 选择 */}
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.apiKey")}</Label>
-          <Select
-            value={localFilters.keyId?.toString() || "__all__"}
-            onValueChange={(value: string) =>
-              setLocalFilters({
-                ...localFilters,
-                keyId: value && value !== "__all__" ? parseInt(value, 10) : undefined,
-              })
-            }
-            disabled={isKeysLoading || (isAdmin && !localFilters.userId && keys.length === 0)}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  isKeysLoading
-                    ? t("logs.stats.loading")
-                    : isAdmin && !localFilters.userId && keys.length === 0
-                      ? t("logs.filters.selectUserFirst")
-                      : t("logs.filters.allKeys")
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">{t("logs.filters.allKeys")}</SelectItem>
-              {keys.map((key) => (
-                <SelectItem key={key.id} value={key.id.toString()}>
-                  {key.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* 供应商选择 */}
-        {isAdmin && (
-          <div className="space-y-2 lg:col-span-4">
-            <Label>{t("logs.filters.provider")}</Label>
-            <Popover open={providerPopoverOpen} onOpenChange={setProviderPopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={providerPopoverOpen}
-                  disabled={isProvidersLoading}
-                  type="button"
-                  className="w-full justify-between"
-                >
-                  {localFilters.providerId ? (
-                    (providerMap.get(localFilters.providerId) ?? localFilters.providerId.toString())
-                  ) : (
-                    <span className="text-muted-foreground">
-                      {isProvidersLoading
-                        ? t("logs.stats.loading")
-                        : t("logs.filters.allProviders")}
-                    </span>
-                  )}
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-[320px] p-0"
-                align="start"
-                onWheel={(e) => e.stopPropagation()}
-                onTouchMove={(e) => e.stopPropagation()}
-              >
-                <Command shouldFilter={true}>
-                  <CommandInput placeholder={t("logs.filters.searchProvider")} />
-                  <CommandList className="max-h-[250px] overflow-y-auto">
-                    <CommandEmpty>
-                      {isProvidersLoading
-                        ? t("logs.stats.loading")
-                        : t("logs.filters.noProviderFound")}
-                    </CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value={t("logs.filters.allProviders")}
-                        onSelect={() => {
-                          setLocalFilters({
-                            ...localFilters,
-                            providerId: undefined,
-                          });
-                          setProviderPopoverOpen(false);
-                        }}
-                        className="cursor-pointer"
-                      >
-                        <span className="flex-1">{t("logs.filters.allProviders")}</span>
-                        {!localFilters.providerId && <Check className="h-4 w-4 text-primary" />}
-                      </CommandItem>
-                      {providers.map((provider) => (
-                        <CommandItem
-                          key={provider.id}
-                          value={provider.name}
-                          onSelect={() => {
-                            setLocalFilters({
-                              ...localFilters,
-                              providerId: provider.id,
-                            });
-                            setProviderPopoverOpen(false);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <span className="flex-1">{provider.name}</span>
-                          {localFilters.providerId === provider.id && (
-                            <Check className="h-4 w-4 text-primary" />
-                          )}
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-        )}
-
-        {/* Session ID 联想 */}
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.sessionId")}</Label>
-          <Popover open={sessionIdPopoverOpen} onOpenChange={setSessionIdPopoverOpen}>
-            <PopoverAnchor asChild>
-              <Input
-                value={localFilters.sessionId ?? ""}
-                placeholder={t("logs.filters.searchSessionId")}
-                onFocus={() => {
-                  const term = (localFilters.sessionId ?? "").trim();
-                  setSessionIdPopoverOpen(term.length >= SESSION_ID_SUGGESTION_MIN_LEN);
-                }}
-                onChange={(e) => {
-                  const next = e.target.value.trim();
-                  setLocalFilters((prev) => ({ ...prev, sessionId: next || undefined }));
-                  setSessionIdPopoverOpen(next.length >= SESSION_ID_SUGGESTION_MIN_LEN);
-                }}
-              />
-            </PopoverAnchor>
-            <PopoverContent
-              className="w-[320px] p-0"
-              align="start"
-              onOpenAutoFocus={(e) => e.preventDefault()}
-              onWheel={(e) => e.stopPropagation()}
-              onTouchMove={(e) => e.stopPropagation()}
-            >
-              <Command shouldFilter={false}>
-                <CommandList className="max-h-[250px] overflow-y-auto">
-                  <CommandEmpty>
-                    {isSessionIdsLoading
-                      ? t("logs.stats.loading")
-                      : t("logs.filters.noSessionFound")}
-                  </CommandEmpty>
-                  <CommandGroup>
-                    {availableSessionIds.map((sessionId) => (
-                      <CommandItem
-                        key={sessionId}
-                        value={sessionId}
-                        onSelect={() => {
-                          setLocalFilters((prev) => ({ ...prev, sessionId }));
-                          setSessionIdPopoverOpen(false);
-                        }}
-                        className="cursor-pointer"
-                      >
-                        <span className="flex-1 font-mono text-xs truncate">{sessionId}</span>
-                        {localFilters.sessionId === sessionId && (
-                          <Check className="h-4 w-4 text-primary" />
-                        )}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        {/* 模型选择 */}
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.model")}</Label>
-          <Select
-            value={localFilters.model || "all"}
-            onValueChange={(value: string) =>
-              setLocalFilters({ ...localFilters, model: value === "all" ? undefined : value })
-            }
-            onOpenChange={onModelsOpenChange}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  isModelsLoading ? t("logs.stats.loading") : t("logs.filters.allModels")
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("logs.filters.allModels")}</SelectItem>
-              {models.map((model) => (
-                <SelectItem key={model} value={model}>
-                  {model}
-                </SelectItem>
-              ))}
-              {isModelsLoading && (
-                <div className="p-2 text-center text-muted-foreground text-sm">
-                  {t("logs.stats.loading")}
-                </div>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Endpoint 选择 */}
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.endpoint")}</Label>
-          <Select
-            value={localFilters.endpoint || "all"}
-            onValueChange={(value: string) =>
-              setLocalFilters({ ...localFilters, endpoint: value === "all" ? undefined : value })
-            }
-            onOpenChange={onEndpointsOpenChange}
-          >
-            <SelectTrigger>
-              <SelectValue
-                placeholder={
-                  isEndpointsLoading ? t("logs.stats.loading") : t("logs.filters.allEndpoints")
-                }
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("logs.filters.allEndpoints")}</SelectItem>
-              {endpoints.map((endpoint) => (
-                <SelectItem key={endpoint} value={endpoint}>
-                  {endpoint}
-                </SelectItem>
-              ))}
-              {isEndpointsLoading && (
-                <div className="p-2 text-center text-muted-foreground text-sm">
-                  {t("logs.stats.loading")}
-                </div>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* 状态码选择 */}
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.statusCode")}</Label>
-          <Select
-            value={
-              localFilters.excludeStatusCode200
-                ? "!200"
-                : localFilters.statusCode?.toString() || "__all__"
-            }
-            onValueChange={(value: string) =>
-              setLocalFilters({
-                ...localFilters,
-                statusCode:
-                  value && value !== "!200" && value !== "__all__"
-                    ? parseInt(value, 10)
-                    : undefined,
-                excludeStatusCode200: value === "!200",
-              })
-            }
-            onOpenChange={onStatusCodesOpenChange}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={t("logs.filters.allStatusCodes")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">{t("logs.filters.allStatusCodes")}</SelectItem>
-              <SelectItem value="!200">{t("logs.statusCodes.not200")}</SelectItem>
-              <SelectItem value="200">{t("logs.statusCodes.200")}</SelectItem>
-              <SelectItem value="400">{t("logs.statusCodes.400")}</SelectItem>
-              <SelectItem value="401">{t("logs.statusCodes.401")}</SelectItem>
-              <SelectItem value="429">{t("logs.statusCodes.429")}</SelectItem>
-              <SelectItem value="500">{t("logs.statusCodes.500")}</SelectItem>
-              {allStatusCodes.map((code) => (
-                <SelectItem key={code} value={code.toString()}>
-                  {code}
-                </SelectItem>
-              ))}
-              {isStatusCodesLoading && (
-                <div className="p-2 text-center text-muted-foreground text-sm">
-                  {t("logs.stats.loading")}
-                </div>
-              )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* 重试次数下限 */}
-        <div className="space-y-2 lg:col-span-4">
-          <Label>{t("logs.filters.minRetryCount")}</Label>
-          <Input
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={localFilters.minRetryCount?.toString() ?? ""}
-            placeholder={t("logs.filters.minRetryCountPlaceholder")}
-            onChange={(e) =>
-              setLocalFilters({
-                ...localFilters,
-                minRetryCount: e.target.value ? parseInt(e.target.value, 10) : undefined,
-              })
-            }
+        {/* Request Section */}
+        <FilterSection
+          title={t("logs.filters.groups.request")}
+          description={t("logs.filters.groups.requestDesc")}
+          icon={Network}
+          activeCount={requestActiveCount}
+          defaultOpen={false}
+        >
+          <RequestFilters
+            isAdmin={isAdmin}
+            filters={localFilters}
+            onFiltersChange={setLocalFilters}
+            providers={providers}
+            isProvidersLoading={isProvidersLoading}
           />
-        </div>
+        </FilterSection>
+
+        {/* Status Section */}
+        <FilterSection
+          title={t("logs.filters.groups.status")}
+          description={t("logs.filters.groups.statusDesc")}
+          icon={Server}
+          activeCount={statusActiveCount}
+          defaultOpen={false}
+        >
+          <StatusFilters filters={localFilters} onFiltersChange={setLocalFilters} />
+        </FilterSection>
       </div>
 
-      {/* 操作按钮 */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center gap-2 pt-2">
         <Button onClick={handleApply}>{t("logs.filters.apply")}</Button>
         <Button variant="outline" onClick={handleReset}>
           {t("logs.filters.reset")}

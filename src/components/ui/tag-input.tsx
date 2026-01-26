@@ -1,5 +1,6 @@
 "use client";
 
+import * as Portal from "@radix-ui/react-portal";
 import { X } from "lucide-react";
 import * as React from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -66,8 +67,14 @@ export function TagInput({
   const [inputValue, setInputValue] = React.useState("");
   const [showSuggestions, setShowSuggestions] = React.useState(false);
   const [highlightedIndex, setHighlightedIndex] = React.useState(-1);
+  const [dropdownPosition, setDropdownPosition] = React.useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
 
   const normalizedMaxVisible = React.useMemo(() => {
     if (maxVisibleTags === undefined) return undefined;
@@ -92,6 +99,64 @@ export function TagInput({
     }
     previousShowSuggestions.current = showSuggestions;
   }, [showSuggestions, onSuggestionsClose]);
+
+  // Calculate dropdown position when showing suggestions
+  // Using fixed positioning, so use viewport coordinates directly (no scroll offset)
+  React.useEffect(() => {
+    if (showSuggestions && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+  }, [showSuggestions]);
+
+  // Update position on scroll/resize (recalculate viewport coords)
+  React.useEffect(() => {
+    if (!showSuggestions) return;
+
+    const updatePosition = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setDropdownPosition({
+          top: rect.bottom + 4,
+          left: rect.left,
+          width: rect.width,
+        });
+      }
+    };
+
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [showSuggestions]);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    if (!showSuggestions) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target)
+      ) {
+        setShowSuggestions(false);
+        setHighlightedIndex(-1);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showSuggestions]);
 
   const inputMinWidthClass = normalizedMaxVisible === undefined ? "min-w-[120px]" : "min-w-[60px]";
 
@@ -403,27 +468,37 @@ export function TagInput({
           <X className="h-3.5 w-3.5" />
         </button>
       )}
-      {/* 建议下拉列表 */}
-      {showSuggestions && filteredSuggestions.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-auto">
-          {filteredSuggestions.map((suggestion, index) => (
-            <button
-              key={suggestion.value}
-              type="button"
-              className={cn(
-                "w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer",
-                index === highlightedIndex && "bg-accent text-accent-foreground"
-              )}
-              onMouseDown={(e) => {
-                e.preventDefault(); // 阻止 blur 事件
-                handleSuggestionClick(suggestion.value);
-              }}
-              onMouseEnter={() => setHighlightedIndex(index)}
-            >
-              {suggestion.label}
-            </button>
-          ))}
-        </div>
+      {/* 建议下拉列表 - 使用 Radix Portal 确保在 Dialog 中正确渲染 */}
+      {showSuggestions && filteredSuggestions.length > 0 && dropdownPosition && (
+        <Portal.Root>
+          <div
+            ref={dropdownRef}
+            className="fixed z-[9999] rounded-md border bg-popover shadow-md max-h-48 overflow-auto"
+            style={{
+              top: dropdownPosition.top,
+              left: dropdownPosition.left,
+              width: dropdownPosition.width,
+            }}
+          >
+            {filteredSuggestions.map((suggestion, index) => (
+              <button
+                key={suggestion.value}
+                type="button"
+                className={cn(
+                  "w-full px-3 py-2 text-left text-sm hover:bg-primary hover:text-primary-foreground cursor-pointer",
+                  index === highlightedIndex && "bg-primary text-primary-foreground"
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSuggestionClick(suggestion.value);
+                }}
+                onMouseEnter={() => setHighlightedIndex(index)}
+              >
+                {suggestion.label}
+              </button>
+            ))}
+          </div>
+        </Portal.Root>
       )}
     </div>
   );

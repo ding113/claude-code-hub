@@ -8,7 +8,7 @@ import { testErrorRuleAction } from "@/actions/error-rules";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 
 interface TestResult {
@@ -58,18 +58,28 @@ export function ErrorRuleTester() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-2">
-        <Label htmlFor="error-rule-test-message">{t("errorRules.tester.inputLabel")}</Label>
-        <Textarea
+      <div className="space-y-2">
+        <Label
+          htmlFor="error-rule-test-message"
+          className="text-xs font-medium text-muted-foreground uppercase tracking-wide"
+        >
+          {t("errorRules.tester.inputLabel")}
+        </Label>
+        <textarea
           id="error-rule-test-message"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder={t("errorRules.tester.inputPlaceholder")}
           rows={3}
+          className={cn(
+            "w-full bg-muted/50 border border-border rounded-lg py-2.5 px-3 text-sm text-foreground",
+            "placeholder:text-muted-foreground/50 resize-none",
+            "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+          )}
         />
       </div>
 
-      <Button onClick={handleTest} disabled={isTesting}>
+      <Button onClick={handleTest} disabled={isTesting} className="bg-primary hover:bg-primary/90">
         {isTesting ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -81,19 +91,23 @@ export function ErrorRuleTester() {
       </Button>
 
       {result && (
-        <div className="space-y-4 rounded-lg border border-muted bg-muted/30 p-4">
-          {/* 匹配状态 */}
+        <div className="space-y-4 rounded-xl bg-white/[0.02] border border-border/50 p-4">
+          {/* Match Status */}
           <div className="flex flex-wrap items-center gap-2">
             {result.matched ? (
               <>
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <span className="text-sm font-medium text-green-700">
+                <div className="p-1.5 rounded-lg bg-green-500/10">
+                  <CheckCircle2 className="h-4 w-4 text-green-400" />
+                </div>
+                <span className="text-sm font-medium text-green-400">
                   {t("errorRules.tester.matched")}
                 </span>
               </>
             ) : (
               <>
-                <XCircle className="h-4 w-4 text-muted-foreground" />
+                <div className="p-1.5 rounded-lg bg-white/5">
+                  <XCircle className="h-4 w-4 text-muted-foreground" />
+                </div>
                 <span className="text-sm font-medium text-muted-foreground">
                   {t("errorRules.tester.notMatched")}
                 </span>
@@ -101,38 +115,49 @@ export function ErrorRuleTester() {
             )}
           </div>
 
-          <div className="grid gap-4">
-            {/* 规则信息 */}
+          <div className="space-y-4">
+            {/* Rule Info */}
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 {t("errorRules.tester.ruleInfo")}
               </p>
               {result.rule ? (
-                <div className="space-y-1 rounded border border-border bg-card/60 px-3 py-2 text-sm">
+                <div className="space-y-2 rounded-lg bg-muted/50 border border-border/50 px-3 py-2.5">
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">{t("errorRules.tester.category")}</span>
-                    <Badge variant="secondary">{result.rule.category}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {t("errorRules.tester.category")}
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="bg-white/5 text-foreground border-border text-[10px]"
+                    >
+                      {result.rule.category}
+                    </Badge>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {t("errorRules.tester.matchType")}
                     </span>
-                    <Badge variant="outline">{result.rule.matchType}</Badge>
+                    <Badge variant="outline" className="border-border text-[10px]">
+                      {result.rule.matchType}
+                    </Badge>
                   </div>
                   <div className="flex items-start justify-between gap-4">
-                    <span className="text-muted-foreground shrink-0">
+                    <span className="text-xs text-muted-foreground shrink-0">
                       {t("errorRules.tester.pattern")}
                     </span>
-                    <code className="max-w-[260px] break-all text-right font-mono text-xs">
+                    <code className="max-w-[260px] break-all text-right font-mono text-xs text-foreground">
                       {result.rule.pattern}
                     </code>
                   </div>
                   {result.rule.overrideStatusCode !== null && (
-                    <div className="flex items-center justify-between gap-4 pt-1 border-t border-border/50">
-                      <span className="text-muted-foreground">
+                    <div className="flex items-center justify-between gap-4 pt-2 border-t border-border/50">
+                      <span className="text-xs text-muted-foreground">
                         {t("errorRules.tester.overrideStatusCode")}
                       </span>
-                      <Badge variant="outline">{result.rule.overrideStatusCode}</Badge>
+                      <Badge variant="outline" className="border-border text-[10px]">
+                        {result.rule.overrideStatusCode}
+                      </Badge>
                     </div>
                   )}
                 </div>
@@ -141,45 +166,45 @@ export function ErrorRuleTester() {
               )}
             </div>
 
-            {/* 警告信息 */}
+            {/* Warnings */}
             {result.warnings && result.warnings.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   {t("errorRules.tester.warnings")}
                 </p>
-                <div className="space-y-1">
+                <div className="space-y-2">
                   {result.warnings.map((warning, index) => (
                     <div
                       key={index}
-                      className="flex items-start gap-2 rounded border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm dark:border-yellow-900 dark:bg-yellow-950"
+                      className="flex items-start gap-2 rounded-lg bg-yellow-500/5 border border-yellow-500/20 px-3 py-2.5"
                     >
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600 dark:text-yellow-500" />
-                      <span className="text-yellow-800 dark:text-yellow-200">{warning}</span>
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-400" />
+                      <span className="text-xs text-yellow-200">{warning}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* 最终返回响应（响应体覆写或仅状态码覆写） */}
+            {/* Final Response */}
             {(result.finalResponse || result.finalStatusCode !== null) && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-muted-foreground">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {t("errorRules.tester.finalResponse")}
                   </p>
                   {result.finalStatusCode !== null && (
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className="border-border text-[10px]">
                       HTTP {result.finalStatusCode}
                     </Badge>
                   )}
                 </div>
                 {result.finalResponse ? (
-                  <pre className="rounded bg-background px-3 py-2 text-xs font-mono overflow-x-auto max-h-48">
+                  <pre className="rounded-lg bg-black/30 border border-border/50 px-3 py-2.5 text-xs font-mono text-foreground overflow-x-auto max-h-48">
                     {JSON.stringify(result.finalResponse, null, 2)}
                   </pre>
                 ) : (
-                  <p className="text-sm text-muted-foreground rounded bg-background px-3 py-2">
+                  <p className="text-xs text-muted-foreground rounded-lg bg-muted/50 border border-border/50 px-3 py-2.5">
                     {t("errorRules.tester.statusCodeOnlyOverride")}
                   </p>
                 )}

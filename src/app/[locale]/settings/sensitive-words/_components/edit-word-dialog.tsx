@@ -94,6 +94,7 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
                 value={wordText}
                 onChange={(e) => setWordText(e.target.value)}
                 placeholder={t("sensitiveWords.dialog.wordPlaceholder")}
+                className="bg-muted/50 border border-border rounded-lg focus:border-[#E25706]/50 focus:ring-[#E25706]/20"
                 required
               />
             </div>
@@ -101,7 +102,7 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
             <div className="grid gap-2">
               <Label htmlFor="edit-matchType">{t("sensitiveWords.dialog.matchTypeLabel")}</Label>
               <Select value={matchType} onValueChange={(value) => setMatchType(value)}>
-                <SelectTrigger>
+                <SelectTrigger className="bg-muted/50 border border-border rounded-lg focus:border-[#E25706]/50 focus:ring-[#E25706]/20">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -123,6 +124,7 @@ export function EditWordDialog({ word, open, onOpenChange }: EditWordDialogProps
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t("sensitiveWords.dialog.descriptionPlaceholder")}
+                className="bg-muted/50 border border-border rounded-lg focus:border-[#E25706]/50 focus:ring-[#E25706]/20"
                 rows={3}
               />
             </div>

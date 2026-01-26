@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,24 +11,29 @@ export interface RateLimitEventsChartProps {
   data: EventTimeline[];
 }
 
-const chartConfig = {
-  count: {
-    label: "限流事件数",
-    color: "hsl(var(--chart-1))",
-  },
-} satisfies ChartConfig;
-
 /**
  * 限流事件时间线图表
  * 使用 Recharts AreaChart 显示小时级别的限流事件趋势
  */
 export function RateLimitEventsChart({ data }: RateLimitEventsChartProps) {
   const t = useTranslations("dashboard.rateLimits.chart");
+  const locale = useLocale();
+
+  const chartConfig = React.useMemo(
+    () =>
+      ({
+        count: {
+          label: t("events"),
+          color: "hsl(var(--chart-1))",
+        },
+      }) satisfies ChartConfig,
+    [t]
+  );
 
   // 格式化小时显示
   const formatHour = (hourStr: string) => {
     const date = new Date(hourStr);
-    return date.toLocaleTimeString("zh-CN", {
+    return date.toLocaleTimeString(locale, {
       month: "numeric",
       day: "numeric",
       hour: "2-digit",
@@ -39,7 +44,7 @@ export function RateLimitEventsChart({ data }: RateLimitEventsChartProps) {
   // 格式化 tooltip 显示
   const formatTooltipHour = (hourStr: string) => {
     const date = new Date(hourStr);
-    return date.toLocaleString("zh-CN", {
+    return date.toLocaleString(locale, {
       year: "numeric",
       month: "long",
       day: "numeric",

@@ -4,6 +4,7 @@
   "status": {
     "loading": "加载中...",
     "error": "获取数据库状态失败",
+    "connectionUnavailable": "数据库连接不可用，请检查数据库服务状态",
     "retry": "重试",
     "connected": "数据库连接正常",
     "unavailable": "数据库不可用",

@@ -14,7 +14,11 @@ export default async function SettingsConfigPage() {
 
   return (
     <>
-      <SettingsPageHeader title={t("config.title")} description={t("config.description")} />
+      <SettingsPageHeader
+        title={t("config.title")}
+        description={t("config.description")}
+        icon="settings"
+      />
       <Suspense fallback={<SettingsConfigSkeleton />}>
         <SettingsConfigContent />
       </Suspense>
@@ -31,6 +35,8 @@ async function SettingsConfigContent() {
       <Section
         title={t("config.section.siteParams.title")}
         description={t("config.section.siteParams.description")}
+        icon="settings"
+        variant="default"
       >
         <SystemSettingsForm
           initialSettings={{
@@ -52,6 +58,9 @@ async function SettingsConfigContent() {
       <Section
         title={t("config.section.autoCleanup.title")}
         description={t("config.section.autoCleanup.description")}
+        icon="trash"
+        iconColor="text-red-400"
+        variant="default"
       >
         <AutoCleanupForm settings={settings} />
       </Section>

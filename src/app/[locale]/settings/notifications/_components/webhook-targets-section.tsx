@@ -1,11 +1,11 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { Link2, Plus } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import type {
   ClientActionResult,
   WebhookTargetCreateInput,
@@ -117,25 +117,36 @@ export function WebhookTargetsSection({
   }, [targets]);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <CardTitle>{t("notifications.targets.title")}</CardTitle>
-          <CardDescription>{t("notifications.targets.description")}</CardDescription>
+    <div className="rounded-xl border border-border/50 bg-card/30 backdrop-blur-sm">
+      {/* Compact Header */}
+      <div className="p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 flex items-center justify-center rounded-xl bg-blue-500/10 shrink-0">
+            <Link2 className="h-5 w-5 text-blue-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {t("notifications.targets.title")}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t("notifications.targets.description")}
+            </p>
+          </div>
         </div>
-        <Button type="button" onClick={openCreate} className="w-full sm:w-auto">
+        <Button type="button" onClick={openCreate} size="sm">
           <Plus className="mr-2 h-4 w-4" />
           {t("notifications.targets.add")}
         </Button>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-4">
+      {/* Content */}
+      <div className="border-t border-border/50 p-4">
         {sortedTargets.length === 0 ? (
-          <div className="text-muted-foreground text-sm">
-            {t("notifications.targets.emptyHint")}
+          <div className="p-4 rounded-lg bg-muted/30 border border-border/50 text-center">
+            <p className="text-sm text-muted-foreground">{t("notifications.targets.emptyHint")}</p>
           </div>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-3">
             {sortedTargets.map((target) => (
               <WebhookTargetCard
                 key={target.id}
@@ -148,7 +159,7 @@ export function WebhookTargetsSection({
             ))}
           </div>
         )}
-      </CardContent>
+      </div>
 
       <WebhookTargetDialog
         mode={dialogMode}
@@ -159,6 +170,6 @@ export function WebhookTargetsSection({
         onUpdate={handleUpdate}
         onTest={onTest}
       />
-    </Card>
+    </div>
   );
 }

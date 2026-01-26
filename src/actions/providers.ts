@@ -2,6 +2,7 @@
 
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
+import { buildProxyUrl } from "@/app/v1/_lib/url";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -43,6 +44,7 @@ import {
   updateProvider,
   updateProviderPrioritiesBatch,
 } from "@/repository/provider";
+import { tryDeleteProviderVendorIfEmpty } from "@/repository/provider-endpoints";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   CodexParallelToolCallsPreference,
@@ -236,6 +238,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
         providerType: provider.providerType,
+        providerVendorId: provider.providerVendorId,
         preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
@@ -734,6 +737,7 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
       return { ok: false, error: "无权限执行此操作" };
     }
 
+    const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
 
     // 清除内存缓存（无论 Redis 是否成功都要执行）
@@ -749,6 +753,11 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
         providerId,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+
+    // Auto cleanup: delete vendor if it has no active providers/endpoints.
+    if (provider?.providerVendorId) {
+      await tryDeleteProviderVendorIfEmpty(provider.providerVendorId);
     }
 
     // 广播缓存更新（跨实例即时生效）
@@ -979,6 +988,168 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
   } catch (error) {
     logger.error("重置供应商总用量失败:", error);
     const message = error instanceof Error ? error.message : "重置供应商总用量失败";
+    return { ok: false, error: message };
+  }
+}
+
+const BATCH_OPERATION_MAX_SIZE = 500;
+
+export interface BatchUpdateProvidersParams {
+  providerIds: number[];
+  updates: {
+    is_enabled?: boolean;
+    priority?: number;
+    weight?: number;
+    cost_multiplier?: number;
+    group_tag?: string | null;
+  };
+}
+
+export async function batchUpdateProviders(
+  params: BatchUpdateProvidersParams
+): Promise<ActionResult<{ updatedCount: number }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const { providerIds, updates } = params;
+
+    if (!providerIds || providerIds.length === 0) {
+      return { ok: false, error: "请选择要更新的供应商" };
+    }
+
+    if (providerIds.length > BATCH_OPERATION_MAX_SIZE) {
+      return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
+    }
+
+    const hasUpdates = Object.values(updates).some((v) => v !== undefined);
+    if (!hasUpdates) {
+      return { ok: false, error: "请指定要更新的字段" };
+    }
+
+    const { updateProvidersBatch } = await import("@/repository/provider");
+
+    const repositoryUpdates: Parameters<typeof updateProvidersBatch>[1] = {};
+    if (updates.is_enabled !== undefined) repositoryUpdates.isEnabled = updates.is_enabled;
+    if (updates.priority !== undefined) repositoryUpdates.priority = updates.priority;
+    if (updates.weight !== undefined) repositoryUpdates.weight = updates.weight;
+    if (updates.cost_multiplier !== undefined) {
+      repositoryUpdates.costMultiplier = updates.cost_multiplier.toString();
+    }
+    if (updates.group_tag !== undefined) repositoryUpdates.groupTag = updates.group_tag;
+
+    const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
+
+    await broadcastProviderCacheInvalidation({
+      operation: "edit",
+      providerId: providerIds[0],
+    });
+
+    logger.info("batchUpdateProviders:completed", {
+      requestedCount: providerIds.length,
+      updatedCount,
+      fields: Object.keys(updates).filter((k) => updates[k as keyof typeof updates] !== undefined),
+    });
+
+    return { ok: true, data: { updatedCount } };
+  } catch (error) {
+    logger.error("批量更新供应商失败:", error);
+    const message = error instanceof Error ? error.message : "批量更新供应商失败";
+    return { ok: false, error: message };
+  }
+}
+
+export interface BatchDeleteProvidersParams {
+  providerIds: number[];
+}
+
+export async function batchDeleteProviders(
+  params: BatchDeleteProvidersParams
+): Promise<ActionResult<{ deletedCount: number }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const { providerIds } = params;
+
+    if (!providerIds || providerIds.length === 0) {
+      return { ok: false, error: "请选择要删除的供应商" };
+    }
+
+    if (providerIds.length > BATCH_OPERATION_MAX_SIZE) {
+      return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
+    }
+
+    const { deleteProvidersBatch } = await import("@/repository/provider");
+
+    const deletedCount = await deleteProvidersBatch(providerIds);
+
+    for (const id of providerIds) {
+      clearProviderState(id);
+      clearConfigCache(id);
+    }
+
+    await broadcastProviderCacheInvalidation({
+      operation: "remove",
+      providerId: providerIds[0],
+    });
+
+    logger.info("batchDeleteProviders:completed", {
+      requestedCount: providerIds.length,
+      deletedCount,
+    });
+
+    return { ok: true, data: { deletedCount } };
+  } catch (error) {
+    logger.error("批量删除供应商失败:", error);
+    const message = error instanceof Error ? error.message : "批量删除供应商失败";
+    return { ok: false, error: message };
+  }
+}
+
+export interface BatchResetCircuitParams {
+  providerIds: number[];
+}
+
+export async function batchResetProviderCircuits(
+  params: BatchResetCircuitParams
+): Promise<ActionResult<{ resetCount: number }>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const { providerIds } = params;
+
+    if (!providerIds || providerIds.length === 0) {
+      return { ok: false, error: "请选择要重置的供应商" };
+    }
+
+    if (providerIds.length > BATCH_OPERATION_MAX_SIZE) {
+      return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
+    }
+
+    let resetCount = 0;
+    for (const id of providerIds) {
+      resetCircuit(id);
+      clearConfigCache(id);
+      resetCount++;
+    }
+
+    logger.info("batchResetProviderCircuits:completed", {
+      requestedCount: providerIds.length,
+      resetCount,
+    });
+
+    return { ok: true, data: { resetCount } };
+  } catch (error) {
+    logger.error("批量重置熔断器失败:", error);
+    const message = error instanceof Error ? error.message : "批量重置熔断器失败";
     return { ok: false, error: message };
   }
 }
@@ -2117,7 +2288,7 @@ async function executeProviderApiTest(
     const model = data.model || options.defaultModel;
     const path =
       typeof options.path === "function" ? options.path(model, data.apiKey) : options.path;
-    const url = normalizedProviderUrl + path;
+    const url = buildProxyUrl(normalizedProviderUrl, new URL(`https://dummy.com${path}`));
 
     try {
       const proxyConfig = createProxyAgentForProvider(tempProvider, url);

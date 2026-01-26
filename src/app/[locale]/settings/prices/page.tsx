@@ -28,7 +28,11 @@ export default async function SettingsPricesPage({ searchParams }: SettingsPrice
 
   return (
     <>
-      <SettingsPageHeader title={t("prices.title")} description={t("prices.description")} />
+      <SettingsPageHeader
+        title={t("prices.title")}
+        description={t("prices.description")}
+        icon="dollar-sign"
+      />
       <Suspense fallback={<PricesSkeleton />}>
         <SettingsPricesContent searchParams={searchParams} />
       </Suspense>
@@ -84,6 +88,9 @@ async function SettingsPricesContent({ searchParams }: SettingsPricesPageProps) 
     <Section
       title={t("prices.section.title")}
       description={t("prices.section.description")}
+      icon="dollar-sign"
+      iconColor="text-[#E25706]"
+      variant="default"
       actions={
         <div className="flex gap-2">
           <ModelPriceDrawer mode="create" />

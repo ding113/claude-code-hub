@@ -13,10 +13,20 @@ import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overr
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
-import { createProxyAgentForProvider } from "@/lib/proxy-agent";
+import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
+import {
+  getGlobalAgentPool,
+  getProxyAgentForProvider,
+  type ProxyConfigWithCacheKey,
+} from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
+import {
+  isVendorTypeCircuitOpen,
+  recordVendorTypeAllEndpointsTimeout,
+} from "@/lib/vendor-type-circuit-breaker";
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
@@ -35,7 +45,9 @@ import {
   isClientAbortError,
   isEmptyResponseError,
   isHttp2Error,
+  isSSLCertificateError,
   ProxyError,
+  sanitizeUrl,
 } from "./errors";
 import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 import { ModelRedirector } from "./model-redirector";
@@ -211,19 +223,122 @@ export class ProxyForwarder {
       );
       let thinkingSignatureRectifierRetried = false;
 
+      const requestPath = session.requestUrl.pathname;
+      const isMcpRequest =
+        currentProvider.providerType !== "gemini" &&
+        currentProvider.providerType !== "gemini-cli" &&
+        !STANDARD_ENDPOINTS.includes(requestPath);
+
+      const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
+
+      if (isMcpRequest) {
+        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+      } else if (currentProvider.providerVendorId && currentProvider.providerVendorId > 0) {
+        try {
+          const preferred = await getPreferredProviderEndpoints({
+            vendorId: currentProvider.providerVendorId,
+            providerType: currentProvider.providerType,
+          });
+          endpointCandidates.push(...preferred.map((e) => ({ endpointId: e.id, baseUrl: e.url })));
+        } catch (error) {
+          logger.warn(
+            "[ProxyForwarder] Failed to load provider endpoints, fallback to provider.url",
+            {
+              providerId: currentProvider.id,
+              vendorId: currentProvider.providerVendorId,
+              providerType: currentProvider.providerType,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+        }
+      }
+
+      if (endpointCandidates.length === 0) {
+        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+      }
+
+      // Truncate endpoints to maxRetryAttempts count
+      // Ensures only the N lowest-latency endpoints are used (N = maxRetryAttempts)
+      // Note: getPreferredProviderEndpoints already returns endpoints sorted by latency (ascending)
+      if (endpointCandidates.length > maxAttemptsPerProvider) {
+        const originalCount = endpointCandidates.length;
+        endpointCandidates.length = maxAttemptsPerProvider;
+
+        logger.debug("ProxyForwarder: Truncated endpoint candidates to match maxRetryAttempts", {
+          providerId: currentProvider.id,
+          providerName: currentProvider.name,
+          originalEndpointCount: originalCount,
+          truncatedTo: maxAttemptsPerProvider,
+          selectedEndpointIds: endpointCandidates.map((e) => e.endpointId),
+        });
+      }
+
+      let endpointAttemptsEvaluated = 0;
+      let allEndpointAttemptsTimedOut = true;
+
+      // Endpoint stickiness: track current endpoint index separately from attemptCount
+      // - SYSTEM_ERROR (network error): advance to next endpoint
+      // - PROVIDER_ERROR (HTTP error): stay at current endpoint
+      // - No wrap-around: if exhausted, stay at last endpoint
+      let currentEndpointIndex = 0;
+
       logger.info("ProxyForwarder: Trying provider", {
         providerId: currentProvider.id,
         providerName: currentProvider.name,
         totalProvidersAttempted,
         maxRetryAttempts: maxAttemptsPerProvider,
+        endpointCount: endpointCandidates.length,
+        endpointSelectionCriteria: "latency_ascending",
+        selectedEndpoints: endpointCandidates.map((e, idx) => ({
+          index: idx,
+          endpointId: e.endpointId,
+          baseUrl: sanitizeUrl(e.baseUrl),
+        })),
       });
+
+      if (
+        !isMcpRequest &&
+        currentProvider.providerVendorId &&
+        (await isVendorTypeCircuitOpen(
+          currentProvider.providerVendorId,
+          currentProvider.providerType
+        ))
+      ) {
+        logger.warn("ProxyForwarder: Vendor-type circuit is open, skipping provider", {
+          providerId: currentProvider.id,
+          vendorId: currentProvider.providerVendorId,
+          providerType: currentProvider.providerType,
+        });
+        failedProviderIds.push(currentProvider.id);
+        attemptCount = maxAttemptsPerProvider;
+      }
 
       // ========== 内层循环：重试当前供应商（根据配置最多尝试 maxAttemptsPerProvider 次）==========
       while (attemptCount < maxAttemptsPerProvider) {
         attemptCount++;
 
+        // Use currentEndpointIndex for endpoint selection (sticky behavior)
+        // - currentEndpointIndex is advanced only on SYSTEM_ERROR (network errors)
+        // - PROVIDER_ERROR keeps the same endpoint (no advancement)
+        // - No wrap-around: clamped to last endpoint if exhausted
+        const endpointIndex =
+          endpointCandidates.length > 0
+            ? Math.min(currentEndpointIndex, endpointCandidates.length - 1)
+            : 0;
+        const activeEndpoint = endpointCandidates[endpointIndex];
+        const endpointAudit = {
+          endpointId: activeEndpoint.endpointId,
+          endpointUrl: sanitizeUrl(activeEndpoint.baseUrl),
+        };
+
         try {
-          const response = await ProxyForwarder.doForward(session, currentProvider);
+          const response = await ProxyForwarder.doForward(
+            session,
+            currentProvider,
+            activeEndpoint.baseUrl,
+            endpointAudit,
+            attemptCount
+          );
 
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
@@ -307,6 +422,10 @@ export class ProxyForwarder {
           }
 
           // ========== 成功分支 ==========
+          if (activeEndpoint.endpointId != null) {
+            await recordEndpointSuccess(activeEndpoint.endpointId);
+          }
+
           recordSuccess(currentProvider.id);
 
           // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
@@ -356,6 +475,7 @@ export class ProxyForwarder {
 
           // 记录到决策链
           session.addProviderToChain(currentProvider, {
+            ...endpointAudit,
             reason:
               totalProvidersAttempted === 1 && attemptCount === 1
                 ? "request_success"
@@ -385,6 +505,20 @@ export class ProxyForwarder {
               ? lastError.getDetailedErrorMessage()
               : lastError.message;
 
+          const isTimeoutError = lastError instanceof ProxyError && lastError.statusCode === 524;
+          if (attemptCount <= endpointCandidates.length) {
+            endpointAttemptsEvaluated = attemptCount;
+            if (!isTimeoutError) {
+              allEndpointAttemptsTimedOut = false;
+            }
+          }
+
+          if (activeEndpoint.endpointId != null) {
+            if (isTimeoutError || errorCategory === ErrorCategory.SYSTEM_ERROR) {
+              await recordEndpointFailure(activeEndpoint.endpointId, lastError);
+            }
+          }
+
           // ⭐ 2. 客户端中断处理（不计入熔断器，不重试，立即返回）
           if (errorCategory === ErrorCategory.CLIENT_ABORT) {
             logger.warn("ProxyForwarder: Client aborted, stopping immediately", {
@@ -396,6 +530,7 @@ export class ProxyForwarder {
 
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "system_error", // 使用 system_error 作为客户端中断的原因
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -403,16 +538,13 @@ export class ProxyForwarder {
               errorDetails: {
                 system: {
                   errorType: "ClientAbort",
-                  errorName: lastError.name,
-                  errorMessage: lastError.message || "Client aborted request",
-                  errorCode: "CLIENT_ABORT",
-                  errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+                  errorName: "ClientAbort",
+                  errorMessage: "Client aborted request",
                 },
                 request: buildRequestDetails(session),
               },
             });
 
-            // 立即抛出错误，不重试
             throw lastError;
           }
 
@@ -515,6 +647,7 @@ export class ProxyForwarder {
                   // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
                   if (lastError instanceof ProxyError) {
                     session.addProviderToChain(currentProvider, {
+                      ...endpointAudit,
                       reason: "retry_failed",
                       circuitState: getCircuitState(currentProvider.id),
                       attemptNumber: attemptCount,
@@ -534,6 +667,7 @@ export class ProxyForwarder {
                     });
                   } else {
                     session.addProviderToChain(currentProvider, {
+                      ...endpointAudit,
                       reason: "retry_failed",
                       circuitState: getCircuitState(currentProvider.id),
                       attemptNumber: attemptCount,
@@ -594,6 +728,7 @@ export class ProxyForwarder {
             // 记录到决策链（标记为不可重试的客户端错误）
             // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "client_error_non_retryable", // 新增的 reason 值
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -622,8 +757,9 @@ export class ProxyForwarder {
           // ⭐ 4. 系统错误处理（不计入熔断器，先重试1次当前供应商）
           if (errorCategory === ErrorCategory.SYSTEM_ERROR) {
             const err = lastError as Error & {
-              code?: string;
-              syscall?: string;
+              code?: string; // Node.js 错误码：如 'ENOTFOUND'、'ECONNREFUSED'、'ETIMEDOUT'、'ECONNRESET'
+              errno?: number;
+              syscall?: string; // 系统调用：如 'getaddrinfo'、'connect'、'read'、'write'
             };
 
             logger.warn("ProxyForwarder: System/network error occurred", {
@@ -637,6 +773,7 @@ export class ProxyForwarder {
 
             // 记录到决策链（不计入 failedProviderIds）
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "system_error",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -656,8 +793,19 @@ export class ProxyForwarder {
 
             // 第1次失败：等待100ms后重试当前供应商
             if (attemptCount < maxAttemptsPerProvider) {
+              // Network error: advance to next endpoint for retry
+              // This implements "endpoint stickiness" where network errors switch endpoints
+              // but non-network errors (PROVIDER_ERROR) keep the same endpoint
+              currentEndpointIndex++;
+              logger.debug("ProxyForwarder: Advancing endpoint index due to network error", {
+                providerId: currentProvider.id,
+                previousEndpointIndex: currentEndpointIndex - 1,
+                newEndpointIndex: currentEndpointIndex,
+                maxEndpointIndex: endpointCandidates.length - 1,
+              });
+
               await new Promise((resolve) => setTimeout(resolve, 100));
-              continue; // ⭐ 继续内层循环（重试当前供应商）
+              continue; // Continue retry with next endpoint
             }
 
             // 第2次失败：跳出内层循环，切换供应商
@@ -716,6 +864,7 @@ export class ProxyForwarder {
 
             // 记录到决策链（标记为 resource_not_found，不计入熔断）
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "resource_not_found",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -769,6 +918,7 @@ export class ProxyForwarder {
 
               // 记录到决策链
               session.addProviderToChain(currentProvider, {
+                ...endpointAudit,
                 reason: "retry_failed",
                 circuitState: getCircuitState(currentProvider.id),
                 attemptNumber: attemptCount,
@@ -807,6 +957,22 @@ export class ProxyForwarder {
             const statusCode = proxyError.statusCode;
             const willRetry = attemptCount < maxAttemptsPerProvider;
 
+            if (
+              !isMcpRequest &&
+              statusCode === 524 &&
+              endpointCandidates.length > 0 &&
+              endpointAttemptsEvaluated >= endpointCandidates.length &&
+              allEndpointAttemptsTimedOut &&
+              currentProvider.providerVendorId
+            ) {
+              await recordVendorTypeAllEndpointsTimeout(
+                currentProvider.providerVendorId,
+                currentProvider.providerType
+              );
+              failedProviderIds.push(currentProvider.id);
+              break;
+            }
+
             // 🆕 count_tokens 请求特殊处理：不计入熔断，不触发供应商切换
             if (session.isCountTokensRequest()) {
               logger.debug(
@@ -837,6 +1003,7 @@ export class ProxyForwarder {
 
             // 记录到决策链
             session.addProviderToChain(currentProvider, {
+              ...endpointAudit,
               reason: "retry_failed",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
@@ -876,7 +1043,7 @@ export class ProxyForwarder {
 
             // 加入失败列表并切换供应商
             failedProviderIds.push(currentProvider.id);
-            break; // ⭐ 跳出内层循环，进入供应商切换逻辑
+            break; // 跳出内层循环，进入供应商切换逻辑
           }
         }
       } // ========== 内层循环结束 ==========
@@ -929,7 +1096,10 @@ export class ProxyForwarder {
    */
   private static async doForward(
     session: ProxySession,
-    provider: typeof session.provider
+    provider: typeof session.provider,
+    baseUrl: string,
+    endpointAudit?: { endpointId: number | null; endpointUrl: string },
+    attemptNumber?: number
   ): Promise<Response> {
     if (!provider) {
       throw new Error("Provider is required");
@@ -968,10 +1138,10 @@ export class ProxyForwarder {
       });
     }
 
-    let proxyUrl: string;
     let processedHeaders: Headers;
     let requestBody: BodyInit | undefined;
     let isStreaming = false;
+    let proxyUrl: string;
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -998,20 +1168,21 @@ export class ProxyForwarder {
       const isApiKey = GeminiAuth.isApiKey(provider.key);
 
       // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
-      const baseUrl =
+      const effectiveBaseUrl =
+        baseUrl ||
         provider.url ||
         (provider.providerType === "gemini"
           ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
           : GEMINI_PROTOCOL.CLI_ENDPOINT);
 
-      proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
+      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
 
       // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
       // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
       processedHeaders = ProxyForwarder.buildGeminiHeaders(
         session,
         provider,
-        baseUrl,
+        effectiveBaseUrl,
         accessToken,
         isApiKey
       );
@@ -1212,7 +1383,7 @@ export class ProxyForwarder {
       }
 
       // ⭐ MCP 透传处理：检测是否为 MCP 请求，并使用相应的 URL
-      let effectiveBaseUrl = provider.url;
+      let effectiveBaseUrl = baseUrl || provider.url;
 
       // 检测是否为 MCP 请求（非标准 Claude/Codex/OpenAI 端点）
       const requestPath = session.requestUrl.pathname;
@@ -1233,16 +1404,17 @@ export class ProxyForwarder {
             requestPath,
           });
         } else {
-          // 自动从 provider.url 提取基础域名（去掉路径部分）
+          // 自动从 baseUrl 提取基础域名（去掉路径部分）
           // 例如：https://api.minimaxi.com/anthropic -> https://api.minimaxi.com
           try {
-            const baseUrlObj = new URL(provider.url);
+            const originalBaseUrl = effectiveBaseUrl;
+            const baseUrlObj = new URL(originalBaseUrl);
             effectiveBaseUrl = `${baseUrlObj.protocol}//${baseUrlObj.host}`;
             logger.debug("ProxyForwarder: Extracted base domain for MCP passthrough", {
               providerId: provider.id,
               providerName: provider.name,
               mcpType: provider.mcpPassthroughType,
-              originalUrl: provider.url,
+              originalUrl: originalBaseUrl,
               extractedBaseDomain: effectiveBaseUrl,
               requestPath,
             });
@@ -1427,8 +1599,11 @@ export class ProxyForwarder {
     // ⭐ 获取 HTTP/2 全局开关设置
     const enableHttp2 = await isHttp2Enabled();
 
-    // ⭐ 应用代理配置（如果配置了）
-    const proxyConfig = createProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+    // ⭐ 应用代理配置（如果配置了）- 使用 Agent Pool 缓存连接
+    const proxyConfig = await getProxyAgentForProvider(provider, proxyUrl, enableHttp2);
+    // 用于直连场景的 cacheKey（SSL 错误时标记不健康）
+    let directConnectionCacheKey: string | null = null;
+
     if (proxyConfig) {
       init.dispatcher = proxyConfig.agent;
       logger.info("ProxyForwarder: Using proxy", {
@@ -1440,11 +1615,19 @@ export class ProxyForwarder {
         http2Enabled: proxyConfig.http2Enabled,
       });
     } else if (enableHttp2) {
-      // 直连场景：创建支持 HTTP/2 的 Agent
-      init.dispatcher = new Agent({ allowH2: true });
-      logger.debug("ProxyForwarder: Using HTTP/2 Agent for direct connection", {
+      // 直连场景：使用 Agent Pool 获取缓存的 HTTP/2 Agent（避免内存泄漏）
+      const pool = getGlobalAgentPool();
+      const { agent, cacheKey } = await pool.getAgent({
+        endpointUrl: proxyUrl,
+        proxyUrl: null,
+        enableHttp2: true,
+      });
+      init.dispatcher = agent;
+      directConnectionCacheKey = cacheKey;
+      logger.debug("ProxyForwarder: Using cached HTTP/2 Agent for direct connection", {
         providerId: provider.id,
         providerName: provider.name,
+        cacheKey,
       });
     }
 
@@ -1496,6 +1679,21 @@ export class ProxyForwarder {
         errno?: number;
         syscall?: string; // 系统调用：如 'getaddrinfo'、'connect'、'read'、'write'
       };
+
+      // ⭐ SSL 证书错误检测：标记 Agent 为不健康，下次请求将创建新 Agent
+      const sslErrorCacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+      if (isSSLCertificateError(err) && sslErrorCacheKey) {
+        const pool = getGlobalAgentPool();
+        pool.markUnhealthy(sslErrorCacheKey, err.message);
+        logger.warn("ProxyForwarder: SSL certificate error detected, marked agent as unhealthy", {
+          providerId: provider.id,
+          providerName: provider.name,
+          cacheKey: sslErrorCacheKey,
+          connectionType: proxyConfig ? "proxy" : "direct",
+          errorMessage: err.message,
+          errorCode: err.code,
+        });
+      }
 
       // ⭐ 超时错误检测（优先级：response > client）
 
@@ -1619,9 +1817,10 @@ export class ProxyForwarder {
 
         // 记录到决策链（标记为 HTTP/2 回退）
         session.addProviderToChain(provider, {
+          ...(endpointAudit ?? { endpointId: null, endpointUrl: sanitizeUrl(baseUrl) }),
           reason: "http2_fallback",
           circuitState: getCircuitState(provider.id),
-          attemptNumber: 1,
+          attemptNumber: attemptNumber ?? 1,
           errorMessage: `HTTP/2 error: ${err.message}`,
           errorDetails: {
             system: {
@@ -1640,9 +1839,21 @@ export class ProxyForwarder {
         const http1FallbackInit = { ...init };
         delete http1FallbackInit.dispatcher;
 
+        // ⭐ 标记 HTTP/2 Agent 为不健康，避免后续请求重复失败
+        const http2CacheKey = proxyConfig?.cacheKey ?? directConnectionCacheKey;
+        if (http2CacheKey) {
+          const pool = getGlobalAgentPool();
+          pool.markUnhealthy(http2CacheKey, `HTTP/2 protocol error: ${err.message}`);
+          logger.debug("ProxyForwarder: Marked HTTP/2 agent as unhealthy due to protocol error", {
+            providerId: provider.id,
+            providerName: provider.name,
+            cacheKey: http2CacheKey,
+          });
+        }
+
         // 如果使用了代理，创建不支持 HTTP/2 的代理 Agent
         if (proxyConfig) {
-          const http1ProxyConfig = createProxyAgentForProvider(provider, proxyUrl, false);
+          const http1ProxyConfig = await getProxyAgentForProvider(provider, proxyUrl, false);
           if (http1ProxyConfig) {
             http1FallbackInit.dispatcher = http1ProxyConfig.agent;
           }
@@ -2096,10 +2307,23 @@ export class ProxyForwarder {
 
     // 使用 undici.request 获取未自动解压的响应
     // ⭐ 显式配置超时：确保使用自定义 dispatcher（如 SOCKS 代理）时也能正确应用超时
+    const toUndiciBody = (
+      body: BodyInit | null | undefined
+    ): string | Uint8Array | Buffer | null | undefined => {
+      if (body == null || typeof body === "string") return body;
+      if (body instanceof Uint8Array) return body;
+      if (Buffer.isBuffer(body)) return body;
+      if (body instanceof ArrayBuffer) return new Uint8Array(body);
+      if (ArrayBuffer.isView(body)) {
+        return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+      }
+      return undefined;
+    };
+
     const undiciRes = await undiciRequest(url, {
       method: init.method as string,
       headers: headersObj,
-      body: init.body as string | Buffer | undefined,
+      body: toUndiciBody(init.body),
       signal: init.signal,
       dispatcher: init.dispatcher,
       bodyTimeout,

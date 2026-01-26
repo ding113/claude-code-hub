@@ -23,6 +23,10 @@ export function DatabaseStatusDisplay() {
       });
 
       if (!response.ok) {
+        // Check 503 before parsing JSON (response may not have JSON body)
+        if (response.status === 503) {
+          throw new Error(t("connectionUnavailable"));
+        }
         const errorData = await response.json();
         throw new Error(errorData.error || t("error"));
       }
@@ -51,7 +55,7 @@ export function DatabaseStatusDisplay() {
 
   if (error) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-4">
+      <div className="flex items-center gap-3 rounded-xl bg-white/[0.02] border border-destructive/20 p-4">
         <AlertCircle className="h-5 w-5 text-destructive" />
         <div className="flex-1">
           <p className="text-sm font-medium text-destructive">{error}</p>
@@ -68,58 +72,49 @@ export function DatabaseStatusDisplay() {
   }
 
   return (
-    <div className="space-y-3">
-      {/* Compact horizontal status bar */}
-      <div className="flex items-center gap-6 rounded-lg border border-border bg-muted/30 px-4 py-3">
-        {/* Connection status */}
-        <div className="flex items-center gap-2">
+    <div className="space-y-4">
+      {/* Status header with badge */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
           {status.isAvailable ? (
-            <>
-              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-sm font-medium">{t("connected")}</span>
-            </>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border bg-green-500/10 text-green-400 border-green-500/20">
+              {t("connected")}
+            </span>
           ) : (
-            <>
-              <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
-              <span className="text-sm font-medium text-orange-500">{t("unavailable")}</span>
-            </>
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border bg-orange-500/10 text-orange-400 border-orange-500/20">
+              {t("unavailable")}
+            </span>
           )}
         </div>
-
-        {/* Separator */}
-        {status.isAvailable && (
-          <>
-            <div className="h-4 w-px bg-border" />
-
-            {/* Database size */}
-            <div className="flex items-center gap-2">
-              <Database className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">{status.databaseSize}</span>
-            </div>
-
-            {/* Separator */}
-            <div className="h-4 w-px bg-border" />
-
-            {/* Table count */}
-            <div className="flex items-center gap-2">
-              <Table className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">
-                {t("tables", { count: status.tableCount })}
-              </span>
-            </div>
-          </>
-        )}
-
-        {/* Refresh button */}
-        <Button variant="ghost" size="sm" onClick={fetchStatus} className="ml-auto h-8">
+        <Button variant="ghost" size="sm" onClick={fetchStatus} className="h-8">
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      {/* 错误信息 */}
+      {/* Glass cards for stats */}
+      {status.isAvailable && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <Database className="h-4 w-4" />
+              <span>{t("size")}</span>
+            </div>
+            <p className="text-lg font-mono font-bold text-foreground">{status.databaseSize}</p>
+          </div>
+          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+              <Table className="h-4 w-4" />
+              <span>{t("tableCount")}</span>
+            </div>
+            <p className="text-lg font-mono font-bold text-foreground">{status.tableCount}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Error message */}
       {status.error && (
-        <div className="rounded-md border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800 dark:border-orange-800 dark:bg-orange-950 dark:text-orange-200">
-          {status.error}
+        <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-3 text-sm text-orange-400">
+          {status.isAvailable === false ? t("connectionUnavailable") : status.error}
         </div>
       )}
     </div>

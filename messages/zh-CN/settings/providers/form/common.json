@@ -1,3 +1,10 @@
 {
-  "core": "核心"
+  "core": "核心",
+  "tabs": {
+    "basic": "基础信息",
+    "routing": "路由",
+    "limits": "限制",
+    "network": "网络",
+    "testing": "测试"
+  }
 }

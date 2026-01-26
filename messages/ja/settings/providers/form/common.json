@@ -1,3 +1,10 @@
 {
-  "core": "コア"
+  "core": "コア",
+  "tabs": {
+    "basic": "基本情報",
+    "routing": "ルーティング",
+    "limits": "制限",
+    "network": "ネットワーク",
+    "testing": "テスト"
+  }
 }

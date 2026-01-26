@@ -8,6 +8,20 @@ import type { User } from "@/types/user";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function toUser(dbUser: any): User {
+  const parseOptionalNumber = (value: unknown): number | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const parsed = Number.parseFloat(String(value));
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  const parseOptionalInteger = (value: unknown): number | null | undefined => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    const parsed = Number.parseInt(String(value), 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
   return {
     ...dbUser,
     description: dbUser?.description || "",
@@ -24,10 +38,11 @@ export function toUser(dbUser: any): User {
     })(),
     providerGroup: dbUser?.providerGroup ?? null,
     tags: dbUser?.tags ?? [],
-    limitTotalUsd:
-      dbUser?.limitTotalUsd !== null && dbUser?.limitTotalUsd !== undefined
-        ? parseFloat(dbUser.limitTotalUsd)
-        : null,
+    limit5hUsd: parseOptionalNumber(dbUser?.limit5hUsd),
+    limitWeeklyUsd: parseOptionalNumber(dbUser?.limitWeeklyUsd),
+    limitMonthlyUsd: parseOptionalNumber(dbUser?.limitMonthlyUsd),
+    limitTotalUsd: parseOptionalNumber(dbUser?.limitTotalUsd),
+    limitConcurrentSessions: parseOptionalInteger(dbUser?.limitConcurrentSessions),
     dailyResetMode: dbUser?.dailyResetMode ?? "fixed",
     dailyResetTime: dbUser?.dailyResetTime ?? "00:00",
     isEnabled: dbUser?.isEnabled ?? true,
@@ -66,6 +81,7 @@ export function toKey(dbKey: any): Key {
 export function toProvider(dbProvider: any): Provider {
   return {
     ...dbProvider,
+    providerVendorId: dbProvider?.providerVendorId ?? null,
     isEnabled: dbProvider?.isEnabled ?? true,
     weight: dbProvider?.weight ?? 1,
     priority: dbProvider?.priority ?? 0,

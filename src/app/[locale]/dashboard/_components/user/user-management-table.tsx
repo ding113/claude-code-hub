@@ -62,6 +62,7 @@ export interface UserManagementTableProps {
     editDialog: any;
     actions: {
       edit: string;
+      status: string;
       details: string;
       logs: string;
       delete: string;
@@ -501,8 +502,11 @@ export function UserManagementTable({
                   </span>
                 </div>
                 <div className="px-2 text-center min-w-0">
-                  <span className="block truncate" title={translations.actions.edit}>
-                    {translations.actions.edit}
+                  <span
+                    className="block truncate"
+                    title={isAdmin ? translations.actions.edit : translations.actions.status}
+                  >
+                    {isAdmin ? translations.actions.edit : translations.actions.status}
                   </span>
                 </div>
               </div>

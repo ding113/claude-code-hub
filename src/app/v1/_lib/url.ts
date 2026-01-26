@@ -29,7 +29,15 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
     const basePath = baseUrlObj.pathname.replace(/\/$/, ""); // 移除末尾斜杠
     const requestPath = requestUrl.pathname; // 原始请求路径（如 /v1/messages）
 
-    // ⭐ 智能检测：base_url 是否已包含完整目标路径
+    // Case 1: baseUrl 已是 requestPath 的前缀（例如 base=/v1/messages, req=/v1/messages/count_tokens）
+    // 直接使用 requestPath，避免丢失子路径。
+    if (requestPath === basePath || requestPath.startsWith(`${basePath}/`)) {
+      baseUrlObj.pathname = requestPath;
+      baseUrlObj.search = requestUrl.search;
+      return baseUrlObj.toString();
+    }
+
+    // Case 2: baseUrl 已包含“端点根路径”（可能带有额外前缀），仅追加 requestPath 的子路径部分。
     const targetEndpoints = [
       "/responses", // Codex Response API
       "/messages", // Claude Messages API
@@ -37,44 +45,30 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
       "/models", // Gemini & OpenAI models
     ];
 
-    let shouldSkipConcatenation = false;
     for (const endpoint of targetEndpoints) {
-      // 检查 1：base_url 末尾是否包含目标端点
-      if (basePath.endsWith(endpoint)) {
-        shouldSkipConcatenation = true;
-        logger.debug("[buildProxyUrl] Detected complete path in baseUrl", {
-          basePath,
-          endpoint,
-          action: "skip_concatenation",
-        });
-        break;
-      }
+      const requestRoot = `/v1${endpoint}`; // /v1/messages, /v1/responses 等
+      if (requestPath === requestRoot || requestPath.startsWith(`${requestRoot}/`)) {
+        if (basePath.endsWith(endpoint) || basePath.endsWith(requestRoot)) {
+          const suffix = requestPath.slice(requestRoot.length); // 例如 /count_tokens
+          baseUrlObj.pathname = basePath + suffix;
+          baseUrlObj.search = requestUrl.search;
 
-      // 检查 2：base_url 是否已包含完整的 API 路径（如 /v1/messages）
-      // 这处理类似 "https://xxx.com/api/v1/messages" 的情况
-      const fullApiPath = `/v1${endpoint}`; // /v1/messages, /v1/responses 等
-      if (basePath.endsWith(fullApiPath)) {
-        shouldSkipConcatenation = true;
-        logger.debug("[buildProxyUrl] Detected complete API path in baseUrl", {
-          basePath,
-          fullApiPath,
-          action: "skip_concatenation",
-        });
-        break;
+          logger.debug("[buildProxyUrl] Detected endpoint root in baseUrl", {
+            basePath,
+            requestPath,
+            endpoint,
+            action: "append_suffix",
+          });
+
+          return baseUrlObj.toString();
+        }
       }
     }
 
-    // 构建最终URL
-    if (shouldSkipConcatenation) {
-      // 已包含完整路径：直接使用 baseUrl + 查询参数
-      baseUrlObj.search = requestUrl.search;
-      return baseUrlObj.toString();
-    } else {
-      // 标准拼接：basePath + requestPath
-      baseUrlObj.pathname = basePath + requestPath;
-      baseUrlObj.search = requestUrl.search;
-      return baseUrlObj.toString();
-    }
+    // 标准拼接：basePath + requestPath
+    baseUrlObj.pathname = basePath + requestPath;
+    baseUrlObj.search = requestUrl.search;
+    return baseUrlObj.toString();
   } catch (error) {
     logger.error("URL构建失败:", error);
     // 降级到字符串拼接
@@ -103,38 +97,38 @@ export function previewProxyUrls(baseUrl: string, providerType?: string): Record
     return previews;
   }
 
-  // 根据供应商类型定义端点映射
-  const endpointsByType: Record<string, Array<{ name: string; path: string }>> = {
+  // 根据供应商类型定义端点映射（key 由 UI 负责 i18n）
+  const endpointsByType: Record<string, Array<{ key: string; path: string }>> = {
     claude: [
-      { name: "Claude Messages", path: "/v1/messages" },
-      { name: "Claude Count Tokens", path: "/v1/messages/count_tokens" },
+      { key: "claudeMessages", path: "/v1/messages" },
+      { key: "claudeCountTokens", path: "/v1/messages/count_tokens" },
     ],
     "claude-auth": [
-      { name: "Claude Messages", path: "/v1/messages" },
-      { name: "Claude Count Tokens", path: "/v1/messages/count_tokens" },
+      { key: "claudeMessages", path: "/v1/messages" },
+      { key: "claudeCountTokens", path: "/v1/messages/count_tokens" },
     ],
-    codex: [{ name: "Codex Responses", path: "/v1/responses" }],
+    codex: [{ key: "codexResponses", path: "/v1/responses" }],
     "openai-compatible": [
-      { name: "OpenAI Chat Completions", path: "/v1/chat/completions" },
-      { name: "OpenAI Models", path: "/v1/models" },
+      { key: "openaiChatCompletions", path: "/v1/chat/completions" },
+      { key: "openaiModels", path: "/v1/models" },
     ],
     gemini: [
       {
-        name: "Gemini Generate Content",
+        key: "geminiGenerateContent",
         path: "/v1beta/models/gemini-1.5-pro:generateContent",
       },
       {
-        name: "Gemini Stream Content",
+        key: "geminiStreamContent",
         path: "/v1beta/models/gemini-1.5-pro:streamGenerateContent",
       },
     ],
     "gemini-cli": [
       {
-        name: "Gemini CLI Generate",
+        key: "geminiCliGenerate",
         path: "/v1internal/models/gemini-2.5-flash:generateContent",
       },
       {
-        name: "Gemini CLI Stream",
+        key: "geminiCliStream",
         path: "/v1internal/models/gemini-2.5-flash:streamGenerateContent",
       },
     ],
@@ -144,35 +138,19 @@ export function previewProxyUrls(baseUrl: string, providerType?: string): Record
   const endpoints = providerType ? endpointsByType[providerType] || [] : endpointsByType.claude;
 
   // 如果没有匹配的端点，显示常见端点
-  if (endpoints.length === 0) {
-    const commonEndpoints = [
-      { name: "Claude Messages", path: "/v1/messages" },
-      { name: "Codex Responses", path: "/v1/responses" },
-      { name: "OpenAI Chat", path: "/v1/chat/completions" },
-    ];
-
-    for (const { name, path } of commonEndpoints) {
-      try {
-        const fakeRequestUrl = new URL(`https://dummy.com${path}`);
-        const result = buildProxyUrl(baseUrl, fakeRequestUrl);
-        previews[name] = result;
-      } catch {
-        previews[name] = "❌ 无效的 URL";
-      }
-    }
-
-    return previews;
-  }
+  const effectiveEndpoints =
+    endpoints.length > 0
+      ? endpoints
+      : [
+          { key: "claudeMessages", path: "/v1/messages" },
+          { key: "codexResponses", path: "/v1/responses" },
+          { key: "openaiChatCompletions", path: "/v1/chat/completions" },
+        ];
 
   // 生成当前供应商类型的端点预览
-  for (const { name, path } of endpoints) {
-    try {
-      const fakeRequestUrl = new URL(`https://dummy.com${path}`);
-      const result = buildProxyUrl(baseUrl, fakeRequestUrl);
-      previews[name] = result;
-    } catch {
-      previews[name] = "❌ 无效的 URL";
-    }
+  for (const { key, path } of effectiveEndpoints) {
+    const fakeRequestUrl = new URL(`https://dummy.com${path}`);
+    previews[key] = buildProxyUrl(baseUrl, fakeRequestUrl);
   }
 
   return previews;

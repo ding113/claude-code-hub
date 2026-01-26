@@ -182,57 +182,99 @@ export async function addKey(data: {
     }
 
     // 验证各个限额字段
-    if (data.limit5hUsd && user.limit5hUsd && data.limit5hUsd > user.limit5hUsd) {
-      return {
-        ok: false,
-        error: `Key的5小时消费上限（${data.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
-      };
-    }
-
-    if (data.limitDailyUsd && user.dailyQuota && data.limitDailyUsd > user.dailyQuota) {
-      return {
-        ok: false,
-        error: `Key的日消费上限（${data.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
-      };
-    }
-
-    if (data.limitWeeklyUsd && user.limitWeeklyUsd && data.limitWeeklyUsd > user.limitWeeklyUsd) {
-      return {
-        ok: false,
-        error: `Key的周消费上限（${data.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
-      };
-    }
-
     if (
-      data.limitMonthlyUsd &&
-      user.limitMonthlyUsd &&
-      data.limitMonthlyUsd > user.limitMonthlyUsd
+      validatedData.limit5hUsd != null &&
+      validatedData.limit5hUsd > 0 &&
+      user.limit5hUsd != null &&
+      user.limit5hUsd > 0 &&
+      validatedData.limit5hUsd > user.limit5hUsd
     ) {
       return {
         ok: false,
-        error: `Key的月消费上限（${data.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+        error: tError("KEY_LIMIT_5H_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limit5hUsd),
+          userLimit: String(user.limit5hUsd),
+        }),
       };
     }
 
     if (
-      validatedData.limitTotalUsd &&
-      user.limitTotalUsd &&
+      validatedData.limitDailyUsd != null &&
+      validatedData.limitDailyUsd > 0 &&
+      user.dailyQuota != null &&
+      user.dailyQuota > 0 &&
+      validatedData.limitDailyUsd > user.dailyQuota
+    ) {
+      return {
+        ok: false,
+        error: tError("KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitDailyUsd),
+          userLimit: String(user.dailyQuota),
+        }),
+      };
+    }
+
+    if (
+      validatedData.limitWeeklyUsd != null &&
+      validatedData.limitWeeklyUsd > 0 &&
+      user.limitWeeklyUsd != null &&
+      user.limitWeeklyUsd > 0 &&
+      validatedData.limitWeeklyUsd > user.limitWeeklyUsd
+    ) {
+      return {
+        ok: false,
+        error: tError("KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitWeeklyUsd),
+          userLimit: String(user.limitWeeklyUsd),
+        }),
+      };
+    }
+
+    if (
+      validatedData.limitMonthlyUsd != null &&
+      validatedData.limitMonthlyUsd > 0 &&
+      user.limitMonthlyUsd != null &&
+      user.limitMonthlyUsd > 0 &&
+      validatedData.limitMonthlyUsd > user.limitMonthlyUsd
+    ) {
+      return {
+        ok: false,
+        error: tError("KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitMonthlyUsd),
+          userLimit: String(user.limitMonthlyUsd),
+        }),
+      };
+    }
+
+    if (
+      validatedData.limitTotalUsd != null &&
+      validatedData.limitTotalUsd > 0 &&
+      user.limitTotalUsd != null &&
+      user.limitTotalUsd > 0 &&
       validatedData.limitTotalUsd > user.limitTotalUsd
     ) {
       return {
         ok: false,
-        error: `Key的总消费上限（${validatedData.limitTotalUsd}）不能超过用户限额（${user.limitTotalUsd}）`,
+        error: tError("KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitTotalUsd),
+          userLimit: String(user.limitTotalUsd),
+        }),
       };
     }
 
     if (
-      data.limitConcurrentSessions &&
-      user.limitConcurrentSessions &&
-      data.limitConcurrentSessions > user.limitConcurrentSessions
+      validatedData.limitConcurrentSessions != null &&
+      validatedData.limitConcurrentSessions > 0 &&
+      user.limitConcurrentSessions != null &&
+      user.limitConcurrentSessions > 0 &&
+      validatedData.limitConcurrentSessions > user.limitConcurrentSessions
     ) {
       return {
         ok: false,
-        error: `Key的并发Session上限（${data.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
+        error: tError("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitConcurrentSessions),
+          userLimit: String(user.limitConcurrentSessions),
+        }),
       };
     }
 
@@ -357,65 +399,99 @@ export async function editKey(
     }
 
     // 验证各个限额字段
-    if (validatedData.limit5hUsd && user.limit5hUsd && validatedData.limit5hUsd > user.limit5hUsd) {
+    if (
+      validatedData.limit5hUsd != null &&
+      validatedData.limit5hUsd > 0 &&
+      user.limit5hUsd != null &&
+      user.limit5hUsd > 0 &&
+      validatedData.limit5hUsd > user.limit5hUsd
+    ) {
       return {
         ok: false,
-        error: `Key的5小时消费上限（${validatedData.limit5hUsd}）不能超过用户限额（${user.limit5hUsd}）`,
+        error: tError("KEY_LIMIT_5H_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limit5hUsd),
+          userLimit: String(user.limit5hUsd),
+        }),
       };
     }
 
     if (
-      validatedData.limitDailyUsd &&
-      user.dailyQuota &&
+      validatedData.limitDailyUsd != null &&
+      validatedData.limitDailyUsd > 0 &&
+      user.dailyQuota != null &&
+      user.dailyQuota > 0 &&
       validatedData.limitDailyUsd > user.dailyQuota
     ) {
       return {
         ok: false,
-        error: `Key的日消费上限（${validatedData.limitDailyUsd}）不能超过用户限额（${user.dailyQuota}）`,
+        error: tError("KEY_LIMIT_DAILY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitDailyUsd),
+          userLimit: String(user.dailyQuota),
+        }),
       };
     }
 
     if (
-      validatedData.limitWeeklyUsd &&
-      user.limitWeeklyUsd &&
+      validatedData.limitWeeklyUsd != null &&
+      validatedData.limitWeeklyUsd > 0 &&
+      user.limitWeeklyUsd != null &&
+      user.limitWeeklyUsd > 0 &&
       validatedData.limitWeeklyUsd > user.limitWeeklyUsd
     ) {
       return {
         ok: false,
-        error: `Key的周消费上限（${validatedData.limitWeeklyUsd}）不能超过用户限额（${user.limitWeeklyUsd}）`,
+        error: tError("KEY_LIMIT_WEEKLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitWeeklyUsd),
+          userLimit: String(user.limitWeeklyUsd),
+        }),
       };
     }
 
     if (
-      validatedData.limitMonthlyUsd &&
-      user.limitMonthlyUsd &&
+      validatedData.limitMonthlyUsd != null &&
+      validatedData.limitMonthlyUsd > 0 &&
+      user.limitMonthlyUsd != null &&
+      user.limitMonthlyUsd > 0 &&
       validatedData.limitMonthlyUsd > user.limitMonthlyUsd
     ) {
       return {
         ok: false,
-        error: `Key的月消费上限（${validatedData.limitMonthlyUsd}）不能超过用户限额（${user.limitMonthlyUsd}）`,
+        error: tError("KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitMonthlyUsd),
+          userLimit: String(user.limitMonthlyUsd),
+        }),
       };
     }
 
     if (
-      validatedData.limitTotalUsd &&
-      user.limitTotalUsd &&
+      validatedData.limitTotalUsd != null &&
+      validatedData.limitTotalUsd > 0 &&
+      user.limitTotalUsd != null &&
+      user.limitTotalUsd > 0 &&
       validatedData.limitTotalUsd > user.limitTotalUsd
     ) {
       return {
         ok: false,
-        error: `Key的总消费上限（${validatedData.limitTotalUsd}）不能超过用户限额（${user.limitTotalUsd}）`,
+        error: tError("KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitTotalUsd),
+          userLimit: String(user.limitTotalUsd),
+        }),
       };
     }
 
     if (
-      validatedData.limitConcurrentSessions &&
-      user.limitConcurrentSessions &&
+      validatedData.limitConcurrentSessions != null &&
+      validatedData.limitConcurrentSessions > 0 &&
+      user.limitConcurrentSessions != null &&
+      user.limitConcurrentSessions > 0 &&
       validatedData.limitConcurrentSessions > user.limitConcurrentSessions
     ) {
       return {
         ok: false,
-        error: `Key的并发Session上限（${validatedData.limitConcurrentSessions}）不能超过用户限额（${user.limitConcurrentSessions}）`,
+        error: tError("KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitConcurrentSessions),
+          userLimit: String(user.limitConcurrentSessions),
+        }),
       };
     }
 

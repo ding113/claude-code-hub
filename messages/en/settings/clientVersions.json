@@ -38,7 +38,13 @@
     "unknown": "Unknown",
     "user": "User",
     "usersCount": "{count} users",
-    "version": "Current Version"
+    "version": "Current Version",
+    "stats": {
+      "clientTypes": "Client Types",
+      "totalUsers": "Total Users",
+      "withGA": "With GA Version",
+      "coverage": "GA Coverage"
+    }
   },
   "title": "Client Update Reminder",
   "toggle": {

@@ -122,6 +122,28 @@ export async function register() {
         }
 
         try {
+          const { stopEndpointProbeScheduler } = await import(
+            "@/lib/provider-endpoints/probe-scheduler"
+          );
+          stopEndpointProbeScheduler();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop endpoint probe scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          const { stopEndpointProbeLogCleanup } = await import(
+            "@/lib/provider-endpoints/probe-log-cleanup"
+          );
+          stopEndpointProbeLogCleanup();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop endpoint probe log cleanup", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
           const { closeRedis } = await import("@/lib/redis");
           await closeRedis();
         } catch (error) {
@@ -165,7 +187,7 @@ export async function register() {
     }
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)
-    if (process.env.NODE_ENV === "production" && process.env.AUTO_MIGRATE !== "false") {
+    if (process.env.NODE_ENV === "production") {
       const { checkDatabaseConnection, runMigrations } = await import("@/lib/migrate");
 
       logger.info("Initializing Claude Code Hub");
@@ -177,8 +199,43 @@ export async function register() {
         process.exit(1);
       }
 
-      // 执行迁移
-      await runMigrations();
+      // 执行迁移（可通过 AUTO_MIGRATE=false 跳过）
+      if (process.env.AUTO_MIGRATE !== "false") {
+        await runMigrations();
+      } else {
+        logger.info("[Instrumentation] AUTO_MIGRATE=false: skipping migrations");
+      }
+
+      // 回填 provider_vendors（按域名自动聚合旧 providers）
+      try {
+        const { backfillProviderVendorsFromProviders } = await import(
+          "@/repository/provider-endpoints"
+        );
+        const vendorResult = await backfillProviderVendorsFromProviders();
+        logger.info("[Instrumentation] Provider vendors backfill completed", {
+          processed: vendorResult.processed,
+          providersUpdated: vendorResult.providersUpdated,
+          vendorsCreatedCount: vendorResult.vendorsCreated.size,
+          skippedInvalidUrl: vendorResult.skippedInvalidUrl,
+        });
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to backfill provider vendors", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      // 回填 provider_endpoints（从 providers.url/类型 生成端点池，幂等）
+      try {
+        const { backfillProviderEndpointsFromProviders } = await import(
+          "@/repository/provider-endpoints"
+        );
+        const result = await backfillProviderEndpointsFromProviders();
+        logger.info("[Instrumentation] Provider endpoints backfill completed", result);
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
 
       // 初始化价格表（如果数据库为空）
       const { ensurePriceTable } = await import("@/lib/price-sync/seed-initializer");
@@ -215,6 +272,28 @@ export async function register() {
         logger.info("Smart probing scheduler started");
       }
 
+      try {
+        const { startEndpointProbeScheduler } = await import(
+          "@/lib/provider-endpoints/probe-scheduler"
+        );
+        startEndpointProbeScheduler();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start endpoint probe scheduler", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      try {
+        const { startEndpointProbeLogCleanup } = await import(
+          "@/lib/provider-endpoints/probe-log-cleanup"
+        );
+        startEndpointProbeLogCleanup();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start endpoint probe log cleanup", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       logger.info("Application ready");
     }
     // 开发环境: 执行迁移 + 初始化价格表（禁用 Bull Queue 避免 Turbopack 冲突）
@@ -226,6 +305,37 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+
+        // 回填 provider_vendors（按域名自动聚合旧 providers）
+        try {
+          const { backfillProviderVendorsFromProviders } = await import(
+            "@/repository/provider-endpoints"
+          );
+          const vendorResult = await backfillProviderVendorsFromProviders();
+          logger.info("[Instrumentation] Provider vendors backfill completed", {
+            processed: vendorResult.processed,
+            providersUpdated: vendorResult.providersUpdated,
+            vendorsCreatedCount: vendorResult.vendorsCreated.size,
+            skippedInvalidUrl: vendorResult.skippedInvalidUrl,
+          });
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to backfill provider vendors", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        // 回填 provider_endpoints（幂等；避免老数据缺少端点池）
+        try {
+          const { backfillProviderEndpointsFromProviders } = await import(
+            "@/repository/provider-endpoints"
+          );
+          const result = await backfillProviderEndpointsFromProviders();
+          logger.info("[Instrumentation] Provider endpoints backfill completed", result);
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       } else {
         logger.warn("Database connection failed, skipping migrations");
       }
@@ -250,7 +360,7 @@ export async function register() {
         // 继续启动 - 错误检测不是核心功能的关键依赖
       }
 
-      // ⚠️ 开发环境禁用通知队列（Bull + Turbopack 不兼容）
+      // NOTE: 开发环境禁用通知队列（Bull + Turbopack 不兼容）
       // 通知功能仅在生产环境可用，开发环境需要手动测试
       logger.warn(
         "Notification queue disabled in development mode due to Bull + Turbopack incompatibility. " +
@@ -264,6 +374,34 @@ export async function register() {
       if (isSmartProbingEnabled()) {
         startProbeScheduler();
         logger.info("Smart probing scheduler started (development mode)");
+      }
+
+      if (isConnected) {
+        try {
+          const { startEndpointProbeScheduler } = await import(
+            "@/lib/provider-endpoints/probe-scheduler"
+          );
+          startEndpointProbeScheduler();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start endpoint probe scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          const { startEndpointProbeLogCleanup } = await import(
+            "@/lib/provider-endpoints/probe-log-cleanup"
+          );
+          startEndpointProbeLogCleanup();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start endpoint probe log cleanup", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      } else {
+        logger.warn(
+          "[Instrumentation] Database unavailable: skipping endpoint probe scheduler and cleanup"
+        );
       }
 
       logger.info("Development environment ready");

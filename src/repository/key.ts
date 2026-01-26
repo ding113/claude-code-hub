@@ -471,7 +471,13 @@ export async function validateApiKeyAndGetUser(
       userRpm: users.rpmLimit,
       userDailyQuota: users.dailyLimitUsd,
       userProviderGroup: users.providerGroup,
+      userLimit5hUsd: users.limit5hUsd,
+      userLimitWeeklyUsd: users.limitWeeklyUsd,
+      userLimitMonthlyUsd: users.limitMonthlyUsd,
       userLimitTotalUsd: users.limitTotalUsd,
+      userLimitConcurrentSessions: users.limitConcurrentSessions,
+      userDailyResetMode: users.dailyResetMode,
+      userDailyResetTime: users.dailyResetTime,
       userIsEnabled: users.isEnabled,
       userExpiresAt: users.expiresAt,
       userAllowedClients: users.allowedClients,
@@ -506,7 +512,13 @@ export async function validateApiKeyAndGetUser(
     rpm: row.userRpm,
     dailyQuota: row.userDailyQuota,
     providerGroup: row.userProviderGroup,
+    limit5hUsd: row.userLimit5hUsd,
+    limitWeeklyUsd: row.userLimitWeeklyUsd,
+    limitMonthlyUsd: row.userLimitMonthlyUsd,
     limitTotalUsd: row.userLimitTotalUsd,
+    limitConcurrentSessions: row.userLimitConcurrentSessions,
+    dailyResetMode: row.userDailyResetMode,
+    dailyResetTime: row.userDailyResetTime,
     isEnabled: row.userIsEnabled,
     expiresAt: row.userExpiresAt,
     allowedClients: row.userAllowedClients,
@@ -554,6 +566,10 @@ export interface KeyStatistics {
     model: string;
     callCount: number;
     totalCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
   }>;
 }
 
@@ -606,6 +622,10 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
         model: messageRequest.model,
         callCount: sql<number>`count(*)::int`,
         totalCost: sum(messageRequest.costUsd),
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
       })
       .from(messageRequest)
       .where(
@@ -628,6 +648,10 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
         const costDecimal = toCostDecimal(row.totalCost) ?? new Decimal(0);
         return costDecimal.toDecimalPlaces(6).toNumber();
       })(),
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheCreationTokens: row.cacheCreationTokens,
+      cacheReadTokens: row.cacheReadTokens,
     }));
 
     stats.push({
@@ -747,6 +771,10 @@ export async function findKeysWithStatisticsBatch(
       model: messageRequest.model,
       callCount: sql<number>`count(*)::int`,
       totalCost: sum(messageRequest.costUsd),
+      inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
+      outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+      cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
+      cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
     })
     .from(messageRequest)
     .where(
@@ -765,7 +793,15 @@ export async function findKeysWithStatisticsBatch(
   // Group model stats by key
   const modelStatsMap = new Map<
     string,
-    Array<{ model: string; callCount: number; totalCost: number }>
+    Array<{
+      model: string;
+      callCount: number;
+      totalCost: number;
+      inputTokens: number;
+      outputTokens: number;
+      cacheCreationTokens: number;
+      cacheReadTokens: number;
+    }>
   >();
   for (const row of modelStatsRows) {
     if (row.key) {
@@ -779,6 +815,10 @@ export async function findKeysWithStatisticsBatch(
           const costDecimal = toCostDecimal(row.totalCost) ?? new Decimal(0);
           return costDecimal.toDecimalPlaces(6).toNumber();
         })(),
+        inputTokens: row.inputTokens,
+        outputTokens: row.outputTokens,
+        cacheCreationTokens: row.cacheCreationTokens,
+        cacheReadTokens: row.cacheReadTokens,
       });
     }
   }

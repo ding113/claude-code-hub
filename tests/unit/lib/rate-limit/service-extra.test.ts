@@ -73,6 +73,7 @@ vi.mock("@/repository/statistics", () => statisticsMock);
 const sessionTrackerMock = {
   getKeySessionCount: vi.fn(async () => 0),
   getProviderSessionCount: vi.fn(async () => 0),
+  getUserSessionCount: vi.fn(async () => 0),
 };
 
 vi.mock("@/lib/session-tracker", () => ({
@@ -216,6 +217,25 @@ describe("RateLimitService - other quota paths", () => {
     expect(result.allowed).toBe(true);
     expect(result.current).toBe(4);
     expect(writePipeline.zadd).toHaveBeenCalledTimes(1);
+  });
+
+  it("checkRpmLimit：user 类型应复用 checkUserRPM 逻辑", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    const readPipeline = makePipeline();
+    readPipeline.exec.mockResolvedValueOnce([
+      [null, 0],
+      [null, 1],
+    ]);
+
+    const writePipeline = makePipeline();
+    writePipeline.exec.mockResolvedValueOnce([]);
+
+    redisClientRef.pipeline.mockReturnValueOnce(readPipeline).mockReturnValueOnce(writePipeline);
+
+    const result = await RateLimitService.checkRpmLimit(1, "user", 2);
+    expect(result.allowed).toBe(true);
+    expect(result.current).toBe(2);
   });
 
   it("getCurrentCostBatch：providerIds 为空时应返回空 Map", async () => {

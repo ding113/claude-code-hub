@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ModelPrice, ModelPriceData } from "@/types/model-price";
 import type { SystemSettings } from "@/types/system-config";
+import type { Provider } from "@/types/provider";
 
 vi.mock("@/repository/model-price", () => ({
   findLatestPriceByModel: vi.fn(),
@@ -673,5 +674,107 @@ describe("ProxySession.isWarmupRequest", () => {
       },
     });
     expect(cacheControlNotObject.isWarmupRequest()).toBe(false);
+  });
+});
+
+describe("ProxySession.addProviderToChain - endpoint audit", () => {
+  it("应写入 vendorId/providerType/endpointId/endpointUrl", () => {
+    const session = createSession({ redirectedModel: null });
+    const provider = {
+      id: 1,
+      name: "p1",
+      providerVendorId: 123,
+      providerType: "claude",
+      priority: 0,
+      weight: 1,
+      costMultiplier: 1,
+      groupTag: null,
+    } as unknown as Provider;
+
+    session.addProviderToChain(provider, {
+      endpointId: 42,
+      endpointUrl: "https://api.example.com",
+    });
+
+    const chain = session.getProviderChain();
+    expect(chain).toHaveLength(1);
+    expect(chain[0]).toEqual(
+      expect.objectContaining({
+        id: 1,
+        name: "p1",
+        vendorId: 123,
+        providerType: "claude",
+        endpointId: 42,
+        endpointUrl: "https://api.example.com",
+      })
+    );
+  });
+
+  it("同一 provider 连续写入且不带 attemptNumber 时应去重", () => {
+    const session = createSession({ redirectedModel: null });
+    const provider = {
+      id: 1,
+      name: "p1",
+      providerVendorId: 123,
+      providerType: "claude",
+      priority: 0,
+      weight: 1,
+      costMultiplier: 1,
+      groupTag: null,
+    } as unknown as Provider;
+
+    session.addProviderToChain(provider, { endpointId: 1, endpointUrl: "https://a.example.com" });
+    session.addProviderToChain(provider, { endpointId: 2, endpointUrl: "https://b.example.com" });
+
+    const chain = session.getProviderChain();
+    expect(chain).toHaveLength(1);
+    expect(chain[0]).toEqual(
+      expect.objectContaining({
+        endpointId: 1,
+        endpointUrl: "https://a.example.com",
+      })
+    );
+  });
+
+  it("同一 provider 连续写入且带 attemptNumber 时应保留多条", () => {
+    const session = createSession({ redirectedModel: null });
+    const provider = {
+      id: 1,
+      name: "p1",
+      providerVendorId: 123,
+      providerType: "claude",
+      priority: 0,
+      weight: 1,
+      costMultiplier: 1,
+      groupTag: null,
+    } as unknown as Provider;
+
+    session.addProviderToChain(provider, {
+      attemptNumber: 1,
+      endpointId: 1,
+      endpointUrl: "https://a.example.com",
+    });
+    session.addProviderToChain(provider, {
+      attemptNumber: 2,
+      endpointId: 2,
+      endpointUrl: "https://b.example.com",
+    });
+
+    const chain = session.getProviderChain();
+    expect(chain).toHaveLength(2);
+    expect(chain[0]).toEqual(
+      expect.objectContaining({
+        attemptNumber: 1,
+        endpointId: 1,
+        endpointUrl: "https://a.example.com",
+      })
+    );
+    expect(chain[1]).toEqual(
+      expect.objectContaining({
+        attemptNumber: 2,
+        endpointId: 2,
+        endpointUrl: "https://b.example.com",
+      })
+    );
   });
 });

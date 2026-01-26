@@ -1,61 +1,96 @@
 import { getTranslations } from "next-intl/server";
 
+export type SettingsNavIconName =
+  | "settings"
+  | "dollar-sign"
+  | "server"
+  | "shield-alert"
+  | "alert-triangle"
+  | "filter"
+  | "smartphone"
+  | "database"
+  | "file-text"
+  | "bell"
+  | "book-open"
+  | "help-circle"
+  | "message-circle"
+  | "external-link";
+
 export interface SettingsNavItem {
   href: string;
   label: string;
-  labelKey?: string; // Add key for client-side translation fallback
-  external?: boolean; // Mark if this is an external link (bypasses i18n routing)
+  labelKey?: string;
+  iconName?: SettingsNavIconName;
+  external?: boolean;
 }
 
 // Static navigation items for navigation structure
 export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
-  { href: "/settings/config", labelKey: "nav.config", label: "配置" },
-  { href: "/settings/prices", labelKey: "nav.prices", label: "价格表" },
-  { href: "/settings/providers", labelKey: "nav.providers", label: "供应商" },
+  {
+    href: "/settings/config",
+    labelKey: "nav.config",
+    label: "Configuration",
+    iconName: "settings",
+  },
+  { href: "/settings/prices", labelKey: "nav.prices", label: "Prices", iconName: "dollar-sign" },
+  {
+    href: "/settings/providers",
+    labelKey: "nav.providers",
+    label: "Providers",
+    iconName: "server",
+  },
   {
     href: "/settings/sensitive-words",
     labelKey: "nav.sensitiveWords",
-    label: "敏感词",
+    label: "Sensitive Words",
+    iconName: "shield-alert",
   },
   {
     href: "/settings/error-rules",
     labelKey: "nav.errorRules",
-    label: "错误规则",
+    label: "Error Rules",
+    iconName: "alert-triangle",
   },
   {
     href: "/settings/request-filters",
     labelKey: "nav.requestFilters",
-    label: "请求过滤",
+    label: "Request Filters",
+    iconName: "filter",
   },
   {
     href: "/settings/client-versions",
     labelKey: "nav.clientVersions",
-    label: "客户端升级提醒",
+    label: "Client Versions",
+    iconName: "smartphone",
   },
-  { href: "/settings/data", labelKey: "nav.data", label: "数据管理" },
-  { href: "/settings/logs", labelKey: "nav.logs", label: "日志" },
+  { href: "/settings/data", labelKey: "nav.data", label: "Data", iconName: "database" },
+  { href: "/settings/logs", labelKey: "nav.logs", label: "Logs", iconName: "file-text" },
   {
     href: "/settings/notifications",
     labelKey: "nav.notifications",
-    label: "消息推送",
+    label: "Notifications",
+    iconName: "bell",
   },
   {
     href: "/api/actions/scalar",
     labelKey: "nav.apiDocs",
-    label: "API 文档",
+    label: "API Docs",
     external: true,
+    iconName: "book-open",
   },
   {
     href: "https://claude-code-hub.app/",
     labelKey: "nav.docs",
-    label: "使用文档",
+    label: "Documentation",
     external: true,
+    iconName: "help-circle",
   },
   {
     href: "https://github.com/ding113/claude-code-hub/issues",
     labelKey: "nav.feedback",
-    label: "反馈问题",
+    label: "Feedback",
     external: true,
+    iconName: "message-circle",
   },
 ];
 

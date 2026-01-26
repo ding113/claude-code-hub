@@ -376,4 +376,68 @@ describe("ProxyForwarder - thinking signature rectifier", () => {
     expect(special).not.toBeNull();
     expect(JSON.stringify(special)).toContain("thinking_signature_rectifier");
   });
+
+  test("命中 signature Extra inputs not permitted 错误时应整流并对同供应商重试一次", async () => {
+    const session = createSession();
+    session.setProvider(createAnthropicProvider());
+
+    // 模拟包含 signature 字段的 tool_use content block
+    const msg = session.request.message as any;
+    msg.messages = [
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "hello" },
+          {
+            type: "tool_use",
+            id: "toolu_1",
+            name: "WebSearch",
+            input: { query: "q" },
+            signature: "sig_tool_should_remove",
+          },
+        ],
+      },
+    ];
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    doForward.mockImplementationOnce(async () => {
+      throw new ProxyError("content.1.tool_use.signature: Extra inputs are not permitted", 400, {
+        body: "",
+        providerId: 1,
+        providerName: "anthropic-1",
+      });
+    });
+
+    doForward.mockImplementationOnce(async (s: ProxySession) => {
+      const bodyMsg = s.request.message as any;
+      const blocks = bodyMsg.messages[0].content as any[];
+
+      // 验证 signature 字段已被移除
+      expect(blocks.some((b: any) => "signature" in b)).toBe(false);
+
+      const body = JSON.stringify({
+        type: "message",
+        content: [{ type: "text", text: "ok" }],
+      });
+
+      return new Response(body, {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(body.length),
+        },
+      });
+    });
+
+    const response = await ProxyForwarder.send(session);
+
+    expect(response.status).toBe(200);
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(mocks.updateMessageRequestDetails).toHaveBeenCalledTimes(1);
+
+    const special = session.getSpecialSettings();
+    expect(special).not.toBeNull();
+    expect(JSON.stringify(special)).toContain("thinking_signature_rectifier");
+  });
 });
