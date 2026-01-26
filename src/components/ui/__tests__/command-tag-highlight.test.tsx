@@ -106,33 +106,29 @@ describe("TagInput suggestion highlight classes", () => {
       await new Promise((r) => setTimeout(r, 50));
     });
 
-    // Find suggestion buttons in the portal
-    const suggestionButtons = document.querySelectorAll("button.w-full.px-3.py-2");
+    // Find suggestion buttons in the portal (horizontal flow layout)
+    const suggestionButtons = document.querySelectorAll("button.inline-flex");
 
     // Verify suggestions are rendered
     expect(suggestionButtons.length).toBeGreaterThan(0);
 
     const className = suggestionButtons[0].getAttribute("class") ?? "";
 
-    // Should use primary-based highlight classes for hover state
-    expect(className).toContain("hover:bg-primary");
-    expect(className).toContain("hover:text-primary-foreground");
-
-    // Should NOT use accent-based highlight classes
-    expect(className).not.toContain("hover:bg-accent");
-    expect(className).not.toContain("hover:text-accent-foreground");
+    // Unselected suggestions use accent-based hover classes in horizontal layout
+    expect(className).toContain("hover:bg-accent");
 
     unmount();
   });
 
-  test("TagInput highlighted suggestion should use primary-based background", async () => {
+  test("TagInput selected suggestion should use primary-based background", async () => {
     const suggestions = [
       { value: "tag1", label: "Tag 1" },
       { value: "tag2", label: "Tag 2" },
     ];
 
+    // Pre-select tag1 to verify selected state styling
     const { container, unmount } = render(
-      <TagInput value={[]} onChange={() => {}} suggestions={suggestions} />
+      <TagInput value={["tag1"]} onChange={() => {}} suggestions={suggestions} />
     );
 
     // Focus the input to show suggestions
@@ -145,18 +141,23 @@ describe("TagInput suggestion highlight classes", () => {
       await new Promise((r) => setTimeout(r, 50));
     });
 
-    // Find suggestion buttons in the portal
-    const suggestionButtons = document.querySelectorAll("button.w-full.px-3.py-2");
+    // Find suggestion buttons in the portal (horizontal flow layout)
+    const suggestionButtons = document.querySelectorAll("button.inline-flex");
 
     // Verify suggestions are rendered
     expect(suggestionButtons.length).toBeGreaterThan(0);
 
-    const className = suggestionButtons[0].getAttribute("class") ?? "";
+    // Find the selected tag button (tag1)
+    const selectedButton = Array.from(suggestionButtons).find(
+      (btn) => btn.textContent === "Tag 1"
+    );
+    expect(selectedButton).toBeDefined();
 
-    // The highlighted state class should use primary (when index === highlightedIndex)
-    // This is applied conditionally, so we check the hover classes which are always present
-    expect(className).toContain("hover:bg-primary");
-    expect(className).toContain("hover:text-primary-foreground");
+    const className = selectedButton?.getAttribute("class") ?? "";
+
+    // Selected suggestions use primary-based styling
+    expect(className).toContain("bg-primary");
+    expect(className).toContain("text-primary-foreground");
 
     unmount();
   });
