@@ -148,9 +148,7 @@ describe("TagInput suggestion highlight classes", () => {
     expect(suggestionButtons.length).toBeGreaterThan(0);
 
     // Find the selected tag button (tag1)
-    const selectedButton = Array.from(suggestionButtons).find(
-      (btn) => btn.textContent === "Tag 1"
-    );
+    const selectedButton = Array.from(suggestionButtons).find((btn) => btn.textContent === "Tag 1");
     expect(selectedButton).toBeDefined();
 
     const className = selectedButton?.getAttribute("class") ?? "";
