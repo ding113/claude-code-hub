@@ -1,13 +1,23 @@
 {
-  "status": {
-    "all": "全部状态",
-    "active": "已启用",
-    "inactive": "已禁用"
-  },
+  "apply": "应用筛选",
+  "circuitBroken": "熔断",
   "groups": {
-    "label": "分组:",
     "all": "全部",
-    "default": "default"
+    "default": "default",
+    "label": "分组:"
   },
-  "circuitBroken": "熔断"
+  "reset": "重置",
+  "sort": {
+    "label": "排序:"
+  },
+  "status": {
+    "active": "已启用",
+    "all": "全部状态",
+    "inactive": "已禁用",
+    "label": "状态:"
+  },
+  "title": "筛选选项",
+  "type": {
+    "label": "类型:"
+  }
 }

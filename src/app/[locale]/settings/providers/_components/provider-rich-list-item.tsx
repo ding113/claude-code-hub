@@ -7,6 +7,7 @@ import {
   Edit,
   Globe,
   Key,
+  MoreVertical,
   RotateCcw,
   Trash,
   XCircle,
@@ -43,9 +44,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
@@ -101,6 +111,7 @@ export function ProviderRichListItem({
 }: ProviderRichListItemProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
   const [showKeyDialog, setShowKeyDialog] = useState(false);
@@ -424,7 +435,228 @@ export function ProviderRichListItem({
 
   return (
     <>
-      <div className="flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
+      {/* Mobile Layout */}
+      <div className="flex flex-col md:hidden py-3 px-4 border-b hover:bg-muted/50 transition-colors">
+        {/* Layer 1: Identity */}
+        <div className="flex items-center gap-2">
+          {/* Multi-select checkbox */}
+          {isMultiSelectMode && (
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={(checked) => onSelectChange?.(Boolean(checked))}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Select ${provider.name}`}
+              className="flex-shrink-0"
+            />
+          )}
+
+          {/* Status indicator */}
+          {provider.isEnabled ? (
+            <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+          ) : (
+            <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+          )}
+
+          {/* Type icon */}
+          <div
+            className={`flex items-center justify-center w-6 h-6 rounded ${typeConfig.bgColor} flex-shrink-0`}
+            title={`${typeLabel} \u00b7 ${typeDescription}`}
+            aria-label={typeLabel}
+          >
+            <TypeIcon className="h-3.5 w-3.5" aria-hidden />
+          </div>
+
+          {/* Provider name */}
+          <span className="font-semibold truncate flex-1">{provider.name}</span>
+
+          {/* Circuit breaker warning */}
+          {healthStatus && healthStatus.circuitState === "open" && (
+            <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+          )}
+        </div>
+
+        {/* URL */}
+        <div className="text-sm text-muted-foreground truncate mt-1">{provider.url}</div>
+
+        {/* Group Tags */}
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          {canEdit ? (
+            <GroupTagEditPopover
+              groupTag={provider.groupTag}
+              availableGroups={availableGroups}
+              onSave={handleSaveGroupTag}
+            />
+          ) : groupTags.length > 0 ? (
+            groupTags.map((tag, index) => {
+              const bgColor = getGroupColor(tag);
+              return (
+                <Badge
+                  key={`${tag}-${index}`}
+                  className="text-xs"
+                  style={{
+                    backgroundColor: bgColor,
+                    color: getContrastTextColor(bgColor),
+                  }}
+                >
+                  {tag}
+                </Badge>
+              );
+            })
+          ) : (
+            <Badge variant="outline" className="text-xs">
+              {PROVIDER_GROUP.DEFAULT}
+            </Badge>
+          )}
+        </div>
+
+        {/* Layer 2: Core Metrics - Tappable cards */}
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {/* Priority */}
+          <div className="flex flex-col items-center justify-center min-h-[44px] rounded-lg bg-muted/50 p-2">
+            <span className="text-[10px] text-muted-foreground">{tList("priority")}</span>
+            <span className="font-medium text-sm">
+              {canEdit ? (
+                hasMultipleGroups ? (
+                  <GroupPriorityPopover
+                    priority={provider.priority}
+                    groupPriorities={provider.groupPriorities}
+                    groupTag={provider.groupTag}
+                    onSave={handleSaveGroupPriority}
+                    displayPriority={displayPriority}
+                  />
+                ) : (
+                  <InlineEditPopover
+                    value={provider.priority}
+                    label={tInline("priorityLabel")}
+                    type="integer"
+                    validator={validatePriority}
+                    onSave={handleSavePriority}
+                  />
+                )
+              ) : (
+                displayPriority
+              )}
+            </span>
+          </div>
+
+          {/* Weight */}
+          <div className="flex flex-col items-center justify-center min-h-[44px] rounded-lg bg-muted/50 p-2">
+            <span className="text-[10px] text-muted-foreground">{tList("weight")}</span>
+            <span className="font-medium text-sm">
+              {canEdit ? (
+                <InlineEditPopover
+                  value={provider.weight}
+                  label={tInline("weightLabel")}
+                  type="integer"
+                  validator={validateWeight}
+                  onSave={handleSaveWeight}
+                />
+              ) : (
+                provider.weight
+              )}
+            </span>
+          </div>
+
+          {/* Cost Multiplier */}
+          <div className="flex flex-col items-center justify-center min-h-[44px] rounded-lg bg-muted/50 p-2">
+            <span className="text-[10px] text-muted-foreground">{tList("costMultiplier")}</span>
+            <span className="font-medium text-sm">
+              {canEdit ? (
+                <InlineEditPopover
+                  value={provider.costMultiplier}
+                  label={tInline("costMultiplierLabel")}
+                  validator={validateCostMultiplier}
+                  onSave={handleSaveCostMultiplier}
+                  suffix="x"
+                  type="number"
+                />
+              ) : (
+                `${provider.costMultiplier}x`
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Layer 3: Monitoring + Actions */}
+        <div className="flex items-center justify-between mt-3">
+          {/* Today usage */}
+          <div className="text-sm text-muted-foreground">
+            {statisticsLoading ? (
+              <Skeleton className="h-4 w-24" />
+            ) : (
+              <>
+                <span>
+                  {tList("todayUsageCount", {
+                    count: statistics?.todayCalls ?? provider.todayCallCount ?? 0,
+                  })}
+                </span>
+                <span className="ml-2 font-mono">
+                  {formatCurrency(
+                    parseFloat(statistics?.todayCost ?? provider.todayTotalCostUsd ?? "0"),
+                    currencyCode
+                  )}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            {canEdit && (
+              <Switch
+                checked={provider.isEnabled}
+                onCheckedChange={handleToggle}
+                disabled={togglePending}
+                className="data-[state=checked]:bg-green-500"
+              />
+            )}
+
+            {canEdit && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="ghost" className="h-9 w-9">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleEdit}>
+                    <Edit className="h-4 w-4 mr-2" />
+                    {tList("edit")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleClone}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    {tList("clone")}
+                  </DropdownMenuItem>
+                  {healthStatus && healthStatus.circuitState === "open" && (
+                    <DropdownMenuItem onClick={handleResetCircuit} disabled={resetPending}>
+                      <RotateCcw className="h-4 w-4 mr-2 text-orange-600" />
+                      {tList("resetCircuit")}
+                    </DropdownMenuItem>
+                  )}
+                  {provider.limitTotalUsd !== null && provider.limitTotalUsd > 0 && (
+                    <DropdownMenuItem onClick={handleResetTotalUsage} disabled={resetUsagePending}>
+                      <RotateCcw className="h-4 w-4 mr-2 text-blue-600" />
+                      {tList("resetUsageTitle")}
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={handleDelete}
+                    disabled={deletePending}
+                  >
+                    <Trash className="h-4 w-4 mr-2" />
+                    {tList("delete")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Layout */}
+      <div className="hidden md:flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
         {/* 多选模式下显示 checkbox */}
         {isMultiSelectMode && (
           <Checkbox
@@ -773,43 +1005,93 @@ export function ProviderRichListItem({
         </div>
       </div>
 
-      {/* 编辑 Dialog */}
-      <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
-          <FormErrorBoundary>
-            <ProviderForm
-              mode="edit"
-              provider={provider}
-              onSuccess={() => {
-                setOpenEdit(false);
-                queryClient.invalidateQueries({ queryKey: ["providers"] });
-                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                router.refresh();
-              }}
-              enableMultiProviderTypes={enableMultiProviderTypes}
-            />
-          </FormErrorBoundary>
-        </DialogContent>
-      </Dialog>
+      {/* Edit Modal - Sheet on mobile, Dialog on desktop */}
+      {isMobile ? (
+        <Sheet open={openEdit} onOpenChange={setOpenEdit}>
+          <SheetContent side="bottom" className="h-[90vh] overflow-hidden p-0">
+            <SheetHeader className="px-6 py-4 border-b">
+              <SheetTitle>{tList("edit")}</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-hidden">
+              <FormErrorBoundary>
+                <ProviderForm
+                  mode="edit"
+                  provider={provider}
+                  onSuccess={() => {
+                    setOpenEdit(false);
+                    queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                    router.refresh();
+                  }}
+                  enableMultiProviderTypes={enableMultiProviderTypes}
+                />
+              </FormErrorBoundary>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={openEdit} onOpenChange={setOpenEdit}>
+          <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+            <FormErrorBoundary>
+              <ProviderForm
+                mode="edit"
+                provider={provider}
+                onSuccess={() => {
+                  setOpenEdit(false);
+                  queryClient.invalidateQueries({ queryKey: ["providers"] });
+                  queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                  router.refresh();
+                }}
+                enableMultiProviderTypes={enableMultiProviderTypes}
+              />
+            </FormErrorBoundary>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      {/* 克隆 Dialog */}
-      <Dialog open={openClone} onOpenChange={setOpenClone}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
-          <FormErrorBoundary>
-            <ProviderForm
-              mode="create"
-              cloneProvider={provider}
-              onSuccess={() => {
-                setOpenClone(false);
-                queryClient.invalidateQueries({ queryKey: ["providers"] });
-                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                router.refresh();
-              }}
-              enableMultiProviderTypes={enableMultiProviderTypes}
-            />
-          </FormErrorBoundary>
-        </DialogContent>
-      </Dialog>
+      {/* Clone Modal - Sheet on mobile, Dialog on desktop */}
+      {isMobile ? (
+        <Sheet open={openClone} onOpenChange={setOpenClone}>
+          <SheetContent side="bottom" className="h-[90vh] overflow-hidden p-0">
+            <SheetHeader className="px-6 py-4 border-b">
+              <SheetTitle>{tList("clone")}</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-hidden">
+              <FormErrorBoundary>
+                <ProviderForm
+                  mode="create"
+                  cloneProvider={provider}
+                  onSuccess={() => {
+                    setOpenClone(false);
+                    queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                    router.refresh();
+                  }}
+                  enableMultiProviderTypes={enableMultiProviderTypes}
+                />
+              </FormErrorBoundary>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={openClone} onOpenChange={setOpenClone}>
+          <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+            <FormErrorBoundary>
+              <ProviderForm
+                mode="create"
+                cloneProvider={provider}
+                onSuccess={() => {
+                  setOpenClone(false);
+                  queryClient.invalidateQueries({ queryKey: ["providers"] });
+                  queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                  router.refresh();
+                }}
+                enableMultiProviderTypes={enableMultiProviderTypes}
+              />
+            </FormErrorBoundary>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* API Key 展示 Dialog */}
       <Dialog open={showKeyDialog} onOpenChange={handleCloseDialog}>

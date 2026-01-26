@@ -1,13 +1,23 @@
 {
+  "apply": "Apply Filters",
   "circuitBroken": "Circuit Broken",
   "groups": {
     "all": "All",
     "default": "default",
     "label": "Groups:"
   },
+  "reset": "Reset",
+  "sort": {
+    "label": "Sort By:"
+  },
   "status": {
     "active": "Active",
     "all": "Any status",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "label": "Status:"
+  },
+  "title": "Filter Options",
+  "type": {
+    "label": "Type:"
   }
 }

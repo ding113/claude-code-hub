@@ -1,13 +1,23 @@
 {
+  "apply": "套用篩選",
   "circuitBroken": "熔斷",
   "groups": {
     "all": "所有",
     "default": "default",
     "label": "分組:"
   },
+  "reset": "重置",
+  "sort": {
+    "label": "排序:"
+  },
   "status": {
     "active": "已啟用",
     "all": "所有狀態",
-    "inactive": "已停用"
+    "inactive": "已停用",
+    "label": "狀態:"
+  },
+  "title": "篩選選項",
+  "type": {
+    "label": "類型:"
   }
 }

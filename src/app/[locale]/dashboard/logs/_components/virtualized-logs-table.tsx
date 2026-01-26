@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVirtualizer } from "@/hooks/use-virtualizer";
+import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/utils/performance-formatter";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
+import { MobileLogsList } from "./mobile-logs-list";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
 import { ProviderChainPopover } from "./provider-chain-popover";
 
@@ -79,6 +81,7 @@ export function VirtualizedLogsTable({
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const isMobile = useIsMobile();
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
@@ -189,6 +192,22 @@ export function VirtualizedLogsTable({
 
   if (allLogs.length === 0) {
     return <div className="text-center py-8 text-muted-foreground">{t("logs.table.noData")}</div>;
+  }
+
+  // Render mobile card layout on small screens
+  if (isMobile) {
+    return (
+      <MobileLogsList
+        filters={filters}
+        currencyCode={currencyCode}
+        billingModelSource={billingModelSource}
+        autoRefreshEnabled={autoRefreshEnabled}
+        autoRefreshIntervalMs={autoRefreshIntervalMs}
+        hideStatusBar={hideStatusBar}
+        hideScrollToTop={hideScrollToTop}
+        bodyClassName={bodyClassName}
+      />
+    );
   }
 
   return (

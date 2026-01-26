@@ -1,4 +1,7 @@
 {
+  "clone": "克隆",
+  "delete": "删除",
+  "edit": "编辑",
   "priority": "优先级",
   "weight": "权重",
   "costMultiplier": "成本倍数",
@@ -22,6 +25,7 @@
   "keyCopied": "密钥已复制到剪贴板",
   "copyFailed": "复制失败",
   "clipboardUnavailable": "当前环境无法访问剪贴板，请手动选择复制。",
+  "resetCircuit": "重置熔断",
   "resetCircuitSuccess": "熔断器已重置",
   "resetCircuitSuccessDesc": "供应商 \"{name}\" 的熔断状态已解除",
   "resetCircuitFailed": "重置熔断器失败",

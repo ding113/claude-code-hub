@@ -1,7 +1,8 @@
 "use client";
-import { AlertTriangle, LayoutGrid, LayoutList, Loader2, Search } from "lucide-react";
+import { AlertTriangle, Filter, LayoutGrid, LayoutList, Loader2, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
@@ -78,6 +80,9 @@ export function ProviderManager({
   const [groupFilter, setGroupFilter] = useState<string[]>([]);
   const [circuitBrokenFilter, setCircuitBrokenFilter] = useState(false);
 
+  // Mobile filter sheet state
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+
   // Batch edit state
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedProviderIds, setSelectedProviderIds] = useState<Set<number>>(new Set());
@@ -95,6 +100,28 @@ export function ProviderManager({
       setCircuitBrokenFilter(false);
     }
   }, [circuitBrokenCount, circuitBrokenFilter]);
+
+  // Count active filters for mobile badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (viewMode !== "list") count++;
+    if (typeFilter !== "all") count++;
+    if (statusFilter !== "all") count++;
+    if (sortBy !== "priority") count++;
+    if (groupFilter.length > 0) count++;
+    if (circuitBrokenFilter) count++;
+    return count;
+  }, [viewMode, typeFilter, statusFilter, sortBy, groupFilter.length, circuitBrokenFilter]);
+
+  // Reset all filters
+  const handleResetFilters = useCallback(() => {
+    setViewMode("list");
+    setTypeFilter("all");
+    setStatusFilter("all");
+    setSortBy("priority");
+    setGroupFilter([]);
+    setCircuitBrokenFilter(false);
+  }, []);
 
   // Extract unique groups from all providers
   const allGroups = useMemo(() => {
@@ -286,7 +313,206 @@ export function ProviderManager({
       </div>
       {/* 筛选条件 */}
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+        {/* Mobile Filter Bar */}
+        <div className="flex md:hidden items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder={t("placeholder")}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9"
+              disabled={loading}
+            />
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="relative h-9 px-3"
+            onClick={() => setMobileFilterOpen(true)}
+            disabled={loading}
+          >
+            <Filter className="h-4 w-4" />
+            {activeFilterCount > 0 && (
+              <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-[10px]">
+                {activeFilterCount}
+              </Badge>
+            )}
+          </Button>
+        </div>
+
+        {/* Mobile Group Filter - Quick Access */}
+        {allGroups.length > 0 && (
+          <div className="flex md:hidden items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+            <Button
+              variant={groupFilter.length === 0 ? "default" : "outline"}
+              size="sm"
+              onClick={() => setGroupFilter([])}
+              disabled={loading}
+              className="h-8 shrink-0"
+            >
+              {tFilter("groups.all")}
+            </Button>
+            {allGroups.map((group) => (
+              <Button
+                key={group}
+                variant={groupFilter.includes(group) ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setGroupFilter((prev) =>
+                    prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]
+                  );
+                }}
+                disabled={loading}
+                className="h-8 shrink-0"
+              >
+                {group}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        {/* Mobile Filter Sheet */}
+        <Sheet open={mobileFilterOpen} onOpenChange={setMobileFilterOpen}>
+          <SheetContent side="bottom" className="h-[70vh] overflow-y-auto">
+            <SheetHeader className="pb-4">
+              <SheetTitle>{tFilter("title")}</SheetTitle>
+            </SheetHeader>
+            <div className="space-y-6">
+              {/* View Mode */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{tStrings("viewMode")}</Label>
+                <div className="flex items-center border rounded-md bg-muted/50 p-1 w-fit">
+                  <Button
+                    variant={viewMode === "list" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 px-3 gap-2"
+                    onClick={() => setViewMode("list")}
+                  >
+                    <LayoutList className="h-4 w-4" />
+                    {tStrings("viewModeList")}
+                  </Button>
+                  <Button
+                    variant={viewMode === "vendor" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-8 px-3 gap-2"
+                    onClick={() => setViewMode("vendor")}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                    {tStrings("viewModeVendor")}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Type Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{tFilter("type.label")}</Label>
+                <ProviderTypeFilter
+                  value={typeFilter}
+                  onChange={setTypeFilter}
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Status Filter */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{tFilter("status.label")}</Label>
+                <Select
+                  value={statusFilter}
+                  onValueChange={(value) => setStatusFilter(value as "all" | "active" | "inactive")}
+                  disabled={loading}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{tFilter("status.all")}</SelectItem>
+                    <SelectItem value="active">{tFilter("status.active")}</SelectItem>
+                    <SelectItem value="inactive">{tFilter("status.inactive")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sort */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{tFilter("sort.label")}</Label>
+                <ProviderSortDropdown value={sortBy} onChange={setSortBy} disabled={loading} />
+              </div>
+
+              {/* Group Filter */}
+              {allGroups.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">{tFilter("groups.label")}</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant={groupFilter.length === 0 ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setGroupFilter([])}
+                      disabled={loading}
+                    >
+                      {tFilter("groups.all")}
+                    </Button>
+                    {allGroups.map((group) => (
+                      <Button
+                        key={group}
+                        variant={groupFilter.includes(group) ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => {
+                          setGroupFilter((prev) =>
+                            prev.includes(group)
+                              ? prev.filter((g) => g !== group)
+                              : [...prev, group]
+                          );
+                        }}
+                        disabled={loading}
+                      >
+                        {group}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Circuit Breaker Filter */}
+              {circuitBrokenCount > 0 && (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle
+                      className={`h-4 w-4 ${circuitBrokenFilter ? "text-destructive" : "text-muted-foreground"}`}
+                    />
+                    <Label
+                      htmlFor="circuit-broken-filter-mobile"
+                      className={`text-sm cursor-pointer select-none ${circuitBrokenFilter ? "text-destructive font-medium" : "text-muted-foreground"}`}
+                    >
+                      {tFilter("circuitBroken")} ({circuitBrokenCount})
+                    </Label>
+                  </div>
+                  <Switch
+                    id="circuit-broken-filter-mobile"
+                    checked={circuitBrokenFilter}
+                    onCheckedChange={setCircuitBrokenFilter}
+                    disabled={loading}
+                  />
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 pt-4 border-t">
+                <Button variant="outline" className="flex-1" onClick={handleResetFilters}>
+                  <X className="h-4 w-4 mr-2" />
+                  {tFilter("reset")}
+                </Button>
+                <Button className="flex-1" onClick={() => setMobileFilterOpen(false)}>
+                  {tFilter("apply")}
+                </Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        {/* Desktop Filter Bar */}
+        <div className="hidden md:flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           {/* View Mode Toggle */}
           <div className="flex items-center border rounded-md bg-muted/50 p-1">
             <Button
@@ -343,9 +569,9 @@ export function ProviderManager({
           </div>
         </div>
 
-        {/* Group filter */}
+        {/* Group filter (hidden on mobile - shown in Sheet) */}
         {allGroups.length > 0 && (
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="hidden md:flex flex-wrap gap-2 items-center">
             <span className="text-sm text-muted-foreground">{tFilter("groups.label")}</span>
             <Button
               variant={groupFilter.length === 0 ? "default" : "outline"}
@@ -374,7 +600,7 @@ export function ProviderManager({
             ))}
           </div>
         )}
-        {/* 搜索结果提示 + Circuit Breaker filter */}
+        {/* Search results + Circuit Breaker filter (hidden circuit toggle on mobile - shown in Sheet) */}
         <div className="flex items-center justify-between">
           {debouncedSearchTerm ? (
             <p className="text-sm text-muted-foreground">
@@ -392,9 +618,9 @@ export function ProviderManager({
             </div>
           )}
 
-          {/* Circuit Breaker toggle - only show if there are broken providers */}
+          {/* Circuit Breaker toggle - only show if there are broken providers (desktop only) */}
           {circuitBrokenCount > 0 && (
-            <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
               <AlertTriangle
                 className={`h-4 w-4 ${circuitBrokenFilter ? "text-destructive" : "text-muted-foreground"}`}
               />
