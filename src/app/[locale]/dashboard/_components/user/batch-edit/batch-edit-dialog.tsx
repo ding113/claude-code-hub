@@ -92,7 +92,7 @@ const INITIAL_KEY_STATE: BatchKeySectionState = {
   limitMonthlyUsdEnabled: false,
   limitMonthlyUsd: "",
   canLoginWebUiEnabled: false,
-  canLoginWebUi: true,
+  canLoginWebUi: false, // Default: independent page enabled (switch ON with inverted logic)
   isEnabledEnabled: false,
   isEnabled: true,
 };

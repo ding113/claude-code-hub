@@ -485,8 +485,8 @@ export function TagInput({
                 key={suggestion.value}
                 type="button"
                 className={cn(
-                  "w-full px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground cursor-pointer",
-                  index === highlightedIndex && "bg-accent text-accent-foreground"
+                  "w-full px-3 py-2 text-left text-sm hover:bg-primary hover:text-primary-foreground cursor-pointer",
+                  index === highlightedIndex && "bg-primary text-primary-foreground"
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();

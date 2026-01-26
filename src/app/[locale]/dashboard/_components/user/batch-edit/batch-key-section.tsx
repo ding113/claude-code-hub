@@ -141,6 +141,10 @@ export function BatchKeySection({
           />
         </FieldCard>
 
+        {/* Balance Query Page toggle uses inverted logic by design:
+            - canLoginWebUi=true means user accesses full WebUI (switch OFF)
+            - canLoginWebUi=false means user uses independent balance page (switch ON)
+            The switch represents "enable independent page" which is !canLoginWebUi */}
         <FieldCard
           title={translations.fields.canLoginWebUi}
           enabled={state.canLoginWebUiEnabled}
@@ -150,8 +154,8 @@ export function BatchKeySection({
           <div className="flex items-center justify-between gap-3">
             <span className="text-sm text-muted-foreground">{translations.targetValue}</span>
             <Switch
-              checked={state.canLoginWebUi}
-              onCheckedChange={(checked) => onChange({ canLoginWebUi: checked })}
+              checked={!state.canLoginWebUi}
+              onCheckedChange={(checked) => onChange({ canLoginWebUi: !checked })}
               disabled={!state.canLoginWebUiEnabled}
               aria-label={`${translations.targetValue}: ${translations.fields.canLoginWebUi}`}
             />

@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { CircularProgress } from "@/components/ui/circular-progress";
 import { cn, formatTokenAmount } from "@/lib/utils";
-import { calculateOutputRate, type PerformanceTabProps } from "../types";
+import { calculateOutputRate, type PerformanceTabProps, shouldHideOutputRate } from "../types";
 import { LatencyBreakdownBar } from "./LatencyBreakdownBar";
 
 /**
@@ -98,6 +98,7 @@ export function PerformanceTab({ durationMs, ttfbMs, outputTokens }: Performance
     normalizedDurationMs,
     normalizedTtfbMs
   );
+  const hideRate = shouldHideOutputRate(outputRate, normalizedDurationMs, normalizedTtfbMs);
   const generationMs =
     normalizedDurationMs !== null && normalizedTtfbMs !== null
       ? normalizedDurationMs - normalizedTtfbMs
@@ -109,7 +110,7 @@ export function PerformanceTab({ durationMs, ttfbMs, outputTokens }: Performance
   const hasData =
     normalizedDurationMs !== null ||
     normalizedTtfbMs !== null ||
-    outputRate !== null ||
+    (outputRate !== null && !hideRate) ||
     normalizedOutputTokens !== null;
 
   if (!hasData) {
@@ -164,7 +165,7 @@ export function PerformanceTab({ durationMs, ttfbMs, outputTokens }: Performance
         )}
 
         {/* Output Rate Gauge */}
-        {outputRate !== null && (
+        {outputRate !== null && !hideRate && (
           <div
             className={cn(
               "flex-1 flex items-center gap-4 p-4 rounded-lg border",
@@ -253,7 +254,7 @@ export function PerformanceTab({ durationMs, ttfbMs, outputTokens }: Performance
               </span>
             </div>
           )}
-          {outputRate !== null && (
+          {outputRate !== null && !hideRate && (
             <div className="flex justify-between items-center px-4 py-3">
               <span className="text-sm text-muted-foreground">{t("performance.outputRate")}</span>
               <span className="text-sm font-mono font-medium">{outputRate.toFixed(1)} tok/s</span>

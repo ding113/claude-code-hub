@@ -24,6 +24,7 @@ import {
   isInProgressStatus,
   isSuccessStatus,
   type SummaryTabProps,
+  shouldHideOutputRate,
 } from "../types";
 
 export function SummaryTab({
@@ -58,6 +59,7 @@ export function SummaryTab({
   const isSuccess = isSuccessStatus(statusCode);
   const isInProgress = isInProgressStatus(statusCode);
   const outputRate = calculateOutputRate(outputTokens, durationMs, ttfbMs);
+  const hideRate = shouldHideOutputRate(outputRate, durationMs, ttfbMs);
   const totalTokens = (inputTokens ?? 0) + (outputTokens ?? 0);
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
   const specialSettingsContent =
@@ -111,7 +113,7 @@ export function SummaryTab({
       </div>
 
       {/* Key Metrics Grid */}
-      {(costUsd || totalTokens > 0 || durationMs || outputRate) && (
+      {(costUsd || totalTokens > 0 || durationMs || (outputRate && !hideRate)) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold text-muted-foreground">{t("summary.keyMetrics")}</h4>
           <div className="grid grid-cols-2 gap-3">
@@ -163,7 +165,7 @@ export function SummaryTab({
             )}
 
             {/* Output Rate */}
-            {outputRate !== null && (
+            {outputRate !== null && !hideRate && (
               <div className="flex items-center gap-3 p-3 rounded-lg border bg-card">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
                   <Zap className="h-4 w-4 text-amber-600" />

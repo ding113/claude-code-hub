@@ -19,6 +19,7 @@ import {
   calculateOutputRate,
   formatDuration,
   NON_BILLING_ENDPOINT,
+  shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
@@ -626,11 +627,13 @@ export function VirtualizedLogsTable({
                             log.durationMs,
                             log.ttfbMs
                           );
+                          const hideRate = shouldHideOutputRate(rate, log.durationMs, log.ttfbMs);
                           const ttfbLine =
                             log.ttfbMs != null && log.ttfbMs > 0
                               ? `TTFB ${formatDuration(log.ttfbMs)}`
                               : null;
-                          const rateLine = rate !== null ? `${rate.toFixed(0)} tok/s` : null;
+                          const rateLine =
+                            rate !== null && !hideRate ? `${rate.toFixed(0)} tok/s` : null;
 
                           return (
                             <TooltipProvider>
@@ -661,7 +664,7 @@ export function VirtualizedLogsTable({
                                       {formatDuration(log.ttfbMs)}
                                     </div>
                                   )}
-                                  {rate !== null && (
+                                  {rate !== null && !hideRate && (
                                     <div>
                                       {t("logs.details.performance.outputRate")}: {rate.toFixed(1)}{" "}
                                       tok/s

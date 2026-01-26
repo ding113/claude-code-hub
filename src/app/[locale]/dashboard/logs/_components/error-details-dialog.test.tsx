@@ -110,9 +110,59 @@ vi.mock("@/components/ui/tabs", () => {
   };
 });
 
-vi.mock("@/lib/utils/provider-chain-formatter", () => ({
-  formatProviderTimeline: () => ({ timeline: "timeline", totalDuration: 123 }),
-}));
+// Mock StepCard to always render details (bypasses useState expansion)
+vi.mock(
+  "@/app/[locale]/dashboard/logs/_components/error-details-dialog/components/StepCard",
+  () => {
+    type StepStatus =
+      | "success"
+      | "failure"
+      | "warning"
+      | "pending"
+      | "skipped"
+      | "session_reuse";
+
+    interface StepCardProps {
+      step: number;
+      icon: React.ComponentType<{ className?: string }>;
+      title: string;
+      subtitle?: string;
+      status: StepStatus;
+      timestamp?: number;
+      baseTimestamp?: number;
+      details?: React.ReactNode;
+      isLast?: boolean;
+      className?: string;
+    }
+
+    function StepCard({
+      step,
+      icon: Icon,
+      title,
+      subtitle,
+      details,
+    }: StepCardProps) {
+      return (
+        <div data-slot="step-card" data-step={step}>
+          <Icon className="step-icon" />
+          <span data-slot="step-title">{title}</span>
+          {subtitle && <span data-slot="step-subtitle">{subtitle}</span>}
+          {details && <div data-slot="step-details">{details}</div>}
+        </div>
+      );
+    }
+
+    return { StepCard };
+  }
+);
+
+vi.mock("@/lib/utils/provider-chain-formatter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils/provider-chain-formatter")>();
+  return {
+    ...actual,
+    formatProviderTimeline: () => ({ timeline: "timeline", totalDuration: 123 }),
+  };
+});
 
 import { ErrorDetailsDialog } from "./error-details-dialog";
 
@@ -249,6 +299,7 @@ const messages = {
       system_error: "System error",
       client_error_non_retryable: "Client error",
       concurrent_limit_failed: "Concurrent limit",
+      initial_selection: "Initial selection",
     },
     filterReasons: {
       rate_limited: "Rate limited",
@@ -258,10 +309,14 @@ const messages = {
       selectionMethod: "Selection method",
       endpoint: "Endpoint",
       circuitBreaker: "Circuit breaker",
+      circuitDisabled: "Disabled",
       failures: "failures",
       modelRedirect: "Model redirect",
       error: "Error",
       errorDetails: "Error details",
+      priority: "Priority",
+      weight: "Weight",
+      costMultiplier: "Cost",
     },
   },
 };
@@ -367,6 +422,56 @@ describe("error-details-dialog layout", () => {
 
     expect(html).toContain("Output Rate");
     expect(html).toContain("100.0 tok/s");
+  });
+
+  test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
+    // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
+    // durationMs=1000, ttfbMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        costUsd={null}
+        inputTokens={null}
+        outputTokens={300}
+        durationMs={1000}
+        ttfbMs={950}
+      />
+    );
+
+    // tok/s should NOT appear
+    expect(html).not.toContain("tok/s");
+    expect(html).not.toContain("Output Rate");
+    // TTFB should still appear
+    expect(html).toContain("TTFB");
+  });
+
+  test("shows tok/s in dialog when conditions are normal", () => {
+    // durationMs=1000, ttfbMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        providerChain={null}
+        sessionId={null}
+        costUsd={null}
+        inputTokens={null}
+        outputTokens={50}
+        durationMs={1000}
+        ttfbMs={500}
+      />
+    );
+
+    // tok/s should appear
+    expect(html).toContain("tok/s");
+    // TTFB should also appear
+    expect(html).toContain("TTFB");
   });
 
   test("uses gray status class for unexpected statusCode (e.g., 100)", () => {
@@ -665,6 +770,195 @@ describe("error-details-dialog multiplier", () => {
 
     expect(html).toContain("Multiplier");
     expect(html).toContain("0.20x");
+  });
+});
+
+describe("error-details-dialog probability formatting", () => {
+  test("renders probability 0.5 as 50.0% in Decision Chain tab", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "initial_selection",
+              decisionContext: {
+                totalProviders: 2,
+                enabledProviders: 2,
+                afterHealthCheck: 2,
+                selectedPriority: 1,
+                priorityLevels: [1],
+                candidatesAtPriority: [
+                  { id: 1, name: "p1", weight: 50, costMultiplier: 1, probability: 0.5 },
+                  { id: 2, name: "p2", weight: 50, costMultiplier: 1, probability: 0.5 },
+                ],
+              },
+            },
+            {
+              id: 1,
+              name: "p1",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ] as any
+        }
+      />
+    );
+
+    // Should show 50.0%, not 0.5%
+    expect(html).toContain("50.0%");
+    expect(html).not.toContain("0.5%");
+  });
+
+  test("renders probability 100 (out-of-range) as 100.0% not 10000.0%", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "initial_selection",
+              decisionContext: {
+                totalProviders: 1,
+                enabledProviders: 1,
+                afterHealthCheck: 1,
+                selectedPriority: 1,
+                priorityLevels: [1],
+                candidatesAtPriority: [
+                  { id: 1, name: "p1", weight: 100, costMultiplier: 1, probability: 100 },
+                ],
+              },
+            },
+            {
+              id: 1,
+              name: "p1",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ] as any
+        }
+      />
+    );
+
+    // Should show 100.0%, not 10000.0%
+    expect(html).toContain("100.0%");
+    expect(html).not.toContain("10000.0%");
+  });
+
+  test("renders circuit breaker threshold=0 as Disabled label", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "request_success",
+              statusCode: 200,
+              circuitState: "closed",
+              circuitFailureCount: 0,
+              circuitFailureThreshold: 0,
+            },
+          ] as any
+        }
+      />
+    );
+
+    // Should show "Disabled" label when threshold is 0
+    expect(html).toContain("Disabled");
+    expect(html).not.toContain("0/0 failures");
+  });
+
+  test("hides probability badge when probability is undefined", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "initial_selection",
+              decisionContext: {
+                totalProviders: 1,
+                enabledProviders: 1,
+                afterHealthCheck: 1,
+                selectedPriority: 1,
+                priorityLevels: [1],
+                candidatesAtPriority: [
+                  { id: 1, name: "p1", weight: 100, costMultiplier: 1 },
+                ],
+              },
+            },
+            {
+              id: 1,
+              name: "p1",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ] as any
+        }
+      />
+    );
+
+    // Should not show any percentage when probability is undefined
+    expect(html).not.toMatch(/\d+\.\d+%/);
+  });
+
+  test("hides probability badge when probability is NaN", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={null}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "initial_selection",
+              decisionContext: {
+                totalProviders: 1,
+                enabledProviders: 1,
+                afterHealthCheck: 1,
+                selectedPriority: 1,
+                priorityLevels: [1],
+                candidatesAtPriority: [
+                  { id: 1, name: "p1", weight: 100, costMultiplier: 1, probability: Number.NaN },
+                ],
+              },
+            },
+            {
+              id: 1,
+              name: "p1",
+              reason: "request_success",
+              statusCode: 200,
+            },
+          ] as any
+        }
+      />
+    );
+
+    // Should not show NaN%
+    expect(html).not.toContain("NaN");
   });
 });
 

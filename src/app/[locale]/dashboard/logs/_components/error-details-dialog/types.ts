@@ -132,6 +132,31 @@ export function calculateOutputRate(
 }
 
 /**
+ * Determine if output rate should be hidden due to blocked streaming request.
+ * Rule: Hide when generationTimeMs / durationMs < 0.1 AND outputRate > 5000
+ * This indicates TTFB is very close to total duration with abnormally high tok/s.
+ */
+export function shouldHideOutputRate(
+  outputRate: number | null,
+  durationMs: number | null | undefined,
+  ttfbMs: number | null | undefined
+): boolean {
+  if (
+    outputRate == null ||
+    !Number.isFinite(outputRate) ||
+    durationMs == null ||
+    durationMs <= 0 ||
+    ttfbMs == null
+  ) {
+    return false;
+  }
+  const generationTimeMs = durationMs - ttfbMs;
+  if (generationTimeMs <= 0) return false;
+  const ratio = generationTimeMs / durationMs;
+  return ratio < 0.1 && outputRate > 5000;
+}
+
+/**
  * Check if request is successful (2xx status)
  */
 export function isSuccessStatus(statusCode: number | null): boolean {

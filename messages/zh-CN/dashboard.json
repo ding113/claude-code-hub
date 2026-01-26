@@ -1561,7 +1561,7 @@
           "limitDaily": "每日限额 (USD)",
           "limitWeekly": "周限额 (USD)",
           "limitMonthly": "月限额 (USD)",
-          "canLoginWebUi": "允许登录 Web UI",
+          "canLoginWebUi": "独立个人用量页面",
           "keyEnabled": "Key 启用状态"
         },
         "placeholders": {

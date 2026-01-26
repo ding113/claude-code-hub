@@ -297,4 +297,45 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("provider summary");
     expect(html).toContain("logs.table.loadingMore");
   });
+
+  test("hides tok/s when TTFB is close to duration and rate is abnormally high", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    // Rule: generationTimeMs / durationMs < 0.1 && outputRate > 5000 => hide tok/s
+    // durationMs=1000, ttfbMs=950 => generationTimeMs=50, ratio=0.05 < 0.1
+    // outputTokens=300 => rate = 300 / 0.05 = 6000 > 5000 => should hide
+    mockLogs = [makeLog({ id: 1, durationMs: 1000, ttfbMs: 950, outputTokens: 300 })];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    // tok/s should NOT appear
+    expect(html).not.toContain("tok/s");
+    // TTFB should still appear
+    expect(html).toContain("TTFB");
+  });
+
+  test("shows tok/s when conditions are normal", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    // durationMs=1000, ttfbMs=500 => generationTimeMs=500, ratio=0.5 >= 0.1
+    // outputTokens=50 => rate = 50 / 0.5 = 100 <= 5000 => should show
+    mockLogs = [makeLog({ id: 1, durationMs: 1000, ttfbMs: 500, outputTokens: 50 })];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    // tok/s should appear
+    expect(html).toContain("tok/s");
+    // TTFB should also appear
+    expect(html).toContain("TTFB");
+  });
 });

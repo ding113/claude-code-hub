@@ -1551,7 +1551,7 @@
           "limitDaily": "Дневной лимит (USD)",
           "limitWeekly": "Недельный лимит (USD)",
           "limitMonthly": "Месячный лимит (USD)",
-          "canLoginWebUi": "Разрешить вход в Web UI",
+          "canLoginWebUi": "Независимая страница использования",
           "keyEnabled": "Статус ключа"
         },
         "placeholders": {

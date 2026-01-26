@@ -1560,7 +1560,7 @@
           "limitDaily": "Daily Limit (USD)",
           "limitWeekly": "Weekly Limit (USD)",
           "limitMonthly": "Monthly Limit (USD)",
-          "canLoginWebUi": "Allow Web UI Login",
+          "canLoginWebUi": "Independent Personal Usage Page",
           "keyEnabled": "Key Enabled Status"
         },
         "placeholders": {

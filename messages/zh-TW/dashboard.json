@@ -1552,7 +1552,7 @@
           "limitDaily": "每日限額（USD）",
           "limitWeekly": "週限額（USD）",
           "limitMonthly": "月限額（USD）",
-          "canLoginWebUi": "允許登入 Web UI",
+          "canLoginWebUi": "獨立個人用量頁面",
           "keyEnabled": "Key 啟用狀態"
         },
         "placeholders": {

@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { redactJsonString } from "@/lib/utils/message-redaction";
-import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
+import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
 import { StepCard, type StepStatus } from "./StepCard";
@@ -395,23 +395,26 @@ export function LogicTraceTab({
                   {decisionContext.candidatesAtPriority &&
                     decisionContext.candidatesAtPriority.length > 0 && (
                       <div className="space-y-1 mt-2">
-                        {decisionContext.candidatesAtPriority.map((c, idx) => (
-                          <div
-                            key={`${c.id}-${idx}`}
-                            className="flex items-center justify-between text-xs"
-                          >
-                            <span className="font-medium">{c.name}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground">W:{c.weight}</span>
-                              <span className="text-muted-foreground">x{c.costMultiplier}</span>
-                              {c.probability !== undefined && (
-                                <Badge variant="secondary" className="text-[10px]">
-                                  {(c.probability * 100).toFixed(1)}%
-                                </Badge>
-                              )}
+                        {decisionContext.candidatesAtPriority.map((c, idx) => {
+                          const formattedProbability = formatProbability(c.probability);
+                          return (
+                            <div
+                              key={`${c.id}-${idx}`}
+                              className="flex items-center justify-between text-xs"
+                            >
+                              <span className="font-medium">{c.name}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground">W:{c.weight}</span>
+                                <span className="text-muted-foreground">x{c.costMultiplier}</span>
+                                {formattedProbability && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {formattedProbability}
+                                  </Badge>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                 </div>
@@ -563,8 +566,9 @@ export function LogicTraceTab({
                           {item.circuitFailureCount !== undefined &&
                             item.circuitFailureThreshold !== undefined && (
                               <span className="font-mono text-muted-foreground">
-                                {item.circuitFailureCount}/{item.circuitFailureThreshold}{" "}
-                                {tChain("details.failures")}
+                                {item.circuitFailureThreshold === 0
+                                  ? tChain("details.circuitDisabled")
+                                  : `${item.circuitFailureCount}/${item.circuitFailureThreshold} ${tChain("details.failures")}`}
                               </span>
                             )}
                         </div>

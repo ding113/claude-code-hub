@@ -4,9 +4,13 @@ import { NextIntlClientProvider } from "next-intl";
 import { Window } from "happy-dom";
 import { describe, expect, test, vi } from "vitest";
 
-vi.mock("@/lib/utils/provider-chain-formatter", () => ({
-  formatProviderDescription: () => "provider description",
-}));
+vi.mock("@/lib/utils/provider-chain-formatter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils/provider-chain-formatter")>();
+  return {
+    ...actual,
+    formatProviderDescription: () => "provider description",
+  };
+});
 
 vi.mock("@/components/ui/tooltip", () => {
   type PropsWithChildren = { children?: ReactNode };
@@ -100,6 +104,106 @@ function parseHtml(html: string) {
   window.document.body.innerHTML = html;
   return window.document;
 }
+
+describe("provider-chain-popover probability formatting", () => {
+  test("renders probability 0.5 as 50% in tooltip", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "initial_selection",
+            decisionContext: {
+              totalProviders: 2,
+              enabledProviders: 2,
+              targetType: "claude",
+              groupFilterApplied: false,
+              beforeHealthCheck: 2,
+              afterHealthCheck: 2,
+              priorityLevels: [1],
+              selectedPriority: 1,
+              candidatesAtPriority: [
+                { id: 1, name: "p1", weight: 50, costMultiplier: 1, probability: 0.5 },
+                { id: 2, name: "p2", weight: 50, costMultiplier: 1, probability: 0.5 },
+              ],
+            },
+          },
+          { id: 1, name: "p1", reason: "request_success", statusCode: 200 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    // Should show 50%, not 0%
+    expect(html).toContain("50%");
+    expect(html).not.toContain("0.5%");
+  });
+
+  test("renders probability 100 (out-of-range) as 100% not 10000%", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "initial_selection",
+            decisionContext: {
+              totalProviders: 2,
+              enabledProviders: 2,
+              targetType: "claude",
+              groupFilterApplied: false,
+              beforeHealthCheck: 2,
+              afterHealthCheck: 2,
+              priorityLevels: [1],
+              selectedPriority: 1,
+              candidatesAtPriority: [
+                { id: 1, name: "p1", weight: 100, costMultiplier: 1, probability: 100 },
+                { id: 2, name: "p2", weight: 0, costMultiplier: 1, probability: 0 },
+              ],
+            },
+          },
+          { id: 1, name: "p1", reason: "request_success", statusCode: 200 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    // Should show 100%, not 10000%
+    expect(html).toContain("100%");
+    expect(html).not.toContain("10000%");
+  });
+
+  test("hides probability when undefined", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "initial_selection",
+            decisionContext: {
+              totalProviders: 1,
+              enabledProviders: 1,
+              targetType: "claude",
+              groupFilterApplied: false,
+              beforeHealthCheck: 1,
+              afterHealthCheck: 1,
+              priorityLevels: [1],
+              selectedPriority: 1,
+              candidatesAtPriority: [{ id: 1, name: "p1", weight: 100, costMultiplier: 1 }],
+            },
+          },
+          { id: 1, name: "p1", reason: "request_success", statusCode: 200 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    // Should not show any percentage
+    expect(html).not.toMatch(/\d+%\)/);
+  });
+});
 
 describe("provider-chain-popover layout", () => {
   test("requestCount<=1 branch keeps truncation container shrinkable", () => {

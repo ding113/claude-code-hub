@@ -128,7 +128,7 @@ export function ProviderMultiSelect({
                       key={provider.id}
                       value={`${provider.name} ${provider.id}`}
                       onSelect={() => toggleProvider(provider.id)}
-                      className="cursor-pointer hover:bg-white/5"
+                      className="cursor-pointer"
                     >
                       <Checkbox
                         checked={selectedProviderIds.includes(provider.id)}

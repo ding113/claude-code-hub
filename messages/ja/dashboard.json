@@ -1603,7 +1603,7 @@
           "limitDaily": "日次上限 (USD)",
           "limitWeekly": "週次上限 (USD)",
           "limitMonthly": "月次上限 (USD)",
-          "canLoginWebUi": "Web UI へのログインを許可",
+          "canLoginWebUi": "独立した個人使用量ページ",
           "keyEnabled": "キー有効状態"
         },
         "placeholders": {

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { formatProbabilityCompact } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 
 interface ProviderChainPopoverProps {
@@ -225,15 +226,14 @@ export function ProviderChainPopover({
                                 >
                                   {c.name}
                                 </span>
-                                {c.probability !== undefined && (
-                                  <span className="text-zinc-500 dark:text-zinc-400">
-                                    (
-                                    {c.probability <= 1
-                                      ? (c.probability * 100).toFixed(0)
-                                      : c.probability}
-                                    %)
-                                  </span>
-                                )}
+                                {(() => {
+                                  const formatted = formatProbabilityCompact(c.probability);
+                                  return formatted ? (
+                                    <span className="text-zinc-500 dark:text-zinc-400">
+                                      ({formatted})
+                                    </span>
+                                  ) : null;
+                                })()}
                               </span>
                             ))}
                           </div>
