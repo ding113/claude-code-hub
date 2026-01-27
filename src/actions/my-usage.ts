@@ -354,8 +354,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
     const [aggregate] = await db
       .select({
         calls: sql<number>`count(*)::int`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
         costUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
       })
       .from(messageRequest)
@@ -375,8 +375,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
         originalModel: messageRequest.originalModel,
         calls: sql<number>`count(*)::int`,
         costUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
       })
       .from(messageRequest)
       .where(
@@ -604,10 +604,10 @@ export async function getMyStatsSummary(
         model: messageRequest.model,
         requests: sql<number>`count(*)::int`,
         cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
       })
       .from(messageRequest)
       .where(
@@ -628,10 +628,10 @@ export async function getMyStatsSummary(
         model: messageRequest.model,
         requests: sql<number>`count(*)::int`,
         cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
       })
       .from(messageRequest)
       .where(

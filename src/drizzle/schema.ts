@@ -6,6 +6,7 @@ import {
   timestamp,
   boolean,
   integer,
+  bigint,
   numeric,
   jsonb,
   index,
@@ -151,9 +152,11 @@ export const providers = pgTable('providers', {
   description: text('description'),
   url: varchar('url').notNull(),
   key: varchar('key').notNull(),
-  providerVendorId: integer('provider_vendor_id').references(() => providerVendors.id, {
-    onDelete: 'restrict',
-  }),
+  providerVendorId: integer('provider_vendor_id')
+    .notNull()
+    .references(() => providerVendors.id, {
+      onDelete: 'restrict',
+    }),
   isEnabled: boolean('is_enabled').notNull().default(true),
   weight: integer('weight').notNull().default(1),
 
@@ -397,13 +400,13 @@ export const messageRequest = pgTable('message_request', {
   originalModel: varchar('original_model', { length: 128 }),
 
   // Token 使用信息
-  inputTokens: integer('input_tokens'),
-  outputTokens: integer('output_tokens'),
+  inputTokens: bigint('input_tokens', { mode: 'number' }),
+  outputTokens: bigint('output_tokens', { mode: 'number' }),
   ttfbMs: integer('ttfb_ms'),
-  cacheCreationInputTokens: integer('cache_creation_input_tokens'),
-  cacheReadInputTokens: integer('cache_read_input_tokens'),
-  cacheCreation5mInputTokens: integer('cache_creation_5m_input_tokens'),
-  cacheCreation1hInputTokens: integer('cache_creation_1h_input_tokens'),
+  cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
+  cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
+  cacheCreation5mInputTokens: bigint('cache_creation_5m_input_tokens', { mode: 'number' }),
+  cacheCreation1hInputTokens: bigint('cache_creation_1h_input_tokens', { mode: 'number' }),
   cacheTtlApplied: varchar('cache_ttl_applied', { length: 10 }),
 
   // 1M Context Window 应用状态

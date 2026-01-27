@@ -38,6 +38,19 @@ function isActualRequest(item: ProviderChainItem): boolean {
   return false;
 }
 
+function parseGroupTags(groupTag?: string | null): string[] {
+  if (!groupTag) return [];
+  const seen = new Set<string>();
+  const groups: string[] = [];
+  for (const raw of groupTag.split(",")) {
+    const trimmed = raw.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    groups.push(trimmed);
+  }
+  return groups;
+}
+
 /**
  * Get status icon and color for a provider chain item
  */
@@ -279,6 +292,7 @@ export function ProviderChainPopover({
     .find((item) => item.reason === "request_success" || item.reason === "retry_success");
   const finalCostMultiplier = successfulProvider?.costMultiplier;
   const finalGroupTag = successfulProvider?.groupTag;
+  const finalGroupTags = parseGroupTags(finalGroupTag);
   const hasFinalCostBadge =
     finalCostMultiplier !== undefined &&
     finalCostMultiplier !== null &&
@@ -318,15 +332,22 @@ export function ProviderChainPopover({
                 x{finalCostMultiplier.toFixed(2)}
               </Badge>
             )}
-            {/* Group tag badge (if present) */}
-            {finalGroupTag && (
-              <Badge
-                variant="outline"
-                className="text-[10px] px-1 py-0 shrink-0 bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-700"
-              >
-                {finalGroupTag}
-              </Badge>
-            )}
+            {/* Group tag badges (if present) */}
+            {finalGroupTags.map((group) => (
+              <TooltipProvider key={group}>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1 py-0 shrink-0 bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-700 max-w-[120px] truncate"
+                    >
+                      {group}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>{group}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
             {/* Info icon */}
             <InfoIcon className="h-3 w-3 text-muted-foreground shrink-0" aria-hidden="true" />
           </span>

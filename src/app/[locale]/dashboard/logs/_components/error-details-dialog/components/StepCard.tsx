@@ -173,7 +173,9 @@ export function StepCard({
 
           {/* Expandable details */}
           {hasDetails && isExpanded && (
-            <div className="mt-3 pt-3 border-t border-current/10">{details}</div>
+            <div className="mt-3 pt-3 border-t border-current/10 overflow-hidden min-w-0">
+              {details}
+            </div>
           )}
         </div>
       </div>

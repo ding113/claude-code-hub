@@ -43,6 +43,7 @@ interface UsageLogsViewVirtualizedProps {
   searchParams: { [key: string]: string | string[] | undefined };
   currencyCode?: CurrencyCode;
   billingModelSource?: BillingModelSource;
+  serverTimeZone?: string;
 }
 
 async function fetchSystemSettings(): Promise<SystemSettings> {
@@ -69,6 +70,7 @@ function UsageLogsViewContent({
   searchParams,
   currencyCode = "USD",
   billingModelSource = "original",
+  serverTimeZone,
 }: UsageLogsViewVirtualizedProps) {
   const t = useTranslations("dashboard");
   const tc = useTranslations("customs");
@@ -311,6 +313,7 @@ function UsageLogsViewContent({
               onReset={() => router.push("/dashboard/logs")}
               isProvidersLoading={isProvidersLoading}
               isKeysLoading={isKeysLoading}
+              serverTimeZone={serverTimeZone}
             />
           </CardContent>
         </Card>

@@ -9,6 +9,7 @@ import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
 import { getUserStatistics } from "@/actions/statistics";
 import type { CurrencyCode } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import type {
   LeaderboardEntry,
@@ -202,10 +203,9 @@ export function DashboardBento({
 
   return (
     <div className="space-y-6">
-      {/* Top Section: Metrics + Live Sessions */}
+      {/* Section 1: Metrics (Admin only) */}
       {isAdmin && (
         <BentoGrid>
-          {/* Metric Cards */}
           <BentoMetricCard
             title={t("metrics.concurrent")}
             value={metrics.concurrentSessions}
@@ -213,7 +213,11 @@ export function DashboardBento({
             accentColor="emerald"
             className="min-h-[120px]"
             comparisons={[
-              { value: metrics.recentMinuteRequests, label: t("metrics.rpm"), isPercentage: false },
+              {
+                value: metrics.recentMinuteRequests,
+                label: t("metrics.rpm"),
+                isPercentage: false,
+              },
             ]}
           />
           <BentoMetricCard
@@ -244,25 +248,26 @@ export function DashboardBento({
         </BentoGrid>
       )}
 
-      {/* Middle Section: Statistics Chart + Live Sessions (Admin) */}
-      <BentoGrid>
-        {/* Statistics Chart - 3 columns for admin, 4 columns for non-admin */}
-        {statistics && (
-          <StatisticsChartCard
-            data={statistics}
-            onTimeRangeChange={setTimeRange}
-            currencyCode={currencyCode}
-            colSpan={isAdmin ? 3 : 4}
-          />
-        )}
+      {/* Section 2: Statistics Chart - Full width */}
+      {statistics && (
+        <StatisticsChartCard
+          data={statistics}
+          onTimeRangeChange={setTimeRange}
+          currencyCode={currencyCode}
+        />
+      )}
 
-        {/* Live Sessions Panel - Right sidebar, spans 2 rows */}
-        {isAdmin && (
-          <LiveSessionsPanel sessions={sessionsWithActivity} isLoading={sessionsLoading} />
-        )}
-
-        {/* Leaderboard Cards - Below chart, 3 columns */}
-        {canViewLeaderboard && (
+      {/* Section 3: Leaderboards + Live Sessions */}
+      {canViewLeaderboard && (
+        <div
+          data-testid={isAdmin ? "dashboard-home-layout" : undefined}
+          className={cn(
+            "grid gap-6",
+            isAdmin
+              ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_280px]"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+          )}
+        >
           <LeaderboardCard
             title={tl("userRankings")}
             entries={userLeaderboard}
@@ -273,8 +278,6 @@ export function DashboardBento({
             maxItems={3}
             accentColor="primary"
           />
-        )}
-        {canViewLeaderboard && (
           <LeaderboardCard
             title={tl("providerRankings")}
             entries={providerLeaderboard}
@@ -285,8 +288,6 @@ export function DashboardBento({
             maxItems={3}
             accentColor="purple"
           />
-        )}
-        {canViewLeaderboard && (
           <LeaderboardCard
             title={tl("modelRankings")}
             entries={modelLeaderboard}
@@ -297,8 +298,16 @@ export function DashboardBento({
             maxItems={3}
             accentColor="blue"
           />
-        )}
-      </BentoGrid>
+
+          {isAdmin && (
+            <LiveSessionsPanel
+              data-testid="dashboard-home-sidebar"
+              sessions={sessionsWithActivity}
+              isLoading={sessionsLoading}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

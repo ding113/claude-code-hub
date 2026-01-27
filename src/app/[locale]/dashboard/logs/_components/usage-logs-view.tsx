@@ -25,6 +25,7 @@ interface UsageLogsViewProps {
   searchParams: { [key: string]: string | string[] | undefined };
   currencyCode?: CurrencyCode;
   billingModelSource?: BillingModelSource;
+  serverTimeZone?: string;
 }
 
 export function UsageLogsView({
@@ -34,6 +35,7 @@ export function UsageLogsView({
   searchParams,
   currencyCode = "USD",
   billingModelSource = "original",
+  serverTimeZone,
 }: UsageLogsViewProps) {
   const t = useTranslations("dashboard");
   const router = useRouter();
@@ -190,6 +192,7 @@ export function UsageLogsView({
             filters={filters}
             onChange={handleFilterChange}
             onReset={() => router.push("/dashboard/logs")}
+            serverTimeZone={serverTimeZone}
           />
         </CardContent>
       </Card>

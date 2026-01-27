@@ -216,7 +216,7 @@ export function LogicTraceTab({
                       <Database className="h-3 w-3" />
                       <span className="font-medium">{t("logicTrace.sessionInfo")}</span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pl-4 min-w-0">
                       {sessionReuseContext?.sessionId && (
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">
@@ -252,14 +252,14 @@ export function LogicTraceTab({
                       <Server className="h-3 w-3" />
                       <span className="font-medium">{t("logicTrace.reusedProvider")}</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-1.5 pl-4">
-                      <div>
+                    <div className="grid grid-cols-2 gap-1.5 pl-4 min-w-0">
+                      <div className="min-w-0">
                         <span className="text-muted-foreground">Provider:</span>{" "}
-                        <span className="font-medium">{sessionReuseProvider.name}</span>
+                        <span className="font-medium break-all">{sessionReuseProvider.name}</span>
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <span className="text-muted-foreground">ID:</span>{" "}
-                        <span className="font-mono">{sessionReuseProvider.id}</span>
+                        <span className="font-mono break-all">{sessionReuseProvider.id}</span>
                       </div>
                       {sessionReuseProvider.priority !== undefined && (
                         <div>
@@ -301,23 +301,23 @@ export function LogicTraceTab({
               subtitle={`${decisionContext.totalProviders} -> ${decisionContext.afterModelFilter || decisionContext.afterHealthCheck}`}
               status="success"
               details={
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
+                <div className="grid grid-cols-2 gap-2 text-xs min-w-0">
+                  <div className="min-w-0">
                     <span className="text-muted-foreground">Total:</span>{" "}
                     <span className="font-mono">{decisionContext.totalProviders}</span>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-muted-foreground">Enabled:</span>{" "}
                     <span className="font-mono">{decisionContext.enabledProviders}</span>
                   </div>
                   {decisionContext.afterGroupFilter !== undefined && (
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-muted-foreground">After Group:</span>{" "}
                       <span className="font-mono">{decisionContext.afterGroupFilter}</span>
                     </div>
                   )}
                   {decisionContext.afterModelFilter !== undefined && (
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-muted-foreground">After Model:</span>{" "}
                       <span className="font-mono">{decisionContext.afterModelFilter}</span>
                     </div>
@@ -336,14 +336,24 @@ export function LogicTraceTab({
               subtitle={`${filteredProviders.length} providers filtered`}
               status="warning"
               details={
-                <div className="space-y-1">
+                <div className="space-y-1 min-w-0">
                   {filteredProviders.map((p, idx) => (
-                    <div key={`${p.id}-${idx}`} className="flex items-center gap-2 text-xs">
-                      <Badge variant="outline" className="text-[10px]">
+                    <div
+                      key={`${p.id}-${idx}`}
+                      className="flex items-center gap-2 text-xs flex-wrap min-w-0"
+                    >
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] shrink-0 max-w-[120px] truncate"
+                      >
                         {p.name}
                       </Badge>
-                      <span className="text-rose-600">{tChain(`filterReasons.${p.reason}`)}</span>
-                      {p.details && <span className="text-muted-foreground">({p.details})</span>}
+                      <span className="text-rose-600 break-all">
+                        {tChain(`filterReasons.${p.reason}`)}
+                      </span>
+                      {p.details && (
+                        <span className="text-muted-foreground break-all">({p.details})</span>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -468,13 +478,13 @@ export function LogicTraceTab({
                           <Link2 className="h-3 w-3" />
                           <span className="font-medium">{t("logicTrace.sessionReuseTitle")}</span>
                         </div>
-                        <div className="grid grid-cols-1 gap-1.5">
+                        <div className="grid grid-cols-1 gap-1.5 min-w-0">
                           {item.decisionContext.sessionId && (
-                            <div className="flex items-center gap-2">
-                              <span className="text-muted-foreground">
+                            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                              <span className="text-muted-foreground shrink-0">
                                 {tChain("timeline.sessionId", { id: "" }).replace(": ", ":")}
                               </span>
-                              <code className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono">
+                              <code className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/30 rounded font-mono break-all">
                                 {item.decisionContext.sessionId}
                               </code>
                             </div>
@@ -487,23 +497,23 @@ export function LogicTraceTab({
                     )}
 
                     {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
+                    <div className="grid grid-cols-2 gap-2 min-w-0">
+                      <div className="min-w-0">
                         <span className="text-muted-foreground">Provider ID:</span>{" "}
-                        <span className="font-mono">{item.id}</span>
+                        <span className="font-mono break-all">{item.id}</span>
                       </div>
                       {item.selectionMethod && !isSessionReuse && (
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-muted-foreground">
                             {tChain("details.selectionMethod")}:
                           </span>{" "}
-                          <span className="font-mono">{item.selectionMethod}</span>
+                          <span className="font-mono break-all">{item.selectionMethod}</span>
                         </div>
                       )}
                       {isSessionReuse && (
-                        <div>
+                        <div className="min-w-0">
                           <span className="text-muted-foreground">Provider:</span>{" "}
-                          <span className="font-mono">{item.name}</span>
+                          <span className="font-mono break-all">{item.name}</span>
                         </div>
                       )}
                     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { addDays, differenceInCalendarDays, format, subDays } from "date-fns";
+import { addDays, differenceInCalendarDays, format } from "date-fns";
 import { CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
@@ -9,16 +9,18 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { getQuickDateRange, type QuickPeriod } from "../_utils/time-range";
 
 interface LogsDateRangePickerProps {
   startDate?: string; // "YYYY-MM-DD"
   endDate?: string; // "YYYY-MM-DD"
   onDateRangeChange: (range: { startDate?: string; endDate?: string }) => void;
+  serverTimeZone?: string;
 }
 
-type QuickPeriod = "today" | "yesterday" | "last7days" | "last30days" | "custom";
+type PickerQuickPeriod = QuickPeriod | "custom";
 
-const QUICK_PERIODS: Exclude<QuickPeriod, "custom">[] = [
+const QUICK_PERIODS: Exclude<PickerQuickPeriod, "custom">[] = [
   "today",
   "yesterday",
   "last7days",
@@ -35,29 +37,22 @@ function parseDate(dateStr: string): Date {
   return new Date(year, month - 1, day);
 }
 
-function getDateRangeForPeriod(period: QuickPeriod): { startDate: string; endDate: string } {
-  const today = new Date();
-  switch (period) {
-    case "today":
-      return { startDate: formatDate(today), endDate: formatDate(today) };
-    case "yesterday": {
-      const yesterday = subDays(today, 1);
-      return { startDate: formatDate(yesterday), endDate: formatDate(yesterday) };
-    }
-    case "last7days":
-      return { startDate: formatDate(subDays(today, 6)), endDate: formatDate(today) };
-    case "last30days":
-      return { startDate: formatDate(subDays(today, 29)), endDate: formatDate(today) };
-    default:
-      return { startDate: formatDate(today), endDate: formatDate(today) };
-  }
+function getDateRangeForPeriod(
+  period: QuickPeriod,
+  serverTimeZone?: string
+): { startDate: string; endDate: string } {
+  return getQuickDateRange(period, serverTimeZone);
 }
 
-function detectQuickPeriod(startDate?: string, endDate?: string): QuickPeriod | null {
+function detectQuickPeriod(
+  startDate?: string,
+  endDate?: string,
+  serverTimeZone?: string
+): PickerQuickPeriod | null {
   if (!startDate || !endDate) return null;
 
   for (const period of QUICK_PERIODS) {
-    const range = getDateRangeForPeriod(period);
+    const range = getDateRangeForPeriod(period, serverTimeZone);
     if (range.startDate === startDate && range.endDate === endDate) {
       return period;
     }
@@ -85,6 +80,7 @@ export function LogsDateRangePicker({
   startDate,
   endDate,
   onDateRangeChange,
+  serverTimeZone,
 }: LogsDateRangePickerProps) {
   const t = useTranslations("dashboard");
   const tCommon = useTranslations("common");
@@ -93,8 +89,8 @@ export function LogsDateRangePicker({
   const hasDateRange = Boolean(startDate && endDate);
 
   const activeQuickPeriod = useMemo(() => {
-    return detectQuickPeriod(startDate, endDate);
-  }, [startDate, endDate]);
+    return detectQuickPeriod(startDate, endDate, serverTimeZone);
+  }, [startDate, endDate, serverTimeZone]);
 
   const selectedRange: DateRange | undefined = useMemo(() => {
     if (!startDate || !endDate) return undefined;
@@ -106,10 +102,10 @@ export function LogsDateRangePicker({
 
   const handleQuickPeriodClick = useCallback(
     (period: QuickPeriod) => {
-      const range = getDateRangeForPeriod(period);
+      const range = getDateRangeForPeriod(period, serverTimeZone);
       onDateRangeChange(range);
     },
-    [onDateRangeChange]
+    [onDateRangeChange, serverTimeZone]
   );
 
   const handleNavigate = useCallback(

@@ -335,11 +335,11 @@ export async function findKeyUsageTodayBatch(
       keyId: keys.id,
       totalCost: sum(messageRequest.costUsd),
       totalTokens: sql<number>`COALESCE(SUM(
-        COALESCE(${messageRequest.inputTokens}, 0) +
-        COALESCE(${messageRequest.outputTokens}, 0) +
-        COALESCE(${messageRequest.cacheCreationInputTokens}, 0) +
-        COALESCE(${messageRequest.cacheReadInputTokens}, 0)
-      ), 0)::int`,
+        COALESCE(${messageRequest.inputTokens}, 0)::double precision +
+        COALESCE(${messageRequest.outputTokens}, 0)::double precision +
+        COALESCE(${messageRequest.cacheCreationInputTokens}, 0)::double precision +
+        COALESCE(${messageRequest.cacheReadInputTokens}, 0)::double precision
+      ), 0::double precision)`,
     })
     .from(keys)
     .leftJoin(
@@ -622,10 +622,10 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
         model: messageRequest.model,
         callCount: sql<number>`count(*)::int`,
         totalCost: sum(messageRequest.costUsd),
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
+        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
       })
       .from(messageRequest)
       .where(
@@ -771,10 +771,10 @@ export async function findKeysWithStatisticsBatch(
       model: messageRequest.model,
       callCount: sql<number>`count(*)::int`,
       totalCost: sum(messageRequest.costUsd),
-      inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::int`,
-      outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::int`,
-      cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::int`,
-      cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::int`,
+      inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+      outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+      cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+      cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
     })
     .from(messageRequest)
     .where(

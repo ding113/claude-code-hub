@@ -166,7 +166,7 @@ export function LeaderboardCard({
   const maxCost = Math.max(...entries.map((e) => e.totalCost), 0);
 
   return (
-    <BentoCard className={cn("flex flex-col", className)}>
+    <BentoCard className={cn("flex flex-col min-h-[280px]", className)}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-semibold">{title}</h4>

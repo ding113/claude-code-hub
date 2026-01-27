@@ -7,6 +7,7 @@ import {
   type MyUsageLogsResult,
   type MyUsageQuota,
 } from "@/actions/my-usage";
+import { getServerTimeZone } from "@/actions/system-config";
 import { useRouter } from "@/i18n/routing";
 import { CollapsibleQuotaCard } from "./_components/collapsible-quota-card";
 import { ExpirationInfo } from "./_components/expiration-info";
@@ -22,6 +23,7 @@ export default function MyUsagePage() {
   const [logsData, setLogsData] = useState<MyUsageLogsResult | null>(null);
   const [isQuotaLoading, setIsQuotaLoading] = useState(true);
   const [isLogsLoading, setIsLogsLoading] = useState(true);
+  const [serverTimeZone, setServerTimeZone] = useState<string | undefined>(undefined);
 
   const loadInitial = useCallback(() => {
     setIsQuotaLoading(true);
@@ -38,6 +40,10 @@ export default function MyUsagePage() {
         if (logsResult.ok) setLogsData(logsResult.data ?? null);
       })
       .finally(() => setIsLogsLoading(false));
+
+    void getServerTimeZone().then((tzResult) => {
+      if (tzResult.ok) setServerTimeZone(tzResult.data.timeZone);
+    });
   }, []);
 
   useEffect(() => {
@@ -76,9 +82,14 @@ export default function MyUsagePage() {
 
       <CollapsibleQuotaCard quota={quota} loading={isQuotaLoading} />
 
-      <StatisticsSummaryCard />
+      <StatisticsSummaryCard serverTimeZone={serverTimeZone} />
 
-      <UsageLogsSection initialData={logsData} loading={isLogsLoading} autoRefreshSeconds={30} />
+      <UsageLogsSection
+        initialData={logsData}
+        loading={isLogsLoading}
+        autoRefreshSeconds={30}
+        serverTimeZone={serverTimeZone}
+      />
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth";
-import { invalidateSystemSettingsCache } from "@/lib/config";
+import { getEnvConfig, invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
@@ -21,6 +21,21 @@ export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings
   } catch (error) {
     logger.error("获取系统设置失败:", error);
     return { ok: false, error: "获取系统设置失败" };
+  }
+}
+
+export async function getServerTimeZone(): Promise<ActionResult<{ timeZone: string }>> {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return { ok: false, error: "未授权" };
+    }
+
+    const { TZ } = getEnvConfig();
+    return { ok: true, data: { timeZone: TZ } };
+  } catch (error) {
+    logger.error("获取时区失败:", error);
+    return { ok: false, error: "获取时区失败" };
   }
 }
 

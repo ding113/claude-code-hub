@@ -41,11 +41,11 @@ vi.mock("@/actions/usage-logs", () => ({
           statusCode: 200,
           inputTokens: 1,
           outputTokens: 1,
-          cacheCreationInputTokens: 0,
-          cacheReadInputTokens: 0,
-          cacheCreation5mInputTokens: 0,
+          cacheCreationInputTokens: 10,
+          cacheReadInputTokens: 5,
+          cacheCreation5mInputTokens: 10,
           cacheCreation1hInputTokens: 0,
-          cacheTtlApplied: null,
+          cacheTtlApplied: "1h",
           totalTokens: 2,
           costUsd: "0.000001",
           costMultiplier: null,
@@ -156,6 +156,22 @@ describe("VirtualizedLogsTable - specialSettings display", () => {
     await waitForText(container, "Loaded 1 records");
 
     expect(container.textContent).not.toContain(dashboardMessages.logs.table.specialSettings);
+
+    unmount();
+  });
+});
+
+describe("VirtualizedLogsTable - cache badge alignment", () => {
+  test("badge renders left while numbers stay right", async () => {
+    const { container, unmount } = renderWithIntl(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    await flushMicrotasks();
+    await waitForText(container, "Loaded 1 records");
+
+    expect(container.innerHTML).toContain("1h");
+    expect(container.innerHTML).toContain("ml-auto");
 
     unmount();
   });

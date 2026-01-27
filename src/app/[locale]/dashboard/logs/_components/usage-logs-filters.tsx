@@ -52,6 +52,7 @@ interface UsageLogsFiltersProps {
   filters: UsageLogFilters;
   onChange: (filters: UsageLogFilters) => void;
   onReset: () => void;
+  serverTimeZone?: string;
 }
 
 export function UsageLogsFilters({
@@ -63,6 +64,7 @@ export function UsageLogsFilters({
   filters,
   onChange,
   onReset,
+  serverTimeZone,
 }: UsageLogsFiltersProps) {
   const t = useTranslations("dashboard");
 
@@ -259,7 +261,11 @@ export function UsageLogsFilters({
           activeCount={timeActiveCount}
           defaultOpen={true}
         >
-          <TimeFilters filters={localFilters} onFiltersChange={setLocalFilters} />
+          <TimeFilters
+            filters={localFilters}
+            onFiltersChange={setLocalFilters}
+            serverTimeZone={serverTimeZone}
+          />
         </FilterSection>
 
         {/* Identity Section (Admin only for User, all for Key) */}

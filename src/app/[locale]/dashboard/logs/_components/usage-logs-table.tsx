@@ -287,16 +287,16 @@ export function UsageLogsTable({
                       <TooltipProvider>
                         <Tooltip delayDuration={250}>
                           <TooltipTrigger asChild>
-                            <div className="flex items-center justify-end gap-1 cursor-help">
-                              <span>
-                                {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
-                                {formatTokenAmount(log.cacheReadInputTokens)}
-                              </span>
+                            <div className="flex items-center gap-2 w-full cursor-help">
                               {log.cacheTtlApplied ? (
                                 <Badge variant="outline" className="text-[10px] leading-tight px-1">
                                   {log.cacheTtlApplied}
                                 </Badge>
                               ) : null}
+                              <span className="ml-auto">
+                                {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
+                                {formatTokenAmount(log.cacheReadInputTokens)}
+                              </span>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent align="end" className="text-xs space-y-1">
