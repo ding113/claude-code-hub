@@ -78,10 +78,11 @@ export class LeaseService {
    * 1. Try to get cached lease from Redis
    * 2. If valid (not expired), return it
    * 3. If missing or expired, refresh from DB
-   * 4. On error, fail-open (return null)
+   * 4. If limitAmount changed, refresh from DB
+   * 5. On error, fail-open (return null)
    */
   static async getCostLease(params: GetCostLeaseParams): Promise<BudgetLease | null> {
-    const { entityType, entityId, window } = params;
+    const { entityType, entityId, window, limitAmount } = params;
 
     try {
       const redis = LeaseService.redis;
@@ -95,6 +96,16 @@ export class LeaseService {
           const lease = deserializeLease(cached);
 
           if (lease && !isLeaseExpired(lease)) {
+            // Check if limit changed - force refresh if so
+            if (lease.limitAmount !== limitAmount) {
+              logger.debug("[LeaseService] Limit changed, force refresh", {
+                key: leaseKey,
+                cachedLimit: lease.limitAmount,
+                newLimit: limitAmount,
+              });
+              return await LeaseService.refreshCostLeaseFromDb(params);
+            }
+
             logger.debug("[LeaseService] Cache hit", {
               key: leaseKey,
               remaining: lease.remainingBudget,

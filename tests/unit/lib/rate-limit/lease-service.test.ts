@@ -942,4 +942,227 @@ describe("LeaseService", () => {
       expect(result.newRemaining).toBe(5.0);
     });
   });
+
+  describe("getCostLease - limit change detection", () => {
+    const nowMs = 1706400000000;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(nowMs));
+      vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("should force refresh when limitAmount increases", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { getCachedSystemSettings } = await import("@/lib/config/system-settings-cache");
+      const { sumKeyCostInTimeRange } = await import("@/repository/statistics");
+
+      // Setup: cached lease with limitAmount=100
+      const cachedLease = {
+        entityType: "key",
+        entityId: 123,
+        window: "daily",
+        resetMode: "fixed",
+        resetTime: "00:00",
+        snapshotAtMs: nowMs - 5000,
+        currentUsage: 50,
+        limitAmount: 100, // Old limit
+        remainingBudget: 2.5,
+        ttlSeconds: 60,
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
+
+      // Mock system settings and DB query for refresh
+      vi.mocked(getCachedSystemSettings).mockResolvedValue({
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercentDaily: 0.05,
+      } as ReturnType<typeof getCachedSystemSettings> extends Promise<infer T> ? T : never);
+      vi.mocked(sumKeyCostInTimeRange).mockResolvedValue(50);
+
+      // Call with increased limitAmount=150
+      const result = await LeaseService.getCostLease({
+        entityType: "key",
+        entityId: 123,
+        window: "daily",
+        limitAmount: 150, // New limit (increased)
+        resetTime: "00:00",
+        resetMode: "fixed",
+      });
+
+      // Should have refreshed from DB
+      expect(sumKeyCostInTimeRange).toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result?.limitAmount).toBe(150);
+    });
+
+    it("should force refresh when limitAmount decreases", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { getCachedSystemSettings } = await import("@/lib/config/system-settings-cache");
+      const { sumKeyCostInTimeRange } = await import("@/repository/statistics");
+
+      // Setup: cached lease with limitAmount=100
+      const cachedLease = {
+        entityType: "key",
+        entityId: 123,
+        window: "daily",
+        resetMode: "fixed",
+        resetTime: "00:00",
+        snapshotAtMs: nowMs - 5000,
+        currentUsage: 50,
+        limitAmount: 100, // Old limit
+        remainingBudget: 2.5,
+        ttlSeconds: 60,
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
+
+      vi.mocked(getCachedSystemSettings).mockResolvedValue({
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercentDaily: 0.05,
+      } as ReturnType<typeof getCachedSystemSettings> extends Promise<infer T> ? T : never);
+      vi.mocked(sumKeyCostInTimeRange).mockResolvedValue(50);
+
+      // Call with decreased limitAmount=50
+      const result = await LeaseService.getCostLease({
+        entityType: "key",
+        entityId: 123,
+        window: "daily",
+        limitAmount: 50, // New limit (decreased)
+        resetTime: "00:00",
+        resetMode: "fixed",
+      });
+
+      // Should have refreshed from DB
+      expect(sumKeyCostInTimeRange).toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result?.limitAmount).toBe(50);
+    });
+
+    it("should return cached lease when limitAmount unchanged", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { sumKeyCostInTimeRange } = await import("@/repository/statistics");
+
+      // Setup: cached lease with limitAmount=100
+      const cachedLease = {
+        entityType: "key",
+        entityId: 123,
+        window: "daily",
+        resetMode: "fixed",
+        resetTime: "00:00",
+        snapshotAtMs: nowMs - 5000,
+        currentUsage: 50,
+        limitAmount: 100,
+        remainingBudget: 2.5,
+        ttlSeconds: 60,
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
+
+      // Call with same limitAmount=100
+      const result = await LeaseService.getCostLease({
+        entityType: "key",
+        entityId: 123,
+        window: "daily",
+        limitAmount: 100, // Same limit
+        resetTime: "00:00",
+        resetMode: "fixed",
+      });
+
+      // Should NOT have refreshed from DB
+      expect(sumKeyCostInTimeRange).not.toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result?.limitAmount).toBe(100);
+      expect(result?.remainingBudget).toBe(2.5);
+    });
+
+    it("should allow requests after limit increase for over-limit user", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { getCachedSystemSettings } = await import("@/lib/config/system-settings-cache");
+      const { sumUserCostInTimeRange } = await import("@/repository/statistics");
+
+      // Setup: user is over limit (usage=100, limit=100, remaining=0)
+      const cachedLease = {
+        entityType: "user",
+        entityId: 456,
+        window: "daily",
+        resetMode: "rolling",
+        resetTime: "00:00",
+        snapshotAtMs: nowMs - 5000,
+        currentUsage: 100,
+        limitAmount: 100, // Old limit
+        remainingBudget: 0, // Over limit
+        ttlSeconds: 60,
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
+
+      vi.mocked(getCachedSystemSettings).mockResolvedValue({
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercentDaily: 0.05,
+      } as ReturnType<typeof getCachedSystemSettings> extends Promise<infer T> ? T : never);
+      vi.mocked(sumUserCostInTimeRange).mockResolvedValue(100); // Current usage still 100
+
+      // Admin increases limit to 150
+      const result = await LeaseService.getCostLease({
+        entityType: "user",
+        entityId: 456,
+        window: "daily",
+        limitAmount: 150, // Increased limit
+        resetTime: "00:00",
+        resetMode: "rolling",
+      });
+
+      // Should have refreshed and now have remaining budget
+      expect(sumUserCostInTimeRange).toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result?.limitAmount).toBe(150);
+      // remainingBudget = min(150 * 0.05, 150 - 100) = min(7.5, 50) = 7.5
+      expect(result?.remainingBudget).toBeGreaterThan(0);
+    });
+
+    it("should block requests after limit decrease below usage", async () => {
+      const { LeaseService } = await import("@/lib/rate-limit/lease-service");
+      const { getCachedSystemSettings } = await import("@/lib/config/system-settings-cache");
+      const { sumKeyCostInTimeRange } = await import("@/repository/statistics");
+
+      // Setup: user has used 80, limit was 100, remaining=1
+      const cachedLease = {
+        entityType: "key",
+        entityId: 789,
+        window: "daily",
+        resetMode: "fixed",
+        resetTime: "00:00",
+        snapshotAtMs: nowMs - 5000,
+        currentUsage: 80,
+        limitAmount: 100, // Old limit
+        remainingBudget: 1, // Still has budget
+        ttlSeconds: 60,
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedLease));
+
+      vi.mocked(getCachedSystemSettings).mockResolvedValue({
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercentDaily: 0.05,
+      } as ReturnType<typeof getCachedSystemSettings> extends Promise<infer T> ? T : never);
+      vi.mocked(sumKeyCostInTimeRange).mockResolvedValue(80); // Current usage still 80
+
+      // Admin decreases limit to 50 (below current usage of 80)
+      const result = await LeaseService.getCostLease({
+        entityType: "key",
+        entityId: 789,
+        window: "daily",
+        limitAmount: 50, // Decreased limit (below usage)
+        resetTime: "00:00",
+        resetMode: "fixed",
+      });
+
+      // Should have refreshed and now have 0 remaining budget
+      expect(sumKeyCostInTimeRange).toHaveBeenCalled();
+      expect(result).not.toBeNull();
+      expect(result?.limitAmount).toBe(50);
+      // remainingBudget = min(50 * 0.05, 50 - 80) = min(2.5, -30) = 0 (clamped)
+      expect(result?.remainingBudget).toBe(0);
+    });
+  });
 });
