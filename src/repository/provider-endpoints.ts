@@ -242,9 +242,13 @@ export async function deriveDisplayNameFromDomain(domain: string): Promise<strin
     return name.charAt(0).toUpperCase() + name.slice(1);
   }
 
+  const apiPrefixes = new Set(["api", "v1", "v2", "v3", "www"]);
   let name = parts[parts.length - 2];
-  if (name === "api" && parts.length >= 3) {
+  if (apiPrefixes.has(name) && parts.length >= 3) {
     name = parts[parts.length - 3];
+  }
+  if (apiPrefixes.has(name) && parts.length >= 4) {
+    name = parts[parts.length - 4];
   }
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
