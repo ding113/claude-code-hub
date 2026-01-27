@@ -108,6 +108,12 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
       responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
+      quotaDbRefreshIntervalSeconds: 10,
+      quotaLeasePercent5h: 0.05,
+      quotaLeasePercentDaily: 0.05,
+      quotaLeasePercentWeekly: 0.05,
+      quotaLeasePercentMonthly: 0.05,
+      quotaLeaseCapUsd: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies SystemSettings;

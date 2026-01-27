@@ -57,6 +57,13 @@ export async function saveSystemSettings(formData: {
   enableCodexSessionIdCompletion?: boolean;
   enableResponseFixer?: boolean;
   responseFixerConfig?: Partial<ResponseFixerConfig>;
+  // Quota lease settings
+  quotaDbRefreshIntervalSeconds?: number;
+  quotaLeasePercent5h?: number;
+  quotaLeasePercentDaily?: number;
+  quotaLeasePercentWeekly?: number;
+  quotaLeasePercentMonthly?: number;
+  quotaLeaseCapUsd?: number | null;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -82,6 +89,12 @@ export async function saveSystemSettings(formData: {
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
       enableResponseFixer: validated.enableResponseFixer,
       responseFixerConfig: validated.responseFixerConfig,
+      quotaDbRefreshIntervalSeconds: validated.quotaDbRefreshIntervalSeconds,
+      quotaLeasePercent5h: validated.quotaLeasePercent5h,
+      quotaLeasePercentDaily: validated.quotaLeasePercentDaily,
+      quotaLeasePercentWeekly: validated.quotaLeasePercentWeekly,
+      quotaLeasePercentMonthly: validated.quotaLeasePercentMonthly,
+      quotaLeaseCapUsd: validated.quotaLeaseCapUsd,
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings

@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Clock,
   Eye,
   FileCode,
   Network,
@@ -45,6 +46,12 @@ interface SystemSettingsFormProps {
     | "enableCodexSessionIdCompletion"
     | "enableResponseFixer"
     | "responseFixerConfig"
+    | "quotaDbRefreshIntervalSeconds"
+    | "quotaLeasePercent5h"
+    | "quotaLeasePercentDaily"
+    | "quotaLeasePercentWeekly"
+    | "quotaLeasePercentMonthly"
+    | "quotaLeaseCapUsd"
   >;
 }
 
@@ -81,6 +88,24 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [responseFixerConfig, setResponseFixerConfig] = useState(
     initialSettings.responseFixerConfig
   );
+  const [quotaDbRefreshIntervalSeconds, setQuotaDbRefreshIntervalSeconds] = useState(
+    initialSettings.quotaDbRefreshIntervalSeconds ?? 10
+  );
+  const [quotaLeasePercent5h, setQuotaLeasePercent5h] = useState(
+    initialSettings.quotaLeasePercent5h ?? 0.05
+  );
+  const [quotaLeasePercentDaily, setQuotaLeasePercentDaily] = useState(
+    initialSettings.quotaLeasePercentDaily ?? 0.05
+  );
+  const [quotaLeasePercentWeekly, setQuotaLeasePercentWeekly] = useState(
+    initialSettings.quotaLeasePercentWeekly ?? 0.05
+  );
+  const [quotaLeasePercentMonthly, setQuotaLeasePercentMonthly] = useState(
+    initialSettings.quotaLeasePercentMonthly ?? 0.05
+  );
+  const [quotaLeaseCapUsd, setQuotaLeaseCapUsd] = useState<string>(
+    initialSettings.quotaLeaseCapUsd != null ? String(initialSettings.quotaLeaseCapUsd) : ""
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -104,6 +129,12 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableCodexSessionIdCompletion,
         enableResponseFixer,
         responseFixerConfig,
+        quotaDbRefreshIntervalSeconds,
+        quotaLeasePercent5h,
+        quotaLeasePercentDaily,
+        quotaLeasePercentWeekly,
+        quotaLeasePercentMonthly,
+        quotaLeaseCapUsd: quotaLeaseCapUsd.trim() === "" ? null : parseFloat(quotaLeaseCapUsd),
       });
 
       if (!result.ok) {
@@ -123,6 +154,14 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
+        setQuotaDbRefreshIntervalSeconds(result.data.quotaDbRefreshIntervalSeconds ?? 10);
+        setQuotaLeasePercent5h(result.data.quotaLeasePercent5h ?? 0.05);
+        setQuotaLeasePercentDaily(result.data.quotaLeasePercentDaily ?? 0.05);
+        setQuotaLeasePercentWeekly(result.data.quotaLeasePercentWeekly ?? 0.05);
+        setQuotaLeasePercentMonthly(result.data.quotaLeasePercentMonthly ?? 0.05);
+        setQuotaLeaseCapUsd(
+          result.data.quotaLeaseCapUsd != null ? String(result.data.quotaLeaseCapUsd) : ""
+        );
       }
 
       toast.success(t("configUpdated"));
@@ -432,6 +471,157 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
               </div>
             </div>
           )}
+        </div>
+
+        {/* Quota Lease Settings Section */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-amber-500/10 text-amber-400 shrink-0">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("quotaLease.title")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t("quotaLease.description")}</p>
+            </div>
+          </div>
+
+          <div className="space-y-4 pl-11">
+            {/* DB Refresh Interval */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="quota-db-refresh-interval"
+                className="text-sm font-medium text-foreground"
+              >
+                {t("quotaLease.dbRefreshInterval")}
+              </Label>
+              <Input
+                id="quota-db-refresh-interval"
+                type="number"
+                min={1}
+                max={300}
+                value={quotaDbRefreshIntervalSeconds}
+                onChange={(e) => setQuotaDbRefreshIntervalSeconds(Number(e.target.value))}
+                disabled={isPending}
+                className={inputClassName}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("quotaLease.dbRefreshIntervalDesc")}
+              </p>
+            </div>
+
+            {/* Lease Percent 5h */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="quota-lease-percent-5h"
+                className="text-sm font-medium text-foreground"
+              >
+                {t("quotaLease.leasePercent5h")}
+              </Label>
+              <Input
+                id="quota-lease-percent-5h"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={quotaLeasePercent5h}
+                onChange={(e) => setQuotaLeasePercent5h(Number(e.target.value))}
+                disabled={isPending}
+                className={inputClassName}
+              />
+              <p className="text-xs text-muted-foreground">{t("quotaLease.leasePercent5hDesc")}</p>
+            </div>
+
+            {/* Lease Percent Daily */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="quota-lease-percent-daily"
+                className="text-sm font-medium text-foreground"
+              >
+                {t("quotaLease.leasePercentDaily")}
+              </Label>
+              <Input
+                id="quota-lease-percent-daily"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={quotaLeasePercentDaily}
+                onChange={(e) => setQuotaLeasePercentDaily(Number(e.target.value))}
+                disabled={isPending}
+                className={inputClassName}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("quotaLease.leasePercentDailyDesc")}
+              </p>
+            </div>
+
+            {/* Lease Percent Weekly */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="quota-lease-percent-weekly"
+                className="text-sm font-medium text-foreground"
+              >
+                {t("quotaLease.leasePercentWeekly")}
+              </Label>
+              <Input
+                id="quota-lease-percent-weekly"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={quotaLeasePercentWeekly}
+                onChange={(e) => setQuotaLeasePercentWeekly(Number(e.target.value))}
+                disabled={isPending}
+                className={inputClassName}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("quotaLease.leasePercentWeeklyDesc")}
+              </p>
+            </div>
+
+            {/* Lease Percent Monthly */}
+            <div className="space-y-2">
+              <Label
+                htmlFor="quota-lease-percent-monthly"
+                className="text-sm font-medium text-foreground"
+              >
+                {t("quotaLease.leasePercentMonthly")}
+              </Label>
+              <Input
+                id="quota-lease-percent-monthly"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={quotaLeasePercentMonthly}
+                onChange={(e) => setQuotaLeasePercentMonthly(Number(e.target.value))}
+                disabled={isPending}
+                className={inputClassName}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("quotaLease.leasePercentMonthlyDesc")}
+              </p>
+            </div>
+
+            {/* Lease Cap USD */}
+            <div className="space-y-2">
+              <Label htmlFor="quota-lease-cap-usd" className="text-sm font-medium text-foreground">
+                {t("quotaLease.leaseCapUsd")}
+              </Label>
+              <Input
+                id="quota-lease-cap-usd"
+                type="number"
+                min={0}
+                step={0.01}
+                value={quotaLeaseCapUsd}
+                onChange={(e) => setQuotaLeaseCapUsd(e.target.value)}
+                placeholder=""
+                disabled={isPending}
+                className={inputClassName}
+              />
+              <p className="text-xs text-muted-foreground">{t("quotaLease.leaseCapUsdDesc")}</p>
+            </div>
+          </div>
         </div>
       </div>
 

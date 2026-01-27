@@ -608,6 +608,14 @@ export const systemSettings = pgTable('system_settings', {
       maxFixSize: 1024 * 1024,
     }),
 
+  // Quota lease settings
+  quotaDbRefreshIntervalSeconds: integer('quota_db_refresh_interval_seconds').default(10),
+  quotaLeasePercent5h: numeric('quota_lease_percent_5h', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeasePercentDaily: numeric('quota_lease_percent_daily', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeasePercentWeekly: numeric('quota_lease_percent_weekly', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeasePercentMonthly: numeric('quota_lease_percent_monthly', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeaseCapUsd: numeric('quota_lease_cap_usd', { precision: 10, scale: 2 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

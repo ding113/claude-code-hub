@@ -52,6 +52,14 @@ export interface SystemSettings {
   enableResponseFixer: boolean;
   responseFixerConfig: ResponseFixerConfig;
 
+  // Quota lease settings
+  quotaDbRefreshIntervalSeconds?: number;
+  quotaLeasePercent5h?: number;
+  quotaLeasePercentDaily?: number;
+  quotaLeasePercentWeekly?: number;
+  quotaLeasePercentMonthly?: number;
+  quotaLeaseCapUsd?: number | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -94,4 +102,12 @@ export interface UpdateSystemSettingsInput {
   // 响应整流（可选）
   enableResponseFixer?: boolean;
   responseFixerConfig?: Partial<ResponseFixerConfig>;
+
+  // Quota lease settings（可选）
+  quotaDbRefreshIntervalSeconds?: number;
+  quotaLeasePercent5h?: number;
+  quotaLeasePercentDaily?: number;
+  quotaLeasePercentWeekly?: number;
+  quotaLeasePercentMonthly?: number;
+  quotaLeaseCapUsd?: number | null;
 }

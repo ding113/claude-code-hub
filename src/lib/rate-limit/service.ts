@@ -81,6 +81,8 @@ import {
   sumUserCostInTimeRange,
   sumUserTotalCost,
 } from "@/repository/statistics";
+import type { LeaseWindowType } from "./lease";
+import { type DecrementLeaseBudgetResult, LeaseService } from "./lease-service";
 import {
   type DailyResetMode,
   getTimeRangeForPeriodWithMode,
@@ -1284,5 +1286,142 @@ export class RateLimitService {
       logger.error("[RateLimit] Batch cost query failed:", error);
       return result;
     }
+  }
+
+  /**
+   * Check cost limits using lease-based mechanism
+   *
+   * This method uses the lease service to check if there's enough budget
+   * in the lease slice. If the lease is expired or missing, it will be
+   * refreshed from the database.
+   *
+   * @param entityId - The entity ID (key, user, or provider)
+   * @param entityType - The entity type
+   * @param limits - The cost limits to check
+   * @returns Whether the request is allowed and any failure reason
+   */
+  static async checkCostLimitsWithLease(
+    entityId: number,
+    entityType: "key" | "user" | "provider",
+    limits: {
+      limit_5h_usd: number | null;
+      limit_daily_usd: number | null;
+      daily_reset_time?: string;
+      daily_reset_mode?: DailyResetMode;
+      limit_weekly_usd: number | null;
+      limit_monthly_usd: number | null;
+    }
+  ): Promise<{ allowed: boolean; reason?: string; failOpen?: boolean }> {
+    const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
+    const dailyResetMode = limits.daily_reset_mode ?? "fixed";
+
+    // Define windows to check with their limits
+    const windowChecks: Array<{
+      window: LeaseWindowType;
+      limit: number | null;
+      name: string;
+      resetTime: string;
+      resetMode: DailyResetMode;
+    }> = [
+      {
+        window: "5h",
+        limit: limits.limit_5h_usd,
+        name: "5h",
+        resetTime: "00:00",
+        resetMode: "rolling" as DailyResetMode,
+      },
+      {
+        window: "daily",
+        limit: limits.limit_daily_usd,
+        name: "daily",
+        resetTime: normalizedDailyReset,
+        resetMode: dailyResetMode,
+      },
+      {
+        window: "weekly",
+        limit: limits.limit_weekly_usd,
+        name: "weekly",
+        resetTime: "00:00",
+        resetMode: "fixed" as DailyResetMode,
+      },
+      {
+        window: "monthly",
+        limit: limits.limit_monthly_usd,
+        name: "monthly",
+        resetTime: "00:00",
+        resetMode: "fixed" as DailyResetMode,
+      },
+    ];
+
+    try {
+      for (const check of windowChecks) {
+        if (!check.limit || check.limit <= 0) continue;
+
+        // Get or refresh lease from cache/DB
+        const lease = await LeaseService.getCostLease({
+          entityType,
+          entityId,
+          window: check.window,
+          limitAmount: check.limit,
+          resetTime: check.resetTime,
+          resetMode: check.resetMode,
+        });
+
+        // Fail-open if lease retrieval failed
+        if (!lease) {
+          logger.warn("[RateLimit] Lease retrieval failed, fail-open", {
+            entityType,
+            entityId,
+            window: check.window,
+          });
+          continue; // Fail-open: allow this window check
+        }
+
+        // Check if remaining budget is sufficient (> 0)
+        if (lease.remainingBudget <= 0) {
+          const typeName =
+            entityType === "key" ? "Key" : entityType === "provider" ? "Provider" : "User";
+          return {
+            allowed: false,
+            reason: `${typeName} ${check.name} cost limit reached (usage: ${lease.currentUsage.toFixed(4)}/${check.limit.toFixed(4)})`,
+          };
+        }
+      }
+
+      return { allowed: true };
+    } catch (error) {
+      logger.error("[RateLimit] checkCostLimitsWithLease failed, fail-open", {
+        entityType,
+        entityId,
+        error,
+      });
+      return { allowed: true, failOpen: true };
+    }
+  }
+
+  /**
+   * Decrement lease budget after a request completes
+   *
+   * This should be called after the request is processed to deduct
+   * the actual cost from the lease budget.
+   *
+   * @param entityId - The entity ID
+   * @param entityType - The entity type
+   * @param window - The time window
+   * @param cost - The cost to deduct
+   * @returns The decrement result
+   */
+  static async decrementLeaseBudget(
+    entityId: number,
+    entityType: "key" | "user" | "provider",
+    window: LeaseWindowType,
+    cost: number
+  ): Promise<DecrementLeaseBudgetResult> {
+    return LeaseService.decrementLeaseBudget({
+      entityType,
+      entityId,
+      window,
+      cost,
+    });
   }
 }

@@ -73,7 +73,23 @@
     "siteTitlePlaceholder": "e.g. Claude Code Hub",
     "siteTitleRequired": "Site title cannot be empty",
     "verboseProviderError": "Verbose Provider Error",
-    "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code."
+    "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
+    "quotaLease": {
+      "title": "Quota Lease Settings",
+      "description": "Configure lease refresh interval and slice percentages for rate limit checks. The lease mechanism reduces DB query pressure while maintaining rate limit accuracy.",
+      "dbRefreshInterval": "DB Refresh Interval (seconds)",
+      "dbRefreshIntervalDesc": "Interval for refreshing quota usage from the database (1-300 seconds)",
+      "leasePercent5h": "5-Hour Window Lease Percentage",
+      "leasePercent5hDesc": "Percentage of 5-hour limit for each lease slice (0-1)",
+      "leasePercentDaily": "Daily Window Lease Percentage",
+      "leasePercentDailyDesc": "Percentage of daily limit for each lease slice (0-1)",
+      "leasePercentWeekly": "Weekly Window Lease Percentage",
+      "leasePercentWeeklyDesc": "Percentage of weekly limit for each lease slice (0-1)",
+      "leasePercentMonthly": "Monthly Window Lease Percentage",
+      "leasePercentMonthlyDesc": "Percentage of monthly limit for each lease slice (0-1)",
+      "leaseCapUsd": "Lease Cap (USD)",
+      "leaseCapUsdDesc": "Maximum absolute cap per lease slice in USD, leave empty for no limit"
+    }
   },
   "section": {
     "autoCleanup": {

@@ -73,7 +73,23 @@
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "站台標題不能為空",
     "verboseProviderError": "詳細供應商錯誤資訊",
-    "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。"
+    "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
+    "quotaLease": {
+      "title": "配額租約設定",
+      "description": "設定限額檢查時的租約刷新間隔和切片比例。租約機制用於減少 DB 查詢壓力，同時保持限額精度。",
+      "dbRefreshInterval": "DB 刷新間隔（秒）",
+      "dbRefreshIntervalDesc": "從資料庫刷新配額使用量的間隔時間（1-300 秒）",
+      "leasePercent5h": "5 小時窗口租約比例",
+      "leasePercent5hDesc": "每次租約切片佔 5 小時限額的比例（0-1）",
+      "leasePercentDaily": "每日窗口租約比例",
+      "leasePercentDailyDesc": "每次租約切片佔每日限額的比例（0-1）",
+      "leasePercentWeekly": "每週窗口租約比例",
+      "leasePercentWeeklyDesc": "每次租約切片佔每週限額的比例（0-1）",
+      "leasePercentMonthly": "每月窗口租約比例",
+      "leasePercentMonthlyDesc": "每次租約切片佔每月限額的比例（0-1）",
+      "leaseCapUsd": "租約上限（USD）",
+      "leaseCapUsdDesc": "單次租約切片的絕對上限（美元），為空則不限制"
+    }
   },
   "section": {
     "autoCleanup": {

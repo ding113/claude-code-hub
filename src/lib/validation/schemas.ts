@@ -772,6 +772,35 @@ export const UpdateSystemSettingsSchema = z.object({
     })
     .partial()
     .optional(),
+
+  // Quota lease settings
+  quotaDbRefreshIntervalSeconds: z.coerce
+    .number()
+    .int("DB refresh interval must be an integer")
+    .min(1, "DB refresh interval cannot be less than 1 second")
+    .max(300, "DB refresh interval cannot exceed 300 seconds")
+    .optional(),
+  quotaLeasePercent5h: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeasePercentDaily: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeasePercentWeekly: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeasePercentMonthly: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
 });
 
 // 导出类型推断

@@ -194,6 +194,20 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
       ...defaultResponseFixerConfig,
       ...(dbSettings?.responseFixerConfig ?? {}),
     },
+    quotaDbRefreshIntervalSeconds: dbSettings?.quotaDbRefreshIntervalSeconds ?? 10,
+    quotaLeasePercent5h: dbSettings?.quotaLeasePercent5h
+      ? parseFloat(dbSettings.quotaLeasePercent5h)
+      : 0.05,
+    quotaLeasePercentDaily: dbSettings?.quotaLeasePercentDaily
+      ? parseFloat(dbSettings.quotaLeasePercentDaily)
+      : 0.05,
+    quotaLeasePercentWeekly: dbSettings?.quotaLeasePercentWeekly
+      ? parseFloat(dbSettings.quotaLeasePercentWeekly)
+      : 0.05,
+    quotaLeasePercentMonthly: dbSettings?.quotaLeasePercentMonthly
+      ? parseFloat(dbSettings.quotaLeasePercentMonthly)
+      : 0.05,
+    quotaLeaseCapUsd: dbSettings?.quotaLeaseCapUsd ? parseFloat(dbSettings.quotaLeaseCapUsd) : null,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

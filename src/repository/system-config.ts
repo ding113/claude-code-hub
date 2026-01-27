@@ -158,6 +158,12 @@ function createFallbackSettings(): SystemSettings {
       maxJsonDepth: 200,
       maxFixSize: 1024 * 1024,
     },
+    quotaDbRefreshIntervalSeconds: 10,
+    quotaLeasePercent5h: 0.05,
+    quotaLeasePercentDaily: 0.05,
+    quotaLeasePercentWeekly: 0.05,
+    quotaLeasePercentMonthly: 0.05,
+    quotaLeaseCapUsd: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -186,6 +192,12 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableResponseFixer: systemSettings.enableResponseFixer,
       responseFixerConfig: systemSettings.responseFixerConfig,
+      quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
+      quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
+      quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
+      quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
+      quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
+      quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
@@ -338,6 +350,27 @@ export async function updateSystemSettings(
       };
     }
 
+    // Quota lease settings（如果提供）
+    if (payload.quotaDbRefreshIntervalSeconds !== undefined) {
+      updates.quotaDbRefreshIntervalSeconds = payload.quotaDbRefreshIntervalSeconds;
+    }
+    if (payload.quotaLeasePercent5h !== undefined) {
+      updates.quotaLeasePercent5h = String(payload.quotaLeasePercent5h);
+    }
+    if (payload.quotaLeasePercentDaily !== undefined) {
+      updates.quotaLeasePercentDaily = String(payload.quotaLeasePercentDaily);
+    }
+    if (payload.quotaLeasePercentWeekly !== undefined) {
+      updates.quotaLeasePercentWeekly = String(payload.quotaLeasePercentWeekly);
+    }
+    if (payload.quotaLeasePercentMonthly !== undefined) {
+      updates.quotaLeasePercentMonthly = String(payload.quotaLeasePercentMonthly);
+    }
+    if (payload.quotaLeaseCapUsd !== undefined) {
+      updates.quotaLeaseCapUsd =
+        payload.quotaLeaseCapUsd === null ? null : String(payload.quotaLeaseCapUsd);
+    }
+
     const [updated] = await db
       .update(systemSettings)
       .set(updates)
@@ -360,6 +393,12 @@ export async function updateSystemSettings(
         enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
         enableResponseFixer: systemSettings.enableResponseFixer,
         responseFixerConfig: systemSettings.responseFixerConfig,
+        quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
+        quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
+        quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
+        quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
+        quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
+        quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
         createdAt: systemSettings.createdAt,
         updatedAt: systemSettings.updatedAt,
       });
