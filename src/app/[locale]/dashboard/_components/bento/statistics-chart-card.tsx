@@ -419,7 +419,7 @@ export function StatisticsChartCard({
           {/* Control buttons */}
           <div className="flex items-center justify-center gap-2 mb-2">
             <button
-              onClick={() => setSelectedUserIds(new Set(data.users.map((u) => u.id)))}
+              onClick={() => setSelectedUserIds(new Set(nonZeroUsers.map((u) => u.id)))}
               disabled={nonZeroUsers.length === 0 || selectedNonZeroCount === nonZeroUsers.length}
               className={cn(
                 "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
