@@ -19,15 +19,8 @@ export function DashboardMain({ children }: DashboardMainProps) {
   const isSessionMessagesPage =
     normalizedPathname.includes("/dashboard/sessions/") && normalizedPathname.endsWith("/messages");
 
-  const isDashboardHomePage =
-    normalizedPathname === "/dashboard" || normalizedPathname.endsWith("/dashboard");
-
   if (isSessionMessagesPage) {
     return <main className="h-[calc(100vh-64px)] w-full overflow-hidden">{children}</main>;
-  }
-
-  if (isDashboardHomePage) {
-    return <main className="mx-auto w-full max-w-7xl px-6 py-8">{children}</main>;
   }
 
   return <main className="mx-auto w-full max-w-7xl px-6 py-8">{children}</main>;
