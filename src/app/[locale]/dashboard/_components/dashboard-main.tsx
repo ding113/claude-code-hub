@@ -27,7 +27,7 @@ export function DashboardMain({ children }: DashboardMainProps) {
   }
 
   if (isDashboardHomePage) {
-    return <main className="w-full px-6 py-8">{children}</main>;
+    return <main className="mx-auto w-full max-w-7xl px-6 py-8">{children}</main>;
   }
 
   return <main className="mx-auto w-full max-w-7xl px-6 py-8">{children}</main>;

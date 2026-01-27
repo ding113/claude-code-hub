@@ -9,6 +9,7 @@ import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
 import { getUserStatistics } from "@/actions/statistics";
 import type { CurrencyCode } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import type {
   LeaderboardEntry,
@@ -202,127 +203,111 @@ export function DashboardBento({
 
   return (
     <div className="space-y-6">
-      {/* Top Section: Metrics + Live Sessions */}
+      {/* Section 1: Metrics (Admin only) */}
       {isAdmin && (
-        <div className="mx-auto w-full max-w-7xl">
-          <BentoGrid>
-            {/* Metric Cards */}
-            <BentoMetricCard
-              title={t("metrics.concurrent")}
-              value={metrics.concurrentSessions}
-              icon={Activity}
-              accentColor="emerald"
-              className="min-h-[120px]"
-              comparisons={[
-                {
-                  value: metrics.recentMinuteRequests,
-                  label: t("metrics.rpm"),
-                  isPercentage: false,
-                },
-              ]}
-            />
-            <BentoMetricCard
-              title={t("metrics.todayRequests")}
-              value={metrics.todayRequests}
-              icon={TrendingUp}
-              accentColor="blue"
-              className="min-h-[120px]"
-              comparisons={[{ value: requestsChange, label: t("metrics.vsYesterday") }]}
-            />
-            <BentoMetricCard
-              title={t("metrics.todayCost")}
-              value={formatCurrency(metrics.todayCost, currencyCode)}
-              icon={DollarSign}
-              accentColor="amber"
-              className="min-h-[120px]"
-              comparisons={[{ value: costChange, label: t("metrics.vsYesterday") }]}
-            />
-            <BentoMetricCard
-              title={t("metrics.avgResponse")}
-              value={metrics.avgResponseTime}
-              icon={Clock}
-              formatter={formatResponseTime}
-              accentColor="purple"
-              className="min-h-[120px]"
-              comparisons={[{ value: -responseTimeChange, label: t("metrics.vsYesterday") }]}
-            />
-          </BentoGrid>
-        </div>
+        <BentoGrid>
+          <BentoMetricCard
+            title={t("metrics.concurrent")}
+            value={metrics.concurrentSessions}
+            icon={Activity}
+            accentColor="emerald"
+            className="min-h-[120px]"
+            comparisons={[
+              {
+                value: metrics.recentMinuteRequests,
+                label: t("metrics.rpm"),
+                isPercentage: false,
+              },
+            ]}
+          />
+          <BentoMetricCard
+            title={t("metrics.todayRequests")}
+            value={metrics.todayRequests}
+            icon={TrendingUp}
+            accentColor="blue"
+            className="min-h-[120px]"
+            comparisons={[{ value: requestsChange, label: t("metrics.vsYesterday") }]}
+          />
+          <BentoMetricCard
+            title={t("metrics.todayCost")}
+            value={formatCurrency(metrics.todayCost, currencyCode)}
+            icon={DollarSign}
+            accentColor="amber"
+            className="min-h-[120px]"
+            comparisons={[{ value: costChange, label: t("metrics.vsYesterday") }]}
+          />
+          <BentoMetricCard
+            title={t("metrics.avgResponse")}
+            value={metrics.avgResponseTime}
+            icon={Clock}
+            formatter={formatResponseTime}
+            accentColor="purple"
+            className="min-h-[120px]"
+            comparisons={[{ value: -responseTimeChange, label: t("metrics.vsYesterday") }]}
+          />
+        </BentoGrid>
       )}
 
-      {/* Middle Section: Statistics Chart + Leaderboards (+ Live Sessions sidebar for admin) */}
-      <div
-        data-testid={isAdmin ? "dashboard-home-layout" : undefined}
-        className={
-          isAdmin ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_300px]" : undefined
-        }
-      >
-        <div className="min-w-0">
-          <div
-            className={[
-              "grid gap-4 md:gap-6",
-              "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
-              "auto-rows-[minmax(140px,auto)]",
-            ].join(" ")}
-          >
-            {statistics && (
-              <StatisticsChartCard
-                data={statistics}
-                onTimeRangeChange={setTimeRange}
-                currencyCode={currencyCode}
-                colSpan={3}
-              />
-            )}
+      {/* Section 2: Statistics Chart - Full width */}
+      {statistics && (
+        <StatisticsChartCard
+          data={statistics}
+          onTimeRangeChange={setTimeRange}
+          currencyCode={currencyCode}
+        />
+      )}
 
-            {canViewLeaderboard && (
-              <LeaderboardCard
-                title={tl("userRankings")}
-                entries={userLeaderboard}
-                currencyCode={currencyCode}
-                isLoading={userLeaderboardLoading}
-                emptyText={tl("noData")}
-                viewAllHref="/dashboard/leaderboard"
-                maxItems={3}
-                accentColor="primary"
-              />
-            )}
-            {canViewLeaderboard && (
-              <LeaderboardCard
-                title={tl("providerRankings")}
-                entries={providerLeaderboard}
-                currencyCode={currencyCode}
-                isLoading={providerLeaderboardLoading}
-                emptyText={tl("noData")}
-                viewAllHref="/dashboard/leaderboard"
-                maxItems={3}
-                accentColor="purple"
-              />
-            )}
-            {canViewLeaderboard && (
-              <LeaderboardCard
-                title={tl("modelRankings")}
-                entries={modelLeaderboard}
-                currencyCode={currencyCode}
-                isLoading={modelLeaderboardLoading}
-                emptyText={tl("noData")}
-                viewAllHref="/dashboard/leaderboard"
-                maxItems={3}
-                accentColor="blue"
-              />
-            )}
-          </div>
-        </div>
+      {/* Section 3: Leaderboards + Live Sessions */}
+      {canViewLeaderboard && (
+        <div
+          data-testid={isAdmin ? "dashboard-home-layout" : undefined}
+          className={cn(
+            "grid gap-6",
+            isAdmin
+              ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_280px]"
+              : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+          )}
+        >
+          <LeaderboardCard
+            title={tl("userRankings")}
+            entries={userLeaderboard}
+            currencyCode={currencyCode}
+            isLoading={userLeaderboardLoading}
+            emptyText={tl("noData")}
+            viewAllHref="/dashboard/leaderboard"
+            maxItems={3}
+            accentColor="primary"
+          />
+          <LeaderboardCard
+            title={tl("providerRankings")}
+            entries={providerLeaderboard}
+            currencyCode={currencyCode}
+            isLoading={providerLeaderboardLoading}
+            emptyText={tl("noData")}
+            viewAllHref="/dashboard/leaderboard"
+            maxItems={3}
+            accentColor="purple"
+          />
+          <LeaderboardCard
+            title={tl("modelRankings")}
+            entries={modelLeaderboard}
+            currencyCode={currencyCode}
+            isLoading={modelLeaderboardLoading}
+            emptyText={tl("noData")}
+            viewAllHref="/dashboard/leaderboard"
+            maxItems={3}
+            accentColor="blue"
+          />
 
-        {isAdmin && (
-          <aside data-testid="dashboard-home-sidebar" className="hidden lg:block">
+          {isAdmin && (
             <LiveSessionsPanel
+              data-testid="dashboard-home-sidebar"
               sessions={sessionsWithActivity}
               isLoading={sessionsLoading}
-              className="h-full"
             />
-          </aside>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

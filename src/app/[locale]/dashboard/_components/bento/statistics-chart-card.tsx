@@ -29,7 +29,6 @@ export interface StatisticsChartCardProps {
   data: UserStatisticsData;
   onTimeRangeChange?: (timeRange: TimeRange) => void;
   currencyCode?: CurrencyCode;
-  colSpan?: 3 | 4;
   className?: string;
 }
 
@@ -37,7 +36,6 @@ export function StatisticsChartCard({
   data,
   onTimeRangeChange,
   currencyCode = "USD",
-  colSpan = 4,
   className,
 }: StatisticsChartCardProps) {
   const t = useTranslations("dashboard.statistics");
@@ -175,11 +173,7 @@ export function StatisticsChartCard({
   };
 
   return (
-    <BentoCard
-      colSpan={colSpan}
-      rowSpan={2}
-      className={cn("flex flex-col p-0 overflow-hidden", className)}
-    >
+    <BentoCard className={cn("flex flex-col p-0 overflow-hidden", className)}>
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/50 dark:border-white/[0.06]">
         <div className="flex items-center gap-4 p-4">

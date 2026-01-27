@@ -171,7 +171,7 @@ afterEach(() => {
 });
 
 describe("DashboardMain layout classes", () => {
-  test("pathname /dashboard removes max-w-7xl but keeps px-6", () => {
+  test("pathname /dashboard has max-w-7xl and px-6", () => {
     routingMocks.usePathname.mockReturnValue("/dashboard");
     const { container, unmount } = renderSimple(
       <DashboardMain>
@@ -182,7 +182,7 @@ describe("DashboardMain layout classes", () => {
     const main = container.querySelector("main");
     expect(main).toBeTruthy();
     expect(main?.className).toContain("px-6");
-    expect(main?.className).not.toContain("max-w-7xl");
+    expect(main?.className).toContain("max-w-7xl");
 
     unmount();
   });
@@ -204,7 +204,7 @@ describe("DashboardMain layout classes", () => {
 });
 
 describe("DashboardBento admin layout", () => {
-  test("renders two-column layout with right sidebar LiveSessionsPanel", async () => {
+  test("renders four-column layout with LiveSessionsPanel in last column", async () => {
     const { container, unmount } = renderWithProviders(
       <DashboardBento
         isAdmin={true}
@@ -215,15 +215,13 @@ describe("DashboardBento admin layout", () => {
     );
     await flushPromises();
 
-    const grid = findByClassToken(container, "lg:grid-cols-[minmax(0,1fr)_300px]");
+    const grid = findByClassToken(container, "lg:grid-cols-[1fr_1fr_1fr_280px]");
     expect(grid).toBeTruthy();
 
     const livePanel = container.querySelector('[data-testid="live-sessions-panel"]');
     expect(livePanel).toBeTruthy();
 
-    const sidebar = findClosestWithClasses(livePanel, ["hidden", "lg:block"]);
-    expect(sidebar).toBeTruthy();
-    expect(grid?.contains(sidebar as HTMLElement)).toBe(true);
+    expect(grid?.contains(livePanel as HTMLElement)).toBe(true);
 
     unmount();
   });
