@@ -54,20 +54,6 @@ export function StatisticsChartCard({
   const isAdminMode = data.mode === "users";
   const enableUserFilter = isAdminMode && data.users.length > 1;
 
-  const toggleUserSelection = (userId: number) => {
-    setSelectedUserIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(userId)) {
-        if (next.size > 1) {
-          next.delete(userId);
-        }
-      } else {
-        next.add(userId);
-      }
-      return next;
-    });
-  };
-
   const chartConfig = React.useMemo(() => {
     const config: ChartConfig = {
       cost: { label: t("cost") },
@@ -85,27 +71,6 @@ export function StatisticsChartCard({
   const userMap = React.useMemo(() => {
     return new Map(data.users.map((user) => [user.dataKey, user]));
   }, [data.users]);
-
-  const visibleUsers = React.useMemo(() => {
-    if (!enableUserFilter) return data.users;
-    return data.users.filter((u) => selectedUserIds.has(u.id));
-  }, [data.users, selectedUserIds, enableUserFilter]);
-
-  const numericChartData = React.useMemo(() => {
-    return data.chartData.map((day) => {
-      const normalized: Record<string, string | number> = { ...day };
-      visibleUsers.forEach((user) => {
-        const costKey = `${user.dataKey}_cost`;
-        const costDecimal = toDecimal(day[costKey]);
-        normalized[costKey] = costDecimal ? Number(costDecimal.toDecimalPlaces(6).toString()) : 0;
-        const callsKey = `${user.dataKey}_calls`;
-        const callsValue = day[callsKey];
-        normalized[callsKey] =
-          typeof callsValue === "number" ? callsValue : Number(callsValue ?? 0);
-      });
-      return normalized;
-    });
-  }, [data.chartData, visibleUsers]);
 
   const userTotals = React.useMemo(() => {
     const totals: Record<string, { cost: Decimal; calls: number }> = {};
@@ -126,6 +91,61 @@ export function StatisticsChartCard({
     });
     return totals;
   }, [data.chartData, data.users]);
+
+  const nonZeroUsers = React.useMemo(() => {
+    if (!enableUserFilter) return data.users;
+    return data.users.filter((user) => {
+      const total = userTotals[user.dataKey];
+      return total && (total.cost.greaterThan(0) || total.calls > 0);
+    });
+  }, [data.users, enableUserFilter, userTotals]);
+
+  const selectedNonZeroCount = React.useMemo(() => {
+    if (!enableUserFilter) return selectedUserIds.size;
+    return nonZeroUsers.reduce((count, user) => count + (selectedUserIds.has(user.id) ? 1 : 0), 0);
+  }, [enableUserFilter, nonZeroUsers, selectedUserIds]);
+
+  const toggleUserSelection = (userId: number) => {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+
+      if (next.has(userId)) {
+        // Keep at least one visible (non-zero) user selected
+        const selectedCount = nonZeroUsers.reduce(
+          (count, user) => count + (prev.has(user.id) ? 1 : 0),
+          0
+        );
+        if (selectedCount > 1) {
+          next.delete(userId);
+        }
+      } else {
+        next.add(userId);
+      }
+
+      return next;
+    });
+  };
+
+  const visibleUsers = React.useMemo(() => {
+    if (!enableUserFilter) return data.users;
+    return nonZeroUsers.filter((u) => selectedUserIds.has(u.id));
+  }, [data.users, selectedUserIds, enableUserFilter, nonZeroUsers]);
+
+  const numericChartData = React.useMemo(() => {
+    return data.chartData.map((day) => {
+      const normalized: Record<string, string | number> = { ...day };
+      visibleUsers.forEach((user) => {
+        const costKey = `${user.dataKey}_cost`;
+        const costDecimal = toDecimal(day[costKey]);
+        normalized[costKey] = costDecimal ? Number(costDecimal.toDecimalPlaces(6).toString()) : 0;
+        const callsKey = `${user.dataKey}_calls`;
+        const callsValue = day[callsKey];
+        normalized[callsKey] =
+          typeof callsValue === "number" ? callsValue : Number(callsValue ?? 0);
+      });
+      return normalized;
+    });
+  }, [data.chartData, visibleUsers]);
 
   const visibleTotals = React.useMemo(() => {
     const costTotal = data.chartData.reduce((sum, day) => {
@@ -263,8 +283,9 @@ export function StatisticsChartCard({
         <ChartContainer config={chartConfig} className="h-full w-full min-h-[200px]">
           <AreaChart data={numericChartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
             <defs>
-              {data.users.map((user, index) => {
-                const color = getUserColor(index);
+              {visibleUsers.map((user) => {
+                const originalIndex = data.users.findIndex((u) => u.id === user.id);
+                const color = getUserColor(originalIndex);
                 return (
                   <linearGradient
                     key={user.dataKey}
@@ -392,11 +413,11 @@ export function StatisticsChartCard({
           {/* Control buttons */}
           <div className="flex items-center justify-center gap-2 mb-2">
             <button
-              onClick={() => setSelectedUserIds(new Set(data.users.map((u) => u.id)))}
-              disabled={selectedUserIds.size === data.users.length}
+              onClick={() => setSelectedUserIds(new Set(nonZeroUsers.map((u) => u.id)))}
+              disabled={nonZeroUsers.length === 0 || selectedNonZeroCount === nonZeroUsers.length}
               className={cn(
                 "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
-                selectedUserIds.size === data.users.length
+                nonZeroUsers.length === 0 || selectedNonZeroCount === nonZeroUsers.length
                   ? "text-muted-foreground/50 cursor-not-allowed"
                   : "text-primary hover:text-primary/80 hover:bg-primary/10"
               )}
@@ -406,14 +427,14 @@ export function StatisticsChartCard({
             <span className="text-muted-foreground/30">|</span>
             <button
               onClick={() => {
-                if (data.users.length > 0) {
-                  setSelectedUserIds(new Set([data.users[0].id]));
+                if (nonZeroUsers.length > 0) {
+                  setSelectedUserIds(new Set([nonZeroUsers[0].id]));
                 }
               }}
-              disabled={selectedUserIds.size === 1}
+              disabled={nonZeroUsers.length === 0 || selectedNonZeroCount === 1}
               className={cn(
                 "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
-                selectedUserIds.size === 1
+                nonZeroUsers.length === 0 || selectedNonZeroCount === 1
                   ? "text-muted-foreground/50 cursor-not-allowed"
                   : "text-primary hover:text-primary/80 hover:bg-primary/10"
               )}
@@ -424,12 +445,11 @@ export function StatisticsChartCard({
           {/* User list with max 3 rows and scroll - only show users with non-zero usage */}
           <div className="max-h-[72px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
             <div className="flex flex-wrap gap-1.5 justify-center">
-              {data.users
-                .map((user, originalIndex) => ({ user, originalIndex }))
-                .filter(({ user }) => {
-                  const total = userTotals[user.dataKey];
-                  return total && (total.cost.greaterThan(0) || total.calls > 0);
-                })
+              {nonZeroUsers
+                .map((user) => ({
+                  user,
+                  originalIndex: data.users.findIndex((u) => u.id === user.id),
+                }))
                 .map(({ user, originalIndex }) => {
                   const color = getUserColor(originalIndex);
                   const isSelected = selectedUserIds.has(user.id);

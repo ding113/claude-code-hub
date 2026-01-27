@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Download, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, XCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -71,13 +71,15 @@ export function ProbeTerminal({
   const containerRef = useRef<HTMLDivElement>(null);
   const [userScrolled, setUserScrolled] = useState(false);
   const [filter, setFilter] = useState("");
+  const lastLogId = logs[logs.length - 1]?.id;
 
   // Auto-scroll to bottom when new logs arrive
   useEffect(() => {
+    if (!lastLogId) return;
     if (autoScroll && !userScrolled && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs, autoScroll, userScrolled]);
+  }, [lastLogId, autoScroll, userScrolled]);
 
   // Detect user scroll
   const handleScroll = () => {
@@ -183,7 +185,6 @@ export function ProbeTerminal({
           filteredLogs.map((log) => {
             const level = getLogLevel(log);
             const config = levelConfig[level];
-            const Icon = config.icon;
 
             return (
               <button
