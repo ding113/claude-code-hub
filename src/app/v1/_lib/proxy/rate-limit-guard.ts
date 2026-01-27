@@ -224,15 +224,18 @@ export class ProxyRateLimitGuard {
       logger.warn(`[RateLimit] Key 5h limit exceeded: key=${key.id}, ${key5hCheck.reason}`);
 
       const { currentUsage, limitValue } = parseLimitInfo(key5hCheck.reason!);
-      const resetTime = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
-      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_5H_EXCEEDED, {
-        current: currentUsage.toFixed(4),
-        limit: limitValue.toFixed(4),
-        resetTime,
-      });
+      // 5h 是滚动窗口，使用专用的滚动窗口错误消息（无固定重置时间）
+      const message = await getErrorMessageServer(
+        locale,
+        ERROR_CODES.RATE_LIMIT_5H_ROLLING_EXCEEDED,
+        {
+          current: currentUsage.toFixed(4),
+          limit: limitValue.toFixed(4),
+        }
+      );
 
       throw new RateLimitError(
         "rate_limit_error",
@@ -240,7 +243,7 @@ export class ProxyRateLimitGuard {
         "usd_5h",
         currentUsage,
         limitValue,
-        resetTime,
+        null, // 滚动窗口没有固定重置时间
         null
       );
     }
@@ -257,15 +260,18 @@ export class ProxyRateLimitGuard {
       logger.warn(`[RateLimit] User 5h limit exceeded: user=${user.id}, ${user5hCheck.reason}`);
 
       const { currentUsage, limitValue } = parseLimitInfo(user5hCheck.reason!);
-      const resetTime = new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString();
 
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
-      const message = await getErrorMessageServer(locale, ERROR_CODES.RATE_LIMIT_5H_EXCEEDED, {
-        current: currentUsage.toFixed(4),
-        limit: limitValue.toFixed(4),
-        resetTime,
-      });
+      // 5h 是滚动窗口，使用专用的滚动窗口错误消息（无固定重置时间）
+      const message = await getErrorMessageServer(
+        locale,
+        ERROR_CODES.RATE_LIMIT_5H_ROLLING_EXCEEDED,
+        {
+          current: currentUsage.toFixed(4),
+          limit: limitValue.toFixed(4),
+        }
+      );
 
       throw new RateLimitError(
         "rate_limit_error",
@@ -273,7 +279,7 @@ export class ProxyRateLimitGuard {
         "usd_5h",
         currentUsage,
         limitValue,
-        resetTime,
+        null, // 滚动窗口没有固定重置时间
         null
       );
     }
@@ -293,33 +299,57 @@ export class ProxyRateLimitGuard {
 
       const { currentUsage, limitValue } = parseLimitInfo(keyDailyCheck.reason!);
 
-      const resetInfo = getResetInfoWithMode("daily", key.dailyResetTime, key.dailyResetMode);
-      // rolling 模式没有 resetAt，使用 24 小时后作为 fallback
-      const resetTime =
-        resetInfo.resetAt?.toISOString() ??
-        new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
       const { getLocale } = await import("next-intl/server");
       const locale = await getLocale();
-      const message = await getErrorMessageServer(
-        locale,
-        ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
-        {
-          current: currentUsage.toFixed(4),
-          limit: limitValue.toFixed(4),
-          resetTime,
-        }
-      );
 
-      throw new RateLimitError(
-        "rate_limit_error",
-        message,
-        "daily_quota",
-        currentUsage,
-        limitValue,
-        resetTime,
-        null
-      );
+      // 根据模式选择不同的错误消息
+      if (key.dailyResetMode === "rolling") {
+        // rolling 模式：使用滚动窗口专用消息（无固定重置时间）
+        const message = await getErrorMessageServer(
+          locale,
+          ERROR_CODES.RATE_LIMIT_DAILY_ROLLING_EXCEEDED,
+          {
+            current: currentUsage.toFixed(4),
+            limit: limitValue.toFixed(4),
+          }
+        );
+
+        throw new RateLimitError(
+          "rate_limit_error",
+          message,
+          "daily_quota",
+          currentUsage,
+          limitValue,
+          null, // 滚动窗口没有固定重置时间
+          null
+        );
+      } else {
+        // fixed 模式：有固定重置时间
+        const resetInfo = getResetInfoWithMode("daily", key.dailyResetTime, key.dailyResetMode);
+        const resetTime =
+          resetInfo.resetAt?.toISOString() ??
+          new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        const message = await getErrorMessageServer(
+          locale,
+          ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
+          {
+            current: currentUsage.toFixed(4),
+            limit: limitValue.toFixed(4),
+            resetTime,
+          }
+        );
+
+        throw new RateLimitError(
+          "rate_limit_error",
+          message,
+          "daily_quota",
+          currentUsage,
+          limitValue,
+          resetTime,
+          null
+        );
+      }
     }
 
     // 8. User 每日额度（User 独有的常用预算）- null 表示无限制
@@ -334,34 +364,57 @@ export class ProxyRateLimitGuard {
       if (!dailyCheck.allowed) {
         logger.warn(`[RateLimit] User daily limit exceeded: user=${user.id}, ${dailyCheck.reason}`);
 
-        // 使用用户配置的重置时间和模式计算正确的 resetTime
-        const resetInfo = getResetInfoWithMode("daily", user.dailyResetTime, user.dailyResetMode);
-        // rolling 模式没有 resetAt，使用 24 小时后作为 fallback
-        const resetTime =
-          resetInfo.resetAt?.toISOString() ??
-          new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
         const { getLocale } = await import("next-intl/server");
         const locale = await getLocale();
-        const message = await getErrorMessageServer(
-          locale,
-          ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
-          {
-            current: (dailyCheck.current || 0).toFixed(4),
-            limit: user.dailyQuota.toFixed(4),
-            resetTime,
-          }
-        );
 
-        throw new RateLimitError(
-          "rate_limit_error",
-          message,
-          "daily_quota",
-          dailyCheck.current || 0,
-          user.dailyQuota,
-          resetTime,
-          null
-        );
+        // 根据模式选择不同的错误消息
+        if (user.dailyResetMode === "rolling") {
+          // rolling 模式：使用滚动窗口专用消息（无固定重置时间）
+          const message = await getErrorMessageServer(
+            locale,
+            ERROR_CODES.RATE_LIMIT_DAILY_ROLLING_EXCEEDED,
+            {
+              current: (dailyCheck.current || 0).toFixed(4),
+              limit: user.dailyQuota.toFixed(4),
+            }
+          );
+
+          throw new RateLimitError(
+            "rate_limit_error",
+            message,
+            "daily_quota",
+            dailyCheck.current || 0,
+            user.dailyQuota,
+            null, // 滚动窗口没有固定重置时间
+            null
+          );
+        } else {
+          // fixed 模式：有固定重置时间
+          const resetInfo = getResetInfoWithMode("daily", user.dailyResetTime, user.dailyResetMode);
+          const resetTime =
+            resetInfo.resetAt?.toISOString() ??
+            new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+          const message = await getErrorMessageServer(
+            locale,
+            ERROR_CODES.RATE_LIMIT_DAILY_QUOTA_EXCEEDED,
+            {
+              current: (dailyCheck.current || 0).toFixed(4),
+              limit: user.dailyQuota.toFixed(4),
+              resetTime,
+            }
+          );
+
+          throw new RateLimitError(
+            "rate_limit_error",
+            message,
+            "daily_quota",
+            dailyCheck.current || 0,
+            user.dailyQuota,
+            resetTime,
+            null
+          );
+        }
       }
     }
 

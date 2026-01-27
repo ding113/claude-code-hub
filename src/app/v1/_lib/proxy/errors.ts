@@ -659,7 +659,7 @@ export class RateLimitError extends Error {
       | "daily_quota",
     public readonly currentUsage: number,
     public readonly limitValue: number,
-    public readonly resetTime: string, // ISO 8601 格式
+    public readonly resetTime: string | null, // ISO 8601 格式，滚动窗口为 null
     public readonly providerId: number | null = null
   ) {
     super(message);

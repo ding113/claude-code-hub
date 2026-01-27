@@ -256,12 +256,12 @@ export class ProxyErrorHandler {
    * - error.limit_type: 限流类型（rpm/usd_5h/usd_weekly/usd_monthly/concurrent_sessions/daily_quota）
    * - error.current: 当前使用量
    * - error.limit: 限制值
-   * - error.reset_time: 重置时间（ISO-8601格式）
+   * - error.reset_time: 重置时间（ISO-8601格式，滚动窗口为 null）
    *
    * 响应头（3个标准 rate limit 头）：
    * - X-RateLimit-Limit: 限制值
    * - X-RateLimit-Remaining: 剩余配额（max(0, limit - current)）
-   * - X-RateLimit-Reset: Unix 时间戳（秒）
+   * - X-RateLimit-Reset: Unix 时间戳（秒），滚动窗口不设置此头
    */
   private static buildRateLimitResponse(error: RateLimitError): Response {
     // 使用 helper 函数计算状态码
@@ -270,19 +270,21 @@ export class ProxyErrorHandler {
     // 计算剩余配额（不能为负数）
     const remaining = Math.max(0, error.limitValue - error.currentUsage);
 
-    // 计算 Unix 时间戳（秒）
-    const resetTimestamp = Math.floor(new Date(error.resetTime).getTime() / 1000);
-
     const headers = new Headers({
       "Content-Type": "application/json",
-      // 标准 rate limit 响应头（3个）
+      // 标准 rate limit 响应头
       "X-RateLimit-Limit": error.limitValue.toString(),
       "X-RateLimit-Remaining": remaining.toString(),
-      "X-RateLimit-Reset": resetTimestamp.toString(),
       // 额外的自定义头（便于客户端快速识别限流类型）
       "X-RateLimit-Type": error.limitType,
-      "Retry-After": ProxyErrorHandler.calculateRetryAfter(error.resetTime),
     });
+
+    // 只有固定窗口才设置重置时间相关头（滚动窗口 resetTime 为 null）
+    if (error.resetTime !== null) {
+      const resetTimestamp = Math.floor(new Date(error.resetTime).getTime() / 1000);
+      headers.set("X-RateLimit-Reset", resetTimestamp.toString());
+      headers.set("Retry-After", ProxyErrorHandler.calculateRetryAfter(error.resetTime));
+    }
 
     return new Response(
       JSON.stringify({
@@ -295,7 +297,7 @@ export class ProxyErrorHandler {
           limit_type: error.limitType,
           current: error.currentUsage,
           limit: error.limitValue,
-          reset_time: error.resetTime,
+          reset_time: error.resetTime, // 滚动窗口为 null
         },
       }),
       {
@@ -307,6 +309,7 @@ export class ProxyErrorHandler {
 
   /**
    * 计算 Retry-After 头（秒数）
+   * 仅用于固定窗口（有确定重置时间的场景）
    */
   private static calculateRetryAfter(resetTime: string): string {
     const resetDate = new Date(resetTime);

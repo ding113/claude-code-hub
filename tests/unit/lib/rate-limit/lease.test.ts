@@ -8,8 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock getEnvConfig before importing lease module
 vi.mock("@/lib/config", () => ({
-  getEnvConfig: () => ({ TZ: "Asia/Shanghai" }),
+  getEnvConfig: vi.fn(() => ({ TZ: "Asia/Shanghai" })),
 }));
+
+import { getEnvConfig } from "@/lib/config";
 
 describe("lease module", () => {
   const nowMs = 1706400000000; // 2024-01-28 00:00:00 UTC
@@ -374,6 +376,235 @@ describe("lease module", () => {
       });
 
       expect(isLeaseExpired(lease)).toBe(false);
+    });
+  });
+});
+
+/**
+ * Lease Module Timezone Consistency Tests
+ *
+ * Verify that lease module delegates to time-utils correctly
+ * and produces consistent timezone behavior
+ */
+describe("lease timezone consistency", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe("getLeaseTimeRange timezone behavior", () => {
+    it("should use configured timezone for daily fixed window", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange } = await import("@/lib/rate-limit/lease");
+
+      // 2024-01-15 02:00:00 UTC = 2024-01-15 10:00:00 Shanghai
+      const utcTime = new Date("2024-01-15T02:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      // Reset at 08:00 Shanghai, we've passed it
+      const range = getLeaseTimeRange("daily", "08:00", "fixed");
+
+      // Window starts at 08:00 Shanghai = 00:00 UTC
+      expect(range.startTime.toISOString()).toBe("2024-01-15T00:00:00.000Z");
+      expect(range.endTime.toISOString()).toBe("2024-01-15T02:00:00.000Z");
+    });
+
+    it("should use configured timezone for weekly window", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange } = await import("@/lib/rate-limit/lease");
+
+      // 2024-01-17 00:00:00 UTC = Wednesday 08:00 Shanghai
+      const utcTime = new Date("2024-01-17T00:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      const range = getLeaseTimeRange("weekly");
+
+      // Monday 00:00 Shanghai = Sunday 16:00 UTC
+      expect(range.startTime.toISOString()).toBe("2024-01-14T16:00:00.000Z");
+    });
+
+    it("should use configured timezone for monthly window", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange } = await import("@/lib/rate-limit/lease");
+
+      // 2024-01-15 00:00:00 UTC = 2024-01-15 08:00 Shanghai
+      const utcTime = new Date("2024-01-15T00:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      const range = getLeaseTimeRange("monthly");
+
+      // Jan 1 00:00 Shanghai = Dec 31 16:00 UTC
+      expect(range.startTime.toISOString()).toBe("2023-12-31T16:00:00.000Z");
+    });
+
+    it("should ignore timezone for rolling windows (5h)", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange } = await import("@/lib/rate-limit/lease");
+
+      const utcTime = new Date("2024-01-15T12:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "America/New_York" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      const range = getLeaseTimeRange("5h");
+
+      // 5h is always rolling, timezone doesn't matter
+      expect(range.startTime.toISOString()).toBe("2024-01-15T07:00:00.000Z");
+      expect(range.endTime.toISOString()).toBe("2024-01-15T12:00:00.000Z");
+    });
+
+    it("should ignore timezone for daily rolling window", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange } = await import("@/lib/rate-limit/lease");
+
+      const utcTime = new Date("2024-01-15T12:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Europe/London" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      const range = getLeaseTimeRange("daily", "08:00", "rolling");
+
+      // Daily rolling is 24h back, timezone doesn't matter
+      expect(range.startTime.toISOString()).toBe("2024-01-14T12:00:00.000Z");
+      expect(range.endTime.toISOString()).toBe("2024-01-15T12:00:00.000Z");
+    });
+  });
+
+  describe("getLeaseTtlSeconds timezone behavior", () => {
+    it("should calculate TTL based on configured timezone for daily fixed", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTtlSeconds } = await import("@/lib/rate-limit/lease");
+
+      // 2024-01-15 02:00:00 UTC = 2024-01-15 10:00:00 Shanghai
+      const utcTime = new Date("2024-01-15T02:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      // Next reset at 08:00 Shanghai tomorrow = 22 hours away
+      const ttl = getLeaseTtlSeconds("daily", "08:00", "fixed");
+
+      expect(ttl).toBe(22 * 3600);
+    });
+
+    it("should calculate TTL based on configured timezone for weekly", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTtlSeconds } = await import("@/lib/rate-limit/lease");
+
+      // 2024-01-17 00:00:00 UTC = Wednesday 08:00 Shanghai
+      const utcTime = new Date("2024-01-17T00:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      // Next Monday 00:00 Shanghai = 112 hours away
+      const ttl = getLeaseTtlSeconds("weekly");
+
+      expect(ttl).toBe(112 * 3600);
+    });
+
+    it("should return fixed TTL for rolling windows", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTtlSeconds } = await import("@/lib/rate-limit/lease");
+
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Pacific/Auckland" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      expect(getLeaseTtlSeconds("5h")).toBe(5 * 3600);
+      expect(getLeaseTtlSeconds("daily", "08:00", "rolling")).toBe(24 * 3600);
+    });
+  });
+
+  describe("cross-module consistency", () => {
+    it("should produce same results as time-utils for daily fixed", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange, getLeaseTtlSeconds } = await import("@/lib/rate-limit/lease");
+      const { getTimeRangeForPeriod, getTTLForPeriod } = await import(
+        "@/lib/rate-limit/time-utils"
+      );
+
+      const utcTime = new Date("2024-01-15T02:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      const leaseRange = getLeaseTimeRange("daily", "08:00", "fixed");
+      const timeUtilsRange = getTimeRangeForPeriod("daily", "08:00");
+
+      expect(leaseRange.startTime.toISOString()).toBe(timeUtilsRange.startTime.toISOString());
+      expect(leaseRange.endTime.toISOString()).toBe(timeUtilsRange.endTime.toISOString());
+
+      const leaseTtl = getLeaseTtlSeconds("daily", "08:00", "fixed");
+      const timeUtilsTtl = getTTLForPeriod("daily", "08:00");
+
+      expect(leaseTtl).toBe(timeUtilsTtl);
+    });
+
+    it("should produce same results as time-utils for weekly", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange, getLeaseTtlSeconds } = await import("@/lib/rate-limit/lease");
+      const { getTimeRangeForPeriod, getTTLForPeriod } = await import(
+        "@/lib/rate-limit/time-utils"
+      );
+
+      const utcTime = new Date("2024-01-17T00:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      const leaseRange = getLeaseTimeRange("weekly");
+      const timeUtilsRange = getTimeRangeForPeriod("weekly");
+
+      expect(leaseRange.startTime.toISOString()).toBe(timeUtilsRange.startTime.toISOString());
+
+      const leaseTtl = getLeaseTtlSeconds("weekly");
+      const timeUtilsTtl = getTTLForPeriod("weekly");
+
+      expect(leaseTtl).toBe(timeUtilsTtl);
+    });
+
+    it("should produce same results as time-utils for monthly", async () => {
+      const { getEnvConfig } = await import("@/lib/config");
+      const { getLeaseTimeRange, getLeaseTtlSeconds } = await import("@/lib/rate-limit/lease");
+      const { getTimeRangeForPeriod, getTTLForPeriod } = await import(
+        "@/lib/rate-limit/time-utils"
+      );
+
+      const utcTime = new Date("2024-01-15T00:00:00.000Z");
+      vi.setSystemTime(utcTime);
+      vi.mocked(getEnvConfig).mockReturnValue({ TZ: "Asia/Shanghai" } as ReturnType<
+        typeof getEnvConfig
+      >);
+
+      const leaseRange = getLeaseTimeRange("monthly");
+      const timeUtilsRange = getTimeRangeForPeriod("monthly");
+
+      expect(leaseRange.startTime.toISOString()).toBe(timeUtilsRange.startTime.toISOString());
+
+      const leaseTtl = getLeaseTtlSeconds("monthly");
+      const timeUtilsTtl = getTTLForPeriod("monthly");
+
+      expect(leaseTtl).toBe(timeUtilsTtl);
     });
   });
 });
