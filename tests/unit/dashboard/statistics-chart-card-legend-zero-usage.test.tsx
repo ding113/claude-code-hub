@@ -16,7 +16,8 @@ vi.mock("recharts", async () => {
       React.createElement("div", { "data-testid": "recharts-responsive" }, children),
     AreaChart: ({ children }: any) =>
       React.createElement("div", { "data-testid": "recharts-areachart" }, children),
-    Area: () => null,
+    Area: ({ dataKey }: any) =>
+      React.createElement("div", { "data-testid": "recharts-area", "data-key": dataKey }),
     CartesianGrid: () => null,
     XAxis: () => null,
     YAxis: () => null,
@@ -32,7 +33,7 @@ function findButtonByText(container: HTMLElement, text: string) {
 }
 
 describe("StatisticsChartCard legend", () => {
-  test("shows users with zero usage so they can be toggled", async () => {
+  test("hides users with zero usage and does not render their series", async () => {
     const data: UserStatisticsData = {
       mode: "users",
       timeRange: "7days",
@@ -59,7 +60,13 @@ describe("StatisticsChartCard legend", () => {
     });
 
     expect(findButtonByText(container, "Alice")).toBeTruthy();
-    expect(findButtonByText(container, "Bob")).toBeTruthy();
+    expect(findButtonByText(container, "Bob")).toBeFalsy();
+
+    const series = Array.from(container.querySelectorAll('[data-testid="recharts-area"]')).map(
+      (el) => (el as HTMLElement).getAttribute("data-key")
+    );
+    expect(series).toContain("user-1_cost");
+    expect(series).not.toContain("user-2_cost");
 
     await act(async () => root.unmount());
     container.remove();
