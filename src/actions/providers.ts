@@ -1198,14 +1198,14 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     ]);
 
     // 获取重置时间信息
-    const reset5h = getResetInfo("5h");
-    const resetDaily = getResetInfoWithMode(
+    const reset5h = await getResetInfo("5h");
+    const resetDaily = await getResetInfoWithMode(
       "daily",
       provider.dailyResetTime,
       provider.dailyResetMode ?? "fixed"
     );
-    const resetWeekly = getResetInfo("weekly");
-    const resetMonthly = getResetInfo("monthly");
+    const resetWeekly = await getResetInfo("weekly");
+    const resetMonthly = await getResetInfo("monthly");
 
     return {
       ok: true,
@@ -1322,15 +1322,15 @@ export async function getProviderLimitUsageBatch(
       const sessionCount = sessionCountMap.get(provider.id) || 0;
 
       // 获取重置时间信息
-      const reset5h = getResetInfo("5h");
+      const reset5h = await getResetInfo("5h");
       const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
-      const resetDaily = getResetInfoWithMode(
+      const resetDaily = await getResetInfoWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
         dailyResetMode
       );
-      const resetWeekly = getResetInfo("weekly");
-      const resetMonthly = getResetInfo("monthly");
+      const resetWeekly = await getResetInfo("weekly");
+      const resetMonthly = await getResetInfo("monthly");
 
       result.set(provider.id, {
         cost5h: {

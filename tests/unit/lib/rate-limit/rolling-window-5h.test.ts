@@ -12,9 +12,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock getEnvConfig before importing modules
-vi.mock("@/lib/config", () => ({
-  getEnvConfig: vi.fn(() => ({ TZ: "Asia/Shanghai" })),
+// Mock resolveSystemTimezone before importing modules
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn(async () => "Asia/Shanghai"),
 }));
 
 const pipelineCommands: Array<unknown[]> = [];
@@ -369,7 +369,7 @@ describe("RateLimitService - 5h rolling window behavior", () => {
     it("should not have any fixed reset time concept", async () => {
       const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
 
-      const info = getResetInfo("5h");
+      const info = await getResetInfo("5h");
 
       // 5h window is rolling type, no resetAt timestamp
       expect(info.type).toBe("rolling");
@@ -383,7 +383,7 @@ describe("RateLimitService - 5h rolling window behavior", () => {
       const now1 = new Date("2024-01-15T10:00:00.000Z").getTime();
       vi.setSystemTime(new Date(now1));
 
-      const range1 = getTimeRangeForPeriod("5h");
+      const range1 = await getTimeRangeForPeriod("5h");
       expect(range1.endTime.getTime()).toBe(now1);
       expect(range1.startTime.getTime()).toBe(now1 - 5 * 60 * 60 * 1000);
 
@@ -391,7 +391,7 @@ describe("RateLimitService - 5h rolling window behavior", () => {
       const now2 = new Date("2024-01-16T15:30:00.000Z").getTime();
       vi.setSystemTime(new Date(now2));
 
-      const range2 = getTimeRangeForPeriod("5h");
+      const range2 = await getTimeRangeForPeriod("5h");
       expect(range2.endTime.getTime()).toBe(now2);
       expect(range2.startTime.getTime()).toBe(now2 - 5 * 60 * 60 * 1000);
     });
@@ -500,7 +500,7 @@ describe("5h limit exceeded - error message and resetTime", () => {
     it("5h window getResetInfo should return rolling type without resetAt", async () => {
       const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
 
-      const info = getResetInfo("5h");
+      const info = await getResetInfo("5h");
 
       // Rolling windows have no fixed reset time
       expect(info.type).toBe("rolling");
@@ -520,12 +520,12 @@ describe("5h limit exceeded - error message and resetTime", () => {
 
       const t1 = baseTime;
       vi.setSystemTime(new Date(t1));
-      const info1 = getResetInfo("5h");
+      const info1 = await getResetInfo("5h");
 
       // Move forward 3 hours
       const t2 = baseTime + 3 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t2));
-      const info2 = getResetInfo("5h");
+      const info2 = await getResetInfo("5h");
 
       // Both should indicate rolling type, no specific resetAt
       expect(info1.type).toBe("rolling");
@@ -540,14 +540,14 @@ describe("5h limit exceeded - error message and resetTime", () => {
       // T1: Check time range
       const t1 = baseTime;
       vi.setSystemTime(new Date(t1));
-      const range1 = getTimeRangeForPeriod("5h");
+      const range1 = await getTimeRangeForPeriod("5h");
       expect(range1.startTime.getTime()).toBe(t1 - 5 * 60 * 60 * 1000);
       expect(range1.endTime.getTime()).toBe(t1);
 
       // T2: 3 hours later, time range should shift
       const t2 = baseTime + 3 * 60 * 60 * 1000;
       vi.setSystemTime(new Date(t2));
-      const range2 = getTimeRangeForPeriod("5h");
+      const range2 = await getTimeRangeForPeriod("5h");
       expect(range2.startTime.getTime()).toBe(t2 - 5 * 60 * 60 * 1000);
       expect(range2.endTime.getTime()).toBe(t2);
 
@@ -571,7 +571,7 @@ describe("5h limit exceeded - error message and resetTime", () => {
       //   "5-hour cost limit exceeded. Oldest usage will roll off in X hours."
 
       const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
-      const info = getResetInfo("5h");
+      const info = await getResetInfo("5h");
 
       // The info should clearly indicate this is a rolling window
       expect(info.type).toBe("rolling");
@@ -584,7 +584,7 @@ describe("5h limit exceeded - error message and resetTime", () => {
     it("daily fixed window SHOULD have a specific reset time", async () => {
       const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
 
-      const info = getResetInfo("daily", "18:00");
+      const info = await getResetInfo("daily", "18:00");
 
       // Daily fixed windows have a specific reset time
       expect(info.type).toBe("custom");
@@ -595,7 +595,7 @@ describe("5h limit exceeded - error message and resetTime", () => {
     it("daily rolling window should NOT have a specific reset time", async () => {
       const { getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
 
-      const info = getResetInfoWithMode("daily", "18:00", "rolling");
+      const info = await getResetInfoWithMode("daily", "18:00", "rolling");
 
       // Daily rolling also has no fixed reset
       expect(info.type).toBe("rolling");
@@ -608,7 +608,7 @@ describe("5h limit exceeded - error message and resetTime", () => {
     it("weekly window should have natural reset time (next Monday)", async () => {
       const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
 
-      const info = getResetInfo("weekly");
+      const info = await getResetInfo("weekly");
 
       expect(info.type).toBe("natural");
       expect(info.resetAt).toBeDefined();
@@ -617,7 +617,7 @@ describe("5h limit exceeded - error message and resetTime", () => {
     it("monthly window should have natural reset time (1st of next month)", async () => {
       const { getResetInfo } = await import("@/lib/rate-limit/time-utils");
 
-      const info = getResetInfo("monthly");
+      const info = await getResetInfo("monthly");
 
       expect(info.type).toBe("natural");
       expect(info.resetAt).toBeDefined();

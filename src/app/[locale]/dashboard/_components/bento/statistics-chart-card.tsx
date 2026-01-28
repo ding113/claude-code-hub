@@ -1,11 +1,13 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
+import { formatInTimeZone } from "date-fns-tz";
+import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn, Decimal, formatCurrency, toDecimal } from "@/lib/utils";
+import { getDateFnsLocale } from "@/lib/utils/date-format";
 import type { TimeRange, UserStatisticsData } from "@/types/statistics";
 import { TIME_RANGE_OPTIONS } from "@/types/statistics";
 import { BentoCard } from "./bento-grid";
@@ -40,6 +42,8 @@ export function StatisticsChartCard({
 }: StatisticsChartCardProps) {
   const t = useTranslations("dashboard.statistics");
   const locale = useLocale();
+  const timeZone = useTimeZone() ?? "UTC";
+  const dateFnsLocale = getDateFnsLocale(locale);
   const [activeChart, setActiveChart] = React.useState<"cost" | "calls">("cost");
   const [chartMode, setChartMode] = React.useState<"stacked" | "overlay">("overlay");
 
@@ -150,26 +154,17 @@ export function StatisticsChartCard({
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     if (data.resolution === "hour") {
-      return date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+      return formatInTimeZone(date, timeZone, "HH:mm", { locale: dateFnsLocale });
     }
-    return date.toLocaleDateString(locale, { month: "numeric", day: "numeric" });
+    return formatInTimeZone(date, timeZone, "M/d", { locale: dateFnsLocale });
   };
 
   const formatTooltipDate = (dateStr: string) => {
     const date = new Date(dateStr);
     if (data.resolution === "hour") {
-      return date.toLocaleString(locale, {
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      return formatInTimeZone(date, timeZone, "MMMM d HH:mm", { locale: dateFnsLocale });
     }
-    return date.toLocaleDateString(locale, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    return formatInTimeZone(date, timeZone, "yyyy MMMM d", { locale: dateFnsLocale });
   };
 
   return (

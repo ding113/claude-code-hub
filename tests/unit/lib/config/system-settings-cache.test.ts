@@ -30,6 +30,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",
+    timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
     cleanupSchedule: "0 2 * * *",

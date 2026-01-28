@@ -414,6 +414,13 @@
       "when": 1769523406503,
       "tag": "0058_silly_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1769539222210,
+      "tag": "0059_safe_xorn",
+      "breakpoints": true
     }
   ]
 }

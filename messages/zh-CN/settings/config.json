@@ -87,6 +87,9 @@
       "KRW": "₩ 韩元 (KRW)",
       "SGD": "S$ 新加坡元 (SGD)"
     },
+    "timezoneLabel": "系统时区",
+    "timezoneDescription": "设置系统时区，用于统一后端时间边界计算和前端日期/时间显示。留空时使用环境变量 TZ 或默认 UTC。",
+    "timezoneAuto": "自动 (使用环境变量 TZ)",
     "quotaLease": {
       "title": "配额租约设置",
       "description": "配置限额检查时的租约刷新间隔和切片比例。租约机制用于减少 DB 查询压力，同时保持限额精度。",

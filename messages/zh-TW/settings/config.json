@@ -74,6 +74,9 @@
     "siteTitleRequired": "站台標題不能為空",
     "verboseProviderError": "詳細供應商錯誤資訊",
     "verboseProviderErrorDesc": "開啟後，當所有供應商不可用時返回詳細錯誤資訊（包含供應商數量、限流原因等）；關閉後僅返回簡潔錯誤碼。",
+    "timezoneLabel": "系統時區",
+    "timezoneDescription": "設定系統時區，用於統一後端時間邊界計算和前端日期/時間顯示。留空時使用環境變數 TZ 或預設 UTC。",
+    "timezoneAuto": "自動 (使用環境變數 TZ)",
     "quotaLease": {
       "title": "配額租約設定",
       "description": "設定限額檢查時的租約刷新間隔和切片比例。租約機制用於減少 DB 查詢壓力，同時保持限額精度。",

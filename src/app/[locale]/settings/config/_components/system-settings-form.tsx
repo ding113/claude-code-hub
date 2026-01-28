@@ -5,6 +5,7 @@ import {
   Clock,
   Eye,
   FileCode,
+  Globe,
   Network,
   Pencil,
   Terminal,
@@ -30,6 +31,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
+import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
 import type { BillingModelSource, SystemSettings } from "@/types/system-config";
 
 interface SystemSettingsFormProps {
@@ -39,6 +41,7 @@ interface SystemSettingsFormProps {
     | "allowGlobalUsageView"
     | "currencyDisplay"
     | "billingModelSource"
+    | "timezone"
     | "verboseProviderError"
     | "enableHttp2"
     | "interceptAnthropicWarmupRequests"
@@ -69,6 +72,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [billingModelSource, setBillingModelSource] = useState<BillingModelSource>(
     initialSettings.billingModelSource
   );
+  const [timezone, setTimezone] = useState<string | null>(initialSettings.timezone);
   const [verboseProviderError, setVerboseProviderError] = useState(
     initialSettings.verboseProviderError
   );
@@ -122,6 +126,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         allowGlobalUsageView,
         currencyDisplay,
         billingModelSource,
+        timezone,
         verboseProviderError,
         enableHttp2,
         interceptAnthropicWarmupRequests,
@@ -147,6 +152,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setAllowGlobalUsageView(result.data.allowGlobalUsageView);
         setCurrencyDisplay(result.data.currencyDisplay);
         setBillingModelSource(result.data.billingModelSource);
+        setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
@@ -239,6 +245,34 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">{t("billingModelSourceDesc")}</p>
+      </div>
+
+      {/* Timezone Select */}
+      <div className="space-y-2">
+        <Label htmlFor="timezone" className="text-sm font-medium text-foreground">
+          <div className="flex items-center gap-2">
+            <Globe className="h-4 w-4" />
+            {t("timezoneLabel")}
+          </div>
+        </Label>
+        <Select
+          value={timezone ?? "__auto__"}
+          onValueChange={(value) => setTimezone(value === "__auto__" ? null : value)}
+          disabled={isPending}
+        >
+          <SelectTrigger id="timezone" className={selectTriggerClassName}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__auto__">{t("timezoneAuto")}</SelectItem>
+            {COMMON_TIMEZONES.map((tz) => (
+              <SelectItem key={tz} value={tz}>
+                {getTimezoneLabel(tz)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">{t("timezoneDescription")}</p>
       </div>
 
       {/* Toggle Settings */}

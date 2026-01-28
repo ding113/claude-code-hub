@@ -96,6 +96,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       allowGlobalUsageView: false,
       currencyDisplay: "USD",
       billingModelSource: "original",
+      timezone: null,
       verboseProviderError: false,
       enableAutoCleanup: false,
       cleanupRetentionDays: 30,

@@ -3,8 +3,8 @@
 import { and, avg, count, eq, gte, isNull, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
-import { getEnvConfig } from "@/lib/config";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 /**
@@ -38,10 +38,10 @@ export interface OverviewMetricsWithComparison extends OverviewMetrics {
 /**
  * 获取今日概览统计数据
  * 包括：今日总请求数、今日总消耗、平均响应时间、今日错误率
- * 使用 SQL AT TIME ZONE 确保"今日"基于配置时区（TZ 环境变量）
+ * 使用 SQL AT TIME ZONE 确保"今日"基于系统时区配置
  */
 export async function getOverviewMetrics(): Promise<OverviewMetrics> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
 
   const [result] = await db
     .select({
@@ -88,7 +88,7 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
 export async function getOverviewMetricsWithComparison(
   userId?: number
 ): Promise<OverviewMetricsWithComparison> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
 
   // 用户过滤条件
   const userCondition = userId ? eq(messageRequest.userId, userId) : undefined;

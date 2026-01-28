@@ -74,6 +74,9 @@
     "siteTitleRequired": "Site title cannot be empty",
     "verboseProviderError": "Verbose Provider Error",
     "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
+    "timezoneLabel": "System Timezone",
+    "timezoneDescription": "Set the system timezone for unified backend time boundary calculations and frontend date/time display. Leave empty to use the TZ environment variable or default to UTC.",
+    "timezoneAuto": "Auto (use TZ env variable)",
     "quotaLease": {
       "title": "Quota Lease Settings",
       "description": "Configure lease refresh interval and slice percentages for rate limit checks. The lease mechanism reduces DB query pressure while maintaining rate limit accuracy.",

@@ -4,12 +4,13 @@ import type {
   SectionContent,
   StructuredMessage,
   WebhookPayload,
+  WebhookSendOptions,
 } from "../types";
 import { formatTimestamp } from "../utils/date";
 import type { Renderer } from "./index";
 
 export class WeChatRenderer implements Renderer {
-  render(message: StructuredMessage): WebhookPayload {
+  render(message: StructuredMessage, options?: WebhookSendOptions): WebhookPayload {
     const lines: string[] = [];
 
     // Header
@@ -32,7 +33,7 @@ export class WeChatRenderer implements Renderer {
     }
 
     // Timestamp
-    lines.push(formatTimestamp(message.timestamp));
+    lines.push(formatTimestamp(message.timestamp, options?.timezone || "UTC"));
 
     const content = lines.join("\n");
 

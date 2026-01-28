@@ -397,7 +397,7 @@ export class RateLimitService {
       if (!limit.amount || limit.amount <= 0) continue;
 
       // 计算时间范围（使用支持模式的时间工具函数）
-      const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+      const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         limit.period,
         limit.resetTime,
         limit.resetMode
@@ -470,7 +470,7 @@ export class RateLimitService {
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const { normalized, suffix } = RateLimitService.resolveDailyReset(limit.resetTime);
-            const ttl = getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
+            const ttl = await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
             const periodKey = limit.period === "daily" ? `${limit.period}_${suffix}` : limit.period;
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${periodKey}`,
@@ -629,14 +629,22 @@ export class RateLimitService {
       const window24h = 24 * 60 * 60 * 1000; // 24 hours in ms
 
       // 计算动态 TTL（daily/周/月）
-      const ttlDailyKey = getTTLForPeriodWithMode("daily", keyDailyReset.normalized, keyDailyMode);
+      const ttlDailyKey = await getTTLForPeriodWithMode(
+        "daily",
+        keyDailyReset.normalized,
+        keyDailyMode
+      );
       const ttlDailyProvider =
         keyDailyReset.normalized === providerDailyReset.normalized &&
         keyDailyMode === providerDailyMode
           ? ttlDailyKey
-          : getTTLForPeriodWithMode("daily", providerDailyReset.normalized, providerDailyMode);
-      const ttlWeekly = getTTLForPeriod("weekly");
-      const ttlMonthly = getTTLForPeriod("monthly");
+          : await getTTLForPeriodWithMode(
+              "daily",
+              providerDailyReset.normalized,
+              providerDailyMode
+            );
+      const ttlWeekly = await getTTLForPeriod("weekly");
+      const ttlMonthly = await getTTLForPeriod("monthly");
 
       // 1. 5h 滚动窗口：使用 Lua 脚本（ZSET）
       // Key 的 5h 滚动窗口
@@ -827,7 +835,7 @@ export class RateLimitService {
         sumProviderCostInTimeRange,
       } = await import("@/repository/statistics");
 
-      const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+      const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         period,
         dailyResetInfo.normalized,
         resetMode
@@ -891,7 +899,7 @@ export class RateLimitService {
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
-            const ttl = getTTLForPeriodWithMode(period, dailyResetInfo.normalized, resetMode);
+            const ttl = await getTTLForPeriodWithMode(period, dailyResetInfo.normalized, resetMode);
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${redisKey}`,
               current.toString(),
@@ -1062,7 +1070,7 @@ export class RateLimitService {
           } else {
             // Cache Miss: 从数据库恢复
             logger.info(`[RateLimit] Cache miss for ${key}, querying database`);
-            const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+            const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
               "daily",
               normalizedResetTime,
               mode
@@ -1070,14 +1078,14 @@ export class RateLimitService {
             currentCost = await sumUserCostInTimeRange(userId, startTime, endTime);
 
             // Cache Warming: 写回 Redis
-            const ttl = getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
+            const ttl = await getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
             await RateLimitService.redis.set(key, currentCost.toString(), "EX", ttl);
           }
         }
       } else {
         // Slow Path: 数据库查询（Redis 不可用）
         logger.warn("[RateLimit] Redis unavailable, querying database for user daily cost");
-        const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+        const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
           "daily",
           normalizedResetTime,
           mode
@@ -1141,7 +1149,7 @@ export class RateLimitService {
         // Fixed 模式：使用 STRING 类型
         const suffix = normalizedResetTime.replace(":", "");
         const key = `user:${userId}:cost_daily_${suffix}`;
-        const ttl = getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
+        const ttl = await getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
 
         await RateLimitService.redis.pipeline().incrbyfloat(key, cost).expire(key, ttl).exec();
 

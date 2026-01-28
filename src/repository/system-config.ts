@@ -140,6 +140,7 @@ function createFallbackSettings(): SystemSettings {
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",
+    timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
     cleanupSchedule: "0 2 * * *",
@@ -180,6 +181,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       allowGlobalUsageView: systemSettings.allowGlobalUsageView,
       currencyDisplay: systemSettings.currencyDisplay,
       billingModelSource: systemSettings.billingModelSource,
+      timezone: systemSettings.timezone,
       enableAutoCleanup: systemSettings.enableAutoCleanup,
       cleanupRetentionDays: systemSettings.cleanupRetentionDays,
       cleanupSchedule: systemSettings.cleanupSchedule,
@@ -294,6 +296,11 @@ export async function updateSystemSettings(
       updates.billingModelSource = payload.billingModelSource;
     }
 
+    // 系统时区配置字段（如果提供）
+    if (payload.timezone !== undefined) {
+      updates.timezone = payload.timezone;
+    }
+
     // 日志清理配置字段（如果提供）
     if (payload.enableAutoCleanup !== undefined) {
       updates.enableAutoCleanup = payload.enableAutoCleanup;
@@ -381,6 +388,7 @@ export async function updateSystemSettings(
         allowGlobalUsageView: systemSettings.allowGlobalUsageView,
         currencyDisplay: systemSettings.currencyDisplay,
         billingModelSource: systemSettings.billingModelSource,
+        timezone: systemSettings.timezone,
         enableAutoCleanup: systemSettings.enableAutoCleanup,
         cleanupRetentionDays: systemSettings.cleanupRetentionDays,
         cleanupSchedule: systemSettings.cleanupSchedule,

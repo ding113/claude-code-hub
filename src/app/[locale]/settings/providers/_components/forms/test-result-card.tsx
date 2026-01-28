@@ -1,5 +1,6 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -10,7 +11,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +99,7 @@ const STATUS_ICONS: Record<TestStatus, React.ReactNode> = {
  */
 export function TestResultCard({ result }: TestResultCardProps) {
   const t = useTranslations("settings.providers.form.apiTest");
+  const timeZone = useTimeZone() ?? "UTC";
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   const colors = STATUS_COLORS[result.status];
@@ -132,7 +134,7 @@ export function TestResultCard({ result }: TestResultCardProps) {
       result.content &&
         `${ct("response")}: ${result.content.slice(0, 200)}${result.content.length > 200 ? "..." : ""}`,
       result.errorMessage && `${ct("error")}: ${result.errorMessage}`,
-      `${ct("testedAt")}: ${new Date(result.testedAt).toLocaleString()}`,
+      `${ct("testedAt")}: ${formatInTimeZone(new Date(result.testedAt), timeZone, "yyyy-MM-dd HH:mm:ss")}`,
       "",
       `${ct("validationDetails")}:`,
       `  ${ct("httpCheck")}: ${vp(result.validationDetails.httpPassed, "http")}`,
@@ -294,6 +296,7 @@ function TestResultDetails({
   onCopy: () => void;
 }) {
   const t = useTranslations("settings.providers.form.apiTest");
+  const timeZone = useTimeZone() ?? "UTC";
 
   return (
     <div className="space-y-6 mt-4">
@@ -374,7 +377,7 @@ function TestResultDetails({
           )}
           <div>
             <span className="text-muted-foreground">{t("resultCard.timing.testedAt")}:</span>{" "}
-            <span className="font-mono">{new Date(result.testedAt).toLocaleString()}</span>
+            <span className="font-mono">{formatInTimeZone(new Date(result.testedAt), timeZone, "yyyy-MM-dd HH:mm:ss")}</span>
           </div>
         </div>
       </div>

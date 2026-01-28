@@ -1,6 +1,7 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { formatInTimeZone } from "date-fns-tz";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ProviderAvailabilitySummary, TimeBucketMetrics } from "@/lib/availability";
@@ -38,27 +39,19 @@ function getStatusColor(status: string): string {
   }
 }
 
-function formatBucketTime(isoString: string, bucketSizeMinutes: number): string {
+function formatBucketTime(isoString: string, bucketSizeMinutes: number, timeZone?: string): string {
   const date = new Date(isoString);
+  const tz = timeZone ?? "UTC";
   if (bucketSizeMinutes >= 1440) {
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatInTimeZone(date, tz, "MMM d");
   }
   if (bucketSizeMinutes >= 60) {
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatInTimeZone(date, tz, "MMM d HH:mm");
   }
   if (bucketSizeMinutes < 1) {
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
+    return formatInTimeZone(date, tz, "HH:mm:ss");
   }
-  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return formatInTimeZone(date, tz, "HH:mm");
 }
 
 function formatLatency(ms: number): string {
@@ -79,6 +72,7 @@ export function LaneChart({
   className,
 }: LaneChartProps) {
   const t = useTranslations("dashboard.availability.laneChart");
+  const timeZone = useTimeZone() ?? "UTC";
 
   // Generate unified time buckets
   const unifiedBuckets = useMemo(() => {
@@ -106,12 +100,12 @@ export function LaneChart({
     for (let i = 0; i < unifiedBuckets.length; i += step) {
       labels.push({
         position: (i / unifiedBuckets.length) * 100,
-        label: formatBucketTime(unifiedBuckets[i], bucketSizeMinutes),
+        label: formatBucketTime(unifiedBuckets[i], bucketSizeMinutes, timeZone),
       });
     }
 
     return labels;
-  }, [unifiedBuckets, bucketSizeMinutes]);
+  }, [unifiedBuckets, bucketSizeMinutes, timeZone]);
 
   const getBucketData = (
     provider: ProviderAvailabilitySummary,
@@ -215,6 +209,7 @@ export function LaneChart({
                                 bucketStart={bucketStart}
                                 bucket={bucket}
                                 bucketSizeMinutes={bucketSizeMinutes}
+                                timeZone={timeZone}
                               />
                             </TooltipContent>
                           </Tooltip>
@@ -255,6 +250,7 @@ export function LaneChart({
                                 bucketStart={bucketStart}
                                 bucket={bucket}
                                 bucketSizeMinutes={bucketSizeMinutes}
+                                timeZone={timeZone}
                               />
                             </TooltipContent>
                           </Tooltip>
@@ -301,17 +297,21 @@ function BucketTooltip({
   bucketStart,
   bucket,
   bucketSizeMinutes,
+  timeZone,
 }: {
   bucketStart: string;
   bucket: TimeBucketMetrics | null;
   bucketSizeMinutes: number;
+  timeZone: string;
 }) {
   const t = useTranslations("dashboard.availability.laneChart");
   const hasData = bucket !== null && bucket.totalRequests > 0;
 
   return (
     <div className="text-sm space-y-1">
-      <div className="font-medium">{formatBucketTime(bucketStart, bucketSizeMinutes)}</div>
+      <div className="font-medium">
+        {formatBucketTime(bucketStart, bucketSizeMinutes, timeZone)}
+      </div>
       {hasData && bucket ? (
         <>
           <div>{t("requests", { count: bucket.totalRequests })}</div>

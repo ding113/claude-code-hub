@@ -1,6 +1,7 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { formatInTimeZone } from "date-fns-tz";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import {
@@ -34,6 +35,7 @@ const chartConfig = {
 
 export function LatencyChart({ providers, className }: LatencyChartProps) {
   const t = useTranslations("dashboard.availability.latencyChart");
+  const timeZone = useTimeZone() ?? "UTC";
 
   // Aggregate latency data across all providers
   const chartData = useMemo(() => {
@@ -85,10 +87,7 @@ export function LatencyChart({ providers, className }: LatencyChartProps) {
 
   const formatTime = (time: string) => {
     const date = new Date(time);
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatInTimeZone(date, timeZone, "HH:mm");
   };
 
   const formatLatency = (value: number) => {

@@ -1,7 +1,8 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { Activity, CheckCircle2, HelpCircle, RefreshCw, XCircle } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,31 +64,19 @@ function getAvailabilityColor(score: number, hasData: boolean): string {
 /**
  * Format bucket time for display in tooltip
  */
-function formatBucketTime(isoString: string, bucketSizeMinutes: number): string {
+function formatBucketTime(isoString: string, bucketSizeMinutes: number, timeZone?: string): string {
   const date = new Date(isoString);
+  const tz = timeZone ?? "UTC";
   if (bucketSizeMinutes >= 1440) {
-    // Daily buckets: show date
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatInTimeZone(date, tz, "MMM d");
   }
   if (bucketSizeMinutes >= 60) {
-    // Hourly buckets: show date + hour
-    return date.toLocaleString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatInTimeZone(date, tz, "MMM d HH:mm");
   }
-  // Sub-hour buckets: show full time with seconds for precision
   if (bucketSizeMinutes < 1) {
-    return date.toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
+    return formatInTimeZone(date, tz, "HH:mm:ss");
   }
-  // Minute buckets: show time
-  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  return formatInTimeZone(date, tz, "HH:mm");
 }
 
 /**
@@ -107,6 +96,7 @@ function _formatBucketSizeDisplay(minutes: number): string {
 
 export function AvailabilityView() {
   const t = useTranslations("dashboard.availability");
+  const timeZone = useTimeZone() ?? "UTC";
   const [data, setData] = useState<AvailabilityQueryResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -455,7 +445,11 @@ export function AvailabilityView() {
                               <TooltipContent side="top" className="max-w-xs">
                                 <div className="text-sm space-y-1">
                                   <div className="font-medium">
-                                    {formatBucketTime(bucketStart, data?.bucketSizeMinutes ?? 5)}
+                                    {formatBucketTime(
+                                      bucketStart,
+                                      data?.bucketSizeMinutes ?? 5,
+                                      timeZone
+                                    )}
                                   </div>
                                   {hasData && bucket ? (
                                     <>

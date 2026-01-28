@@ -6,6 +6,7 @@ import {
 } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
+import { isValidIANATimezone } from "@/lib/utils/timezone";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
@@ -727,6 +728,15 @@ export const UpdateSystemSettingsSchema = z.object({
   // 计费模型来源配置（可选）
   billingModelSource: z
     .enum(["original", "redirected"], { message: "不支持的计费模型来源" })
+    .optional(),
+  // 系统时区配置（可选）
+  // 必须是有效的 IANA 时区标识符（如 "Asia/Shanghai", "America/New_York"）
+  timezone: z
+    .string()
+    .refine((val) => isValidIANATimezone(val), {
+      message: "无效的时区标识符，请使用 IANA 时区格式（如 Asia/Shanghai）",
+    })
+    .nullable()
     .optional(),
   // 日志清理配置（可选）
   enableAutoCleanup: z.boolean().optional(),

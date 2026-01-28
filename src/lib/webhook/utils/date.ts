@@ -1,20 +1,24 @@
+import { formatInTimeZone } from "date-fns-tz";
+
 /**
- * 格式化日期时间为中国时区的本地化字符串
+ * Format date-time for webhook messages.
+ * Uses ISO-like format (yyyy/MM/dd HH:mm:ss) for consistency across locales.
+ *
+ * @param date - Date object or ISO string to format
+ * @param timezone - IANA timezone identifier (required, use resolveSystemTimezone() for system default)
+ * @returns Formatted datetime string in the specified timezone
+ *
+ * @example
+ * formatDateTime(new Date(), "Asia/Shanghai") // "2024/01/15 14:30:00"
  */
-export function formatDateTime(date: Date | string): string {
+export function formatDateTime(date: Date | string, timezone: string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleString("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  return formatInTimeZone(d, timezone, "yyyy/MM/dd HH:mm:ss");
 }
 
-export function formatTimestamp(date: Date): string {
-  return formatDateTime(date);
+/**
+ * Alias for formatDateTime for backward compatibility
+ */
+export function formatTimestamp(date: Date, timezone: string): string {
+  return formatDateTime(date, timezone);
 }

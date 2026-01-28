@@ -5,6 +5,7 @@ import type {
   SectionContent,
   StructuredMessage,
   WebhookPayload,
+  WebhookSendOptions,
 } from "../types";
 import { formatDateTime } from "../utils/date";
 import type { Renderer } from "./index";
@@ -15,7 +16,7 @@ interface CardElement {
 }
 
 export class FeishuCardRenderer implements Renderer {
-  render(message: StructuredMessage): WebhookPayload {
+  render(message: StructuredMessage, options?: WebhookSendOptions): WebhookPayload {
     const elements: CardElement[] = [];
 
     // Sections
@@ -34,7 +35,7 @@ export class FeishuCardRenderer implements Renderer {
     // Timestamp
     elements.push({
       tag: "markdown",
-      content: formatDateTime(message.timestamp),
+      content: formatDateTime(message.timestamp, options?.timezone || "UTC"),
       text_size: "notation",
     });
 

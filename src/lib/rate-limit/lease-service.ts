@@ -163,7 +163,7 @@ export class LeaseService {
       const percent = LeaseService.getLeasePercent(window, leasePercentConfig);
 
       // Calculate time range for DB query
-      const { startTime, endTime } = getLeaseTimeRange(window, resetTime, resetMode);
+      const { startTime, endTime } = await getLeaseTimeRange(window, resetTime, resetMode);
 
       // Query DB for current usage
       const currentUsage = await LeaseService.queryDbUsage(

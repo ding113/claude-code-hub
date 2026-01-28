@@ -3,7 +3,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers, users } from "@/drizzle/schema";
-import { getEnvConfig } from "@/lib/config";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { ProviderType } from "@/types/provider";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { getSystemSettings } from "./system-config";
@@ -73,34 +73,34 @@ export interface ModelLeaderboardEntry {
 
 /**
  * 查询今日消耗排行榜（不限制数量）
- * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于配置时区（Asia/Shanghai）
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于系统时区
  */
 export async function findDailyLeaderboard(
   userFilters?: UserLeaderboardFilters
 ): Promise<LeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findLeaderboardWithTimezone("daily", timezone, undefined, userFilters);
 }
 
 /**
  * 查询本月消耗排行榜（不限制数量）
- * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于配置时区（Asia/Shanghai）
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于系统时区
  */
 export async function findMonthlyLeaderboard(
   userFilters?: UserLeaderboardFilters
 ): Promise<LeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findLeaderboardWithTimezone("monthly", timezone, undefined, userFilters);
 }
 
 /**
  * 查询本周消耗排行榜（不限制数量）
- * 使用 SQL AT TIME ZONE 进行时区转换，确保"本周"基于配置时区
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"本周"基于系统时区
  */
 export async function findWeeklyLeaderboard(
   userFilters?: UserLeaderboardFilters
 ): Promise<LeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findLeaderboardWithTimezone("weekly", timezone, undefined, userFilters);
 }
 
@@ -110,7 +110,7 @@ export async function findWeeklyLeaderboard(
 export async function findAllTimeLeaderboard(
   userFilters?: UserLeaderboardFilters
 ): Promise<LeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findLeaderboardWithTimezone("allTime", timezone, undefined, userFilters);
 }
 
@@ -119,7 +119,7 @@ export async function findAllTimeLeaderboard(
  * 使用滚动24小时窗口而非日历日
  */
 export async function findLast24HoursLeaderboard(): Promise<LeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findLeaderboardWithTimezone("last24h", timezone);
 }
 
@@ -244,29 +244,29 @@ export async function findCustomRangeLeaderboard(
   dateRange: DateRangeParams,
   userFilters?: UserLeaderboardFilters
 ): Promise<LeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findLeaderboardWithTimezone("custom", timezone, dateRange, userFilters);
 }
 
 /**
  * 查询今日供应商消耗排行榜（不限制数量）
- * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于配置时区（Asia/Shanghai）
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于系统时区
  */
 export async function findDailyProviderLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderLeaderboardWithTimezone("daily", timezone, undefined, providerType);
 }
 
 /**
  * 查询本月供应商消耗排行榜（不限制数量）
- * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于配置时区（Asia/Shanghai）
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于系统时区
  */
 export async function findMonthlyProviderLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderLeaderboardWithTimezone("monthly", timezone, undefined, providerType);
 }
 
@@ -276,7 +276,7 @@ export async function findMonthlyProviderLeaderboard(
 export async function findWeeklyProviderLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderLeaderboardWithTimezone("weekly", timezone, undefined, providerType);
 }
 
@@ -286,7 +286,7 @@ export async function findWeeklyProviderLeaderboard(
 export async function findAllTimeProviderLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderLeaderboardWithTimezone("allTime", timezone, undefined, providerType);
 }
 
@@ -296,7 +296,7 @@ export async function findAllTimeProviderLeaderboard(
 export async function findDailyProviderCacheHitRateLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderCacheHitRateLeaderboardWithTimezone(
     "daily",
     timezone,
@@ -311,7 +311,7 @@ export async function findDailyProviderCacheHitRateLeaderboard(
 export async function findMonthlyProviderCacheHitRateLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderCacheHitRateLeaderboardWithTimezone(
     "monthly",
     timezone,
@@ -326,7 +326,7 @@ export async function findMonthlyProviderCacheHitRateLeaderboard(
 export async function findWeeklyProviderCacheHitRateLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderCacheHitRateLeaderboardWithTimezone(
     "weekly",
     timezone,
@@ -341,7 +341,7 @@ export async function findWeeklyProviderCacheHitRateLeaderboard(
 export async function findAllTimeProviderCacheHitRateLeaderboard(
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderCacheHitRateLeaderboardWithTimezone(
     "allTime",
     timezone,
@@ -508,7 +508,7 @@ export async function findCustomRangeProviderLeaderboard(
   dateRange: DateRangeParams,
   providerType?: ProviderType
 ): Promise<ProviderLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderLeaderboardWithTimezone("custom", timezone, dateRange, providerType);
 }
 
@@ -519,7 +519,7 @@ export async function findCustomRangeProviderCacheHitRateLeaderboard(
   dateRange: DateRangeParams,
   providerType?: ProviderType
 ): Promise<ProviderCacheHitRateLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findProviderCacheHitRateLeaderboardWithTimezone(
     "custom",
     timezone,
@@ -530,19 +530,19 @@ export async function findCustomRangeProviderCacheHitRateLeaderboard(
 
 /**
  * 查询今日模型调用排行榜（不限制数量）
- * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于配置时区（Asia/Shanghai）
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于系统时区
  */
 export async function findDailyModelLeaderboard(): Promise<ModelLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findModelLeaderboardWithTimezone("daily", timezone);
 }
 
 /**
  * 查询本月模型调用排行榜（不限制数量）
- * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于配置时区（Asia/Shanghai）
+ * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于系统时区
  */
 export async function findMonthlyModelLeaderboard(): Promise<ModelLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findModelLeaderboardWithTimezone("monthly", timezone);
 }
 
@@ -550,7 +550,7 @@ export async function findMonthlyModelLeaderboard(): Promise<ModelLeaderboardEnt
  * 查询本周模型调用排行榜（不限制数量）
  */
 export async function findWeeklyModelLeaderboard(): Promise<ModelLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findModelLeaderboardWithTimezone("weekly", timezone);
 }
 
@@ -558,7 +558,7 @@ export async function findWeeklyModelLeaderboard(): Promise<ModelLeaderboardEntr
  * 查询全部时间模型调用排行榜（不限制数量）
  */
 export async function findAllTimeModelLeaderboard(): Promise<ModelLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findModelLeaderboardWithTimezone("allTime", timezone);
 }
 
@@ -631,6 +631,6 @@ async function findModelLeaderboardWithTimezone(
 export async function findCustomRangeModelLeaderboard(
   dateRange: DateRangeParams
 ): Promise<ModelLeaderboardEntry[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   return findModelLeaderboardWithTimezone("custom", timezone, dateRange);
 }

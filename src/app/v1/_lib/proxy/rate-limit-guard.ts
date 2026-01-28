@@ -325,7 +325,11 @@ export class ProxyRateLimitGuard {
         );
       } else {
         // fixed 模式：有固定重置时间
-        const resetInfo = getResetInfoWithMode("daily", key.dailyResetTime, key.dailyResetMode);
+        const resetInfo = await getResetInfoWithMode(
+          "daily",
+          key.dailyResetTime,
+          key.dailyResetMode
+        );
         const resetTime =
           resetInfo.resetAt?.toISOString() ??
           new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -390,7 +394,11 @@ export class ProxyRateLimitGuard {
           );
         } else {
           // fixed 模式：有固定重置时间
-          const resetInfo = getResetInfoWithMode("daily", user.dailyResetTime, user.dailyResetMode);
+          const resetInfo = await getResetInfoWithMode(
+            "daily",
+            user.dailyResetTime,
+            user.dailyResetMode
+          );
           const resetTime =
             resetInfo.resetAt?.toISOString() ??
             new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
@@ -432,7 +440,7 @@ export class ProxyRateLimitGuard {
       logger.warn(`[RateLimit] Key weekly limit exceeded: key=${key.id}, ${keyWeeklyCheck.reason}`);
 
       const { currentUsage, limitValue } = parseLimitInfo(keyWeeklyCheck.reason!);
-      const resetInfo = getResetInfo("weekly");
+      const resetInfo = await getResetInfo("weekly");
       const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");
@@ -468,7 +476,7 @@ export class ProxyRateLimitGuard {
       );
 
       const { currentUsage, limitValue } = parseLimitInfo(userWeeklyCheck.reason!);
-      const resetInfo = getResetInfo("weekly");
+      const resetInfo = await getResetInfo("weekly");
       const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");
@@ -504,7 +512,7 @@ export class ProxyRateLimitGuard {
       );
 
       const { currentUsage, limitValue } = parseLimitInfo(keyMonthlyCheck.reason!);
-      const resetInfo = getResetInfo("monthly");
+      const resetInfo = await getResetInfo("monthly");
       const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");
@@ -540,7 +548,7 @@ export class ProxyRateLimitGuard {
       );
 
       const { currentUsage, limitValue } = parseLimitInfo(userMonthlyCheck.reason!);
-      const resetInfo = getResetInfo("monthly");
+      const resetInfo = await getResetInfo("monthly");
       const resetTime = resetInfo.resetAt?.toISOString() || new Date().toISOString();
 
       const { getLocale } = await import("next-intl/server");

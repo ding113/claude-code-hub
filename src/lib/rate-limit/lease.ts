@@ -63,11 +63,11 @@ export function buildLeaseKey(
  * Get time range for a lease window
  * Delegates to time-utils for consistent behavior
  */
-export function getLeaseTimeRange(
+export async function getLeaseTimeRange(
   window: LeaseWindowType,
   resetTime = "00:00",
   mode: DailyResetMode = "fixed"
-): { startTime: Date; endTime: Date } {
+): Promise<{ startTime: Date; endTime: Date }> {
   return getTimeRangeForPeriodWithMode(window as TimePeriod, resetTime, mode);
 }
 
@@ -75,11 +75,11 @@ export function getLeaseTimeRange(
  * Get TTL in seconds for a lease window
  * Delegates to time-utils for consistent behavior
  */
-export function getLeaseTtlSeconds(
+export async function getLeaseTtlSeconds(
   window: LeaseWindowType,
   resetTime = "00:00",
   mode: DailyResetMode = "fixed"
-): number {
+): Promise<number> {
   return getTTLForPeriodWithMode(window as TimePeriod, resetTime, mode);
 }
 

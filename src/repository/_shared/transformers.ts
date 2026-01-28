@@ -179,6 +179,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     allowGlobalUsageView: dbSettings?.allowGlobalUsageView ?? true,
     currencyDisplay: dbSettings?.currencyDisplay ?? "USD",
     billingModelSource: dbSettings?.billingModelSource ?? "original",
+    timezone: dbSettings?.timezone ?? null,
     enableAutoCleanup: dbSettings?.enableAutoCleanup ?? false,
     cleanupRetentionDays: dbSettings?.cleanupRetentionDays ?? 30,
     cleanupSchedule: dbSettings?.cleanupSchedule ?? "0 2 * * *",

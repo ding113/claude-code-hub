@@ -103,6 +103,8 @@ export interface WebhookSendOptions {
   notificationType?: WebhookNotificationType;
   data?: unknown;
   templateOverride?: Record<string, unknown> | null;
+  /** IANA timezone identifier for date/time formatting */
+  timezone?: string;
 }
 
 export interface WebhookPayload {

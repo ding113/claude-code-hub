@@ -15,7 +15,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
-import { getEnvConfig } from "@/lib/config";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 
 export type TimePeriod = "5h" | "daily" | "weekly" | "monthly";
 export type DailyResetMode = "fixed" | "rolling";
@@ -38,10 +38,13 @@ export interface ResetInfo {
  * - weekly: 自然周（本周一 00:00 到现在）
  * - monthly: 自然月（本月 1 号 00:00 到现在）
  *
- * 所有自然时间窗口使用配置的时区（Asia/Shanghai）
+ * 所有自然时间窗口使用系统配置时区（通过 resolveSystemTimezone 获取）
  */
-export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): TimeRange {
-  const timezone = getEnvConfig().TZ; // 'Asia/Shanghai'
+export async function getTimeRangeForPeriod(
+  period: TimePeriod,
+  resetTime = "00:00"
+): Promise<TimeRange> {
+  const timezone = await resolveSystemTimezone();
   const normalizedResetTime = normalizeResetTime(resetTime);
   const now = new Date();
   const endTime = now;
@@ -60,7 +63,7 @@ export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): 
     }
 
     case "weekly": {
-      // 自然周：本周一 00:00 (Asia/Shanghai)
+      // 自然周：本周一 00:00 (系统时区)
       const zonedNow = toZonedTime(now, timezone);
       const zonedStartOfWeek = startOfWeek(zonedNow, { weekStartsOn: 1 }); // 周一
       startTime = fromZonedTime(zonedStartOfWeek, timezone);
@@ -68,7 +71,7 @@ export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): 
     }
 
     case "monthly": {
-      // 自然月：本月 1 号 00:00 (Asia/Shanghai)
+      // 自然月：本月 1 号 00:00 (系统时区)
       const zonedNow = toZonedTime(now, timezone);
       const zonedStartOfMonth = startOfMonth(zonedNow);
       startTime = fromZonedTime(zonedStartOfMonth, timezone);
@@ -85,11 +88,11 @@ export function getTimeRangeForPeriod(period: TimePeriod, resetTime = "00:00"): 
  * - daily + fixed: 固定时间重置（使用 resetTime）
  * - 其他周期：使用原有逻辑
  */
-export function getTimeRangeForPeriodWithMode(
+export async function getTimeRangeForPeriodWithMode(
   period: TimePeriod,
   resetTime = "00:00",
   mode: DailyResetMode = "fixed"
-): TimeRange {
+): Promise<TimeRange> {
   if (period === "daily" && mode === "rolling") {
     // 滚动窗口：过去 24 小时
     const now = new Date();
@@ -110,8 +113,8 @@ export function getTimeRangeForPeriodWithMode(
  * - weekly: 到下周一 00:00 的秒数
  * - monthly: 到下月 1 号 00:00 的秒数
  */
-export function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): number {
-  const timezone = getEnvConfig().TZ;
+export async function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): Promise<number> {
+  const timezone = await resolveSystemTimezone();
   const now = new Date();
   const normalizedResetTime = normalizeResetTime(resetTime);
 
@@ -152,11 +155,11 @@ export function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): number
  * - daily + fixed: 到下一个自定义重置时间的秒数
  * - 其他周期：使用原有逻辑
  */
-export function getTTLForPeriodWithMode(
+export async function getTTLForPeriodWithMode(
   period: TimePeriod,
   resetTime = "00:00",
   mode: DailyResetMode = "fixed"
-): number {
+): Promise<number> {
   if (period === "daily" && mode === "rolling") {
     return 24 * 3600; // 24 小时
   }
@@ -167,8 +170,8 @@ export function getTTLForPeriodWithMode(
 /**
  * 获取重置信息（用于前端展示）
  */
-export function getResetInfo(period: TimePeriod, resetTime = "00:00"): ResetInfo {
-  const timezone = getEnvConfig().TZ;
+export async function getResetInfo(period: TimePeriod, resetTime = "00:00"): Promise<ResetInfo> {
+  const timezone = await resolveSystemTimezone();
   const now = new Date();
   const normalizedResetTime = normalizeResetTime(resetTime);
 
@@ -216,11 +219,11 @@ export function getResetInfo(period: TimePeriod, resetTime = "00:00"): ResetInfo
 /**
  * 获取重置信息（支持滚动窗口模式）
  */
-export function getResetInfoWithMode(
+export async function getResetInfoWithMode(
   period: TimePeriod,
   resetTime = "00:00",
   mode: DailyResetMode = "fixed"
-): ResetInfo {
+): Promise<ResetInfo> {
   if (period === "daily" && mode === "rolling") {
     return {
       type: "rolling",
@@ -290,10 +293,10 @@ export function normalizeResetTime(resetTime?: string): string {
 
 /**
  * 计算距离午夜的秒数（用于每日限额）
- * 使用配置的时区（Asia/Shanghai）而非服务器本地时区
+ * 使用系统配置时区而非服务器本地时区
  */
-export function getSecondsUntilMidnight(): number {
-  const timezone = getEnvConfig().TZ;
+export async function getSecondsUntilMidnight(): Promise<number> {
+  const timezone = await resolveSystemTimezone();
   const now = new Date();
   const zonedNow = toZonedTime(now, timezone);
   const zonedTomorrow = addDays(zonedNow, 1);
@@ -316,8 +319,8 @@ export function getSecondsUntilMidnight(): number {
 /**
  * 获取每日限额的重置时间
  */
-export function getDailyResetTime(): Date {
-  const timezone = getEnvConfig().TZ;
+export async function getDailyResetTime(): Promise<Date> {
+  const timezone = await resolveSystemTimezone();
   const now = new Date();
   const zonedNow = toZonedTime(now, timezone);
   const zonedTomorrow = addDays(zonedNow, 1);
