@@ -540,7 +540,9 @@ function AddEndpointButton({ vendorId }: { vendorId: number }) {
   const [providerType, setProviderType] = useState<ProviderType>("claude");
 
   // Get provider types for the selector (exclude claude-auth and gemini-cli which are internal)
-  const selectableTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
+  const selectableTypes: ProviderType[] = getAllProviderTypes().filter(
+    (type) => !["claude-auth", "gemini-cli"].includes(type)
+  );
 
   useEffect(() => {
     if (!open) {
