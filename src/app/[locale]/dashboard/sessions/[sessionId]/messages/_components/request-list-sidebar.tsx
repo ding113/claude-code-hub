@@ -1,5 +1,6 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import {
   AlertCircle,
   ArrowDownUp,
@@ -8,7 +9,7 @@ import {
   MoreHorizontal,
   Search,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { getSessionRequests } from "@/actions/active-sessions";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,7 @@ export function RequestListSidebar({
   className,
 }: RequestListSidebarProps) {
   const t = useTranslations("dashboard.sessions");
+  const timeZone = useTimeZone() ?? "UTC";
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -85,12 +87,7 @@ export function RequestListSidebar({
   // Formatter functions
   const formatTime = (date: Date | null) => {
     if (!date) return "-";
-    return new Date(date).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
+    return formatInTimeZone(new Date(date), timeZone, "HH:mm:ss");
   };
 
   const getStatusColor = (statusCode: number | null) => {

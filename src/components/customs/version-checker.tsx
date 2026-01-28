@@ -1,7 +1,8 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { ExternalLink, RefreshCw } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ interface VersionInfo {
 
 export function VersionChecker() {
   const t = useTranslations("customs");
+  const timeZone = useTimeZone() ?? "UTC";
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -93,7 +95,7 @@ export function VersionChecker() {
                 {versionInfo.publishedAt && (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {t("version.publishedAt")}{" "}
-                    {new Date(versionInfo.publishedAt).toLocaleDateString("zh-CN")}
+                    {formatInTimeZone(new Date(versionInfo.publishedAt), timeZone, "yyyy-MM-dd")}
                   </p>
                 )}
               </div>

@@ -11,6 +11,8 @@ interface ExpirationInfoProps {
   userExpiresAt: Date | null;
   userRpmLimit?: number | null;
   className?: string;
+  /** IANA timezone for display (e.g., "Asia/Shanghai"). Falls back to local time when omitted. */
+  timezone?: string;
 }
 
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
@@ -23,6 +25,7 @@ export function ExpirationInfo({
   userExpiresAt,
   userRpmLimit,
   className,
+  timezone,
 }: ExpirationInfoProps) {
   const t = useTranslations("myUsage.expiration");
   const locale = useLocale();
@@ -32,7 +35,7 @@ export function ExpirationInfo({
 
   const formatExpiry = (value: Date | null) => {
     if (!value) return t("neverExpires");
-    const formatted = formatDate(value, getLocaleDateFormat(locale, "long"), locale);
+    const formatted = formatDate(value, getLocaleDateFormat(locale, "long"), locale, timezone);
     return formatted;
   };
 

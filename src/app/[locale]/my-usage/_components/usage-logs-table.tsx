@@ -1,6 +1,7 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { formatInTimeZone } from "date-fns-tz";
+import { useTimeZone, useTranslations } from "next-intl";
 import type { MyUsageLogEntry } from "@/actions/my-usage";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,6 +38,7 @@ export function UsageLogsTable({
   loadingLabel,
 }: UsageLogsTableProps) {
   const t = useTranslations("myUsage.logs");
+  const timeZone = useTimeZone() ?? "UTC";
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const formatTokenAmount = (value: number | null | undefined): string => {
@@ -80,7 +82,9 @@ export function UsageLogsTable({
               logs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                    {log.createdAt ? new Date(log.createdAt).toLocaleString() : "-"}
+                    {log.createdAt
+                      ? formatInTimeZone(new Date(log.createdAt), timeZone, "yyyy-MM-dd HH:mm:ss")
+                      : "-"}
                   </TableCell>
                   <TableCell className="space-y-1">
                     <div className="text-sm">{log.model ?? t("unknownModel")}</div>

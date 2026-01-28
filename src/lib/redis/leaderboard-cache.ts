@@ -1,6 +1,6 @@
 import { formatInTimeZone } from "date-fns-tz";
-import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   type DateRangeParams,
   findAllTimeLeaderboard,
@@ -50,16 +50,17 @@ export interface LeaderboardFilters {
 
 /**
  * 构建缓存键
+ * @param timezone - 已解析的系统时区（调用者应使用 resolveSystemTimezone() 获取）
  */
 function buildCacheKey(
   period: LeaderboardPeriod,
   currencyDisplay: string,
+  timezone: string,
   scope: LeaderboardScope = "user",
   dateRange?: DateRangeParams,
   filters?: LeaderboardFilters
 ): string {
   const now = new Date();
-  const tz = getEnvConfig().TZ; // ensure date formatting aligns with configured timezone
   const providerTypeSuffix = filters?.providerType ? `:providerType:${filters.providerType}` : "";
 
   let userFilterSuffix = "";
@@ -78,15 +79,15 @@ function buildCacheKey(
     return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else if (period === "daily") {
     // leaderboard:{scope}:daily:2025-01-15:USD
-    const dateStr = formatInTimeZone(now, tz, "yyyy-MM-dd");
+    const dateStr = formatInTimeZone(now, timezone, "yyyy-MM-dd");
     return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else if (period === "weekly") {
     // leaderboard:{scope}:weekly:2025-W03:USD (ISO week)
-    const weekStr = formatInTimeZone(now, tz, "yyyy-'W'ww");
+    const weekStr = formatInTimeZone(now, timezone, "yyyy-'W'ww");
     return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else if (period === "monthly") {
     // leaderboard:{scope}:monthly:2025-01:USD
-    const monthStr = formatInTimeZone(now, tz, "yyyy-MM");
+    const monthStr = formatInTimeZone(now, timezone, "yyyy-MM");
     return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
   } else {
     // allTime: leaderboard:{scope}:allTime:USD (no date component)
@@ -221,7 +222,9 @@ export async function getLeaderboardWithCache(
     return await queryDatabase(period, scope, dateRange, filters);
   }
 
-  const cacheKey = buildCacheKey(period, currencyDisplay, scope, dateRange, filters);
+  // Resolve timezone once per request
+  const timezone = await resolveSystemTimezone();
+  const cacheKey = buildCacheKey(period, currencyDisplay, timezone, scope, dateRange, filters);
   const lockKey = `${cacheKey}:lock`;
 
   try {
@@ -306,7 +309,9 @@ export async function invalidateLeaderboardCache(
     return;
   }
 
-  const cacheKey = buildCacheKey(period, currencyDisplay, scope);
+  // Resolve timezone once per request
+  const timezone = await resolveSystemTimezone();
+  const cacheKey = buildCacheKey(period, currencyDisplay, timezone, scope);
 
   try {
     await redis.del(cacheKey);

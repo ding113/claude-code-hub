@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
 import { isValidProxyUrl } from "@/lib/proxy-agent";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { WebhookNotifier } from "@/lib/webhook";
 import { buildTestMessage } from "@/lib/webhook/templates/test-messages";
 import { getNotificationSettings, updateNotificationSettings } from "@/repository/notifications";
@@ -380,12 +381,14 @@ export async function testWebhookTargetAction(
     }
 
     const validatedType = NotificationTypeSchema.parse(notificationType);
-    const testMessage = buildTestMessage(toJobType(validatedType));
+    const timezone = await resolveSystemTimezone();
+    const testMessage = buildTestMessage(toJobType(validatedType), timezone);
 
     const notifier = new WebhookNotifier(target);
     const result = await notifier.send(testMessage, {
       notificationType: validatedType,
       data: buildTestData(validatedType),
+      timezone,
     });
 
     const latencyMs = Date.now() - start;

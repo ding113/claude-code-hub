@@ -1,11 +1,13 @@
 /**
  * Date Formatting Utilities with Locale Support
- * Provides locale-aware date formatting using date-fns and next-intl
+ * Provides locale-aware date formatting using date-fns and next-intl.
+ * Supports optional IANA timezone via date-fns-tz for timezone-aware display.
  */
 
 import type { Locale } from "date-fns";
 import { format, formatDistance, formatRelative } from "date-fns";
 import { enUS, ja, ru, zhCN, zhTW } from "date-fns/locale";
+import { formatInTimeZone } from "date-fns-tz";
 
 /**
  * Map next-intl locale codes to date-fns locale objects
@@ -28,19 +30,32 @@ export function getDateFnsLocale(locale: string): Locale {
 }
 
 /**
- * Format date with locale support
+ * Format date with locale support and optional timezone.
+ *
+ * When a valid IANA timezone is provided (e.g., "Asia/Shanghai"), the date is
+ * rendered in that timezone using `formatInTimeZone` from date-fns-tz.
+ * Otherwise, the browser/server local timezone is used (original behaviour).
+ *
  * @param date - Date to format
  * @param formatString - Format string (e.g., "yyyy-MM-dd", "PPP")
  * @param locale - next-intl locale code
+ * @param timezone - Optional IANA timezone identifier (e.g., "America/New_York")
  * @returns Formatted date string
  */
 export function formatDate(
   date: Date | number | string,
   formatString: string,
-  locale: string = "zh-CN"
+  locale: string = "zh-CN",
+  timezone?: string
 ): string {
   const dateObj = typeof date === "string" ? new Date(date) : date;
   const dateFnsLocale = getDateFnsLocale(locale);
+
+  if (timezone) {
+    return formatInTimeZone(dateObj, timezone, formatString, {
+      locale: dateFnsLocale,
+    });
+  }
 
   return format(dateObj, formatString, { locale: dateFnsLocale });
 }

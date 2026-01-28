@@ -5,12 +5,12 @@ import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
-import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit/service";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
@@ -31,9 +31,10 @@ import type { ActionResult } from "./types";
  */
 function parseDateRangeInServerTimezone(
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  timezone?: string
 ): { startTime?: number; endTime?: number } {
-  const timezone = getEnvConfig().TZ;
+  const tz = timezone ?? "UTC";
 
   const toIsoDate = (dateStr: string): { ok: true; value: string } | { ok: false } => {
     return /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? { ok: true, value: dateStr } : { ok: false };
@@ -58,12 +59,12 @@ function parseDateRangeInServerTimezone(
   const endIso = endDate ? toIsoDate(endDate) : { ok: false as const };
 
   const parsedStart = startIso.ok
-    ? fromZonedTime(`${startIso.value}T00:00:00`, timezone).getTime()
+    ? fromZonedTime(`${startIso.value}T00:00:00`, tz).getTime()
     : Number.NaN;
 
   const endExclusiveDate = endIso.ok ? addIsoDays(endIso.value, 1) : null;
   const parsedEndExclusive = endExclusiveDate
-    ? fromZonedTime(`${endExclusiveDate}T00:00:00`, timezone).getTime()
+    ? fromZonedTime(`${endExclusiveDate}T00:00:00`, tz).getTime()
     : Number.NaN;
 
   return {
@@ -193,7 +194,7 @@ async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" |
   }
 
   // 其他周期：使用统一的时间范围计算
-  const { startTime, endTime } = getTimeRangeForPeriod(period);
+  const { startTime, endTime } = await getTimeRangeForPeriod(period);
   return await sumUserCostInTimeRange(userId, startTime, endTime);
 }
 
@@ -241,7 +242,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const { sumUserCostInTimeRange } = await import("@/repository/statistics");
 
     // 计算用户每日消费的时间范围(使用用户的配置)
-    const userDailyTimeRange = getTimeRangeForPeriodWithMode(
+    const userDailyTimeRange = await getTimeRangeForPeriodWithMode(
       "daily",
       user.dailyResetTime ?? "00:00",
       (user.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
@@ -345,7 +346,7 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
 
     // 修复: 使用 Key 的 dailyResetTime 和 dailyResetMode 来计算时间范围
     const { getTimeRangeForPeriodWithMode } = await import("@/lib/rate-limit/time-utils");
-    const timeRange = getTimeRangeForPeriodWithMode(
+    const timeRange = await getTimeRangeForPeriodWithMode(
       "daily",
       session.key.dailyResetTime ?? "00:00",
       (session.key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
@@ -444,9 +445,11 @@ export async function getMyUsageLogs(
     const pageSize = Math.min(rawPageSize, 100);
     const page = filters.page && filters.page > 0 ? filters.page : 1;
 
+    const timezone = await resolveSystemTimezone();
     const { startTime, endTime } = parseDateRangeInServerTimezone(
       filters.startDate,
-      filters.endDate
+      filters.endDate,
+      timezone
     );
 
     const usageFilters: UsageLogFilters = {
@@ -586,9 +589,11 @@ export async function getMyStatsSummary(
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
+    const timezone = await resolveSystemTimezone();
     const { startTime, endTime } = parseDateRangeInServerTimezone(
       filters.startDate,
-      filters.endDate
+      filters.endDate,
+      timezone
     );
 
     // Get aggregated stats using existing repository function

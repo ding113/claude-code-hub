@@ -10,6 +10,8 @@ import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
+import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { KeyStatistics } from "@/repository/key";
@@ -280,9 +282,12 @@ export async function addKey(data: {
 
     const generatedKey = `sk-${randomBytes(16).toString("hex")}`;
 
-    // 转换 expiresAt: undefined → null（永不过期），string → Date（设置日期）
+    // 转换 expiresAt: undefined → null（永不过期），string → Date（按系统时区解析）
+    const timezone = await resolveSystemTimezone();
     const expiresAt =
-      validatedData.expiresAt === undefined ? null : new Date(validatedData.expiresAt);
+      validatedData.expiresAt === undefined
+        ? null
+        : parseDateInputAsTimezone(validatedData.expiresAt, timezone);
 
     await createKey({
       user_id: data.userId,
@@ -497,22 +502,26 @@ export async function editKey(
 
     // 移除 providerGroup 子集校验（用户分组由 Key 分组自动计算）
 
-    // 转换 expiresAt：
+    // 转换 expiresAt（按系统时区解析）：
     // - 未携带 expiresAt：不更新该字段
     // - 携带 expiresAt 但为空：清除（永不过期）
     // - 携带 expiresAt 且为字符串：设置为对应 Date
-    const expiresAt = hasExpiresAtField
-      ? validatedData.expiresAt === undefined
-        ? null
-        : new Date(validatedData.expiresAt)
-      : undefined;
-
-    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
-      return {
-        ok: false,
-        error: tError("INVALID_FORMAT"),
-        errorCode: ERROR_CODES.INVALID_FORMAT,
-      };
+    let expiresAt: Date | null | undefined = undefined;
+    if (hasExpiresAtField) {
+      if (validatedData.expiresAt === undefined) {
+        expiresAt = null;
+      } else {
+        try {
+          const timezone = await resolveSystemTimezone();
+          expiresAt = parseDateInputAsTimezone(validatedData.expiresAt, timezone);
+        } catch {
+          return {
+            ok: false,
+            error: tError("INVALID_FORMAT"),
+            errorCode: ERROR_CODES.INVALID_FORMAT,
+          };
+        }
+      }
     }
 
     const isAdmin = session.user.role === "admin";
@@ -721,14 +730,14 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       ]);
 
     // 获取重置时间
-    const resetInfo5h = getResetInfo("5h");
-    const resetInfoDaily = getResetInfoWithMode(
+    const resetInfo5h = await getResetInfo("5h");
+    const resetInfoDaily = await getResetInfoWithMode(
       "daily",
       key.dailyResetTime,
       key.dailyResetMode ?? "fixed"
     );
-    const resetInfoWeekly = getResetInfo("weekly");
-    const resetInfoMonthly = getResetInfo("monthly");
+    const resetInfoWeekly = await getResetInfo("weekly");
+    const resetInfoMonthly = await getResetInfo("monthly");
 
     return {
       ok: true,
@@ -1058,10 +1067,9 @@ export async function renewKeyExpiresAt(
       };
     }
 
-    const expiresAt = new Date(data.expiresAt);
-    if (Number.isNaN(expiresAt.getTime())) {
-      return { ok: false, error: tError("INVALID_FORMAT"), errorCode: ERROR_CODES.INVALID_FORMAT };
-    }
+    // 按系统时区解析过期日期
+    const timezone = await resolveSystemTimezone();
+    const expiresAt = parseDateInputAsTimezone(data.expiresAt, timezone);
 
     await updateKey(keyId, {
       expires_at: expiresAt,

@@ -50,8 +50,12 @@ export function TimeFilters({ filters, onFiltersChange, serverTimeZone }: TimeFi
   const displayEndDate = useMemo(() => {
     if (!filters.endTime) return undefined;
     const inclusiveEndTime = inclusiveEndTimestampFromExclusive(filters.endTime);
-    return format(new Date(inclusiveEndTime), "yyyy-MM-dd");
-  }, [filters.endTime]);
+    const date = new Date(inclusiveEndTime);
+    if (serverTimeZone) {
+      return formatInTimeZone(date, serverTimeZone, "yyyy-MM-dd");
+    }
+    return format(date, "yyyy-MM-dd");
+  }, [filters.endTime, serverTimeZone]);
 
   const displayEndClock = useMemo(() => {
     if (!filters.endTime) return undefined;

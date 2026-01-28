@@ -94,7 +94,7 @@ export const keys = pgTable('keys', {
   key: varchar('key').notNull(),
   name: varchar('name').notNull(),
   isEnabled: boolean('is_enabled').default(true),
-  expiresAt: timestamp('expires_at'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
 
   // Web UI 登录权限控制
   canLoginWebUi: boolean('can_login_web_ui').default(false),
@@ -563,6 +563,11 @@ export const systemSettings = pgTable('system_settings', {
   // 计费模型来源配置: 'original' (重定向前) | 'redirected' (重定向后)
   billingModelSource: varchar('billing_model_source', { length: 20 }).notNull().default('original'),
 
+  // 系统时区配置 (IANA timezone identifier)
+  // 用于统一后端时间边界计算和前端日期/时间显示
+  // null 表示使用环境变量 TZ 或默认 UTC
+  timezone: varchar('timezone', { length: 64 }),
+
   // 日志清理配置
   enableAutoCleanup: boolean('enable_auto_cleanup').default(false),
   cleanupRetentionDays: integer('cleanup_retention_days').default(30),
@@ -607,6 +612,14 @@ export const systemSettings = pgTable('system_settings', {
       maxJsonDepth: 200,
       maxFixSize: 1024 * 1024,
     }),
+
+  // Quota lease settings
+  quotaDbRefreshIntervalSeconds: integer('quota_db_refresh_interval_seconds').default(10),
+  quotaLeasePercent5h: numeric('quota_lease_percent_5h', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeasePercentDaily: numeric('quota_lease_percent_daily', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeasePercentWeekly: numeric('quota_lease_percent_weekly', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeasePercentMonthly: numeric('quota_lease_percent_monthly', { precision: 5, scale: 4 }).default('0.05'),
+  quotaLeaseCapUsd: numeric('quota_lease_cap_usd', { precision: 10, scale: 2 }),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
@@ -687,8 +700,9 @@ export const notificationTargetBindings = pgTable(
     isEnabled: boolean('is_enabled').notNull().default(true),
 
     // 定时配置覆盖（可选，仅用于定时类通知）
+    // null 表示使用系统时区（由运行时 resolveSystemTimezone() 决定）
     scheduleCron: varchar('schedule_cron', { length: 100 }),
-    scheduleTimezone: varchar('schedule_timezone', { length: 50 }).default('Asia/Shanghai'),
+    scheduleTimezone: varchar('schedule_timezone', { length: 50 }),
 
     // 模板覆盖（可选，主要用于 custom webhook）
     templateOverride: jsonb('template_override'),

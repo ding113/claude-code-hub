@@ -4,24 +4,25 @@ import type {
   SectionContent,
   StructuredMessage,
   WebhookPayload,
+  WebhookSendOptions,
 } from "../types";
 import { formatTimestamp } from "../utils/date";
 import type { Renderer } from "./index";
 
 export class DingTalkRenderer implements Renderer {
-  render(message: StructuredMessage): WebhookPayload {
+  render(message: StructuredMessage, options?: WebhookSendOptions): WebhookPayload {
     const markdown = {
       msgtype: "markdown",
       markdown: {
         title: this.escapeText(message.header.title),
-        text: this.buildMarkdown(message),
+        text: this.buildMarkdown(message, options?.timezone),
       },
     };
 
     return { body: JSON.stringify(markdown) };
   }
 
-  private buildMarkdown(message: StructuredMessage): string {
+  private buildMarkdown(message: StructuredMessage, timezone?: string): string {
     const lines: string[] = [];
 
     lines.push(`### ${this.escapeText(message.header.title)}`);
@@ -40,7 +41,7 @@ export class DingTalkRenderer implements Renderer {
       lines.push("");
     }
 
-    lines.push(formatTimestamp(message.timestamp));
+    lines.push(formatTimestamp(message.timestamp, timezone || "UTC"));
     return lines.join("\n").trim();
   }
 

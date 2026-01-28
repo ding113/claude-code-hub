@@ -3,7 +3,7 @@
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest } from "@/drizzle/schema";
-import { getEnvConfig } from "@/lib/config";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
   DatabaseKey,
   DatabaseKeyStatRow,
@@ -21,7 +21,7 @@ import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
  * 注意：这个函数使用原生SQL，因为涉及到PostgreSQL特定的generate_series函数
  */
 export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<DatabaseStatRow[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   let query;
 
   switch (timeRange) {
@@ -199,7 +199,7 @@ export async function getKeyStatisticsFromDB(
   userId: number,
   timeRange: TimeRange
 ): Promise<DatabaseKeyStatRow[]> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   let query;
 
   switch (timeRange) {
@@ -402,7 +402,7 @@ export async function getMixedStatisticsFromDB(
   ownKeys: DatabaseKeyStatRow[];
   othersAggregate: DatabaseStatRow[];
 }> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   let ownKeysQuery;
   let othersQuery;
 
@@ -720,7 +720,7 @@ export async function getMixedStatisticsFromDB(
  * @deprecated 使用 sumUserCostInTimeRange() 替代
  */
 export async function sumUserCostToday(userId: number): Promise<number> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
 
   const query = sql`
     SELECT COALESCE(SUM(mr.cost_usd), 0) AS total_cost
@@ -1043,7 +1043,7 @@ export async function findKeyCostEntriesInTimeRange(
 export async function getRateLimitEventStats(
   filters: RateLimitEventFilters = {}
 ): Promise<RateLimitEventStats> {
-  const timezone = getEnvConfig().TZ;
+  const timezone = await resolveSystemTimezone();
   const { user_id, provider_id, limit_type, start_time, end_time, key_id } = filters;
 
   // 构建 WHERE 条件

@@ -4,6 +4,7 @@
  */
 
 import { getRequestConfig } from "next-intl/server";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { Locale } from "./config";
 import { routing } from "./routing";
 
@@ -21,21 +22,13 @@ export default getRequestConfig(async ({ requestLocale }) => {
   // The `settings` namespace is composed by `messages/<locale>/settings/index.ts` so key paths stay stable.
   const messages = await import(`../../messages/${locale}`).then((module) => module.default);
 
+  const timeZone = await resolveSystemTimezone();
+
   return {
     locale,
     messages,
-    // Optional: Configure date/time/number formatting
-    // formats: {
-    //   dateTime: {
-    //     short: {
-    //       day: 'numeric',
-    //       month: 'short',
-    //       year: 'numeric'
-    //     }
-    //   }
-    // },
-    // Optional: Configure time zone
-    // timeZone: 'Asia/Shanghai',
+    timeZone,
+    now: new Date(),
     // Optional: Enable runtime warnings for missing translations in development
     onError:
       process.env.NODE_ENV === "development"

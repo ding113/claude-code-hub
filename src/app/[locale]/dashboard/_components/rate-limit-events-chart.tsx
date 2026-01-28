@@ -1,10 +1,12 @@
 "use client";
 
-import { useLocale, useTranslations } from "next-intl";
+import { formatInTimeZone } from "date-fns-tz";
+import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import * as React from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import { getDateFnsLocale } from "@/lib/utils/date-format";
 import type { EventTimeline } from "@/types/statistics";
 
 export interface RateLimitEventsChartProps {
@@ -18,6 +20,8 @@ export interface RateLimitEventsChartProps {
 export function RateLimitEventsChart({ data }: RateLimitEventsChartProps) {
   const t = useTranslations("dashboard.rateLimits.chart");
   const locale = useLocale();
+  const timeZone = useTimeZone() ?? "UTC";
+  const dateFnsLocale = getDateFnsLocale(locale);
 
   const chartConfig = React.useMemo(
     () =>
@@ -30,27 +34,16 @@ export function RateLimitEventsChart({ data }: RateLimitEventsChartProps) {
     [t]
   );
 
-  // 格式化小时显示
+  // Format hour display with timezone
   const formatHour = (hourStr: string) => {
     const date = new Date(hourStr);
-    return date.toLocaleTimeString(locale, {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatInTimeZone(date, timeZone, "M/d HH:mm", { locale: dateFnsLocale });
   };
 
-  // 格式化 tooltip 显示
+  // Format tooltip display with timezone
   const formatTooltipHour = (hourStr: string) => {
     const date = new Date(hourStr);
-    return date.toLocaleString(locale, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return formatInTimeZone(date, timeZone, "yyyy MMMM d HH:mm", { locale: dateFnsLocale });
   };
 
   // 计算总事件数

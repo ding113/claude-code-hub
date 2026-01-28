@@ -1,7 +1,8 @@
 "use client";
 
 import { format as formatDate } from "date-fns";
-import { useLocale, useTranslations } from "next-intl";
+import { formatInTimeZone } from "date-fns-tz";
+import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateDistance } from "@/lib/utils/date-format";
@@ -35,6 +36,7 @@ export function RelativeTime({
   const [timeAgo, setTimeAgo] = useState<string>(fallback);
   const [mounted, setMounted] = useState(false);
   const locale = useLocale();
+  const timeZone = useTimeZone() ?? "UTC";
   const tShort = useTranslations("common.relativeTimeShort");
 
   // Format short distance with i18n
@@ -70,10 +72,10 @@ export function RelativeTime({
     if (!date) return fallback;
     const dateObj = typeof date === "string" ? new Date(date) : date;
     if (Number.isNaN(dateObj.getTime())) return fallback;
-    // date-fns does not fully support `z` for IANA abbreviations; use `OOOO` to show GMT offset.
+    // Use system timezone from next-intl for consistent display.
     // Example output: 2024-05-01 13:45:12 GMT+08:00
-    return formatDate(dateObj, "yyyy-MM-dd HH:mm:ss OOOO");
-  }, [date, fallback]);
+    return formatInTimeZone(dateObj, timeZone, "yyyy-MM-dd HH:mm:ss OOOO");
+  }, [date, fallback, timeZone]);
 
   useEffect(() => {
     // 如果 date 为 null，直接显示 fallback

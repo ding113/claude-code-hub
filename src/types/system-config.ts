@@ -22,6 +22,11 @@ export interface SystemSettings {
   // 计费模型来源配置
   billingModelSource: BillingModelSource;
 
+  // 系统时区配置 (IANA timezone identifier)
+  // 用于统一后端时间边界计算和前端日期/时间显示
+  // null 表示使用环境变量 TZ 或默认 UTC
+  timezone: string | null;
+
   // 日志清理配置
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -52,6 +57,14 @@ export interface SystemSettings {
   enableResponseFixer: boolean;
   responseFixerConfig: ResponseFixerConfig;
 
+  // Quota lease settings
+  quotaDbRefreshIntervalSeconds?: number;
+  quotaLeasePercent5h?: number;
+  quotaLeasePercentDaily?: number;
+  quotaLeasePercentWeekly?: number;
+  quotaLeasePercentMonthly?: number;
+  quotaLeaseCapUsd?: number | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,6 +79,9 @@ export interface UpdateSystemSettingsInput {
 
   // 计费模型来源配置（可选）
   billingModelSource?: BillingModelSource;
+
+  // 系统时区配置（可选）
+  timezone?: string | null;
 
   // 日志清理配置（可选）
   enableAutoCleanup?: boolean;
@@ -94,4 +110,12 @@ export interface UpdateSystemSettingsInput {
   // 响应整流（可选）
   enableResponseFixer?: boolean;
   responseFixerConfig?: Partial<ResponseFixerConfig>;
+
+  // Quota lease settings（可选）
+  quotaDbRefreshIntervalSeconds?: number;
+  quotaLeasePercent5h?: number;
+  quotaLeasePercentDaily?: number;
+  quotaLeasePercentWeekly?: number;
+  quotaLeasePercentMonthly?: number;
+  quotaLeaseCapUsd?: number | null;
 }

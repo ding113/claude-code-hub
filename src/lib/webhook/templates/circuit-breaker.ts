@@ -1,10 +1,13 @@
 import type { CircuitBreakerAlertData, StructuredMessage } from "../types";
 import { formatDateTime } from "../utils/date";
 
-export function buildCircuitBreakerMessage(data: CircuitBreakerAlertData): StructuredMessage {
+export function buildCircuitBreakerMessage(
+  data: CircuitBreakerAlertData,
+  timezone?: string
+): StructuredMessage {
   const fields = [
     { label: "失败次数", value: `${data.failureCount} 次` },
-    { label: "预计恢复", value: formatDateTime(data.retryAt) },
+    { label: "预计恢复", value: formatDateTime(data.retryAt, timezone || "UTC") },
   ];
 
   if (data.lastError) {

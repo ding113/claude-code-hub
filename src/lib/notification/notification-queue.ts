@@ -2,6 +2,7 @@ import type { Job } from "bull";
 import Queue from "bull";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   buildCircuitBreakerMessage,
   buildCostAlertMessage,
@@ -137,13 +138,25 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
     });
 
     try {
+      // Resolve timezone for formatting
+      // Priority: binding's scheduleTimezone > system timezone
+      let timezone: string | undefined;
+      if (bindingId) {
+        const { getBindingById } = await import("@/repository/notification-bindings");
+        const binding = await getBindingById(bindingId);
+        timezone = binding?.scheduleTimezone ?? undefined;
+      }
+      if (!timezone) {
+        timezone = await resolveSystemTimezone();
+      }
+
       // 构建结构化消息
       let message: StructuredMessage;
       let templateData: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | undefined =
         data;
       switch (type) {
         case "circuit-breaker":
-          message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData);
+          message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData, timezone);
           break;
         case "daily-leaderboard": {
           // 动态生成排行榜数据
@@ -193,7 +206,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
       // 发送通知
       let result;
       if (webhookUrl) {
-        result = await sendWebhookMessage(webhookUrl, message);
+        result = await sendWebhookMessage(webhookUrl, message, { timezone });
       } else if (targetId) {
         const { getWebhookTargetById } = await import("@/repository/webhook-targets");
         const target = await getWebhookTargetById(targetId);
@@ -221,6 +234,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           notificationType,
           data: templateData,
           templateOverride,
+          timezone,
         });
       } else {
         throw new Error("Missing notification destination (webhookUrl/targetId)");
@@ -411,6 +425,7 @@ export async function scheduleNotifications() {
     } else {
       // 新模式：按绑定调度（支持 cron 覆盖）
       const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
+      const systemTimezone = await resolveSystemTimezone();
 
       if (settings.dailyLeaderboardEnabled) {
         const bindings = await getEnabledBindingsByType("daily_leaderboard");
@@ -419,7 +434,7 @@ export async function scheduleNotifications() {
 
         for (const binding of bindings) {
           const cron = binding.scheduleCron ?? defaultCron;
-          const tz = binding.scheduleTimezone ?? "Asia/Shanghai";
+          const tz = binding.scheduleTimezone ?? systemTimezone;
 
           await queue.add(
             {
@@ -449,7 +464,7 @@ export async function scheduleNotifications() {
 
         for (const binding of bindings) {
           const cron = binding.scheduleCron ?? defaultCron;
-          const tz = binding.scheduleTimezone ?? "Asia/Shanghai";
+          const tz = binding.scheduleTimezone ?? systemTimezone;
 
           await queue.add(
             {

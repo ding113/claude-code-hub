@@ -4,6 +4,7 @@ import type {
   SectionContent,
   StructuredMessage,
   WebhookPayload,
+  WebhookSendOptions,
 } from "../types";
 import { formatTimestamp } from "../utils/date";
 import type { Renderer } from "./index";
@@ -11,8 +12,8 @@ import type { Renderer } from "./index";
 export class TelegramRenderer implements Renderer {
   constructor(private readonly chatId: string) {}
 
-  render(message: StructuredMessage): WebhookPayload {
-    const html = this.buildHtml(message);
+  render(message: StructuredMessage, options?: WebhookSendOptions): WebhookPayload {
+    const html = this.buildHtml(message, options?.timezone);
     return {
       body: JSON.stringify({
         chat_id: this.chatId,
@@ -23,7 +24,7 @@ export class TelegramRenderer implements Renderer {
     };
   }
 
-  private buildHtml(message: StructuredMessage): string {
+  private buildHtml(message: StructuredMessage, timezone?: string): string {
     const lines: string[] = [];
 
     lines.push(`<b>${this.escapeHtml(message.header.title)}</b>`);
@@ -42,7 +43,7 @@ export class TelegramRenderer implements Renderer {
       lines.push("");
     }
 
-    lines.push(this.escapeHtml(formatTimestamp(message.timestamp)));
+    lines.push(this.escapeHtml(formatTimestamp(message.timestamp, timezone || "UTC")));
     return lines.join("\n").trim();
   }
 

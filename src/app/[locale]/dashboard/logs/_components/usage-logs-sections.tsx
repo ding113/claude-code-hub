@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { ActiveSessionsList } from "@/components/customs/active-sessions-list";
-import { getEnvConfig } from "@/lib/config";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { getSystemSettings } from "@/repository/system-config";
 import { UsageLogsViewVirtualized } from "./usage-logs-view-virtualized";
 
@@ -29,14 +29,14 @@ export async function UsageLogsDataSection({
   searchParams,
 }: UsageLogsDataSectionProps) {
   const resolvedSearchParams = await searchParams;
-  const { TZ } = getEnvConfig();
+  const serverTimeZone = await resolveSystemTimezone();
 
   return (
     <UsageLogsViewVirtualized
       isAdmin={isAdmin}
       userId={userId}
       searchParams={resolvedSearchParams}
-      serverTimeZone={TZ}
+      serverTimeZone={serverTimeZone}
     />
   );
 }

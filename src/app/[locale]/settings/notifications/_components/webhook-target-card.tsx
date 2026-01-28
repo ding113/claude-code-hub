@@ -1,7 +1,8 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { ExternalLink, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import {
   AlertDialog,
@@ -36,12 +37,12 @@ interface WebhookTargetCardProps {
   onTest: (id: number, type: NotificationType) => Promise<void> | void;
 }
 
-function formatLastTest(target: WebhookTargetState, locale: string): string | null {
+function formatLastTest(target: WebhookTargetState, timeZone: string): string | null {
   if (!target.lastTestAt) return null;
   try {
     const date =
       typeof target.lastTestAt === "string" ? new Date(target.lastTestAt) : target.lastTestAt;
-    return date.toLocaleString(locale, { hour12: false });
+    return formatInTimeZone(date, timeZone, "yyyy-MM-dd HH:mm:ss");
   } catch {
     return null;
   }
@@ -55,7 +56,7 @@ export function WebhookTargetCard({
   onTest,
 }: WebhookTargetCardProps) {
   const t = useTranslations("settings");
-  const locale = useLocale();
+  const timeZone = useTimeZone() ?? "UTC";
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
@@ -63,7 +64,7 @@ export function WebhookTargetCard({
     return t(`notifications.targetDialog.types.${target.providerType}` as any);
   }, [t, target.providerType]);
 
-  const lastTestText = useMemo(() => formatLastTest(target, locale), [target, locale]);
+  const lastTestText = useMemo(() => formatLastTest(target, timeZone), [target, timeZone]);
   const lastTestOk = target.lastTestResult?.success;
   const lastTestLatency = target.lastTestResult?.latencyMs;
 

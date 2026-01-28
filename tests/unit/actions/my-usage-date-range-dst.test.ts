@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSystemSettings: vi.fn(),
   findUsageLogsWithDetails: vi.fn(),
-  getEnvConfig: vi.fn(),
+  resolveSystemTimezone: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -24,14 +24,14 @@ vi.mock("@/repository/usage-logs", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/config", () => ({
-  getEnvConfig: mocks.getEnvConfig,
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 
 describe("my-usage date range parsing", () => {
   it("computes exclusive endTime as next local midnight across DST start", async () => {
     const tz = "America/Los_Angeles";
-    mocks.getEnvConfig.mockReturnValue({ TZ: tz });
+    mocks.resolveSystemTimezone.mockResolvedValue(tz);
 
     mocks.getSession.mockResolvedValue({
       key: { id: 1, key: "k" },
@@ -60,7 +60,7 @@ describe("my-usage date range parsing", () => {
 
   it("computes exclusive endTime as next local midnight across DST end", async () => {
     const tz = "America/Los_Angeles";
-    mocks.getEnvConfig.mockReturnValue({ TZ: tz });
+    mocks.resolveSystemTimezone.mockResolvedValue(tz);
 
     mocks.getSession.mockResolvedValue({
       key: { id: 1, key: "k" },

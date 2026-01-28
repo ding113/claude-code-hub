@@ -9,9 +9,9 @@ export interface UsageLogFilters {
   keyId?: number;
   providerId?: number;
   sessionId?: string;
-  /** Start timestamp (ms, local timezone 00:00:00) */
+  /** Start timestamp (ms, system timezone 00:00:00) */
   startTime?: number;
-  /** End timestamp (ms, local timezone next day 00:00:00, for < comparison) */
+  /** End timestamp (ms, system timezone next day 00:00:00, for < comparison) */
   endTime?: number;
   statusCode?: number;
   excludeStatusCode200?: boolean;

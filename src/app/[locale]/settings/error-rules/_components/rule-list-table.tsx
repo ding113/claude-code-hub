@@ -1,7 +1,8 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { AlertTriangle, Pencil, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { deleteErrorRuleAction, updateErrorRuleAction } from "@/actions/error-rules";
@@ -29,6 +30,7 @@ const categoryColors: Record<string, { bg: string; text: string }> = {
 
 export function RuleListTable({ rules }: RuleListTableProps) {
   const t = useTranslations("settings");
+  const timeZone = useTimeZone() ?? "UTC";
   const [selectedRule, setSelectedRule] = useState<ErrorRule | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
@@ -140,7 +142,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                     </p>
                   )}
                   <p className="text-[10px] text-muted-foreground/60 mt-1">
-                    {new Date(rule.createdAt).toLocaleString("zh-CN")}
+                    {formatInTimeZone(new Date(rule.createdAt), timeZone, "yyyy-MM-dd HH:mm:ss")}
                   </p>
                 </div>
               </div>

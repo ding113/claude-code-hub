@@ -76,6 +76,7 @@ export default function MyUsagePage() {
             keyExpiresAt={keyExpiresAt}
             userExpiresAt={userExpiresAt}
             userRpmLimit={quota.userRpmLimit}
+            timezone={serverTimeZone}
           />
         </div>
       ) : null}

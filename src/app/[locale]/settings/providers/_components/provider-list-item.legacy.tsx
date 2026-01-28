@@ -1,7 +1,8 @@
 "use client";
+import { formatInTimeZone } from "date-fns-tz";
 import { CheckCircle, Copy, Edit, Globe, Key, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getUnmaskedProviderKey, resetProviderCircuit } from "@/actions/providers";
@@ -62,6 +63,7 @@ export function ProviderListItem({
   enableMultiProviderTypes,
 }: ProviderListItemProps) {
   const router = useRouter();
+  const timeZone = useTimeZone() ?? "UTC";
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
   const [showKeyDialog, setShowKeyDialog] = useState(false);
@@ -351,13 +353,7 @@ export function ProviderListItem({
           <span className="font-medium text-foreground/80">最近调用:</span>
           <span className="tabular-nums">
             {item.lastCallTime
-              ? new Date(item.lastCallTime).toLocaleString("zh-CN", {
-                  year: "numeric",
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
+              ? formatInTimeZone(new Date(item.lastCallTime), timeZone, "yyyy-MM-dd HH:mm")
               : "-"}
             {item.lastCallModel && item.lastCallTime ? ` - ${item.lastCallModel}` : ""}
           </span>

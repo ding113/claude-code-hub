@@ -124,7 +124,7 @@ describe("my-usage token aggregation", () => {
       return selectQueue.shift() ?? createThenableQuery([]);
     });
 
-    mocks.getTimeRangeForPeriodWithMode.mockReturnValue({
+    mocks.getTimeRangeForPeriodWithMode.mockResolvedValue({
       startTime: new Date("2024-01-01T00:00:00.000Z"),
       endTime: new Date("2024-01-02T00:00:00.000Z"),
     });

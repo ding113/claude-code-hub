@@ -18,6 +18,7 @@ vi.mock("next-intl", () => {
   const t = (key: string) => key;
   return {
     useTranslations: () => t,
+    useTimeZone: () => "UTC",
   };
 });
 

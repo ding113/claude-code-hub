@@ -103,6 +103,7 @@ function makeSystemSettings(
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource,
+    timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
     cleanupSchedule: "0 2 * * *",

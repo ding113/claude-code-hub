@@ -21,6 +21,7 @@ import {
   NON_BILLING_ENDPOINT,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
+import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
@@ -433,6 +434,28 @@ export function VirtualizedLogsTable({
                                   Number.isFinite(multiplier) &&
                                   multiplier !== 1;
 
+                                // Calculate actual request count (same logic as ProviderChainPopover)
+                                const isActualRequest = (item: ProviderChainItem) => {
+                                  if (item.reason === "concurrent_limit_failed") return true;
+                                  if (
+                                    item.reason === "retry_failed" ||
+                                    item.reason === "system_error"
+                                  )
+                                    return true;
+                                  if (
+                                    (item.reason === "request_success" ||
+                                      item.reason === "retry_success") &&
+                                    item.statusCode
+                                  ) {
+                                    return true;
+                                  }
+                                  return false;
+                                };
+                                const actualRequestCount =
+                                  log.providerChain?.filter(isActualRequest).length ?? 0;
+                                // Only show badge in table when no retry (Popover shows badge when retry)
+                                const showBadgeInTable = hasCostBadge && actualRequestCount <= 1;
+
                                 return (
                                   <>
                                     <div className="flex-1 min-w-0 overflow-hidden">
@@ -448,14 +471,14 @@ export function VirtualizedLogsTable({
                                         hasCostBadge={hasCostBadge}
                                       />
                                     </div>
-                                    {/* Cost multiplier badge */}
-                                    {hasCostBadge && (
+                                    {/* Cost multiplier badge - only show when no retry */}
+                                    {showBadgeInTable && (
                                       <Badge
                                         variant="outline"
                                         className={
                                           multiplier > 1
-                                            ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
-                                            : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
+                                            ? "text-[10px] px-1 py-0 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
+                                            : "text-[10px] px-1 py-0 bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
                                         }
                                       >
                                         x{multiplier.toFixed(2)}
