@@ -377,7 +377,9 @@ function TestResultDetails({
           )}
           <div>
             <span className="text-muted-foreground">{t("resultCard.timing.testedAt")}:</span>{" "}
-            <span className="font-mono">{formatInTimeZone(new Date(result.testedAt), timeZone, "yyyy-MM-dd HH:mm:ss")}</span>
+            <span className="font-mono">
+              {formatInTimeZone(new Date(result.testedAt), timeZone, "yyyy-MM-dd HH:mm:ss")}
+            </span>
           </div>
         </div>
       </div>
