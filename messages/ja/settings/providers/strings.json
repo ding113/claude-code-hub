@@ -82,6 +82,8 @@
   "probeOk": "OK",
   "probeError": "エラー",
   "addEndpointDesc": "このベンダーに {providerType} エンドポイントを追加します。",
+  "addEndpointDescGeneric": "このベンダーに新しい API エンドポイントを追加します。",
+  "columnType": "種類",
   "endpointUrlLabel": "URL",
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "ラベル (任意)",

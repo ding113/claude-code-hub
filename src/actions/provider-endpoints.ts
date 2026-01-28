@@ -21,6 +21,7 @@ import {
   deleteProviderVendor,
   findProviderEndpointById,
   findProviderEndpointProbeLogs,
+  findProviderEndpointsByVendor,
   findProviderEndpointsByVendorAndType,
   findProviderVendorById,
   findProviderVendors,
@@ -181,6 +182,30 @@ export async function getProviderEndpoints(input: {
     );
   } catch (error) {
     logger.error("getProviderEndpoints:error", error);
+    return [];
+  }
+}
+
+export async function getProviderEndpointsByVendor(input: {
+  vendorId: number;
+}): Promise<ProviderEndpoint[]> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return [];
+    }
+
+    const parsed = z.object({ vendorId: VendorIdSchema }).safeParse(input);
+    if (!parsed.success) {
+      logger.debug("getProviderEndpointsByVendor:invalid_input", {
+        error: parsed.error,
+      });
+      return [];
+    }
+
+    return await findProviderEndpointsByVendor(parsed.data.vendorId);
+  } catch (error) {
+    logger.error("getProviderEndpointsByVendor:error", error);
     return [];
   }
 }

@@ -44,7 +44,7 @@ export {
   getDistinctProviderGroups,
   updateProvider,
 } from "./provider";
-
+export type { ProviderEndpointProbeTarget } from "./provider-endpoints";
 export {
   createProviderEndpoint,
   deleteProviderEndpointProbeLogsBeforeDateBatch,
@@ -52,6 +52,7 @@ export {
   findEnabledProviderEndpointsForProbing,
   findProviderEndpointById,
   findProviderEndpointProbeLogs,
+  findProviderEndpointsByVendor,
   findProviderEndpointsByVendorAndType,
   findProviderVendorById,
   findProviderVendors,

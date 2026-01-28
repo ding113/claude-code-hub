@@ -82,6 +82,8 @@
   "probeOk": "正常",
   "probeError": "异常",
   "addEndpointDesc": "为该服务商添加一个新的 {providerType} 端点。",
+  "addEndpointDescGeneric": "为该服务商添加一个新的 API 端点。",
+  "columnType": "类型",
   "endpointUrlLabel": "URL",
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "标签（可选）",
