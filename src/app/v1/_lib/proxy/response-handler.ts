@@ -34,6 +34,9 @@ export type UsageMetrics = {
   cache_creation_1h_input_tokens?: number;
   cache_ttl?: "5m" | "1h" | "mixed";
   cache_read_input_tokens?: number;
+  // 图片 modality tokens（从 candidatesTokensDetails/promptTokensDetails 提取）
+  input_image_tokens?: number;
+  output_image_tokens?: number;
 };
 
 /**
@@ -1286,6 +1289,71 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
   if (typeof usage.cachedContentTokenCount === "number") {
     result.cache_read_input_tokens = usage.cachedContentTokenCount;
     hasAny = true;
+  }
+
+  // Gemini modality-specific token details (IMAGE/TEXT)
+  // candidatesTokensDetails: 输出 token 按 modality 分类
+  const candidatesDetails = usage.candidatesTokensDetails as
+    | Array<{ modality?: string; tokenCount?: number }>
+    | undefined;
+  if (Array.isArray(candidatesDetails) && candidatesDetails.length > 0) {
+    let imageTokens = 0;
+    let textTokens = 0;
+    let hasValidToken = false;
+    for (const detail of candidatesDetails) {
+      if (typeof detail.tokenCount === "number" && detail.tokenCount > 0) {
+        hasValidToken = true;
+        const modalityUpper = detail.modality?.toUpperCase();
+        if (modalityUpper === "IMAGE") {
+          imageTokens += detail.tokenCount;
+        } else {
+          textTokens += detail.tokenCount;
+        }
+      }
+    }
+    if (imageTokens > 0) {
+      result.output_image_tokens = imageTokens;
+      hasAny = true;
+    }
+    if (hasValidToken) {
+      // 计算未分类的 TEXT tokens: candidatesTokenCount - details总和
+      // 这些可能是图片生成的内部开销，按 TEXT 价格计费
+      const detailsSum = imageTokens + textTokens;
+      const candidatesTotal =
+        typeof usage.candidatesTokenCount === "number" ? usage.candidatesTokenCount : 0;
+      const unaccountedTokens = Math.max(candidatesTotal - detailsSum, 0);
+      result.output_tokens = textTokens + unaccountedTokens;
+      hasAny = true;
+    }
+  }
+
+  // promptTokensDetails: 输入 token 按 modality 分类
+  const promptDetails = usage.promptTokensDetails as
+    | Array<{ modality?: string; tokenCount?: number }>
+    | undefined;
+  if (Array.isArray(promptDetails) && promptDetails.length > 0) {
+    let imageTokens = 0;
+    let textTokens = 0;
+    let hasValidToken = false;
+    for (const detail of promptDetails) {
+      if (typeof detail.tokenCount === "number" && detail.tokenCount > 0) {
+        hasValidToken = true;
+        const modalityUpper = detail.modality?.toUpperCase();
+        if (modalityUpper === "IMAGE") {
+          imageTokens += detail.tokenCount;
+        } else {
+          textTokens += detail.tokenCount;
+        }
+      }
+    }
+    if (imageTokens > 0) {
+      result.input_image_tokens = imageTokens;
+      hasAny = true;
+    }
+    if (hasValidToken) {
+      result.input_tokens = textTokens;
+      hasAny = true;
+    }
   }
 
   if (typeof usage.output_tokens === "number") {
