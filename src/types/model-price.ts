@@ -20,6 +20,12 @@ export interface ModelPriceData {
 
   // 图片生成价格
   output_cost_per_image?: number;
+  // 图片 token 价格（按 token 计费，用于 Gemini 等模型的图片输出）
+  output_cost_per_image_token?: number;
+  // 图片输入价格（按张计费）
+  input_cost_per_image?: number;
+  // 图片输入 token 价格（按 token 计费）
+  input_cost_per_image_token?: number;
 
   // 搜索上下文价格
   search_context_cost_per_query?: {

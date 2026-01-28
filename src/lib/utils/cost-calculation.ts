@@ -14,6 +14,9 @@ type UsageMetrics = {
   cache_creation_1h_input_tokens?: number;
   cache_ttl?: "5m" | "1h" | "mixed";
   cache_read_input_tokens?: number;
+  // 图片 modality tokens（从 candidatesTokensDetails/promptTokensDetails 提取）
+  input_image_tokens?: number;
+  output_image_tokens?: number;
 };
 
 function multiplyCost(quantity: number | undefined, unitCost: number | undefined): Decimal {
@@ -283,6 +286,21 @@ export function calculateRequestCost(
     );
   } else {
     segments.push(multiplyCost(usage.cache_read_input_tokens, cacheReadCost));
+  }
+
+  // 图片 token 费用（Gemini image generation models）
+  // 输出图片 token：优先使用 output_cost_per_image_token，否则回退到 output_cost_per_token
+  if (usage.output_image_tokens != null && usage.output_image_tokens > 0) {
+    const imageCostPerToken =
+      priceData.output_cost_per_image_token ?? priceData.output_cost_per_token;
+    segments.push(multiplyCost(usage.output_image_tokens, imageCostPerToken));
+  }
+
+  // 输入图片 token：优先使用 input_cost_per_image_token，否则回退到 input_cost_per_token
+  if (usage.input_image_tokens != null && usage.input_image_tokens > 0) {
+    const imageCostPerToken =
+      priceData.input_cost_per_image_token ?? priceData.input_cost_per_token;
+    segments.push(multiplyCost(usage.input_image_tokens, imageCostPerToken));
   }
 
   const total = segments.reduce((acc, segment) => acc.plus(segment), new Decimal(0));
