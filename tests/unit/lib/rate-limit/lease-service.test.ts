@@ -7,6 +7,23 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Mock Redis client using vi.hoisted to avoid TDZ issues
+const mockRedis = vi.hoisted(() => ({
+  status: "ready",
+  get: vi.fn(),
+  set: vi.fn(),
+  setex: vi.fn(),
+  eval: vi.fn(),
+  exists: vi.fn(),
+  del: vi.fn(),
+  pipeline: vi.fn(() => ({
+    get: vi.fn().mockReturnThis(),
+    set: vi.fn().mockReturnThis(),
+    expire: vi.fn().mockReturnThis(),
+    exec: vi.fn().mockResolvedValue([]),
+  })),
+}));
+
 // Mock dependencies
 vi.mock("@/lib/config", () => ({
   getEnvConfig: () => ({ TZ: "Asia/Shanghai" }),
@@ -37,23 +54,6 @@ vi.mock("@/repository/statistics", () => ({
 vi.mock("@/lib/config/system-settings-cache", () => ({
   getCachedSystemSettings: vi.fn(),
 }));
-
-// Mock Redis client
-const mockRedis = {
-  status: "ready",
-  get: vi.fn(),
-  set: vi.fn(),
-  setex: vi.fn(),
-  eval: vi.fn(),
-  exists: vi.fn(),
-  del: vi.fn(),
-  pipeline: vi.fn(() => ({
-    get: vi.fn().mockReturnThis(),
-    set: vi.fn().mockReturnThis(),
-    expire: vi.fn().mockReturnThis(),
-    exec: vi.fn().mockResolvedValue([]),
-  })),
-};
 
 describe("LeaseService", () => {
   const nowMs = 1706400000000; // 2024-01-28 00:00:00 UTC

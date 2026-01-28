@@ -131,16 +131,30 @@ function safeJsonStringify(value: unknown): string {
 }
 
 function formatLocalTimestamp(date: Date, timezone?: string): string {
-  return date.toLocaleString("zh-CN", {
-    timeZone: timezone || "UTC",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  try {
+    return date.toLocaleString("zh-CN", {
+      timeZone: timezone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    // Fallback to UTC if timezone is invalid
+    return date.toLocaleString("zh-CN", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  }
 }
 
 function renderMessageSections(message: StructuredMessage): string {

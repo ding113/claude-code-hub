@@ -101,23 +101,25 @@ export interface CalculateLeaseSliceParams {
 export function calculateLeaseSlice(params: CalculateLeaseSliceParams): number {
   const { limitAmount, currentUsage, percent, capUsd } = params;
 
-  const remaining = limitAmount - currentUsage;
-  if (remaining <= 0) {
+  const remaining = Math.max(0, limitAmount - currentUsage);
+  if (remaining === 0) {
     return 0;
   }
 
-  let slice = limitAmount * percent;
+  // Clamp percent to valid range [0, 1]
+  const safePercent = Math.min(1, Math.max(0, percent));
+  let slice = limitAmount * safePercent;
 
   // Cap by remaining budget
   slice = Math.min(slice, remaining);
 
-  // Cap by USD limit if provided
+  // Cap by USD limit if provided (ensure non-negative)
   if (capUsd !== undefined) {
-    slice = Math.min(slice, capUsd);
+    slice = Math.min(slice, Math.max(0, capUsd));
   }
 
-  // Round to 4 decimal places
-  return Math.round(slice * 10000) / 10000;
+  // Round to 4 decimal places, ensure non-negative
+  return Math.max(0, Math.round(slice * 10000) / 10000);
 }
 
 /**

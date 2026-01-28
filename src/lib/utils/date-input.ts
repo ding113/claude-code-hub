@@ -40,7 +40,18 @@ export function parseDateInputAsTimezone(input: string, timezone: string): Date 
     return fromZonedTime(localDateTime, timezone);
   }
 
-  // ISO datetime or other formats: parse and treat as timezone local time
+  // Check if input has timezone designator (Z or +-HH:MM offset)
+  // If so, parse directly as it already represents an absolute instant
+  const hasTimezoneDesignator = /([zZ]|[+-]\d{2}:?\d{2})$/.test(input);
+  if (hasTimezoneDesignator) {
+    const directDate = new Date(input);
+    if (Number.isNaN(directDate.getTime())) {
+      throw new Error(`Invalid date input: ${input}`);
+    }
+    return directDate;
+  }
+
+  // ISO datetime without timezone: parse and treat as timezone local time
   const localDate = new Date(input);
 
   if (Number.isNaN(localDate.getTime())) {
