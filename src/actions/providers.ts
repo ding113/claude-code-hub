@@ -3648,7 +3648,9 @@ export async function reclusterProviderVendors(args: {
       }
 
       // Get current vendor domain from pre-loaded map
-      const currentVendor = provider.providerVendorId ? vendorMap.get(provider.providerVendorId) : null;
+      const currentVendor = provider.providerVendorId
+        ? vendorMap.get(provider.providerVendorId)
+        : null;
       const currentDomain = currentVendor?.websiteDomain ?? "";
 
       // If key changed, record the change
