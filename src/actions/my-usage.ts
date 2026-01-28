@@ -6,7 +6,6 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { RateLimitService } from "@/lib/rate-limit/service";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
@@ -18,7 +17,6 @@ import {
   findUsageLogsWithDetails,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
-  getTotalUsageForKey,
   type UsageLogFilters,
   type UsageLogSummary,
 } from "@/repository/usage-logs";
@@ -236,17 +234,33 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const key = session.key;
     const user = session.user;
 
-    // 获取用户每日消费时使用用户的 dailyResetTime 和 dailyResetMode 配置
-    // 导入时间工具函数
-    const { getTimeRangeForPeriodWithMode } = await import("@/lib/rate-limit/time-utils");
-    const { sumUserCostInTimeRange } = await import("@/repository/statistics");
+    // 导入时间工具函数和统计函数
+    const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
+      "@/lib/rate-limit/time-utils"
+    );
+    const { sumUserCostInTimeRange, sumKeyCostInTimeRange, sumKeyTotalCostById } = await import(
+      "@/repository/statistics"
+    );
 
-    // 计算用户每日消费的时间范围(使用用户的配置)
+    // 计算各周期的时间范围
+    // Key 使用 Key 的 dailyResetTime/dailyResetMode 配置
+    const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
+      "daily",
+      key.dailyResetTime ?? "00:00",
+      (key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+    );
+
+    // User 使用 User 的 dailyResetTime/dailyResetMode 配置
     const userDailyTimeRange = await getTimeRangeForPeriodWithMode(
       "daily",
       user.dailyResetTime ?? "00:00",
       (user.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
     );
+
+    // 5h/weekly/monthly 使用统一时间范围
+    const range5h = await getTimeRangeForPeriod("5h");
+    const rangeWeekly = await getTimeRangeForPeriod("weekly");
+    const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     const [
       keyCost5h,
@@ -262,20 +276,15 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       userTotalCost,
       userKeyConcurrent,
     ] = await Promise.all([
-      RateLimitService.getCurrentCost(key.id, "key", "5h"),
-      RateLimitService.getCurrentCost(
-        key.id,
-        "key",
-        "daily",
-        key.dailyResetTime,
-        key.dailyResetMode ?? "fixed"
-      ),
-      RateLimitService.getCurrentCost(key.id, "key", "weekly"),
-      RateLimitService.getCurrentCost(key.id, "key", "monthly"),
-      getTotalUsageForKey(key.key),
+      // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
+      sumKeyCostInTimeRange(key.id, range5h.startTime, range5h.endTime),
+      sumKeyCostInTimeRange(key.id, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
+      sumKeyCostInTimeRange(key.id, rangeWeekly.startTime, rangeWeekly.endTime),
+      sumKeyCostInTimeRange(key.id, rangeMonthly.startTime, rangeMonthly.endTime),
+      sumKeyTotalCostById(key.id),
       SessionTracker.getKeySessionCount(key.id),
+      // User 配额：直接查 DB
       sumUserCost(user.id, "5h"),
-      // 修复: 使用与 Key 层级相同的时间范围逻辑来计算用户每日消费
       sumUserCostInTimeRange(user.id, userDailyTimeRange.startTime, userDailyTimeRange.endTime),
       sumUserCost(user.id, "weekly"),
       sumUserCost(user.id, "monthly"),

@@ -706,25 +706,35 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       return { ok: false, error: "无权限执行此操作" };
     }
 
-    // 动态导入 RateLimitService 避免循环依赖
-    const { RateLimitService } = await import("@/lib/rate-limit");
+    // 动态导入避免循环依赖
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
-    const { sumKeyTotalCost } = await import("@/repository/statistics");
+    const {
+      getResetInfo,
+      getResetInfoWithMode,
+      getTimeRangeForPeriod,
+      getTimeRangeForPeriodWithMode,
+    } = await import("@/lib/rate-limit/time-utils");
+    const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
 
-    // 获取金额消费（优先 Redis，降级数据库）
+    // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
+    const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
+      "daily",
+      key.dailyResetTime,
+      key.dailyResetMode ?? "fixed"
+    );
+
+    // 5h/weekly/monthly use unified time ranges
+    const range5h = await getTimeRangeForPeriod("5h");
+    const rangeWeekly = await getTimeRangeForPeriod("weekly");
+    const rangeMonthly = await getTimeRangeForPeriod("monthly");
+
+    // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-        RateLimitService.getCurrentCost(keyId, "key", "5h"),
-        RateLimitService.getCurrentCost(
-          keyId,
-          "key",
-          "daily",
-          key.dailyResetTime,
-          key.dailyResetMode ?? "fixed"
-        ),
-        RateLimitService.getCurrentCost(keyId, "key", "weekly"),
-        RateLimitService.getCurrentCost(keyId, "key", "monthly"),
+        sumKeyCostInTimeRange(keyId, range5h.startTime, range5h.endTime),
+        sumKeyCostInTimeRange(keyId, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
+        sumKeyCostInTimeRange(keyId, rangeWeekly.startTime, rangeWeekly.endTime),
+        sumKeyCostInTimeRange(keyId, rangeMonthly.startTime, rangeMonthly.endTime),
         sumKeyTotalCost(key.key),
         SessionTracker.getKeySessionCount(keyId),
       ]);

@@ -6,7 +6,7 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { RateLimitService } from "@/lib/rate-limit/service";
+import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
@@ -81,18 +81,31 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       return Number.isNaN(num) ? null : num;
     };
 
+    // Import time utils and statistics functions (same as my-usage.ts for consistency)
+    const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
+      "@/lib/rate-limit/time-utils"
+    );
+    const { sumKeyCostInTimeRange } = await import("@/repository/statistics");
+
+    // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
+    const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
+      "daily",
+      keyRow.dailyResetTime ?? "00:00",
+      (keyRow.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
+    );
+
+    // 5h/weekly/monthly use unified time ranges
+    const range5h = await getTimeRangeForPeriod("5h");
+    const rangeWeekly = await getTimeRangeForPeriod("weekly");
+    const rangeMonthly = await getTimeRangeForPeriod("monthly");
+
+    // Use DB direct queries for consistency with my-usage.ts (not Redis-first)
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-        RateLimitService.getCurrentCost(keyId, "key", "5h"),
-        RateLimitService.getCurrentCost(
-          keyId,
-          "key",
-          "daily",
-          keyRow.dailyResetTime ?? "00:00",
-          keyRow.dailyResetMode ?? "fixed"
-        ),
-        RateLimitService.getCurrentCost(keyId, "key", "weekly"),
-        RateLimitService.getCurrentCost(keyId, "key", "monthly"),
+        sumKeyCostInTimeRange(keyId, range5h.startTime, range5h.endTime),
+        sumKeyCostInTimeRange(keyId, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
+        sumKeyCostInTimeRange(keyId, rangeWeekly.startTime, rangeWeekly.endTime),
+        sumKeyCostInTimeRange(keyId, rangeMonthly.startTime, rangeMonthly.endTime),
         getTotalUsageForKey(keyRow.key),
         SessionTracker.getKeySessionCount(keyId),
       ]);
