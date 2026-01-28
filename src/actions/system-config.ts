@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { locales } from "@/i18n/config";
 import { getSession } from "@/lib/auth";
 import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
@@ -103,8 +104,11 @@ export async function saveSystemSettings(formData: {
     // Invalidate the system settings cache so proxy requests get fresh settings
     invalidateSystemSettingsCache();
 
-    revalidatePath("/settings/config");
-    revalidatePath("/dashboard");
+    // Revalidate paths for all locales to ensure cache invalidation across i18n routes
+    for (const locale of locales) {
+      revalidatePath(`/${locale}/settings/config`);
+      revalidatePath(`/${locale}/dashboard`);
+    }
     revalidatePath("/", "layout");
 
     return { ok: true, data: updated };
