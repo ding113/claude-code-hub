@@ -20,8 +20,8 @@ import type {
   ProviderAvailabilitySummary,
   TimeBucketMetrics,
 } from "@/lib/availability";
-import { formatDate } from "@/lib/utils/date-format";
 import { cn } from "@/lib/utils";
+import { formatDate } from "@/lib/utils/date-format";
 import { EndpointProbeHistory } from "./endpoint-probe-history";
 
 type TimeRangeOption = "15min" | "1h" | "6h" | "24h" | "7d";

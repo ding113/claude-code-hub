@@ -9,10 +9,10 @@ import { keys as keysTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
-import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import type { KeyStatistics } from "@/repository/key";
 import {
@@ -506,7 +506,7 @@ export async function editKey(
     // - 未携带 expiresAt：不更新该字段
     // - 携带 expiresAt 但为空：清除（永不过期）
     // - 携带 expiresAt 且为字符串：设置为对应 Date
-    let expiresAt: Date | null | undefined = undefined;
+    let expiresAt: Date | null | undefined;
     if (hasExpiresAtField) {
       if (validatedData.expiresAt === undefined) {
         expiresAt = null;
