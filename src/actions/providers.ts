@@ -3619,6 +3619,22 @@ export async function reclusterProviderVendors(args: {
     const oldVendorIds = new Set<number>();
     let skippedInvalidUrl = 0;
 
+    // Batch load all vendor data upfront to avoid N+1 queries
+    const uniqueVendorIds = [
+      ...new Set(
+        allProviders
+          .map((p) => p.providerVendorId)
+          .filter((id): id is number => id !== null && id !== undefined && id > 0)
+      ),
+    ];
+    const vendors = await Promise.all(uniqueVendorIds.map((id) => findProviderVendorById(id)));
+    const vendorMap = new Map(
+      vendors.filter((v): v is NonNullable<typeof v> => v !== null).map((v) => [v.id, v])
+    );
+
+    // Build provider map for quick lookup in transaction
+    const providerMap = new Map(allProviders.map((p) => [p.id, p]));
+
     // Calculate new vendor key for each provider
     for (const provider of allProviders) {
       const newVendorKey = computeVendorKey({
@@ -3631,10 +3647,8 @@ export async function reclusterProviderVendors(args: {
         continue;
       }
 
-      // Get current vendor domain
-      const currentVendor = provider.providerVendorId
-        ? await findProviderVendorById(provider.providerVendorId)
-        : null;
+      // Get current vendor domain from pre-loaded map
+      const currentVendor = provider.providerVendorId ? vendorMap.get(provider.providerVendorId) : null;
       const currentDomain = currentVendor?.websiteDomain ?? "";
 
       // If key changed, record the change
@@ -3676,10 +3690,14 @@ export async function reclusterProviderVendors(args: {
     if (changes.length > 0) {
       await db.transaction(async (tx) => {
         for (const change of changes) {
+          // Use pre-built map for O(1) lookup instead of O(N) find()
+          const provider = providerMap.get(change.providerId);
+          if (!provider) continue;
+
           // Get or create new vendor
           const newVendorId = await getOrCreateProviderVendorIdFromUrls({
-            providerUrl: allProviders.find((p) => p.id === change.providerId)?.url ?? "",
-            websiteUrl: allProviders.find((p) => p.id === change.providerId)?.websiteUrl ?? null,
+            providerUrl: provider.url,
+            websiteUrl: provider.websiteUrl ?? null,
           });
 
           // Update provider's vendorId
