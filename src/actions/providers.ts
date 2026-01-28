@@ -1187,22 +1187,33 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     }
 
     // 动态导入避免循环依赖
-    const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
+    const {
+      getResetInfo,
+      getResetInfoWithMode,
+      getTimeRangeForPeriod,
+      getTimeRangeForPeriodWithMode,
+    } = await import("@/lib/rate-limit/time-utils");
+    const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
 
-    // 获取金额消费（优先 Redis，降级数据库）
-    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
-      RateLimitService.getCurrentCost(providerId, "provider", "5h"),
-      RateLimitService.getCurrentCost(
-        providerId,
-        "provider",
+    // 计算各周期的时间范围
+    const [range5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriodWithMode(
         "daily",
-        provider.dailyResetTime,
-        provider.dailyResetMode ?? "fixed"
+        provider.dailyResetTime ?? undefined,
+        (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling"
       ),
-      RateLimitService.getCurrentCost(providerId, "provider", "weekly"),
-      RateLimitService.getCurrentCost(providerId, "provider", "monthly"),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
+    ]);
+
+    // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
+    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+      sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
+      sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
+      sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
+      sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
       SessionTracker.getProviderSessionCount(providerId),
     ]);
 
@@ -1296,43 +1307,49 @@ export async function getProviderLimitUsageBatch(
     }
 
     // 动态导入避免循环依赖
-    const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
+    const {
+      getResetInfo,
+      getResetInfoWithMode,
+      getTimeRangeForPeriod,
+      getTimeRangeForPeriodWithMode,
+    } = await import("@/lib/rate-limit/time-utils");
+    const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
 
     const providerIds = providers.map((p) => p.id);
 
-    // 构建日限额重置配置
-    const dailyResetConfigs = new Map<
-      number,
-      { resetTime?: string | null; resetMode?: string | null }
-    >();
-    for (const provider of providers) {
-      dailyResetConfigs.set(provider.id, {
-        resetTime: provider.dailyResetTime,
-        resetMode: provider.dailyResetMode,
-      });
-    }
+    // 获取并发 session 计数（仍使用 Redis，这是实时数据）
+    const sessionCountMap = await SessionTracker.getProviderSessionCountBatch(providerIds);
 
-    // 批量获取限额消费和并发 session 计数（2 次 Redis Pipeline 调用）
-    const [costMap, sessionCountMap] = await Promise.all([
-      RateLimitService.getCurrentCostBatch(providerIds, dailyResetConfigs),
-      SessionTracker.getProviderSessionCountBatch(providerIds),
+    // 获取各周期的时间范围（这些范围对所有供应商是相同的，除了 daily 需要根据每个供应商的配置）
+    const [range5h, rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
     ]);
 
     // 组装结果
     for (const provider of providers) {
-      const costs = costMap.get(provider.id) || {
-        cost5h: 0,
-        costDaily: 0,
-        costWeekly: 0,
-        costMonthly: 0,
-      };
+      // 获取该供应商的 daily 时间范围（根据其 dailyResetMode 配置）
+      const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
+      const rangeDaily = await getTimeRangeForPeriodWithMode(
+        "daily",
+        provider.dailyResetTime ?? undefined,
+        dailyResetMode
+      );
+
+      // 并行查询该供应商的各周期消费（直接查询数据库）
+      const [cost5h, costDaily, costWeekly, costMonthly] = await Promise.all([
+        sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
+        sumProviderCostInTimeRange(provider.id, rangeDaily.startTime, rangeDaily.endTime),
+        sumProviderCostInTimeRange(provider.id, rangeWeekly.startTime, rangeWeekly.endTime),
+        sumProviderCostInTimeRange(provider.id, rangeMonthly.startTime, rangeMonthly.endTime),
+      ]);
+
       const sessionCount = sessionCountMap.get(provider.id) || 0;
 
       // 获取重置时间信息
       const reset5h = await getResetInfo("5h");
-      const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
       const resetDaily = await getResetInfoWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
@@ -1343,22 +1360,22 @@ export async function getProviderLimitUsageBatch(
 
       result.set(provider.id, {
         cost5h: {
-          current: costs.cost5h,
+          current: cost5h,
           limit: provider.limit5hUsd ?? null,
           resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
         },
         costDaily: {
-          current: costs.costDaily,
+          current: costDaily,
           limit: provider.limitDailyUsd ?? null,
           resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
         },
         costWeekly: {
-          current: costs.costWeekly,
+          current: costWeekly,
           limit: provider.limitWeeklyUsd ?? null,
           resetAt: resetWeekly.resetAt!,
         },
         costMonthly: {
-          current: costs.costMonthly,
+          current: costMonthly,
           limit: provider.limitMonthlyUsd ?? null,
           resetAt: resetMonthly.resetAt!,
         },

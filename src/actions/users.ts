@@ -1457,6 +1457,9 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     limitTotal: { usage: number; limit: number | null };
   }>
 > {
+  // All-time max age for total usage queries (~100 years in days)
+  const ALL_TIME_MAX_AGE_DAYS = 36500;
+
   try {
     const tError = await getTranslations("errors");
 
@@ -1480,22 +1483,29 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     }
 
     // 动态导入
-    const { getTimeRangeForPeriod } = await import("@/lib/rate-limit/time-utils");
+    const { getTimeRangeForPeriod, getTimeRangeForPeriodWithMode } = await import(
+      "@/lib/rate-limit/time-utils"
+    );
     const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
 
     // 获取各时间范围
     const range5h = await getTimeRangeForPeriod("5h");
-    const rangeDaily = await getTimeRangeForPeriod("daily", user.dailyResetTime || "00:00");
+    const rangeDaily = await getTimeRangeForPeriodWithMode(
+      "daily",
+      user.dailyResetTime || "00:00",
+      (user.dailyResetMode || "fixed") as "fixed" | "rolling"
+    );
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // 并行查询各时间范围的消费
+    // Note: sumUserTotalCost uses ALL_TIME_MAX_AGE_DAYS for all-time semantics
     const [usage5h, usageDaily, usageWeekly, usageMonthly, usageTotal] = await Promise.all([
       sumUserCostInTimeRange(userId, range5h.startTime, range5h.endTime),
       sumUserCostInTimeRange(userId, rangeDaily.startTime, rangeDaily.endTime),
       sumUserCostInTimeRange(userId, rangeWeekly.startTime, rangeWeekly.endTime),
       sumUserCostInTimeRange(userId, rangeMonthly.startTime, rangeMonthly.endTime),
-      sumUserTotalCost(userId),
+      sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS),
     ]);
 
     return {

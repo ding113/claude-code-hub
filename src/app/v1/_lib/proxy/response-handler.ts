@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
+import type { LeaseWindowType } from "@/lib/rate-limit/lease";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
@@ -2017,6 +2018,20 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
         createdAtMs: messageContext.createdAt.getTime(),
       }
     );
+
+    // Decrement lease budgets for all windows (fire-and-forget)
+    const windows: LeaseWindowType[] = ["5h", "daily", "weekly", "monthly"];
+    void Promise.all([
+      ...windows.map((w) => RateLimitService.decrementLeaseBudget(key.id, "key", w, costFloat)),
+      ...windows.map((w) => RateLimitService.decrementLeaseBudget(user.id, "user", w, costFloat)),
+      ...windows.map((w) =>
+        RateLimitService.decrementLeaseBudget(provider.id, "provider", w, costFloat)
+      ),
+    ]).catch((error) => {
+      logger.warn("[ResponseHandler] Failed to decrement lease budgets:", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
 
     // 刷新 session 时间戳（滑动窗口）
     void SessionTracker.refreshSession(session.sessionId, key.id, provider.id, user.id).catch(

@@ -1,8 +1,10 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, messageRequest, providers } from "@/drizzle/schema";
+import { keys, providers } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
+import { getTimeRangeForPeriod } from "@/lib/rate-limit/time-utils";
 import type { CostAlertData } from "@/lib/webhook";
+import { sumKeyCostInTimeRange, sumProviderCostInTimeRange } from "@/repository/statistics";
 
 /**
  * 生成成本预警数据
@@ -43,6 +45,14 @@ export async function generateCostAlerts(threshold: number): Promise<CostAlertDa
 
 /**
  * 检查用户配额超额情况
+ *
+ * 使用统一的时间窗口计算函数 (getTimeRangeForPeriod) 和
+ * 带 warmup/deleted 过滤的统计函数 (sumKeyCostInTimeRange)。
+ *
+ * 时间窗口语义:
+ * - 5h: 滚动窗口（过去 5 小时）
+ * - weekly: 自然周（本周一 00:00 开始，使用系统时区）
+ * - monthly: 自然月（本月 1 号 00:00 开始，使用系统时区）
  */
 async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
   const alerts: CostAlertData[] = [];
@@ -65,18 +75,24 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
         sql`${keys.limit5hUsd} > 0 OR ${keys.limitWeeklyUsd} > 0 OR ${keys.limitMonthlyUsd} > 0`
       );
 
-    for (const keyData of keysWithLimits) {
-      // 获取当前时间点
-      const now = new Date();
-      const fiveHoursAgo = new Date(now.getTime() - 5 * 60 * 60 * 1000);
-      const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    // 预计算时间范围（所有 key 共享相同的时间窗口）
+    const [range5h, rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
+    ]);
 
+    for (const keyData of keysWithLimits) {
       // 检查 5 小时额度
       if (keyData.limit5h) {
         const limit5h = parseFloat(keyData.limit5h);
         if (limit5h > 0) {
-          const cost5h = await getKeyCostSince(keyData.key, fiveHoursAgo);
+          // 使用 keyId 和标准统计函数（包含 warmup/deleted 过滤）
+          const cost5h = await sumKeyCostInTimeRange(
+            keyData.id,
+            range5h.startTime,
+            range5h.endTime
+          );
           if (cost5h >= limit5h * threshold) {
             alerts.push({
               targetType: "user",
@@ -91,11 +107,15 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
         }
       }
 
-      // 检查本周额度
+      // 检查本周额度（自然周：从周一开始）
       if (keyData.limitWeek) {
         const limitWeek = parseFloat(keyData.limitWeek);
         if (limitWeek > 0) {
-          const costWeek = await getKeyCostSince(keyData.key, weekStart);
+          const costWeek = await sumKeyCostInTimeRange(
+            keyData.id,
+            rangeWeekly.startTime,
+            rangeWeekly.endTime
+          );
           if (costWeek >= limitWeek * threshold) {
             alerts.push({
               targetType: "user",
@@ -110,11 +130,15 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
         }
       }
 
-      // 检查本月额度
+      // 检查本月额度（自然月：从 1 号开始）
       if (keyData.limitMonth) {
         const limitMonth = parseFloat(keyData.limitMonth);
         if (limitMonth > 0) {
-          const costMonth = await getKeyCostSince(keyData.key, monthStart);
+          const costMonth = await sumKeyCostInTimeRange(
+            keyData.id,
+            rangeMonthly.startTime,
+            rangeMonthly.endTime
+          );
           if (costMonth >= limitMonth * threshold) {
             alerts.push({
               targetType: "user",
@@ -141,6 +165,13 @@ async function checkUserQuotas(threshold: number): Promise<CostAlertData[]> {
 
 /**
  * 检查供应商配额超额情况
+ *
+ * 使用统一的时间窗口计算函数 (getTimeRangeForPeriod) 和
+ * 带 warmup/deleted 过滤的统计函数 (sumProviderCostInTimeRange)。
+ *
+ * 时间窗口语义:
+ * - weekly: 自然周（本周一 00:00 开始，使用系统时区）
+ * - monthly: 自然月（本月 1 号 00:00 开始，使用系统时区）
  */
 async function checkProviderQuotas(threshold: number): Promise<CostAlertData[]> {
   const alerts: CostAlertData[] = [];
@@ -159,16 +190,22 @@ async function checkProviderQuotas(threshold: number): Promise<CostAlertData[]> 
       .from(providers)
       .where(sql`${providers.limitWeeklyUsd} > 0 OR ${providers.limitMonthlyUsd} > 0`);
 
-    for (const provider of providersWithLimits) {
-      const now = new Date();
-      const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    // 预计算时间范围（所有 provider 共享相同的时间窗口）
+    const [rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
+    ]);
 
-      // 检查本周额度
+    for (const provider of providersWithLimits) {
+      // 检查本周额度（自然周：从周一开始）
       if (provider.limitWeek) {
         const limitWeek = parseFloat(provider.limitWeek);
         if (limitWeek > 0) {
-          const costWeek = await getProviderCostSince(provider.id, weekStart);
+          const costWeek = await sumProviderCostInTimeRange(
+            provider.id,
+            rangeWeekly.startTime,
+            rangeWeekly.endTime
+          );
           if (costWeek >= limitWeek * threshold) {
             alerts.push({
               targetType: "provider",
@@ -183,11 +220,15 @@ async function checkProviderQuotas(threshold: number): Promise<CostAlertData[]> 
         }
       }
 
-      // 检查本月额度
+      // 检查本月额度（自然月：从 1 号开始）
       if (provider.limitMonth) {
         const limitMonth = parseFloat(provider.limitMonth);
         if (limitMonth > 0) {
-          const costMonth = await getProviderCostSince(provider.id, monthStart);
+          const costMonth = await sumProviderCostInTimeRange(
+            provider.id,
+            rangeMonthly.startTime,
+            rangeMonthly.endTime
+          );
           if (costMonth >= limitMonth * threshold) {
             alerts.push({
               targetType: "provider",
@@ -210,32 +251,4 @@ async function checkProviderQuotas(threshold: number): Promise<CostAlertData[]> 
   }
 
   return alerts;
-}
-
-/**
- * 获取密钥在指定时间后的总消费
- */
-async function getKeyCostSince(key: string, since: Date): Promise<number> {
-  const result = await db
-    .select({
-      totalCost: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)::numeric`,
-    })
-    .from(messageRequest)
-    .where(and(eq(messageRequest.key, key), gte(messageRequest.createdAt, since)));
-
-  return result[0]?.totalCost || 0;
-}
-
-/**
- * 获取供应商在指定时间后的总消费
- */
-async function getProviderCostSince(providerId: number, since: Date): Promise<number> {
-  const result = await db
-    .select({
-      totalCost: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)::numeric`,
-    })
-    .from(messageRequest)
-    .where(and(eq(messageRequest.providerId, providerId), gte(messageRequest.createdAt, since)));
-
-  return result[0]?.totalCost || 0;
 }

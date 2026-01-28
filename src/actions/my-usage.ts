@@ -175,6 +175,10 @@ export interface MyUsageLogsResult {
   billingModelSource: BillingModelSource;
 }
 
+// All-time max age for total usage queries (~100 years in days)
+// This ensures "total" displays all-time usage, not just the last 365 days
+const ALL_TIME_MAX_AGE_DAYS = 36500;
+
 /**
  * 查询用户在指定周期内的消费
  * 使用与 Key 层级和限额检查相同的时间范围计算逻辑
@@ -186,9 +190,9 @@ async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" |
   const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
   const { getTimeRangeForPeriod } = await import("@/lib/rate-limit/time-utils");
 
-  // 总消费：使用专用函数
+  // 总消费：使用专用函数，传递 ALL_TIME_MAX_AGE_DAYS 实现全时间语义
   if (period === "total") {
-    return await sumUserTotalCost(userId);
+    return await sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS);
   }
 
   // 其他周期：使用统一的时间范围计算
@@ -281,7 +285,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       sumKeyCostInTimeRange(key.id, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
       sumKeyCostInTimeRange(key.id, rangeWeekly.startTime, rangeWeekly.endTime),
       sumKeyCostInTimeRange(key.id, rangeMonthly.startTime, rangeMonthly.endTime),
-      sumKeyTotalCostById(key.id),
+      sumKeyTotalCostById(key.id, ALL_TIME_MAX_AGE_DAYS),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
       sumUserCost(user.id, "5h"),
