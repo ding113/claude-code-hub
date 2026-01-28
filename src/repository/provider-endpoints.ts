@@ -54,6 +54,76 @@ function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   return null;
 }
 
+/**
+ * Normalize URL to host:port format for vendor key when websiteUrl is empty.
+ * - IPv6 addresses are formatted as [ipv6]:port
+ * - Default ports: http=80, https=443
+ * - URLs without scheme are assumed to be https
+ */
+function normalizeHostWithPort(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  // Add https:// if no scheme present
+  let urlString = trimmed;
+  if (!/^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)) {
+    urlString = `https://${trimmed}`;
+  }
+
+  try {
+    const parsed = new URL(urlString);
+    const hostname = parsed.hostname?.toLowerCase();
+    if (!hostname) return null;
+
+    // Strip www. prefix
+    const normalizedHostname = hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+
+    // Determine port
+    let port: string;
+    if (parsed.port) {
+      port = parsed.port;
+    } else {
+      // Use protocol default port
+      port = parsed.protocol === "http:" ? "80" : "443";
+    }
+
+    // IPv6 addresses already have brackets from URL parser (e.g., "[::1]")
+    // Just append the port directly
+    return `${normalizedHostname}:${port}`;
+  } catch (error) {
+    logger.debug("[ProviderVendor] Failed to parse URL for host:port", {
+      urlLength: rawUrl.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Compute vendor clustering key based on URLs.
+ *
+ * Rules:
+ * - If websiteUrl is non-empty: key = normalized hostname (strip www, lowercase), ignore port
+ * - If websiteUrl is empty: key = host:port
+ *   - IPv6 format: [ipv6]:port
+ *   - Missing port: use protocol default (http=80, https=443)
+ *   - No scheme: assume https
+ */
+export function computeVendorKey(input: {
+  providerUrl: string;
+  websiteUrl?: string | null;
+}): string | null {
+  const { providerUrl, websiteUrl } = input;
+
+  // Case 1: websiteUrl is non-empty - use hostname only (existing behavior)
+  if (websiteUrl?.trim()) {
+    return normalizeWebsiteDomainFromUrl(websiteUrl);
+  }
+
+  // Case 2: websiteUrl is empty - use host:port as key
+  return normalizeHostWithPort(providerUrl);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toProviderVendor(row: any): ProviderVendor {
   return {
@@ -188,8 +258,11 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
   faviconUrl?: string | null;
   displayName?: string | null;
 }): Promise<number> {
-  const domainSource = input.websiteUrl?.trim() ? input.websiteUrl : input.providerUrl;
-  const websiteDomain = normalizeWebsiteDomainFromUrl(domainSource);
+  // Use new computeVendorKey for consistent vendor key calculation
+  const websiteDomain = computeVendorKey({
+    providerUrl: input.providerUrl,
+    websiteUrl: input.websiteUrl,
+  });
   if (!websiteDomain) {
     throw new Error("Failed to resolve provider vendor domain");
   }
@@ -305,10 +378,13 @@ export async function backfillProviderVendorsFromProviders(): Promise<{
     for (const row of rows) {
       stats.processed++;
 
-      const domainSource = row.websiteUrl?.trim() || row.url;
-      const domain = normalizeWebsiteDomainFromUrl(domainSource);
+      // Use new computeVendorKey for consistent vendor key calculation
+      const vendorKey = computeVendorKey({
+        providerUrl: row.url,
+        websiteUrl: row.websiteUrl,
+      });
 
-      if (!domain) {
+      if (!vendorKey) {
         logger.warn("[backfillVendors] Invalid URL for provider", {
           providerId: row.id,
           url: row.url,
@@ -319,7 +395,9 @@ export async function backfillProviderVendorsFromProviders(): Promise<{
       }
 
       try {
-        const displayName = await deriveDisplayNameFromDomain(domain);
+        // For displayName, extract domain part (remove port if present)
+        const domainForDisplayName = vendorKey.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+        const displayName = await deriveDisplayNameFromDomain(domainForDisplayName);
         const vendorId = await getOrCreateProviderVendorIdFromUrls({
           providerUrl: row.url,
           websiteUrl: row.websiteUrl ?? null,

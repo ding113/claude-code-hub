@@ -2,6 +2,7 @@ import { BarChart3 } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { AutoSortPriorityDialog } from "@/app/[locale]/settings/providers/_components/auto-sort-priority-dialog";
 import { ProviderManagerLoader } from "@/app/[locale]/settings/providers/_components/provider-manager-loader";
+import { ReclusterVendorsDialog } from "@/app/[locale]/settings/providers/_components/recluster-vendors-dialog";
 import { SchedulingRulesDialog } from "@/app/[locale]/settings/providers/_components/scheduling-rules-dialog";
 import { Section } from "@/components/section";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,7 @@ export default async function DashboardProvidersPage({
               </Link>
             </Button>
             <AutoSortPriorityDialog />
+            <ReclusterVendorsDialog />
             <SchedulingRulesDialog />
           </>
         }

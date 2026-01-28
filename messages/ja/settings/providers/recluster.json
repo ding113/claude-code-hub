@@ -1,0 +1,16 @@
+{
+  "button": "再クラスタ",
+  "dialogTitle": "プロバイダーの再クラスタリング",
+  "dialogDescription": "更新されたクラスタリングルールに基づいてプロバイダーを再編成します。ウェブサイトURLが設定されていないプロバイダーには、host:port がクラスタリングキーとして使用されます。",
+  "providersMoved": "移動したプロバイダー",
+  "vendorsCreated": "作成されるベンダー",
+  "vendorsToDelete": "削除されるベンダー",
+  "skipped": "スキップ (無効なURL)",
+  "providerHeader": "プロバイダー",
+  "vendorChangeHeader": "ベンダー変更",
+  "noChanges": "変更不要 (既に正しくクラスタリング済み)",
+  "moreChanges": "他 {count} 件の変更...",
+  "confirm": "変更を適用",
+  "success": "{count} 件のプロバイダーを再クラスタリングしました",
+  "error": "再クラスタリングに失敗しました"
+}
