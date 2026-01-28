@@ -109,10 +109,10 @@ function normalizeHostWithPort(rawUrl: string): string | null {
  *   - Missing port: use protocol default (http=80, https=443)
  *   - No scheme: assume https
  */
-export function computeVendorKey(input: {
+export async function computeVendorKey(input: {
   providerUrl: string;
   websiteUrl?: string | null;
-}): string | null {
+}): Promise<string | null> {
   const { providerUrl, websiteUrl } = input;
 
   // Case 1: websiteUrl is non-empty - use hostname only (existing behavior)
@@ -259,7 +259,7 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
   displayName?: string | null;
 }): Promise<number> {
   // Use new computeVendorKey for consistent vendor key calculation
-  const websiteDomain = computeVendorKey({
+  const websiteDomain = await computeVendorKey({
     providerUrl: input.providerUrl,
     websiteUrl: input.websiteUrl,
   });
@@ -379,7 +379,7 @@ export async function backfillProviderVendorsFromProviders(): Promise<{
       stats.processed++;
 
       // Use new computeVendorKey for consistent vendor key calculation
-      const vendorKey = computeVendorKey({
+      const vendorKey = await computeVendorKey({
         providerUrl: row.url,
         websiteUrl: row.websiteUrl,
       });

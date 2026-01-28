@@ -158,7 +158,7 @@ describe("reclusterProviderVendors", () => {
         id: 1,
         websiteDomain: "192.168.1.1",
       });
-      computeVendorKeyMock.mockReturnValue("192.168.1.1:8080");
+      computeVendorKeyMock.mockResolvedValue("192.168.1.1:8080");
 
       const { reclusterProviderVendors } = await import("@/actions/providers");
       await reclusterProviderVendors({ confirm: false });
@@ -178,7 +178,7 @@ describe("reclusterProviderVendors", () => {
           providerVendorId: null,
         },
       ]);
-      computeVendorKeyMock.mockReturnValue(null);
+      computeVendorKeyMock.mockResolvedValue(null);
 
       const { reclusterProviderVendors } = await import("@/actions/providers");
       const result = await reclusterProviderVendors({ confirm: false });
@@ -207,7 +207,7 @@ describe("reclusterProviderVendors", () => {
         id: 1,
         websiteDomain: "192.168.1.1",
       });
-      computeVendorKeyMock.mockReturnValue("192.168.1.1:8080");
+      computeVendorKeyMock.mockResolvedValue("192.168.1.1:8080");
       getOrCreateProviderVendorIdFromUrlsMock.mockResolvedValue(2);
       backfillProviderEndpointsFromProvidersMock.mockResolvedValue({});
       tryDeleteProviderVendorIfEmptyMock.mockResolvedValue(true);
@@ -246,7 +246,7 @@ describe("reclusterProviderVendors", () => {
         id: 1,
         websiteDomain: "192.168.1.1",
       });
-      computeVendorKeyMock.mockReturnValue("192.168.1.1:8080");
+      computeVendorKeyMock.mockResolvedValue("192.168.1.1:8080");
       getOrCreateProviderVendorIdFromUrlsMock.mockResolvedValue(2);
       backfillProviderEndpointsFromProvidersMock.mockResolvedValue({});
       tryDeleteProviderVendorIfEmptyMock.mockResolvedValue(true);
@@ -282,7 +282,7 @@ describe("reclusterProviderVendors", () => {
         id: 1,
         websiteDomain: "192.168.1.1:8080",
       });
-      computeVendorKeyMock.mockReturnValue("192.168.1.1:8080");
+      computeVendorKeyMock.mockResolvedValue("192.168.1.1:8080");
 
       const { reclusterProviderVendors } = await import("@/actions/providers");
       const result = await reclusterProviderVendors({ confirm: true });
