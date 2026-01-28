@@ -82,6 +82,8 @@
   "probeOk": "正常",
   "probeError": "異常",
   "addEndpointDesc": "為此供應商新增一個 {providerType} 端點。",
+  "addEndpointDescGeneric": "為此供應商新增一個新的 API 端點。",
+  "columnType": "類型",
   "endpointUrlLabel": "URL",
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "標籤（選填）",

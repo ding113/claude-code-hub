@@ -29,7 +29,7 @@ const providerEndpointsActionMocks = vi.hoisted(() => ({
   addProviderEndpoint: vi.fn(async () => ({ ok: true, data: { endpoint: {} } })),
   editProviderEndpoint: vi.fn(async () => ({ ok: true, data: { endpoint: {} } })),
   getProviderEndpointProbeLogs: vi.fn(async () => ({ ok: true, data: { logs: [] } })),
-  getProviderEndpoints: vi.fn(async () => [
+  getProviderEndpointsByVendor: vi.fn(async () => [
     {
       id: 1,
       vendorId: 1,
@@ -56,21 +56,9 @@ const providerEndpointsActionMocks = vi.hoisted(() => ({
       updatedAt: "2026-01-01",
     },
   ]),
-  getVendorTypeCircuitInfo: vi.fn(async () => ({
-    ok: true,
-    data: {
-      vendorId: 1,
-      providerType: "claude",
-      circuitState: "open",
-      circuitOpenUntil: null,
-      lastFailureTime: null,
-      manualOpen: false,
-    },
-  })),
   probeProviderEndpoint: vi.fn(async () => ({ ok: true, data: { result: { ok: true } } })),
   removeProviderEndpoint: vi.fn(async () => ({ ok: true })),
   removeProviderVendor: vi.fn(async () => ({ ok: true })),
-  resetVendorTypeCircuit: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("@/actions/provider-endpoints", () => providerEndpointsActionMocks);
 
@@ -196,7 +184,7 @@ async function flushTicks(times = 3) {
   }
 }
 
-describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关闭按钮", () => {
+describe("ProviderVendorView: Endpoints table renders with type icons", () => {
   beforeEach(() => {
     queryClient = new QueryClient({
       defaultOptions: {
@@ -205,22 +193,12 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
       },
     });
     vi.clearAllMocks();
-    document.body.innerHTML = "";
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
   });
 
-  test("circuitState=open 时显示 Close Circuit，且不显示 Manually Open Circuit", async () => {
-    providerEndpointsActionMocks.getVendorTypeCircuitInfo.mockResolvedValueOnce({
-      ok: true,
-      data: {
-        vendorId: 1,
-        providerType: "claude",
-        circuitState: "open",
-        circuitOpenUntil: null,
-        lastFailureTime: null,
-        manualOpen: false,
-      },
-    });
-
+  test("renders endpoint URL and latency header", async () => {
     const { unmount } = renderWithProviders(
       <ProviderVendorView
         providers={[makeProviderDisplay()]}
@@ -235,31 +213,17 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
 
     await flushTicks(6);
 
-    expect(document.body.textContent || "").toContain("Close Circuit");
-    expect(document.body.textContent || "").not.toContain("Manually Open Circuit");
-    // Check that provider type tabs are rendered
-    expect(document.body.textContent || "").toContain("Gemini");
-    expect(document.body.textContent || "").toContain("Claude");
+    // Check that endpoint URL is rendered
+    expect(document.body.textContent || "").toContain("https://api.example.com/v1");
 
+    // Check that latency header is present
     const latencyHeader = document.querySelector('th[class*="w-[220px]"]');
     expect(latencyHeader?.textContent || "").toContain("Latency");
 
     unmount();
   });
 
-  test("circuitState=closed 时不显示 Close Circuit，也不显示 Manually Open Circuit", async () => {
-    providerEndpointsActionMocks.getVendorTypeCircuitInfo.mockResolvedValueOnce({
-      ok: true,
-      data: {
-        vendorId: 1,
-        providerType: "claude",
-        circuitState: "closed",
-        circuitOpenUntil: null,
-        lastFailureTime: null,
-        manualOpen: false,
-      },
-    });
-
+  test("renders type column header", async () => {
     const { unmount } = renderWithProviders(
       <ProviderVendorView
         providers={[makeProviderDisplay()]}
@@ -274,14 +238,8 @@ describe("ProviderVendorView: VendorTypeCircuitControl 仅在熔断时展示关�
 
     await flushTicks(6);
 
-    expect(document.body.textContent || "").not.toContain("Close Circuit");
-    expect(document.body.textContent || "").not.toContain("Manually Open Circuit");
-    // Check that provider type tabs are rendered
-    expect(document.body.textContent || "").toContain("Gemini");
-    expect(document.body.textContent || "").toContain("Claude");
-
-    const latencyHeader = document.querySelector('th[class*="w-[220px]"]');
-    expect(latencyHeader?.textContent || "").toContain("Latency");
+    // Check that type column header is present
+    expect(document.body.textContent || "").toContain("Type");
 
     unmount();
   });
@@ -296,7 +254,9 @@ describe("ProviderVendorView vendor list", () => {
       },
     });
     vi.clearAllMocks();
-    document.body.innerHTML = "";
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
   });
 
   test("vendors with zero providers are hidden", async () => {
@@ -341,7 +301,9 @@ describe("ProviderVendorView endpoints table", () => {
       },
     });
     vi.clearAllMocks();
-    document.body.innerHTML = "";
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
   });
 
   test("renders endpoints and toggles enabled status", async () => {

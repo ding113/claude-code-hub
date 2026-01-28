@@ -82,6 +82,8 @@
   "probeOk": "OK",
   "probeError": "Error",
   "addEndpointDesc": "Add a new {providerType} endpoint for this vendor.",
+  "addEndpointDescGeneric": "Add a new API endpoint for this vendor.",
+  "columnType": "Type",
   "endpointUrlLabel": "URL",
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "Label (optional)",

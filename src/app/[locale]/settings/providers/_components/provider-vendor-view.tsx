@@ -3,7 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
-  Activity,
   Edit2,
   ExternalLink,
   InfoIcon,
@@ -19,13 +18,11 @@ import { toast } from "sonner";
 import {
   addProviderEndpoint,
   editProviderEndpoint,
-  getProviderEndpoints,
+  getProviderEndpointsByVendor,
   getProviderVendors,
-  getVendorTypeCircuitInfo,
   probeProviderEndpoint,
   removeProviderEndpoint,
   removeProviderVendor,
-  resetVendorTypeCircuit,
 } from "@/actions/provider-endpoints";
 import {
   AlertDialog,
@@ -59,6 +56,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -69,7 +73,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import {
+  getAllProviderTypes,
+  getProviderTypeConfig,
+  getProviderTypeTranslationKey,
+} from "@/lib/provider-type-utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type {
@@ -270,140 +278,47 @@ function VendorCard({
 
 function VendorEndpointsSection({ vendorId }: { vendorId: number }) {
   const t = useTranslations("settings.providers");
-  const tTypes = useTranslations("settings.providers.types");
-  const [activeType, setActiveType] = useState<ProviderType>("claude");
-
-  const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
 
   return (
     <div>
       <div className="px-6 py-3 bg-muted/10 border-b font-medium text-sm text-muted-foreground flex items-center justify-between">
         <span>{t("endpoints")}</span>
+        <AddEndpointButton vendorId={vendorId} />
       </div>
 
       <div className="p-6">
-        <div className="flex flex-col space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 bg-muted p-1 rounded-md">
-              {providerTypes.map((type) => {
-                const typeConfig = getProviderTypeConfig(type);
-                const TypeIcon = typeConfig.icon;
-                const typeKey = getProviderTypeTranslationKey(type);
-                const label = tTypes(`${typeKey}.label`);
-                return (
-                  <Button
-                    key={type}
-                    variant={activeType === type ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setActiveType(type)}
-                    className="h-7 text-xs capitalize"
-                  >
-                    <span
-                      className={`mr-1.5 inline-flex h-5 w-5 items-center justify-center rounded ${typeConfig.bgColor}`}
-                    >
-                      <TypeIcon className={`h-3.5 w-3.5 ${typeConfig.iconColor}`} />
-                    </span>
-                    {label}
-                  </Button>
-                );
-              })}
-            </div>
-
-            <AddEndpointButton vendorId={vendorId} providerType={activeType} />
-          </div>
-
-          <VendorTypeCircuitControl vendorId={vendorId} providerType={activeType} />
-
-          <EndpointsTable vendorId={vendorId} providerType={activeType} />
-        </div>
+        <EndpointsTable vendorId={vendorId} />
       </div>
     </div>
   );
 }
 
-function VendorTypeCircuitControl({
-  vendorId,
-  providerType,
-}: {
-  vendorId: number;
-  providerType: ProviderType;
-}) {
+function EndpointsTable({ vendorId }: { vendorId: number }) {
   const t = useTranslations("settings.providers");
-  const queryClient = useQueryClient();
+  const tTypes = useTranslations("settings.providers.types");
 
-  const { data: circuitInfo, isLoading } = useQuery({
-    queryKey: ["vendor-circuit", vendorId, providerType],
+  const { data: rawEndpoints = [], isLoading } = useQuery({
+    queryKey: ["provider-endpoints", vendorId],
     queryFn: async () => {
-      const res = await getVendorTypeCircuitInfo({ vendorId, providerType });
-      if (!res.ok) throw new Error(res.error);
-      return res.data;
-    },
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: async () => {
-      const res = await resetVendorTypeCircuit({ vendorId, providerType });
-      if (!res.ok) throw new Error(res.error);
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["vendor-circuit", vendorId, providerType] });
-      toast.success(t("vendorTypeCircuitUpdated"));
-    },
-    onError: () => {
-      toast.error(t("toggleFailed"));
-    },
-  });
-
-  if (isLoading || !circuitInfo) return null;
-
-  return (
-    <div className="flex items-center justify-between bg-muted/20 p-3 rounded-md border">
-      <div className="flex items-center gap-2">
-        <Activity
-          className={`h-4 w-4 ${circuitInfo.circuitState === "open" ? "text-destructive" : "text-green-500"}`}
-        />
-        <span className="text-sm font-medium">{t("vendorTypeCircuit")}</span>
-        {circuitInfo.circuitState === "open" && (
-          <Badge variant="destructive" className="ml-2 text-xs">
-            {t("circuitBroken")}
-          </Badge>
-        )}
-      </div>
-
-      {circuitInfo.circuitState === "open" ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={() => resetMutation.mutate()}
-          disabled={resetMutation.isPending}
-        >
-          {resetMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {t("manualCircuitClose")}
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function EndpointsTable({
-  vendorId,
-  providerType,
-}: {
-  vendorId: number;
-  providerType: ProviderType;
-}) {
-  const t = useTranslations("settings.providers");
-
-  const { data: endpoints = [], isLoading } = useQuery({
-    queryKey: ["provider-endpoints", vendorId, providerType],
-    queryFn: async () => {
-      const endpoints = await getProviderEndpoints({ vendorId, providerType });
+      const endpoints = await getProviderEndpointsByVendor({ vendorId });
       return endpoints;
     },
   });
+
+  // Sort endpoints by type order (from getAllProviderTypes) then by sortOrder
+  const endpoints = useMemo(() => {
+    const typeOrder = getAllProviderTypes();
+    const typeIndexMap = new Map(typeOrder.map((t, i) => [t, i]));
+
+    return [...rawEndpoints].sort((a, b) => {
+      const aTypeIndex = typeIndexMap.get(a.providerType) ?? 999;
+      const bTypeIndex = typeIndexMap.get(b.providerType) ?? 999;
+      if (aTypeIndex !== bTypeIndex) {
+        return aTypeIndex - bTypeIndex;
+      }
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+    });
+  }, [rawEndpoints]);
 
   if (isLoading) {
     return <div className="text-center py-4 text-sm text-muted-foreground">{t("keyLoading")}</div>;
@@ -423,6 +338,7 @@ function EndpointsTable({
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[60px]">{t("columnType")}</TableHead>
             <TableHead>{t("columnUrl")}</TableHead>
             <TableHead>{t("status")}</TableHead>
             <TableHead className="w-[220px]">{t("latency")}</TableHead>
@@ -431,7 +347,7 @@ function EndpointsTable({
         </TableHeader>
         <TableBody>
           {endpoints.map((endpoint) => (
-            <EndpointRow key={endpoint.id} endpoint={endpoint} />
+            <EndpointRow key={endpoint.id} endpoint={endpoint} tTypes={tTypes} />
           ))}
         </TableBody>
       </Table>
@@ -439,12 +355,23 @@ function EndpointsTable({
   );
 }
 
-function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
+function EndpointRow({
+  endpoint,
+  tTypes,
+}: {
+  endpoint: ProviderEndpoint;
+  tTypes: ReturnType<typeof useTranslations>;
+}) {
   const t = useTranslations("settings.providers");
   const tCommon = useTranslations("settings.common");
   const queryClient = useQueryClient();
   const [isProbing, setIsProbing] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
+
+  const typeConfig = getProviderTypeConfig(endpoint.providerType);
+  const TypeIcon = typeConfig.icon;
+  const typeKey = getProviderTypeTranslationKey(endpoint.providerType);
+  const typeLabel = tTypes(`${typeKey}.label`);
 
   const probeMutation = useMutation({
     mutationFn: async () => {
@@ -509,6 +436,20 @@ function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
 
   return (
     <TableRow>
+      <TableCell>
+        <TooltipProvider>
+          <Tooltip delayDuration={200}>
+            <TooltipTrigger asChild>
+              <span
+                className={`inline-flex h-6 w-6 items-center justify-center rounded ${typeConfig.bgColor}`}
+              >
+                <TypeIcon className={`h-4 w-4 ${typeConfig.iconColor}`} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{typeLabel}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </TableCell>
       <TableCell className="font-mono text-xs max-w-[200px] truncate" title={endpoint.url}>
         {endpoint.url}
       </TableCell>
@@ -588,22 +529,24 @@ function EndpointRow({ endpoint }: { endpoint: ProviderEndpoint }) {
   );
 }
 
-function AddEndpointButton({
-  vendorId,
-  providerType,
-}: {
-  vendorId: number;
-  providerType: ProviderType;
-}) {
+function AddEndpointButton({ vendorId }: { vendorId: number }) {
   const t = useTranslations("settings.providers");
+  const tTypes = useTranslations("settings.providers.types");
   const tCommon = useTranslations("settings.common");
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [url, setUrl] = useState("");
+  const [providerType, setProviderType] = useState<ProviderType>("claude");
+
+  // Get provider types for the selector (exclude claude-auth and gemini-cli which are internal)
+  const selectableTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
 
   useEffect(() => {
-    if (!open) setUrl("");
+    if (!open) {
+      setUrl("");
+      setProviderType("claude");
+    }
   }, [open]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -625,7 +568,7 @@ function AddEndpointButton({
       if (res.ok) {
         toast.success(t("endpointAddSuccess"));
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints", vendorId, providerType] });
+        queryClient.invalidateQueries({ queryKey: ["provider-endpoints", vendorId] });
       } else {
         toast.error(res.error || t("endpointAddFailed"));
       }
@@ -647,9 +590,41 @@ function AddEndpointButton({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("addEndpoint")}</DialogTitle>
-          <DialogDescription>{t("addEndpointDesc", { providerType })}</DialogDescription>
+          <DialogDescription>{t("addEndpointDescGeneric")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="providerType">{t("columnType")}</Label>
+            <Select
+              value={providerType}
+              onValueChange={(value) => setProviderType(value as ProviderType)}
+            >
+              <SelectTrigger id="providerType">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {selectableTypes.map((type) => {
+                  const typeConfig = getProviderTypeConfig(type);
+                  const TypeIcon = typeConfig.icon;
+                  const typeKey = getProviderTypeTranslationKey(type);
+                  const label = tTypes(`${typeKey}.label`);
+                  return (
+                    <SelectItem key={type} value={type}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-flex h-5 w-5 items-center justify-center rounded ${typeConfig.bgColor}`}
+                        >
+                          <TypeIcon className={`h-3.5 w-3.5 ${typeConfig.iconColor}`} />
+                        </span>
+                        {label}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="url">{t("endpointUrlLabel")}</Label>
             <Input

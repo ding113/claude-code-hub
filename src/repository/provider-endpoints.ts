@@ -106,7 +106,7 @@ function toProviderEndpointProbeLog(row: any): ProviderEndpointProbeLog {
 
 export type ProviderEndpointProbeTarget = Pick<
   ProviderEndpoint,
-  "id" | "url" | "lastProbedAt" | "lastProbeOk"
+  "id" | "url" | "vendorId" | "lastProbedAt" | "lastProbeOk" | "lastProbeErrorType"
 >;
 
 export async function findEnabledProviderEndpointsForProbing(): Promise<
@@ -116,8 +116,10 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
     .select({
       id: providerEndpoints.id,
       url: providerEndpoints.url,
+      vendorId: providerEndpoints.vendorId,
       lastProbedAt: providerEndpoints.lastProbedAt,
       lastProbeOk: providerEndpoints.lastProbeOk,
+      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
     })
     .from(providerEndpoints)
     .where(and(eq(providerEndpoints.isEnabled, true), isNull(providerEndpoints.deletedAt)))
@@ -126,8 +128,10 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
   return rows.map((row) => ({
     id: row.id,
     url: row.url,
+    vendorId: row.vendorId,
     lastProbedAt: toNullableDate(row.lastProbedAt),
     lastProbeOk: row.lastProbeOk ?? null,
+    lastProbeErrorType: row.lastProbeErrorType ?? null,
   }));
 }
 
@@ -558,6 +562,33 @@ export async function findProviderEndpointsByVendorAndType(
         isNull(providerEndpoints.deletedAt)
       )
     )
+    .orderBy(asc(providerEndpoints.sortOrder), asc(providerEndpoints.id));
+
+  return rows.map(toProviderEndpoint);
+}
+
+export async function findProviderEndpointsByVendor(vendorId: number): Promise<ProviderEndpoint[]> {
+  const rows = await db
+    .select({
+      id: providerEndpoints.id,
+      vendorId: providerEndpoints.vendorId,
+      providerType: providerEndpoints.providerType,
+      url: providerEndpoints.url,
+      label: providerEndpoints.label,
+      sortOrder: providerEndpoints.sortOrder,
+      isEnabled: providerEndpoints.isEnabled,
+      lastProbedAt: providerEndpoints.lastProbedAt,
+      lastProbeOk: providerEndpoints.lastProbeOk,
+      lastProbeStatusCode: providerEndpoints.lastProbeStatusCode,
+      lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
+      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
+      lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
+      createdAt: providerEndpoints.createdAt,
+      updatedAt: providerEndpoints.updatedAt,
+      deletedAt: providerEndpoints.deletedAt,
+    })
+    .from(providerEndpoints)
+    .where(and(eq(providerEndpoints.vendorId, vendorId), isNull(providerEndpoints.deletedAt)))
     .orderBy(asc(providerEndpoints.sortOrder), asc(providerEndpoints.id));
 
   return rows.map(toProviderEndpoint);
