@@ -3621,7 +3621,7 @@ export async function reclusterProviderVendors(args: {
 
     // Calculate new vendor key for each provider
     for (const provider of allProviders) {
-      const newVendorKey = computeVendorKey({
+      const newVendorKey = await computeVendorKey({
         providerUrl: provider.url,
         websiteUrl: provider.websiteUrl,
       });
