@@ -329,7 +329,8 @@
       }
     },
     "providerChain": {
-      "decisionChain": "供应商决策链"
+      "decisionChain": "供应商决策链",
+      "clickItemForDetails": "点击步骤查看详情"
     },
     "modelRedirect": {
       "redirected": "已重定向",

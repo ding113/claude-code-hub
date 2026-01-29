@@ -75,7 +75,10 @@ export interface SummaryTabProps extends TabSharedProps {
 /**
  * Props for LogicTraceTab
  */
-export interface LogicTraceTabProps extends TabSharedProps {}
+export interface LogicTraceTabProps extends TabSharedProps {
+  /** Index into providerChain to expand by default */
+  initialExpandedChainIndex?: number;
+}
 
 /**
  * Props for PerformanceTab

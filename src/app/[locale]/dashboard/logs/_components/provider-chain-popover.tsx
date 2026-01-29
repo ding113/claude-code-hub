@@ -24,6 +24,8 @@ interface ProviderChainPopoverProps {
   finalProvider: string;
   /** Whether a cost badge is displayed, affects name max width */
   hasCostBadge?: boolean;
+  /** Callback when a chain item is clicked in the popover */
+  onChainItemClick?: (chainIndex: number) => void;
 }
 
 /**
@@ -98,6 +100,7 @@ export function ProviderChainPopover({
   chain,
   finalProvider,
   hasCostBadge = false,
+  onChainItemClick,
 }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
@@ -372,7 +375,36 @@ export function ProviderChainPopover({
             const isLast = index === actualRequests.length - 1;
 
             return (
-              <div key={`${item.id}-${index}`} className="relative flex gap-2">
+              <div
+                key={`${item.id}-${index}`}
+                className={cn(
+                  "relative flex gap-2",
+                  onChainItemClick &&
+                    "cursor-pointer hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors"
+                )}
+                onClick={
+                  onChainItemClick
+                    ? () => {
+                        // Map actualRequests index back to original chain index
+                        const originalIndex = chain.indexOf(item);
+                        onChainItemClick(originalIndex);
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  onChainItemClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          const originalIndex = chain.indexOf(item);
+                          onChainItemClick(originalIndex);
+                        }
+                      }
+                    : undefined
+                }
+                role={onChainItemClick ? "button" : undefined}
+                tabIndex={onChainItemClick ? 0 : undefined}
+              >
                 {/* Timeline connector */}
                 <div className="flex flex-col items-center">
                   <div
@@ -422,7 +454,9 @@ export function ProviderChainPopover({
 
         <div className="p-2 border-t bg-muted/30">
           <p className="text-[10px] text-muted-foreground text-center">
-            {t("logs.details.clickStatusCode")}
+            {onChainItemClick
+              ? t("logs.providerChain.clickItemForDetails")
+              : t("logs.details.clickStatusCode")}
           </p>
         </div>
       </PopoverContent>

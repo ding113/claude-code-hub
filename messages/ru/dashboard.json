@@ -329,7 +329,8 @@
       }
     },
     "providerChain": {
-      "decisionChain": "Цепочка решений поставщика"
+      "decisionChain": "Цепочка решений поставщика",
+      "clickItemForDetails": "Нажмите на шаг, чтобы посмотреть детали"
     },
     "modelRedirect": {
       "redirected": "Перенаправлено",

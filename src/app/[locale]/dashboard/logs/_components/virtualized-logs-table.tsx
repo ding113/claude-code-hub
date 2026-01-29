@@ -89,10 +89,12 @@ export function VirtualizedLogsTable({
   const hideCacheColumn = hiddenColumns?.includes("cache") ?? false;
   const hidePerformanceColumn = hiddenColumns?.includes("performance") ?? false;
 
-  // Dialog state for model redirect click
+  // Dialog state for model redirect click and chain item click
   const [dialogState, setDialogState] = useState<{
     logId: number | null;
     scrollToRedirect: boolean;
+    targetTab?: "summary" | "logic-trace" | "performance";
+    expandedChainIndex?: number;
   }>({ logId: null, scrollToRedirect: false });
 
   const handleCopySessionIdClick = useCallback(
@@ -469,6 +471,14 @@ export function VirtualizedLogsTable({
                                           tChain("circuit.unknown")
                                         }
                                         hasCostBadge={hasCostBadge}
+                                        onChainItemClick={(chainIndex) => {
+                                          setDialogState({
+                                            logId: log.id,
+                                            scrollToRedirect: false,
+                                            targetTab: "logic-trace",
+                                            expandedChainIndex: chainIndex,
+                                          });
+                                        }}
                                       />
                                     </div>
                                     {/* Cost multiplier badge - only show when no retry */}
@@ -738,6 +748,12 @@ export function VirtualizedLogsTable({
                         }}
                         scrollToRedirect={
                           dialogState.logId === log.id && dialogState.scrollToRedirect
+                        }
+                        initialTab={
+                          dialogState.logId === log.id ? dialogState.targetTab : undefined
+                        }
+                        initialExpandedChainIndex={
+                          dialogState.logId === log.id ? dialogState.expandedChainIndex : undefined
                         }
                       />
                     </div>

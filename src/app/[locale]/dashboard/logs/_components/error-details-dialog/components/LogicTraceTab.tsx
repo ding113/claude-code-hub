@@ -54,6 +54,7 @@ export function LogicTraceTab({
   blockedBy,
   blockedReason,
   requestSequence,
+  initialExpandedChainIndex,
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
@@ -469,6 +470,7 @@ export function LogicTraceTab({
                 timestamp={item.timestamp}
                 baseTimestamp={baseTimestamp}
                 isLast={index === providerChain.length - 1}
+                defaultExpanded={initialExpandedChainIndex === index}
                 details={
                   <div className="space-y-2 text-xs">
                     {/* Session Reuse Info */}

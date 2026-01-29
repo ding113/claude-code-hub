@@ -63,6 +63,8 @@ export function UsageLogsTable({
   const [dialogState, setDialogState] = useState<{
     logId: number | null;
     scrollToRedirect: boolean;
+    targetTab?: "summary" | "logic-trace" | "performance";
+    expandedChainIndex?: number;
   }>({ logId: null, scrollToRedirect: false });
 
   const handleCopySessionIdClick = useCallback(
@@ -197,6 +199,14 @@ export function UsageLogsTable({
                                   tChain("circuit.unknown")
                                 }
                                 hasCostBadge={hasCostBadge}
+                                onChainItemClick={(chainIndex) => {
+                                  setDialogState({
+                                    logId: log.id,
+                                    scrollToRedirect: false,
+                                    targetTab: "logic-trace",
+                                    expandedChainIndex: chainIndex,
+                                  });
+                                }}
                               />
                             </div>
                             {/* 摘要文字（第二行显示，左对齐） */}
@@ -510,6 +520,12 @@ export function UsageLogsTable({
                         }}
                         scrollToRedirect={
                           dialogState.logId === log.id && dialogState.scrollToRedirect
+                        }
+                        initialTab={
+                          dialogState.logId === log.id ? dialogState.targetTab : undefined
+                        }
+                        initialExpandedChainIndex={
+                          dialogState.logId === log.id ? dialogState.expandedChainIndex : undefined
                         }
                       />
                     </TableCell>

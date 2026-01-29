@@ -329,7 +329,8 @@
       }
     },
     "providerChain": {
-      "decisionChain": "供應商決策鏈"
+      "decisionChain": "供應商決策鏈",
+      "clickItemForDetails": "點擊步驟查看詳情"
     },
     "modelRedirect": {
       "redirected": "已重新導向",

@@ -329,7 +329,8 @@
       }
     },
     "providerChain": {
-      "decisionChain": "Provider Decision Chain"
+      "decisionChain": "Provider Decision Chain",
+      "clickItemForDetails": "Click a step to view details"
     },
     "modelRedirect": {
       "redirected": "Redirected",
