@@ -44,6 +44,7 @@ async function SettingsConfigContent() {
             allowGlobalUsageView: settings.allowGlobalUsageView,
             currencyDisplay: settings.currencyDisplay,
             billingModelSource: settings.billingModelSource,
+            timezone: settings.timezone,
             verboseProviderError: settings.verboseProviderError,
             enableHttp2: settings.enableHttp2,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
@@ -51,6 +52,12 @@ async function SettingsConfigContent() {
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableResponseFixer: settings.enableResponseFixer,
             responseFixerConfig: settings.responseFixerConfig,
+            quotaDbRefreshIntervalSeconds: settings.quotaDbRefreshIntervalSeconds,
+            quotaLeasePercent5h: settings.quotaLeasePercent5h,
+            quotaLeasePercentDaily: settings.quotaLeasePercentDaily,
+            quotaLeasePercentWeekly: settings.quotaLeasePercentWeekly,
+            quotaLeasePercentMonthly: settings.quotaLeasePercentMonthly,
+            quotaLeaseCapUsd: settings.quotaLeaseCapUsd,
           }}
         />
       </Section>

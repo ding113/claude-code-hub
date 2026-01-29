@@ -7,6 +7,7 @@ import { Footer } from "@/components/customs/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { getSystemSettings } from "@/repository/system-config";
 import { AppProviders } from "../providers";
 
@@ -70,11 +71,14 @@ export default async function RootLayout({
 
   // Load translation messages
   const messages = await getMessages();
+  const timeZone = await resolveSystemTimezone();
+  // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
+  const now = new Date();
 
   return (
     <html lang={locale} suppressHydrationWarning>
       <body className="antialiased">
-        <NextIntlClientProvider messages={messages}>
+        <NextIntlClientProvider messages={messages} timeZone={timeZone} now={now}>
           <AppProviders>
             <div className="flex min-h-screen flex-col bg-background text-foreground">
               <main className="flex-1">{children}</main>

@@ -7,6 +7,7 @@ import { getSession } from "@/lib/auth";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { AutoSortPriorityDialog } from "./_components/auto-sort-priority-dialog";
 import { ProviderManagerLoader } from "./_components/provider-manager-loader";
+import { ReclusterVendorsDialog } from "./_components/recluster-vendors-dialog";
 import { SchedulingRulesDialog } from "./_components/scheduling-rules-dialog";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export default async function SettingsProvidersPage() {
               </Link>
             </Button>
             <AutoSortPriorityDialog />
+            <ReclusterVendorsDialog />
             <SchedulingRulesDialog />
           </>
         }

@@ -54,6 +54,11 @@
     "rate_limited": "Rate Limited",
     "circuit_open": "Circuit Open",
     "disabled": "Disabled",
+    "excluded": "Excluded",
+    "format_type_mismatch": "Format Type Mismatch",
+    "type_mismatch": "Type Mismatch",
+    "model_not_allowed": "Model Not Allowed",
+    "context_1m_disabled": "1M Context Disabled",
     "model_not_supported": "Model Not Supported",
     "group_mismatch": "Group Mismatch",
     "health_check_failed": "Health Check Failed"

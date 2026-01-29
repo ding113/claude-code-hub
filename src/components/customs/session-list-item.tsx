@@ -41,13 +41,17 @@ function getStatusIcon(status: "in_progress" | "completed" | "error", statusCode
  * 简洁的 Session 列表项
  * 可复用组件，用于活跃 Session 列表的单项展示
  */
+export interface SessionListItemProps {
+  session: ActiveSessionInfo;
+  currencyCode?: CurrencyCode;
+  showTokensCost?: boolean;
+}
+
 export function SessionListItem({
   session,
   currencyCode = "USD",
-}: {
-  session: ActiveSessionInfo;
-  currencyCode?: CurrencyCode;
-}) {
+  showTokensCost = true,
+}: SessionListItemProps) {
   const statusInfo = getStatusIcon(session.status, session.statusCode);
   const StatusIcon = statusInfo.icon;
   const inputTokensDisplay =
@@ -106,18 +110,22 @@ export function SessionListItem({
         </div>
 
         {/* Token 和成本 */}
-        <div className="flex items-center gap-2 text-xs font-mono flex-shrink-0">
-          {(inputTokensDisplay || outputTokensDisplay) && (
-            <span className="text-muted-foreground">
-              {inputTokensDisplay && `↑${inputTokensDisplay}`}
-              {inputTokensDisplay && outputTokensDisplay && " "}
-              {outputTokensDisplay && `↓${outputTokensDisplay}`}
-            </span>
-          )}
-          {session.costUsd && (
-            <span className="font-medium">{formatCurrency(session.costUsd, currencyCode, 4)}</span>
-          )}
-        </div>
+        {showTokensCost && (
+          <div className="flex items-center gap-2 text-xs font-mono flex-shrink-0">
+            {(inputTokensDisplay || outputTokensDisplay) && (
+              <span className="text-muted-foreground">
+                {inputTokensDisplay && `↑${inputTokensDisplay}`}
+                {inputTokensDisplay && outputTokensDisplay && " "}
+                {outputTokensDisplay && `↓${outputTokensDisplay}`}
+              </span>
+            )}
+            {session.costUsd && (
+              <span className="font-medium">
+                {formatCurrency(session.costUsd, currencyCode, 4)}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );

@@ -34,6 +34,8 @@ interface StepCardProps {
   isLast?: boolean;
   /** Optional className */
   className?: string;
+  /** Initial expanded state (uncontrolled) */
+  defaultExpanded?: boolean;
 }
 
 const statusConfig: Record<StepStatus, { dot: string; bg: string; text: string }> = {
@@ -80,8 +82,9 @@ export function StepCard({
   details,
   isLast = false,
   className,
+  defaultExpanded = false,
 }: StepCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const config = statusConfig[status];
 
   const relativeTime =
@@ -173,7 +176,9 @@ export function StepCard({
 
           {/* Expandable details */}
           {hasDetails && isExpanded && (
-            <div className="mt-3 pt-3 border-t border-current/10">{details}</div>
+            <div className="mt-3 pt-3 border-t border-current/10 overflow-hidden min-w-0">
+              {details}
+            </div>
           )}
         </div>
       </div>

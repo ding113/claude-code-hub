@@ -1,0 +1,16 @@
+{
+  "button": "重新分組",
+  "dialogTitle": "重新分組供應商",
+  "dialogDescription": "根據更新的分組規則重新組織供應商。對於未設定網站URL的供應商，將使用 host:port 作為分組鍵。",
+  "providersMoved": "供應商移動",
+  "vendorsCreated": "新建分組",
+  "vendorsToDelete": "待刪除分組",
+  "skipped": "跳過(無效URL)",
+  "providerHeader": "供應商",
+  "vendorChangeHeader": "分組變更",
+  "noChanges": "無需更改（已正確分組）",
+  "moreChanges": "還有 {count} 條變更...",
+  "confirm": "應用變更",
+  "success": "已重新分組 {count} 個供應商",
+  "error": "重新分組失敗"
+}

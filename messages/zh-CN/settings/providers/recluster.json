@@ -1,0 +1,16 @@
+{
+  "button": "重新分组",
+  "dialogTitle": "重新分组供应商",
+  "dialogDescription": "根据更新的分组规则重新组织供应商。对于未设置网站URL的供应商，将使用 host:port 作为分组键。",
+  "providersMoved": "供应商移动",
+  "vendorsCreated": "新建分组",
+  "vendorsToDelete": "待删除分组",
+  "skipped": "跳过(无效URL)",
+  "providerHeader": "供应商",
+  "vendorChangeHeader": "分组变更",
+  "noChanges": "无需更改（已正确分组）",
+  "moreChanges": "还有 {count} 条变更...",
+  "confirm": "应用变更",
+  "success": "已重新分组 {count} 个供应商",
+  "error": "重新分组失败"
+}

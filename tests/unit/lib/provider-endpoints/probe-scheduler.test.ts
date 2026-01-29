@@ -1,8 +1,10 @@
 type ProbeTarget = {
   id: number;
   url: string;
+  vendorId: number;
   lastProbedAt: Date | null;
   lastProbeOk: boolean | null;
+  lastProbeErrorType: string | null;
 };
 
 type ProbeResult = {
@@ -14,12 +16,14 @@ type ProbeResult = {
   errorMessage: string | null;
 };
 
-function makeEndpoint(id: number): ProbeTarget {
+function makeEndpoint(id: number, overrides: Partial<ProbeTarget> = {}): ProbeTarget {
   return {
     id,
     url: `https://example.com/${id}`,
-    lastProbedAt: null,
-    lastProbeOk: null,
+    vendorId: overrides.vendorId ?? 1,
+    lastProbedAt: overrides.lastProbedAt ?? null,
+    lastProbeOk: overrides.lastProbeOk ?? null,
+    lastProbeErrorType: overrides.lastProbeErrorType ?? null,
   };
 }
 
@@ -167,5 +171,276 @@ describe("provider-endpoints: probe scheduler", () => {
     expect(maxInFlight).toBe(2);
 
     stopEndpointProbeScheduler();
+  });
+
+  describe("dynamic interval calculation", () => {
+    test("default interval is 60s - endpoints probed 60s ago should be probed", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T12:01:00Z"));
+
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+      vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+      acquireLeaderLockMock = vi.fn(async () => ({
+        key: "locks:endpoint-probe-scheduler",
+        lockId: "test",
+        lockType: "memory" as const,
+      }));
+      renewLeaderLockMock = vi.fn(async () => true);
+      releaseLeaderLockMock = vi.fn(async () => {});
+
+      // Two endpoints from SAME vendor (multi-endpoint vendor uses base 60s interval)
+      // Both probed 61s ago - should be due
+      const endpoint = makeEndpoint(1, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T11:59:59Z"), // 61s ago
+      });
+      const endpoint2 = makeEndpoint(2, {
+        vendorId: 1, // Same vendor
+        lastProbedAt: new Date("2024-01-01T11:59:59Z"), // 61s ago
+      });
+
+      findEnabledEndpointsMock = vi.fn(async () => [endpoint, endpoint2]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+      const { startEndpointProbeScheduler, stopEndpointProbeScheduler } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      // Both endpoints should be probed since they're due (61s > 60s interval)
+      expect(probeByEndpointMock).toHaveBeenCalledTimes(2);
+
+      stopEndpointProbeScheduler();
+    });
+
+    test("single-endpoint vendor uses 10min interval", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T12:05:00Z"));
+
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+      vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+      acquireLeaderLockMock = vi.fn(async () => ({
+        key: "locks:endpoint-probe-scheduler",
+        lockId: "test",
+        lockType: "memory" as const,
+      }));
+      renewLeaderLockMock = vi.fn(async () => true);
+      releaseLeaderLockMock = vi.fn(async () => {});
+
+      // Vendor 1: single endpoint probed 5min ago (should NOT be due - 10min interval)
+      // Vendor 2: two endpoints, one probed 30s ago (should NOT be due - 60s interval but recently probed)
+      const singleVendorEndpoint = makeEndpoint(1, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"), // 5min ago
+      });
+      const multiVendorEndpoint1 = makeEndpoint(2, {
+        vendorId: 2,
+        lastProbedAt: new Date("2024-01-01T12:04:30Z"), // 30s ago - NOT due
+      });
+      const multiVendorEndpoint2 = makeEndpoint(3, {
+        vendorId: 2,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"), // 5min ago - should be due
+      });
+
+      findEnabledEndpointsMock = vi.fn(async () => [
+        singleVendorEndpoint,
+        multiVendorEndpoint1,
+        multiVendorEndpoint2,
+      ]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+      const { startEndpointProbeScheduler, stopEndpointProbeScheduler } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      // Only multiVendorEndpoint2 should be probed (5min > 60s, multi-endpoint vendor)
+      // singleVendorEndpoint not due (5min < 10min)
+      // multiVendorEndpoint1 not due (30s < 60s)
+      expect(probeByEndpointMock).toHaveBeenCalledTimes(1);
+      expect(probeByEndpointMock.mock.calls[0][0].endpoint.id).toBe(3);
+
+      stopEndpointProbeScheduler();
+    });
+
+    test("timeout endpoint uses 10s override interval", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T12:00:15Z"));
+
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+      vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+      acquireLeaderLockMock = vi.fn(async () => ({
+        key: "locks:endpoint-probe-scheduler",
+        lockId: "test",
+        lockType: "memory" as const,
+      }));
+      renewLeaderLockMock = vi.fn(async () => true);
+      releaseLeaderLockMock = vi.fn(async () => {});
+
+      // Endpoint with timeout error 15s ago - should be due (10s override)
+      const timeoutEndpoint = makeEndpoint(1, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"),
+        lastProbeOk: false,
+        lastProbeErrorType: "timeout",
+      });
+      // Normal endpoint from same vendor probed 15s ago - not due (60s interval)
+      const normalEndpoint = makeEndpoint(2, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"),
+        lastProbeOk: true,
+      });
+
+      findEnabledEndpointsMock = vi.fn(async () => [timeoutEndpoint, normalEndpoint]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+      const { startEndpointProbeScheduler, stopEndpointProbeScheduler } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      // Only timeout endpoint should be probed
+      expect(probeByEndpointMock).toHaveBeenCalledTimes(1);
+      expect(probeByEndpointMock.mock.calls[0][0].endpoint.id).toBe(1);
+
+      stopEndpointProbeScheduler();
+    });
+
+    test("timeout override takes priority over 10min single-vendor interval", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T12:00:15Z"));
+
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+      vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+      acquireLeaderLockMock = vi.fn(async () => ({
+        key: "locks:endpoint-probe-scheduler",
+        lockId: "test",
+        lockType: "memory" as const,
+      }));
+      renewLeaderLockMock = vi.fn(async () => true);
+      releaseLeaderLockMock = vi.fn(async () => {});
+
+      // Single-endpoint vendor with timeout error 15s ago
+      // Without timeout, would use 10min interval and not be due
+      // With timeout, uses 10s override and IS due
+      const timeoutSingleVendor = makeEndpoint(1, {
+        vendorId: 1, // only endpoint for this vendor
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"),
+        lastProbeOk: false,
+        lastProbeErrorType: "timeout",
+      });
+
+      findEnabledEndpointsMock = vi.fn(async () => [timeoutSingleVendor]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+      const { startEndpointProbeScheduler, stopEndpointProbeScheduler } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      // Timeout override should take priority
+      expect(probeByEndpointMock).toHaveBeenCalledTimes(1);
+
+      stopEndpointProbeScheduler();
+    });
+
+    test("recovered endpoint (lastProbeOk=true) reverts to normal interval", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T12:00:15Z"));
+
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+      vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+      acquireLeaderLockMock = vi.fn(async () => ({
+        key: "locks:endpoint-probe-scheduler",
+        lockId: "test",
+        lockType: "memory" as const,
+      }));
+      renewLeaderLockMock = vi.fn(async () => true);
+      releaseLeaderLockMock = vi.fn(async () => {});
+
+      // Had timeout before but now recovered (lastProbeOk=true) - uses normal interval
+      const recoveredEndpoint = makeEndpoint(1, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"), // 15s ago
+        lastProbeOk: true, // recovered!
+        lastProbeErrorType: "timeout", // had timeout before
+      });
+      // Multi-vendor so 60s base interval applies
+      const otherEndpoint = makeEndpoint(2, {
+        vendorId: 1,
+        lastProbedAt: new Date("2024-01-01T12:00:00Z"),
+        lastProbeOk: true,
+      });
+
+      findEnabledEndpointsMock = vi.fn(async () => [recoveredEndpoint, otherEndpoint]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+      const { startEndpointProbeScheduler, stopEndpointProbeScheduler } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      // Neither should be probed - 15s < 60s and lastProbeOk=true means no timeout override
+      expect(probeByEndpointMock).toHaveBeenCalledTimes(0);
+
+      stopEndpointProbeScheduler();
+    });
+
+    test("null lastProbedAt is always due for probing", async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2024-01-01T12:00:00Z"));
+
+      vi.resetModules();
+      vi.stubEnv("ENDPOINT_PROBE_INTERVAL_MS", "60000");
+      vi.stubEnv("ENDPOINT_PROBE_CYCLE_JITTER_MS", "0");
+
+      acquireLeaderLockMock = vi.fn(async () => ({
+        key: "locks:endpoint-probe-scheduler",
+        lockId: "test",
+        lockType: "memory" as const,
+      }));
+      renewLeaderLockMock = vi.fn(async () => true);
+      releaseLeaderLockMock = vi.fn(async () => {});
+
+      // Never probed endpoint should always be due
+      const neverProbed = makeEndpoint(1, {
+        vendorId: 1,
+        lastProbedAt: null,
+      });
+
+      findEnabledEndpointsMock = vi.fn(async () => [neverProbed]);
+      probeByEndpointMock = vi.fn(async () => makeOkResult());
+
+      const { startEndpointProbeScheduler, stopEndpointProbeScheduler } = await import(
+        "@/lib/provider-endpoints/probe-scheduler"
+      );
+
+      startEndpointProbeScheduler();
+      await flushMicrotasks();
+
+      expect(probeByEndpointMock).toHaveBeenCalledTimes(1);
+
+      stopEndpointProbeScheduler();
+    });
   });
 });

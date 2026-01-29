@@ -43,6 +43,7 @@ interface UsageLogsViewVirtualizedProps {
   searchParams: { [key: string]: string | string[] | undefined };
   currencyCode?: CurrencyCode;
   billingModelSource?: BillingModelSource;
+  serverTimeZone?: string;
 }
 
 async function fetchSystemSettings(): Promise<SystemSettings> {
@@ -66,9 +67,10 @@ function UsageLogsViewContent({
   userId,
   providers,
   initialKeys,
-  searchParams,
+  searchParams: _searchParams, // Kept for SSR hydration, but filters use useSearchParams
   currencyCode = "USD",
   billingModelSource = "original",
+  serverTimeZone,
 }: UsageLogsViewVirtualizedProps) {
   const t = useTranslations("dashboard");
   const tc = useTranslations("customs");
@@ -79,7 +81,6 @@ function UsageLogsViewContent({
   const [isAutoRefresh, setIsAutoRefresh] = useState(true);
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const paramsKey = _params.toString();
 
   const fullscreen = useFullscreen();
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
@@ -156,33 +157,23 @@ function UsageLogsViewContent({
   const resolvedProviders = providers ?? providersData;
   const resolvedKeys = initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
 
+  // Use useSearchParams hook for client-side URL reactivity
+  // Note: searchParams props from server don't update on client-side navigation
   const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(() => {
     return parseLogsUrlFilters({
-      userId: searchParams.userId,
-      keyId: searchParams.keyId,
-      providerId: searchParams.providerId,
-      sessionId: searchParams.sessionId,
-      startTime: searchParams.startTime,
-      endTime: searchParams.endTime,
-      statusCode: searchParams.statusCode,
-      model: searchParams.model,
-      endpoint: searchParams.endpoint,
-      minRetry: searchParams.minRetry,
-      page: searchParams.page,
+      userId: _params.get("userId") ?? undefined,
+      keyId: _params.get("keyId") ?? undefined,
+      providerId: _params.get("providerId") ?? undefined,
+      sessionId: _params.get("sessionId") ?? undefined,
+      startTime: _params.get("startTime") ?? undefined,
+      endTime: _params.get("endTime") ?? undefined,
+      statusCode: _params.get("statusCode") ?? undefined,
+      model: _params.get("model") ?? undefined,
+      endpoint: _params.get("endpoint") ?? undefined,
+      minRetry: _params.get("minRetry") ?? undefined,
+      page: _params.get("page") ?? undefined,
     }) as VirtualizedLogsTableFilters & { page?: number };
-  }, [
-    searchParams.userId,
-    searchParams.keyId,
-    searchParams.providerId,
-    searchParams.sessionId,
-    searchParams.startTime,
-    searchParams.endTime,
-    searchParams.statusCode,
-    searchParams.model,
-    searchParams.endpoint,
-    searchParams.minRetry,
-    searchParams.page,
-  ]);
+  }, [_params]);
 
   const { data: overviewData } = useQuery<OverviewData>({
     queryKey: ["overview-data"],
@@ -253,11 +244,6 @@ function UsageLogsViewContent({
   };
 
   useEffect(() => {
-    void paramsKey;
-    queryClientInstance.invalidateQueries({ queryKey: ["usage-logs-batch"] });
-  }, [paramsKey, queryClientInstance]);
-
-  useEffect(() => {
     return () => {
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
@@ -311,6 +297,7 @@ function UsageLogsViewContent({
               onReset={() => router.push("/dashboard/logs")}
               isProvidersLoading={isProvidersLoading}
               isKeysLoading={isKeysLoading}
+              serverTimeZone={serverTimeZone}
             />
           </CardContent>
         </Card>

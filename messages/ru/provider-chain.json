@@ -54,6 +54,11 @@
     "rate_limited": "Ограничение скорости",
     "circuit_open": "Автомат открыт",
     "disabled": "Отключен",
+    "excluded": "Исключен",
+    "format_type_mismatch": "Несоответствие формата",
+    "type_mismatch": "Несоответствие типа",
+    "model_not_allowed": "Модель не разрешена",
+    "context_1m_disabled": "1M контекст отключен",
     "model_not_supported": "Модель не поддерживается",
     "group_mismatch": "Несоответствие группы",
     "health_check_failed": "Проверка состояния не пройдена"

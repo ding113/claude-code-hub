@@ -6,7 +6,10 @@ import {
   renewLeaderLock,
 } from "@/lib/provider-endpoints/leader-lock";
 import { probeProviderEndpointAndRecordByEndpoint } from "@/lib/provider-endpoints/probe";
-import { findEnabledProviderEndpointsForProbing } from "@/repository";
+import {
+  findEnabledProviderEndpointsForProbing,
+  type ProviderEndpointProbeTarget,
+} from "@/repository";
 
 const LOCK_KEY = "locks:endpoint-probe-scheduler";
 
@@ -15,10 +18,17 @@ function parseIntWithDefault(value: string | undefined, fallback: number): numbe
   return Number.isFinite(n) ? n : fallback;
 }
 
-const INTERVAL_MS = Math.max(
+// Base interval (default 60s)
+const BASE_INTERVAL_MS = Math.max(
   1,
-  parseIntWithDefault(process.env.ENDPOINT_PROBE_INTERVAL_MS, 10_000)
+  parseIntWithDefault(process.env.ENDPOINT_PROBE_INTERVAL_MS, 60_000)
 );
+// Single-vendor interval (10 minutes)
+const SINGLE_VENDOR_INTERVAL_MS = 600_000;
+// Timeout override interval (10 seconds)
+const TIMEOUT_OVERRIDE_INTERVAL_MS = 10_000;
+// Scheduler tick interval - use shortest possible interval to support timeout override
+const TICK_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, TIMEOUT_OVERRIDE_INTERVAL_MS);
 const TIMEOUT_MS = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_TIMEOUT_MS, 5_000));
 const CONCURRENCY = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_CONCURRENCY, 10));
 const CYCLE_JITTER_MS = Math.max(
@@ -52,6 +62,67 @@ function shuffleInPlace<T>(arr: T[]): void {
     arr[i] = arr[j];
     arr[j] = tmp;
   }
+}
+
+/**
+ * Count enabled endpoints per vendor
+ */
+function countEndpointsByVendor(endpoints: ProviderEndpointProbeTarget[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const ep of endpoints) {
+    counts.set(ep.vendorId, (counts.get(ep.vendorId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Calculate effective interval for an endpoint based on:
+ * 1. Timeout override (10s) - if lastProbeErrorType === "timeout" and lastProbeOk !== true
+ * 2. Single-vendor interval (10min) - if vendor has only 1 enabled endpoint
+ * 3. Base interval (60s) - default
+ *
+ * Priority: timeout override > single-vendor > base
+ */
+function getEffectiveIntervalMs(
+  endpoint: ProviderEndpointProbeTarget,
+  vendorEndpointCounts: Map<number, number>
+): number {
+  // Timeout override takes highest priority
+  const hasTimeoutError =
+    endpoint.lastProbeErrorType === "timeout" && endpoint.lastProbeOk !== true;
+  if (hasTimeoutError) {
+    return TIMEOUT_OVERRIDE_INTERVAL_MS;
+  }
+
+  // Single-vendor interval
+  const vendorCount = vendorEndpointCounts.get(endpoint.vendorId) ?? 0;
+  if (vendorCount === 1) {
+    return SINGLE_VENDOR_INTERVAL_MS;
+  }
+
+  // Default base interval
+  return BASE_INTERVAL_MS;
+}
+
+/**
+ * Filter endpoints that are due for probing based on their effective interval
+ */
+function filterDueEndpoints(
+  endpoints: ProviderEndpointProbeTarget[],
+  vendorEndpointCounts: Map<number, number>,
+  now: Date
+): ProviderEndpointProbeTarget[] {
+  const nowMs = now.getTime();
+  return endpoints.filter((ep) => {
+    // Never probed - always due
+    if (ep.lastProbedAt === null) {
+      return true;
+    }
+
+    const effectiveInterval = getEffectiveIntervalMs(ep, vendorEndpointCounts);
+    const dueAt = ep.lastProbedAt.getTime() + effectiveInterval;
+    return nowMs >= dueAt;
+  });
 }
 
 async function ensureLeaderLock(): Promise<boolean> {
@@ -155,7 +226,17 @@ async function runProbeCycle(): Promise<void> {
       return;
     }
 
-    const endpoints = await findEnabledProviderEndpointsForProbing();
+    const allEndpoints = await findEnabledProviderEndpointsForProbing();
+    if (allEndpoints.length === 0) {
+      return;
+    }
+
+    // Calculate vendor endpoint counts for interval decisions
+    const vendorEndpointCounts = countEndpointsByVendor(allEndpoints);
+
+    // Filter to only endpoints that are due for probing
+    const now = new Date();
+    const endpoints = filterDueEndpoints(allEndpoints, vendorEndpointCounts, now);
     if (endpoints.length === 0) {
       return;
     }
@@ -163,10 +244,11 @@ async function runProbeCycle(): Promise<void> {
     const concurrency = Math.max(1, Math.min(CONCURRENCY, endpoints.length));
     const minBatches = Math.ceil(endpoints.length / concurrency);
     const expectedFloorMs = minBatches * Math.max(0, TIMEOUT_MS);
-    if (expectedFloorMs > INTERVAL_MS) {
+    if (expectedFloorMs > TICK_INTERVAL_MS) {
       logger.warn("[EndpointProbeScheduler] Probe capacity may be insufficient", {
-        endpointsCount: endpoints.length,
-        intervalMs: INTERVAL_MS,
+        dueEndpointsCount: endpoints.length,
+        totalEndpointsCount: allEndpoints.length,
+        tickIntervalMs: TICK_INTERVAL_MS,
         timeoutMs: TIMEOUT_MS,
         concurrency,
         expectedFloorMs,
@@ -222,10 +304,13 @@ export function startEndpointProbeScheduler(): void {
 
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_INTERVAL_ID__ = setInterval(() => {
     void runProbeCycle();
-  }, INTERVAL_MS);
+  }, TICK_INTERVAL_MS);
 
   logger.info("[EndpointProbeScheduler] Started", {
-    intervalMs: INTERVAL_MS,
+    baseIntervalMs: BASE_INTERVAL_MS,
+    singleVendorIntervalMs: SINGLE_VENDOR_INTERVAL_MS,
+    timeoutOverrideIntervalMs: TIMEOUT_OVERRIDE_INTERVAL_MS,
+    tickIntervalMs: TICK_INTERVAL_MS,
     timeoutMs: TIMEOUT_MS,
     concurrency: CONCURRENCY,
     jitterMs: CYCLE_JITTER_MS,
@@ -254,7 +339,10 @@ export function stopEndpointProbeScheduler(): void {
 export function getEndpointProbeSchedulerStatus(): {
   started: boolean;
   running: boolean;
-  intervalMs: number;
+  baseIntervalMs: number;
+  singleVendorIntervalMs: number;
+  timeoutOverrideIntervalMs: number;
+  tickIntervalMs: number;
   timeoutMs: number;
   concurrency: number;
   jitterMs: number;
@@ -263,7 +351,10 @@ export function getEndpointProbeSchedulerStatus(): {
   return {
     started: schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__ === true,
     running: schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_RUNNING__ === true,
-    intervalMs: INTERVAL_MS,
+    baseIntervalMs: BASE_INTERVAL_MS,
+    singleVendorIntervalMs: SINGLE_VENDOR_INTERVAL_MS,
+    timeoutOverrideIntervalMs: TIMEOUT_OVERRIDE_INTERVAL_MS,
+    tickIntervalMs: TICK_INTERVAL_MS,
     timeoutMs: TIMEOUT_MS,
     concurrency: CONCURRENCY,
     jitterMs: CYCLE_JITTER_MS,

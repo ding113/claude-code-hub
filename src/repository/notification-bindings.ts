@@ -3,11 +3,10 @@
 import { and, desc, eq, notInArray } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { notificationTargetBindings, webhookTargets } from "@/drizzle/schema";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { WebhookProviderType, WebhookTarget, WebhookTestResult } from "./webhook-targets";
 
 export type NotificationType = "circuit_breaker" | "daily_leaderboard" | "cost_alert";
-
-const DEFAULT_TIMEZONE = "Asia/Shanghai";
 
 export interface NotificationBinding {
   id: number;
@@ -159,12 +158,15 @@ export async function upsertBindings(
   type: NotificationType,
   bindings: BindingInput[]
 ): Promise<void> {
+  // Resolve system timezone for default value
+  const defaultTimezone = await resolveSystemTimezone();
+
   const normalized = bindings
     .map((b) => ({
       targetId: b.targetId,
       isEnabled: b.isEnabled ?? true,
       scheduleCron: b.scheduleCron ?? null,
-      scheduleTimezone: b.scheduleTimezone ?? DEFAULT_TIMEZONE,
+      scheduleTimezone: b.scheduleTimezone ?? defaultTimezone,
       templateOverride: b.templateOverride ?? null,
     }))
     .filter((b) => Number.isFinite(b.targetId) && b.targetId > 0);

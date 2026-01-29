@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { EndpointTab } from "./endpoint/endpoint-tab";
 import { OverviewSection } from "./overview/overview-section";
 import { ProviderTab } from "./provider/provider-tab";
-import { FloatingProbeButton } from "./shared/floating-probe-button";
 
 export type TimeRangeOption = "15min" | "1h" | "6h" | "24h" | "7d";
 
@@ -166,9 +165,6 @@ export function AvailabilityDashboard() {
           <EndpointTab />
         </TabsContent>
       </Tabs>
-
-      {/* Floating Probe Button */}
-      <FloatingProbeButton onProbeComplete={fetchData} />
     </div>
   );
 }

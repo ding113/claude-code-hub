@@ -3,6 +3,7 @@
 import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { WebhookNotifier } from "@/lib/webhook";
 import { buildTestMessage } from "@/lib/webhook/templates/test-messages";
 import {
@@ -80,8 +81,9 @@ export async function testWebhookAction(
 
   try {
     const notifier = new WebhookNotifier(trimmedUrl, { maxRetries: 1 });
-    const testMessage = buildTestMessage(type);
-    return notifier.send(testMessage);
+    const timezone = await resolveSystemTimezone();
+    const testMessage = buildTestMessage(type, timezone);
+    return notifier.send(testMessage, { timezone });
   } catch (error) {
     return {
       success: false,

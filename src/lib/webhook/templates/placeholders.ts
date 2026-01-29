@@ -26,7 +26,7 @@ export const TEMPLATE_PLACEHOLDERS = {
     {
       key: "{{timestamp_local}}",
       label: "本地时间",
-      description: "本地格式化时间（Asia/Shanghai）",
+      description: "本地格式化时间（系统时区）",
     },
     { key: "{{title}}", label: "消息标题", description: "通知标题" },
     { key: "{{level}}", label: "消息级别", description: "info / warning / error" },
@@ -70,14 +70,15 @@ export function buildTemplateVariables(params: {
   message: StructuredMessage;
   notificationType?: WebhookNotificationType;
   data?: unknown;
+  timezone?: string;
 }): Record<string, string> {
-  const { message, notificationType, data } = params;
+  const { message, notificationType, data, timezone } = params;
 
   const values: Record<string, string> = {};
 
   // 通用字段
   values["{{timestamp}}"] = message.timestamp.toISOString();
-  values["{{timestamp_local}}"] = formatLocalTimestamp(message.timestamp);
+  values["{{timestamp_local}}"] = formatLocalTimestamp(message.timestamp, timezone);
   values["{{title}}"] = message.header.title;
   values["{{level}}"] = message.header.level;
   values["{{sections}}"] = renderMessageSections(message);
@@ -129,17 +130,31 @@ function safeJsonStringify(value: unknown): string {
   }
 }
 
-function formatLocalTimestamp(date: Date): string {
-  return date.toLocaleString("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+function formatLocalTimestamp(date: Date, timezone?: string): string {
+  try {
+    return date.toLocaleString("zh-CN", {
+      timeZone: timezone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    // Fallback to UTC if timezone is invalid
+    return date.toLocaleString("zh-CN", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  }
 }
 
 function renderMessageSections(message: StructuredMessage): string {

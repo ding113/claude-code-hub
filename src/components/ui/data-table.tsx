@@ -1,5 +1,6 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import {
@@ -238,7 +239,7 @@ export const TableColumnTypes = {
     title,
     render: (value) => {
       if (!value) return "-";
-      return new Date(value).toLocaleDateString();
+      return formatInTimeZone(new Date(value), "UTC", "yyyy-MM-dd");
     },
     ...options,
   }),

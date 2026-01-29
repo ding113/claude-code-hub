@@ -1,3 +1,5 @@
+import { formatInTimeZone } from "date-fns-tz";
+
 /**
  * Format a date to relative time (e.g., "2 hours ago")
  */
@@ -34,9 +36,13 @@ export function formatRelativeTime(date: Date): string {
 }
 
 /**
- * Format a date to string
+ * Format a date to string.
+ * When a timezone is provided, uses formatInTimeZone for consistent display.
  */
-export function formatDate(date: Date, locale = "zh-CN"): string {
+export function formatDate(date: Date, locale = "zh-CN", timezone?: string): string {
+  if (timezone) {
+    return formatInTimeZone(date, timezone, "yyyy-MM-dd");
+  }
   return date.toLocaleDateString(locale, {
     year: "numeric",
     month: "2-digit",
@@ -45,9 +51,13 @@ export function formatDate(date: Date, locale = "zh-CN"): string {
 }
 
 /**
- * Format a date to datetime string
+ * Format a date to datetime string.
+ * When a timezone is provided, uses formatInTimeZone for consistent display.
  */
-export function formatDateTime(date: Date, locale = "zh-CN"): string {
+export function formatDateTime(date: Date, locale = "zh-CN", timezone?: string): string {
+  if (timezone) {
+    return formatInTimeZone(date, timezone, "yyyy-MM-dd HH:mm:ss");
+  }
   return date.toLocaleString(locale, {
     year: "numeric",
     month: "2-digit",

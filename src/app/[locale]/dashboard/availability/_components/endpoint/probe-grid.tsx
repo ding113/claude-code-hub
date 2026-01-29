@@ -1,7 +1,8 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { CheckCircle2, HelpCircle, XCircle } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpoint } from "@/types/provider";
@@ -47,9 +48,12 @@ function formatLatency(ms: number | null): string {
   return `${(ms / 1000).toFixed(2)}s`;
 }
 
-function formatTime(date: Date | string | null): string {
+function formatTime(date: Date | string | null, timeZone?: string): string {
   if (!date) return "-";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (timeZone) {
+    return formatInTimeZone(d, timeZone, "HH:mm:ss");
+  }
   return d.toLocaleTimeString(undefined, {
     hour: "2-digit",
     minute: "2-digit",
@@ -64,6 +68,7 @@ export function ProbeGrid({
   className,
 }: ProbeGridProps) {
   const t = useTranslations("dashboard.availability.probeGrid");
+  const timeZone = useTimeZone() ?? "UTC";
 
   if (endpoints.length === 0) {
     return (
@@ -126,7 +131,7 @@ export function ProbeGrid({
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/30">
                     <span className="text-xs text-muted-foreground">{t("lastProbe")}</span>
                     <span className="text-xs font-mono text-muted-foreground">
-                      {formatTime(endpoint.lastProbedAt)}
+                      {formatTime(endpoint.lastProbedAt, timeZone)}
                     </span>
                   </div>
 

@@ -1,7 +1,8 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { Activity, CheckCircle2, Play, RefreshCw, XCircle } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getProviderVendors, probeProviderEndpoint } from "@/actions/provider-endpoints";
@@ -44,6 +45,7 @@ const PROVIDER_TYPES: ProviderType[] = [
 export function EndpointProbeHistory() {
   const t = useTranslations("dashboard.availability");
   const tErrors = useTranslations("errors");
+  const timeZone = useTimeZone() ?? "UTC";
 
   const [vendors, setVendors] = useState<ProviderVendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<string>("");
@@ -259,7 +261,7 @@ export function EndpointProbeHistory() {
                 logs.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="font-mono text-xs">
-                      {new Date(log.createdAt).toLocaleString()}
+                      {formatInTimeZone(new Date(log.createdAt), timeZone, "yyyy-MM-dd HH:mm:ss")}
                       <div className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wider">
                         {t(`probeHistory.${log.source === "manual" ? "manual" : "auto"}`)}
                       </div>

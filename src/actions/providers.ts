@@ -1,8 +1,11 @@
 "use server";
 
+import { eq } from "drizzle-orm";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
+import { db } from "@/drizzle/db";
+import { providers as providersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
@@ -44,7 +47,13 @@ import {
   updateProvider,
   updateProviderPrioritiesBatch,
 } from "@/repository/provider";
-import { tryDeleteProviderVendorIfEmpty } from "@/repository/provider-endpoints";
+import {
+  backfillProviderEndpointsFromProviders,
+  computeVendorKey,
+  findProviderVendorById,
+  getOrCreateProviderVendorIdFromUrls,
+  tryDeleteProviderVendorIfEmpty,
+} from "@/repository/provider-endpoints";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   CodexParallelToolCallsPreference,
@@ -1178,34 +1187,45 @@ export async function getProviderLimitUsage(providerId: number): Promise<
     }
 
     // 动态导入避免循环依赖
-    const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
+    const {
+      getResetInfo,
+      getResetInfoWithMode,
+      getTimeRangeForPeriod,
+      getTimeRangeForPeriodWithMode,
+    } = await import("@/lib/rate-limit/time-utils");
+    const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
 
-    // 获取金额消费（优先 Redis，降级数据库）
-    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
-      RateLimitService.getCurrentCost(providerId, "provider", "5h"),
-      RateLimitService.getCurrentCost(
-        providerId,
-        "provider",
+    // 计算各周期的时间范围
+    const [range5h, rangeDaily, rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriodWithMode(
         "daily",
-        provider.dailyResetTime,
-        provider.dailyResetMode ?? "fixed"
+        provider.dailyResetTime ?? undefined,
+        (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling"
       ),
-      RateLimitService.getCurrentCost(providerId, "provider", "weekly"),
-      RateLimitService.getCurrentCost(providerId, "provider", "monthly"),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
+    ]);
+
+    // 获取金额消费（直接查询数据库，确保配额显示与 DB 一致）
+    const [cost5h, costDaily, costWeekly, costMonthly, concurrentSessions] = await Promise.all([
+      sumProviderCostInTimeRange(providerId, range5h.startTime, range5h.endTime),
+      sumProviderCostInTimeRange(providerId, rangeDaily.startTime, rangeDaily.endTime),
+      sumProviderCostInTimeRange(providerId, rangeWeekly.startTime, rangeWeekly.endTime),
+      sumProviderCostInTimeRange(providerId, rangeMonthly.startTime, rangeMonthly.endTime),
       SessionTracker.getProviderSessionCount(providerId),
     ]);
 
     // 获取重置时间信息
-    const reset5h = getResetInfo("5h");
-    const resetDaily = getResetInfoWithMode(
+    const reset5h = await getResetInfo("5h");
+    const resetDaily = await getResetInfoWithMode(
       "daily",
       provider.dailyResetTime,
       provider.dailyResetMode ?? "fixed"
     );
-    const resetWeekly = getResetInfo("weekly");
-    const resetMonthly = getResetInfo("monthly");
+    const resetWeekly = await getResetInfo("weekly");
+    const resetMonthly = await getResetInfo("monthly");
 
     return {
       ok: true,
@@ -1287,69 +1307,75 @@ export async function getProviderLimitUsageBatch(
     }
 
     // 动态导入避免循环依赖
-    const { RateLimitService } = await import("@/lib/rate-limit");
     const { SessionTracker } = await import("@/lib/session-tracker");
-    const { getResetInfo, getResetInfoWithMode } = await import("@/lib/rate-limit/time-utils");
+    const {
+      getResetInfo,
+      getResetInfoWithMode,
+      getTimeRangeForPeriod,
+      getTimeRangeForPeriodWithMode,
+    } = await import("@/lib/rate-limit/time-utils");
+    const { sumProviderCostInTimeRange } = await import("@/repository/statistics");
 
     const providerIds = providers.map((p) => p.id);
 
-    // 构建日限额重置配置
-    const dailyResetConfigs = new Map<
-      number,
-      { resetTime?: string | null; resetMode?: string | null }
-    >();
-    for (const provider of providers) {
-      dailyResetConfigs.set(provider.id, {
-        resetTime: provider.dailyResetTime,
-        resetMode: provider.dailyResetMode,
-      });
-    }
+    // 获取并发 session 计数（仍使用 Redis，这是实时数据）
+    const sessionCountMap = await SessionTracker.getProviderSessionCountBatch(providerIds);
 
-    // 批量获取限额消费和并发 session 计数（2 次 Redis Pipeline 调用）
-    const [costMap, sessionCountMap] = await Promise.all([
-      RateLimitService.getCurrentCostBatch(providerIds, dailyResetConfigs),
-      SessionTracker.getProviderSessionCountBatch(providerIds),
+    // 获取各周期的时间范围（这些范围对所有供应商是相同的，除了 daily 需要根据每个供应商的配置）
+    const [range5h, rangeWeekly, rangeMonthly] = await Promise.all([
+      getTimeRangeForPeriod("5h"),
+      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod("monthly"),
     ]);
 
     // 组装结果
     for (const provider of providers) {
-      const costs = costMap.get(provider.id) || {
-        cost5h: 0,
-        costDaily: 0,
-        costWeekly: 0,
-        costMonthly: 0,
-      };
-      const sessionCount = sessionCountMap.get(provider.id) || 0;
-
-      // 获取重置时间信息
-      const reset5h = getResetInfo("5h");
+      // 获取该供应商的 daily 时间范围（根据其 dailyResetMode 配置）
       const dailyResetMode = (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling";
-      const resetDaily = getResetInfoWithMode(
+      const rangeDaily = await getTimeRangeForPeriodWithMode(
         "daily",
         provider.dailyResetTime ?? undefined,
         dailyResetMode
       );
-      const resetWeekly = getResetInfo("weekly");
-      const resetMonthly = getResetInfo("monthly");
+
+      // 并行查询该供应商的各周期消费（直接查询数据库）
+      const [cost5h, costDaily, costWeekly, costMonthly] = await Promise.all([
+        sumProviderCostInTimeRange(provider.id, range5h.startTime, range5h.endTime),
+        sumProviderCostInTimeRange(provider.id, rangeDaily.startTime, rangeDaily.endTime),
+        sumProviderCostInTimeRange(provider.id, rangeWeekly.startTime, rangeWeekly.endTime),
+        sumProviderCostInTimeRange(provider.id, rangeMonthly.startTime, rangeMonthly.endTime),
+      ]);
+
+      const sessionCount = sessionCountMap.get(provider.id) || 0;
+
+      // 获取重置时间信息
+      const reset5h = await getResetInfo("5h");
+      const resetDaily = await getResetInfoWithMode(
+        "daily",
+        provider.dailyResetTime ?? undefined,
+        dailyResetMode
+      );
+      const resetWeekly = await getResetInfo("weekly");
+      const resetMonthly = await getResetInfo("monthly");
 
       result.set(provider.id, {
         cost5h: {
-          current: costs.cost5h,
+          current: cost5h,
           limit: provider.limit5hUsd ?? null,
           resetInfo: reset5h.type === "rolling" ? `滚动窗口（${reset5h.period}）` : "自然时间窗口",
         },
         costDaily: {
-          current: costs.costDaily,
+          current: costDaily,
           limit: provider.limitDailyUsd ?? null,
           resetAt: resetDaily.type === "rolling" ? undefined : resetDaily.resetAt!,
         },
         costWeekly: {
-          current: costs.costWeekly,
+          current: costWeekly,
           limit: provider.limitWeeklyUsd ?? null,
           resetAt: resetWeekly.resetAt!,
         },
         costMonthly: {
-          current: costs.costMonthly,
+          current: costMonthly,
           limit: provider.limitMonthlyUsd ?? null,
           resetAt: resetMonthly.resetAt!,
         },
@@ -3546,5 +3572,191 @@ export async function getModelSuggestionsByProviderGroup(
   } catch (error) {
     logger.error("获取模型建议列表失败:", error);
     return { ok: false, error: "获取模型建议列表失败" };
+  }
+}
+
+// ============================================================================
+// Recluster Provider Vendors
+// ============================================================================
+
+type ReclusterChange = {
+  providerId: number;
+  providerName: string;
+  oldVendorId: number;
+  oldVendorDomain: string;
+  newVendorDomain: string;
+};
+
+type ReclusterResult = {
+  preview: {
+    providersMoved: number;
+    vendorsCreated: number;
+    vendorsToDelete: number;
+    skippedInvalidUrl: number;
+  };
+  changes: ReclusterChange[];
+  applied: boolean;
+};
+
+/**
+ * Recluster provider vendors based on updated clustering rules.
+ * When websiteUrl is empty, uses host:port as vendor key instead of just hostname.
+ *
+ * @param confirm - false=preview mode (calculate changes only), true=apply mode (execute changes)
+ */
+export async function reclusterProviderVendors(args: {
+  confirm: boolean;
+}): Promise<ActionResult<ReclusterResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "NO_PERMISSION" };
+    }
+
+    const allProviders = await findAllProvidersFresh();
+
+    if (allProviders.length === 0) {
+      return {
+        ok: true,
+        data: {
+          preview: {
+            providersMoved: 0,
+            vendorsCreated: 0,
+            vendorsToDelete: 0,
+            skippedInvalidUrl: 0,
+          },
+          changes: [],
+          applied: args.confirm,
+        },
+      };
+    }
+
+    const changes: ReclusterChange[] = [];
+    const newVendorKeys = new Set<string>();
+    const oldVendorIds = new Set<number>();
+    let skippedInvalidUrl = 0;
+
+    // Batch load all vendor data upfront to avoid N+1 queries
+    const uniqueVendorIds = [
+      ...new Set(
+        allProviders
+          .map((p) => p.providerVendorId)
+          .filter((id): id is number => id !== null && id !== undefined && id > 0)
+      ),
+    ];
+    const vendors = await Promise.all(uniqueVendorIds.map((id) => findProviderVendorById(id)));
+    const vendorMap = new Map(
+      vendors.filter((v): v is NonNullable<typeof v> => v !== null).map((v) => [v.id, v])
+    );
+
+    // Build provider map for quick lookup in transaction
+    const providerMap = new Map(allProviders.map((p) => [p.id, p]));
+
+    // Calculate new vendor key for each provider
+    for (const provider of allProviders) {
+      const newVendorKey = await computeVendorKey({
+        providerUrl: provider.url,
+        websiteUrl: provider.websiteUrl,
+      });
+
+      if (!newVendorKey) {
+        skippedInvalidUrl++;
+        continue;
+      }
+
+      // Get current vendor domain from pre-loaded map
+      const currentVendor = provider.providerVendorId
+        ? vendorMap.get(provider.providerVendorId)
+        : null;
+      const currentDomain = currentVendor?.websiteDomain ?? "";
+
+      // If key changed, record the change
+      if (currentDomain !== newVendorKey) {
+        newVendorKeys.add(newVendorKey);
+        if (provider.providerVendorId) {
+          oldVendorIds.add(provider.providerVendorId);
+        }
+        changes.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          oldVendorId: provider.providerVendorId ?? 0,
+          oldVendorDomain: currentDomain,
+          newVendorDomain: newVendorKey,
+        });
+      }
+    }
+
+    const preview = {
+      providersMoved: changes.length,
+      vendorsCreated: newVendorKeys.size,
+      vendorsToDelete: oldVendorIds.size,
+      skippedInvalidUrl,
+    };
+
+    // Preview mode: return without modifying DB
+    if (!args.confirm) {
+      return {
+        ok: true,
+        data: {
+          preview,
+          changes,
+          applied: false,
+        },
+      };
+    }
+
+    // Apply mode: execute changes in transaction
+    if (changes.length > 0) {
+      await db.transaction(async (tx) => {
+        for (const change of changes) {
+          // Use pre-built map for O(1) lookup instead of O(N) find()
+          const provider = providerMap.get(change.providerId);
+          if (!provider) continue;
+
+          // Get or create new vendor
+          const newVendorId = await getOrCreateProviderVendorIdFromUrls({
+            providerUrl: provider.url,
+            websiteUrl: provider.websiteUrl ?? null,
+          });
+
+          // Update provider's vendorId
+          await tx
+            .update(providersTable)
+            .set({ providerVendorId: newVendorId, updatedAt: new Date() })
+            .where(eq(providersTable.id, change.providerId));
+        }
+      });
+
+      // Backfill provider_endpoints
+      await backfillProviderEndpointsFromProviders();
+
+      // Cleanup empty vendors
+      for (const oldVendorId of oldVendorIds) {
+        await tryDeleteProviderVendorIfEmpty(oldVendorId);
+      }
+
+      // Publish cache invalidation
+      try {
+        await publishProviderCacheInvalidation();
+      } catch (error) {
+        logger.warn("reclusterProviderVendors:cache_invalidation_failed", {
+          changedCount: changes.length,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        preview,
+        changes,
+        applied: true,
+      },
+    };
+  } catch (error) {
+    logger.error("reclusterProviderVendors:error", error);
+    const message = error instanceof Error ? error.message : "Recluster failed";
+    return { ok: false, error: message };
   }
 }

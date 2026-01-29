@@ -54,6 +54,11 @@
     "rate_limited": "レート制限",
     "circuit_open": "サーキットオープン",
     "disabled": "無効",
+    "excluded": "除外済み",
+    "format_type_mismatch": "フォーマット不一致",
+    "type_mismatch": "タイプ不一致",
+    "model_not_allowed": "モデル不許可",
+    "context_1m_disabled": "1Mコンテキスト無効",
     "model_not_supported": "モデル非対応",
     "group_mismatch": "グループ不一致",
     "health_check_failed": "ヘルスチェック失敗"

@@ -277,6 +277,7 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.allowGlobalUsageView).toBe(true);
       expect(result.currencyDisplay).toBe("USD");
       expect(result.billingModelSource).toBe("original");
+      expect(result.timezone).toBeNull();
       expect(result.enableAutoCleanup).toBe(false);
       expect(result.cleanupRetentionDays).toBe(30);
       expect(result.cleanupSchedule).toBe("0 2 * * *");

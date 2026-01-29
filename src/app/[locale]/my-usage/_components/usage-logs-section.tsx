@@ -30,6 +30,7 @@ interface UsageLogsSectionProps {
   loading?: boolean;
   autoRefreshSeconds?: number;
   defaultOpen?: boolean;
+  serverTimeZone?: string;
 }
 
 interface Filters {
@@ -48,6 +49,7 @@ export function UsageLogsSection({
   loading = false,
   autoRefreshSeconds,
   defaultOpen = false,
+  serverTimeZone,
 }: UsageLogsSectionProps) {
   const t = useTranslations("myUsage.logs");
   const tCollapsible = useTranslations("myUsage.logsCollapsible");
@@ -375,6 +377,7 @@ export function UsageLogsSection({
                   startDate={draftFilters.startDate}
                   endDate={draftFilters.endDate}
                   onDateRangeChange={handleDateRangeChange}
+                  serverTimeZone={serverTimeZone}
                 />
               </div>
               <div className="space-y-1.5 lg:col-span-4">

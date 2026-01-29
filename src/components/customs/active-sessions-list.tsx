@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Activity, Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { getActiveSessions } from "@/actions/active-sessions";
+import { useRouter } from "@/i18n/routing";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ActiveSessionInfo } from "@/types/session";
 import { SessionListItem } from "./session-list-item";
@@ -28,6 +28,8 @@ interface ActiveSessionsListProps {
   showHeader?: boolean;
   /** 容器最大高度 */
   maxHeight?: string;
+  /** 是否显示 Token/成本（默认显示） */
+  showTokensCost?: boolean;
   /** 自定义类名 */
   className?: string;
 }
@@ -43,6 +45,7 @@ export function ActiveSessionsList({
   maxItems,
   showHeader = true,
   maxHeight = "200px",
+  showTokensCost = true,
   className = "",
 }: ActiveSessionsListProps) {
   const router = useRouter();
@@ -103,6 +106,7 @@ export function ActiveSessionsList({
                 key={session.sessionId}
                 session={session}
                 currencyCode={currencyCode}
+                showTokensCost={showTokensCost}
               />
             ))}
           </div>

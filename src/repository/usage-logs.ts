@@ -285,7 +285,13 @@ export async function getTotalUsageForKey(keyString: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
     .from(messageRequest)
-    .where(and(eq(messageRequest.key, keyString), isNull(messageRequest.deletedAt)));
+    .where(
+      and(
+        eq(messageRequest.key, keyString),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
+      )
+    );
 
   return Number(row?.total ?? 0);
 }

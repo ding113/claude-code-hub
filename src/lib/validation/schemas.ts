@@ -6,6 +6,7 @@ import {
 } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { CURRENCY_CONFIG } from "@/lib/utils/currency";
+import { isValidIANATimezone } from "@/lib/utils/timezone";
 
 const CACHE_TTL_PREFERENCE = z.enum(["inherit", "5m", "1h"]);
 const CONTEXT_1M_PREFERENCE = z.enum(["inherit", "force_enable", "disabled"]);
@@ -728,6 +729,15 @@ export const UpdateSystemSettingsSchema = z.object({
   billingModelSource: z
     .enum(["original", "redirected"], { message: "不支持的计费模型来源" })
     .optional(),
+  // 系统时区配置（可选）
+  // 必须是有效的 IANA 时区标识符（如 "Asia/Shanghai", "America/New_York"）
+  timezone: z
+    .string()
+    .refine((val) => isValidIANATimezone(val), {
+      message: "无效的时区标识符，请使用 IANA 时区格式（如 Asia/Shanghai）",
+    })
+    .nullable()
+    .optional(),
   // 日志清理配置（可选）
   enableAutoCleanup: z.boolean().optional(),
   cleanupRetentionDays: z.coerce
@@ -772,6 +782,35 @@ export const UpdateSystemSettingsSchema = z.object({
     })
     .partial()
     .optional(),
+
+  // Quota lease settings
+  quotaDbRefreshIntervalSeconds: z.coerce
+    .number()
+    .int("DB refresh interval must be an integer")
+    .min(1, "DB refresh interval cannot be less than 1 second")
+    .max(300, "DB refresh interval cannot exceed 300 seconds")
+    .optional(),
+  quotaLeasePercent5h: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeasePercentDaily: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeasePercentWeekly: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeasePercentMonthly: z.coerce
+    .number()
+    .min(0, "Lease percent cannot be negative")
+    .max(1, "Lease percent cannot exceed 1")
+    .optional(),
+  quotaLeaseCapUsd: z.coerce.number().min(0, "Lease cap cannot be negative").nullable().optional(),
 });
 
 // 导出类型推断

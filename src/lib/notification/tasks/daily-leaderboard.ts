@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { DailyLeaderboardData } from "@/lib/webhook";
 import { findLast24HoursLeaderboard } from "@/repository/leaderboard";
 
@@ -29,11 +30,12 @@ export async function generateDailyLeaderboard(topN: number): Promise<DailyLeade
     const totalRequests = leaderboard.reduce((sum, entry) => sum + entry.totalRequests, 0);
     const totalCost = leaderboard.reduce((sum, entry) => sum + entry.totalCost, 0);
 
-    // 格式化日期 (YYYY-MM-DD)
+    // 格式化日期 (YYYY-MM-DD) 使用系统时区
     const today = new Date();
+    const timezone = await resolveSystemTimezone();
     const dateStr = today
       .toLocaleDateString("zh-CN", {
-        timeZone: "Asia/Shanghai",
+        timeZone: timezone,
         year: "numeric",
         month: "2-digit",
         day: "2-digit",

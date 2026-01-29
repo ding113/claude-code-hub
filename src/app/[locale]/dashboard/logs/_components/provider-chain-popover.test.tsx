@@ -205,6 +205,56 @@ describe("provider-chain-popover probability formatting", () => {
   });
 });
 
+describe("provider-chain-popover group badges", () => {
+  test("renders multiple deduped group badges with tooltip content", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "initial_selection",
+            decisionContext: {
+              totalProviders: 1,
+              enabledProviders: 1,
+              targetType: "claude",
+              groupFilterApplied: false,
+              beforeHealthCheck: 1,
+              afterHealthCheck: 1,
+              priorityLevels: [1],
+              selectedPriority: 1,
+              candidatesAtPriority: [{ id: 1, name: "p1", weight: 100, costMultiplier: 1 }],
+            },
+          },
+          {
+            id: 2,
+            name: "p1",
+            reason: "retry_failed",
+            statusCode: 500,
+          },
+          {
+            id: 3,
+            name: "p1",
+            reason: "request_success",
+            statusCode: 200,
+            groupTag: "alpha, beta, alpha",
+          },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    const document = parseHtml(html);
+    const badgeTexts = Array.from(document.querySelectorAll("[data-slot='badge']")).map(
+      (node) => node.textContent
+    );
+    expect(badgeTexts.filter((text) => text === "alpha").length).toBe(1);
+    expect(badgeTexts.filter((text) => text === "beta").length).toBe(1);
+    expect(document.body.textContent).toContain("alpha");
+    expect(document.body.textContent).toContain("beta");
+  });
+});
+
 describe("provider-chain-popover layout", () => {
   test("requestCount<=1 branch keeps truncation container shrinkable", () => {
     const html = renderWithIntl(

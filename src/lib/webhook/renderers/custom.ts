@@ -18,6 +18,7 @@ export class CustomRenderer implements Renderer {
       message,
       notificationType: options?.notificationType,
       data: options?.data,
+      timezone: options?.timezone,
     });
 
     const bodyObject = this.interpolate(template, variables);

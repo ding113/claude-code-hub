@@ -329,7 +329,8 @@
       }
     },
     "providerChain": {
-      "decisionChain": "プロバイダー決定チェーン"
+      "decisionChain": "プロバイダー決定チェーン",
+      "clickItemForDetails": "ステップをクリックして詳細を表示"
     },
     "modelRedirect": {
       "redirected": "リダイレクト済み",

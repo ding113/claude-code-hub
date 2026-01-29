@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   dateStringWithClockToTimestamp,
   formatClockFromTimestamp,
+  getQuickDateRange,
   inclusiveEndTimestampFromExclusive,
   parseClockString,
 } from "@/app/[locale]/dashboard/logs/_utils/time-range";
@@ -42,5 +43,19 @@ describe("dashboard logs time range utils", () => {
   test("formatClockFromTimestamp uses HH:MM:SS", () => {
     const ts = new Date(2026, 0, 1, 1, 2, 3, 0).getTime();
     expect(formatClockFromTimestamp(ts)).toBe("01:02:03");
+  });
+
+  test("getQuickDateRange uses server timezone for today/yesterday", () => {
+    const now = new Date("2024-01-02T02:00:00Z");
+    const tz = "America/Los_Angeles";
+
+    expect(getQuickDateRange("today", tz, now)).toEqual({
+      startDate: "2024-01-01",
+      endDate: "2024-01-01",
+    });
+    expect(getQuickDateRange("yesterday", tz, now)).toEqual({
+      startDate: "2023-12-31",
+      endDate: "2023-12-31",
+    });
   });
 });

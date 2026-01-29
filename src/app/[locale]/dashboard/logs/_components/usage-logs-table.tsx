@@ -63,6 +63,8 @@ export function UsageLogsTable({
   const [dialogState, setDialogState] = useState<{
     logId: number | null;
     scrollToRedirect: boolean;
+    targetTab?: "summary" | "logic-trace" | "performance";
+    expandedChainIndex?: number;
   }>({ logId: null, scrollToRedirect: false });
 
   const handleCopySessionIdClick = useCallback(
@@ -197,6 +199,14 @@ export function UsageLogsTable({
                                   tChain("circuit.unknown")
                                 }
                                 hasCostBadge={hasCostBadge}
+                                onChainItemClick={(chainIndex) => {
+                                  setDialogState({
+                                    logId: log.id,
+                                    scrollToRedirect: false,
+                                    targetTab: "logic-trace",
+                                    expandedChainIndex: chainIndex,
+                                  });
+                                }}
                               />
                             </div>
                             {/* 摘要文字（第二行显示，左对齐） */}
@@ -287,16 +297,16 @@ export function UsageLogsTable({
                       <TooltipProvider>
                         <Tooltip delayDuration={250}>
                           <TooltipTrigger asChild>
-                            <div className="flex items-center justify-end gap-1 cursor-help">
-                              <span>
-                                {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
-                                {formatTokenAmount(log.cacheReadInputTokens)}
-                              </span>
+                            <div className="flex items-center gap-2 w-full cursor-help">
                               {log.cacheTtlApplied ? (
                                 <Badge variant="outline" className="text-[10px] leading-tight px-1">
                                   {log.cacheTtlApplied}
                                 </Badge>
                               ) : null}
+                              <span className="ml-auto">
+                                {formatTokenAmount(log.cacheCreationInputTokens)} /{" "}
+                                {formatTokenAmount(log.cacheReadInputTokens)}
+                              </span>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent align="end" className="text-xs space-y-1">
@@ -510,6 +520,12 @@ export function UsageLogsTable({
                         }}
                         scrollToRedirect={
                           dialogState.logId === log.id && dialogState.scrollToRedirect
+                        }
+                        initialTab={
+                          dialogState.logId === log.id ? dialogState.targetTab : undefined
+                        }
+                        initialExpandedChainIndex={
+                          dialogState.logId === log.id ? dialogState.expandedChainIndex : undefined
                         }
                       />
                     </TableCell>

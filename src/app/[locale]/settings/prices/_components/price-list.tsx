@@ -1,6 +1,7 @@
 "use client";
 
 import { Claude, Gemini, OpenAI } from "@lobehub/icons";
+import { formatInTimeZone } from "date-fns-tz";
 import {
   Braces,
   ChevronLeft,
@@ -19,7 +20,7 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +71,7 @@ export function PriceList({
   const t = useTranslations("settings.prices");
   const tCommon = useTranslations("common");
   const locale = useLocale();
+  const timeZone = useTimeZone() ?? "UTC";
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [sourceFilter, setSourceFilter] = useState<ModelPriceSource | "">(initialSourceFilter);
   const [litellmProviderFilter, setLitellmProviderFilter] = useState(initialLitellmProviderFilter);
@@ -612,7 +614,11 @@ export function PriceList({
                     )}
                   </td>
                   <td className="py-3 px-4 text-sm text-muted-foreground">
-                    {new Date(price.updatedAt ?? price.createdAt).toLocaleDateString(locale)}
+                    {formatInTimeZone(
+                      new Date(price.updatedAt ?? price.createdAt),
+                      timeZone,
+                      "yyyy-MM-dd"
+                    )}
                   </td>
                   <td className="py-3 px-4">
                     <DropdownMenu>
@@ -771,9 +777,13 @@ export function PriceList({
           {t("stats.lastUpdated", {
             time:
               prices.length > 0
-                ? new Date(
-                    Math.max(...prices.map((p) => new Date(p.updatedAt ?? p.createdAt).getTime()))
-                  ).toLocaleDateString(locale)
+                ? formatInTimeZone(
+                    new Date(
+                      Math.max(...prices.map((p) => new Date(p.updatedAt ?? p.createdAt).getTime()))
+                    ),
+                    timeZone,
+                    "yyyy-MM-dd"
+                  )
                 : "-",
           })}
         </div>

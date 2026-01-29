@@ -28,11 +28,13 @@ import { LogsDateRangePicker } from "../../dashboard/logs/_components/logs-date-
 interface StatisticsSummaryCardProps {
   className?: string;
   autoRefreshSeconds?: number;
+  serverTimeZone?: string;
 }
 
 export function StatisticsSummaryCard({
   className,
   autoRefreshSeconds = 30,
+  serverTimeZone,
 }: StatisticsSummaryCardProps) {
   const t = useTranslations("myUsage.stats");
   const [stats, setStats] = useState<MyStatsSummary | null>(null);
@@ -128,6 +130,7 @@ export function StatisticsSummaryCard({
             startDate={dateRange.startDate}
             endDate={dateRange.endDate}
             onDateRangeChange={handleDateRangeChange}
+            serverTimeZone={serverTimeZone}
           />
           <Button
             size="sm"

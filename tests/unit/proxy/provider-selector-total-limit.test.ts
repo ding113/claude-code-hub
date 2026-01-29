@@ -25,7 +25,7 @@ vi.mock("@/repository/provider", () => providerRepositoryMocks);
 
 const rateLimitMocks = vi.hoisted(() => ({
   RateLimitService: {
-    checkCostLimits: vi.fn(async () => ({ allowed: true })),
+    checkCostLimitsWithLease: vi.fn(async () => ({ allowed: true })),
     checkTotalCostLimit: vi.fn(async () => ({ allowed: true, current: 0 })),
   },
 }));
@@ -145,14 +145,18 @@ describe("ProxyProviderResolver.findReusable - provider total limit", () => {
     const reused = await (ProxyProviderResolver as any).findReusable(session);
     expect(reused).toBeNull();
 
-    expect(rateLimitMocks.RateLimitService.checkCostLimits).toHaveBeenCalledWith(1, "provider", {
-      limit_5h_usd: null,
-      limit_daily_usd: null,
-      daily_reset_mode: "fixed",
-      daily_reset_time: "00:00",
-      limit_weekly_usd: null,
-      limit_monthly_usd: null,
-    });
+    expect(rateLimitMocks.RateLimitService.checkCostLimitsWithLease).toHaveBeenCalledWith(
+      1,
+      "provider",
+      {
+        limit_5h_usd: null,
+        limit_daily_usd: null,
+        daily_reset_mode: "fixed",
+        daily_reset_time: "00:00",
+        limit_weekly_usd: null,
+        limit_monthly_usd: null,
+      }
+    );
 
     expect(rateLimitMocks.RateLimitService.checkTotalCostLimit).toHaveBeenCalledWith(
       1,

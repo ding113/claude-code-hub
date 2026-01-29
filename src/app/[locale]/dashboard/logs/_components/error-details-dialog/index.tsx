@@ -44,6 +44,10 @@ interface ErrorDetailsDialogProps {
   externalOpen?: boolean;
   onExternalOpenChange?: (open: boolean) => void;
   scrollToRedirect?: boolean;
+  /** Initial tab to display when opening */
+  initialTab?: TabValue;
+  /** Index into providerChain to expand by default in LogicTraceTab */
+  initialExpandedChainIndex?: number;
 }
 
 type TabValue = "summary" | "logic-trace" | "performance";
@@ -78,6 +82,8 @@ export function ErrorDetailsDialog({
   externalOpen,
   onExternalOpenChange,
   scrollToRedirect,
+  initialTab,
+  initialExpandedChainIndex,
 }: ErrorDetailsDialogProps) {
   const t = useTranslations("dashboard.logs.details");
   const [internalOpen, setInternalOpen] = useState(false);
@@ -142,6 +148,13 @@ export function ErrorDetailsDialog({
       return () => clearTimeout(timer);
     }
   }, [open, scrollToRedirect]);
+
+  // Handle initialTab - switch to specified tab when opening
+  useEffect(() => {
+    if (open && initialTab && !scrollToRedirect) {
+      setActiveTab(initialTab);
+    }
+  }, [open, initialTab, scrollToRedirect]);
 
   // Reset tab when dialog closes
   useEffect(() => {
@@ -277,7 +290,10 @@ export function ErrorDetailsDialog({
             </TabsContent>
 
             <TabsContent value="logic-trace" className="mt-4">
-              <LogicTraceTab {...sharedProps} />
+              <LogicTraceTab
+                {...sharedProps}
+                initialExpandedChainIndex={initialExpandedChainIndex}
+              />
             </TabsContent>
 
             <TabsContent value="performance" className="mt-4">

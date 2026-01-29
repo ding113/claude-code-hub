@@ -81,6 +81,8 @@ import {
   sumUserCostInTimeRange,
   sumUserTotalCost,
 } from "@/repository/statistics";
+import type { LeaseWindowType } from "./lease";
+import { type DecrementLeaseBudgetResult, LeaseService } from "./lease-service";
 import {
   type DailyResetMode,
   getTimeRangeForPeriodWithMode,
@@ -395,7 +397,7 @@ export class RateLimitService {
       if (!limit.amount || limit.amount <= 0) continue;
 
       // 计算时间范围（使用支持模式的时间工具函数）
-      const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+      const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         limit.period,
         limit.resetTime,
         limit.resetMode
@@ -468,7 +470,7 @@ export class RateLimitService {
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const { normalized, suffix } = RateLimitService.resolveDailyReset(limit.resetTime);
-            const ttl = getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
+            const ttl = await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
             const periodKey = limit.period === "daily" ? `${limit.period}_${suffix}` : limit.period;
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${periodKey}`,
@@ -627,14 +629,22 @@ export class RateLimitService {
       const window24h = 24 * 60 * 60 * 1000; // 24 hours in ms
 
       // 计算动态 TTL（daily/周/月）
-      const ttlDailyKey = getTTLForPeriodWithMode("daily", keyDailyReset.normalized, keyDailyMode);
+      const ttlDailyKey = await getTTLForPeriodWithMode(
+        "daily",
+        keyDailyReset.normalized,
+        keyDailyMode
+      );
       const ttlDailyProvider =
         keyDailyReset.normalized === providerDailyReset.normalized &&
         keyDailyMode === providerDailyMode
           ? ttlDailyKey
-          : getTTLForPeriodWithMode("daily", providerDailyReset.normalized, providerDailyMode);
-      const ttlWeekly = getTTLForPeriod("weekly");
-      const ttlMonthly = getTTLForPeriod("monthly");
+          : await getTTLForPeriodWithMode(
+              "daily",
+              providerDailyReset.normalized,
+              providerDailyMode
+            );
+      const ttlWeekly = await getTTLForPeriod("weekly");
+      const ttlMonthly = await getTTLForPeriod("monthly");
 
       // 1. 5h 滚动窗口：使用 Lua 脚本（ZSET）
       // Key 的 5h 滚动窗口
@@ -825,7 +835,7 @@ export class RateLimitService {
         sumProviderCostInTimeRange,
       } = await import("@/repository/statistics");
 
-      const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+      const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         period,
         dailyResetInfo.normalized,
         resetMode
@@ -889,7 +899,7 @@ export class RateLimitService {
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
-            const ttl = getTTLForPeriodWithMode(period, dailyResetInfo.normalized, resetMode);
+            const ttl = await getTTLForPeriodWithMode(period, dailyResetInfo.normalized, resetMode);
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${redisKey}`,
               current.toString(),
@@ -1060,7 +1070,7 @@ export class RateLimitService {
           } else {
             // Cache Miss: 从数据库恢复
             logger.info(`[RateLimit] Cache miss for ${key}, querying database`);
-            const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+            const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
               "daily",
               normalizedResetTime,
               mode
@@ -1068,14 +1078,14 @@ export class RateLimitService {
             currentCost = await sumUserCostInTimeRange(userId, startTime, endTime);
 
             // Cache Warming: 写回 Redis
-            const ttl = getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
+            const ttl = await getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
             await RateLimitService.redis.set(key, currentCost.toString(), "EX", ttl);
           }
         }
       } else {
         // Slow Path: 数据库查询（Redis 不可用）
         logger.warn("[RateLimit] Redis unavailable, querying database for user daily cost");
-        const { startTime, endTime } = getTimeRangeForPeriodWithMode(
+        const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
           "daily",
           normalizedResetTime,
           mode
@@ -1139,7 +1149,7 @@ export class RateLimitService {
         // Fixed 模式：使用 STRING 类型
         const suffix = normalizedResetTime.replace(":", "");
         const key = `user:${userId}:cost_daily_${suffix}`;
-        const ttl = getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
+        const ttl = await getTTLForPeriodWithMode("daily", normalizedResetTime, "fixed");
 
         await RateLimitService.redis.pipeline().incrbyfloat(key, cost).expire(key, ttl).exec();
 
@@ -1284,5 +1294,142 @@ export class RateLimitService {
       logger.error("[RateLimit] Batch cost query failed:", error);
       return result;
     }
+  }
+
+  /**
+   * Check cost limits using lease-based mechanism
+   *
+   * This method uses the lease service to check if there's enough budget
+   * in the lease slice. If the lease is expired or missing, it will be
+   * refreshed from the database.
+   *
+   * @param entityId - The entity ID (key, user, or provider)
+   * @param entityType - The entity type
+   * @param limits - The cost limits to check
+   * @returns Whether the request is allowed and any failure reason
+   */
+  static async checkCostLimitsWithLease(
+    entityId: number,
+    entityType: "key" | "user" | "provider",
+    limits: {
+      limit_5h_usd: number | null;
+      limit_daily_usd: number | null;
+      daily_reset_time?: string;
+      daily_reset_mode?: DailyResetMode;
+      limit_weekly_usd: number | null;
+      limit_monthly_usd: number | null;
+    }
+  ): Promise<{ allowed: boolean; reason?: string; failOpen?: boolean }> {
+    const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
+    const dailyResetMode = limits.daily_reset_mode ?? "fixed";
+
+    // Define windows to check with their limits
+    const windowChecks: Array<{
+      window: LeaseWindowType;
+      limit: number | null;
+      name: string;
+      resetTime: string;
+      resetMode: DailyResetMode;
+    }> = [
+      {
+        window: "5h",
+        limit: limits.limit_5h_usd,
+        name: "5h",
+        resetTime: "00:00",
+        resetMode: "rolling" as DailyResetMode,
+      },
+      {
+        window: "daily",
+        limit: limits.limit_daily_usd,
+        name: "daily",
+        resetTime: normalizedDailyReset,
+        resetMode: dailyResetMode,
+      },
+      {
+        window: "weekly",
+        limit: limits.limit_weekly_usd,
+        name: "weekly",
+        resetTime: "00:00",
+        resetMode: "fixed" as DailyResetMode,
+      },
+      {
+        window: "monthly",
+        limit: limits.limit_monthly_usd,
+        name: "monthly",
+        resetTime: "00:00",
+        resetMode: "fixed" as DailyResetMode,
+      },
+    ];
+
+    try {
+      for (const check of windowChecks) {
+        if (!check.limit || check.limit <= 0) continue;
+
+        // Get or refresh lease from cache/DB
+        const lease = await LeaseService.getCostLease({
+          entityType,
+          entityId,
+          window: check.window,
+          limitAmount: check.limit,
+          resetTime: check.resetTime,
+          resetMode: check.resetMode,
+        });
+
+        // Fail-open if lease retrieval failed
+        if (!lease) {
+          logger.warn("[RateLimit] Lease retrieval failed, fail-open", {
+            entityType,
+            entityId,
+            window: check.window,
+          });
+          continue; // Fail-open: allow this window check
+        }
+
+        // Check if remaining budget is sufficient (> 0)
+        if (lease.remainingBudget <= 0) {
+          const typeName =
+            entityType === "key" ? "Key" : entityType === "provider" ? "Provider" : "User";
+          return {
+            allowed: false,
+            reason: `${typeName} ${check.name} cost limit reached (usage: ${lease.currentUsage.toFixed(4)}/${check.limit.toFixed(4)})`,
+          };
+        }
+      }
+
+      return { allowed: true };
+    } catch (error) {
+      logger.error("[RateLimit] checkCostLimitsWithLease failed, fail-open", {
+        entityType,
+        entityId,
+        error,
+      });
+      return { allowed: true, failOpen: true };
+    }
+  }
+
+  /**
+   * Decrement lease budget after a request completes
+   *
+   * This should be called after the request is processed to deduct
+   * the actual cost from the lease budget.
+   *
+   * @param entityId - The entity ID
+   * @param entityType - The entity type
+   * @param window - The time window
+   * @param cost - The cost to deduct
+   * @returns The decrement result
+   */
+  static async decrementLeaseBudget(
+    entityId: number,
+    entityType: "key" | "user" | "provider",
+    window: LeaseWindowType,
+    cost: number
+  ): Promise<DecrementLeaseBudgetResult> {
+    return LeaseService.decrementLeaseBudget({
+      entityType,
+      entityId,
+      window,
+      cost,
+    });
   }
 }

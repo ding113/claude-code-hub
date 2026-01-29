@@ -1,7 +1,8 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
+import { formatInTimeZone } from "date-fns-tz";
 import { CheckCircle, Copy, Eye, EyeOff, ListPlus } from "lucide-react";
-import { useLocale, useTranslations } from "next-intl";
+import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { getProxyStatus } from "@/actions/proxy-status";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
@@ -37,7 +38,10 @@ async function fetchProxyStatus(): Promise<ProxyStatusResponse> {
   throw new Error(result.error || "Failed to fetch proxy status");
 }
 
-function createFormatRelativeTime(t: (key: string, params?: Record<string, number>) => string) {
+function createFormatRelativeTime(
+  t: (key: string, params?: Record<string, number>) => string,
+  timeZone: string
+) {
   return (timestamp: number): string => {
     const diff = Date.now() - timestamp;
     if (diff <= 0) {
@@ -67,7 +71,7 @@ function createFormatRelativeTime(t: (key: string, params?: Record<string, numbe
       return t("proxyStatus.timeAgo.daysAgo", { count: days });
     }
 
-    return new Date(timestamp).toLocaleDateString();
+    return formatInTimeZone(new Date(timestamp), timeZone, "yyyy-MM-dd");
   };
 }
 
@@ -99,6 +103,7 @@ export function KeyListHeader({
   const t = useTranslations("dashboard.keyListHeader");
   const tUsers = useTranslations("users");
   const locale = useLocale();
+  const timeZone = useTimeZone() ?? "UTC";
 
   // 检测 clipboard 是否可用
   useEffect(() => {
@@ -108,7 +113,7 @@ export function KeyListHeader({
   const totalTodayUsage =
     activeUser?.keys.reduce((sum, key) => sum + (key.todayUsage ?? 0), 0) ?? 0;
 
-  const formatRelativeTime = useMemo(() => createFormatRelativeTime(t), [t]);
+  const formatRelativeTime = useMemo(() => createFormatRelativeTime(t, timeZone), [t, timeZone]);
 
   // 获取用户状态和过期信息
   const userStatusInfo = useMemo(() => {

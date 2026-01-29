@@ -1,0 +1,16 @@
+{
+  "button": "Recluster",
+  "dialogTitle": "Recluster Providers",
+  "dialogDescription": "Reorganize providers based on updated clustering rules. For providers without a website URL, host:port will be used as the clustering key.",
+  "providersMoved": "Providers Moved",
+  "vendorsCreated": "Vendors Created",
+  "vendorsToDelete": "Vendors to Delete",
+  "skipped": "Skipped (Invalid URL)",
+  "providerHeader": "Provider",
+  "vendorChangeHeader": "Vendor Change",
+  "noChanges": "No changes needed (already clustered correctly)",
+  "moreChanges": "{count} more changes...",
+  "confirm": "Apply Changes",
+  "success": "Reclustered {count} providers",
+  "error": "Recluster failed"
+}

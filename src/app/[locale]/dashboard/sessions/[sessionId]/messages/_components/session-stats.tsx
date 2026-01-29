@@ -1,5 +1,6 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import {
   Calendar,
   Clock,
@@ -11,7 +12,7 @@ import {
   Server,
   Zap,
 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ interface SessionStatsProps {
 
 export function SessionStats({ stats, currencyCode = "USD", className }: SessionStatsProps) {
   const t = useTranslations("dashboard.sessions.details");
+  const timeZone = useTimeZone() ?? "UTC";
 
   const totalTokens =
     stats.totalInputTokens +
@@ -165,8 +167,8 @@ export function SessionStats({ stats, currencyCode = "USD", className }: Session
         </h4>
 
         <div className="space-y-3">
-          <TimeRow label={t("firstRequest")} date={stats.firstRequestAt} />
-          <TimeRow label={t("lastRequest")} date={stats.lastRequestAt} />
+          <TimeRow label={t("firstRequest")} date={stats.firstRequestAt} timeZone={timeZone} />
+          <TimeRow label={t("lastRequest")} date={stats.lastRequestAt} timeZone={timeZone} />
         </div>
       </div>
     </div>
@@ -217,15 +219,23 @@ function TokenRow({
   );
 }
 
-function TimeRow({ label, date }: { label: string; date: Date | null }) {
+function TimeRow({
+  label,
+  date,
+  timeZone,
+}: {
+  label: string;
+  date: Date | null;
+  timeZone: string;
+}) {
   if (!date) return null;
   const d = date instanceof Date ? date : new Date(date);
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-[10px] text-muted-foreground uppercase">{label}</span>
       <div className="flex items-center justify-between text-xs font-mono">
-        <span>{d.toLocaleDateString()}</span>
-        <span className="text-muted-foreground">{d.toLocaleTimeString()}</span>
+        <span>{formatInTimeZone(d, timeZone, "yyyy-MM-dd")}</span>
+        <span className="text-muted-foreground">{formatInTimeZone(d, timeZone, "HH:mm:ss")}</span>
       </div>
     </div>
   );

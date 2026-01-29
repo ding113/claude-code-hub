@@ -54,6 +54,76 @@ function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   return null;
 }
 
+/**
+ * Normalize URL to host:port format for vendor key when websiteUrl is empty.
+ * - IPv6 addresses are formatted as [ipv6]:port
+ * - Default ports: http=80, https=443
+ * - URLs without scheme are assumed to be https
+ */
+function normalizeHostWithPort(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  // Add https:// if no scheme present
+  let urlString = trimmed;
+  if (!/^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)) {
+    urlString = `https://${trimmed}`;
+  }
+
+  try {
+    const parsed = new URL(urlString);
+    const hostname = parsed.hostname?.toLowerCase();
+    if (!hostname) return null;
+
+    // Strip www. prefix
+    const normalizedHostname = hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+
+    // Determine port
+    let port: string;
+    if (parsed.port) {
+      port = parsed.port;
+    } else {
+      // Use protocol default port
+      port = parsed.protocol === "http:" ? "80" : "443";
+    }
+
+    // IPv6 addresses already have brackets from URL parser (e.g., "[::1]")
+    // Just append the port directly
+    return `${normalizedHostname}:${port}`;
+  } catch (error) {
+    logger.debug("[ProviderVendor] Failed to parse URL for host:port", {
+      urlLength: rawUrl.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * Compute vendor clustering key based on URLs.
+ *
+ * Rules:
+ * - If websiteUrl is non-empty: key = normalized hostname (strip www, lowercase), ignore port
+ * - If websiteUrl is empty: key = host:port
+ *   - IPv6 format: [ipv6]:port
+ *   - Missing port: use protocol default (http=80, https=443)
+ *   - No scheme: assume https
+ */
+export async function computeVendorKey(input: {
+  providerUrl: string;
+  websiteUrl?: string | null;
+}): Promise<string | null> {
+  const { providerUrl, websiteUrl } = input;
+
+  // Case 1: websiteUrl is non-empty - use hostname only (existing behavior)
+  if (websiteUrl?.trim()) {
+    return normalizeWebsiteDomainFromUrl(websiteUrl);
+  }
+
+  // Case 2: websiteUrl is empty - use host:port as key
+  return normalizeHostWithPort(providerUrl);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toProviderVendor(row: any): ProviderVendor {
   return {
@@ -106,7 +176,7 @@ function toProviderEndpointProbeLog(row: any): ProviderEndpointProbeLog {
 
 export type ProviderEndpointProbeTarget = Pick<
   ProviderEndpoint,
-  "id" | "url" | "lastProbedAt" | "lastProbeOk"
+  "id" | "url" | "vendorId" | "lastProbedAt" | "lastProbeOk" | "lastProbeErrorType"
 >;
 
 export async function findEnabledProviderEndpointsForProbing(): Promise<
@@ -116,8 +186,10 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
     .select({
       id: providerEndpoints.id,
       url: providerEndpoints.url,
+      vendorId: providerEndpoints.vendorId,
       lastProbedAt: providerEndpoints.lastProbedAt,
       lastProbeOk: providerEndpoints.lastProbeOk,
+      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
     })
     .from(providerEndpoints)
     .where(and(eq(providerEndpoints.isEnabled, true), isNull(providerEndpoints.deletedAt)))
@@ -126,8 +198,10 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
   return rows.map((row) => ({
     id: row.id,
     url: row.url,
+    vendorId: row.vendorId,
     lastProbedAt: toNullableDate(row.lastProbedAt),
     lastProbeOk: row.lastProbeOk ?? null,
+    lastProbeErrorType: row.lastProbeErrorType ?? null,
   }));
 }
 
@@ -184,8 +258,11 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
   faviconUrl?: string | null;
   displayName?: string | null;
 }): Promise<number> {
-  const domainSource = input.websiteUrl?.trim() ? input.websiteUrl : input.providerUrl;
-  const websiteDomain = normalizeWebsiteDomainFromUrl(domainSource);
+  // Use new computeVendorKey for consistent vendor key calculation
+  const websiteDomain = await computeVendorKey({
+    providerUrl: input.providerUrl,
+    websiteUrl: input.websiteUrl,
+  });
   if (!websiteDomain) {
     throw new Error("Failed to resolve provider vendor domain");
   }
@@ -231,9 +308,25 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
  * 从域名派生显示名称（直接使用域名的中间部分）
  * 例如: anthropic.com -> Anthropic, api.openai.com -> OpenAI
  */
-function deriveDisplayNameFromDomain(domain: string): string {
-  const parts = domain.split(".");
-  const name = parts[0] === "api" && parts[1] ? parts[1] : parts[0];
+export async function deriveDisplayNameFromDomain(domain: string): Promise<string> {
+  const parts = domain
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) {
+    const name = parts[0];
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  }
+
+  const apiPrefixes = new Set(["api", "v1", "v2", "v3", "www"]);
+  let name = parts[parts.length - 2];
+  if (apiPrefixes.has(name) && parts.length >= 3) {
+    name = parts[parts.length - 3];
+  }
+  if (apiPrefixes.has(name) && parts.length >= 4) {
+    name = parts[parts.length - 4];
+  }
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
@@ -285,10 +378,13 @@ export async function backfillProviderVendorsFromProviders(): Promise<{
     for (const row of rows) {
       stats.processed++;
 
-      const domainSource = row.websiteUrl?.trim() || row.url;
-      const domain = normalizeWebsiteDomainFromUrl(domainSource);
+      // Use new computeVendorKey for consistent vendor key calculation
+      const vendorKey = await computeVendorKey({
+        providerUrl: row.url,
+        websiteUrl: row.websiteUrl,
+      });
 
-      if (!domain) {
+      if (!vendorKey) {
         logger.warn("[backfillVendors] Invalid URL for provider", {
           providerId: row.id,
           url: row.url,
@@ -299,7 +395,9 @@ export async function backfillProviderVendorsFromProviders(): Promise<{
       }
 
       try {
-        const displayName = deriveDisplayNameFromDomain(domain);
+        // For displayName, extract domain part (remove port if present)
+        const domainForDisplayName = vendorKey.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+        const displayName = await deriveDisplayNameFromDomain(domainForDisplayName);
         const vendorId = await getOrCreateProviderVendorIdFromUrls({
           providerUrl: row.url,
           websiteUrl: row.websiteUrl ?? null,
@@ -542,6 +640,33 @@ export async function findProviderEndpointsByVendorAndType(
         isNull(providerEndpoints.deletedAt)
       )
     )
+    .orderBy(asc(providerEndpoints.sortOrder), asc(providerEndpoints.id));
+
+  return rows.map(toProviderEndpoint);
+}
+
+export async function findProviderEndpointsByVendor(vendorId: number): Promise<ProviderEndpoint[]> {
+  const rows = await db
+    .select({
+      id: providerEndpoints.id,
+      vendorId: providerEndpoints.vendorId,
+      providerType: providerEndpoints.providerType,
+      url: providerEndpoints.url,
+      label: providerEndpoints.label,
+      sortOrder: providerEndpoints.sortOrder,
+      isEnabled: providerEndpoints.isEnabled,
+      lastProbedAt: providerEndpoints.lastProbedAt,
+      lastProbeOk: providerEndpoints.lastProbeOk,
+      lastProbeStatusCode: providerEndpoints.lastProbeStatusCode,
+      lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
+      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
+      lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
+      createdAt: providerEndpoints.createdAt,
+      updatedAt: providerEndpoints.updatedAt,
+      deletedAt: providerEndpoints.deletedAt,
+    })
+    .from(providerEndpoints)
+    .where(and(eq(providerEndpoints.vendorId, vendorId), isNull(providerEndpoints.deletedAt)))
     .orderBy(asc(providerEndpoints.sortOrder), asc(providerEndpoints.id));
 
   return rows.map(toProviderEndpoint);

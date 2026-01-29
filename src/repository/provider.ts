@@ -4,8 +4,8 @@ import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
-import { getEnvConfig } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
 import {
@@ -793,9 +793,9 @@ export async function getProviderStatistics(): Promise<
   }>
 > {
   try {
-    // 统一的时区处理：使用 PostgreSQL AT TIME ZONE + 环境变量 TZ
+    // 统一的时区处理：使用 PostgreSQL AT TIME ZONE + 系统时区配置
     // 参考 getUserStatisticsFromDB 的实现，避免 Node.js Date 带来的时区偏移
-    const timezone = getEnvConfig().TZ;
+    const timezone = await resolveSystemTimezone();
 
     // ⭐ 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
     // 如果 provider_chain 为空（无重试），则使用 provider_id 字段

@@ -18,6 +18,7 @@ import providersFilter from "./providers/filter.json";
 import providersGuide from "./providers/guide.json";
 import providersInlineEdit from "./providers/inlineEdit.json";
 import providersList from "./providers/list.json";
+import providersRecluster from "./providers/recluster.json";
 import providersSchedulingDialog from "./providers/schedulingDialog.json";
 import providersSearch from "./providers/search.json";
 import providersSection from "./providers/section.json";
@@ -81,6 +82,7 @@ const providers = {
   guide: providersGuide,
   inlineEdit: providersInlineEdit,
   list: providersList,
+  recluster: providersRecluster,
   schedulingDialog: providersSchedulingDialog,
   search: providersSearch,
   section: providersSection,

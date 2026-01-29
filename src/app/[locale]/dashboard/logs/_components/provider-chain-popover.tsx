@@ -24,6 +24,8 @@ interface ProviderChainPopoverProps {
   finalProvider: string;
   /** Whether a cost badge is displayed, affects name max width */
   hasCostBadge?: boolean;
+  /** Callback when a chain item is clicked in the popover */
+  onChainItemClick?: (chainIndex: number) => void;
 }
 
 /**
@@ -36,6 +38,19 @@ function isActualRequest(item: ProviderChainItem): boolean {
     return true;
   }
   return false;
+}
+
+function parseGroupTags(groupTag?: string | null): string[] {
+  if (!groupTag) return [];
+  const seen = new Set<string>();
+  const groups: string[] = [];
+  for (const raw of groupTag.split(",")) {
+    const trimmed = raw.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    groups.push(trimmed);
+  }
+  return groups;
 }
 
 /**
@@ -85,6 +100,7 @@ export function ProviderChainPopover({
   chain,
   finalProvider,
   hasCostBadge = false,
+  onChainItemClick,
 }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
@@ -279,6 +295,7 @@ export function ProviderChainPopover({
     .find((item) => item.reason === "request_success" || item.reason === "retry_success");
   const finalCostMultiplier = successfulProvider?.costMultiplier;
   const finalGroupTag = successfulProvider?.groupTag;
+  const finalGroupTags = parseGroupTags(finalGroupTag);
   const hasFinalCostBadge =
     finalCostMultiplier !== undefined &&
     finalCostMultiplier !== null &&
@@ -318,15 +335,22 @@ export function ProviderChainPopover({
                 x{finalCostMultiplier.toFixed(2)}
               </Badge>
             )}
-            {/* Group tag badge (if present) */}
-            {finalGroupTag && (
-              <Badge
-                variant="outline"
-                className="text-[10px] px-1 py-0 shrink-0 bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-700"
-              >
-                {finalGroupTag}
-              </Badge>
-            )}
+            {/* Group tag badges (if present) */}
+            {finalGroupTags.map((group) => (
+              <TooltipProvider key={group}>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] px-1 py-0 shrink-0 bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-700 max-w-[120px] truncate"
+                    >
+                      {group}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>{group}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
             {/* Info icon */}
             <InfoIcon className="h-3 w-3 text-muted-foreground shrink-0" aria-hidden="true" />
           </span>
@@ -351,7 +375,36 @@ export function ProviderChainPopover({
             const isLast = index === actualRequests.length - 1;
 
             return (
-              <div key={`${item.id}-${index}`} className="relative flex gap-2">
+              <div
+                key={`${item.id}-${index}`}
+                className={cn(
+                  "relative flex gap-2",
+                  onChainItemClick &&
+                    "cursor-pointer hover:bg-muted/50 rounded-md p-1 -m-1 transition-colors"
+                )}
+                onClick={
+                  onChainItemClick
+                    ? () => {
+                        // Map actualRequests index back to original chain index
+                        const originalIndex = chain.indexOf(item);
+                        onChainItemClick(originalIndex);
+                      }
+                    : undefined
+                }
+                onKeyDown={
+                  onChainItemClick
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          const originalIndex = chain.indexOf(item);
+                          onChainItemClick(originalIndex);
+                        }
+                      }
+                    : undefined
+                }
+                role={onChainItemClick ? "button" : undefined}
+                tabIndex={onChainItemClick ? 0 : undefined}
+              >
                 {/* Timeline connector */}
                 <div className="flex flex-col items-center">
                   <div
@@ -401,7 +454,9 @@ export function ProviderChainPopover({
 
         <div className="p-2 border-t bg-muted/30">
           <p className="text-[10px] text-muted-foreground text-center">
-            {t("logs.details.clickStatusCode")}
+            {onChainItemClick
+              ? t("logs.providerChain.clickItemForDetails")
+              : t("logs.details.clickStatusCode")}
           </p>
         </div>
       </PopoverContent>

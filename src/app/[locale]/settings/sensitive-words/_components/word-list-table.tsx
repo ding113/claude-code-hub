@@ -1,7 +1,8 @@
 "use client";
 
+import { formatInTimeZone } from "date-fns-tz";
 import { Pencil, Trash2 } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useTimeZone, useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { deleteSensitiveWordAction, updateSensitiveWordAction } from "@/actions/sensitive-words";
@@ -23,6 +24,7 @@ const matchTypeColors = {
 
 export function WordListTable({ words }: WordListTableProps) {
   const t = useTranslations("settings");
+  const timeZone = useTimeZone() ?? "UTC";
   const [selectedWord, setSelectedWord] = useState<SensitiveWord | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
@@ -122,7 +124,7 @@ export function WordListTable({ words }: WordListTableProps) {
                   />
                 </td>
                 <td className="py-3 px-4 text-sm text-muted-foreground">
-                  {new Date(word.createdAt).toLocaleString("zh-CN")}
+                  {formatInTimeZone(new Date(word.createdAt), timeZone, "yyyy-MM-dd HH:mm:ss")}
                 </td>
                 <td className="py-3 px-4 text-right">
                   <div className="flex justify-end gap-1">

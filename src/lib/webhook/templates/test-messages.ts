@@ -7,17 +7,23 @@ import { buildDailyLeaderboardMessage } from "./daily-leaderboard";
 /**
  * 根据通知类型构建测试消息
  * 使用模拟数据，完整展示真实消息格式
+ *
+ * @param type - Notification job type
+ * @param timezone - IANA timezone identifier for date/time formatting (optional, defaults to UTC)
  */
-export function buildTestMessage(type: NotificationJobType): StructuredMessage {
+export function buildTestMessage(type: NotificationJobType, timezone?: string): StructuredMessage {
   switch (type) {
     case "circuit-breaker":
-      return buildCircuitBreakerMessage({
-        providerName: "测试供应商",
-        providerId: 0,
-        failureCount: 3,
-        retryAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-        lastError: "Connection timeout (示例错误)",
-      });
+      return buildCircuitBreakerMessage(
+        {
+          providerName: "测试供应商",
+          providerId: 0,
+          failureCount: 3,
+          retryAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          lastError: "Connection timeout (示例错误)",
+        },
+        timezone
+      );
 
     case "cost-alert":
       return buildCostAlertMessage({
