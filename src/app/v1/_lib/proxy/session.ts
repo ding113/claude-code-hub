@@ -380,8 +380,8 @@ export class ProxySession {
     }
 
     const hash = crypto.createHash("sha256").update(parts.join(":"), "utf8").digest("hex");
-    // 取前 32 位作为稳定 ID，避免过长
-    return `sess_${hash.substring(0, 32)}`;
+    // 格式：sess_{8位}_{12位}，与 SessionManager.generateSessionId() 保持一致
+    return `sess_${hash.substring(0, 8)}_${hash.substring(8, 20)}`;
   }
 
   /**

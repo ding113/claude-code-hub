@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
@@ -195,6 +196,62 @@ function filterPrivateParameters(obj: unknown): unknown {
   }
 
   return filtered;
+}
+
+/**
+ * 为 Claude 请求注入 metadata.user_id
+ *
+ * 格式：user_{stableHash}_account__session_{sessionId}
+ * - stableHash: 基于 API Key ID 生成的稳定哈希（64位hex），生成后保持不变
+ * - sessionId: 当前请求的 session ID
+ *
+ * 注意：如果请求体中已存在 metadata.user_id，则保持原样不修改
+ */
+function injectClaudeMetadataUserId(
+  message: Record<string, unknown>,
+  session: ProxySession
+): Record<string, unknown> {
+  // 检查是否已存在 metadata.user_id
+  const existingMetadata = message.metadata as Record<string, unknown> | undefined;
+  if (existingMetadata?.user_id) {
+    logger.debug("[ProxyForwarder] metadata.user_id already exists, skipping injection");
+    return message;
+  }
+
+  // 获取必要信息
+  const keyId = session.authState?.key?.id;
+  const sessionId = session.sessionId;
+
+  if (!keyId || !sessionId) {
+    logger.debug("[ProxyForwarder] Missing keyId or sessionId, skipping metadata injection");
+    return message;
+  }
+
+  // 生成稳定的 user hash（基于 API Key ID）
+  const stableHash = crypto
+    .createHash("sha256")
+    .update(`claude_user_${keyId}`)
+    .digest("hex");
+
+  // 构建 user_id
+  const userId = `user_${stableHash}_account__session_${sessionId}`;
+
+  // 注入 metadata
+  const newMetadata = {
+    ...existingMetadata,
+    user_id: userId,
+  };
+
+  logger.debug("[ProxyForwarder] Injected metadata.user_id", {
+    keyId,
+    sessionId,
+    userIdPreview: `user_${stableHash.substring(0, 8)}..._account__session_${sessionId}`,
+  });
+
+  return {
+    ...message,
+    metadata: newMetadata,
+  };
 }
 
 export class ProxyForwarder {
@@ -1551,7 +1608,16 @@ export class ProxyForwarder {
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
       if (hasBody) {
-        const filteredMessage = filterPrivateParameters(session.request.message);
+        // 为 Claude 请求注入 metadata.user_id（如果不存在）
+        let messageToSend = session.request.message;
+        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+          messageToSend = injectClaudeMetadataUserId(
+            session.request.message as Record<string, unknown>,
+            session
+          );
+        }
+
+        const filteredMessage = filterPrivateParameters(messageToSend);
         const bodyString = JSON.stringify(filteredMessage);
         requestBody = bodyString;
 
