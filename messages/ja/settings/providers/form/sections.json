@@ -244,7 +244,8 @@
         "label": "Max Tokens オーバーライド",
         "help": "リクエストボディの max_tokens を上書きします。範囲：1-64000。「継承」はクライアントリクエストに従います。",
         "options": {
-          "inherit": "上書きなし（クライアントに従う）"
+          "inherit": "上書きなし（クライアントに従う）",
+          "custom": "カスタム"
         },
         "placeholder": "例: 32000"
       },
@@ -252,7 +253,8 @@
         "label": "思考予算オーバーライド",
         "help": "リクエストボディの thinking.budget_tokens を上書きします。範囲：1024-32000。設定すると thinking.type が 'enabled' に強制されます。",
         "options": {
-          "inherit": "上書きなし（クライアントに従う）"
+          "inherit": "上書きなし（クライアントに従う）",
+          "custom": "カスタム"
         },
         "placeholder": "例: 10240",
         "maxOutButton": "最大化 (32000)"

@@ -139,7 +139,8 @@
         "label": "Max Tokens 覆写",
         "help": "覆写请求体中的 max_tokens。范围：1-64000。'继承' 表示遵循客户端请求。",
         "options": {
-          "inherit": "不覆写（遵循客户端）"
+          "inherit": "不覆写（遵循客户端）",
+          "custom": "自定义"
         },
         "placeholder": "如 32000"
       },
@@ -147,7 +148,8 @@
         "label": "思考预算覆写",
         "help": "覆写请求体中的 thinking.budget_tokens。范围：1024-32000。设置后会强制 thinking.type 为 'enabled'。",
         "options": {
-          "inherit": "不覆写（遵循客户端）"
+          "inherit": "不覆写（遵循客户端）",
+          "custom": "自定义"
         },
         "placeholder": "如 10240",
         "maxOutButton": "拉满 (32000)"

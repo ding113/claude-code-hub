@@ -413,6 +413,93 @@ describe("Anthropic Provider Overrides", () => {
       const thinking = output.thinking as Record<string, unknown>;
       expect(thinking.budget_tokens).toBe(50000);
     });
+
+    it("should skip thinking override when clamped budget_tokens would be below 1024 (API minimum)", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicMaxTokensPreference: "500",
+        anthropicThinkingBudgetPreference: "10000",
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-3-opus-20240229",
+        messages: [],
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.max_tokens).toBe(500);
+      expect(output.thinking).toBeUndefined();
+    });
+
+    it("should skip thinking override when budget_tokens preference itself is below 1024", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "500",
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-3-opus-20240229",
+        messages: [],
+        max_tokens: 32000,
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.thinking).toBeUndefined();
+    });
+
+    it("should skip thinking override when max_tokens is exactly 1024 (clamped would be 1023)", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicMaxTokensPreference: "1024",
+        anthropicThinkingBudgetPreference: "2000",
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-3-opus-20240229",
+        messages: [],
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.max_tokens).toBe(1024);
+      expect(output.thinking).toBeUndefined();
+    });
+
+    it("should apply thinking override when clamped budget_tokens is exactly 1024", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicMaxTokensPreference: "1025",
+        anthropicThinkingBudgetPreference: "2000",
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-3-opus-20240229",
+        messages: [],
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.max_tokens).toBe(1025);
+      const thinking = output.thinking as Record<string, unknown>;
+      expect(thinking.budget_tokens).toBe(1024);
+      expect(thinking.type).toBe("enabled");
+    });
+
+    it("should apply thinking override when budget_tokens is exactly 1024 and no clamping needed", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "1024",
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-3-opus-20240229",
+        messages: [],
+        max_tokens: 32000,
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      const thinking = output.thinking as Record<string, unknown>;
+      expect(thinking.budget_tokens).toBe(1024);
+      expect(thinking.type).toBe("enabled");
+    });
   });
 
   describe("Audit function", () => {

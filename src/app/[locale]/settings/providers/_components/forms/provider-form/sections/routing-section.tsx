@@ -546,7 +546,9 @@ export function RoutingSection() {
                       <SelectItem value="inherit">
                         {t("sections.routing.anthropicOverrides.maxTokens.options.inherit")}
                       </SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
+                      <SelectItem value="custom">
+                        {t("sections.routing.anthropicOverrides.maxTokens.options.custom")}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                   {state.routing.anthropicMaxTokensPreference !== "inherit" && (
@@ -611,7 +613,9 @@ export function RoutingSection() {
                               "sections.routing.anthropicOverrides.thinkingBudget.options.inherit"
                             )}
                           </SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem>
+                          <SelectItem value="custom">
+                            {t("sections.routing.anthropicOverrides.thinkingBudget.options.custom")}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                       {state.routing.anthropicThinkingBudgetPreference !== "inherit" && (

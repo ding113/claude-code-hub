@@ -244,7 +244,8 @@
         "label": "Max Tokens 覆寫",
         "help": "覆寫請求體中的 max_tokens。範圍：1-64000。'繼承' 表示遵循客戶端請求。",
         "options": {
-          "inherit": "不覆寫（遵循客戶端）"
+          "inherit": "不覆寫（遵循客戶端）",
+          "custom": "自訂"
         },
         "placeholder": "如 32000"
       },
@@ -252,7 +253,8 @@
         "label": "思考預算覆寫",
         "help": "覆寫請求體中的 thinking.budget_tokens。範圍：1024-32000。設置後會強制 thinking.type 為 'enabled'。",
         "options": {
-          "inherit": "不覆寫（遵循客戶端）"
+          "inherit": "不覆寫（遵循客戶端）",
+          "custom": "自訂"
         },
         "placeholder": "如 10240",
         "maxOutButton": "拉滿 (32000)"

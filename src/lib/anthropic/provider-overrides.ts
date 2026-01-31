@@ -64,8 +64,15 @@ export function applyAnthropicProviderOverrides(
     const existingThinking = isPlainObject(output.thinking) ? output.thinking : {};
     let budgetTokens = thinkingBudget;
     const currentMaxTokens = typeof output.max_tokens === "number" ? output.max_tokens : null;
+    // Anthropic API requires budget_tokens >= 1024
+    const MIN_BUDGET_TOKENS = 1024;
     if (currentMaxTokens !== null && budgetTokens >= currentMaxTokens) {
       budgetTokens = currentMaxTokens - 1;
+    }
+    // If clamping would result in budget_tokens < 1024, skip thinking override entirely
+    // to avoid invalid API requests
+    if (budgetTokens < MIN_BUDGET_TOKENS) {
+      return output;
     }
     const nextThinking: Record<string, unknown> = {
       ...existingThinking,
