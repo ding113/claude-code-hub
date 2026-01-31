@@ -49,6 +49,7 @@ async function SettingsConfigContent() {
             enableHttp2: settings.enableHttp2,
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,
+            enableThinkingBudgetRectifier: settings.enableThinkingBudgetRectifier,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableResponseFixer: settings.enableResponseFixer,
             responseFixerConfig: settings.responseFixerConfig,

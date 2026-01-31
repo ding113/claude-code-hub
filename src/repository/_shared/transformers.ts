@@ -191,6 +191,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableHttp2: dbSettings?.enableHttp2 ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
+    enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
     responseFixerConfig: {

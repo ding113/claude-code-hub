@@ -601,6 +601,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // thinking budget 整流器（默认开启）
+  // 开启后：当 Anthropic 类型供应商出现 budget_tokens < 1024 错误时，自动整流并重试一次
+  enableThinkingBudgetRectifier: boolean('enable_thinking_budget_rectifier')
+    .notNull()
+    .default(true),
+
   // Codex Session ID 补全（默认开启）
   // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')

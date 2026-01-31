@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableHttp2"
   | "interceptAnthropicWarmupRequests"
   | "enableThinkingSignatureRectifier"
+  | "enableThinkingBudgetRectifier"
   | "enableCodexSessionIdCompletion"
   | "enableResponseFixer"
   | "responseFixerConfig"
@@ -36,6 +37,7 @@ const DEFAULT_SETTINGS: Pick<
   enableHttp2: false,
   interceptAnthropicWarmupRequests: false,
   enableThinkingSignatureRectifier: true,
+  enableThinkingBudgetRectifier: true,
   enableCodexSessionIdCompletion: true,
   enableResponseFixer: true,
   responseFixerConfig: {
@@ -106,6 +108,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
+      enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
       responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
