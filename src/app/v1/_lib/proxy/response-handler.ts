@@ -1560,6 +1560,10 @@ export function parseUsageFromResponseText(
     let messageStartUsage: UsageMetrics | null = null;
     let messageDeltaUsage: UsageMetrics | null = null;
 
+    // Gemini SSE: usageMetadata 需要 last-wins（完整 token 计数仅在最后事件中）
+    let lastGeminiUsage: UsageMetrics | null = null;
+    let lastGeminiUsageRecord: Record<string, unknown> | null = null;
+
     const mergeUsageMetrics = (base: UsageMetrics | null, patch: UsageMetrics): UsageMetrics => {
       if (!base) {
         return { ...patch };
@@ -1633,18 +1637,37 @@ export function parseUsageFromResponseText(
       }
 
       // 非 Claude 格式的 SSE 处理（Gemini 等）
+      // 注意：Gemini SSE 流中，usageMetadata 在每个事件中都可能存在，
+      // 但只有最后一个事件包含完整的 token 计数（candidatesTokenCount、thoughtsTokenCount 等）
+      // 因此需要持续更新，使用最后一个有效值
       if (!messageStartUsage && !messageDeltaUsage) {
-        // Standard usage fields (data.usage)
+        // Standard usage fields (data.usage) - 仍使用 first-wins 策略
         applyUsageValue(data.usage, `sse.${event.event}.usage`);
 
-        // Gemini usageMetadata
-        applyUsageValue(data.usageMetadata, `sse.${event.event}.usageMetadata`);
+        // Gemini usageMetadata - 改为 last-wins 策略
+        // 跳过 applyUsageValue（它是 first-wins），直接更新
+        if (data.usageMetadata && typeof data.usageMetadata === "object") {
+          const extracted = extractUsageMetrics(data.usageMetadata);
+          if (extracted) {
+            // 持续更新，最后一个有效值会覆盖之前的
+            lastGeminiUsage = extracted;
+            lastGeminiUsageRecord = data.usageMetadata as Record<string, unknown>;
+          }
+        }
 
         // Handle response wrapping in SSE
         if (!usageMetrics && data.response && typeof data.response === "object") {
           const responseObj = data.response as Record<string, unknown>;
           applyUsageValue(responseObj.usage, `sse.${event.event}.response.usage`);
-          applyUsageValue(responseObj.usageMetadata, `sse.${event.event}.response.usageMetadata`);
+
+          // response.usageMetadata 也使用 last-wins 策略
+          if (responseObj.usageMetadata && typeof responseObj.usageMetadata === "object") {
+            const extracted = extractUsageMetrics(responseObj.usageMetadata);
+            if (extracted) {
+              lastGeminiUsage = extracted;
+              lastGeminiUsageRecord = responseObj.usageMetadata as Record<string, unknown>;
+            }
+          }
         }
       }
     }
@@ -1661,6 +1684,17 @@ export function parseUsageFromResponseText(
       usageMetrics = adjustUsageForProviderType(mergedClaudeUsage, providerType);
       usageRecord = mergedClaudeUsage as unknown as Record<string, unknown>;
       logger.debug("[ResponseHandler] Final merged usage from Claude SSE", {
+        providerType,
+        usage: usageMetrics,
+      });
+    }
+
+    // Gemini SSE 处理：使用最后一个有效的 usageMetadata
+    // 仅当 Claude SSE 没有提供 usage 且 applyUsageValue 也没有找到时才使用
+    if (!usageMetrics && lastGeminiUsage) {
+      usageMetrics = adjustUsageForProviderType(lastGeminiUsage, providerType);
+      usageRecord = lastGeminiUsageRecord;
+      logger.debug("[ResponseHandler] Final usage from Gemini SSE (last event)", {
         providerType,
         usage: usageMetrics,
       });
