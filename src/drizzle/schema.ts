@@ -276,6 +276,12 @@ export const providers = pgTable('providers', {
   codexTextVerbosityPreference: varchar('codex_text_verbosity_preference', { length: 10 }),
   codexParallelToolCallsPreference: varchar('codex_parallel_tool_calls_preference', { length: 10 }),
 
+  // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
+  // - 'inherit' or null: follow client request
+  // - numeric string: force override to that value
+  anthropicMaxTokensPreference: varchar('anthropic_max_tokens_preference', { length: 20 }),
+  anthropicThinkingBudgetPreference: varchar('anthropic_thinking_budget_preference', { length: 20 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),

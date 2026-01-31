@@ -280,6 +280,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         codexReasoningSummaryPreference: provider.codexReasoningSummaryPreference,
         codexTextVerbosityPreference: provider.codexTextVerbosityPreference,
         codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
+        anthropicMaxTokensPreference: provider.anthropicMaxTokensPreference,
+        anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,

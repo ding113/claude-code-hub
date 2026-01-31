@@ -239,6 +239,25 @@
         }
       }
     },
+    "anthropicOverrides": {
+      "maxTokens": {
+        "label": "Max Tokens 覆寫",
+        "help": "覆寫請求體中的 max_tokens。範圍：1-64000。'繼承' 表示遵循客戶端請求。",
+        "options": {
+          "inherit": "不覆寫（遵循客戶端）"
+        },
+        "placeholder": "如 32000"
+      },
+      "thinkingBudget": {
+        "label": "思考預算覆寫",
+        "help": "覆寫請求體中的 thinking.budget_tokens。範圍：1024-32000。設置後會強制 thinking.type 為 'enabled'。",
+        "options": {
+          "inherit": "不覆寫（遵循客戶端）"
+        },
+        "placeholder": "如 10240",
+        "maxOutButton": "拉滿 (32000)"
+      }
+    },
     "context1m": {
       "desc": "設定 1M 上下文視窗支援。僅對 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。啟用後將套用階梯定價。",
       "label": "1M 上下文視窗",

@@ -124,6 +124,8 @@ export function toProvider(dbProvider: any): Provider {
     codexReasoningSummaryPreference: dbProvider?.codexReasoningSummaryPreference ?? null,
     codexTextVerbosityPreference: dbProvider?.codexTextVerbosityPreference ?? null,
     codexParallelToolCallsPreference: dbProvider?.codexParallelToolCallsPreference ?? null,
+    anthropicMaxTokensPreference: dbProvider?.anthropicMaxTokensPreference ?? null,
+    anthropicThinkingBudgetPreference: dbProvider?.anthropicThinkingBudgetPreference ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
     rpd: dbProvider?.rpd ?? null,

@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
 import { Agent, request as undiciRequest } from "undici";
+import { applyAnthropicProviderOverridesWithAudit } from "@/lib/anthropic/provider-overrides";
 import {
   getCircuitState,
   getProviderHealthInfo,
@@ -1338,11 +1339,51 @@ export class ProxyForwarder {
           }
 
           if (session.messageContext?.id) {
-            // 同上：确保 special_settings 的“旧值”不会在并发下覆盖“新值”
+            // 同上：确保 special_settings 的"旧值"不会在并发下覆盖"新值"
             await updateMessageRequestDetails(session.messageContext.id, {
               specialSettings,
             }).catch((err) => {
               logger.error("[ProxyForwarder] Failed to persist special settings", {
+                error: err,
+                messageRequestId: session.messageContext?.id,
+              });
+            });
+          }
+        }
+      }
+
+      // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
+      // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
+      if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+        const { request: anthropicOverridden, audit: anthropicAudit } =
+          applyAnthropicProviderOverridesWithAudit(
+            provider,
+            session.request.message as Record<string, unknown>
+          );
+        session.request.message = anthropicOverridden;
+
+        if (anthropicAudit) {
+          session.addSpecialSetting(anthropicAudit);
+          const specialSettings = session.getSpecialSettings();
+
+          if (session.sessionId) {
+            await SessionManager.storeSessionSpecialSettings(
+              session.sessionId,
+              specialSettings,
+              session.requestSequence
+            ).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to store Anthropic special settings", {
+                error: err,
+                sessionId: session.sessionId,
+              });
+            });
+          }
+
+          if (session.messageContext?.id) {
+            await updateMessageRequestDetails(session.messageContext.id, {
+              specialSettings,
+            }).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to persist Anthropic special settings", {
                 error: err,
                 messageRequestId: session.messageContext?.id,
               });

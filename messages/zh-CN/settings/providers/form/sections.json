@@ -126,12 +126,31 @@
       },
       "parallelToolCalls": {
         "label": "并行工具调用覆写",
-        "help": "控制是否允许并行 tool calls。关闭可能降低工具调用并发能力；“跟随客户端”不改写 parallel_tool_calls。",
+        "help": "控制是否允许并行 tool calls。关闭可能降低工具调用并发能力；'跟随客户端'不改写 parallel_tool_calls。",
         "options": {
           "inherit": "不覆写（跟随客户端）",
           "true": "强制开启",
           "false": "强制关闭"
         }
+      }
+    },
+    "anthropicOverrides": {
+      "maxTokens": {
+        "label": "Max Tokens 覆写",
+        "help": "覆写请求体中的 max_tokens。范围：1-64000。'继承' 表示遵循客户端请求。",
+        "options": {
+          "inherit": "不覆写（遵循客户端）"
+        },
+        "placeholder": "如 32000"
+      },
+      "thinkingBudget": {
+        "label": "思考预算覆写",
+        "help": "覆写请求体中的 thinking.budget_tokens。范围：1024-32000。设置后会强制 thinking.type 为 'enabled'。",
+        "options": {
+          "inherit": "不覆写（遵循客户端）"
+        },
+        "placeholder": "如 10240",
+        "maxOutButton": "拉满 (32000)"
       }
     }
   },
