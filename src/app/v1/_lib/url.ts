@@ -1,5 +1,7 @@
 import { logger } from "@/lib/logger";
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
  * 构建代理目标URL（智能检测版本）
  *
@@ -45,10 +47,8 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
       "/models", // Gemini & OpenAI models
     ];
 
-    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
     for (const endpoint of targetEndpoints) {
-      const re = new RegExp(`^/(v\\d+[a-z0-9]*)${escapeRegExp(endpoint)}(?<suffix>/.*)?$`, "i");
+      const re = new RegExp(`^/(v\\d+[a-z0-9]*)${escapeRegExp(endpoint)}(?<suffix>/.*)?$`);
       const m = requestPath.match(re);
       if (!m) continue;
 
