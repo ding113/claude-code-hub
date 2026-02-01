@@ -70,7 +70,7 @@ export function PriceList({
 }: PriceListProps) {
   const t = useTranslations("settings.prices");
   const tCommon = useTranslations("common");
-  const locale = useLocale();
+  const _locale = useLocale();
   const timeZone = useTimeZone() ?? "UTC";
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [sourceFilter, setSourceFilter] = useState<ModelPriceSource | "">(initialSourceFilter);

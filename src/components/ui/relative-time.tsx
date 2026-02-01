@@ -1,6 +1,5 @@
 "use client";
 
-import { format as formatDate } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
