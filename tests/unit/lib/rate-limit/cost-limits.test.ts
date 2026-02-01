@@ -121,7 +121,7 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(result.reason).toContain("供应商 每日消费上限已达到（11.0000/10）");
   });
 
-  it('checkCostLimits: User fast-path should be labeled as User (not Provider)', async () => {
+  it("checkCostLimits: User fast-path should be labeled as User (not Provider)", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     redisClient.get.mockImplementation(async (key: string) => {
