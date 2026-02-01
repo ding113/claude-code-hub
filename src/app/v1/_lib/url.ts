@@ -45,23 +45,29 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
       "/models", // Gemini & OpenAI models
     ];
 
+    const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
     for (const endpoint of targetEndpoints) {
-      const requestRoot = `/v1${endpoint}`; // /v1/messages, /v1/responses 等
-      if (requestPath === requestRoot || requestPath.startsWith(`${requestRoot}/`)) {
-        if (basePath.endsWith(endpoint) || basePath.endsWith(requestRoot)) {
-          const suffix = requestPath.slice(requestRoot.length); // 例如 /count_tokens
-          baseUrlObj.pathname = basePath + suffix;
-          baseUrlObj.search = requestUrl.search;
+      const re = new RegExp(`^/(v\\d+[a-z0-9]*)${escapeRegExp(endpoint)}(?<suffix>/.*)?$`, "i");
+      const m = requestPath.match(re);
+      if (!m) continue;
 
-          logger.debug("[buildProxyUrl] Detected endpoint root in baseUrl", {
-            basePath,
-            requestPath,
-            endpoint,
-            action: "append_suffix",
-          });
+      const version = m[1];
+      const requestRoot = `/${version}${endpoint}`;
+      const suffix = m.groups?.suffix ?? "";
 
-          return baseUrlObj.toString();
-        }
+      if (basePath.endsWith(endpoint) || basePath.endsWith(requestRoot)) {
+        baseUrlObj.pathname = basePath + suffix;
+        baseUrlObj.search = requestUrl.search;
+
+        logger.debug("[buildProxyUrl] Detected endpoint root in baseUrl", {
+          basePath,
+          requestPath,
+          endpoint,
+          action: "append_suffix",
+        });
+
+        return baseUrlObj.toString();
       }
     }
 
