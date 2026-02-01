@@ -460,6 +460,8 @@ export async function addProvider(data: {
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
+  weekly_reset_day?: number | null;
+  weekly_reset_time?: string | null;
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number | null;
@@ -1379,7 +1381,12 @@ export async function getProviderLimitUsageBatch(
         provider.dailyResetTime ?? undefined,
         dailyResetMode
       );
-      const resetWeekly = await getResetInfo("weekly");
+      const resetWeekly = await getResetInfo(
+        "weekly",
+        "00:00",
+        provider.weeklyResetDay ?? undefined,
+        provider.weeklyResetTime ?? undefined
+      );
       const resetMonthly = await getResetInfo("monthly");
 
       result.set(provider.id, {

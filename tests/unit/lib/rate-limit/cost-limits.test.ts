@@ -125,7 +125,8 @@ describe("RateLimitService - cost limits and quota checks", () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     redisClient.get.mockImplementation(async (key: string) => {
-      if (key === "user:1:cost_weekly_1_0000") return "20";
+      // Users don't have configurable weekly reset, so they use cost_weekly without suffix
+      if (key === "user:1:cost_weekly") return "20";
       return "0";
     });
 
