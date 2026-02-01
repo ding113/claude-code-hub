@@ -222,6 +222,8 @@ export const providers = pgTable('providers', {
     .default('00:00')
     .notNull(), // HH:mm 格式，如 "18:00"（仅 fixed 模式使用）
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
+  weeklyResetDay: integer('weekly_reset_day'), // 0=Sunday, 1=Monday, ..., 6=Saturday
+  weeklyResetTime: varchar('weekly_reset_time', { length: 5 }), // HH:mm
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   totalCostResetAt: timestamp('total_cost_reset_at', { withTimezone: true }),

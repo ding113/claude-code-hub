@@ -48,11 +48,12 @@ vi.mock("@/lib/session-tracker", () => ({
 }));
 
 vi.mock("@/lib/rate-limit/time-utils", () => ({
-  getTimeRangeForPeriod: (period: string, resetTime?: string) =>
-    getTimeRangeForPeriodMock(period, resetTime),
+  getTimeRangeForPeriod: (period: string, resetTime?: string, weeklyResetDay?: number, weeklyResetTime?: string) =>
+    getTimeRangeForPeriodMock(period, resetTime, weeklyResetDay, weeklyResetTime),
   getTimeRangeForPeriodWithMode: (period: string, resetTime?: string, mode?: string) =>
     getTimeRangeForPeriodWithModeMock(period, resetTime, mode),
-  getResetInfo: (period: string, resetTime?: string) => getResetInfoMock(period, resetTime),
+  getResetInfo: (period: string, resetTime?: string, weeklyResetDay?: number, weeklyResetTime?: string) =>
+    getResetInfoMock(period, resetTime, weeklyResetDay, weeklyResetTime),
   getResetInfoWithMode: (period: string, resetTime?: string, mode?: string) =>
     getResetInfoWithModeMock(period, resetTime, mode),
 }));
@@ -188,9 +189,9 @@ describe("getProviderLimitUsage", () => {
     await getProviderLimitUsage(1);
 
     // 5h should use getTimeRangeForPeriod (note: second arg is optional resetTime, defaults to undefined)
-    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("5h", undefined);
-    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("weekly", undefined);
-    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("monthly", undefined);
+    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("5h", undefined, undefined, undefined);
+    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("weekly", "00:00", undefined, undefined);
+    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("monthly", undefined, undefined, undefined);
   });
 
   it("should call getTimeRangeForPeriodWithMode for daily with provider config", async () => {

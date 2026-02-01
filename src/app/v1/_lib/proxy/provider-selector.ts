@@ -617,6 +617,8 @@ export class ProxyProviderResolver {
       daily_reset_mode: provider.dailyResetMode,
       daily_reset_time: provider.dailyResetTime,
       limit_weekly_usd: provider.limitWeeklyUsd,
+      weekly_reset_day: provider.weeklyResetDay,
+      weekly_reset_time: provider.weeklyResetTime,
       limit_monthly_usd: provider.limitMonthlyUsd,
     });
 
@@ -995,6 +997,8 @@ export class ProxyProviderResolver {
           daily_reset_mode: p.dailyResetMode,
           daily_reset_time: p.dailyResetTime,
           limit_weekly_usd: p.limitWeeklyUsd,
+          weekly_reset_day: p.weeklyResetDay,
+          weekly_reset_time: p.weeklyResetTime,
           limit_monthly_usd: p.limitMonthlyUsd,
         });
 

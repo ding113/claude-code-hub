@@ -170,6 +170,22 @@
       "label": "週の上限 (USD)",
       "placeholder": "空欄で無制限"
     },
+    "weeklyResetDay": {
+      "label": "週次リセット曜日",
+      "desc": "週次クォータをリセットする曜日",
+      "days": {
+        "0": "日曜日",
+        "1": "月曜日",
+        "2": "火曜日",
+        "3": "水曜日",
+        "4": "木曜日",
+        "5": "金曜日",
+        "6": "土曜日"
+      }
+    },
+    "weeklyResetTime": {
+      "label": "週次リセット時刻 (HH:mm)"
+    },
     "summary": {
       "concurrent": "同時: {count}",
       "daily": "日: {amount}（{resetTime}にリセット）",
@@ -184,6 +200,7 @@
   "limits": {
     "timeBased": "時間ベースの制限",
     "dailyReset": "日次リセット設定",
+    "weeklyReset": "週次リセット設定",
     "otherLimits": "その他の制限"
   },
   "routing": {

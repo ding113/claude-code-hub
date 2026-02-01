@@ -42,7 +42,9 @@ export interface ResetInfo {
  */
 export async function getTimeRangeForPeriod(
   period: TimePeriod,
-  resetTime = "00:00"
+  resetTime = "00:00",
+  weeklyResetDay?: number,
+  weeklyResetTime?: string
 ): Promise<TimeRange> {
   const timezone = await resolveSystemTimezone();
   const normalizedResetTime = normalizeResetTime(resetTime);
@@ -63,10 +65,25 @@ export async function getTimeRangeForPeriod(
     }
 
     case "weekly": {
-      // 自然周：本周一 00:00 (系统时区)
+      // Custom weekly reset: configurable day (0-6) and time (HH:mm)
+      const day = weeklyResetDay ?? 1; // default Monday
+      const wTime = normalizeResetTime(weeklyResetTime ?? "00:00");
+      const { hours: wHours, minutes: wMinutes } = parseResetTime(wTime);
       const zonedNow = toZonedTime(now, timezone);
-      const zonedStartOfWeek = startOfWeek(zonedNow, { weekStartsOn: 1 }); // 周一
-      startTime = fromZonedTime(zonedStartOfWeek, timezone);
+      const zonedStartOfWeek = startOfWeek(zonedNow, {
+        weekStartsOn: day as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+      });
+      const zonedResetPoint = buildZonedDate(zonedStartOfWeek, wHours, wMinutes);
+      const resetPoint = fromZonedTime(zonedResetPoint, timezone);
+
+      if (now >= resetPoint) {
+        startTime = resetPoint;
+      } else {
+        // We're before this week's reset, use last week's reset
+        const zonedPrevWeek = addWeeks(zonedStartOfWeek, -1);
+        const zonedPrevReset = buildZonedDate(zonedPrevWeek, wHours, wMinutes);
+        startTime = fromZonedTime(zonedPrevReset, timezone);
+      }
       break;
     }
 
@@ -91,7 +108,9 @@ export async function getTimeRangeForPeriod(
 export async function getTimeRangeForPeriodWithMode(
   period: TimePeriod,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  weeklyResetDay?: number,
+  weeklyResetTime?: string
 ): Promise<TimeRange> {
   if (period === "daily" && mode === "rolling") {
     // 滚动窗口：过去 24 小时
@@ -103,7 +122,7 @@ export async function getTimeRangeForPeriodWithMode(
   }
 
   // 其他情况使用原有逻辑
-  return getTimeRangeForPeriod(period, resetTime);
+  return getTimeRangeForPeriod(period, resetTime, weeklyResetDay, weeklyResetTime);
 }
 
 /**
@@ -113,7 +132,12 @@ export async function getTimeRangeForPeriodWithMode(
  * - weekly: 到下周一 00:00 的秒数
  * - monthly: 到下月 1 号 00:00 的秒数
  */
-export async function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): Promise<number> {
+export async function getTTLForPeriod(
+  period: TimePeriod,
+  resetTime = "00:00",
+  weeklyResetDay?: number,
+  weeklyResetTime?: string
+): Promise<number> {
   const timezone = await resolveSystemTimezone();
   const now = new Date();
   const normalizedResetTime = normalizeResetTime(resetTime);
@@ -128,13 +152,27 @@ export async function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): 
     }
 
     case "weekly": {
-      // 计算到下周一 00:00 的秒数
+      // Calculate seconds until next weekly reset
+      const day = weeklyResetDay ?? 1;
+      const wTime = normalizeResetTime(weeklyResetTime ?? "00:00");
+      const { hours: wHours, minutes: wMinutes } = parseResetTime(wTime);
       const zonedNow = toZonedTime(now, timezone);
-      const zonedStartOfWeek = startOfWeek(zonedNow, { weekStartsOn: 1 });
-      const zonedNextWeek = addWeeks(zonedStartOfWeek, 1);
-      const nextWeek = fromZonedTime(zonedNextWeek, timezone);
+      const zonedStartOfWeek = startOfWeek(zonedNow, {
+        weekStartsOn: day as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+      });
+      const zonedResetPoint = buildZonedDate(zonedStartOfWeek, wHours, wMinutes);
+      const resetPoint = fromZonedTime(zonedResetPoint, timezone);
 
-      return Math.ceil((nextWeek.getTime() - now.getTime()) / 1000);
+      let nextReset: Date;
+      if (now < resetPoint) {
+        nextReset = resetPoint;
+      } else {
+        const zonedNextWeek = addWeeks(zonedStartOfWeek, 1);
+        const zonedNextReset = buildZonedDate(zonedNextWeek, wHours, wMinutes);
+        nextReset = fromZonedTime(zonedNextReset, timezone);
+      }
+
+      return Math.max(1, Math.ceil((nextReset.getTime() - now.getTime()) / 1000));
     }
 
     case "monthly": {
@@ -158,19 +196,26 @@ export async function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): 
 export async function getTTLForPeriodWithMode(
   period: TimePeriod,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  weeklyResetDay?: number,
+  weeklyResetTime?: string
 ): Promise<number> {
   if (period === "daily" && mode === "rolling") {
     return 24 * 3600; // 24 小时
   }
 
-  return getTTLForPeriod(period, resetTime);
+  return getTTLForPeriod(period, resetTime, weeklyResetDay, weeklyResetTime);
 }
 
 /**
  * 获取重置信息（用于前端展示）
  */
-export async function getResetInfo(period: TimePeriod, resetTime = "00:00"): Promise<ResetInfo> {
+export async function getResetInfo(
+  period: TimePeriod,
+  resetTime = "00:00",
+  weeklyResetDay?: number,
+  weeklyResetTime?: string
+): Promise<ResetInfo> {
   const timezone = await resolveSystemTimezone();
   const now = new Date();
   const normalizedResetTime = normalizeResetTime(resetTime);
@@ -191,10 +236,24 @@ export async function getResetInfo(period: TimePeriod, resetTime = "00:00"): Pro
     }
 
     case "weekly": {
+      const day = weeklyResetDay ?? 1;
+      const wTime = normalizeResetTime(weeklyResetTime ?? "00:00");
+      const { hours: wHours, minutes: wMinutes } = parseResetTime(wTime);
       const zonedNow = toZonedTime(now, timezone);
-      const zonedStartOfWeek = startOfWeek(zonedNow, { weekStartsOn: 1 });
-      const zonedNextWeek = addWeeks(zonedStartOfWeek, 1);
-      const resetAt = fromZonedTime(zonedNextWeek, timezone);
+      const zonedStartOfWeek = startOfWeek(zonedNow, {
+        weekStartsOn: day as 0 | 1 | 2 | 3 | 4 | 5 | 6,
+      });
+      const zonedResetPoint = buildZonedDate(zonedStartOfWeek, wHours, wMinutes);
+      const resetPoint = fromZonedTime(zonedResetPoint, timezone);
+
+      let resetAt: Date;
+      if (now < resetPoint) {
+        resetAt = resetPoint;
+      } else {
+        const zonedNextWeek = addWeeks(zonedStartOfWeek, 1);
+        const zonedNextReset = buildZonedDate(zonedNextWeek, wHours, wMinutes);
+        resetAt = fromZonedTime(zonedNextReset, timezone);
+      }
 
       return {
         type: "natural",
@@ -222,7 +281,9 @@ export async function getResetInfo(period: TimePeriod, resetTime = "00:00"): Pro
 export async function getResetInfoWithMode(
   period: TimePeriod,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  weeklyResetDay?: number,
+  weeklyResetTime?: string
 ): Promise<ResetInfo> {
   if (period === "daily" && mode === "rolling") {
     return {
@@ -231,7 +292,7 @@ export async function getResetInfoWithMode(
     };
   }
 
-  return getResetInfo(period, resetTime);
+  return getResetInfo(period, resetTime, weeklyResetDay, weeklyResetTime);
 }
 
 function getCustomDailyResetTime(now: Date, resetTime: string, timezone: string): Date {
