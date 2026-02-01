@@ -2,6 +2,18 @@ import { logger } from "@/lib/logger";
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const targetEndpoints = [
+  "/responses", // Codex Response API
+  "/messages", // Claude Messages API
+  "/chat/completions", // OpenAI Compatible
+  "/models", // Gemini & OpenAI models
+] as const;
+
+const endpointRegexes = targetEndpoints.map((endpoint) => ({
+  endpoint,
+  regex: new RegExp(`^/(v\\d+[a-z0-9]*)${escapeRegExp(endpoint)}(?<suffix>/.*)?$`),
+}));
+
 /**
  * 构建代理目标URL（智能检测版本）
  *
@@ -40,16 +52,9 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
     }
 
     // Case 2: baseUrl 已包含“端点根路径”（可能带有额外前缀），仅追加 requestPath 的子路径部分。
-    const targetEndpoints = [
-      "/responses", // Codex Response API
-      "/messages", // Claude Messages API
-      "/chat/completions", // OpenAI Compatible
-      "/models", // Gemini & OpenAI models
-    ];
 
-    for (const endpoint of targetEndpoints) {
-      const re = new RegExp(`^/(v\\d+[a-z0-9]*)${escapeRegExp(endpoint)}(?<suffix>/.*)?$`);
-      const m = requestPath.match(re);
+    for (const { endpoint, regex } of endpointRegexes) {
+      const m = requestPath.match(regex);
       if (!m) continue;
 
       const version = m[1];
