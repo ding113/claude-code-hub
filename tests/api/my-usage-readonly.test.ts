@@ -163,7 +163,7 @@ describe("my-usage API：只读 Key 自助查询", () => {
     expect(json).toMatchObject({ ok: false });
   });
 
-  test("只读 Key：允许访问 my-usage 端点，但禁止访问其他 WebUI API", async () => {
+  test("只读 Key：允许访问 my-usage 端点和其他 allowReadOnlyAccess 端点", async () => {
     const unique = `my-usage-readonly-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const user = await createTestUser(`Test ${unique}`);
     createdUserIds.push(user.id);
@@ -197,15 +197,20 @@ describe("my-usage API：只读 Key 自助查询", () => {
     expect(quota.response.status).toBe(200);
     expect(quota.json).toMatchObject({ ok: true });
 
-    // 禁止访问需要 WebUI 权限的 actions（默认 validateKey 会拒绝 canLoginWebUi=false 的 key）
+    // Issue #687 fix: getUsers 和 getUsageLogs 现在也支持 allowReadOnlyAccess
+    // 普通用户只能看到自己的数据
     const usersApi = await callActionsRoute({
       method: "POST",
       pathname: "/api/actions/users/getUsers",
       authToken: readonlyKey.key,
       body: {},
     });
-    expect(usersApi.response.status).toBe(401);
-    expect(usersApi.json).toMatchObject({ ok: false });
+    expect(usersApi.response.status).toBe(200);
+    expect(usersApi.json).toMatchObject({ ok: true });
+    // 验证只返回自己的数据
+    const usersData = (usersApi.json as { ok: boolean; data: Array<{ id: number }> }).data;
+    expect(usersData.length).toBe(1);
+    expect(usersData[0].id).toBe(user.id);
 
     const usageLogsApi = await callActionsRoute({
       method: "POST",
@@ -213,11 +218,11 @@ describe("my-usage API：只读 Key 自助查询", () => {
       authToken: readonlyKey.key,
       body: {},
     });
-    expect(usageLogsApi.response.status).toBe(401);
-    expect(usageLogsApi.json).toMatchObject({ ok: false });
+    expect(usageLogsApi.response.status).toBe(200);
+    expect(usageLogsApi.json).toMatchObject({ ok: true });
   });
 
-  test("Bearer-only：仅 Authorization 也应可查询 my-usage，但仍禁止访问 WebUI API", async () => {
+  test("Bearer-only：仅 Authorization 也应可查询 my-usage 和其他 allowReadOnlyAccess 端点", async () => {
     const unique = `my-usage-bearer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const user = await createTestUser(`Test ${unique}`);
     createdUserIds.push(user.id);
@@ -255,14 +260,19 @@ describe("my-usage API：只读 Key 自助查询", () => {
     expect(stats.json).toMatchObject({ ok: true });
     expect((stats.json as any).data.calls).toBe(1);
 
+    // Issue #687 fix: getUsers 现在也支持 allowReadOnlyAccess
     const usersApi = await callActionsRoute({
       method: "POST",
       pathname: "/api/actions/users/getUsers",
       headers: { Authorization: currentAuthorization },
       body: {},
     });
-    expect(usersApi.response.status).toBe(401);
-    expect(usersApi.json).toMatchObject({ ok: false });
+    expect(usersApi.response.status).toBe(200);
+    expect(usersApi.json).toMatchObject({ ok: true });
+    // 验证只返回自己的数据
+    const usersData = (usersApi.json as { ok: boolean; data: Array<{ id: number }> }).data;
+    expect(usersData.length).toBe(1);
+    expect(usersData[0].id).toBe(user.id);
   });
 
   test("今日统计：应与 message_request 数据一致，并排除 warmup 与其他 Key 数据", async () => {
