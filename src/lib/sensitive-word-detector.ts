@@ -236,5 +236,9 @@ class SensitiveWordCache {
   }
 }
 
-// 单例导出
-export const sensitiveWordDetector = new SensitiveWordCache();
+// Use globalThis to guarantee a single instance across workers
+const g = globalThis as unknown as { __CCH_SENSITIVE_WORD_DETECTOR__?: SensitiveWordCache };
+if (!g.__CCH_SENSITIVE_WORD_DETECTOR__) {
+  g.__CCH_SENSITIVE_WORD_DETECTOR__ = new SensitiveWordCache();
+}
+export const sensitiveWordDetector = g.__CCH_SENSITIVE_WORD_DETECTOR__;

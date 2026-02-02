@@ -16,6 +16,7 @@ describe("globalThis singleton pattern", () => {
     const g = globalThis as Record<string, unknown>;
     delete g.__CCH_EVENT_EMITTER__;
     delete g.__CCH_REQUEST_FILTER_ENGINE__;
+    delete g.__CCH_SENSITIVE_WORD_DETECTOR__;
   });
 
   test("eventEmitter: multiple imports return same instance", async () => {
@@ -67,6 +68,31 @@ describe("globalThis singleton pattern", () => {
     const { requestFilterEngine } = await import("@/lib/request-filter-engine");
     expect(g.__CCH_REQUEST_FILTER_ENGINE__).toBe(requestFilterEngine);
   });
+
+  test("sensitiveWordDetector: multiple imports return same instance", async () => {
+    // First import
+    const { sensitiveWordDetector: detector1 } = await import("@/lib/sensitive-word-detector");
+
+    // Reset module cache
+    vi.resetModules();
+
+    // Second import
+    const { sensitiveWordDetector: detector2 } = await import("@/lib/sensitive-word-detector");
+
+    // Should be the exact same instance
+    expect(detector1).toBe(detector2);
+  });
+
+  test("sensitiveWordDetector: globalThis stores the singleton", async () => {
+    const g = globalThis as Record<string, unknown>;
+
+    // Before import, should not exist
+    expect(g.__CCH_SENSITIVE_WORD_DETECTOR__).toBeUndefined();
+
+    // After import, should exist
+    const { sensitiveWordDetector } = await import("@/lib/sensitive-word-detector");
+    expect(g.__CCH_SENSITIVE_WORD_DETECTOR__).toBe(sensitiveWordDetector);
+  });
 });
 
 describe("event propagation between singleton instances", () => {
@@ -79,6 +105,7 @@ describe("event propagation between singleton instances", () => {
     const g = globalThis as Record<string, unknown>;
     delete g.__CCH_EVENT_EMITTER__;
     delete g.__CCH_REQUEST_FILTER_ENGINE__;
+    delete g.__CCH_SENSITIVE_WORD_DETECTOR__;
   });
 
   afterEach(() => {
@@ -86,6 +113,7 @@ describe("event propagation between singleton instances", () => {
     const g = globalThis as Record<string, unknown>;
     delete g.__CCH_EVENT_EMITTER__;
     delete g.__CCH_REQUEST_FILTER_ENGINE__;
+    delete g.__CCH_SENSITIVE_WORD_DETECTOR__;
   });
 
   test("events emitted in one context should be received in another", async () => {

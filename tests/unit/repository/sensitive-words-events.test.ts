@@ -171,4 +171,3 @@ describe("Sensitive words repository events", () => {
     expect(emitSensitiveWordsUpdated).not.toHaveBeenCalled();
   });
 });
-

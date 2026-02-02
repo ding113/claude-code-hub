@@ -90,7 +90,9 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
       subscriberClient = sub;
       subscribedChannels.clear();
 
-      sub.on("error", (error) => logger.warn("[RedisPubSub] Subscriber connection error", { error }));
+      sub.on("error", (error) =>
+        logger.warn("[RedisPubSub] Subscriber connection error", { error })
+      );
       sub.on("close", () => subscribedChannels.clear());
       sub.on("end", () => subscribedChannels.clear());
       sub.on("ready", () => void resubscribeAll(sub));
