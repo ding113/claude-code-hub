@@ -73,7 +73,7 @@ PackyCode 为本软件的用户提供了特别优惠，使用此链接注册并�
 - 📊 **实时监控与统计**：仪表盘、活跃 Session、消耗排行榜、决策链记录、代理状态追踪，秒级掌控运行态势。
 - 💰 **价格表管理**：分页查询 + SQL 优化，支持搜索防抖、LiteLLM 同步，千级模型也能快速检索。
 - 🔁 **Session 管理**：5 分钟上下文缓存，记录决策链，避免频繁切换供应商并保留全链路审计。
-- 🔄 **OpenAI 兼容层**：支持 `/v1/chat/completions`，自动格式转换、工具调用、reasoning 字段与 Codex CLI 指令注入。
+- 🔄 **OpenAI 兼容端点**：支持 `/v1/chat/completions`（OpenAI 兼容格式），工具调用与 reasoning 字段透传，严格同格式路由，无跨格式转换。
 
 ## ⚡️ 快速开始 Quick Start
 
@@ -220,7 +220,7 @@ Hono + Proxy Pipeline (认证 → Session 分配 → 限流 → 供应商选择 
 2. **上下文管理**：`SessionManager` 从 Redis 读取 5 分钟缓存，控制并发并记录决策链。
 3. **限流**：`RateLimitService` 使用 Lua 脚本原子写入 RPM/金额/并发指标，Redis 不可用则 Fail-Open 降级。
 4. **调度**：`ProviderResolver` 根据权重、优先级、熔断状态与 Session 复用策略选择最佳供应商，至多 3 次重试。
-5. **转发与兼容**：`ProxyForwarder` + `ResponseTransformer` 适配 Claude/OpenAI/Response API，支持代理与模型重定向。
+5. **转发与响应处理**：`ProxyForwarder` 负责上游请求转发，`ProxyResponseHandler` 处理响应流并保留端点原生格式，支持代理与模型重定向。
 6. **监控**：日志、排行榜、价格表等 UI 通过 `repository` 查询 PostgreSQL，以小时级聚合呈现指标。
 
 ## 🚢 部署指南 Deployment
