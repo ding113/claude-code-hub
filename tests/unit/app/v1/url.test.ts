@@ -54,4 +54,31 @@ describe("buildProxyUrl", () => {
 
     expect(out).toBe("https://api.example.com/v1/messages?from=request");
   });
+
+  test("baseUrl 以 /models 结尾时去除请求中的版本前缀", () => {
+    const out = buildProxyUrl(
+      "https://api.example.com/gemini/models",
+      new URL("https://dummy.com/v1beta/models/gemini-1.5-pro:streamGenerateContent")
+    );
+
+    expect(out).toBe("https://api.example.com/gemini/models/gemini-1.5-pro:streamGenerateContent");
+  });
+
+  test("支持 v1internal 版本前缀", () => {
+    const out = buildProxyUrl(
+      "https://example.com/gemini/models",
+      new URL("https://dummy.com/v1internal/models/gemini-2.5-flash:generateContent")
+    );
+
+    expect(out).toBe("https://example.com/gemini/models/gemini-2.5-flash:generateContent");
+  });
+
+  test("支持未来的版本前缀如 v2", () => {
+    const out = buildProxyUrl(
+      "https://example.com/api/models",
+      new URL("https://dummy.com/v2/models/some-model:action")
+    );
+
+    expect(out).toBe("https://example.com/api/models/some-model:action");
+  });
 });
