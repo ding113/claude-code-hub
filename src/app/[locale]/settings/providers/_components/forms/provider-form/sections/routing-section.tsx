@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Info, Layers, Route, Scale, Settings, Timer, Users } from "lucide-react";
+import { Info, Layers, Route, Scale, Settings, Timer } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -61,10 +61,6 @@ export function RoutingSection() {
     }
     dispatch({ type: "SET_GROUP_TAG", payload: nextTags });
   };
-
-  const hasClaudeRedirects = Object.values(state.routing.modelRedirects).some((target) =>
-    target.startsWith("claude-")
-  );
 
   const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
 
@@ -167,25 +163,6 @@ export function RoutingSection() {
                 disabled={state.ui.isPending}
               />
             </FieldGroup>
-
-            {/* Join Claude Pool */}
-            {state.routing.providerType !== "claude" && hasClaudeRedirects && (
-              <ToggleRow
-                label={t("sections.routing.joinClaudePool.label")}
-                description={t("sections.routing.joinClaudePool.desc")}
-                icon={Users}
-                iconColor="text-blue-500"
-              >
-                <Switch
-                  id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
-                  checked={state.routing.joinClaudePool}
-                  onCheckedChange={(checked) =>
-                    dispatch({ type: "SET_JOIN_CLAUDE_POOL", payload: checked })
-                  }
-                  disabled={state.ui.isPending}
-                />
-              </ToggleRow>
-            )}
 
             {/* Allowed Models */}
             <FieldGroup label={t("sections.routing.modelWhitelist.label")}>
@@ -389,8 +366,8 @@ export function RoutingSection() {
         {/* Codex Overrides - Codex type only */}
         {state.routing.providerType === "codex" && (
           <SectionCard
-            title={t("sections.codexStrategy.title")}
-            description={t("sections.codexStrategy.desc")}
+            title={t("sections.routing.codexOverrides.title")}
+            description={t("sections.routing.codexOverrides.desc")}
             icon={Timer}
           >
             <div className="space-y-4">

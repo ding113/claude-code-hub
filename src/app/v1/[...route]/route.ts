@@ -1,7 +1,6 @@
 import "@/lib/polyfills/file";
 import { Hono } from "hono";
 import { handle } from "hono/vercel";
-import { handleChatCompletions } from "@/app/v1/_lib/codex/chat-completions-handler";
 import { registerCors } from "@/app/v1/_lib/cors";
 import {
   handleAvailableModels,
@@ -36,10 +35,10 @@ app.get("/chat/completions/models", handleOpenAICompatibleModels); // 只返回 
 app.get("/chat/models", handleOpenAICompatibleModels); // 简写路径
 
 // OpenAI Compatible API 路由
-app.post("/chat/completions", handleChatCompletions);
+app.post("/chat/completions", handleProxyRequest);
 
 // Response API 路由（支持 Codex）
-app.post("/responses", handleChatCompletions); // OpenAI
+app.post("/responses", handleProxyRequest);
 
 // Claude API 和其他所有请求（fallback）
 app.all("*", handleProxyRequest);

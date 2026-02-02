@@ -2,7 +2,7 @@ import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
-import { Agent, request as undiciRequest } from "undici";
+import { request as undiciRequest } from "undici";
 import { applyAnthropicProviderOverridesWithAudit } from "@/lib/anthropic/provider-overrides";
 import {
   getCircuitState,
@@ -17,11 +17,7 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
-import {
-  getGlobalAgentPool,
-  getProxyAgentForProvider,
-  type ProxyConfigWithCacheKey,
-} from "@/lib/proxy-agent";
+import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import {
@@ -30,9 +26,7 @@ import {
 } from "@/lib/vendor-type-circuit-breaker";
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
-import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
-import { defaultRegistry } from "../converters";
-import type { Format } from "../converters/types";
+
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
@@ -50,7 +44,7 @@ import {
   ProxyError,
   sanitizeUrl,
 } from "./errors";
-import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
+
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
@@ -1348,40 +1342,6 @@ export class ProxyForwarder {
       });
     } else {
       // --- STANDARD HANDLING ---
-      // 请求格式转换（基于 client 格式和 provider 类型）
-      const fromFormat: Format = mapClientFormatToTransformer(session.originalFormat);
-      const toFormat: Format | null = provider.providerType
-        ? mapProviderTypeToTransformer(provider.providerType)
-        : null;
-
-      if (fromFormat !== toFormat && fromFormat && toFormat) {
-        try {
-          const transformed = defaultRegistry.transformRequest(
-            fromFormat,
-            toFormat,
-            session.request.model || "",
-            session.request.message,
-            true // 假设所有请求都是流式的
-          );
-
-          logger.debug("ProxyForwarder: Request format transformed", {
-            from: fromFormat,
-            to: toFormat,
-            model: session.request.model,
-          });
-
-          // 更新 session 中的请求体
-          session.request.message = transformed;
-        } catch (error) {
-          logger.error("ProxyForwarder: Request transformation failed", {
-            from: fromFormat,
-            to: toFormat,
-            error,
-          });
-          // 转换失败时继续使用原始请求
-        }
-      }
-
       if (
         resolvedCacheTtl &&
         (provider.providerType === "claude" || provider.providerType === "claude-auth")
@@ -1396,60 +1356,8 @@ export class ProxyForwarder {
         }
       }
 
-      // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
-      if (toFormat === "codex") {
-        const isOfficialClient = isOfficialCodexClient(session.userAgent);
-        const log = isOfficialClient ? logger.debug.bind(logger) : logger.info.bind(logger);
-
-        log("[ProxyForwarder] Normalizing Codex request for upstream compatibility", {
-          userAgent: session.userAgent || "N/A",
-          providerId: provider.id,
-          providerName: provider.name,
-          officialClient: isOfficialClient,
-        });
-
-        if (isOfficialClient) {
-          logger.debug("[ProxyForwarder] Bypassing sanitizer for official Codex CLI client", {
-            providerId: provider.id,
-            providerName: provider.name,
-          });
-        } else {
-          try {
-            const sanitized = await sanitizeCodexRequest(
-              session.request.message as Record<string, unknown>,
-              session.request.model || "gpt-5-codex",
-              undefined,
-              undefined,
-              { isOfficialClient }
-            );
-
-            const instructionsLength =
-              typeof sanitized.instructions === "string" ? sanitized.instructions.length : 0;
-
-            if (!instructionsLength) {
-              logger.debug("[ProxyForwarder] Codex request has no instructions (passthrough)", {
-                providerId: provider.id,
-                officialClient: isOfficialClient,
-              });
-            }
-
-            session.request.message = sanitized;
-
-            logger.debug("[ProxyForwarder] Codex request sanitized", {
-              instructionsLength,
-              hasParallelToolCalls: sanitized.parallel_tool_calls,
-              hasStoreFlag: sanitized.store,
-            });
-          } catch (error) {
-            logger.error("[ProxyForwarder] Failed to sanitize Codex request, using original", {
-              error,
-              providerId: provider.id,
-            });
-          }
-        }
-
-        // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
-        // 说明：即使官方客户端跳过清洗，也允许管理员在供应商层面强制覆写关键参数
+      // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
+      if (provider.providerType === "codex") {
         const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
           provider,
           session.request.message as Record<string, unknown>

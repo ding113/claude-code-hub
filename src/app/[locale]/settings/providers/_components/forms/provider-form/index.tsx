@@ -196,7 +196,6 @@ function ProviderFormContent({
           model_redirects: state.routing.modelRedirects,
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
-          join_claude_pool: state.routing.joinClaudePool,
           priority: state.routing.priority,
           weight: state.routing.weight,
           cost_multiplier: state.routing.costMultiplier,
@@ -504,7 +503,7 @@ export function ProviderForm({
   hideWebsiteUrl = false,
   preset,
   urlResolver,
-  allowedProviderTypes,
+  allowedProviderTypes: _allowedProviderTypes,
 }: ProviderFormProps) {
   const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [autoUrlPending, setAutoUrlPending] = useState(false);

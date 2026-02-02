@@ -1,7 +1,7 @@
 "use client";
 
 import { formatInTimeZone } from "date-fns-tz";
-import { AlertCircle, CheckCircle2, Download, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, XCircle } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -78,11 +78,12 @@ export function ProbeTerminal({
   const [filter, setFilter] = useState("");
 
   // Auto-scroll to bottom when new logs arrive
+  // biome-ignore lint/correctness/useExhaustiveDependencies: logs.length intentionally triggers re-scroll
   useEffect(() => {
     if (autoScroll && !userScrolled && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs, autoScroll, userScrolled]);
+  }, [logs.length, autoScroll, userScrolled]);
 
   // Detect user scroll
   const handleScroll = () => {
@@ -188,7 +189,6 @@ export function ProbeTerminal({
           filteredLogs.map((log) => {
             const level = getLogLevel(log);
             const config = levelConfig[level];
-            const Icon = config.icon;
 
             return (
               <button

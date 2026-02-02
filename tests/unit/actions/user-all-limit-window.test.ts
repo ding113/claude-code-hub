@@ -87,7 +87,7 @@ describe("getUserAllLimitUsage - daily window mode handling", () => {
     });
 
     getTimeRangeForPeriodWithModeMock.mockImplementation(
-      async (period: string, resetTime: string, mode: string) => {
+      async (period: string, _resetTime: string, mode: string) => {
         if (period === "daily" && mode === "rolling") {
           return { startTime: past24h, endTime: now };
         }

@@ -202,8 +202,6 @@ function makeProviderDisplay(overrides: Partial<ProviderDisplay> = {}): Provider
     preserveClientIp: false,
     modelRedirects: null,
     allowedModels: null,
-    joinClaudePool: false,
-    codexInstructionsStrategy: "auto",
     mcpPassthroughType: "none",
     mcpPassthroughUrl: null,
     limit5hUsd: null,

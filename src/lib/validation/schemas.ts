@@ -413,7 +413,6 @@ export const CreateProviderSchema = z
     preserve_client_ip: z.boolean().optional().default(false),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
-    join_claude_pool: z.boolean().optional().default(false),
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional().default("none"),
     mcp_passthrough_url: z
@@ -613,7 +612,6 @@ export const UpdateProviderSchema = z
     preserve_client_ip: z.boolean().optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
-    join_claude_pool: z.boolean().optional(),
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional(),
     mcp_passthrough_url: z

@@ -11,16 +11,12 @@ export type CodexSessionIdSource =
 export interface CodexSessionExtractionResult {
   sessionId: string | null;
   source: CodexSessionIdSource;
-  isCodexClient: boolean;
 }
 
 // Session ID validation constants
 const CODEX_SESSION_ID_MIN_LENGTH = 21; // Codex session_id typically > 20 chars (UUID-like)
 const CODEX_SESSION_ID_MAX_LENGTH = 256; // Prevent Redis key bloat from malicious input
 const SESSION_ID_PATTERN = /^[\w\-.:]+$/; // Alphanumeric, dash, dot, colon only
-
-// Codex CLI User-Agent pattern (pre-compiled for performance)
-const CODEX_CLI_PATTERN = /^(codex_vscode|codex_cli_rs)\/[\d.]+/i;
 
 export function normalizeCodexSessionId(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -42,18 +38,6 @@ function parseMetadata(requestBody: Record<string, unknown>): Record<string, unk
 }
 
 /**
- * Detect official Codex CLI clients by User-Agent.
- *
- * Examples:
- * - codex_vscode/0.35.0 (...)
- * - codex_cli_rs/0.50.0 (...)
- */
-export function isCodexClient(userAgent: string | null): boolean {
-  if (!userAgent) return false;
-  return CODEX_CLI_PATTERN.test(userAgent);
-}
-
-/**
  * Extract Codex session id from headers/body with priority:
  * 1) headers["session_id"]
  * 2) headers["x-session-id"]
@@ -65,17 +49,13 @@ export function isCodexClient(userAgent: string | null): boolean {
  */
 export function extractCodexSessionId(
   headers: Headers,
-  requestBody: Record<string, unknown>,
-  userAgent: string | null
+  requestBody: Record<string, unknown>
 ): CodexSessionExtractionResult {
-  const officialClient = isCodexClient(userAgent);
-
   const headerSessionId = normalizeCodexSessionId(headers.get("session_id"));
   if (headerSessionId) {
     return {
       sessionId: headerSessionId,
       source: "header_session_id",
-      isCodexClient: officialClient,
     };
   }
 
@@ -84,7 +64,6 @@ export function extractCodexSessionId(
     return {
       sessionId: headerXSessionId,
       source: "header_x_session_id",
-      isCodexClient: officialClient,
     };
   }
 
@@ -94,7 +73,6 @@ export function extractCodexSessionId(
     return {
       sessionId: bodyPromptCacheKey,
       source: "body_prompt_cache_key",
-      isCodexClient: officialClient,
     };
   }
 
@@ -104,7 +82,6 @@ export function extractCodexSessionId(
     return {
       sessionId: bodyMetadataSessionId,
       source: "body_metadata_session_id",
-      isCodexClient: officialClient,
     };
   }
 
@@ -115,10 +92,9 @@ export function extractCodexSessionId(
       return {
         sessionId,
         source: "body_previous_response_id",
-        isCodexClient: officialClient,
       };
     }
   }
 
-  return { sessionId: null, source: null, isCodexClient: officialClient };
+  return { sessionId: null, source: null };
 }

@@ -38,7 +38,6 @@ export interface RoutingState {
   preserveClientIp: boolean;
   modelRedirects: Record<string, string>;
   allowedModels: string[];
-  joinClaudePool: boolean;
   priority: number;
   weight: number;
   costMultiplier: number;
@@ -115,7 +114,6 @@ export type ProviderFormAction =
   | { type: "SET_PRESERVE_CLIENT_IP"; payload: boolean }
   | { type: "SET_MODEL_REDIRECTS"; payload: Record<string, string> }
   | { type: "SET_ALLOWED_MODELS"; payload: string[] }
-  | { type: "SET_JOIN_CLAUDE_POOL"; payload: boolean }
   | { type: "SET_PRIORITY"; payload: number }
   | { type: "SET_WEIGHT"; payload: number }
   | { type: "SET_COST_MULTIPLIER"; payload: number }

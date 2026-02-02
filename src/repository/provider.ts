@@ -37,8 +37,6 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     preserveClientIp: providerData.preserve_client_ip ?? false,
     modelRedirects: providerData.model_redirects,
     allowedModels: providerData.allowed_models,
-    joinClaudePool: providerData.join_claude_pool ?? false,
-    codexInstructionsStrategy: providerData.codex_instructions_strategy ?? "auto",
     mcpPassthroughType: providerData.mcp_passthrough_type ?? "none",
     mcpPassthroughUrl: providerData.mcp_passthrough_url ?? null,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
@@ -94,8 +92,6 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     preserveClientIp: providers.preserveClientIp,
     modelRedirects: providers.modelRedirects,
     allowedModels: providers.allowedModels,
-    joinClaudePool: providers.joinClaudePool,
-    codexInstructionsStrategy: providers.codexInstructionsStrategy,
     mcpPassthroughType: providers.mcpPassthroughType,
     mcpPassthroughUrl: providers.mcpPassthroughUrl,
     limit5hUsd: providers.limit5hUsd,
@@ -176,8 +172,6 @@ export async function findProviderList(
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
-      joinClaudePool: providers.joinClaudePool,
-      codexInstructionsStrategy: providers.codexInstructionsStrategy,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -254,8 +248,6 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
-      joinClaudePool: providers.joinClaudePool,
-      codexInstructionsStrategy: providers.codexInstructionsStrategy,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -336,8 +328,6 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
-      joinClaudePool: providers.joinClaudePool,
-      codexInstructionsStrategy: providers.codexInstructionsStrategy,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -412,10 +402,6 @@ export async function updateProvider(
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
   if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
-  if (providerData.join_claude_pool !== undefined)
-    dbData.joinClaudePool = providerData.join_claude_pool;
-  if (providerData.codex_instructions_strategy !== undefined)
-    dbData.codexInstructionsStrategy = providerData.codex_instructions_strategy;
   if (providerData.mcp_passthrough_type !== undefined)
     dbData.mcpPassthroughType = providerData.mcp_passthrough_type;
   if (providerData.mcp_passthrough_url !== undefined)
@@ -530,8 +516,6 @@ export async function updateProvider(
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
-      joinClaudePool: providers.joinClaudePool,
-      codexInstructionsStrategy: providers.codexInstructionsStrategy,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,

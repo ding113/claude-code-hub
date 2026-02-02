@@ -1,20 +1,14 @@
 /**
  * API 格式映射工具
  *
- * 统一管理不同格式命名之间的映射关系：
- * - Client Format（路由检测到的格式）→ Transformer Format（转换器使用的格式）
- * - Provider Type（数据库中的类型）→ Transformer Format
+ * 统一管理客户端格式检测逻辑：
+ * - 基于端点路径检测格式
+ * - 基于请求体结构检测格式
  *
  * 背景：
- * - session.originalFormat 使用旧的命名: "response" | "openai" | "claude" | "gemini-cli"
- * - 转换器使用新的 Format 类型: "codex" | "openai-compatible" | "claude" | "gemini-cli"
- * - provider.providerType 使用数据库类型: "codex" | "openai-compatible" | "claude" | "gemini-cli"
- *
- * 此文件提供统一的映射函数，避免在多个地方重复映射逻辑。
+ * - session.originalFormat 使用命名: "response" | "openai" | "claude" | "gemini" | "gemini-cli"
+ * - 这些格式用于路由层识别客户端请求类型
  */
-
-import type { ProviderType } from "@/types/provider";
-import type { Format } from "../converters/types";
 
 /**
  * Client Format（路由层检测到的请求格式）
@@ -87,73 +81,6 @@ export function detectFormatByEndpoint(pathname: string): ClientFormat | null {
   }
 
   return null; // 未知端点，需要回退到请求体检测
-}
-
-/**
- * 将 Client Format 映射到 Transformer Format
- *
- * @param clientFormat - 路由层检测到的格式
- * @returns 转换器使用的格式
- */
-export function mapClientFormatToTransformer(clientFormat: ClientFormat): Format {
-  switch (clientFormat) {
-    case "response":
-      return "codex";
-    case "openai":
-      return "openai-compatible";
-    case "claude":
-      return "claude";
-    case "gemini":
-      return "gemini-cli"; // 直接 Gemini 格式内部使用 gemini-cli 转换器
-    case "gemini-cli":
-      return "gemini-cli";
-    default: {
-      // 类型守卫：如果有未处理的格式，TypeScript 会报错
-      const _exhaustiveCheck: never = clientFormat;
-      throw new Error(`Unknown client format: ${_exhaustiveCheck}`);
-    }
-  }
-}
-
-/**
- * 将 Provider Type 映射到 Transformer Format
- *
- * Provider Type 和 Transformer Format 是 1:1 映射的，
- * 因为它们都使用标准化的格式命名。
- *
- * @param providerType - 供应商类型
- * @returns 转换器使用的格式
- */
-export function mapProviderTypeToTransformer(providerType: ProviderType): Format {
-  // Provider Type 和 Transformer Format 完全一致
-  // 这个函数主要用于类型安全和显式映射
-  return providerType as Format;
-}
-
-/**
- * 将 Transformer Format 映射到 Client Format
- *
- * 这个映射用于响应转换时，确定应该返回哪种格式给客户端。
- *
- * @param transformerFormat - 转换器格式
- * @returns 客户端期望的格式
- */
-export function mapTransformerFormatToClient(transformerFormat: Format): ClientFormat {
-  switch (transformerFormat) {
-    case "codex":
-      return "response";
-    case "openai-compatible":
-      return "openai";
-    case "claude":
-      return "claude";
-    case "gemini-cli":
-      return "gemini"; // 返回直接 Gemini 格式给客户端
-    default: {
-      // 类型守卫：如果有未处理的格式，TypeScript 会报错
-      const _exhaustiveCheck: never = transformerFormat;
-      throw new Error(`Unknown transformer format: ${_exhaustiveCheck}`);
-    }
-  }
 }
 
 /**

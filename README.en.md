@@ -73,7 +73,7 @@ Register via this link to get started → <a href="https://co.yes.vg/register?re
 - 📊 **Real-time monitoring & analytics**: Dashboards, active sessions, consumption leaderboards, decision-chain tracing, and proxy health tracking provide second-level visibility.
 - 💰 **Price sheet management**: Paginated SQL queries with debounce search and LiteLLM sync keep thousands of model prices searchable in milliseconds.
 - 🔁 **Session management**: Five-minute context cache preserves decision trails, reduces vendor switches, and maintains full auditability.
-- 🔄 **OpenAI compatibility layer**: Supports `/v1/chat/completions`, handles format conversions, tool calls, reasoning fields, and Codex CLI instruction injection automatically.
+- 🔄 **OpenAI-compatible endpoint**: Supports `/v1/chat/completions` (OpenAI-compatible format), passes through tool calls and reasoning fields, enforces strict same-format routing with no cross-format conversion.
 
 ## ⚡️ Quick Start
 
@@ -217,7 +217,7 @@ Multi-provider pool (Claude / OpenAI / Gemini / others) + PostgreSQL + Redis
 2. **Context control**: `SessionManager` fetches the five-minute cache from Redis, enforces concurrency, and records the decision chain.
 3. **Rate limiting**: `RateLimitService` applies Lua-driven atomic counters for RPM, spend, and session caps, falling back gracefully if Redis is unavailable.
 4. **Routing**: `ProxyProviderResolver` scores vendors with weights, priorities, breaker states, and session reuse, retrying up to three times.
-5. **Forwarding & compatibility**: `ProxyForwarder` plus `ResponseTransformer` adapt Claude/OpenAI/Response formats, handle proxies, and honor model redirects.
+5. **Forwarding & response handling**: `ProxyForwarder` sends requests upstream; `ProxyResponseHandler` processes response streams while preserving endpoint-native formats, with proxy support and model redirects.
 6. **Observability**: Dashboards, leaderboards, and price sheets query PostgreSQL via repositories with hourly aggregations.
 
 ## 🚢 Deployment

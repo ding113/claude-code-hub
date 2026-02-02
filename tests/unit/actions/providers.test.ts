@@ -104,8 +104,6 @@ describe("Provider Actions - Async Optimization", () => {
         preserveClientIp: false,
         modelRedirects: null,
         allowedModels: null,
-        joinClaudePool: false,
-        codexInstructionsStrategy: "inherit",
         mcpPassthroughType: "none",
         mcpPassthroughUrl: null,
         limit5hUsd: null,
