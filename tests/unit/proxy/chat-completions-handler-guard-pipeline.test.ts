@@ -415,6 +415,45 @@ describe("handleChatCompletions：必须走 GuardPipeline", () => {
     ]);
   });
 
+  test("Response(input) 支持 input 为 string（OpenAI shortcut）", async () => {
+    h.session = createSession({
+      model: "gpt-4.1-mini",
+      input: "hi",
+      stream: false,
+    });
+
+    const { handleChatCompletions } = await import("@/app/v1/_lib/codex/chat-completions-handler");
+    const res = await handleChatCompletions({} as any);
+
+    expect(res.status).toBe(200);
+    expect(h.session.originalFormat).toBe("response");
+    expect((h.session.request.message as any).input).toEqual([
+      {
+        role: "user",
+        content: [{ type: "input_text", text: "hi" }],
+      },
+    ]);
+    expect(h.callOrder).toEqual([
+      "auth",
+      "sensitive",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "session",
+      "warmup",
+      "requestFilter",
+      "rateLimit",
+      "provider",
+      "providerRequestFilter",
+      "messageContext",
+      "concurrencyInc",
+      "forward",
+      "dispatch",
+      "concurrencyDec",
+    ]);
+  });
+
   test("当 sessionId 未分配时，不应进行并发计数（覆盖分支）", async () => {
     h.assignSessionId = false;
     h.session = createSession({

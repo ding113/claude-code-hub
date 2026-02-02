@@ -20,6 +20,32 @@ import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { ChatCompletionRequest } from "./types/compatible";
 
+function normalizeResponseInput(request: Record<string, unknown>): void {
+  if (!("input" in request)) return;
+
+  const input = request.input;
+
+  // OpenAI Responses API supports a string shortcut:
+  // { model, input: "hello" } -> [{ role: "user", content: [{ type: "input_text", text: "hello" }] }]
+  if (typeof input === "string") {
+    const text = input.trim();
+    request.input = text.length
+      ? [
+          {
+            role: "user",
+            content: [{ type: "input_text", text }],
+          },
+        ]
+      : [];
+    return;
+  }
+
+  // Some clients may send a single object instead of an array. Wrap it for compatibility.
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    request.input = [input];
+  }
+}
+
 /**
  * 处理 OpenAI Compatible API 请求 (/v1/chat/completions)
  *
@@ -43,7 +69,12 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
 
     // 格式检测
     const isOpenAIFormat = "messages" in request && Array.isArray(request.messages);
-    const isResponseAPIFormat = "input" in request && Array.isArray(request.input);
+    const inputValue = (request as Record<string, unknown>).input;
+    const isResponseAPIFormat =
+      "input" in request &&
+      (Array.isArray(inputValue) ||
+        typeof inputValue === "string" ||
+        (typeof inputValue === "object" && inputValue !== null));
 
     if (!isOpenAIFormat && !isResponseAPIFormat) {
       const response = new Response(
@@ -158,6 +189,9 @@ export async function handleChatCompletions(c: Context): Promise<Response> {
         );
         return await attachSessionIdToErrorResponse(session.sessionId, response);
       }
+
+      // Normalize for downstream guards/filters.
+      normalizeResponseInput(request as Record<string, unknown>);
     }
 
     const type = session.isCountTokensRequest() ? RequestType.COUNT_TOKENS : RequestType.CHAT;
