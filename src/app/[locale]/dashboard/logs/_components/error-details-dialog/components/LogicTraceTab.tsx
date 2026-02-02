@@ -49,7 +49,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
 }
 
 export function LogicTraceTab({
-  statusCode,
+  statusCode: _statusCode,
   providerChain,
   blockedBy,
   blockedReason,
