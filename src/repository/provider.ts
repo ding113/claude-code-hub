@@ -71,6 +71,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexReasoningSummaryPreference: providerData.codex_reasoning_summary_preference ?? null,
     codexTextVerbosityPreference: providerData.codex_text_verbosity_preference ?? null,
     codexParallelToolCallsPreference: providerData.codex_parallel_tool_calls_preference ?? null,
+    anthropicMaxTokensPreference: providerData.anthropic_max_tokens_preference ?? null,
+    anthropicThinkingBudgetPreference: providerData.anthropic_thinking_budget_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -122,6 +124,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
     codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
     codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+    anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
+    anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -202,6 +206,8 @@ export async function findProviderList(
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
       codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+      anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
+      anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -278,6 +284,8 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
       codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+      anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
+      anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -358,6 +366,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
       codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+      anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
+      anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -465,6 +475,11 @@ export async function updateProvider(
   if (providerData.codex_parallel_tool_calls_preference !== undefined)
     dbData.codexParallelToolCallsPreference =
       providerData.codex_parallel_tool_calls_preference ?? null;
+  if (providerData.anthropic_max_tokens_preference !== undefined)
+    dbData.anthropicMaxTokensPreference = providerData.anthropic_max_tokens_preference ?? null;
+  if (providerData.anthropic_thinking_budget_preference !== undefined)
+    dbData.anthropicThinkingBudgetPreference =
+      providerData.anthropic_thinking_budget_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -545,6 +560,8 @@ export async function updateProvider(
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
       codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+      anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
+      anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,

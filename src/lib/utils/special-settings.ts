@@ -75,6 +75,19 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.source,
         setting.sessionId,
       ]);
+    case "thinking_budget_rectifier":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.providerId ?? null,
+        setting.trigger,
+        setting.attemptNumber,
+        setting.retryAttemptNumber,
+        setting.before.maxTokens,
+        setting.before.thinkingBudgetTokens,
+        setting.after.maxTokens,
+        setting.after.thinkingBudgetTokens,
+      ]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;

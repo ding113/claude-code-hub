@@ -3,6 +3,7 @@ import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
 import type { Dispatcher } from "undici";
 import { Agent, request as undiciRequest } from "undici";
+import { applyAnthropicProviderOverridesWithAudit } from "@/lib/anthropic/provider-overrides";
 import {
   getCircuitState,
   getProviderHealthInfo,
@@ -53,6 +54,10 @@ import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./fo
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
+import {
+  detectThinkingBudgetRectifierTrigger,
+  rectifyThinkingBudget,
+} from "./thinking-budget-rectifier";
 import {
   detectThinkingSignatureRectifierTrigger,
   rectifyAnthropicRequestMessage,
@@ -222,6 +227,7 @@ export class ProxyForwarder {
         envDefaultMaxAttempts
       );
       let thinkingSignatureRectifierRetried = false;
+      let thinkingBudgetRectifierRetried = false;
 
       const requestPath = session.requestUrl.pathname;
       const isMcpRequest =
@@ -685,6 +691,137 @@ export class ProxyForwarder {
                   }
 
                   // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
+                  maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
+                  continue;
+                }
+              }
+            }
+          }
+
+          // 2.6 Thinking budget rectifier: fix budget_tokens < 1024 errors and retry once
+          const budgetRectifierTrigger = isAnthropicProvider
+            ? detectThinkingBudgetRectifierTrigger(errorMessage)
+            : null;
+
+          if (budgetRectifierTrigger) {
+            const settings = await getCachedSystemSettings();
+            const budgetRectifierEnabled = settings.enableThinkingBudgetRectifier ?? true;
+
+            if (budgetRectifierEnabled) {
+              if (thinkingBudgetRectifierRetried) {
+                errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+              } else {
+                const requestDetailsBeforeRectify = buildRequestDetails(session);
+
+                const budgetRectified = rectifyThinkingBudget(
+                  session.request.message as Record<string, unknown>
+                );
+
+                session.addSpecialSetting({
+                  type: "thinking_budget_rectifier",
+                  scope: "request",
+                  hit: budgetRectified.applied,
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  trigger: budgetRectifierTrigger,
+                  attemptNumber: attemptCount,
+                  retryAttemptNumber: attemptCount + 1,
+                  before: budgetRectified.before,
+                  after: budgetRectified.after,
+                });
+
+                const specialSettings = session.getSpecialSettings();
+                if (specialSettings && session.sessionId) {
+                  try {
+                    await SessionManager.storeSessionSpecialSettings(
+                      session.sessionId,
+                      specialSettings,
+                      session.requestSequence
+                    );
+                  } catch (persistError) {
+                    logger.error("[ProxyForwarder] Failed to store special settings", {
+                      error: persistError,
+                      sessionId: session.sessionId,
+                    });
+                  }
+                }
+
+                if (specialSettings && session.messageContext?.id) {
+                  try {
+                    await updateMessageRequestDetails(session.messageContext.id, {
+                      specialSettings,
+                    });
+                  } catch (persistError) {
+                    logger.error("[ProxyForwarder] Failed to persist special settings", {
+                      error: persistError,
+                      messageRequestId: session.messageContext.id,
+                    });
+                  }
+                }
+
+                if (!budgetRectified.applied) {
+                  logger.info(
+                    "ProxyForwarder: Thinking budget rectifier not applicable, skipping retry",
+                    {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      trigger: budgetRectifierTrigger,
+                      attemptNumber: attemptCount,
+                    }
+                  );
+                  errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+                } else {
+                  logger.info("ProxyForwarder: Thinking budget rectifier applied, retrying", {
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    trigger: budgetRectifierTrigger,
+                    attemptNumber: attemptCount,
+                    willRetryAttemptNumber: attemptCount + 1,
+                    before: budgetRectified.before,
+                    after: budgetRectified.after,
+                  });
+
+                  thinkingBudgetRectifierRetried = true;
+
+                  if (lastError instanceof ProxyError) {
+                    session.addProviderToChain(currentProvider, {
+                      ...endpointAudit,
+                      reason: "retry_failed",
+                      circuitState: getCircuitState(currentProvider.id),
+                      attemptNumber: attemptCount,
+                      errorMessage,
+                      statusCode: lastError.statusCode,
+                      errorDetails: {
+                        provider: {
+                          id: currentProvider.id,
+                          name: currentProvider.name,
+                          statusCode: lastError.statusCode,
+                          statusText: lastError.message,
+                          upstreamBody: lastError.upstreamError?.body,
+                          upstreamParsed: lastError.upstreamError?.parsed,
+                        },
+                        request: requestDetailsBeforeRectify,
+                      },
+                    });
+                  } else {
+                    session.addProviderToChain(currentProvider, {
+                      ...endpointAudit,
+                      reason: "retry_failed",
+                      circuitState: getCircuitState(currentProvider.id),
+                      attemptNumber: attemptCount,
+                      errorMessage,
+                      errorDetails: {
+                        system: {
+                          errorType: lastError.constructor.name,
+                          errorName: lastError.name,
+                          errorMessage: lastError.message || lastError.name || "Unknown error",
+                          errorStack: lastError.stack?.split("\n").slice(0, 3).join("\n"),
+                        },
+                        request: requestDetailsBeforeRectify,
+                      },
+                    });
+                  }
+
                   maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
                   continue;
                 }
@@ -1338,11 +1475,51 @@ export class ProxyForwarder {
           }
 
           if (session.messageContext?.id) {
-            // 同上：确保 special_settings 的“旧值”不会在并发下覆盖“新值”
+            // 同上：确保 special_settings 的"旧值"不会在并发下覆盖"新值"
             await updateMessageRequestDetails(session.messageContext.id, {
               specialSettings,
             }).catch((err) => {
               logger.error("[ProxyForwarder] Failed to persist special settings", {
+                error: err,
+                messageRequestId: session.messageContext?.id,
+              });
+            });
+          }
+        }
+      }
+
+      // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
+      // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
+      if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+        const { request: anthropicOverridden, audit: anthropicAudit } =
+          applyAnthropicProviderOverridesWithAudit(
+            provider,
+            session.request.message as Record<string, unknown>
+          );
+        session.request.message = anthropicOverridden;
+
+        if (anthropicAudit) {
+          session.addSpecialSetting(anthropicAudit);
+          const specialSettings = session.getSpecialSettings();
+
+          if (session.sessionId) {
+            await SessionManager.storeSessionSpecialSettings(
+              session.sessionId,
+              specialSettings,
+              session.requestSequence
+            ).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to store Anthropic special settings", {
+                error: err,
+                sessionId: session.sessionId,
+              });
+            });
+          }
+
+          if (session.messageContext?.id) {
+            await updateMessageRequestDetails(session.messageContext.id, {
+              specialSettings,
+            }).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to persist Anthropic special settings", {
                 error: err,
                 messageRequestId: session.messageContext?.id,
               });

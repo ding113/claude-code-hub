@@ -59,6 +59,9 @@ export function createInitialState(
       codexTextVerbosityPreference: sourceProvider?.codexTextVerbosityPreference ?? "inherit",
       codexParallelToolCallsPreference:
         sourceProvider?.codexParallelToolCallsPreference ?? "inherit",
+      anthropicMaxTokensPreference: sourceProvider?.anthropicMaxTokensPreference ?? "inherit",
+      anthropicThinkingBudgetPreference:
+        sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
@@ -167,6 +170,16 @@ export function providerFormReducer(
       return {
         ...state,
         routing: { ...state.routing, codexParallelToolCallsPreference: action.payload },
+      };
+    case "SET_ANTHROPIC_MAX_TOKENS":
+      return {
+        ...state,
+        routing: { ...state.routing, anthropicMaxTokensPreference: action.payload },
+      };
+    case "SET_ANTHROPIC_THINKING_BUDGET":
+      return {
+        ...state,
+        routing: { ...state.routing, anthropicThinkingBudgetPreference: action.payload },
       };
 
     // Rate limit

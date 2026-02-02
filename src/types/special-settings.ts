@@ -10,6 +10,7 @@ export type SpecialSetting =
   | ResponseFixerSpecialSetting
   | GuardInterceptSpecialSetting
   | ThinkingSignatureRectifierSpecialSetting
+  | ThinkingBudgetRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting;
@@ -131,4 +132,25 @@ export type CodexSessionIdCompletionSpecialSetting = {
     | "fingerprint_cache"
     | "generated_uuid_v7";
   sessionId: string;
+};
+
+export type ThinkingBudgetRectifierSpecialSetting = {
+  type: "thinking_budget_rectifier";
+  scope: "request";
+  hit: boolean;
+  providerId: number | null;
+  providerName: string | null;
+  trigger: "budget_tokens_too_low";
+  attemptNumber: number;
+  retryAttemptNumber: number;
+  before: {
+    maxTokens: number | null;
+    thinkingType: string | null;
+    thinkingBudgetTokens: number | null;
+  };
+  after: {
+    maxTokens: number | null;
+    thinkingType: string | null;
+    thinkingBudgetTokens: number | null;
+  };
 };

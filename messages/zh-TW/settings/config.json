@@ -51,6 +51,8 @@
     "enableResponseFixerDesc": "自動修復上游回應中常見的編碼、SSE 與 JSON 格式問題（預設開啟）。",
     "enableThinkingSignatureRectifier": "啟用 thinking 簽名整流器",
     "enableThinkingSignatureRectifierDesc": "當 Anthropic 類型供應商返回 thinking 簽名不相容或非法請求等錯誤時，自動移除不相容的 thinking 相關區塊並對同一供應商重試一次（預設開啟）。",
+    "enableThinkingBudgetRectifier": "啟用 thinking 預算整流器",
+    "enableThinkingBudgetRectifierDesc": "當 Anthropic 類型供應商返回 budget_tokens < 1024 錯誤時，自動將 thinking 預算設為最大值（32000），並在需要時將 max_tokens 設為 64000，然後重試一次（預設開啟）。",
     "enableCodexSessionIdCompletion": "啟用 Codex Session ID 補全",
     "enableCodexSessionIdCompletionDesc": "當 Codex 請求僅提供 session_id（請求頭）或 prompt_cache_key（請求體）之一時，自動補全另一個；若兩者皆缺失，則產生 UUID v7 會話 ID，並在同一對話內穩定複用。",
     "interceptAnthropicWarmupRequests": "攔截 Warmup 請求（Anthropic）",

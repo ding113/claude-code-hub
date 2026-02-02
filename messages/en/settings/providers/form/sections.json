@@ -238,6 +238,27 @@
         }
       }
     },
+    "anthropicOverrides": {
+      "maxTokens": {
+        "label": "Max Tokens Override",
+        "help": "Override max_tokens in request body. Range: 1-64000. 'inherit' follows the client request.",
+        "options": {
+          "inherit": "No override (follow client)",
+          "custom": "Custom"
+        },
+        "placeholder": "e.g. 32000"
+      },
+      "thinkingBudget": {
+        "label": "Thinking Budget Override",
+        "help": "Override thinking.budget_tokens in request body. Range: 1024-32000. Forces thinking.type to 'enabled' when set.",
+        "options": {
+          "inherit": "No override (follow client)",
+          "custom": "Custom"
+        },
+        "placeholder": "e.g. 10240",
+        "maxOutButton": "Max Out (32000)"
+      }
+    },
     "context1m": {
       "desc": "Configure 1M context window support. Only affects Sonnet models (claude-sonnet-4-5, claude-sonnet-4). Tiered pricing applies when enabled.",
       "label": "1M Context Window",

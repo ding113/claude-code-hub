@@ -512,6 +512,171 @@ export function RoutingSection() {
             </div>
           </SectionCard>
         )}
+
+        {/* Anthropic Overrides - Claude type only */}
+        {(state.routing.providerType === "claude" ||
+          state.routing.providerType === "claude-auth") && (
+          <SectionCard
+            title={t("sections.routing.anthropicOverrides.maxTokens.label")}
+            description={t("sections.routing.anthropicOverrides.maxTokens.help")}
+            icon={Timer}
+          >
+            <div className="space-y-4">
+              <SmartInputWrapper label={t("sections.routing.anthropicOverrides.maxTokens.label")}>
+                <div className="flex gap-2">
+                  <Select
+                    value={
+                      state.routing.anthropicMaxTokensPreference === "inherit"
+                        ? "inherit"
+                        : "custom"
+                    }
+                    onValueChange={(val) => {
+                      if (val === "inherit") {
+                        dispatch({ type: "SET_ANTHROPIC_MAX_TOKENS", payload: "inherit" });
+                      } else {
+                        dispatch({ type: "SET_ANTHROPIC_MAX_TOKENS", payload: "8192" });
+                      }
+                    }}
+                    disabled={state.ui.isPending}
+                  >
+                    <SelectTrigger className="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit">
+                        {t("sections.routing.anthropicOverrides.maxTokens.options.inherit")}
+                      </SelectItem>
+                      <SelectItem value="custom">
+                        {t("sections.routing.anthropicOverrides.maxTokens.options.custom")}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {state.routing.anthropicMaxTokensPreference !== "inherit" && (
+                    <Input
+                      type="number"
+                      value={
+                        state.routing.anthropicMaxTokensPreference === "inherit"
+                          ? ""
+                          : state.routing.anthropicMaxTokensPreference
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "") {
+                          dispatch({ type: "SET_ANTHROPIC_MAX_TOKENS", payload: "inherit" });
+                        } else {
+                          dispatch({ type: "SET_ANTHROPIC_MAX_TOKENS", payload: val });
+                        }
+                      }}
+                      placeholder={t("sections.routing.anthropicOverrides.maxTokens.placeholder")}
+                      disabled={state.ui.isPending}
+                      min="1"
+                      max="64000"
+                      className="flex-1"
+                    />
+                  )}
+                </div>
+              </SmartInputWrapper>
+
+              <SmartInputWrapper
+                label={t("sections.routing.anthropicOverrides.thinkingBudget.label")}
+              >
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex gap-2 items-center">
+                      <Select
+                        value={
+                          state.routing.anthropicThinkingBudgetPreference === "inherit"
+                            ? "inherit"
+                            : "custom"
+                        }
+                        onValueChange={(val) => {
+                          if (val === "inherit") {
+                            dispatch({
+                              type: "SET_ANTHROPIC_THINKING_BUDGET",
+                              payload: "inherit",
+                            });
+                          } else {
+                            dispatch({
+                              type: "SET_ANTHROPIC_THINKING_BUDGET",
+                              payload: "10240",
+                            });
+                          }
+                        }}
+                        disabled={state.ui.isPending}
+                      >
+                        <SelectTrigger className="w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inherit">
+                            {t(
+                              "sections.routing.anthropicOverrides.thinkingBudget.options.inherit"
+                            )}
+                          </SelectItem>
+                          <SelectItem value="custom">
+                            {t("sections.routing.anthropicOverrides.thinkingBudget.options.custom")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {state.routing.anthropicThinkingBudgetPreference !== "inherit" && (
+                        <>
+                          <Input
+                            type="number"
+                            value={
+                              state.routing.anthropicThinkingBudgetPreference === "inherit"
+                                ? ""
+                                : state.routing.anthropicThinkingBudgetPreference
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "") {
+                                dispatch({
+                                  type: "SET_ANTHROPIC_THINKING_BUDGET",
+                                  payload: "inherit",
+                                });
+                              } else {
+                                dispatch({
+                                  type: "SET_ANTHROPIC_THINKING_BUDGET",
+                                  payload: val,
+                                });
+                              }
+                            }}
+                            placeholder={t(
+                              "sections.routing.anthropicOverrides.thinkingBudget.placeholder"
+                            )}
+                            disabled={state.ui.isPending}
+                            min="1024"
+                            max="32000"
+                            className="flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              dispatch({
+                                type: "SET_ANTHROPIC_THINKING_BUDGET",
+                                payload: "32000",
+                              })
+                            }
+                            className="px-3 py-2 text-xs bg-primary/10 hover:bg-primary/20 text-primary rounded-md transition-colors whitespace-nowrap"
+                            disabled={state.ui.isPending}
+                          >
+                            {t("sections.routing.anthropicOverrides.thinkingBudget.maxOutButton")}
+                          </button>
+                        </>
+                      )}
+                      <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <p className="text-sm">
+                      {t("sections.routing.anthropicOverrides.thinkingBudget.help")}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </SmartInputWrapper>
+            </div>
+          </SectionCard>
+        )}
       </motion.div>
     </TooltipProvider>
   );

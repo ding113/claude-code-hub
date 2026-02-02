@@ -276,6 +276,12 @@ export const providers = pgTable('providers', {
   codexTextVerbosityPreference: varchar('codex_text_verbosity_preference', { length: 10 }),
   codexParallelToolCallsPreference: varchar('codex_parallel_tool_calls_preference', { length: 10 }),
 
+  // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
+  // - 'inherit' or null: follow client request
+  // - numeric string: force override to that value
+  anthropicMaxTokensPreference: varchar('anthropic_max_tokens_preference', { length: 20 }),
+  anthropicThinkingBudgetPreference: varchar('anthropic_thinking_budget_preference', { length: 20 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),
@@ -592,6 +598,12 @@ export const systemSettings = pgTable('system_settings', {
   // thinking signature 整流器（默认开启）
   // 开启后：当 Anthropic 类型供应商出现 thinking 签名不兼容/非法请求等 400 错误时，自动整流并重试一次
   enableThinkingSignatureRectifier: boolean('enable_thinking_signature_rectifier')
+    .notNull()
+    .default(true),
+
+  // thinking budget 整流器（默认开启）
+  // 开启后：当 Anthropic 类型供应商出现 budget_tokens < 1024 错误时，自动整流并重试一次
+  enableThinkingBudgetRectifier: boolean('enable_thinking_budget_rectifier')
     .notNull()
     .default(true),
 

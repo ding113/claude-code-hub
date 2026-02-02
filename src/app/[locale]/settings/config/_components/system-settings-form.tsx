@@ -48,6 +48,7 @@ interface SystemSettingsFormProps {
     | "enableHttp2"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
+    | "enableThinkingBudgetRectifier"
     | "enableCodexSessionIdCompletion"
     | "enableResponseFixer"
     | "responseFixerConfig"
@@ -84,6 +85,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [enableThinkingSignatureRectifier, setEnableThinkingSignatureRectifier] = useState(
     initialSettings.enableThinkingSignatureRectifier
+  );
+  const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
+    initialSettings.enableThinkingBudgetRectifier
   );
   const [enableCodexSessionIdCompletion, setEnableCodexSessionIdCompletion] = useState(
     initialSettings.enableCodexSessionIdCompletion
@@ -135,6 +139,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableHttp2,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
+        enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion,
         enableResponseFixer,
         responseFixerConfig,
@@ -161,6 +166,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableHttp2(result.data.enableHttp2);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
+        setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
@@ -382,6 +388,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-thinking-signature-rectifier"
             checked={enableThinkingSignatureRectifier}
             onCheckedChange={(checked) => setEnableThinkingSignatureRectifier(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Enable Thinking Budget Rectifier */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-violet-500/10 text-violet-400 shrink-0">
+              <Pencil className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("enableThinkingBudgetRectifier")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableThinkingBudgetRectifierDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-thinking-budget-rectifier"
+            checked={enableThinkingBudgetRectifier}
+            onCheckedChange={(checked) => setEnableThinkingBudgetRectifier(checked)}
             disabled={isPending}
           />
         </div>

@@ -124,6 +124,8 @@ export function toProvider(dbProvider: any): Provider {
     codexReasoningSummaryPreference: dbProvider?.codexReasoningSummaryPreference ?? null,
     codexTextVerbosityPreference: dbProvider?.codexTextVerbosityPreference ?? null,
     codexParallelToolCallsPreference: dbProvider?.codexParallelToolCallsPreference ?? null,
+    anthropicMaxTokensPreference: dbProvider?.anthropicMaxTokensPreference ?? null,
+    anthropicThinkingBudgetPreference: dbProvider?.anthropicThinkingBudgetPreference ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
     rpd: dbProvider?.rpd ?? null,
@@ -189,6 +191,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableHttp2: dbSettings?.enableHttp2 ?? false,
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
+    enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
     responseFixerConfig: {

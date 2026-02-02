@@ -1,5 +1,7 @@
 import type { Dispatch } from "react";
 import type {
+  AnthropicMaxTokensPreference,
+  AnthropicThinkingBudgetPreference,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
@@ -47,6 +49,9 @@ export interface RoutingState {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference;
   codexTextVerbosityPreference: CodexTextVerbosityPreference;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference;
+  // Anthropic-specific
+  anthropicMaxTokensPreference: AnthropicMaxTokensPreference;
+  anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference;
 }
 
 export interface RateLimitState {
@@ -120,6 +125,8 @@ export type ProviderFormAction =
   | { type: "SET_CODEX_REASONING_SUMMARY"; payload: CodexReasoningSummaryPreference }
   | { type: "SET_CODEX_TEXT_VERBOSITY"; payload: CodexTextVerbosityPreference }
   | { type: "SET_CODEX_PARALLEL_TOOL_CALLS"; payload: CodexParallelToolCallsPreference }
+  | { type: "SET_ANTHROPIC_MAX_TOKENS"; payload: AnthropicMaxTokensPreference }
+  | { type: "SET_ANTHROPIC_THINKING_BUDGET"; payload: AnthropicThinkingBudgetPreference }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }
   | { type: "SET_LIMIT_DAILY_USD"; payload: number | null }

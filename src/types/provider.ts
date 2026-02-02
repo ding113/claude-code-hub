@@ -30,6 +30,12 @@ export type CodexTextVerbosityPreference = "inherit" | "low" | "medium" | "high"
 // 由于 Select 的 value 需要是字符串，这里用 "true"/"false" 表示布尔值
 export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
 
+// Anthropic (Messages API) parameter overrides
+// - "inherit": follow client request (default)
+// - numeric string: force override to that value
+export type AnthropicMaxTokensPreference = "inherit" | string;
+export type AnthropicThinkingBudgetPreference = "inherit" | string;
+
 // Codex Instructions 策略枚举
 export type CodexInstructionsStrategy = "auto" | "force_official" | "keep_original";
 
@@ -128,6 +134,10 @@ export interface Provider {
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
 
+  // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
+  anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
+  anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -202,6 +212,8 @@ export interface ProviderDisplay {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
+  anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
+  anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -290,6 +302,8 @@ export interface CreateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
+  anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -360,6 +374,8 @@ export interface UpdateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
+  anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
