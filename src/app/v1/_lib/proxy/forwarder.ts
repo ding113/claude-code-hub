@@ -2307,9 +2307,9 @@ export class ProxyForwarder {
       let resolvedUA: string;
       if (wasModified) {
         resolvedUA =
-          filteredUA ?? originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+          filteredUA ?? originalUA ?? "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
       } else {
-        resolvedUA = originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+        resolvedUA = originalUA ?? "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
       }
       overrides["user-agent"] = resolvedUA;
 

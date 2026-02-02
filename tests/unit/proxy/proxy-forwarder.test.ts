@@ -134,7 +134,7 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     const resultHeaders = buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe(
-      "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64"
+      "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1"
     );
   });
 
