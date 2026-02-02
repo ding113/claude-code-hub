@@ -30,6 +30,9 @@ class SensitiveWordCache {
   private lastReloadTime: number = 0;
   private isLoading: boolean = false;
 
+  private eventEmitterCleanup: (() => void) | null = null;
+  private redisPubSubCleanup: (() => void) | null = null;
+
   constructor() {
     this.setupEventListener();
   }
@@ -45,6 +48,10 @@ class SensitiveWordCache {
         eventEmitter.on("sensitiveWordsUpdated", handler);
         logger.info("[SensitiveWordCache] Subscribed to local eventEmitter");
 
+        this.eventEmitterCleanup = () => {
+          eventEmitter.off("sensitiveWordsUpdated", handler);
+        };
+
         try {
           const { CHANNEL_SENSITIVE_WORDS_UPDATED, subscribeCacheInvalidation } = await import(
             "@/lib/redis/pubsub"
@@ -54,6 +61,7 @@ class SensitiveWordCache {
             handler
           );
           if (cleanup) {
+            this.redisPubSubCleanup = cleanup;
             logger.info("[SensitiveWordCache] Subscribed to Redis pub/sub channel");
           }
         } catch (error) {
@@ -63,6 +71,14 @@ class SensitiveWordCache {
         logger.warn("[SensitiveWordCache] Failed to setup event listener", { error });
       }
     }
+  }
+
+  destroy(): void {
+    this.eventEmitterCleanup?.();
+    this.eventEmitterCleanup = null;
+
+    this.redisPubSubCleanup?.();
+    this.redisPubSubCleanup = null;
   }
 
   /**

@@ -88,6 +88,40 @@ describe("Redis Pub/Sub cache invalidation", () => {
     expect(onInvalidate).toHaveBeenCalledTimes(1);
   });
 
+  test("subscribeCacheInvalidation: should resubscribe on reconnect", async () => {
+    const base = new MockRedis();
+    const subscriber = new MockRedis();
+    base.duplicate.mockReturnValue(subscriber);
+    subscriber.subscribe.mockResolvedValue(1);
+
+    const { getRedisClient } = await import("@/lib/redis/client");
+    (getRedisClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue(base);
+
+    const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
+    const onInvalidate = vi.fn();
+
+    const subscribePromise = subscribeCacheInvalidation("test-channel", onInvalidate);
+
+    subscriber.status = "ready";
+    subscriber.emit("ready");
+
+    const cleanup = await subscribePromise;
+    expect(cleanup).not.toBeNull();
+    expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
+
+    subscriber.subscribe.mockClear();
+
+    subscriber.emit("close");
+    subscriber.emit("ready");
+
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
+    expect(subscriber.subscribe).toHaveBeenCalledWith("test-channel");
+
+    cleanup!();
+  });
+
   test("subscribeCacheInvalidation: should handle Redis not configured gracefully", async () => {
     const { getRedisClient } = await import("@/lib/redis/client");
     (getRedisClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue(null);

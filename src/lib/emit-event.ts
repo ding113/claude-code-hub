@@ -71,7 +71,7 @@ export async function emitRequestFiltersUpdated(): Promise<void> {
         "@/lib/redis/pubsub"
       );
       await publishCacheInvalidation(CHANNEL_REQUEST_FILTERS_UPDATED);
-      logger.info("[emitRequestFiltersUpdated] Redis pub/sub message published");
+      logger.info("[emitRequestFiltersUpdated] Redis pub/sub publish attempted");
     } catch (error) {
       logger.warn("[emitRequestFiltersUpdated] Failed to publish to Redis", { error });
     }

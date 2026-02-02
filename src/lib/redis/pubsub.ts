@@ -15,6 +15,48 @@ let subscriberReady: Promise<Redis> | null = null;
 const subscriptions = new Map<string, Set<CacheInvalidationCallback>>();
 const subscribedChannels = new Set<string>();
 
+let resubscribeInFlight: Promise<void> | null = null;
+
+async function resubscribeAll(sub: Redis): Promise<void> {
+  if (resubscribeInFlight) return resubscribeInFlight;
+
+  resubscribeInFlight = (async () => {
+    const channelsToSubscribe: string[] = [];
+    for (const [channel, callbacks] of subscriptions) {
+      if (!callbacks || callbacks.size === 0) continue;
+      if (!subscribedChannels.has(channel)) {
+        channelsToSubscribe.push(channel);
+      }
+    }
+
+    if (channelsToSubscribe.length === 0) return;
+
+    let successCount = 0;
+    for (const channel of channelsToSubscribe) {
+      try {
+        await sub.subscribe(channel);
+        subscribedChannels.add(channel);
+        successCount++;
+      } catch (error) {
+        logger.warn("[RedisPubSub] Failed to resubscribe channel after reconnect", {
+          channel,
+          error,
+        });
+      }
+    }
+
+    if (successCount > 0) {
+      logger.info("[RedisPubSub] Resubscribed to channels after reconnect", {
+        count: successCount,
+      });
+    }
+  })().finally(() => {
+    resubscribeInFlight = null;
+  });
+
+  return resubscribeInFlight;
+}
+
 function ensureSubscriber(baseClient: Redis): Promise<Redis> {
   if (subscriberReady) return subscriberReady;
 
@@ -49,6 +91,9 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
       subscribedChannels.clear();
 
       sub.on("error", (error) => logger.warn("[RedisPubSub] Subscriber connection error", { error }));
+      sub.on("close", () => subscribedChannels.clear());
+      sub.on("end", () => subscribedChannels.clear());
+      sub.on("ready", () => void resubscribeAll(sub));
 
       sub.on("message", (channel: string) => {
         const callbacks = subscriptions.get(channel);

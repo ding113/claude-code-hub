@@ -49,7 +49,7 @@ class GlobalEventEmitter extends NodeEventEmitter {
 
 /**
  * 全局事件发射器单例导出
- * Используем globalThis для гарантии единственного инстанса между worker'ами
+ * Use globalThis to guarantee a single instance across workers
  */
 const g = globalThis as unknown as { __CCH_EVENT_EMITTER__?: GlobalEventEmitter };
 if (!g.__CCH_EVENT_EMITTER__) {
