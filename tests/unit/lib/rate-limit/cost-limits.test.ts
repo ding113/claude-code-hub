@@ -141,7 +141,7 @@ describe("RateLimitService - cost limits and quota checks", () => {
     });
 
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("User 周消费上限已达到（20.0000/10）");
+    expect(result.reason).toContain("User weekly spending limit exceeded (20.0000/10)");
   });
 
   it("checkCostLimits：Redis cache miss 时应 fallback 到 DB 查询", async () => {
@@ -329,7 +329,7 @@ describe("RateLimitService - cost limits and quota checks", () => {
     });
 
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("供应商 周消费上限已达到（15.0000/10）");
+    expect(result.reason).toContain("Provider weekly spending limit exceeded (15.0000/10)");
   });
 
   it("checkCostLimits: Provider weekly limit with default Monday 00:00 when not specified", async () => {
@@ -351,7 +351,7 @@ describe("RateLimitService - cost limits and quota checks", () => {
     });
 
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("供应商 周消费上限已达到（25.0000/20）");
+    expect(result.reason).toContain("Provider weekly spending limit exceeded (25.0000/20)");
   });
 
   it("checkCostLimits: Key/User weekly limit should use non-suffixed key (no configurable weekly reset)", async () => {
@@ -371,7 +371,7 @@ describe("RateLimitService - cost limits and quota checks", () => {
     });
 
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("Key 周消费上限已达到（30.0000/25）");
+    expect(result.reason).toContain("Key weekly spending limit exceeded (30.0000/25)");
   });
 
   it("trackCost: should write to provider weekly key with custom suffix", async () => {
