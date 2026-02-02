@@ -39,6 +39,15 @@ export async function emitSensitiveWordsUpdated(): Promise<void> {
     } catch {
       // 忽略导入错误
     }
+
+    try {
+      const { CHANNEL_SENSITIVE_WORDS_UPDATED, publishCacheInvalidation } = await import(
+        "@/lib/redis/pubsub"
+      );
+      await publishCacheInvalidation(CHANNEL_SENSITIVE_WORDS_UPDATED);
+    } catch {
+      // 忽略导入错误
+    }
   }
 }
 

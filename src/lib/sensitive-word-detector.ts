@@ -30,6 +30,41 @@ class SensitiveWordCache {
   private lastReloadTime: number = 0;
   private isLoading: boolean = false;
 
+  constructor() {
+    this.setupEventListener();
+  }
+
+  private async setupEventListener(): Promise<void> {
+    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
+      try {
+        const { eventEmitter } = await import("@/lib/event-emitter");
+        const handler = () => {
+          logger.info("[SensitiveWordCache] Received update event, reloading...");
+          void this.reload();
+        };
+        eventEmitter.on("sensitiveWordsUpdated", handler);
+        logger.info("[SensitiveWordCache] Subscribed to local eventEmitter");
+
+        try {
+          const { CHANNEL_SENSITIVE_WORDS_UPDATED, subscribeCacheInvalidation } = await import(
+            "@/lib/redis/pubsub"
+          );
+          const cleanup = await subscribeCacheInvalidation(
+            CHANNEL_SENSITIVE_WORDS_UPDATED,
+            handler
+          );
+          if (cleanup) {
+            logger.info("[SensitiveWordCache] Subscribed to Redis pub/sub channel");
+          }
+        } catch (error) {
+          logger.warn("[SensitiveWordCache] Failed to subscribe to Redis pub/sub", { error });
+        }
+      } catch (error) {
+        logger.warn("[SensitiveWordCache] Failed to setup event listener", { error });
+      }
+    }
+  }
+
   /**
    * 从数据库重新加载敏感词列表
    */

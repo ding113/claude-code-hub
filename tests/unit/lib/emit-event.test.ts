@@ -20,6 +20,7 @@ vi.mock("@/lib/event-emitter", () => ({
 vi.mock("@/lib/redis/pubsub", () => ({
   CHANNEL_ERROR_RULES_UPDATED: "cch:cache:error_rules:updated",
   CHANNEL_REQUEST_FILTERS_UPDATED: "cch:cache:request_filters:updated",
+  CHANNEL_SENSITIVE_WORDS_UPDATED: "cch:cache:sensitive_words:updated",
   publishCacheInvalidation: mocks.publishCacheInvalidation,
 }));
 
@@ -44,12 +45,15 @@ describe.sequential("emit-event", () => {
     expect(mocks.publishCacheInvalidation).toHaveBeenCalledWith("cch:cache:error_rules:updated");
   });
 
-  test("emitSensitiveWordsUpdated：Node.js runtime 下仅触发本地事件", async () => {
+  test("emitSensitiveWordsUpdated：Node.js runtime 下应触发本地事件并广播缓存失效", async () => {
     const { emitSensitiveWordsUpdated } = await import("@/lib/emit-event");
     await emitSensitiveWordsUpdated();
 
     expect(mocks.emitSensitiveWordsUpdated).toHaveBeenCalledTimes(1);
-    expect(mocks.publishCacheInvalidation).not.toHaveBeenCalled();
+    expect(mocks.publishCacheInvalidation).toHaveBeenCalledTimes(1);
+    expect(mocks.publishCacheInvalidation).toHaveBeenCalledWith(
+      "cch:cache:sensitive_words:updated"
+    );
   });
 
   test("emitRequestFiltersUpdated：Node.js runtime 下应触发本地事件并广播缓存失效", async () => {

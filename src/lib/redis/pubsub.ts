@@ -6,6 +6,7 @@ import { getRedisClient } from "./client";
 
 export const CHANNEL_ERROR_RULES_UPDATED = "cch:cache:error_rules:updated";
 export const CHANNEL_REQUEST_FILTERS_UPDATED = "cch:cache:request_filters:updated";
+export const CHANNEL_SENSITIVE_WORDS_UPDATED = "cch:cache:sensitive_words:updated";
 
 type CacheInvalidationCallback = () => void;
 
