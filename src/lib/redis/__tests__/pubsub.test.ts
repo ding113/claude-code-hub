@@ -110,12 +110,16 @@ describe("Redis Pub/Sub cache invalidation", () => {
     expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
 
     subscriber.subscribe.mockClear();
-
     subscriber.emit("close");
     subscriber.emit("ready");
-
     await new Promise((resolve) => setImmediate(resolve));
+    expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
+    expect(subscriber.subscribe).toHaveBeenCalledWith("test-channel");
 
+    subscriber.subscribe.mockClear();
+    subscriber.emit("close");
+    subscriber.emit("ready");
+    await new Promise((resolve) => setImmediate(resolve));
     expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
     expect(subscriber.subscribe).toHaveBeenCalledWith("test-channel");
 

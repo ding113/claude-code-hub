@@ -95,7 +95,7 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
       );
       sub.on("close", () => subscribedChannels.clear());
       sub.on("end", () => subscribedChannels.clear());
-      sub.once("ready", () => void resubscribeAll(sub));
+      sub.on("ready", () => void resubscribeAll(sub));
 
       sub.on("message", (channel: string) => {
         const callbacks = subscriptions.get(channel);

@@ -56,14 +56,19 @@ export async function emitSensitiveWordsUpdated(): Promise<void> {
  */
 export async function emitRequestFiltersUpdated(): Promise<void> {
   if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
-    const { logger } = await import("@/lib/logger");
+    let logger: typeof import("@/lib/logger").logger | undefined;
+    try {
+      ({ logger } = await import("@/lib/logger"));
+    } catch {
+      // 忽略导入错误 (silent degrade)
+    }
 
     try {
       const { eventEmitter } = await import("@/lib/event-emitter");
       eventEmitter.emitRequestFiltersUpdated();
-      logger.info("[emitRequestFiltersUpdated] Local event emitted");
+      logger?.info?.("[emitRequestFiltersUpdated] Local event emitted");
     } catch (error) {
-      logger.warn("[emitRequestFiltersUpdated] Failed to emit local event", { error });
+      logger?.warn?.("[emitRequestFiltersUpdated] Failed to emit local event", { error });
     }
 
     try {
@@ -71,9 +76,9 @@ export async function emitRequestFiltersUpdated(): Promise<void> {
         "@/lib/redis/pubsub"
       );
       await publishCacheInvalidation(CHANNEL_REQUEST_FILTERS_UPDATED);
-      logger.info("[emitRequestFiltersUpdated] Redis pub/sub publish attempted");
+      logger?.info?.("[emitRequestFiltersUpdated] Redis pub/sub publish attempted");
     } catch (error) {
-      logger.warn("[emitRequestFiltersUpdated] Failed to publish to Redis", { error });
+      logger?.warn?.("[emitRequestFiltersUpdated] Failed to publish to Redis", { error });
     }
   }
 }
