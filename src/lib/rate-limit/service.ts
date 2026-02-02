@@ -511,7 +511,11 @@ export class RateLimitService {
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const { normalized, suffix } = RateLimitService.resolveDailyReset(limit.resetTime);
-            const ttl = await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
+            // Calculate TTL - for weekly provider, use custom reset params
+            const ttl =
+              limit.period === "weekly" && type === "provider"
+                ? await getTTLForPeriod("weekly", "00:00", limit.weeklyResetDay, limit.weeklyResetTime)
+                : await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
             let periodKey: string;
             if (limit.period === "daily") {
               periodKey = `${limit.period}_${suffix}`;
@@ -919,7 +923,9 @@ export class RateLimitService {
       const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         period,
         dailyResetInfo.normalized,
-        resetMode
+        resetMode,
+        weeklyResetDay ?? undefined,
+        weeklyResetTime ?? undefined
       );
 
       let current = 0;
@@ -991,7 +997,13 @@ export class RateLimitService {
             } else {
               redisKey = period;
             }
-            const ttl = await getTTLForPeriodWithMode(period, dailyResetInfo.normalized, resetMode);
+            const ttl = await getTTLForPeriodWithMode(
+              period,
+              dailyResetInfo.normalized,
+              resetMode,
+              weeklyResetDay ?? undefined,
+              weeklyResetTime ?? undefined
+            );
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${redisKey}`,
               current.toString(),
