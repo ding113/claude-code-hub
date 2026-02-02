@@ -153,11 +153,15 @@ export class RequestFilterEngine {
           const { CHANNEL_REQUEST_FILTERS_UPDATED, subscribeCacheInvalidation } = await import(
             "@/lib/redis/pubsub"
           );
-          this.redisPubSubCleanup = await subscribeCacheInvalidation(
+          const cleanup = await subscribeCacheInvalidation(
             CHANNEL_REQUEST_FILTERS_UPDATED,
             handler
           );
-          logger.info("[RequestFilterEngine] Subscribed to Redis pub/sub channel");
+          if (cleanup) {
+            this.redisPubSubCleanup = cleanup;
+            logger.info("[RequestFilterEngine] Subscribed to Redis pub/sub channel");
+          }
+          // При null — лог уже выведен в pubsub.ts, ничего не делаем
         } catch (error) {
           logger.warn("[RequestFilterEngine] Failed to subscribe to Redis pub/sub", { error });
         }

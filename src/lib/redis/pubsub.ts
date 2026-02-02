@@ -10,36 +10,65 @@ export const CHANNEL_REQUEST_FILTERS_UPDATED = "cch:cache:request_filters:update
 type CacheInvalidationCallback = () => void;
 
 let subscriberClient: Redis | null = null;
+let subscriberReady: Promise<Redis> | null = null;
 const subscriptions = new Map<string, Set<CacheInvalidationCallback>>();
 
-function ensureSubscriber(baseClient: Redis): Redis {
-  if (subscriberClient) return subscriberClient;
+function ensureSubscriber(baseClient: Redis): Promise<Redis> {
+  if (subscriberReady) return subscriberReady;
 
-  // 订阅必须使用独立连接（Pub/Sub 模式下连接不能再执行普通命令）
-  subscriberClient = baseClient.duplicate();
+  subscriberReady = new Promise<Redis>((resolve, reject) => {
+    const sub = baseClient.duplicate();
 
-  subscriberClient.on("message", (channel: string) => {
-    const callbacks = subscriptions.get(channel);
-    if (!callbacks || callbacks.size === 0) return;
+    const onReady = () => {
+      cleanup();
+      subscriberClient = sub;
 
-    for (const cb of callbacks) {
-      try {
-        cb();
-      } catch (error) {
-        logger.error("[RedisPubSub] Callback error", { channel, error });
+      sub.on("message", (channel: string) => {
+        const callbacks = subscriptions.get(channel);
+        if (!callbacks || callbacks.size === 0) return;
+        for (const cb of callbacks) {
+          try {
+            cb();
+          } catch (error) {
+            logger.error("[RedisPubSub] Callback error", { channel, error });
+          }
+        }
+      });
+
+      logger.info("[RedisPubSub] Subscriber connection ready");
+      resolve(sub);
+    };
+
+    const onError = (error: Error) => {
+      cleanup();
+      logger.warn("[RedisPubSub] Subscriber connection error", { error });
+      subscriberReady = null;
+      reject(error);
+    };
+
+    const cleanup = () => {
+      sub.off("ready", onReady);
+      sub.off("error", onError);
+    };
+
+    sub.once("ready", onReady);
+    sub.once("error", onError);
+
+    // Timeout 10 seconds
+    setTimeout(() => {
+      if (sub.status !== "ready") {
+        cleanup();
+        subscriberReady = null;
+        reject(new Error("Redis subscriber connection timeout"));
       }
-    }
+    }, 10000);
   });
 
-  subscriberClient.on("error", (error) => {
-    logger.warn("[RedisPubSub] Subscriber connection error", { error });
-  });
-
-  return subscriberClient;
+  return subscriberReady;
 }
 
 /**
- * 发布缓存失效通知（失败不抛错，自动降级）
+ * Publish cache invalidation (silent fail, auto-degrade)
  */
 export async function publishCacheInvalidation(channel: string): Promise<void> {
   const redis = getRedisClient();
@@ -53,19 +82,18 @@ export async function publishCacheInvalidation(channel: string): Promise<void> {
 }
 
 /**
- * 订阅缓存失效通知（失败不抛错，自动降级）
- *
- * 返回取消订阅函数（用于释放回调引用）
+ * Subscribe to cache invalidation
+ * Returns cleanup function on success, null on failure
  */
 export async function subscribeCacheInvalidation(
   channel: string,
   callback: CacheInvalidationCallback
-): Promise<() => void> {
+): Promise<(() => void) | null> {
   const baseClient = getRedisClient();
-  if (!baseClient) return () => {};
+  if (!baseClient) return null;
 
   try {
-    const sub = ensureSubscriber(baseClient);
+    const sub = await ensureSubscriber(baseClient);
 
     const existing = subscriptions.get(channel);
     const isFirstSubscriberForChannel = !existing;
@@ -75,6 +103,7 @@ export async function subscribeCacheInvalidation(
 
     if (isFirstSubscriberForChannel) {
       await sub.subscribe(channel);
+      logger.info("[RedisPubSub] Subscribed to channel", { channel });
     }
 
     return () => {
@@ -92,6 +121,6 @@ export async function subscribeCacheInvalidation(
     };
   } catch (error) {
     logger.warn("[RedisPubSub] Failed to subscribe cache invalidation", { channel, error });
-    return () => {};
+    return null;
   }
 }
