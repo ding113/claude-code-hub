@@ -281,6 +281,46 @@ export function RoutingSection() {
               />
             </SmartInputWrapper>
           </div>
+
+          {/* Per-Group Priority Override */}
+          {state.routing.groupTag.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <div className="text-sm font-medium">
+                {t("sections.routing.scheduleParams.groupPriorities.label")}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("sections.routing.scheduleParams.groupPriorities.desc")}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {state.routing.groupTag.map((group) => (
+                  <div key={group} className="flex items-center gap-2">
+                    <Badge variant="outline" className="font-mono text-xs shrink-0">
+                      {group}
+                    </Badge>
+                    <Input
+                      type="number"
+                      value={state.routing.groupPriorities[group] ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const next = { ...state.routing.groupPriorities };
+                        if (val === "") {
+                          delete next[group];
+                        } else {
+                          next[group] = parseInt(val, 10) || 0;
+                        }
+                        dispatch({ type: "SET_GROUP_PRIORITIES", payload: next });
+                      }}
+                      placeholder={t("sections.routing.scheduleParams.groupPriorities.placeholder")}
+                      disabled={state.ui.isPending}
+                      min="0"
+                      step="1"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </SectionCard>
 
         {/* Advanced Settings */}

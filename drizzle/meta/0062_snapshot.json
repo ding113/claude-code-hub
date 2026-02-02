@@ -1,5 +1,5 @@
 {
-  "id": "0bb539db-ea09-4259-9267-2d82d6bfb278",
+  "id": "39a9de25-6da4-4e0a-a406-a9fc5e6a2d2f",
   "prevId": "ae09efb5-f924-4c72-b41f-baccc1765fcb",
   "version": "7",
   "dialect": "postgresql",
@@ -1916,12 +1916,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "gemini_google_search_preference": {
-          "name": "gemini_google_search_preference",
-          "type": "varchar(20)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "tpm": {
           "name": "tpm",
           "type": "integer",
@@ -1969,6 +1963,13 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "group_priorities": {
+          "name": "group_priorities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'null'::jsonb"
         }
       },
       "indexes": {

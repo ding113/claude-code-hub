@@ -59,6 +59,7 @@ export interface Provider {
 
   // 优先级和分组配置
   priority: number;
+  groupPriorities: Record<string, number> | null;
   costMultiplier: number;
   groupTag: string | null;
 
@@ -162,6 +163,7 @@ export interface ProviderDisplay {
   weight: number;
   // 优先级和分组配置
   priority: number;
+  groupPriorities: Record<string, number> | null;
   costMultiplier: number;
   groupTag: string | null;
   // 供应商类型
@@ -251,6 +253,7 @@ export interface CreateProviderData {
 
   // 优先级和分组配置
   priority?: number;
+  group_priorities?: Record<string, number> | null;
   cost_multiplier?: number;
   group_tag?: string | null;
 
@@ -322,6 +325,7 @@ export interface UpdateProviderData {
 
   // 优先级和分组配置
   priority?: number;
+  group_priorities?: Record<string, number> | null;
   cost_multiplier?: number;
   group_tag?: string | null;
 

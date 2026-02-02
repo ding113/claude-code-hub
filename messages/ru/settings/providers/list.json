@@ -33,5 +33,10 @@
   "unknownError": "Неизвестная ошибка",
   "viewFullKey": "Просмотр полного API-ключа",
   "viewFullKeyDesc": "Пожалуйста, храните его в безопасности и не делитесь с другими",
-  "weight": "Вес"
+  "weight": "Вес",
+  "actions": "Действия",
+  "actionClone": "Клонировать",
+  "actionResetCircuit": "Сбросить предохранитель",
+  "actionResetUsage": "Сбросить использование",
+  "actionDelete": "Удалить"
 }

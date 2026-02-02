@@ -9,5 +9,8 @@
     "active": "Active",
     "all": "Any status",
     "inactive": "Inactive"
-  }
+  },
+  "mobileFilter": "Filter",
+  "mobileFilterCount": "Filter ({count})",
+  "resetFilters": "Reset Filters"
 }

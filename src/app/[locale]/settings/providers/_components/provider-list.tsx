@@ -23,9 +23,13 @@ interface ProviderListProps {
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
   enableMultiProviderTypes: boolean;
+  activeGroupFilter?: string | null;
   isMultiSelectMode?: boolean;
   selectedProviderIds?: Set<number>;
   onSelectProvider?: (providerId: number, checked: boolean) => void;
+  allGroups?: string[];
+  userGroups?: string[];
+  isAdmin?: boolean;
 }
 
 export function ProviderList({
@@ -36,9 +40,13 @@ export function ProviderList({
   statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
+  activeGroupFilter = null,
   isMultiSelectMode = false,
   selectedProviderIds = new Set(),
   onSelectProvider,
+  allGroups = [],
+  userGroups = [],
+  isAdmin = false,
 }: ProviderListProps) {
   const t = useTranslations("settings.providers");
 
@@ -55,7 +63,7 @@ export function ProviderList({
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="grid gap-3 md:block md:border md:rounded-lg md:overflow-hidden md:gap-0">
       {providers.map((provider) => (
         <ProviderRichListItem
           key={provider.id}
@@ -66,11 +74,15 @@ export function ProviderList({
           statisticsLoading={statisticsLoading}
           currencyCode={currencyCode}
           enableMultiProviderTypes={enableMultiProviderTypes}
+          activeGroupFilter={activeGroupFilter}
           isMultiSelectMode={isMultiSelectMode}
           isSelected={selectedProviderIds.has(provider.id)}
           onSelectChange={
             onSelectProvider ? (checked) => onSelectProvider(provider.id, checked) : undefined
           }
+          allGroups={allGroups}
+          userGroups={userGroups}
+          isAdmin={isAdmin}
         />
       ))}
     </div>
