@@ -514,7 +514,12 @@ export class RateLimitService {
             // Calculate TTL - for weekly provider, use custom reset params
             const ttl =
               limit.period === "weekly" && type === "provider"
-                ? await getTTLForPeriod("weekly", "00:00", limit.weeklyResetDay, limit.weeklyResetTime)
+                ? await getTTLForPeriod(
+                    "weekly",
+                    "00:00",
+                    limit.weeklyResetDay,
+                    limit.weeklyResetTime
+                  )
                 : await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
             let periodKey: string;
             if (limit.period === "daily") {
