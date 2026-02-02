@@ -168,22 +168,22 @@ export class RateLimitService {
       limits.weekly_reset_time
     );
     const costLimits: CostLimit[] = [
-      { amount: limits.limit_5h_usd, period: "5h", name: "5小时" },
+      { amount: limits.limit_5h_usd, period: "5h", name: "5-hour" },
       {
         amount: limits.limit_daily_usd,
         period: "daily",
-        name: "每日",
+        name: "daily",
         resetTime: normalizedDailyReset,
         resetMode: dailyResetMode,
       },
       {
         amount: limits.limit_weekly_usd,
         period: "weekly",
-        name: "周",
+        name: "weekly",
         weeklyResetDay: weeklyReset.day,
         weeklyResetTime: weeklyReset.time,
       },
-      { amount: limits.limit_monthly_usd, period: "monthly", name: "月" },
+      { amount: limits.limit_monthly_usd, period: "monthly", name: "monthly" },
     ];
 
     try {
@@ -294,10 +294,10 @@ export class RateLimitService {
           }
 
           if (current >= limit.amount) {
-            const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
+            const typeName = type === "key" ? "Key" : type === "provider" ? "Provider" : "User";
             return {
               allowed: false,
-              reason: `${typeName} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+              reason: `${typeName} ${limit.name} spending limit exceeded (${current.toFixed(4)}/${limit.amount})`,
             };
           }
         }
@@ -550,10 +550,10 @@ export class RateLimitService {
       }
 
       if (current >= limit.amount) {
-        const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
+        const typeName = type === "key" ? "Key" : type === "provider" ? "Provider" : "User";
         return {
           allowed: false,
-          reason: `${typeName} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+          reason: `${typeName} ${limit.name} spending limit exceeded (${current.toFixed(4)}/${limit.amount})`,
         };
       }
     }
