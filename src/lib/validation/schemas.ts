@@ -416,6 +416,12 @@ export const CreateProviderSchema = z.object({
     .max(50000, "周消费上限不能超过50000美元")
     .nullable()
     .optional(),
+  weekly_reset_day: z.coerce.number().int().min(0).max(6).nullable().optional(),
+  weekly_reset_time: z
+    .string()
+    .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
+    .nullable()
+    .optional(),
   limit_monthly_usd: z.coerce
     .number()
     .min(0, "月消费上限不能为负数")
@@ -592,6 +598,12 @@ export const UpdateProviderSchema = z
       .number()
       .min(0, "周消费上限不能为负数")
       .max(50000, "周消费上限不能超过50000美元")
+      .nullable()
+      .optional(),
+    weekly_reset_day: z.coerce.number().int().min(0).max(6).nullable().optional(),
+    weekly_reset_time: z
+      .string()
+      .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
       .nullable()
       .optional(),
     limit_monthly_usd: z.coerce

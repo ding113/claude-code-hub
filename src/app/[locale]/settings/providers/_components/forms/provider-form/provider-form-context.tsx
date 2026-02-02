@@ -66,6 +66,8 @@ export function createInitialState(
       dailyResetMode: sourceProvider?.dailyResetMode ?? "fixed",
       dailyResetTime: sourceProvider?.dailyResetTime ?? "00:00",
       limitWeeklyUsd: sourceProvider?.limitWeeklyUsd ?? null,
+      weeklyResetDay: sourceProvider?.weeklyResetDay ?? 1,
+      weeklyResetTime: sourceProvider?.weeklyResetTime ?? "00:00",
       limitMonthlyUsd: sourceProvider?.limitMonthlyUsd ?? null,
       limitTotalUsd: sourceProvider?.limitTotalUsd ?? null,
       limitConcurrentSessions: sourceProvider?.limitConcurrentSessions ?? null,
@@ -180,6 +182,10 @@ export function providerFormReducer(
       return { ...state, rateLimit: { ...state.rateLimit, dailyResetTime: action.payload } };
     case "SET_LIMIT_WEEKLY_USD":
       return { ...state, rateLimit: { ...state.rateLimit, limitWeeklyUsd: action.payload } };
+    case "SET_WEEKLY_RESET_DAY":
+      return { ...state, rateLimit: { ...state.rateLimit, weeklyResetDay: action.payload } };
+    case "SET_WEEKLY_RESET_TIME":
+      return { ...state, rateLimit: { ...state.rateLimit, weeklyResetTime: action.payload } };
     case "SET_LIMIT_MONTHLY_USD":
       return { ...state, rateLimit: { ...state.rateLimit, limitMonthlyUsd: action.payload } };
     case "SET_LIMIT_TOTAL_USD":

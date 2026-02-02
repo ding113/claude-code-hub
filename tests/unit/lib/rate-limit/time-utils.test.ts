@@ -499,3 +499,129 @@ describe("timezone edge cases", () => {
     expect(range21.startTime.toISOString()).toBe("2024-01-14T13:00:00.000Z");
   });
 });
+
+/**
+ * Configurable Weekly Reset Tests
+ *
+ * Verify that weekly reset can be configured with custom day (0-6) and time (HH:mm)
+ * instead of hardcoded Monday 00:00.
+ */
+describe("configurable weekly reset", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("should calculate weekly window with custom reset day (Friday)", async () => {
+    // 2024-01-17 00:00:00 UTC = Wednesday 08:00 Shanghai
+    // Custom reset: Friday (day=5) at 00:00 Shanghai
+    // Last Friday was 2024-01-12 00:00 Shanghai = 2024-01-11 16:00 UTC
+    const utcTime = new Date("2024-01-17T00:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const { startTime } = await getTimeRangeForPeriod("weekly", "00:00", 5, "00:00");
+
+    // Friday 00:00 Shanghai = Thursday 16:00 UTC
+    expect(startTime.toISOString()).toBe("2024-01-11T16:00:00.000Z");
+  });
+
+  it("should calculate weekly window with custom reset day (Sunday)", async () => {
+    // 2024-01-17 00:00:00 UTC = Wednesday 08:00 Shanghai
+    // Custom reset: Sunday (day=0) at 00:00 Shanghai
+    // Last Sunday was 2024-01-14 00:00 Shanghai = 2024-01-13 16:00 UTC
+    const utcTime = new Date("2024-01-17T00:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const { startTime } = await getTimeRangeForPeriod("weekly", "00:00", 0, "00:00");
+
+    expect(startTime.toISOString()).toBe("2024-01-13T16:00:00.000Z");
+  });
+
+  it("should calculate weekly window with custom reset time (18:00)", async () => {
+    // 2024-01-17 12:00:00 UTC = Wednesday 20:00 Shanghai
+    // Custom reset: Monday (day=1) at 18:00 Shanghai
+    // Last Monday 18:00 Shanghai was 2024-01-15 18:00 = 2024-01-15 10:00 UTC
+    const utcTime = new Date("2024-01-17T12:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const { startTime } = await getTimeRangeForPeriod("weekly", "00:00", 1, "18:00");
+
+    expect(startTime.toISOString()).toBe("2024-01-15T10:00:00.000Z");
+  });
+
+  it("should calculate weekly TTL with custom reset day and time", async () => {
+    // 2024-01-17 00:00:00 UTC = Wednesday 08:00 Shanghai
+    // Custom reset: Friday (day=5) at 18:00 Shanghai
+    // Next Friday 18:00 Shanghai = 2024-01-19 18:00 = 2024-01-19 10:00 UTC
+    // TTL = from Wed 08:00 to Fri 18:00 = 2 days + 10 hours = 58 hours
+    const utcTime = new Date("2024-01-17T00:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const ttl = await getTTLForPeriod("weekly", "00:00", 5, "18:00");
+
+    expect(ttl).toBe(58 * 3600);
+  });
+
+  it("should use default Monday 00:00 when weekly reset params not provided", async () => {
+    // 2024-01-17 00:00:00 UTC = Wednesday 08:00 Shanghai
+    // Default: Monday (day=1) at 00:00 Shanghai
+    // Last Monday 00:00 Shanghai = 2024-01-15 00:00 = 2024-01-14 16:00 UTC
+    const utcTime = new Date("2024-01-17T00:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const { startTime } = await getTimeRangeForPeriod("weekly");
+
+    expect(startTime.toISOString()).toBe("2024-01-14T16:00:00.000Z");
+  });
+
+  it("should calculate weekly reset info with custom day and time", async () => {
+    // 2024-01-17 00:00:00 UTC = Wednesday 08:00 Shanghai
+    // Custom reset: Friday (day=5) at 18:00 Shanghai
+    // Next reset: 2024-01-19 18:00 Shanghai = 2024-01-19 10:00 UTC
+    const utcTime = new Date("2024-01-17T00:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const info = await getResetInfo("weekly", "00:00", 5, "18:00");
+
+    expect(info.type).toBe("natural");
+    expect(info.resetAt?.toISOString()).toBe("2024-01-19T10:00:00.000Z");
+  });
+
+  it("should handle weekly window when current time is before reset time on reset day", async () => {
+    // 2024-01-19 08:00:00 UTC = Friday 16:00 Shanghai
+    // Custom reset: Friday (day=5) at 18:00 Shanghai
+    // We're on Friday but before 18:00, so window is from last Friday 18:00
+    // Last Friday 18:00 Shanghai = 2024-01-12 18:00 = 2024-01-12 10:00 UTC
+    const utcTime = new Date("2024-01-19T08:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const { startTime } = await getTimeRangeForPeriod("weekly", "00:00", 5, "18:00");
+
+    expect(startTime.toISOString()).toBe("2024-01-12T10:00:00.000Z");
+  });
+
+  it("should handle weekly window when current time is after reset time on reset day", async () => {
+    // 2024-01-19 12:00:00 UTC = Friday 20:00 Shanghai
+    // Custom reset: Friday (day=5) at 18:00 Shanghai
+    // We're on Friday after 18:00, so window is from this Friday 18:00
+    // This Friday 18:00 Shanghai = 2024-01-19 18:00 = 2024-01-19 10:00 UTC
+    const utcTime = new Date("2024-01-19T12:00:00.000Z");
+    vi.setSystemTime(utcTime);
+    vi.mocked(resolveSystemTimezone).mockResolvedValue("Asia/Shanghai");
+
+    const { startTime } = await getTimeRangeForPeriod("weekly", "00:00", 5, "18:00");
+
+    expect(startTime.toISOString()).toBe("2024-01-19T10:00:00.000Z");
+  });
+});

@@ -90,6 +90,8 @@ export interface Provider {
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
   limitWeeklyUsd: number | null;
+  weeklyResetDay: number | null;
+  weeklyResetTime: string | null;
   limitMonthlyUsd: number | null;
   // 总消费上限（手动重置后从 0 重新累计）
   limitTotalUsd: number | null;
@@ -178,6 +180,8 @@ export interface ProviderDisplay {
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
   limitWeeklyUsd: number | null;
+  weeklyResetDay: number | null;
+  weeklyResetTime: string | null;
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
   limitConcurrentSessions: number;
@@ -262,6 +266,8 @@ export interface CreateProviderData {
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
+  weekly_reset_day?: number | null;
+  weekly_reset_time?: string | null;
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
@@ -332,6 +338,8 @@ export interface UpdateProviderData {
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
+  weekly_reset_day?: number | null;
+  weekly_reset_time?: string | null;
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;

@@ -170,6 +170,22 @@
       "label": "週消費上限（USD）",
       "placeholder": "留空表示無限制"
     },
+    "weeklyResetDay": {
+      "label": "每週重置日",
+      "desc": "每週哪一天重置週配額",
+      "days": {
+        "0": "週日",
+        "1": "週一",
+        "2": "週二",
+        "3": "週三",
+        "4": "週四",
+        "5": "週五",
+        "6": "週六"
+      }
+    },
+    "weeklyResetTime": {
+      "label": "每週重置時間 (HH:mm)"
+    },
     "summary": {
       "concurrent": "並發：{count}",
       "daily": "日: {amount}（重置 {resetTime}）",
@@ -184,6 +200,7 @@
   "limits": {
     "timeBased": "時間維度限制",
     "dailyReset": "每日重置設定",
+    "weeklyReset": "每週重置設定",
     "otherLimits": "其他限制"
   },
   "routing": {

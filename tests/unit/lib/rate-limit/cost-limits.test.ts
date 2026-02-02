@@ -15,7 +15,10 @@ const pipeline = {
     pipelineCommands.push(["exec"]);
     return [];
   }),
-  incrbyfloat: vi.fn(() => pipeline),
+  incrbyfloat: vi.fn((...args: unknown[]) => {
+    pipelineCommands.push(["incrbyfloat", ...args]);
+    return pipeline;
+  }),
   zremrangebyscore: vi.fn(() => pipeline),
   zcard: vi.fn(() => pipeline),
 };
@@ -121,10 +124,11 @@ describe("RateLimitService - cost limits and quota checks", () => {
     expect(result.reason).toContain("供应商 每日消费上限已达到（11.0000/10）");
   });
 
-  it("checkCostLimits：User fast-path 的类型标识应为 User（避免错误标为“供应商”）", async () => {
+  it("checkCostLimits: User fast-path should be labeled as User (not Provider)", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
     redisClient.get.mockImplementation(async (key: string) => {
+      // Users don't have configurable weekly reset, so they use cost_weekly without suffix
       if (key === "user:1:cost_weekly") return "20";
       return "0";
     });
@@ -137,7 +141,7 @@ describe("RateLimitService - cost limits and quota checks", () => {
     });
 
     expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("User 周消费上限已达到（20.0000/10）");
+    expect(result.reason).toContain("User weekly spending limit exceeded (20.0000/10)");
   });
 
   it("checkCostLimits：Redis cache miss 时应 fallback 到 DB 查询", async () => {
@@ -300,5 +304,141 @@ describe("RateLimitService - cost limits and quota checks", () => {
     const zaddCalls = pipelineCommands.filter((c) => c[0] === "zadd");
     expect(zaddCalls).toHaveLength(2);
     expect(pipelineCommands.some((c) => c[0] === "expire")).toBe(true);
+  });
+
+  // ============================================================================
+  // Configurable Weekly Reset Tests
+  // ============================================================================
+
+  it("checkCostLimits: Provider weekly limit should use configurable reset day/time", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    // Mock Redis to return cost for custom weekly key (Friday 18:00 = 5_1800)
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === "provider:1:cost_weekly_5_1800") return "15";
+      return "0";
+    });
+
+    const result = await RateLimitService.checkCostLimits(1, "provider", {
+      limit_5h_usd: null,
+      limit_daily_usd: null,
+      limit_weekly_usd: 10,
+      weekly_reset_day: 5, // Friday
+      weekly_reset_time: "18:00",
+      limit_monthly_usd: null,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Provider weekly spending limit exceeded (15.0000/10)");
+  });
+
+  it("checkCostLimits: Provider weekly limit with default Monday 00:00 when not specified", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    // Default: Monday 00:00 = 1_0000
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === "provider:1:cost_weekly_1_0000") return "25";
+      return "0";
+    });
+
+    const result = await RateLimitService.checkCostLimits(1, "provider", {
+      limit_5h_usd: null,
+      limit_daily_usd: null,
+      limit_weekly_usd: 20,
+      weekly_reset_day: null, // default to Monday
+      weekly_reset_time: null, // default to 00:00
+      limit_monthly_usd: null,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Provider weekly spending limit exceeded (25.0000/20)");
+  });
+
+  it("checkCostLimits: Key/User weekly limit should use non-suffixed key (no configurable weekly reset)", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    // Keys and users use cost_weekly without suffix
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === "key:1:cost_weekly") return "30";
+      return "0";
+    });
+
+    const result = await RateLimitService.checkCostLimits(1, "key", {
+      limit_5h_usd: null,
+      limit_daily_usd: null,
+      limit_weekly_usd: 25,
+      limit_monthly_usd: null,
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toContain("Key weekly spending limit exceeded (30.0000/25)");
+  });
+
+  it("trackCost: should write to provider weekly key with custom suffix", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    await RateLimitService.trackCost(1, 9, "sess-123", 5.5, {
+      providerWeeklyResetDay: 5, // Friday
+      providerWeeklyResetTime: "18:00",
+    });
+
+    // Find the incrbyfloat call for weekly key
+    const incrCalls = pipelineCommands.filter(
+      (c) => c[0] === "incrbyfloat" && String(c[1]).includes("cost_weekly")
+    );
+
+    // Should have key weekly (non-suffixed) and provider weekly (suffixed)
+    expect(incrCalls.some((c) => String(c[1]) === "key:1:cost_weekly")).toBe(true);
+    expect(incrCalls.some((c) => String(c[1]) === "provider:9:cost_weekly_5_1800")).toBe(true);
+  });
+
+  it("getCurrentCost: should use correct weekly key suffix for provider", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClient.get.mockImplementation(async (key: string) => {
+      if (key === "provider:1:cost_weekly_0_0900") return "42.5";
+      return null;
+    });
+
+    const cost = await RateLimitService.getCurrentCost(
+      1,
+      "provider",
+      "weekly",
+      "00:00",
+      "fixed",
+      0, // Sunday
+      "09:00"
+    );
+
+    expect(cost).toBe(42.5);
+  });
+
+  it("getCurrentCostBatch: should query correct weekly keys for providers with different configs", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    const resetConfigs = new Map([
+      [1, { weeklyResetDay: 5, weeklyResetTime: "18:00" }], // Friday 18:00
+      [2, { weeklyResetDay: 0, weeklyResetTime: "00:00" }], // Sunday 00:00
+    ]);
+
+    redisClient.pipeline.mockReturnValue({
+      eval: vi.fn().mockReturnThis(),
+      get: vi.fn().mockReturnThis(),
+      exec: vi.fn(async () => [
+        [null, "1"], // P1 5h
+        [null, "10"], // P1 daily
+        [null, "50"], // P1 weekly (5_1800)
+        [null, "100"], // P1 monthly
+        [null, "2"], // P2 5h
+        [null, "20"], // P2 daily
+        [null, "80"], // P2 weekly (0_0000)
+        [null, "200"], // P2 monthly
+      ]),
+    });
+
+    const result = await RateLimitService.getCurrentCostBatch([1, 2], resetConfigs);
+
+    expect(result.get(1)?.costWeekly).toBe(50);
+    expect(result.get(2)?.costWeekly).toBe(80);
   });
 });

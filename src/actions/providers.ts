@@ -260,6 +260,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         dailyResetMode: provider.dailyResetMode,
         dailyResetTime: provider.dailyResetTime,
         limitWeeklyUsd: provider.limitWeeklyUsd,
+        weeklyResetDay: provider.weeklyResetDay,
+        weeklyResetTime: provider.weeklyResetTime,
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitTotalUsd: provider.limitTotalUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,
@@ -458,6 +460,8 @@ export async function addProvider(data: {
   daily_reset_mode?: "fixed" | "rolling";
   daily_reset_time?: string;
   limit_weekly_usd?: number | null;
+  weekly_reset_day?: number | null;
+  weekly_reset_time?: string | null;
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number | null;
@@ -532,6 +536,8 @@ export async function addProvider(data: {
       daily_reset_mode: validated.daily_reset_mode ?? "fixed",
       daily_reset_time: validated.daily_reset_time ?? "00:00",
       limit_weekly_usd: validated.limit_weekly_usd ?? null,
+      weekly_reset_day: validated.weekly_reset_day ?? null,
+      weekly_reset_time: validated.weekly_reset_time ?? null,
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_total_usd: validated.limit_total_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
@@ -625,6 +631,8 @@ export async function editProvider(
     limit_daily_usd?: number | null;
     daily_reset_time?: string;
     limit_weekly_usd?: number | null;
+    weekly_reset_day?: number | null;
+    weekly_reset_time?: string | null;
     limit_monthly_usd?: number | null;
     limit_total_usd?: number | null;
     limit_concurrent_sessions?: number | null;
@@ -1204,7 +1212,12 @@ export async function getProviderLimitUsage(providerId: number): Promise<
         provider.dailyResetTime ?? undefined,
         (provider.dailyResetMode ?? "fixed") as "fixed" | "rolling"
       ),
-      getTimeRangeForPeriod("weekly"),
+      getTimeRangeForPeriod(
+        "weekly",
+        "00:00",
+        provider.weeklyResetDay ?? undefined,
+        provider.weeklyResetTime ?? undefined
+      ),
       getTimeRangeForPeriod("monthly"),
     ]);
 
@@ -1224,7 +1237,12 @@ export async function getProviderLimitUsage(providerId: number): Promise<
       provider.dailyResetTime,
       provider.dailyResetMode ?? "fixed"
     );
-    const resetWeekly = await getResetInfo("weekly");
+    const resetWeekly = await getResetInfo(
+      "weekly",
+      "00:00",
+      provider.weeklyResetDay ?? undefined,
+      provider.weeklyResetTime ?? undefined
+    );
     const resetMonthly = await getResetInfo("monthly");
 
     return {
@@ -1286,6 +1304,8 @@ export async function getProviderLimitUsageBatch(
     id: number;
     dailyResetTime?: string | null;
     dailyResetMode?: string | null;
+    weeklyResetDay?: number | null;
+    weeklyResetTime?: string | null;
     limit5hUsd?: number | null;
     limitDailyUsd?: number | null;
     limitWeeklyUsd?: number | null;
@@ -1321,10 +1341,9 @@ export async function getProviderLimitUsageBatch(
     // 获取并发 session 计数（仍使用 Redis，这是实时数据）
     const sessionCountMap = await SessionTracker.getProviderSessionCountBatch(providerIds);
 
-    // 获取各周期的时间范围（这些范围对所有供应商是相同的，除了 daily 需要根据每个供应商的配置）
-    const [range5h, rangeWeekly, rangeMonthly] = await Promise.all([
+    // 获取各周期的时间范围（5h、monthly 对所有供应商相同，daily、weekly 需要根据每个供应商配置）
+    const [range5h, rangeMonthly] = await Promise.all([
       getTimeRangeForPeriod("5h"),
-      getTimeRangeForPeriod("weekly"),
       getTimeRangeForPeriod("monthly"),
     ]);
 
@@ -1336,6 +1355,13 @@ export async function getProviderLimitUsageBatch(
         "daily",
         provider.dailyResetTime ?? undefined,
         dailyResetMode
+      );
+      // 获取该供应商的 weekly 时间范围（根据其 weeklyResetDay/Time 配置）
+      const rangeWeekly = await getTimeRangeForPeriod(
+        "weekly",
+        "00:00",
+        provider.weeklyResetDay ?? undefined,
+        provider.weeklyResetTime ?? undefined
       );
 
       // 并行查询该供应商的各周期消费（直接查询数据库）
@@ -1355,7 +1381,12 @@ export async function getProviderLimitUsageBatch(
         provider.dailyResetTime ?? undefined,
         dailyResetMode
       );
-      const resetWeekly = await getResetInfo("weekly");
+      const resetWeekly = await getResetInfo(
+        "weekly",
+        "00:00",
+        provider.weeklyResetDay ?? undefined,
+        provider.weeklyResetTime ?? undefined
+      );
       const resetMonthly = await getResetInfo("monthly");
 
       result.set(provider.id, {

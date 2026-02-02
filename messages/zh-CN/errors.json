@@ -19,6 +19,8 @@
 
   "INVALID_TYPE": "{field}类型不正确",
   "INVALID_FORMAT": "{field}格式不正确",
+  "TIME_FORMAT_INVALID": "时间格式必须为 HH:mm",
+  "WEEKLY_RESET_DAY_INVALID": "每周重置日必须在 0（周日）到 6（周六）之间",
 
   "DUPLICATE_NAME": "名称'{name}'已存在",
   "INVALID_RANGE": "{field}必须在{min}到{max}之间",

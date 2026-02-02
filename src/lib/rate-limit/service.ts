@@ -97,6 +97,8 @@ interface CostLimit {
   name: string;
   resetTime?: string; // 自定义重置时间（仅 daily + fixed 模式使用，格式 "HH:mm"）
   resetMode?: DailyResetMode; // 日限额重置模式（仅 daily 使用）
+  weeklyResetDay?: number; // 0-6 (Sunday=0)
+  weeklyResetTime?: string; // HH:mm
 }
 
 export class RateLimitService {
@@ -108,6 +110,15 @@ export class RateLimitService {
   private static resolveDailyReset(resetTime?: string): { normalized: string; suffix: string } {
     const normalized = normalizeResetTime(resetTime);
     return { normalized, suffix: normalized.replace(":", "") };
+  }
+
+  private static resolveWeeklyReset(
+    day?: number | null,
+    time?: string | null
+  ): { day: number; time: string; suffix: string } {
+    const d = day != null && day >= 0 && day <= 6 ? day : 1;
+    const t = normalizeResetTime(time ?? undefined);
+    return { day: d, time: t, suffix: `${d}_${t.replace(":", "")}` };
   }
 
   private static async warmRollingCostZset(
@@ -145,22 +156,34 @@ export class RateLimitService {
       daily_reset_time?: string;
       daily_reset_mode?: DailyResetMode;
       limit_weekly_usd: number | null;
+      weekly_reset_day?: number | null;
+      weekly_reset_time?: string | null;
       limit_monthly_usd: number | null;
     }
   ): Promise<{ allowed: boolean; reason?: string }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
     const dailyResetMode = limits.daily_reset_mode ?? "fixed";
+    const weeklyReset = RateLimitService.resolveWeeklyReset(
+      limits.weekly_reset_day,
+      limits.weekly_reset_time
+    );
     const costLimits: CostLimit[] = [
-      { amount: limits.limit_5h_usd, period: "5h", name: "5小时" },
+      { amount: limits.limit_5h_usd, period: "5h", name: "5-hour" },
       {
         amount: limits.limit_daily_usd,
         period: "daily",
-        name: "每日",
+        name: "daily",
         resetTime: normalizedDailyReset,
         resetMode: dailyResetMode,
       },
-      { amount: limits.limit_weekly_usd, period: "weekly", name: "周" },
-      { amount: limits.limit_monthly_usd, period: "monthly", name: "月" },
+      {
+        amount: limits.limit_weekly_usd,
+        period: "weekly",
+        name: "weekly",
+        weeklyResetDay: weeklyReset.day,
+        weeklyResetTime: weeklyReset.time,
+      },
+      { amount: limits.limit_monthly_usd, period: "monthly", name: "monthly" },
     ];
 
     try {
@@ -238,9 +261,25 @@ export class RateLimitService {
               return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
             }
           } else {
-            // daily fixed/周/月使用普通 GET
+            // daily fixed/weekly/monthly: use GET
             const { suffix } = RateLimitService.resolveDailyReset(limit.resetTime);
-            const periodKey = limit.period === "daily" ? `${limit.period}_${suffix}` : limit.period;
+            let periodKey: string;
+            if (limit.period === "daily") {
+              periodKey = `daily_${suffix}`;
+            } else if (limit.period === "weekly") {
+              // Only providers have configurable weekly reset; keys/users use default Monday 00:00
+              if (type === "provider") {
+                const wSuffix = RateLimitService.resolveWeeklyReset(
+                  limit.weeklyResetDay,
+                  limit.weeklyResetTime
+                ).suffix;
+                periodKey = `weekly_${wSuffix}`;
+              } else {
+                periodKey = "weekly";
+              }
+            } else {
+              periodKey = limit.period;
+            }
             const value = await RateLimitService.redis.get(`${type}:${id}:cost_${periodKey}`);
 
             // Cache Miss 检测
@@ -255,10 +294,10 @@ export class RateLimitService {
           }
 
           if (current >= limit.amount) {
-            const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
+            const typeName = type === "key" ? "Key" : type === "provider" ? "Provider" : "User";
             return {
               allowed: false,
-              reason: `${typeName} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+              reason: `${typeName} ${limit.name} spending limit exceeded (${current.toFixed(4)}/${limit.amount})`,
             };
           }
         }
@@ -400,7 +439,9 @@ export class RateLimitService {
       const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         limit.period,
         limit.resetTime,
-        limit.resetMode
+        limit.resetMode,
+        limit.weeklyResetDay,
+        limit.weeklyResetTime
       );
 
       // 查询数据库
@@ -470,8 +511,29 @@ export class RateLimitService {
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
             const { normalized, suffix } = RateLimitService.resolveDailyReset(limit.resetTime);
-            const ttl = await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
-            const periodKey = limit.period === "daily" ? `${limit.period}_${suffix}` : limit.period;
+            // Calculate TTL - for weekly provider, use custom reset params
+            const ttl =
+              limit.period === "weekly" && type === "provider"
+                ? await getTTLForPeriod(
+                    "weekly",
+                    "00:00",
+                    limit.weeklyResetDay,
+                    limit.weeklyResetTime
+                  )
+                : await getTTLForPeriodWithMode(limit.period, normalized, limit.resetMode);
+            let periodKey: string;
+            if (limit.period === "daily") {
+              periodKey = `${limit.period}_${suffix}`;
+            } else if (limit.period === "weekly" && type === "provider") {
+              // Only providers have configurable weekly reset
+              const wSuffix = RateLimitService.resolveWeeklyReset(
+                limit.weeklyResetDay,
+                limit.weeklyResetTime
+              ).suffix;
+              periodKey = `weekly_${wSuffix}`;
+            } else {
+              periodKey = limit.period;
+            }
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${periodKey}`,
               current.toString(),
@@ -488,10 +550,10 @@ export class RateLimitService {
       }
 
       if (current >= limit.amount) {
-        const typeName = type === "key" ? "Key" : type === "provider" ? "供应商" : "User";
+        const typeName = type === "key" ? "Key" : type === "provider" ? "Provider" : "User";
         return {
           allowed: false,
-          reason: `${typeName} ${limit.name}消费上限已达到（${current.toFixed(4)}/${limit.amount}）`,
+          reason: `${typeName} ${limit.name} spending limit exceeded (${current.toFixed(4)}/${limit.amount})`,
         };
       }
     }
@@ -612,6 +674,8 @@ export class RateLimitService {
       keyResetMode?: DailyResetMode;
       providerResetTime?: string;
       providerResetMode?: DailyResetMode;
+      providerWeeklyResetDay?: number | null;
+      providerWeeklyResetTime?: string | null;
       requestId?: number;
       createdAtMs?: number;
     }
@@ -628,6 +692,11 @@ export class RateLimitService {
       const window5h = 5 * 60 * 60 * 1000; // 5 hours in ms
       const window24h = 24 * 60 * 60 * 1000; // 24 hours in ms
 
+      const providerWeeklyReset = RateLimitService.resolveWeeklyReset(
+        options?.providerWeeklyResetDay,
+        options?.providerWeeklyResetTime
+      );
+
       // 计算动态 TTL（daily/周/月）
       const ttlDailyKey = await getTTLForPeriodWithMode(
         "daily",
@@ -643,7 +712,13 @@ export class RateLimitService {
               providerDailyReset.normalized,
               providerDailyMode
             );
-      const ttlWeekly = await getTTLForPeriod("weekly");
+      const ttlWeeklyKey = await getTTLForPeriod("weekly");
+      const ttlWeeklyProvider = await getTTLForPeriod(
+        "weekly",
+        "00:00",
+        providerWeeklyReset.day,
+        providerWeeklyReset.time
+      );
       const ttlMonthly = await getTTLForPeriod("monthly");
 
       // 1. 5h 滚动窗口：使用 Lua 脚本（ZSET）
@@ -705,7 +780,7 @@ export class RateLimitService {
       }
 
       pipeline.incrbyfloat(`key:${keyId}:cost_weekly`, cost);
-      pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeekly);
+      pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeeklyKey);
 
       pipeline.incrbyfloat(`key:${keyId}:cost_monthly`, cost);
       pipeline.expire(`key:${keyId}:cost_monthly`, ttlMonthly);
@@ -717,8 +792,9 @@ export class RateLimitService {
         pipeline.expire(providerDailyKey, ttlDailyProvider);
       }
 
-      pipeline.incrbyfloat(`provider:${providerId}:cost_weekly`, cost);
-      pipeline.expire(`provider:${providerId}:cost_weekly`, ttlWeekly);
+      const providerWeeklyKey = `provider:${providerId}:cost_weekly_${providerWeeklyReset.suffix}`;
+      pipeline.incrbyfloat(providerWeeklyKey, cost);
+      pipeline.expire(providerWeeklyKey, ttlWeeklyProvider);
 
       pipeline.incrbyfloat(`provider:${providerId}:cost_monthly`, cost);
       pipeline.expire(`provider:${providerId}:cost_monthly`, ttlMonthly);
@@ -741,7 +817,9 @@ export class RateLimitService {
     type: "key" | "provider",
     period: "5h" | "daily" | "weekly" | "monthly",
     resetTime = "00:00",
-    resetMode: DailyResetMode = "fixed"
+    resetMode: DailyResetMode = "fixed",
+    weeklyResetDay?: number | null,
+    weeklyResetTime?: string | null
   ): Promise<number> {
     try {
       const dailyResetInfo = RateLimitService.resolveDailyReset(resetTime);
@@ -810,7 +888,19 @@ export class RateLimitService {
           }
         } else {
           // daily fixed/周/月使用普通 GET
-          const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
+          let redisKey: string;
+          if (period === "daily") {
+            redisKey = `${period}_${dailyResetInfo.suffix}`;
+          } else if (period === "weekly" && type === "provider") {
+            // Only providers have configurable weekly reset
+            const wSuffix = RateLimitService.resolveWeeklyReset(
+              weeklyResetDay,
+              weeklyResetTime
+            ).suffix;
+            redisKey = `weekly_${wSuffix}`;
+          } else {
+            redisKey = period;
+          }
           const value = await RateLimitService.redis.get(`${type}:${id}:cost_${redisKey}`);
 
           // Cache Hit
@@ -838,7 +928,9 @@ export class RateLimitService {
       const { startTime, endTime } = await getTimeRangeForPeriodWithMode(
         period,
         dailyResetInfo.normalized,
-        resetMode
+        resetMode,
+        weeklyResetDay ?? undefined,
+        weeklyResetTime ?? undefined
       );
 
       let current = 0;
@@ -898,8 +990,25 @@ export class RateLimitService {
             }
           } else {
             // daily fixed/周/月固定窗口：使用 STRING + 动态 TTL
-            const redisKey = period === "daily" ? `${period}_${dailyResetInfo.suffix}` : period;
-            const ttl = await getTTLForPeriodWithMode(period, dailyResetInfo.normalized, resetMode);
+            let redisKey: string;
+            if (period === "daily") {
+              redisKey = `${period}_${dailyResetInfo.suffix}`;
+            } else if (period === "weekly" && type === "provider") {
+              const wSuffix = RateLimitService.resolveWeeklyReset(
+                weeklyResetDay,
+                weeklyResetTime
+              ).suffix;
+              redisKey = `weekly_${wSuffix}`;
+            } else {
+              redisKey = period;
+            }
+            const ttl = await getTTLForPeriodWithMode(
+              period,
+              dailyResetInfo.normalized,
+              resetMode,
+              weeklyResetDay ?? undefined,
+              weeklyResetTime ?? undefined
+            );
             await RateLimitService.redis.set(
               `${type}:${id}:cost_${redisKey}`,
               current.toString(),
@@ -1165,12 +1274,20 @@ export class RateLimitService {
    * 用于避免 N+1 查询问题
    *
    * @param providerIds - 供应商 ID 列表
-   * @param dailyResetConfigs - 每个供应商的日限额重置配置
+   * @param resetConfigs - 每个供应商的限额重置配置
    * @returns Map<providerId, { cost5h, costDaily, costWeekly, costMonthly }>
    */
   static async getCurrentCostBatch(
     providerIds: number[],
-    dailyResetConfigs: Map<number, { resetTime?: string | null; resetMode?: string | null }>
+    resetConfigs: Map<
+      number,
+      {
+        resetTime?: string | null;
+        resetMode?: string | null;
+        weeklyResetDay?: number | null;
+        weeklyResetTime?: string | null;
+      }
+    >
   ): Promise<
     Map<number, { cost5h: number; costDaily: number; costWeekly: number; costMonthly: number }>
   > {
@@ -1209,9 +1326,13 @@ export class RateLimitService {
       }> = [];
 
       for (const providerId of providerIds) {
-        const config = dailyResetConfigs.get(providerId);
+        const config = resetConfigs.get(providerId);
         const dailyResetMode = (config?.resetMode ?? "fixed") as DailyResetMode;
         const { suffix } = RateLimitService.resolveDailyReset(config?.resetTime ?? undefined);
+        const weeklySuffix = RateLimitService.resolveWeeklyReset(
+          config?.weeklyResetDay,
+          config?.weeklyResetTime
+        ).suffix;
 
         // 5h 滚动窗口
         pipeline.eval(
@@ -1238,8 +1359,8 @@ export class RateLimitService {
           queryMeta.push({ providerId, period: "daily", isRolling: false });
         }
 
-        // Weekly
-        pipeline.get(`provider:${providerId}:cost_weekly`);
+        // Weekly - use suffix for configurable weekly reset
+        pipeline.get(`provider:${providerId}:cost_weekly_${weeklySuffix}`);
         queryMeta.push({ providerId, period: "weekly", isRolling: false });
 
         // Monthly
@@ -1317,11 +1438,17 @@ export class RateLimitService {
       daily_reset_time?: string;
       daily_reset_mode?: DailyResetMode;
       limit_weekly_usd: number | null;
+      weekly_reset_day?: number | null;
+      weekly_reset_time?: string | null;
       limit_monthly_usd: number | null;
     }
   ): Promise<{ allowed: boolean; reason?: string; failOpen?: boolean }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
     const dailyResetMode = limits.daily_reset_mode ?? "fixed";
+    const weeklyReset = RateLimitService.resolveWeeklyReset(
+      limits.weekly_reset_day,
+      limits.weekly_reset_time
+    );
 
     // Define windows to check with their limits
     const windowChecks: Array<{
@@ -1349,7 +1476,7 @@ export class RateLimitService {
         window: "weekly",
         limit: limits.limit_weekly_usd,
         name: "weekly",
-        resetTime: "00:00",
+        resetTime: weeklyReset.time,
         resetMode: "fixed" as DailyResetMode,
       },
       {

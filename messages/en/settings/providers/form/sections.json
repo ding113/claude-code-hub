@@ -144,6 +144,22 @@
     "dailyResetTime": {
       "label": "Daily Reset Time (HH:mm)"
     },
+    "weeklyResetDay": {
+      "label": "Weekly Reset Day",
+      "desc": "Day of week when weekly quota resets",
+      "days": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      }
+    },
+    "weeklyResetTime": {
+      "label": "Weekly Reset Time (HH:mm)"
+    },
     "desc": "Configure spending limits to control costs across different time windows",
     "limit5h": {
       "label": "5h Spend Limit (USD)",
@@ -183,6 +199,7 @@
   "limits": {
     "timeBased": "Time-based Limits",
     "dailyReset": "Daily Reset Settings",
+    "weeklyReset": "Weekly Reset Settings",
     "otherLimits": "Other Limits"
   },
   "routing": {

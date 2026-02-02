@@ -55,6 +55,8 @@ export interface RateLimitState {
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
   limitWeeklyUsd: number | null;
+  weeklyResetDay: number;
+  weeklyResetTime: string;
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
   limitConcurrentSessions: number | null;
@@ -126,6 +128,8 @@ export type ProviderFormAction =
   | { type: "SET_DAILY_RESET_MODE"; payload: "fixed" | "rolling" }
   | { type: "SET_DAILY_RESET_TIME"; payload: string }
   | { type: "SET_LIMIT_WEEKLY_USD"; payload: number | null }
+  | { type: "SET_WEEKLY_RESET_DAY"; payload: number }
+  | { type: "SET_WEEKLY_RESET_TIME"; payload: string }
   | { type: "SET_LIMIT_MONTHLY_USD"; payload: number | null }
   | { type: "SET_LIMIT_TOTAL_USD"; payload: number | null }
   | { type: "SET_LIMIT_CONCURRENT_SESSIONS"; payload: number | null }

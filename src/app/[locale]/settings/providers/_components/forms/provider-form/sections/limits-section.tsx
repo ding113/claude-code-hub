@@ -244,6 +244,65 @@ export function LimitsSection() {
             </div>
           </FieldGroup>
 
+          {/* Weekly Reset Settings */}
+          <FieldGroup label={t("sections.limits.weeklyReset")}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <SmartInputWrapper
+                label={t("sections.rateLimit.weeklyResetDay.label")}
+                description={t("sections.rateLimit.weeklyResetDay.desc")}
+              >
+                <Select
+                  value={state.rateLimit.weeklyResetDay.toString()}
+                  onValueChange={(value) =>
+                    dispatch({ type: "SET_WEEKLY_RESET_DAY", payload: parseInt(value, 10) })
+                  }
+                  disabled={state.ui.isPending}
+                >
+                  <SelectTrigger id={isEdit ? "edit-weekly-reset-day" : "weekly-reset-day"}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">
+                      {t("sections.rateLimit.weeklyResetDay.days.0")}
+                    </SelectItem>
+                    <SelectItem value="1">
+                      {t("sections.rateLimit.weeklyResetDay.days.1")}
+                    </SelectItem>
+                    <SelectItem value="2">
+                      {t("sections.rateLimit.weeklyResetDay.days.2")}
+                    </SelectItem>
+                    <SelectItem value="3">
+                      {t("sections.rateLimit.weeklyResetDay.days.3")}
+                    </SelectItem>
+                    <SelectItem value="4">
+                      {t("sections.rateLimit.weeklyResetDay.days.4")}
+                    </SelectItem>
+                    <SelectItem value="5">
+                      {t("sections.rateLimit.weeklyResetDay.days.5")}
+                    </SelectItem>
+                    <SelectItem value="6">
+                      {t("sections.rateLimit.weeklyResetDay.days.6")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </SmartInputWrapper>
+
+              <SmartInputWrapper label={t("sections.rateLimit.weeklyResetTime.label")}>
+                <Input
+                  id={isEdit ? "edit-weekly-reset-time" : "weekly-reset-time"}
+                  type="time"
+                  value={state.rateLimit.weeklyResetTime}
+                  onChange={(e) =>
+                    dispatch({ type: "SET_WEEKLY_RESET_TIME", payload: e.target.value || "00:00" })
+                  }
+                  placeholder="00:00"
+                  disabled={state.ui.isPending}
+                  step="60"
+                />
+              </SmartInputWrapper>
+            </div>
+          </FieldGroup>
+
           {/* Total and Concurrent Limits */}
           <FieldGroup label={t("sections.limits.otherLimits")}>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

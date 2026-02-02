@@ -19,6 +19,8 @@
 
   "INVALID_TYPE": "{field}のタイプが無効です",
   "INVALID_FORMAT": "{field}の形式が無効です",
+  "TIME_FORMAT_INVALID": "時刻は HH:mm 形式で入力してください",
+  "WEEKLY_RESET_DAY_INVALID": "週次リセット日は 0（日曜）から 6（土曜）の間である必要があります",
 
   "DUPLICATE_NAME": "名前'{name}'は既に存在します",
   "INVALID_RANGE": "{field}は{min}から{max}の間である必要があります",
