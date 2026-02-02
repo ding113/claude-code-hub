@@ -66,6 +66,7 @@ export function createInitialState(
       dailyResetMode: sourceProvider?.dailyResetMode ?? "fixed",
       dailyResetTime: sourceProvider?.dailyResetTime ?? "00:00",
       limitWeeklyUsd: sourceProvider?.limitWeeklyUsd ?? null,
+      // Note: null values default to Monday 00:00 - editing existing providers will migrate them to explicit values
       weeklyResetDay: sourceProvider?.weeklyResetDay ?? 1,
       weeklyResetTime: sourceProvider?.weeklyResetTime ?? "00:00",
       limitMonthlyUsd: sourceProvider?.limitMonthlyUsd ?? null,

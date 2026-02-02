@@ -779,6 +779,7 @@ export class RateLimitService {
         pipeline.expire(keyDailyKey, ttlDailyKey);
       }
 
+      // Keys use fixed Monday 00:00 weekly reset (no configurable weekly reset, only providers support it)
       pipeline.incrbyfloat(`key:${keyId}:cost_weekly`, cost);
       pipeline.expire(`key:${keyId}:cost_weekly`, ttlWeeklyKey);
 
