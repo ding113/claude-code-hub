@@ -19,6 +19,8 @@
 
   "INVALID_TYPE": "{field} имеет неверный тип",
   "INVALID_FORMAT": "{field} имеет неверный формат",
+  "TIME_FORMAT_INVALID": "Время должно быть в формате ЧЧ:мм",
+  "WEEKLY_RESET_DAY_INVALID": "День еженедельного сброса должен быть от 0 (воскресенье) до 6 (суббота)",
 
   "DUPLICATE_NAME": "Имя '{name}' уже существует",
   "INVALID_RANGE": "{field} должно быть между {min} и {max}",

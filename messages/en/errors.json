@@ -19,6 +19,8 @@
 
   "INVALID_TYPE": "{field} has an invalid type",
   "INVALID_FORMAT": "{field} has an invalid format",
+  "TIME_FORMAT_INVALID": "Time must be in HH:mm format",
+  "WEEKLY_RESET_DAY_INVALID": "Weekly reset day must be between 0 (Sunday) and 6 (Saturday)",
 
   "DUPLICATE_NAME": "Name '{name}' already exists",
   "INVALID_RANGE": "{field} must be between {min} and {max}",

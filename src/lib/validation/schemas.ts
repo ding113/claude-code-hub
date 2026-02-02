@@ -418,14 +418,14 @@ export const CreateProviderSchema = z.object({
     .optional(),
   weekly_reset_day: z.coerce
     .number()
-    .int("每周重置日必须是整数")
-    .min(0, "每周重置日范围为 0-6")
-    .max(6, "每周重置日范围为 0-6")
+    .int()
+    .min(0)
+    .max(6)
     .nullable()
     .optional(),
   weekly_reset_time: z
     .string()
-    .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")
+    .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
     .nullable()
     .optional(),
   limit_monthly_usd: z.coerce
@@ -608,14 +608,14 @@ export const UpdateProviderSchema = z
       .optional(),
     weekly_reset_day: z.coerce
       .number()
-      .int("每周重置日必须是整数")
-      .min(0, "每周重置日范围为 0-6")
-      .max(6, "每周重置日范围为 0-6")
+      .int()
+      .min(0)
+      .max(6)
       .nullable()
       .optional(),
     weekly_reset_time: z
       .string()
-      .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, "重置时间格式必须为 HH:mm")
+      .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
       .nullable()
       .optional(),
     limit_monthly_usd: z.coerce
