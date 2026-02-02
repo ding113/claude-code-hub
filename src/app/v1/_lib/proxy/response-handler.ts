@@ -19,12 +19,9 @@ import {
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SessionUsageUpdate } from "@/types/session";
-import { defaultRegistry } from "../converters";
-import type { Format, TransformState } from "../converters/types";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { isClientAbortError } from "./errors";
-import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 import type { ProxySession } from "./session";
 
 export type UsageMetrics = {
@@ -103,12 +100,6 @@ export class ProxyResponseHandler {
     const responseForLog = response.clone();
     const statusCode = response.status;
 
-    // 检查是否需要格式转换
-    const fromFormat: Format | null = provider.providerType
-      ? mapProviderTypeToTransformer(provider.providerType)
-      : null;
-    const toFormat: Format = mapClientFormatToTransformer(session.originalFormat);
-    const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let finalResponse = response;
 
     // --- GEMINI HANDLING ---
@@ -208,42 +199,6 @@ export class ProxyResponseHandler {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
           finalResponse = response;
         }
-      }
-    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
-      try {
-        // 克隆一份用于转换
-        const responseForTransform = response.clone();
-        const responseText = await responseForTransform.text();
-        const responseData = JSON.parse(responseText) as Record<string, unknown>;
-
-        // 使用转换器注册表进行转换
-        const transformed = defaultRegistry.transformNonStreamResponse(
-          session.context,
-          fromFormat,
-          toFormat,
-          session.request.model || "",
-          session.request.message, // original request
-          session.request.message, // transformed request (same as original if no transform)
-          responseData
-        );
-
-        logger.debug("[ResponseHandler] Transformed non-stream response", {
-          from: fromFormat,
-          to: toFormat,
-          model: session.request.model,
-        });
-
-        // ⭐ 清理传输 headers（body 已修改，原始传输信息无效）
-        // 构建新的响应
-        finalResponse = new Response(JSON.stringify(transformed), {
-          status: response.status,
-          statusText: response.statusText,
-          headers: cleanResponseHeaders(response.headers),
-        });
-      } catch (error) {
-        logger.error("[ResponseHandler] Failed to transform response:", error);
-        // 转换失败时返回原始响应
-        finalResponse = response;
       }
     }
 
@@ -570,12 +525,6 @@ export class ProxyResponseHandler {
       return response;
     }
 
-    // 检查是否需要格式转换
-    const fromFormat: Format | null = provider.providerType
-      ? mapProviderTypeToTransformer(provider.providerType)
-      : null;
-    const toFormat: Format = mapClientFormatToTransformer(session.originalFormat);
-    const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let processedStream: ReadableStream<Uint8Array> = response.body;
 
     // --- GEMINI STREAM HANDLING ---
@@ -724,48 +673,6 @@ export class ProxyResponseHandler {
         });
         processedStream = response.body.pipeThrough(transformStream);
       }
-    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
-      logger.debug("[ResponseHandler] Transforming stream response", {
-        from: fromFormat,
-        to: toFormat,
-        model: session.request.model,
-      });
-
-      // 创建转换流
-      const transformState: TransformState = {}; // 状态对象，用于在多个 chunk 之间保持状态
-      const transformStream = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
-          try {
-            const decoder = new TextDecoder();
-            const text = decoder.decode(chunk, { stream: true });
-
-            // 使用转换器注册表转换 chunk
-            const transformedChunks = defaultRegistry.transformStreamResponse(
-              session.context,
-              fromFormat,
-              toFormat,
-              session.request.model || "",
-              session.request.message, // original request
-              session.request.message, // transformed request (same as original if no transform)
-              text,
-              transformState
-            );
-
-            // transformedChunks 是字符串数组
-            for (const transformedChunk of transformedChunks) {
-              if (transformedChunk) {
-                controller.enqueue(new TextEncoder().encode(transformedChunk));
-              }
-            }
-          } catch (error) {
-            logger.error("[ResponseHandler] Stream transform error:", error);
-            // 出错时传递原始 chunk
-            controller.enqueue(chunk);
-          }
-        },
-      });
-
-      processedStream = response.body.pipeThrough(transformStream) as ReadableStream<Uint8Array>;
     }
 
     // ⭐ 使用 TransformStream 包装流，以便在 idle timeout 时能关闭客户端流

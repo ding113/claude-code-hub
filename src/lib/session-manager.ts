@@ -111,16 +111,15 @@ export class SessionManager {
   static extractClientSessionId(
     requestMessage: Record<string, unknown>,
     headers?: Headers | null,
-    userAgent?: string | null
+    _userAgent?: string | null
   ): string | null {
     // Codex 请求：优先尝试从 headers/body 提取稳定的 session_id
     if (headers && Array.isArray(requestMessage.input)) {
-      const result = extractCodexSessionId(headers, requestMessage, userAgent ?? null);
+      const result = extractCodexSessionId(headers, requestMessage);
       if (result.sessionId) {
         logger.trace("SessionManager: Extracted session from Codex request", {
           sessionId: result.sessionId,
           source: result.source,
-          isCodexClient: result.isCodexClient,
         });
         return result.sessionId;
       }
