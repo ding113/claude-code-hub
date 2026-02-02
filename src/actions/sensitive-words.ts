@@ -72,9 +72,6 @@ export async function createSensitiveWordAction(data: {
 
     const result = await repo.createSensitiveWord(data);
 
-    // 刷新缓存
-    await sensitiveWordDetector.reload();
-
     revalidatePath("/settings/sensitive-words");
 
     logger.info("[SensitiveWordsAction] Created sensitive word", {
@@ -138,9 +135,6 @@ export async function updateSensitiveWordAction(
       };
     }
 
-    // 刷新缓存
-    await sensitiveWordDetector.reload();
-
     revalidatePath("/settings/sensitive-words");
 
     logger.info("[SensitiveWordsAction] Updated sensitive word", {
@@ -183,9 +177,6 @@ export async function deleteSensitiveWordAction(id: number): Promise<ActionResul
         error: "敏感词不存在",
       };
     }
-
-    // 刷新缓存
-    await sensitiveWordDetector.reload();
 
     revalidatePath("/settings/sensitive-words");
 

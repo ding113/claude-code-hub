@@ -38,6 +38,7 @@ const cache: ProviderCacheState = {
 };
 
 let subscriptionInitialized = false;
+let subscriptionInitPromise: Promise<void> | null = null;
 
 /**
  * 初始化 Redis 订阅
@@ -47,19 +48,29 @@ let subscriptionInitialized = false;
  */
 async function ensureSubscription(): Promise<void> {
   if (subscriptionInitialized) return;
+  if (subscriptionInitPromise) return subscriptionInitPromise;
 
-  // CI/build 阶段跳过
-  if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
+  subscriptionInitPromise = (async () => {
+    // CI/build 阶段跳过
+    if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
+      subscriptionInitialized = true;
+      return;
+    }
+
+    // pubsub.ts 订阅机制
+    const cleanup = await subscribeCacheInvalidation(CHANNEL_PROVIDERS_UPDATED, () => {
+      invalidateCache();
+      logger.debug("[ProviderCache] Cache invalidated via pub/sub");
+    });
+
+    if (!cleanup) return;
+
     subscriptionInitialized = true;
-    return;
-  }
-
-  subscriptionInitialized = true;
-  // pubsub.ts 订阅机制
-  await subscribeCacheInvalidation(CHANNEL_PROVIDERS_UPDATED, () => {
-    invalidateCache();
-    logger.debug("[ProviderCache] Cache invalidated via pub/sub");
+  })().finally(() => {
+    subscriptionInitPromise = null;
   });
+
+  return subscriptionInitPromise;
 }
 
 /**

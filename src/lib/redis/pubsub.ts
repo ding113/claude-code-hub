@@ -13,16 +13,42 @@ type CacheInvalidationCallback = () => void;
 let subscriberClient: Redis | null = null;
 let subscriberReady: Promise<Redis> | null = null;
 const subscriptions = new Map<string, Set<CacheInvalidationCallback>>();
+const subscribedChannels = new Set<string>();
 
 function ensureSubscriber(baseClient: Redis): Promise<Redis> {
   if (subscriberReady) return subscriberReady;
 
   subscriberReady = new Promise<Redis>((resolve, reject) => {
     const sub = baseClient.duplicate();
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
-    const onReady = () => {
+    function cleanup(): void {
+      sub.off("ready", onReady);
+      sub.off("error", onError);
+
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    }
+
+    function fail(error: Error): void {
+      cleanup();
+      subscriberReady = null;
+      try {
+        sub.disconnect();
+      } catch {
+        // ignore
+      }
+      reject(error);
+    }
+
+    function onReady(): void {
       cleanup();
       subscriberClient = sub;
+      subscribedChannels.clear();
+
+      sub.on("error", (error) => logger.warn("[RedisPubSub] Subscriber connection error", { error }));
 
       sub.on("message", (channel: string) => {
         const callbacks = subscriptions.get(channel);
@@ -38,29 +64,20 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
 
       logger.info("[RedisPubSub] Subscriber connection ready");
       resolve(sub);
-    };
+    }
 
-    const onError = (error: Error) => {
-      cleanup();
+    function onError(error: Error): void {
       logger.warn("[RedisPubSub] Subscriber connection error", { error });
-      subscriberReady = null;
-      reject(error);
-    };
-
-    const cleanup = () => {
-      sub.off("ready", onReady);
-      sub.off("error", onError);
-    };
+      fail(error);
+    }
 
     sub.once("ready", onReady);
     sub.once("error", onError);
 
     // Timeout 10 seconds
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       if (sub.status !== "ready") {
-        cleanup();
-        subscriberReady = null;
-        reject(new Error("Redis subscriber connection timeout"));
+        fail(new Error("Redis subscriber connection timeout"));
       }
     }, 10000);
   });
@@ -96,15 +113,22 @@ export async function subscribeCacheInvalidation(
   try {
     const sub = await ensureSubscriber(baseClient);
 
-    const existing = subscriptions.get(channel);
-    const isFirstSubscriberForChannel = !existing;
-    const callbacks = existing ?? new Set<CacheInvalidationCallback>();
+    const callbacks = subscriptions.get(channel) ?? new Set<CacheInvalidationCallback>();
     callbacks.add(callback);
     subscriptions.set(channel, callbacks);
 
-    if (isFirstSubscriberForChannel) {
-      await sub.subscribe(channel);
-      logger.info("[RedisPubSub] Subscribed to channel", { channel });
+    if (!subscribedChannels.has(channel)) {
+      try {
+        await sub.subscribe(channel);
+        subscribedChannels.add(channel);
+        logger.info("[RedisPubSub] Subscribed to channel", { channel });
+      } catch (error) {
+        callbacks.delete(callback);
+        if (callbacks.size === 0) {
+          subscriptions.delete(channel);
+        }
+        throw error;
+      }
     }
 
     return () => {
@@ -115,6 +139,7 @@ export async function subscribeCacheInvalidation(
 
       if (cbs.size === 0) {
         subscriptions.delete(channel);
+        subscribedChannels.delete(channel);
         if (subscriberClient) {
           void subscriberClient.unsubscribe(channel);
         }
