@@ -81,7 +81,7 @@
     "hono": "^4",
     "html2canvas": "^1",
     "ioredis": "^5",
-    "jspdf": "^3",
+    "jspdf": "^4",
     "lucide-react": "^0.555",
     "next": "^16",
     "next-intl": "^4",
