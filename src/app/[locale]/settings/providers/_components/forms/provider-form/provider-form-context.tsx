@@ -46,7 +46,6 @@ export function createInitialState(
       preserveClientIp: sourceProvider?.preserveClientIp ?? false,
       modelRedirects: sourceProvider?.modelRedirects ?? {},
       allowedModels: sourceProvider?.allowedModels ?? [],
-      joinClaudePool: sourceProvider?.joinClaudePool ?? false,
       priority: sourceProvider?.priority ?? 0,
       weight: sourceProvider?.weight ?? 1,
       costMultiplier: sourceProvider?.costMultiplier ?? 1.0,
@@ -139,8 +138,6 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, modelRedirects: action.payload } };
     case "SET_ALLOWED_MODELS":
       return { ...state, routing: { ...state.routing, allowedModels: action.payload } };
-    case "SET_JOIN_CLAUDE_POOL":
-      return { ...state, routing: { ...state.routing, joinClaudePool: action.payload } };
     case "SET_PRIORITY":
       return { ...state, routing: { ...state.routing, priority: action.payload } };
     case "SET_WEIGHT":

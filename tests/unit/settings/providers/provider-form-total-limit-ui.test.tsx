@@ -128,8 +128,6 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
       preserveClientIp: false,
       modelRedirects: null,
       allowedModels: null,
-      joinClaudePool: false,
-      codexInstructionsStrategy: "auto",
       mcpPassthroughType: "none",
       mcpPassthroughUrl: null,
       limit5hUsd: null,
