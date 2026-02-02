@@ -47,11 +47,14 @@ export async function emitSensitiveWordsUpdated(): Promise<void> {
  */
 export async function emitRequestFiltersUpdated(): Promise<void> {
   if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
+    const { logger } = await import("@/lib/logger");
+
     try {
       const { eventEmitter } = await import("@/lib/event-emitter");
       eventEmitter.emitRequestFiltersUpdated();
-    } catch {
-      // 忽略导入错误
+      logger.info("[emitRequestFiltersUpdated] Local event emitted");
+    } catch (error) {
+      logger.warn("[emitRequestFiltersUpdated] Failed to emit local event", { error });
     }
 
     try {
@@ -59,8 +62,9 @@ export async function emitRequestFiltersUpdated(): Promise<void> {
         "@/lib/redis/pubsub"
       );
       await publishCacheInvalidation(CHANNEL_REQUEST_FILTERS_UPDATED);
-    } catch {
-      // 忽略导入错误
+      logger.info("[emitRequestFiltersUpdated] Redis pub/sub message published");
+    } catch (error) {
+      logger.warn("[emitRequestFiltersUpdated] Failed to publish to Redis", { error });
     }
   }
 }

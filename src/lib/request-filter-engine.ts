@@ -137,9 +137,11 @@ export class RequestFilterEngine {
       try {
         const { eventEmitter } = await import("@/lib/event-emitter");
         const handler = () => {
+          logger.info("[RequestFilterEngine] Received requestFiltersUpdated event, reloading...");
           void this.reload();
         };
         eventEmitter.on("requestFiltersUpdated", handler);
+        logger.info("[RequestFilterEngine] Subscribed to local eventEmitter");
 
         // Store cleanup function
         this.eventEmitterCleanup = () => {
@@ -155,11 +157,12 @@ export class RequestFilterEngine {
             CHANNEL_REQUEST_FILTERS_UPDATED,
             handler
           );
-        } catch {
-          // 忽略导入错误
+          logger.info("[RequestFilterEngine] Subscribed to Redis pub/sub channel");
+        } catch (error) {
+          logger.warn("[RequestFilterEngine] Failed to subscribe to Redis pub/sub", { error });
         }
-      } catch {
-        // 忽略导入错误
+      } catch (error) {
+        logger.warn("[RequestFilterEngine] Failed to setup event listener", { error });
       }
     }
   }
@@ -233,9 +236,10 @@ export class RequestFilterEngine {
 
       this.lastReloadTime = Date.now();
       this.isInitialized = true;
-      logger.info("[RequestFilterEngine] Filters loaded", {
+      logger.info("[RequestFilterEngine] Filters reloaded", {
         globalCount: this.globalFilters.length,
         providerCount: this.providerFilters.length,
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       logger.error("[RequestFilterEngine] Failed to reload filters", { error });
@@ -478,4 +482,9 @@ export class RequestFilterEngine {
   }
 }
 
-export const requestFilterEngine = new RequestFilterEngine();
+// Используем globalThis для гарантии единственного инстанса между worker'ами
+const g = globalThis as unknown as { __CCH_REQUEST_FILTER_ENGINE__?: RequestFilterEngine };
+if (!g.__CCH_REQUEST_FILTER_ENGINE__) {
+  g.__CCH_REQUEST_FILTER_ENGINE__ = new RequestFilterEngine();
+}
+export const requestFilterEngine = g.__CCH_REQUEST_FILTER_ENGINE__;
