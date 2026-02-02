@@ -212,6 +212,8 @@ function ProviderFormContent({
           daily_reset_mode: state.rateLimit.dailyResetMode,
           daily_reset_time: state.rateLimit.dailyResetTime,
           limit_weekly_usd: state.rateLimit.limitWeeklyUsd,
+          weekly_reset_day: state.rateLimit.weeklyResetDay,
+          weekly_reset_time: state.rateLimit.weeklyResetTime,
           limit_monthly_usd: state.rateLimit.limitMonthlyUsd,
           limit_total_usd: state.rateLimit.limitTotalUsd,
           limit_concurrent_sessions: state.rateLimit.limitConcurrentSessions,

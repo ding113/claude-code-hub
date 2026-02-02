@@ -99,6 +99,8 @@ describe("getProviderLimitUsage", () => {
     name: "Test Provider",
     dailyResetTime: "18:00",
     dailyResetMode: "fixed" as const,
+    weeklyResetDay: 5, // Friday
+    weeklyResetTime: "18:00",
     limit5hUsd: 10,
     limitDailyUsd: 50,
     limitWeeklyUsd: 200,
@@ -198,7 +200,7 @@ describe("getProviderLimitUsage", () => {
 
     // 5h should use getTimeRangeForPeriod (note: second arg is optional resetTime, defaults to undefined)
     expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("5h", undefined, undefined, undefined);
-    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("weekly", "00:00", undefined, undefined);
+    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("weekly", "00:00", 5, "18:00");
     expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith(
       "monthly",
       undefined,
@@ -231,6 +233,16 @@ describe("getProviderLimitUsage", () => {
     await getProviderLimitUsage(1);
 
     expect(getTimeRangeForPeriodWithModeMock).toHaveBeenCalledWith("daily", "18:00", "rolling");
+  });
+
+  it("should pass weeklyResetDay and weeklyResetTime to getTimeRangeForPeriod for weekly", async () => {
+    const { getProviderLimitUsage } = await import("@/actions/providers");
+
+    await getProviderLimitUsage(1);
+
+    // mockProvider has weeklyResetDay=5 (Friday) and weeklyResetTime="18:00"
+    expect(getTimeRangeForPeriodMock).toHaveBeenCalledWith("weekly", "00:00", 5, "18:00");
+    expect(getResetInfoMock).toHaveBeenCalledWith("weekly", "00:00", 5, "18:00");
   });
 
   it("should pass correct time ranges to sumProviderCostInTimeRange", async () => {
@@ -308,6 +320,8 @@ describe("getProviderLimitUsageBatch", () => {
       id: 1,
       dailyResetTime: "00:00",
       dailyResetMode: "fixed" as const,
+      weeklyResetDay: 1, // Monday
+      weeklyResetTime: "00:00",
       limit5hUsd: 10,
       limitDailyUsd: 50,
       limitWeeklyUsd: 200,
@@ -318,6 +332,8 @@ describe("getProviderLimitUsageBatch", () => {
       id: 2,
       dailyResetTime: "18:00",
       dailyResetMode: "rolling" as const,
+      weeklyResetDay: 5, // Friday
+      weeklyResetTime: "18:00",
       limit5hUsd: 20,
       limitDailyUsd: 100,
       limitWeeklyUsd: 400,
