@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Provider } from "@/types/provider";
-import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
+import { DEFAULT_CODEX_USER_AGENT, ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 
 function createSession({
@@ -133,9 +133,7 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     };
     const resultHeaders = buildHeaders(session, provider);
 
-    expect(resultHeaders.get("user-agent")).toBe(
-      "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1"
-    );
+    expect(resultHeaders.get("user-agent")).toBe(DEFAULT_CODEX_USER_AGENT);
   });
 
   it("应该保留过滤器设置的空字符串 user-agent", () => {

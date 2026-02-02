@@ -58,14 +58,18 @@ async function ensureSubscription(): Promise<void> {
     }
 
     // pubsub.ts 订阅机制
-    const cleanup = await subscribeCacheInvalidation(CHANNEL_PROVIDERS_UPDATED, () => {
-      invalidateCache();
-      logger.debug("[ProviderCache] Cache invalidated via pub/sub");
-    });
+    try {
+      const cleanup = await subscribeCacheInvalidation(CHANNEL_PROVIDERS_UPDATED, () => {
+        invalidateCache();
+        logger.debug("[ProviderCache] Cache invalidated via pub/sub");
+      });
 
-    if (!cleanup) return;
+      if (!cleanup) return;
 
-    subscriptionInitialized = true;
+      subscriptionInitialized = true;
+    } catch (error) {
+      logger.warn("[ProviderCache] Failed to subscribe to cache invalidation", { error });
+    }
   })().finally(() => {
     subscriptionInitPromise = null;
   });
