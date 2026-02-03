@@ -670,4 +670,86 @@ describe("extractUsageMetrics", () => {
       expect(result.usageMetrics).toBeNull();
     });
   });
+
+  describe("OpenAI chat completion format (prompt_tokens/completion_tokens)", () => {
+    it("should extract prompt_tokens as input_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(100);
+      expect(result.usageMetrics?.output_tokens).toBe(50);
+    });
+
+    it("should extract completion_tokens as output_tokens", () => {
+      const response = JSON.stringify({
+        usage: {
+          completion_tokens: 200,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.output_tokens).toBe(200);
+    });
+
+    it("should prefer input_tokens over prompt_tokens (Claude format priority)", () => {
+      const response = JSON.stringify({
+        usage: {
+          input_tokens: 500,
+          output_tokens: 300,
+          prompt_tokens: 100,
+          completion_tokens: 50,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics?.input_tokens).toBe(500);
+      expect(result.usageMetrics?.output_tokens).toBe(300);
+    });
+
+    it("should handle OpenAI streaming chunk with usage in final event", () => {
+      const sse = [
+        'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{"role":"assistant","content":"Hi"}}]}',
+        "",
+        'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1234567890,"model":"gpt-4","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":33,"completion_tokens":31,"total_tokens":64}}',
+        "",
+        "data: [DONE]",
+      ].join("\n");
+
+      const result = parseUsageFromResponseText(sse, "openai");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(33);
+      expect(result.usageMetrics?.output_tokens).toBe(31);
+    });
+
+    it("should handle OpenAI completion_tokens_details (reasoning_tokens)", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 66,
+          completion_tokens: 57,
+          total_tokens: 123,
+          completion_tokens_details: {
+            reasoning_tokens: 0,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai-compatible");
+
+      expect(result.usageMetrics).not.toBeNull();
+      expect(result.usageMetrics?.input_tokens).toBe(66);
+      expect(result.usageMetrics?.output_tokens).toBe(57);
+    });
+  });
 });
