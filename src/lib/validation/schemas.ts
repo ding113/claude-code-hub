@@ -31,13 +31,13 @@ const ANTHROPIC_MAX_TOKENS_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "max_tokens must be 'inherit' or a numeric string")
+    .regex(/^\d+$/, "max_tokens 必须为 \"inherit\" 或数字字符串")
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
         return num >= 1 && num <= 64000;
       },
-      { message: "max_tokens must be between 1 and 64000" }
+      { message: "max_tokens 必须在 1 到 64000 之间" }
     ),
 ]);
 
@@ -45,13 +45,13 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "thinking.budget_tokens must be 'inherit' or a numeric string")
+    .regex(/^\d+$/, "thinking.budget_tokens 必须为 \"inherit\" 或数字字符串")
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
         return num >= 1024 && num <= 32000;
       },
-      { message: "thinking.budget_tokens must be between 1024 and 32000" }
+      { message: "thinking.budget_tokens 必须在 1024 到 32000 之间" }
     ),
 ]);
 

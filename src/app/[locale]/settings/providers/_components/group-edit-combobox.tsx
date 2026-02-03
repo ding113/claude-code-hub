@@ -156,6 +156,9 @@ export function GroupEditCombobox({
         // Rollback on failure
         setSelectedGroups(previousSelection);
       }
+    } catch {
+      // Rollback on exception
+      setSelectedGroups(previousSelection);
     } finally {
       setSaving(false);
     }
@@ -272,7 +275,7 @@ export function GroupEditCombobox({
       {saving && (
         <div className="flex items-center justify-center py-2 text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          {t("save")}...
+          {t("saving")}
         </div>
       )}
     </Command>

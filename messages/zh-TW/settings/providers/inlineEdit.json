@@ -18,6 +18,7 @@
   "priorityInvalid": "請輸入大於等於 0 的整數",
   "priorityLabel": "優先級",
   "save": "儲存",
+  "saving": "儲存中...",
   "saveFailed": "儲存失敗",
   "saveSuccess": "儲存成功",
   "searchGroups": "搜尋分組...",

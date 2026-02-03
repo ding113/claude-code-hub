@@ -18,6 +18,7 @@
   "priorityInvalid": "Введите целое число >= 0",
   "priorityLabel": "Приоритет",
   "save": "Сохранить",
+  "saving": "Сохранение...",
   "saveFailed": "Не удалось сохранить",
   "saveSuccess": "Успешно сохранено",
   "searchGroups": "Поиск групп...",

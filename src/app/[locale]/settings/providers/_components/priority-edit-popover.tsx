@@ -112,22 +112,23 @@ export function PriorityEditPopover({
     if (!Number.isFinite(parsedGlobal) || !Number.isInteger(parsedGlobal) || parsedGlobal < 0)
       return;
 
-    const newGroupPriorities: Record<string, number> = {};
-    let hasGroupOverrides = false;
+    const mergedGroupPriorities: Record<string, number> = { ...(groupPriorities ?? {}) };
     for (const g of groups) {
       const draft = (groupDrafts[g] ?? "").trim();
-      if (draft !== "") {
-        const val = Number(draft);
-        if (Number.isFinite(val) && Number.isInteger(val) && val >= 0) {
-          newGroupPriorities[g] = val;
-          hasGroupOverrides = true;
-        }
+      if (draft === "") {
+        delete mergedGroupPriorities[g];
+        continue;
+      }
+      const val = Number(draft);
+      if (Number.isFinite(val) && Number.isInteger(val) && val >= 0) {
+        mergedGroupPriorities[g] = val;
       }
     }
+    const hasGroupOverrides = Object.keys(mergedGroupPriorities).length > 0;
 
     setSaving(true);
     try {
-      const ok = await onSave(parsedGlobal, hasGroupOverrides ? newGroupPriorities : null);
+      const ok = await onSave(parsedGlobal, hasGroupOverrides ? mergedGroupPriorities : null);
       if (ok) {
         setOpen(false);
       }

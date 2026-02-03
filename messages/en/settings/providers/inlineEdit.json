@@ -18,6 +18,7 @@
   "priorityInvalid": "Please enter an integer >= 0",
   "priorityLabel": "Priority",
   "save": "Save",
+  "saving": "Saving...",
   "saveFailed": "Save failed",
   "saveSuccess": "Saved successfully",
   "searchGroups": "Search groups...",

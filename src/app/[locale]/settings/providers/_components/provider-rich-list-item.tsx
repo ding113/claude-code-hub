@@ -583,40 +583,32 @@ export function ProviderRichListItem({
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={(e) => e.preventDefault()}
-                  className="text-destructive p-0"
-                >
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex items-center w-full px-2 py-1.5 text-sm"
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <DropdownMenuItem className="text-destructive">
+                      <Trash className="mr-2 h-4 w-4" />
+                      {tList("actionDelete")}
+                    </DropdownMenuItem>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{tList("confirmDeleteTitle")}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {tList("confirmDeleteMessage", { name: provider.name })}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="flex justify-end gap-2">
+                      <AlertDialogCancel>{tList("cancelButton")}</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDelete}
+                        className="bg-red-600 hover:bg-red-700"
+                        disabled={deletePending}
                       >
-                        <Trash className="mr-2 h-4 w-4" />
-                        {tList("actionDelete")}
-                      </button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>{tList("confirmDeleteTitle")}</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          {tList("confirmDeleteMessage", { name: provider.name })}
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <div className="flex justify-end gap-2">
-                        <AlertDialogCancel>{tList("cancelButton")}</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleDelete}
-                          className="bg-red-600 hover:bg-red-700"
-                          disabled={deletePending}
-                        >
-                          {tList("deleteButton")}
-                        </AlertDialogAction>
-                      </div>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </DropdownMenuItem>
+                        {tList("deleteButton")}
+                      </AlertDialogAction>
+                    </div>
+                  </AlertDialogContent>
+                </AlertDialog>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
