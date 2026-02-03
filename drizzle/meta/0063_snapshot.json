@@ -1,6 +1,6 @@
 {
-  "id": "0bb539db-ea09-4259-9267-2d82d6bfb278",
-  "prevId": "ae09efb5-f924-4c72-b41f-baccc1765fcb",
+  "id": "9fd69a68-7794-42af-ac5f-83f874adeecf",
+  "prevId": "0bb539db-ea09-4259-9267-2d82d6bfb278",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1669,6 +1669,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "group_priorities": {
+          "name": "group_priorities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'null'::jsonb"
         },
         "cost_multiplier": {
           "name": "cost_multiplier",

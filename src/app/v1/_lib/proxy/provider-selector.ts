@@ -1235,10 +1235,17 @@ export class ProxyProviderResolver {
         beforeHealthCheck: typeFiltered.length,
         afterHealthCheck: healthyProviders.length,
         filteredProviders: [],
-        priorityLevels: [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
-          (a, b) => a - b
+        priorityLevels: [
+          ...new Set(
+            healthyProviders.map((p) =>
+              ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
+            )
+          ),
+        ].sort((a, b) => a - b),
+        selectedPriority: ProxyProviderResolver.resolveEffectivePriority(
+          selected,
+          effectiveGroupPick ?? null
         ),
-        selectedPriority: selected.priority || 0,
         candidatesAtPriority: candidates,
       },
     };

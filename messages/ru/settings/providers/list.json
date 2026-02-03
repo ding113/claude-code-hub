@@ -36,7 +36,7 @@
   "weight": "Вес",
   "actions": "Действия",
   "actionClone": "Клонировать",
-  "actionResetCircuit": "Сбросить предохранитель",
+  "actionResetCircuit": "Сбросить автоматический выключатель",
   "actionResetUsage": "Сбросить использование",
   "actionDelete": "Удалить",
   "selectProvider": "Выбрать {name}"
