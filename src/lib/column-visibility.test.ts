@@ -209,6 +209,7 @@ describe("column-visibility", () => {
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("sessionId");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("provider");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("tokens");
+      expect(DEFAULT_VISIBLE_COLUMNS).toContain("cost");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("cache");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("performance");
     });
