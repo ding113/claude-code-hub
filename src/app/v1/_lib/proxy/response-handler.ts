@@ -1193,6 +1193,13 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     result.output_tokens = usage.candidatesTokenCount;
     hasAny = true;
   }
+
+  // OpenAI chat completion format: prompt_tokens → input_tokens
+  // Priority: Claude (input_tokens) > Gemini (promptTokenCount) > OpenAI (prompt_tokens)
+  if (result.input_tokens === undefined && typeof usage.prompt_tokens === "number") {
+    result.input_tokens = usage.prompt_tokens;
+    hasAny = true;
+  }
   // Gemini 缓存支持
   if (typeof usage.cachedContentTokenCount === "number") {
     result.cache_read_input_tokens = usage.cachedContentTokenCount;
@@ -1275,6 +1282,13 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
   // 通常存在 output_tokens的时候，thoughtsTokenCount=0
   if (typeof usage.thoughtsTokenCount === "number" && usage.thoughtsTokenCount > 0) {
     result.output_tokens = (result.output_tokens ?? 0) + usage.thoughtsTokenCount;
+    hasAny = true;
+  }
+
+  // OpenAI chat completion format: completion_tokens → output_tokens
+  // Priority: Claude (output_tokens) > Gemini (candidatesTokenCount/thoughtsTokenCount) > OpenAI (completion_tokens)
+  if (result.output_tokens === undefined && typeof usage.completion_tokens === "number") {
+    result.output_tokens = usage.completion_tokens;
     hasAny = true;
   }
 
