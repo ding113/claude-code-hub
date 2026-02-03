@@ -1036,10 +1036,17 @@ export class ProxyProviderResolver {
 
   /**
    * 解析供应商的有效优先级：优先使用分组覆盖值，回退到全局默认值
+   * 支持逗号分隔的多分组（如 "cli,admin"），取匹配到的最小优先级
    */
   static resolveEffectivePriority(provider: Provider, userGroup: string | null): number {
-    if (userGroup && provider.groupPriorities?.[userGroup] !== undefined) {
-      return provider.groupPriorities[userGroup];
+    if (userGroup && provider.groupPriorities) {
+      const groups = parseGroupString(userGroup);
+      const overrides = groups
+        .map((g) => provider.groupPriorities?.[g])
+        .filter((v): v is number => v !== undefined);
+      if (overrides.length > 0) {
+        return Math.min(...overrides);
+      }
     }
     return provider.priority || 0;
   }

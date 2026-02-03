@@ -97,6 +97,35 @@ describe("resolveEffectivePriority", () => {
     });
     expect(ProxyProviderResolver.resolveEffectivePriority(provider, "cli")).toBe(0);
   });
+
+  it("handles comma-separated user groups (multi-group)", () => {
+    const provider = makeProvider({
+      priority: 10,
+      groupPriorities: { cli: 2, admin: 5, chat: 8 },
+    });
+    // Multi-group "cli,admin" should match both and take minimum (2)
+    expect(ProxyProviderResolver.resolveEffectivePriority(provider, "cli,admin")).toBe(2);
+    // Multi-group "admin,chat" should take minimum (5)
+    expect(ProxyProviderResolver.resolveEffectivePriority(provider, "admin,chat")).toBe(5);
+  });
+
+  it("falls back to global when no group in multi-group matches", () => {
+    const provider = makeProvider({
+      priority: 10,
+      groupPriorities: { cli: 2 },
+    });
+    // "admin,chat" has no matching overrides, should fall back to global (10)
+    expect(ProxyProviderResolver.resolveEffectivePriority(provider, "admin,chat")).toBe(10);
+  });
+
+  it("handles partial match in multi-group", () => {
+    const provider = makeProvider({
+      priority: 10,
+      groupPriorities: { cli: 3 },
+    });
+    // "cli,admin" - only "cli" matches, should return 3
+    expect(ProxyProviderResolver.resolveEffectivePriority(provider, "cli,admin")).toBe(3);
+  });
 });
 
 describe("selectTopPriority with group context", () => {
