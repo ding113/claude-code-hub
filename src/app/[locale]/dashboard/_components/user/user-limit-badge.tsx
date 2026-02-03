@@ -70,7 +70,7 @@ export function UserLimitBadge({
   limitType,
   limit,
   label,
-  unit = "$",
+  unit = "",
 }: UserLimitBadgeProps) {
   const [usageData, setUsageData] = useState<LimitUsageData | null>(null);
   const [isLoading, setIsLoading] = useState(false);

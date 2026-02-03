@@ -39,6 +39,7 @@ import useSWR from "swr";
 import { getDashboardRealtimeData } from "@/actions/dashboard-realtime";
 import { type Locale, localeLabels, locales } from "@/i18n/config";
 import { usePathname, useRouter } from "@/i18n/routing";
+import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils/currency";
 
 /**
  * ============================================================================
@@ -411,6 +412,7 @@ const UserRankings = ({
   users,
   theme,
   t,
+  currencySymbol,
 }: {
   users: Array<{
     userId: number;
@@ -420,6 +422,7 @@ const UserRankings = ({
   }>;
   theme: (typeof THEMES)[keyof typeof THEMES];
   t: (key: string) => string;
+  currencySymbol: string;
 }) => {
   return (
     <div className="h-full flex flex-col relative">
@@ -467,7 +470,8 @@ const UserRankings = ({
               <div className="flex justify-between items-center">
                 <span className={`text-xs font-bold truncate ${theme.text}`}>{user.userName}</span>
                 <span className="text-[10px] text-gray-500 font-mono">
-                  ${Number(user.totalCost).toFixed(2)}
+                  {currencySymbol}
+                  {Number(user.totalCost).toFixed(2)}
                 </span>
               </div>
               <div className="flex justify-between items-center mt-1">
@@ -493,6 +497,7 @@ const ProviderRanking = ({
   providers,
   theme,
   t,
+  currencySymbol,
 }: {
   providers: Array<{
     providerId: number;
@@ -502,6 +507,7 @@ const ProviderRanking = ({
   }>;
   theme: (typeof THEMES)[keyof typeof THEMES];
   t: (key: string) => string;
+  currencySymbol: string;
 }) => {
   return (
     <div className="h-full flex flex-col">
@@ -523,7 +529,8 @@ const ProviderRanking = ({
             </div>
             <div className="text-right">
               <div className={`text-xs font-mono ${theme.accent}`}>
-                ${Number(p.totalCost).toFixed(2)}
+                {currencySymbol}
+                {Number(p.totalCost).toFixed(2)}
               </div>
               <div className="text-[9px] text-gray-500">
                 {p.totalTokens.toLocaleString()} Tokens
@@ -741,6 +748,19 @@ export default function BigScreenPage() {
     }
   );
 
+  // Fetch system settings for currency display
+  const { data: systemSettings } = useSWR(
+    "system-settings",
+    async () => {
+      const response = await fetch("/api/system-settings");
+      if (!response.ok) throw new Error("Failed to fetch settings");
+      return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
+    },
+    { revalidateOnFocus: false }
+  );
+
+  const currencySymbol = CURRENCY_CONFIG[systemSettings?.currencyDisplay ?? "USD"]?.symbol ?? "$";
+
   // 处理数据
   const metrics = data?.metrics || {
     concurrentSessions: 0,
@@ -837,7 +857,7 @@ export default function BigScreenPage() {
           />
           <MetricCard
             title={t("metrics.cost")}
-            value={<CountUp value={metrics.todayCost} prefix="$" decimals={2} />}
+            value={<CountUp value={metrics.todayCost} prefix={currencySymbol} decimals={2} />}
             subValue="Budget"
             type="neutral"
             icon={DollarSign}
@@ -866,10 +886,15 @@ export default function BigScreenPage() {
           {/* LEFT COL */}
           <div className="col-span-3 flex flex-col gap-4 h-full">
             <div className={`flex-[3] ${theme.card} rounded-lg p-4 overflow-hidden`}>
-              <UserRankings users={users} theme={theme} t={t} />
+              <UserRankings users={users} theme={theme} t={t} currencySymbol={currencySymbol} />
             </div>
             <div className={`flex-[2] ${theme.card} rounded-lg p-4 overflow-hidden`}>
-              <ProviderRanking providers={providerRankings} theme={theme} t={t} />
+              <ProviderRanking
+                providers={providerRankings}
+                theme={theme}
+                t={t}
+                currencySymbol={currencySymbol}
+              />
             </div>
           </div>
 
