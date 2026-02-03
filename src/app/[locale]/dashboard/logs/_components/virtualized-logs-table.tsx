@@ -611,7 +611,7 @@ export function VirtualizedLogsTable({
                       <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1.5">
                         {isNonBilling ? (
                           "-"
-                        ) : log.costUsd ? (
+                        ) : log.costUsd != null ? (
                           <TooltipProvider>
                             <Tooltip delayDuration={250}>
                               <TooltipTrigger asChild>
