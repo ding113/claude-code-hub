@@ -51,6 +51,7 @@ type VirtualizedLogsTableColumn =
   | "provider"
   | "tokens"
   | "cache"
+  | "cost"
   | "performance";
 
 interface VirtualizedLogsTableProps {
@@ -87,6 +88,7 @@ export function VirtualizedLogsTable({
   const hideSessionIdColumn = hiddenColumns?.includes("sessionId") ?? false;
   const hideTokensColumn = hiddenColumns?.includes("tokens") ?? false;
   const hideCacheColumn = hiddenColumns?.includes("cache") ?? false;
+  const hideCostColumn = hiddenColumns?.includes("cost") ?? false;
   const hidePerformanceColumn = hiddenColumns?.includes("performance") ?? false;
 
   // Dialog state for model redirect click and chain item click
@@ -273,12 +275,14 @@ export function VirtualizedLogsTable({
                   {t("logs.columns.cache")}
                 </div>
               )}
-              <div
-                className="flex-[0.7] min-w-[60px] text-right px-1.5 truncate"
-                title={t("logs.columns.cost")}
-              >
-                {t("logs.columns.cost")}
-              </div>
+              {hideCostColumn ? null : (
+                <div
+                  className="flex-[0.7] min-w-[60px] text-right px-1.5 truncate"
+                  title={t("logs.columns.cost")}
+                >
+                  {t("logs.columns.cost")}
+                </div>
+              )}
               {hidePerformanceColumn ? null : (
                 <div
                   className="flex-[0.8] min-w-[80px] text-right px-1.5 truncate"
@@ -612,46 +616,51 @@ export function VirtualizedLogsTable({
                     )}
 
                     {/* Cost */}
-                    <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1.5">
-                      {isNonBilling ? (
-                        "-"
-                      ) : log.costUsd ? (
-                        <TooltipProvider>
-                          <Tooltip delayDuration={250}>
-                            <TooltipTrigger asChild>
-                              <span className="cursor-help inline-flex items-center gap-1">
-                                {formatCurrency(log.costUsd, currencyCode, 6)}
+                    {hideCostColumn ? null : (
+                      <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1.5">
+                        {isNonBilling ? (
+                          "-"
+                        ) : log.costUsd ? (
+                          <TooltipProvider>
+                            <Tooltip delayDuration={250}>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-help inline-flex items-center gap-1">
+                                  {formatCurrency(log.costUsd, currencyCode, 6)}
+                                  {log.context1mApplied && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
+                                    >
+                                      1M
+                                    </Badge>
+                                  )}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent
+                                align="end"
+                                className="text-xs space-y-1 max-w-[300px]"
+                              >
                                 {log.context1mApplied && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] leading-tight px-1 bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800"
-                                  >
-                                    1M
-                                  </Badge>
+                                  <div className="text-purple-600 dark:text-purple-400 font-medium">
+                                    {t("logs.billingDetails.context1m")}
+                                  </div>
                                 )}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent align="end" className="text-xs space-y-1 max-w-[300px]">
-                              {log.context1mApplied && (
-                                <div className="text-purple-600 dark:text-purple-400 font-medium">
-                                  {t("logs.billingDetails.context1m")}
+                                <div>
+                                  {t("logs.billingDetails.input")}:{" "}
+                                  {formatTokenAmount(log.inputTokens)} tokens
                                 </div>
-                              )}
-                              <div>
-                                {t("logs.billingDetails.input")}:{" "}
-                                {formatTokenAmount(log.inputTokens)} tokens
-                              </div>
-                              <div>
-                                {t("logs.billingDetails.output")}:{" "}
-                                {formatTokenAmount(log.outputTokens)} tokens
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      ) : (
-                        "-"
-                      )}
-                    </div>
+                                <div>
+                                  {t("logs.billingDetails.output")}:{" "}
+                                  {formatTokenAmount(log.outputTokens)} tokens
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        ) : (
+                          "-"
+                        )}
+                      </div>
+                    )}
 
                     {/* Performance */}
                     {hidePerformanceColumn ? null : (
