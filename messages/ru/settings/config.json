@@ -51,6 +51,8 @@
     "enableResponseFixerDesc": "Автоматически исправляет распространённые проблемы ответа у провайдеров (кодировка, SSE, обрезанный JSON). Включено по умолчанию.",
     "enableThinkingSignatureRectifier": "Включить исправление thinking-signature",
     "enableThinkingSignatureRectifierDesc": "Если Anthropic-провайдер возвращает ошибку несовместимой подписи thinking или некорректного запроса, автоматически удаляет несовместимые thinking-блоки и повторяет запрос один раз к тому же провайдеру (включено по умолчанию).",
+    "enableThinkingBudgetRectifier": "Включить исправление thinking-budget",
+    "enableThinkingBudgetRectifierDesc": "Если Anthropic-провайдер возвращает ошибку budget_tokens < 1024, автоматически устанавливает thinking budget на максимум (32000) и при необходимости max_tokens на 64000, затем повторяет запрос один раз (включено по умолчанию).",
     "enableCodexSessionIdCompletion": "Включить дополнение Session ID для Codex",
     "enableCodexSessionIdCompletionDesc": "Если в Codex-запросе присутствует только session_id (в заголовках) или prompt_cache_key (в теле), автоматически дополняет отсутствующее поле. Если оба отсутствуют, генерирует UUID v7 и стабильно переиспользует его в рамках одного диалога.",
     "interceptAnthropicWarmupRequests": "Перехватывать Warmup-запросы (Anthropic)",

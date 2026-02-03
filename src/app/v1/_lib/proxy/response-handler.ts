@@ -19,12 +19,9 @@ import {
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
 import type { SessionUsageUpdate } from "@/types/session";
-import { defaultRegistry } from "../converters";
-import type { Format, TransformState } from "../converters/types";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { isClientAbortError } from "./errors";
-import { mapClientFormatToTransformer, mapProviderTypeToTransformer } from "./format-mapper";
 import type { ProxySession } from "./session";
 
 export type UsageMetrics = {
@@ -103,12 +100,6 @@ export class ProxyResponseHandler {
     const responseForLog = response.clone();
     const statusCode = response.status;
 
-    // 检查是否需要格式转换
-    const fromFormat: Format | null = provider.providerType
-      ? mapProviderTypeToTransformer(provider.providerType)
-      : null;
-    const toFormat: Format = mapClientFormatToTransformer(session.originalFormat);
-    const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let finalResponse = response;
 
     // --- GEMINI HANDLING ---
@@ -208,42 +199,6 @@ export class ProxyResponseHandler {
           logger.error("[ResponseHandler] Failed to transform Gemini non-stream response:", error);
           finalResponse = response;
         }
-      }
-    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
-      try {
-        // 克隆一份用于转换
-        const responseForTransform = response.clone();
-        const responseText = await responseForTransform.text();
-        const responseData = JSON.parse(responseText) as Record<string, unknown>;
-
-        // 使用转换器注册表进行转换
-        const transformed = defaultRegistry.transformNonStreamResponse(
-          session.context,
-          fromFormat,
-          toFormat,
-          session.request.model || "",
-          session.request.message, // original request
-          session.request.message, // transformed request (same as original if no transform)
-          responseData
-        );
-
-        logger.debug("[ResponseHandler] Transformed non-stream response", {
-          from: fromFormat,
-          to: toFormat,
-          model: session.request.model,
-        });
-
-        // ⭐ 清理传输 headers（body 已修改，原始传输信息无效）
-        // 构建新的响应
-        finalResponse = new Response(JSON.stringify(transformed), {
-          status: response.status,
-          statusText: response.statusText,
-          headers: cleanResponseHeaders(response.headers),
-        });
-      } catch (error) {
-        logger.error("[ResponseHandler] Failed to transform response:", error);
-        // 转换失败时返回原始响应
-        finalResponse = response;
       }
     }
 
@@ -570,12 +525,6 @@ export class ProxyResponseHandler {
       return response;
     }
 
-    // 检查是否需要格式转换
-    const fromFormat: Format | null = provider.providerType
-      ? mapProviderTypeToTransformer(provider.providerType)
-      : null;
-    const toFormat: Format = mapClientFormatToTransformer(session.originalFormat);
-    const needsTransform = fromFormat !== toFormat && fromFormat && toFormat;
     let processedStream: ReadableStream<Uint8Array> = response.body;
 
     // --- GEMINI STREAM HANDLING ---
@@ -724,48 +673,6 @@ export class ProxyResponseHandler {
         });
         processedStream = response.body.pipeThrough(transformStream);
       }
-    } else if (needsTransform && defaultRegistry.hasResponseTransformer(fromFormat, toFormat)) {
-      logger.debug("[ResponseHandler] Transforming stream response", {
-        from: fromFormat,
-        to: toFormat,
-        model: session.request.model,
-      });
-
-      // 创建转换流
-      const transformState: TransformState = {}; // 状态对象，用于在多个 chunk 之间保持状态
-      const transformStream = new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
-          try {
-            const decoder = new TextDecoder();
-            const text = decoder.decode(chunk, { stream: true });
-
-            // 使用转换器注册表转换 chunk
-            const transformedChunks = defaultRegistry.transformStreamResponse(
-              session.context,
-              fromFormat,
-              toFormat,
-              session.request.model || "",
-              session.request.message, // original request
-              session.request.message, // transformed request (same as original if no transform)
-              text,
-              transformState
-            );
-
-            // transformedChunks 是字符串数组
-            for (const transformedChunk of transformedChunks) {
-              if (transformedChunk) {
-                controller.enqueue(new TextEncoder().encode(transformedChunk));
-              }
-            }
-          } catch (error) {
-            logger.error("[ResponseHandler] Stream transform error:", error);
-            // 出错时传递原始 chunk
-            controller.enqueue(chunk);
-          }
-        },
-      });
-
-      processedStream = response.body.pipeThrough(transformStream) as ReadableStream<Uint8Array>;
     }
 
     // ⭐ 使用 TransformStream 包装流，以便在 idle timeout 时能关闭客户端流
@@ -1560,6 +1467,10 @@ export function parseUsageFromResponseText(
     let messageStartUsage: UsageMetrics | null = null;
     let messageDeltaUsage: UsageMetrics | null = null;
 
+    // Gemini SSE: usageMetadata 需要 last-wins（完整 token 计数仅在最后事件中）
+    let lastGeminiUsage: UsageMetrics | null = null;
+    let lastGeminiUsageRecord: Record<string, unknown> | null = null;
+
     const mergeUsageMetrics = (base: UsageMetrics | null, patch: UsageMetrics): UsageMetrics => {
       if (!base) {
         return { ...patch };
@@ -1633,18 +1544,37 @@ export function parseUsageFromResponseText(
       }
 
       // 非 Claude 格式的 SSE 处理（Gemini 等）
+      // 注意：Gemini SSE 流中，usageMetadata 在每个事件中都可能存在，
+      // 但只有最后一个事件包含完整的 token 计数（candidatesTokenCount、thoughtsTokenCount 等）
+      // 因此需要持续更新，使用最后一个有效值
       if (!messageStartUsage && !messageDeltaUsage) {
-        // Standard usage fields (data.usage)
+        // Standard usage fields (data.usage) - 仍使用 first-wins 策略
         applyUsageValue(data.usage, `sse.${event.event}.usage`);
 
-        // Gemini usageMetadata
-        applyUsageValue(data.usageMetadata, `sse.${event.event}.usageMetadata`);
+        // Gemini usageMetadata - 改为 last-wins 策略
+        // 跳过 applyUsageValue（它是 first-wins），直接更新
+        if (data.usageMetadata && typeof data.usageMetadata === "object") {
+          const extracted = extractUsageMetrics(data.usageMetadata);
+          if (extracted) {
+            // 持续更新，最后一个有效值会覆盖之前的
+            lastGeminiUsage = extracted;
+            lastGeminiUsageRecord = data.usageMetadata as Record<string, unknown>;
+          }
+        }
 
         // Handle response wrapping in SSE
         if (!usageMetrics && data.response && typeof data.response === "object") {
           const responseObj = data.response as Record<string, unknown>;
           applyUsageValue(responseObj.usage, `sse.${event.event}.response.usage`);
-          applyUsageValue(responseObj.usageMetadata, `sse.${event.event}.response.usageMetadata`);
+
+          // response.usageMetadata 也使用 last-wins 策略
+          if (responseObj.usageMetadata && typeof responseObj.usageMetadata === "object") {
+            const extracted = extractUsageMetrics(responseObj.usageMetadata);
+            if (extracted) {
+              lastGeminiUsage = extracted;
+              lastGeminiUsageRecord = responseObj.usageMetadata as Record<string, unknown>;
+            }
+          }
         }
       }
     }
@@ -1661,6 +1591,17 @@ export function parseUsageFromResponseText(
       usageMetrics = adjustUsageForProviderType(mergedClaudeUsage, providerType);
       usageRecord = mergedClaudeUsage as unknown as Record<string, unknown>;
       logger.debug("[ResponseHandler] Final merged usage from Claude SSE", {
+        providerType,
+        usage: usageMetrics,
+      });
+    }
+
+    // Gemini SSE 处理：使用最后一个有效的 usageMetadata
+    // 仅当 Claude SSE 没有提供 usage 且 applyUsageValue 也没有找到时才使用
+    if (!usageMetrics && lastGeminiUsage) {
+      usageMetrics = adjustUsageForProviderType(lastGeminiUsage, providerType);
+      usageRecord = lastGeminiUsageRecord;
+      logger.debug("[ResponseHandler] Final usage from Gemini SSE (last event)", {
         providerType,
         usage: usageMetrics,
       });

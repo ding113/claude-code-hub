@@ -40,6 +40,8 @@
     "interceptAnthropicWarmupRequestsDesc": "开启后，识别到 Claude Code 的 Warmup 探测请求将由 CCH 直接抢答短响应，避免访问上游供应商；该请求会记录在日志中，但不计费、不限流、不计入统计。",
     "enableThinkingSignatureRectifier": "启用 thinking 签名整流器",
     "enableThinkingSignatureRectifierDesc": "当 Anthropic 类型供应商返回 thinking 签名不兼容或非法请求等错误时，自动移除不兼容的 thinking 相关块并对同一供应商重试一次（默认开启）。",
+    "enableThinkingBudgetRectifier": "启用 thinking 预算整流器",
+    "enableThinkingBudgetRectifierDesc": "当 Anthropic 类型供应商返回 budget_tokens < 1024 错误时，自动将 thinking 预算设为最大值（32000），并在需要时将 max_tokens 设为 64000，然后重试一次（默认开启）。",
     "enableCodexSessionIdCompletion": "启用 Codex Session ID 补全",
     "enableCodexSessionIdCompletionDesc": "当 Codex 请求仅提供 session_id（请求头）或 prompt_cache_key（请求体）之一时，自动补全另一个；若两者均缺失，则生成 UUID v7 会话 ID，并在同一对话内稳定复用。",
     "enableResponseFixer": "启用响应整流",

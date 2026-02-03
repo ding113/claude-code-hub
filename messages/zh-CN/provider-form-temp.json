@@ -53,11 +53,6 @@
             "label": "模型重定向配置",
             "optional": "(可选)"
           },
-          "joinClaudePool": {
-            "label": "加入 Claude 调度池",
-            "desc": "启用后，此供应商将与 Claude 类型供应商一起参与负载均衡调度",
-            "help": "仅当模型重定向配置中存在映射到 claude-* 模型时可用。启用后，当用户请求 claude-* 模型时，此供应商也会参与调度选择。"
-          },
           "modelWhitelist": {
             "title": "模型白名单",
             "desc": "限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。",
@@ -159,31 +154,6 @@
             "label": "连接测试",
             "desc": "测试通过配置的代理访问供应商 URL（使用 HEAD 请求，不消耗额度）"
           }
-        },
-        "codexStrategy": {
-          "title": "Codex Instructions 策略",
-          "summary": {
-            "auto": "自动 (推荐)",
-            "force": "强制官方",
-            "keep": "透传原样"
-          },
-          "desc": "控制如何处理 Codex 请求的 instructions 字段，影响与上游中转站的兼容性",
-          "select": {
-            "label": "策略选择",
-            "auto": {
-              "label": "自动 (推荐)",
-              "desc": "透传客户端 instructions，400 错误时自动重试官方 prompt"
-            },
-            "force": {
-              "label": "强制官方",
-              "desc": "始终使用官方 Codex CLI instructions（约 4000+ 字）"
-            },
-            "keep": {
-              "label": "透传原样",
-              "desc": "始终透传客户端 instructions，不自动重试（适用于宽松中转站）"
-            }
-          },
-          "hint": "提示: 部分严格的 Codex 中转站（如 88code、foxcode）需要官方 instructions，选择\"自动\"或\"强制官方\"策略"
         }
       },
       "providerTypes": {

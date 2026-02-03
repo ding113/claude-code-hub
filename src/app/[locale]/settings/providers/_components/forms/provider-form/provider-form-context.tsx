@@ -46,7 +46,6 @@ export function createInitialState(
       preserveClientIp: sourceProvider?.preserveClientIp ?? false,
       modelRedirects: sourceProvider?.modelRedirects ?? {},
       allowedModels: sourceProvider?.allowedModels ?? [],
-      joinClaudePool: sourceProvider?.joinClaudePool ?? false,
       priority: sourceProvider?.priority ?? 0,
       weight: sourceProvider?.weight ?? 1,
       costMultiplier: sourceProvider?.costMultiplier ?? 1.0,
@@ -59,6 +58,9 @@ export function createInitialState(
       codexTextVerbosityPreference: sourceProvider?.codexTextVerbosityPreference ?? "inherit",
       codexParallelToolCallsPreference:
         sourceProvider?.codexParallelToolCallsPreference ?? "inherit",
+      anthropicMaxTokensPreference: sourceProvider?.anthropicMaxTokensPreference ?? "inherit",
+      anthropicThinkingBudgetPreference:
+        sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
@@ -136,8 +138,6 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, modelRedirects: action.payload } };
     case "SET_ALLOWED_MODELS":
       return { ...state, routing: { ...state.routing, allowedModels: action.payload } };
-    case "SET_JOIN_CLAUDE_POOL":
-      return { ...state, routing: { ...state.routing, joinClaudePool: action.payload } };
     case "SET_PRIORITY":
       return { ...state, routing: { ...state.routing, priority: action.payload } };
     case "SET_WEIGHT":
@@ -167,6 +167,16 @@ export function providerFormReducer(
       return {
         ...state,
         routing: { ...state.routing, codexParallelToolCallsPreference: action.payload },
+      };
+    case "SET_ANTHROPIC_MAX_TOKENS":
+      return {
+        ...state,
+        routing: { ...state.routing, anthropicMaxTokensPreference: action.payload },
+      };
+    case "SET_ANTHROPIC_THINKING_BUDGET":
+      return {
+        ...state,
+        routing: { ...state.routing, anthropicThinkingBudgetPreference: action.payload },
       };
 
     // Rate limit

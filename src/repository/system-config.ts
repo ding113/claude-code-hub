@@ -150,6 +150,7 @@ function createFallbackSettings(): SystemSettings {
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
+    enableThinkingBudgetRectifier: true,
     enableCodexSessionIdCompletion: true,
     enableResponseFixer: true,
     responseFixerConfig: {
@@ -191,6 +192,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableHttp2: systemSettings.enableHttp2,
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+      enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableResponseFixer: systemSettings.enableResponseFixer,
       responseFixerConfig: systemSettings.responseFixerConfig,
@@ -340,6 +342,11 @@ export async function updateSystemSettings(
       updates.enableThinkingSignatureRectifier = payload.enableThinkingSignatureRectifier;
     }
 
+    // thinking budget 整流器开关（如果提供）
+    if (payload.enableThinkingBudgetRectifier !== undefined) {
+      updates.enableThinkingBudgetRectifier = payload.enableThinkingBudgetRectifier;
+    }
+
     // Codex Session ID 补全开关（如果提供）
     if (payload.enableCodexSessionIdCompletion !== undefined) {
       updates.enableCodexSessionIdCompletion = payload.enableCodexSessionIdCompletion;
@@ -398,6 +405,7 @@ export async function updateSystemSettings(
         enableHttp2: systemSettings.enableHttp2,
         interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+        enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
         enableResponseFixer: systemSettings.enableResponseFixer,
         responseFixerConfig: systemSettings.responseFixerConfig,

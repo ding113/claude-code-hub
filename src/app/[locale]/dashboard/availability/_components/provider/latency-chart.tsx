@@ -3,13 +3,8 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
-import {
-  type ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import type { ProviderAvailabilitySummary } from "@/lib/availability";
 import { cn } from "@/lib/utils";
 

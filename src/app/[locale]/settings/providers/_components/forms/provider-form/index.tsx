@@ -196,7 +196,6 @@ function ProviderFormContent({
           model_redirects: state.routing.modelRedirects,
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
-          join_claude_pool: state.routing.joinClaudePool,
           priority: state.routing.priority,
           weight: state.routing.weight,
           cost_multiplier: state.routing.costMultiplier,
@@ -207,6 +206,8 @@ function ProviderFormContent({
           codex_reasoning_summary_preference: state.routing.codexReasoningSummaryPreference,
           codex_text_verbosity_preference: state.routing.codexTextVerbosityPreference,
           codex_parallel_tool_calls_preference: state.routing.codexParallelToolCallsPreference,
+          anthropic_max_tokens_preference: state.routing.anthropicMaxTokensPreference,
+          anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
           limit_5h_usd: state.rateLimit.limit5hUsd,
           limit_daily_usd: state.rateLimit.limitDailyUsd,
           daily_reset_mode: state.rateLimit.dailyResetMode,
@@ -502,7 +503,7 @@ export function ProviderForm({
   hideWebsiteUrl = false,
   preset,
   urlResolver,
-  allowedProviderTypes,
+  allowedProviderTypes: _allowedProviderTypes,
 }: ProviderFormProps) {
   const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [autoUrlPending, setAutoUrlPending] = useState(false);

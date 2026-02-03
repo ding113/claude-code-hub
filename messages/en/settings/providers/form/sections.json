@@ -45,32 +45,6 @@
     "summary": "{failureThreshold} failures / {openDuration} min break / {successThreshold} successes to recover / {maxRetryAttempts} attempts per provider",
     "title": "Circuit Breaker"
   },
-  "codexStrategy": {
-    "desc": "Control how to handle the instructions field in Codex requests; affects gateway compatibility",
-    "hint": "Hint: Some strict Codex gateways (e.g. 88code, foxcode) require official instructions. Choose \"Auto\" or \"Force official\".",
-    "select": {
-      "auto": {
-        "desc": "Pass through client instructions; on 400 error, retry with official prompt",
-        "label": "Auto (recommended)"
-      },
-      "force": {
-        "desc": "Always use official Codex CLI instructions (~4000+ chars)",
-        "label": "Force official"
-      },
-      "keep": {
-        "desc": "Always pass through client instructions, no auto retry (for permissive gateways)",
-        "label": "Pass-through"
-      },
-      "label": "Strategy",
-      "placeholder": "Select a strategy"
-    },
-    "summary": {
-      "auto": "Auto (recommended)",
-      "force": "Force official",
-      "keep": "Pass-through"
-    },
-    "title": "Codex Instructions Policy"
-  },
   "mcpPassthrough": {
     "desc": "When enabled, pass through MCP tool calls to specified AI provider (e.g. minimax for image recognition, web search)",
     "hint": "Hint: MCP passthrough allows Claude Code client to use tool capabilities provided by third-party AI providers (e.g. image recognition, web search)",
@@ -196,6 +170,8 @@
       }
     },
     "codexOverrides": {
+      "title": "Codex Parameter Overrides",
+      "desc": "Override Codex (Responses API) request parameters at the provider level",
       "parallelToolCalls": {
         "help": "Controls whether parallel tool calls are allowed. \"inherit\" follows the client request. Disabling may reduce tool-call concurrency.",
         "label": "Parallel Tool Calls Override",
@@ -238,6 +214,27 @@
         }
       }
     },
+    "anthropicOverrides": {
+      "maxTokens": {
+        "label": "Max Tokens Override",
+        "help": "Override max_tokens in request body. Range: 1-64000. 'inherit' follows the client request.",
+        "options": {
+          "inherit": "No override (follow client)",
+          "custom": "Custom"
+        },
+        "placeholder": "e.g. 32000"
+      },
+      "thinkingBudget": {
+        "label": "Thinking Budget Override",
+        "help": "Override thinking.budget_tokens in request body. Range: 1024-32000. Forces thinking.type to 'enabled' when set.",
+        "options": {
+          "inherit": "No override (follow client)",
+          "custom": "Custom"
+        },
+        "placeholder": "e.g. 10240",
+        "maxOutButton": "Max Out (32000)"
+      }
+    },
     "context1m": {
       "desc": "Configure 1M context window support. Only affects Sonnet models (claude-sonnet-4-5, claude-sonnet-4). Tiered pricing applies when enabled.",
       "label": "1M Context Window",
@@ -246,11 +243,6 @@
         "forceEnable": "Force Enable (for supported models)",
         "inherit": "Inherit (follow client request)"
       }
-    },
-    "joinClaudePool": {
-      "desc": "When enabled, this provider will participate in load balancing with Claude-type providers",
-      "help": "Available only when there is a redirect mapping to claude-* models. When users request claude-* models, this provider also joins scheduling.",
-      "label": "Join Claude Routing Pool"
     },
     "modelRedirects": {
       "label": "Model Redirects",

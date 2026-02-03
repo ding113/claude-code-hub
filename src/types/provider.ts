@@ -30,8 +30,11 @@ export type CodexTextVerbosityPreference = "inherit" | "low" | "medium" | "high"
 // 由于 Select 的 value 需要是字符串，这里用 "true"/"false" 表示布尔值
 export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
 
-// Codex Instructions 策略枚举
-export type CodexInstructionsStrategy = "auto" | "force_official" | "keep_original";
+// Anthropic (Messages API) parameter overrides
+// - "inherit": follow client request (default)
+// - numeric string: force override to that value
+export type AnthropicMaxTokensPreference = "inherit" | string;
+export type AnthropicThinkingBudgetPreference = "inherit" | string;
 
 // MCP 透传类型枚举
 export type McpPassthroughType = "none" | "minimax" | "glm" | "custom";
@@ -64,13 +67,6 @@ export interface Provider {
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: string[] | null;
-
-  // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
-  joinClaudePool: boolean;
-
-  // Codex Instructions 策略：控制如何处理 Codex 请求的 instructions 字段
-  // 仅对 providerType = 'codex' 的供应商有效
-  codexInstructionsStrategy: CodexInstructionsStrategy;
 
   // MCP 透传类型：控制是否启用 MCP 透传功能
   // 'none': 不启用（默认）
@@ -128,6 +124,10 @@ export interface Provider {
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
 
+  // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
+  anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
+  anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -164,10 +164,6 @@ export interface ProviderDisplay {
   modelRedirects: Record<string, string> | null;
   // 模型列表（双重语义）
   allowedModels: string[] | null;
-  // 加入 Claude 调度池
-  joinClaudePool: boolean;
-  // Codex Instructions 策略
-  codexInstructionsStrategy: CodexInstructionsStrategy;
   // MCP 透传类型
   mcpPassthroughType: McpPassthroughType;
   // MCP 透传 URL
@@ -202,6 +198,8 @@ export interface ProviderDisplay {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
+  anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
+  anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -251,8 +249,6 @@ export interface CreateProviderData {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
-  join_claude_pool?: boolean;
-  codex_instructions_strategy?: CodexInstructionsStrategy;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 
@@ -290,6 +286,8 @@ export interface CreateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
+  anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -321,8 +319,6 @@ export interface UpdateProviderData {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
-  join_claude_pool?: boolean;
-  codex_instructions_strategy?: CodexInstructionsStrategy;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 
@@ -360,6 +356,8 @@ export interface UpdateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
+  anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量

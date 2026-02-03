@@ -251,8 +251,6 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
-        joinClaudePool: provider.joinClaudePool,
-        codexInstructionsStrategy: provider.codexInstructionsStrategy,
         mcpPassthroughType: provider.mcpPassthroughType,
         mcpPassthroughUrl: provider.mcpPassthroughUrl,
         limit5hUsd: provider.limit5hUsd,
@@ -280,6 +278,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         codexReasoningSummaryPreference: provider.codexReasoningSummaryPreference,
         codexTextVerbosityPreference: provider.codexTextVerbosityPreference,
         codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
+        anthropicMaxTokensPreference: provider.anthropicMaxTokensPreference,
+        anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -452,7 +452,6 @@ export async function addProvider(data: {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
-  join_claude_pool?: boolean;
   limit_5h_usd?: number | null;
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
@@ -620,7 +619,6 @@ export async function editProvider(
     preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;
     allowed_models?: string[] | null;
-    join_claude_pool?: boolean;
     limit_5h_usd?: number | null;
     limit_daily_usd?: number | null;
     daily_reset_time?: string;

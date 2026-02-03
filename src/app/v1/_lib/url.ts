@@ -1,5 +1,19 @@
 import { logger } from "@/lib/logger";
 
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const targetEndpoints = [
+  "/responses", // Codex Response API
+  "/messages", // Claude Messages API
+  "/chat/completions", // OpenAI Compatible
+  "/models", // Gemini & OpenAI models
+] as const;
+
+const endpointRegexes = targetEndpoints.map((endpoint) => ({
+  endpoint,
+  regex: new RegExp(`^/(v\\d+[a-z0-9]*)${escapeRegExp(endpoint)}(?<suffix>/.*)?$`),
+}));
+
 /**
  * 构建代理目标URL（智能检测版本）
  *
@@ -38,30 +52,27 @@ export function buildProxyUrl(baseUrl: string, requestUrl: URL): string {
     }
 
     // Case 2: baseUrl 已包含“端点根路径”（可能带有额外前缀），仅追加 requestPath 的子路径部分。
-    const targetEndpoints = [
-      "/responses", // Codex Response API
-      "/messages", // Claude Messages API
-      "/chat/completions", // OpenAI Compatible
-      "/models", // Gemini & OpenAI models
-    ];
 
-    for (const endpoint of targetEndpoints) {
-      const requestRoot = `/v1${endpoint}`; // /v1/messages, /v1/responses 等
-      if (requestPath === requestRoot || requestPath.startsWith(`${requestRoot}/`)) {
-        if (basePath.endsWith(endpoint) || basePath.endsWith(requestRoot)) {
-          const suffix = requestPath.slice(requestRoot.length); // 例如 /count_tokens
-          baseUrlObj.pathname = basePath + suffix;
-          baseUrlObj.search = requestUrl.search;
+    for (const { endpoint, regex } of endpointRegexes) {
+      const m = requestPath.match(regex);
+      if (!m) continue;
 
-          logger.debug("[buildProxyUrl] Detected endpoint root in baseUrl", {
-            basePath,
-            requestPath,
-            endpoint,
-            action: "append_suffix",
-          });
+      const version = m[1];
+      const requestRoot = `/${version}${endpoint}`;
+      const suffix = m.groups?.suffix ?? "";
 
-          return baseUrlObj.toString();
-        }
+      if (basePath.endsWith(endpoint) || basePath.endsWith(requestRoot)) {
+        baseUrlObj.pathname = basePath + suffix;
+        baseUrlObj.search = requestUrl.search;
+
+        logger.debug("[buildProxyUrl] Detected endpoint root in baseUrl", {
+          basePath,
+          requestPath,
+          endpoint,
+          action: "append_suffix",
+        });
+
+        return baseUrlObj.toString();
       }
     }
 

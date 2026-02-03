@@ -45,32 +45,6 @@
     "summary": "{failureThreshold} 回失敗 / {openDuration} 分間ブレーク / {successThreshold} 回成功で回復 / 各プロバイダー最大 {maxRetryAttempts} 回試行",
     "title": "サーキットブレーカー設定"
   },
-  "codexStrategy": {
-    "desc": "Codex リクエストの instructions フィールドの扱いを制御します。上流ゲートウェイとの互換性に影響します。",
-    "hint": "ヒント: 88code や foxcode など一部の厳格な Codex 中継では公式 instructions が必要です。「自動」または「公式を強制」を選択してください。",
-    "select": {
-      "auto": {
-        "desc": "クライアントの instructions を透過し、400 エラー時は公式プロンプトで自動再試行",
-        "label": "自動（推奨）"
-      },
-      "force": {
-        "desc": "常に公式の Codex CLI instructions を使用（約 4000+ 文字）",
-        "label": "公式を強制"
-      },
-      "keep": {
-        "desc": "常にクライアントの instructions を透過し、自動再試行しない（緩い中継向け）",
-        "label": "そのまま透過"
-      },
-      "label": "ポリシー選択",
-      "placeholder": "戦略を選択"
-    },
-    "summary": {
-      "auto": "自動（推奨）",
-      "force": "公式を強制",
-      "keep": "そのまま透過"
-    },
-    "title": "Codex Instructions ポリシー"
-  },
   "mcpPassthrough": {
     "desc": "有効にすると、MCP ツール呼び出しを指定された AI プロバイダにパススルーします（例：minimax の画像認識、Web 検索）",
     "hint": "ヒント: MCP パススルーにより、Claude Code クライアントは第三者の AI プロバイダー提供のツール機能（画像認識、Web 検索など）を使用できます",
@@ -197,6 +171,8 @@
       }
     },
     "codexOverrides": {
+      "title": "Codex パラメータオーバーライド",
+      "desc": "プロバイダーレベルで Codex (Responses API) リクエストパラメータをオーバーライド",
       "parallelToolCalls": {
         "help": "並列の tool calls を許可するかどうかを制御します。「クライアントに従う」は parallel_tool_calls を変更しません。無効化すると並列度が下がる可能性があります。",
         "label": "並列ツール呼び出しオーバーライド",
@@ -239,6 +215,27 @@
         }
       }
     },
+    "anthropicOverrides": {
+      "maxTokens": {
+        "label": "Max Tokens オーバーライド",
+        "help": "リクエストボディの max_tokens を上書きします。範囲：1-64000。「継承」はクライアントリクエストに従います。",
+        "options": {
+          "inherit": "上書きなし（クライアントに従う）",
+          "custom": "カスタム"
+        },
+        "placeholder": "例: 32000"
+      },
+      "thinkingBudget": {
+        "label": "思考予算オーバーライド",
+        "help": "リクエストボディの thinking.budget_tokens を上書きします。範囲：1024-32000。設定すると thinking.type が 'enabled' に強制されます。",
+        "options": {
+          "inherit": "上書きなし（クライアントに従う）",
+          "custom": "カスタム"
+        },
+        "placeholder": "例: 10240",
+        "maxOutButton": "最大化 (32000)"
+      }
+    },
     "context1m": {
       "desc": "1M コンテキストウィンドウのサポートを設定します。Sonnet モデル（claude-sonnet-4-5、claude-sonnet-4）にのみ適用されます。有効時は段階的料金が適用されます。",
       "label": "1M コンテキストウィンドウ",
@@ -247,11 +244,6 @@
         "forceEnable": "強制有効化",
         "inherit": "継承（クライアントに従う）"
       }
-    },
-    "joinClaudePool": {
-      "desc": "有効にすると、Claude 系のプロバイダーと共に負荷分散に参加します",
-      "help": "claude-* へのリダイレクトがある場合のみ利用できます。ユーザーが claude-* モデルを要求した際に本プロバイダーも選択対象になります。",
-      "label": "Claude ルーティングプールに参加"
     },
     "modelRedirects": {
       "label": "モデルリダイレクト設定",

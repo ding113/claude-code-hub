@@ -208,9 +208,6 @@ export function ProviderForm({
     sourceProvider?.limitConcurrentSessions ?? null
   );
   const [allowedModels, setAllowedModels] = useState<string[]>(sourceProvider?.allowedModels ?? []);
-  const [joinClaudePool, setJoinClaudePool] = useState<boolean>(
-    sourceProvider?.joinClaudePool ?? false
-  );
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
   );
@@ -482,7 +479,6 @@ export function ProviderForm({
             provider_type?: ProviderType;
             model_redirects?: Record<string, string> | null;
             allowed_models?: string[] | null;
-            join_claude_pool?: boolean;
             priority?: number;
             weight?: number;
             cost_multiplier?: number;
@@ -525,7 +521,6 @@ export function ProviderForm({
             preserve_client_ip: preserveClientIp,
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
-            join_claude_pool: joinClaudePool,
             priority: priority,
             weight: weight,
             cost_multiplier: costMultiplier,
@@ -587,7 +582,6 @@ export function ProviderForm({
             preserve_client_ip: preserveClientIp,
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
-            join_claude_pool: joinClaudePool,
             // 使用配置的默认值：默认不启用、权重=1
             is_enabled: PROVIDER_DEFAULTS.IS_ENABLED,
             weight: weight,
@@ -652,7 +646,6 @@ export function ProviderForm({
           setPreserveClientIp(false);
           setModelRedirects({});
           setAllowedModels([]);
-          setJoinClaudePool(false);
           setPriority(0);
           setWeight(1);
           setCostMultiplier(1.0);
@@ -960,41 +953,6 @@ export function ProviderForm({
                     disabled={isPending}
                   />
                 </div>
-
-                {/* joinClaudePool 开关 - 仅非 Claude 供应商显示 */}
-                {providerType !== "claude" &&
-                  (() => {
-                    // 检查是否有重定向到 Claude 模型的映射
-                    const hasClaudeRedirects = Object.values(modelRedirects).some((target) =>
-                      target.startsWith("claude-")
-                    );
-
-                    if (!hasClaudeRedirects) return null;
-
-                    return (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <Label htmlFor={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}>
-                              {t("sections.routing.joinClaudePool.label")}
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {t("sections.routing.joinClaudePool.desc")}
-                            </p>
-                          </div>
-                          <Switch
-                            id={isEdit ? "edit-join-claude-pool" : "join-claude-pool"}
-                            checked={joinClaudePool}
-                            onCheckedChange={setJoinClaudePool}
-                            disabled={isPending}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {t("sections.routing.joinClaudePool.help")}
-                        </p>
-                      </div>
-                    );
-                  })()}
 
                 {/* 模型白名单配置 */}
                 <div className="space-y-1">

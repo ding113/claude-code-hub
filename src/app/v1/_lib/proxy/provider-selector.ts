@@ -98,8 +98,7 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
  * 核心逻辑：
  * 1. Claude 模型请求 (claude-*)：
  *    - Anthropic 提供商：根据 allowedModels 白名单判断
- *    - 非 Anthropic 提供商 + joinClaudePool：检查模型重定向是否指向 claude-* 模型
- *    - 非 Anthropic 提供商（未加入 Claude 调度池）：不支持
+ *    - 非 Anthropic 提供商：不支持 claude-* 模型调度
  *
  * 2. 非 Claude 模型请求 (gpt-*, gemini-*, 或其他任意模型)：
  *    - Anthropic 提供商：不支持（仅支持 Claude 模型）
@@ -129,14 +128,7 @@ function providerSupportsModel(provider: Provider, requestedModel: string): bool
       return provider.allowedModels.includes(requestedModel);
     }
 
-    // 1b. 非 Anthropic 提供商 + joinClaudePool
-    if (provider.joinClaudePool) {
-      const redirectedModel = provider.modelRedirects?.[requestedModel];
-      // 检查是否重定向到 claude 模型
-      return redirectedModel?.startsWith("claude-") || false;
-    }
-
-    // 1c. 其他情况：非 Anthropic 提供商且未加入 Claude 调度池
+    // 1b. 非 Anthropic 提供商不支持 Claude 模型调度
     return false;
   }
 
@@ -565,7 +557,6 @@ export class ProxyProviderResolver {
         providerType: provider.providerType,
         requestedModel,
         allowedModels: provider.allowedModels,
-        joinClaudePool: provider.joinClaudePool,
       });
       return null;
     }

@@ -421,6 +421,20 @@
       "when": 1769539222210,
       "tag": "0059_safe_xorn",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1769850054508,
+      "tag": "0060_bored_gertrude_yorkes",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1769852342867,
+      "tag": "0061_exotic_trauma",
+      "breakpoints": true
     }
   ]
 }
