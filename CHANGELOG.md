@@ -4,6 +4,31 @@
 
 ---
 
+## v0.5.3 (2026-02-03)
+
+### 新增
+
+- 扩展只读密钥访问权限，支持更多 API 端点访问 (#704) [@AptS:1547](https://github.com/AptS1547)
+- 支持 Zeabur 一键部署 (#679) [@h7ml](https://github.com/h7ml)
+- Anthropic 供应商支持参数覆写功能，可自定义 API 请求参数 (#689)
+
+### 优化
+
+- 重构代理架构，移除格式转换器并强制同格式路由，提升性能和稳定性 (#709)
+- 优化 Thinking Budget 整流器，改进思考模式下的令牌预算管理
+
+### 修复
+
+- 修复 Gemini 供应商 buildProxyUrl 重复拼接版本前缀的问题 (#693) [@sunxyw](https://github.com/sunxyw)
+- 修复 Gemini SSE 响应中 usageMetadata 提取逻辑，采用 last-wins 策略 (#691) [@sususu98](https://github.com/sususu98)
+
+### 其他
+
+- 新增 Thinking Budget 整流器单元测试覆盖
+- 更新 i18n 翻译和系统配置
+
+---
+
 ## [v0.5.2](https://github.com/ding113/claude-code-hub/releases/tag/v0.5.2) - 2026-01-29
 
 ### 新增

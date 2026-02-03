@@ -179,6 +179,16 @@ describe("column-visibility", () => {
       const result3 = toggleColumn(userId, tableId, "user");
       expect(result3).toEqual(["provider"]);
     });
+
+    test("toggles cost column visibility", () => {
+      const hiddenAfterToggle = toggleColumn(userId, tableId, "cost");
+      expect(hiddenAfterToggle).toContain("cost");
+      expect(getVisibleColumns(userId, tableId)).not.toContain("cost");
+
+      const visibleAfterToggleBack = toggleColumn(userId, tableId, "cost");
+      expect(visibleAfterToggleBack).not.toContain("cost");
+      expect(getVisibleColumns(userId, tableId)).toContain("cost");
+    });
   });
 
   describe("resetColumns", () => {
@@ -209,6 +219,7 @@ describe("column-visibility", () => {
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("sessionId");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("provider");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("tokens");
+      expect(DEFAULT_VISIBLE_COLUMNS).toContain("cost");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("cache");
       expect(DEFAULT_VISIBLE_COLUMNS).toContain("performance");
     });
