@@ -385,11 +385,13 @@ export function ProviderRichListItem({
         router.refresh();
         return true;
       }
-      toast.error(tInline("groupSaveError"));
+      toast.error(tInline("groupSaveError"), {
+        description: res.error || tList("unknownError"),
+      });
       return false;
     } catch (error) {
       console.error("Failed to save groups:", error);
-      toast.error(tInline("groupSaveError"));
+      toast.error(tInline("groupSaveError"), { description: tList("unknownError") });
       return false;
     }
   };
@@ -427,7 +429,7 @@ export function ProviderRichListItem({
             checked={isSelected}
             onCheckedChange={(checked) => onSelectChange?.(Boolean(checked))}
             onClick={(e) => e.stopPropagation()}
-            aria-label={`Select ${provider.name}`}
+            aria-label={tList("selectProvider", { name: provider.name })}
             className="flex-shrink-0"
           />
         )}

@@ -38,5 +38,6 @@
   "actionClone": "克隆",
   "actionResetCircuit": "重置熔断",
   "actionResetUsage": "重置用量",
-  "actionDelete": "删除"
+  "actionDelete": "删除",
+  "selectProvider": "选择 {name}"
 }

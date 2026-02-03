@@ -38,5 +38,6 @@
   "actionClone": "クローン",
   "actionResetCircuit": "サーキットリセット",
   "actionResetUsage": "使用量リセット",
-  "actionDelete": "削除"
+  "actionDelete": "削除",
+  "selectProvider": "{name} を選択"
 }

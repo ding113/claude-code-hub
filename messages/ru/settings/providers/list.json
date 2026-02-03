@@ -38,5 +38,6 @@
   "actionClone": "Клонировать",
   "actionResetCircuit": "Сбросить предохранитель",
   "actionResetUsage": "Сбросить использование",
-  "actionDelete": "Удалить"
+  "actionDelete": "Удалить",
+  "selectProvider": "Выбрать {name}"
 }

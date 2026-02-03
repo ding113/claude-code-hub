@@ -38,5 +38,6 @@
   "actionClone": "Clone",
   "actionResetCircuit": "Reset Circuit",
   "actionResetUsage": "Reset Usage",
-  "actionDelete": "Delete"
+  "actionDelete": "Delete",
+  "selectProvider": "Select {name}"
 }

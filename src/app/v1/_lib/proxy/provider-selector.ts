@@ -1048,7 +1048,7 @@ export class ProxyProviderResolver {
         return Math.min(...overrides);
       }
     }
-    return provider.priority || 0;
+    return provider.priority ?? 0;
   }
 
   /**
