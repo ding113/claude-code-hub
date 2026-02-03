@@ -91,6 +91,9 @@ import {
   normalizeResetTime,
 } from "./time-utils";
 
+const SESSION_TTL_SECONDS = parseInt(process.env.SESSION_TTL || "300", 10);
+const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
+
 interface CostLimit {
   amount: number | null;
   period: "5h" | "daily" | "weekly" | "monthly";
@@ -566,14 +569,14 @@ export class RateLimitService {
       const key = `provider:${providerId}:active_sessions`;
       const now = Date.now();
 
-      // 执行 Lua 脚本：原子性检查 + 追踪（TC-041 修复版）
       const result = (await RateLimitService.redis.eval(
         CHECK_AND_TRACK_SESSION,
         1, // KEYS count
         key, // KEYS[1]
         sessionId, // ARGV[1]
         limit.toString(), // ARGV[2]
-        now.toString() // ARGV[3]
+        now.toString(), // ARGV[3]
+        SESSION_TTL_MS.toString() // ARGV[4]
       )) as [number, number, number];
 
       const [allowed, count, tracked] = result;

@@ -5,56 +5,57 @@
  */
 
 /**
- * 原子性检查并发限制 + 追踪 Session（TC-041 修复版）
+ * Atomic concurrency check + session tracking (TC-041 fixed version)
  *
- * 功能：
- * 1. 清理过期 session（5 分钟前）
- * 2. 检查 session 是否已追踪（避免重复计数）
- * 3. 检查当前并发数是否超限
- * 4. 如果未超限，追踪新 session（原子操作）
+ * Features:
+ * 1. Cleanup expired sessions (based on TTL window)
+ * 2. Check if session is already tracked (avoid duplicate counting)
+ * 3. Check if current concurrency exceeds limit
+ * 4. If not exceeded, track new session (atomic operation)
  *
  * KEYS[1]: provider:${providerId}:active_sessions
  * ARGV[1]: sessionId
- * ARGV[2]: limit（并发限制）
- * ARGV[3]: now（当前时间戳，毫秒）
+ * ARGV[2]: limit (concurrency limit)
+ * ARGV[3]: now (current timestamp, ms)
+ * ARGV[4]: ttlMs (optional, cleanup window in ms, default 300000)
  *
- * 返回值：
- * - {1, count, 1} - 允许（新追踪），返回新的并发数和 tracked=1
- * - {1, count, 0} - 允许（已追踪），返回当前并发数和 tracked=0
- * - {0, count, 0} - 拒绝（超限），返回当前并发数和 tracked=0
+ * Return:
+ * - {1, count, 1} - allowed (new tracking), returns new count and tracked=1
+ * - {1, count, 0} - allowed (already tracked), returns current count and tracked=0
+ * - {0, count, 0} - rejected (limit reached), returns current count and tracked=0
  */
 export const CHECK_AND_TRACK_SESSION = `
 local provider_key = KEYS[1]
 local session_id = ARGV[1]
 local limit = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
-local ttl = 300000  -- 5 分钟（毫秒）
+local ttl = tonumber(ARGV[4]) or 300000
 
--- 1. 清理过期 session（5 分钟前）
-local five_minutes_ago = now - ttl
-redis.call('ZREMRANGEBYSCORE', provider_key, '-inf', five_minutes_ago)
+-- 1. Cleanup expired sessions (TTL window ago)
+local cutoff = now - ttl
+redis.call('ZREMRANGEBYSCORE', provider_key, '-inf', cutoff)
 
--- 2. 检查 session 是否已追踪
+-- 2. Check if session is already tracked
 local is_tracked = redis.call('ZSCORE', provider_key, session_id)
 
--- 3. 获取当前并发数
+-- 3. Get current concurrency count
 local current_count = redis.call('ZCARD', provider_key)
 
--- 4. 检查限制（排除已追踪的 session）
+-- 4. Check limit (exclude already tracked session)
 if limit > 0 and not is_tracked and current_count >= limit then
   return {0, current_count, 0}  -- {allowed=false, current_count, tracked=0}
 end
 
--- 5. 追踪 session（ZADD 对已存在的成员只更新时间戳）
+-- 5. Track session (ZADD updates timestamp for existing members)
 redis.call('ZADD', provider_key, now, session_id)
-redis.call('EXPIRE', provider_key, 3600)  -- 1 小时兜底 TTL
+redis.call('EXPIRE', provider_key, 3600)  -- 1h fallback TTL
 
--- 6. 返回成功
+-- 6. Return success
 if is_tracked then
-  -- 已追踪，计数不变
+  -- Already tracked, count unchanged
   return {1, current_count, 0}  -- {allowed=true, count, tracked=0}
 else
-  -- 新追踪，计数 +1
+  -- New tracking, count +1
   return {1, current_count + 1, 1}  -- {allowed=true, new_count, tracked=1}
 end
 `;
