@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useRouter } from "@/i18n/routing";
 import { cn } from "@/lib/utils";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
+import { getCurrencySymbol } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
 import type { UserDisplay } from "@/types/user";
 import { EditKeyDialog } from "./edit-key-dialog";
@@ -202,6 +203,9 @@ export function UserKeyTableRow({
   const limitMonthly = normalizeLimitValue(user.limitMonthlyUsd);
   const limitTotal = normalizeLimitValue(user.limitTotalUsd);
   const limitSessions = normalizeLimitValue(user.limitConcurrentSessions);
+
+  // Convert currencyCode to symbol for display
+  const currencySymbol = getCurrencySymbol(currencyCode);
 
   const handleDeleteKey = (keyId: number) => {
     startTransition(async () => {
@@ -404,6 +408,7 @@ export function UserKeyTableRow({
             limitType="5h"
             limit={limit5h}
             label={translations.columns.limit5h}
+            unit={currencySymbol}
           />
         </div>
 
@@ -414,6 +419,7 @@ export function UserKeyTableRow({
             limitType="daily"
             limit={limitDaily}
             label={translations.columns.limitDaily}
+            unit={currencySymbol}
           />
         </div>
 
@@ -424,6 +430,7 @@ export function UserKeyTableRow({
             limitType="weekly"
             limit={limitWeekly}
             label={translations.columns.limitWeekly}
+            unit={currencySymbol}
           />
         </div>
 
@@ -434,6 +441,7 @@ export function UserKeyTableRow({
             limitType="monthly"
             limit={limitMonthly}
             label={translations.columns.limitMonthly}
+            unit={currencySymbol}
           />
         </div>
 
@@ -444,6 +452,7 @@ export function UserKeyTableRow({
             limitType="total"
             limit={limitTotal}
             label={translations.columns.limitTotal}
+            unit={currencySymbol}
           />
         </div>
 
