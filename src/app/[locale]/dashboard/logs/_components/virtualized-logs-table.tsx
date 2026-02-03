@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVirtualizer } from "@/hooks/use-virtualizer";
+import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -44,16 +45,6 @@ export interface VirtualizedLogsTableFilters {
   minRetryCount?: number;
 }
 
-type VirtualizedLogsTableColumn =
-  | "user"
-  | "key"
-  | "sessionId"
-  | "provider"
-  | "tokens"
-  | "cache"
-  | "cost"
-  | "performance";
-
 interface VirtualizedLogsTableProps {
   filters: VirtualizedLogsTableFilters;
   currencyCode?: CurrencyCode;
@@ -62,7 +53,7 @@ interface VirtualizedLogsTableProps {
   autoRefreshIntervalMs?: number;
   hideStatusBar?: boolean;
   hideScrollToTop?: boolean;
-  hiddenColumns?: VirtualizedLogsTableColumn[];
+  hiddenColumns?: LogsTableColumn[];
   bodyClassName?: string;
 }
 
