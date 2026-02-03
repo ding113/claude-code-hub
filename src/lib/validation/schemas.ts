@@ -31,7 +31,7 @@ const ANTHROPIC_MAX_TOKENS_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "max_tokens 必须为 \"inherit\" 或数字字符串")
+    .regex(/^\d+$/, 'max_tokens 必须为 "inherit" 或数字字符串')
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
@@ -45,7 +45,7 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "thinking.budget_tokens 必须为 \"inherit\" 或数字字符串")
+    .regex(/^\d+$/, 'thinking.budget_tokens 必须为 "inherit" 或数字字符串')
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
