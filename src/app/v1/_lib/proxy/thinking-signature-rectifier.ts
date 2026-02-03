@@ -70,6 +70,17 @@ export function detectThinkingSignatureRectifierTrigger(
     return "invalid_signature_in_thinking_block"; // 复用现有触发类型，整流逻辑相同
   }
 
+  // 检测：thinking/redacted_thinking 块被修改的错误
+  // 场景：客户端回传的 thinking 块内容与原始响应不一致
+  // 错误信息："thinking or redacted_thinking blocks ... cannot be modified"
+  const looksLikeThinkingBlockModified =
+    (lower.includes("thinking") || lower.includes("redacted_thinking")) &&
+    lower.includes("cannot be modified");
+
+  if (looksLikeThinkingBlockModified) {
+    return "invalid_signature_in_thinking_block"; // 复用现有触发类型，整流逻辑相同
+  }
+
   // 与默认错误规则保持一致（Issue #432 / Rule 6）
   if (/非法请求|illegal request|invalid request/i.test(errorMessage)) {
     return "invalid_request";
