@@ -57,6 +57,10 @@ import {
   rectifyAnthropicRequestMessage,
 } from "./thinking-signature-rectifier";
 
+/** Default User-Agent for Codex CLI requests when none is provided */
+export const DEFAULT_CODEX_USER_AGENT =
+  "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
+
 const STANDARD_ENDPOINTS = [
   "/v1/messages",
   "/v1/messages/count_tokens",
@@ -2214,10 +2218,9 @@ export class ProxyForwarder {
       // 注意：使用 ?? 而非 || 以确保空字符串 UA 能被正确保留
       let resolvedUA: string;
       if (wasModified) {
-        resolvedUA =
-          filteredUA ?? originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+        resolvedUA = filteredUA ?? originalUA ?? DEFAULT_CODEX_USER_AGENT;
       } else {
-        resolvedUA = originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+        resolvedUA = originalUA ?? DEFAULT_CODEX_USER_AGENT;
       }
       overrides["user-agent"] = resolvedUA;
 

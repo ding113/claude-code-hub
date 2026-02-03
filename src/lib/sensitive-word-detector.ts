@@ -30,6 +30,57 @@ class SensitiveWordCache {
   private lastReloadTime: number = 0;
   private isLoading: boolean = false;
 
+  private eventEmitterCleanup: (() => void) | null = null;
+  private redisPubSubCleanup: (() => void) | null = null;
+
+  constructor() {
+    this.setupEventListener();
+  }
+
+  private async setupEventListener(): Promise<void> {
+    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME !== "edge") {
+      try {
+        const { eventEmitter } = await import("@/lib/event-emitter");
+        const handler = () => {
+          logger.info("[SensitiveWordCache] Received update event, reloading...");
+          void this.reload();
+        };
+        eventEmitter.on("sensitiveWordsUpdated", handler);
+        logger.info("[SensitiveWordCache] Subscribed to local eventEmitter");
+
+        this.eventEmitterCleanup = () => {
+          eventEmitter.off("sensitiveWordsUpdated", handler);
+        };
+
+        try {
+          const { CHANNEL_SENSITIVE_WORDS_UPDATED, subscribeCacheInvalidation } = await import(
+            "@/lib/redis/pubsub"
+          );
+          const cleanup = await subscribeCacheInvalidation(
+            CHANNEL_SENSITIVE_WORDS_UPDATED,
+            handler
+          );
+          if (cleanup) {
+            this.redisPubSubCleanup = cleanup;
+            logger.info("[SensitiveWordCache] Subscribed to Redis pub/sub channel");
+          }
+        } catch (error) {
+          logger.warn("[SensitiveWordCache] Failed to subscribe to Redis pub/sub", { error });
+        }
+      } catch (error) {
+        logger.warn("[SensitiveWordCache] Failed to setup event listener", { error });
+      }
+    }
+  }
+
+  destroy(): void {
+    this.eventEmitterCleanup?.();
+    this.eventEmitterCleanup = null;
+
+    this.redisPubSubCleanup?.();
+    this.redisPubSubCleanup = null;
+  }
+
   /**
    * 从数据库重新加载敏感词列表
    */
@@ -185,5 +236,9 @@ class SensitiveWordCache {
   }
 }
 
-// 单例导出
-export const sensitiveWordDetector = new SensitiveWordCache();
+// Use globalThis to guarantee a single instance across workers
+const g = globalThis as unknown as { __CCH_SENSITIVE_WORD_DETECTOR__?: SensitiveWordCache };
+if (!g.__CCH_SENSITIVE_WORD_DETECTOR__) {
+  g.__CCH_SENSITIVE_WORD_DETECTOR__ = new SensitiveWordCache();
+}
+export const sensitiveWordDetector = g.__CCH_SENSITIVE_WORD_DETECTOR__;
