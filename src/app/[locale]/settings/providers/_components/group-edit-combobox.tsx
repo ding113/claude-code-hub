@@ -131,6 +131,9 @@ export function GroupEditCombobox({
         // Rollback on failure
         setSelectedGroups(previousSelection);
       }
+    } catch {
+      // Rollback on exception
+      setSelectedGroups(previousSelection);
     } finally {
       setSaving(false);
     }
