@@ -88,6 +88,7 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "ラベル (任意)",
   "endpointLabelPlaceholder": "本番環境",
+  "sortOrder": "並び順",
   "editEndpoint": "エンドポイントを編集",
   "editVendor": "ベンダーを編集",
   "vendorName": "ベンダー名",
@@ -102,5 +103,15 @@
   "vendorUpdateSuccess": "ベンダーを更新しました",
   "vendorUpdateFailed": "ベンダーの更新に失敗しました",
   "vendorDeleteSuccess": "ベンダーを削除しました",
-  "vendorDeleteFailed": "ベンダーの削除に失敗しました"
+  "vendorDeleteFailed": "ベンダーの削除に失敗しました",
+  "endpointStatus": {
+    "viewDetails": "詳細を見る",
+    "activeEndpoints": "有効なエンドポイント",
+    "noEndpoints": "エンドポイントなし",
+    "healthy": "正常",
+    "unhealthy": "異常",
+    "unknown": "不明",
+    "circuitOpen": "サーキットオープン",
+    "circuitHalfOpen": "サーキット半開"
+  }
 }

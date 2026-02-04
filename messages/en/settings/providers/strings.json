@@ -88,6 +88,7 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "Label (optional)",
   "endpointLabelPlaceholder": "Production endpoint",
+  "sortOrder": "Sort Order",
   "editEndpoint": "Edit Endpoint",
   "editVendor": "Edit Vendor",
   "vendorName": "Vendor Name",
@@ -102,5 +103,15 @@
   "vendorUpdateSuccess": "Vendor updated successfully",
   "vendorUpdateFailed": "Failed to update vendor",
   "vendorDeleteSuccess": "Vendor deleted successfully",
-  "vendorDeleteFailed": "Failed to delete vendor"
+  "vendorDeleteFailed": "Failed to delete vendor",
+  "endpointStatus": {
+    "viewDetails": "View Details",
+    "activeEndpoints": "Active Endpoints",
+    "noEndpoints": "No Endpoints",
+    "healthy": "Healthy",
+    "unhealthy": "Unhealthy",
+    "unknown": "Unknown",
+    "circuitOpen": "Circuit Open",
+    "circuitHalfOpen": "Circuit Half-Open"
+  }
 }
