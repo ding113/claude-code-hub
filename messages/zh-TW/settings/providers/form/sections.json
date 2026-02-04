@@ -236,6 +236,18 @@
         "maxOutButton": "拉滿 (32000)"
       }
     },
+    "geminiOverrides": {
+      "title": "Gemini 參數覆寫",
+      "desc": "在供應商層級覆寫 Gemini API 請求參數",
+      "googleSearch": {
+        "label": "Google Search 聯網",
+        "options": {
+          "inherit": "不覆寫（遵循客戶端）",
+          "enabled": "強制開啟",
+          "disabled": "強制關閉"
+        }
+      }
+    },
     "context1m": {
       "desc": "設定 1M 上下文視窗支援。僅對 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。啟用後將套用階梯定價。",
       "label": "1M 上下文視窗",

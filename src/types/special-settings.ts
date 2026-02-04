@@ -13,7 +13,8 @@ export type SpecialSetting =
   | ThinkingBudgetRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
-  | AnthropicContext1mHeaderOverrideSpecialSetting;
+  | AnthropicContext1mHeaderOverrideSpecialSetting
+  | GeminiGoogleSearchOverrideSpecialSetting;
 
 export type SpecialSettingChangeValue = string | number | boolean | null;
 
@@ -153,4 +154,21 @@ export type ThinkingBudgetRectifierSpecialSetting = {
     thinkingType: string | null;
     thinkingBudgetTokens: number | null;
   };
+};
+
+/**
+ * Gemini Google Search 覆写审计
+ *
+ * 用于记录：当 Gemini 类型供应商配置了 googleSearch 偏好时，
+ * 系统对请求体中 tools 数组进行注入或移除 googleSearch 工具的行为。
+ */
+export type GeminiGoogleSearchOverrideSpecialSetting = {
+  type: "gemini_google_search_override";
+  scope: "request";
+  hit: boolean;
+  providerId: number | null;
+  providerName: string | null;
+  action: "inject" | "remove" | "passthrough";
+  preference: "enabled" | "disabled";
+  hadGoogleSearchInRequest: boolean;
 };

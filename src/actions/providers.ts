@@ -280,6 +280,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
         anthropicMaxTokensPreference: provider.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
+        geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,

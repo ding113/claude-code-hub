@@ -71,6 +71,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexParallelToolCallsPreference: providerData.codex_parallel_tool_calls_preference ?? null,
     anthropicMaxTokensPreference: providerData.anthropic_max_tokens_preference ?? null,
     anthropicThinkingBudgetPreference: providerData.anthropic_thinking_budget_preference ?? null,
+    geminiGoogleSearchPreference: providerData.gemini_google_search_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
@@ -122,6 +123,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
     anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
     anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+    geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
     tpm: providers.tpm,
     rpm: providers.rpm,
     rpd: providers.rpd,
@@ -202,6 +204,7 @@ export async function findProviderList(
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -278,6 +281,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -358,6 +362,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -466,6 +471,8 @@ export async function updateProvider(
   if (providerData.anthropic_thinking_budget_preference !== undefined)
     dbData.anthropicThinkingBudgetPreference =
       providerData.anthropic_thinking_budget_preference ?? null;
+  if (providerData.gemini_google_search_preference !== undefined)
+    dbData.geminiGoogleSearchPreference = providerData.gemini_google_search_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
@@ -546,6 +553,7 @@ export async function updateProvider(
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,

@@ -151,6 +151,18 @@
         "placeholder": "如 10240",
         "maxOutButton": "拉满 (32000)"
       }
+    },
+    "geminiOverrides": {
+      "title": "Gemini 参数覆写",
+      "desc": "在供应商层面覆写 Gemini API 请求参数",
+      "googleSearch": {
+        "label": "Google Search 联网",
+        "options": {
+          "inherit": "不覆写（遵循客户端）",
+          "enabled": "强制开启",
+          "disabled": "强制关闭"
+        }
+      }
     }
   },
   "rateLimit": {

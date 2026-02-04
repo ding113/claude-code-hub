@@ -61,6 +61,7 @@ export function createInitialState(
       anthropicMaxTokensPreference: sourceProvider?.anthropicMaxTokensPreference ?? "inherit",
       anthropicThinkingBudgetPreference:
         sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
+      geminiGoogleSearchPreference: sourceProvider?.geminiGoogleSearchPreference ?? "inherit",
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
@@ -177,6 +178,11 @@ export function providerFormReducer(
       return {
         ...state,
         routing: { ...state.routing, anthropicThinkingBudgetPreference: action.payload },
+      };
+    case "SET_GEMINI_GOOGLE_SEARCH":
+      return {
+        ...state,
+        routing: { ...state.routing, geminiGoogleSearchPreference: action.payload },
       };
 
     // Rate limit
