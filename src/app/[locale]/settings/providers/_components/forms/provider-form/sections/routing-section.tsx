@@ -22,6 +22,7 @@ import type {
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
+  GeminiGoogleSearchPreference,
   ProviderType,
 } from "@/types/provider";
 import { ModelMultiSelect } from "../../../model-multi-select";
@@ -652,6 +653,40 @@ export function RoutingSection() {
                 </Tooltip>
               </SmartInputWrapper>
             </div>
+          </SectionCard>
+        )}
+
+        {/* Gemini Overrides - Gemini type only */}
+        {(state.routing.providerType === "gemini" ||
+          state.routing.providerType === "gemini-cli") && (
+          <SectionCard
+            title={t("sections.routing.geminiOverrides.title")}
+            description={t("sections.routing.geminiOverrides.desc")}
+            icon={Settings}
+          >
+            <SmartInputWrapper label={t("sections.routing.geminiOverrides.googleSearch.label")}>
+              <Select
+                value={state.routing.geminiGoogleSearchPreference}
+                onValueChange={(val) =>
+                  dispatch({
+                    type: "SET_GEMINI_GOOGLE_SEARCH",
+                    payload: val as GeminiGoogleSearchPreference,
+                  })
+                }
+                disabled={state.ui.isPending}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="inherit" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(["inherit", "enabled", "disabled"] as const).map((val) => (
+                    <SelectItem key={val} value={val}>
+                      {t(`sections.routing.geminiOverrides.googleSearch.options.${val}`)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </SmartInputWrapper>
           </SectionCard>
         )}
       </motion.div>

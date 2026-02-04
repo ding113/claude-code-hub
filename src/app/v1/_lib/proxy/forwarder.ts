@@ -15,6 +15,7 @@ import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
+import { applyGeminiGoogleSearchOverrideWithAudit } from "@/lib/gemini/provider-overrides";
 import { logger } from "@/lib/logger";
 import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
@@ -1283,7 +1284,17 @@ export class ProxyForwarder {
       // 1. 直接透传请求体（不转换）- 仅对有 body 的请求
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
       if (hasBody) {
-        const bodyString = JSON.stringify(session.request.message);
+        let bodyToSerialize = session.request.message as Record<string, unknown>;
+
+        // Apply Gemini Google Search override if configured
+        const { request: overriddenBody, audit: googleSearchAudit } =
+          applyGeminiGoogleSearchOverrideWithAudit(provider, bodyToSerialize);
+        if (googleSearchAudit) {
+          session.addSpecialSetting(googleSearchAudit);
+          bodyToSerialize = overriddenBody;
+        }
+
+        const bodyString = JSON.stringify(bodyToSerialize);
         requestBody = bodyString;
       }
 

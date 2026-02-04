@@ -36,6 +36,12 @@ export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
 export type AnthropicMaxTokensPreference = "inherit" | string;
 export type AnthropicThinkingBudgetPreference = "inherit" | string;
 
+// Gemini (generateContent API) parameter overrides
+// - "inherit": follow client request (default)
+// - "enabled": force inject googleSearch tool
+// - "disabled": force remove googleSearch tool from request
+export type GeminiGoogleSearchPreference = "inherit" | "enabled" | "disabled";
+
 // MCP 透传类型枚举
 export type McpPassthroughType = "none" | "minimax" | "glm" | "custom";
 
@@ -128,6 +134,9 @@ export interface Provider {
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
 
+  // Gemini (generateContent API) parameter overrides (only for gemini/gemini-cli providers)
+  geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
+
   // 废弃（保留向后兼容，但不再使用）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
   tpm: number | null;
@@ -200,6 +209,7 @@ export interface ProviderDisplay {
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
+  geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
   rpm: number | null;
@@ -288,6 +298,7 @@ export interface CreateProviderData {
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
@@ -358,6 +369,7 @@ export interface UpdateProviderData {
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
 
   // 废弃字段（保留向后兼容）
   // TPM (Tokens Per Minute): 每分钟可处理的文本总量
