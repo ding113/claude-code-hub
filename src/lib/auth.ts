@@ -6,12 +6,33 @@ import { findUserById } from "@/repository/user";
 import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
 
+export type AuthSessionStorage = {
+  run<T>(store: AuthSession, callback: () => T): T;
+  getStore(): AuthSession | undefined;
+};
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __cchAuthSessionStorage: AuthSessionStorage | undefined;
+}
+
 const AUTH_COOKIE_NAME = "auth-token";
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export interface AuthSession {
   user: User;
   key: Key;
+}
+
+export function runWithAuthSession<T>(session: AuthSession, fn: () => T): T {
+  const storage = globalThis.__cchAuthSessionStorage;
+  if (!storage) return fn();
+  return storage.run(session, fn);
+}
+
+export function getScopedAuthSession(): AuthSession | null {
+  const storage = globalThis.__cchAuthSessionStorage;
+  return storage?.getStore() ?? null;
 }
 
 export async function validateKey(
@@ -119,6 +140,12 @@ export async function getSession(options?: {
    */
   allowReadOnlyAccess?: boolean;
 }): Promise<AuthSession | null> {
+  // 优先读取 adapter 注入的请求级会话（适配 /api/actions 等非 Next 原生上下文场景）
+  const scoped = getScopedAuthSession();
+  if (scoped) {
+    return scoped;
+  }
+
   const keyString = await getAuthToken();
   if (!keyString) {
     return null;
