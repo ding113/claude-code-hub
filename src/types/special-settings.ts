@@ -169,6 +169,6 @@ export type GeminiGoogleSearchOverrideSpecialSetting = {
   providerId: number | null;
   providerName: string | null;
   action: "inject" | "remove" | "passthrough";
-  preference: "enabled" | "disabled" | "inherit";
+  preference: "enabled" | "disabled";
   hadGoogleSearchInRequest: boolean;
 };

@@ -1,10 +1,11 @@
+import type { GeminiGoogleSearchPreference, ProviderType } from "@/types/provider";
 import type { GeminiGoogleSearchOverrideSpecialSetting } from "@/types/special-settings";
 
 type GeminiProviderOverrideConfig = {
   id?: number;
   name?: string;
-  providerType?: string;
-  geminiGoogleSearchPreference?: string | null;
+  providerType?: ProviderType;
+  geminiGoogleSearchPreference?: GeminiGoogleSearchPreference | null;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
