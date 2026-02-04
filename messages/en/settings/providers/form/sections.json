@@ -8,6 +8,10 @@
       "title": "API Endpoint",
       "desc": "Configure the base URL for API requests"
     },
+    "endpointPool": {
+      "title": "Endpoint Pool",
+      "desc": "Manage vendor endpoints for this provider type"
+    },
     "auth": {
       "title": "Authentication",
       "desc": "Provide your API key for authentication"
