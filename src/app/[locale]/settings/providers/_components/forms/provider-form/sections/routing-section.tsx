@@ -676,7 +676,9 @@ export function RoutingSection() {
                 disabled={state.ui.isPending}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="inherit" />
+                  <SelectValue
+                    placeholder={t("sections.routing.geminiOverrides.googleSearch.options.inherit")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {(["inherit", "enabled", "disabled"] as const).map((val) => (

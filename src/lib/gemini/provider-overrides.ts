@@ -113,9 +113,11 @@ export function applyGeminiGoogleSearchOverrideWithAudit(
   let action: "inject" | "remove" | "passthrough";
   if (preference === "enabled") {
     action = hadGoogleSearch ? "passthrough" : "inject";
-  } else {
-    // disabled
+  } else if (preference === "disabled") {
     action = hadGoogleSearch ? "remove" : "passthrough";
+  } else {
+    // Unreachable with current validation, but handle gracefully
+    return { request, audit: null };
   }
 
   const nextRequest = applyGeminiGoogleSearchOverride(provider, request);

@@ -1292,6 +1292,32 @@ export class ProxyForwarder {
         if (googleSearchAudit) {
           session.addSpecialSetting(googleSearchAudit);
           bodyToSerialize = overriddenBody;
+          session.request.message = overriddenBody;
+
+          // Persist special settings immediately (same pattern as Anthropic overrides)
+          const specialSettings = session.getSpecialSettings();
+          if (session.sessionId) {
+            await SessionManager.storeSessionSpecialSettings(
+              session.sessionId,
+              specialSettings,
+              session.requestSequence
+            ).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to store Gemini special settings", {
+                error: err,
+                sessionId: session.sessionId,
+              });
+            });
+          }
+          if (session.messageContext?.id) {
+            await updateMessageRequestDetails(session.messageContext.id, {
+              specialSettings,
+            }).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to persist Gemini special settings", {
+                error: err,
+                messageRequestId: session.messageContext?.id,
+              });
+            });
+          }
         }
 
         const bodyString = JSON.stringify(bodyToSerialize);
