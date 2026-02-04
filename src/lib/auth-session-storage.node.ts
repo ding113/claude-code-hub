@@ -1,7 +1,7 @@
 import "server-only";
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import type { AuthSession, AuthSessionStorage } from "@/lib/auth";
+import type { AuthSessionStorage, ScopedAuthContext } from "@/lib/auth";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -9,6 +9,5 @@ declare global {
 }
 
 if (!globalThis.__cchAuthSessionStorage) {
-  globalThis.__cchAuthSessionStorage = new AsyncLocalStorage<AuthSession>() as unknown as AuthSessionStorage;
+  globalThis.__cchAuthSessionStorage = new AsyncLocalStorage<ScopedAuthContext>() as unknown as AuthSessionStorage;
 }
-

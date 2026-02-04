@@ -6,9 +6,19 @@ import { findUserById } from "@/repository/user";
 import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
 
+export type ScopedAuthContext = {
+  session: AuthSession;
+  /**
+   * 本次请求在 adapter 层 validateKey 时使用的 allowReadOnlyAccess 参数。
+   * - true：允许 canLoginWebUi=false 的 key 作为“只读会话”使用
+   * - false：严格要求 canLoginWebUi=true
+   */
+  allowReadOnlyAccess: boolean;
+};
+
 export type AuthSessionStorage = {
-  run<T>(store: AuthSession, callback: () => T): T;
-  getStore(): AuthSession | undefined;
+  run<T>(store: ScopedAuthContext, callback: () => T): T;
+  getStore(): ScopedAuthContext | undefined;
 };
 
 declare global {
@@ -24,13 +34,25 @@ export interface AuthSession {
   key: Key;
 }
 
-export function runWithAuthSession<T>(session: AuthSession, fn: () => T): T {
+export function runWithAuthSession<T>(
+  session: AuthSession,
+  fn: () => T,
+  options?: { allowReadOnlyAccess?: boolean }
+): T {
   const storage = globalThis.__cchAuthSessionStorage;
   if (!storage) return fn();
-  return storage.run(session, fn);
+  return storage.run(
+    { session, allowReadOnlyAccess: options?.allowReadOnlyAccess ?? false },
+    fn
+  );
 }
 
 export function getScopedAuthSession(): AuthSession | null {
+  const storage = globalThis.__cchAuthSessionStorage;
+  return storage?.getStore()?.session ?? null;
+}
+
+export function getScopedAuthContext(): ScopedAuthContext | null {
   const storage = globalThis.__cchAuthSessionStorage;
   return storage?.getStore() ?? null;
 }
@@ -141,9 +163,14 @@ export async function getSession(options?: {
   allowReadOnlyAccess?: boolean;
 }): Promise<AuthSession | null> {
   // 优先读取 adapter 注入的请求级会话（适配 /api/actions 等非 Next 原生上下文场景）
-  const scoped = getScopedAuthSession();
+  const scoped = getScopedAuthContext();
   if (scoped) {
-    return scoped;
+    // 关键：scoped 会话必须遵循其“创建时语义”，并允许内部显式降权校验
+    const effectiveAllowReadOnlyAccess = options?.allowReadOnlyAccess ?? scoped.allowReadOnlyAccess;
+    if (!effectiveAllowReadOnlyAccess && !scoped.session.key.canLoginWebUi) {
+      return null;
+    }
+    return scoped.session;
   }
 
   const keyString = await getAuthToken();

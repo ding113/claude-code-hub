@@ -84,11 +84,17 @@ describe("Action Adapter：会话透传", () => {
 
     const action = vi.fn(async () => {
       const session = await getSession();
-      return { ok: true, data: { userId: session?.user.id ?? null } };
+      // 显式降权校验：当 key 为只读（canLoginWebUi=false）时，strict session 应返回 null
+      const strictSession = await getSession({ allowReadOnlyAccess: false });
+      return {
+        ok: true,
+        data: { userId: session?.user.id ?? null, strictUserId: strictSession?.user.id ?? null },
+      };
     });
 
     const { handler } = createActionRoute("users", "getUsers", action as any, {
       requiresAuth: true,
+      allowReadOnlyAccess: true,
     });
 
     const response = (await handler({
@@ -112,6 +118,9 @@ describe("Action Adapter：会话透传", () => {
     expect(validateKey).toHaveBeenCalledTimes(1);
     expect(action).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ ok: true, data: { userId: 123 } });
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      data: { userId: 123, strictUserId: null },
+    });
   });
 });

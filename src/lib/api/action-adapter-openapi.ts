@@ -363,7 +363,7 @@ export function createActionRoute(
 
       const rawResult =
         authSession != null
-          ? await runWithAuthSession(authSession, () => action(...args))
+          ? await runWithAuthSession(authSession, () => action(...args), { allowReadOnlyAccess })
           : await action(...args);
 
       // 2.5. 包装非 ActionResult 格式的返回值
