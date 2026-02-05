@@ -9,5 +9,6 @@ declare global {
 }
 
 if (!globalThis.__cchAuthSessionStorage) {
-  globalThis.__cchAuthSessionStorage = new AsyncLocalStorage<ScopedAuthContext>() as unknown as AuthSessionStorage;
+  globalThis.__cchAuthSessionStorage =
+    new AsyncLocalStorage<ScopedAuthContext>() as unknown as AuthSessionStorage;
 }

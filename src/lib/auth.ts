@@ -41,10 +41,7 @@ export function runWithAuthSession<T>(
 ): T {
   const storage = globalThis.__cchAuthSessionStorage;
   if (!storage) return fn();
-  return storage.run(
-    { session, allowReadOnlyAccess: options?.allowReadOnlyAccess ?? false },
-    fn
-  );
+  return storage.run({ session, allowReadOnlyAccess: options?.allowReadOnlyAccess ?? false }, fn);
 }
 
 export function getScopedAuthSession(): AuthSession | null {
