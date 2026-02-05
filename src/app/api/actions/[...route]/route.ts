@@ -12,6 +12,7 @@
  */
 
 import "@/lib/polyfills/file";
+import "@/lib/auth-session-storage.node";
 import { swaggerUI } from "@hono/swagger-ui";
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { apiReference } from "@scalar/hono-api-reference";
