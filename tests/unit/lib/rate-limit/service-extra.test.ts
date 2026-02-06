@@ -164,6 +164,25 @@ describe("RateLimitService - other quota paths", () => {
     expect(result).toEqual({ allowed: true, count: 1, tracked: true });
   });
 
+  it("checkAndTrackProviderSession: should pass SESSION_TTL_MS as ARGV[4] to Lua script", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce([1, 1, 1]);
+    await RateLimitService.checkAndTrackProviderSession(9, "sess", 2);
+
+    // Verify eval was called with the correct args including ARGV[4] = SESSION_TTL_MS
+    expect(redisClientRef.eval).toHaveBeenCalledTimes(1);
+
+    const evalCall = redisClientRef.eval.mock.calls[0];
+    // evalCall: [script, numkeys, key, sessionId, limit, now, ttlMs]
+    // Indices:   0        1        2    3          4      5     6
+    expect(evalCall.length).toBe(7); // script + 1 key + 5 ARGV
+
+    // ARGV[4] (index 6) should be SESSION_TTL_MS derived from env (default 300s = 300000ms)
+    const ttlMsArg = evalCall[6];
+    expect(ttlMsArg).toBe("300000");
+  });
+
   it("trackUserDailyCost：fixed 模式应使用 STRING + TTL", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
