@@ -12,7 +12,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
-import { validateKey } from "@/lib/auth";
+import { runWithAuthSession, validateKey } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 
 function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
@@ -300,6 +300,8 @@ export function createActionRoute(
     const fullPath = `${module}.${actionName}`;
 
     try {
+      let authSession: Awaited<ReturnType<typeof validateKey>> | null = null;
+
       // 0. 认证检查 (如果需要)
       if (requiresAuth) {
         const authToken =
@@ -314,6 +316,7 @@ export function createActionRoute(
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 无效的 auth-token`);
           return c.json({ ok: false, error: "认证无效或已过期" }, 401);
         }
+        authSession = session;
 
         // 检查角色权限
         if (requiredRole === "admin" && session.user.role !== "admin") {
@@ -358,7 +361,10 @@ export function createActionRoute(
         args = [body];
       }
 
-      const rawResult = await action(...args);
+      const rawResult =
+        authSession != null
+          ? await runWithAuthSession(authSession, () => action(...args), { allowReadOnlyAccess })
+          : await action(...args);
 
       // 2.5. 包装非 ActionResult 格式的返回值
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
