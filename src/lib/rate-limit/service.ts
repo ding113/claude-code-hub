@@ -91,7 +91,10 @@ import {
   normalizeResetTime,
 } from "./time-utils";
 
-const SESSION_TTL_SECONDS = parseInt(process.env.SESSION_TTL || "300", 10);
+const SESSION_TTL_SECONDS = (() => {
+  const parsed = Number.parseInt(process.env.SESSION_TTL ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
+})();
 const SESSION_TTL_MS = SESSION_TTL_SECONDS * 1000;
 
 interface CostLimit {

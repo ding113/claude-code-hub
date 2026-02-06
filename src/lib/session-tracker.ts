@@ -17,7 +17,10 @@ import { getRedisClient } from "./redis";
  * - user:${userId}:active_sessions (ZSET): 同上
  */
 export class SessionTracker {
-  private static readonly SESSION_TTL_SECONDS = parseInt(process.env.SESSION_TTL || "300", 10);
+  private static readonly SESSION_TTL_SECONDS = (() => {
+    const parsed = Number.parseInt(process.env.SESSION_TTL ?? "", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 300;
+  })();
   private static readonly SESSION_TTL_MS = SessionTracker.SESSION_TTL_SECONDS * 1000;
   private static readonly CLEANUP_PROBABILITY = 0.01;
 
@@ -182,7 +185,8 @@ export class SessionTracker {
       pipeline.zadd("global:active_sessions", now, sessionId);
       pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
       pipeline.zadd(providerZSetKey, now, sessionId);
-      pipeline.expire(providerZSetKey, 3600);
+      // Use dynamic TTL based on session TTL (at least 1h to cover active sessions)
+      pipeline.expire(providerZSetKey, Math.max(3600, ttlSeconds));
       if (userId !== undefined) {
         pipeline.zadd(`user:${userId}:active_sessions`, now, sessionId);
       }

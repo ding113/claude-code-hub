@@ -31,6 +31,11 @@ local limit = tonumber(ARGV[2])
 local now = tonumber(ARGV[3])
 local ttl = tonumber(ARGV[4]) or 300000
 
+-- Guard against invalid TTL (prevents clearing all sessions)
+if ttl <= 0 then
+  ttl = 300000
+end
+
 -- 1. Cleanup expired sessions (TTL window ago)
 local cutoff = now - ttl
 redis.call('ZREMRANGEBYSCORE', provider_key, '-inf', cutoff)
@@ -48,9 +53,13 @@ end
 
 -- 5. Track session (ZADD updates timestamp for existing members)
 redis.call('ZADD', provider_key, now, session_id)
-redis.call('EXPIRE', provider_key, 3600)  -- 1h fallback TTL
 
--- 6. Return success
+-- 6. Set TTL based on session TTL (at least 1h to cover active sessions)
+local ttl_seconds = math.floor(ttl / 1000)
+local expire_ttl = math.max(3600, ttl_seconds)
+redis.call('EXPIRE', provider_key, expire_ttl)
+
+-- 7. Return success
 if is_tracked then
   -- Already tracked, count unchanged
   return {1, current_count, 0}  -- {allowed=true, count, tracked=0}

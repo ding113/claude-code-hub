@@ -133,6 +133,21 @@ describe("SessionTracker - TTL and cleanup", () => {
       expect(providerExpireCall![2]).toBe(3600); // fallback TTL
     });
 
+    it("should use SESSION_TTL when it exceeds 3600s for provider ZSET EXPIRE", async () => {
+      process.env.SESSION_TTL = "7200"; // 2 hours > 3600
+
+      const { SessionTracker } = await import("@/lib/session-tracker");
+
+      await SessionTracker.refreshSession("sess-123", 1, 42);
+
+      // Check pipeline calls include expire for provider ZSET with dynamic TTL
+      const providerExpireCall = pipelineCalls.find(
+        (call) => call[0] === "expire" && String(call[1]).includes("provider:42:active_sessions")
+      );
+      expect(providerExpireCall).toBeDefined();
+      expect(providerExpireCall![2]).toBe(7200); // should use SESSION_TTL when > 3600
+    });
+
     it("should refresh session binding TTLs using env SESSION_TTL (not hardcoded 300)", async () => {
       process.env.SESSION_TTL = "600"; // 10 minutes
 
