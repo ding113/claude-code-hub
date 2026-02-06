@@ -61,6 +61,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { logger } from "@/lib/logger";
 import type { Provider, ProviderEndpoint, ProviderType } from "@/types/provider";
 
 function makeEndpoint(input: {
@@ -335,16 +336,24 @@ describe("ProxyForwarder - endpoint audit", () => {
     }
   });
 
-  test("endpoint 选择失败时应回退到 provider.url，并记录 endpointId=null", async () => {
-    const session = createSession();
+  test("MCP 请求应保持 provider.url 语义，不触发 strict endpoint 拦截", async () => {
+    const requestPath = "/mcp/custom-endpoint";
+    const session = createSession(new URL(`https://example.com${requestPath}`));
     const provider = createProvider({
       providerType: "claude",
       providerVendorId: 123,
-      url: "https://provider.example.com/v1/messages?key=SECRET",
+      url: `https://provider.example.com${requestPath}?key=SECRET`,
     });
     session.setProvider(provider);
 
-    mocks.getPreferredProviderEndpoints.mockRejectedValue(new Error("boom"));
+    mocks.getPreferredProviderEndpoints.mockResolvedValueOnce([
+      makeEndpoint({
+        id: 99,
+        vendorId: 123,
+        providerType: "claude",
+        url: "https://ep99.example.com",
+      }),
+    ]);
 
     const doForward = vi.spyOn(
       ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
@@ -362,17 +371,138 @@ describe("ProxyForwarder - endpoint audit", () => {
 
     const response = await ProxyForwarder.send(session);
     expect(response.status).toBe(200);
+    expect(mocks.getPreferredProviderEndpoints).not.toHaveBeenCalled();
 
     const chain = session.getProviderChain();
     expect(chain).toHaveLength(1);
-
-    const item = chain[0];
-    expect(item).toEqual(
+    expect(chain[0]).toEqual(
       expect.objectContaining({
         endpointId: null,
+        reason: "request_success",
       })
     );
-    expect(item.endpointUrl).toContain("[REDACTED]");
-    expect(item.endpointUrl).not.toContain("SECRET");
+
+    const warnMessages = vi.mocked(logger.warn).mock.calls.map(([message]) => message);
+    expect(warnMessages).not.toContain(
+      "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback"
+    );
+  });
+
+  test.each([
+    { requestPath: "/v1/messages", providerType: "claude" as const },
+    { requestPath: "/v1/responses", providerType: "codex" as const },
+    { requestPath: "/v1/chat/completions", providerType: "openai-compatible" as const },
+  ])("标准端点 $requestPath: endpoint 选择失败时不应静默回退到 provider.url", async ({
+    requestPath,
+    providerType,
+  }) => {
+    const session = createSession(new URL(`https://example.com${requestPath}`));
+    const provider = createProvider({
+      providerType,
+      providerVendorId: 123,
+      url: `https://provider.example.com${requestPath}?key=SECRET`,
+    });
+    session.setProvider(provider);
+
+    mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("boom"));
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockResolvedValueOnce(
+      new Response("{}", {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": "2",
+        },
+      })
+    );
+
+    const rejected = await ProxyForwarder.send(session)
+      .then(() => false)
+      .catch(() => true);
+
+    expect(rejected, `标准端点 ${requestPath} endpoint 选择失败后不允许静默回退 provider.url`).toBe(
+      true
+    );
+    expect(doForward).not.toHaveBeenCalled();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "[ProxyForwarder] Failed to load provider endpoints",
+      expect.objectContaining({
+        providerId: provider.id,
+        vendorId: 123,
+        providerType,
+        strictEndpointPolicy: true,
+        reason: "selector_error",
+        error: "boom",
+      })
+    );
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
+      expect.objectContaining({
+        providerId: provider.id,
+        vendorId: 123,
+        providerType,
+        requestPath,
+        reason: "strict_blocked_legacy_fallback",
+        strictBlockCause: "selector_error",
+        selectorError: "boom",
+      })
+    );
+  });
+
+  test("标准端点空候选应记录 no_endpoint_candidates 且不混淆为 selector_error", async () => {
+    const requestPath = "/v1/messages";
+    const providerType = "claude" as const;
+    const session = createSession(new URL(`https://example.com${requestPath}`));
+    const provider = createProvider({
+      providerType,
+      providerVendorId: 123,
+      url: "https://provider.example.com/v1/messages?key=SECRET",
+    });
+    session.setProvider(provider);
+
+    mocks.getPreferredProviderEndpoints.mockResolvedValueOnce([]);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockResolvedValueOnce(
+      new Response("{}", {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": "2",
+        },
+      })
+    );
+
+    const rejected = await ProxyForwarder.send(session)
+      .then(() => false)
+      .catch(() => true);
+
+    expect(rejected).toBe(true);
+    expect(doForward).not.toHaveBeenCalled();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
+      expect.objectContaining({
+        providerId: provider.id,
+        vendorId: 123,
+        providerType,
+        requestPath,
+        reason: "strict_blocked_legacy_fallback",
+        strictBlockCause: "no_endpoint_candidates",
+        selectorError: undefined,
+      })
+    );
+
+    const warnMessages = vi.mocked(logger.warn).mock.calls.map(([message]) => message);
+    expect(warnMessages).not.toContain("[ProxyForwarder] Failed to load provider endpoints");
   });
 });

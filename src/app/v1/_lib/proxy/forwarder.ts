@@ -70,6 +70,8 @@ const STANDARD_ENDPOINTS = [
   "/v1/models",
 ];
 
+const STRICT_STANDARD_ENDPOINTS = ["/v1/messages", "/v1/responses", "/v1/chat/completions"];
+
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
@@ -229,37 +231,63 @@ export class ProxyForwarder {
       let thinkingBudgetRectifierRetried = false;
 
       const requestPath = session.requestUrl.pathname;
+      const providerVendorId = currentProvider.providerVendorId ?? 0;
       const isMcpRequest =
         currentProvider.providerType !== "gemini" &&
         currentProvider.providerType !== "gemini-cli" &&
         !STANDARD_ENDPOINTS.includes(requestPath);
+      const shouldEnforceStrictEndpointPool =
+        !isMcpRequest && STRICT_STANDARD_ENDPOINTS.includes(requestPath) && providerVendorId > 0;
+      let endpointSelectionError: Error | null = null;
 
       const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
 
       if (isMcpRequest) {
         endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
-      } else if (currentProvider.providerVendorId && currentProvider.providerVendorId > 0) {
+      } else if (providerVendorId > 0) {
         try {
           const preferred = await getPreferredProviderEndpoints({
-            vendorId: currentProvider.providerVendorId,
+            vendorId: providerVendorId,
             providerType: currentProvider.providerType,
           });
           endpointCandidates.push(...preferred.map((e) => ({ endpointId: e.id, baseUrl: e.url })));
         } catch (error) {
-          logger.warn(
-            "[ProxyForwarder] Failed to load provider endpoints, fallback to provider.url",
-            {
-              providerId: currentProvider.id,
-              vendorId: currentProvider.providerVendorId,
-              providerType: currentProvider.providerType,
-              error: error instanceof Error ? error.message : String(error),
-            }
-          );
+          endpointSelectionError =
+            error instanceof Error
+              ? error
+              : new Error(typeof error === "string" ? error : String(error));
+          logger.warn("[ProxyForwarder] Failed to load provider endpoints", {
+            providerId: currentProvider.id,
+            vendorId: providerVendorId,
+            providerType: currentProvider.providerType,
+            error: endpointSelectionError.message,
+            strictEndpointPolicy: shouldEnforceStrictEndpointPool,
+            reason: "selector_error",
+          });
         }
       }
 
       if (endpointCandidates.length === 0) {
-        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+        if (shouldEnforceStrictEndpointPool) {
+          logger.warn(
+            "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
+            {
+              providerId: currentProvider.id,
+              vendorId: providerVendorId,
+              providerType: currentProvider.providerType,
+              requestPath,
+              reason: "strict_blocked_legacy_fallback",
+              strictBlockCause: endpointSelectionError
+                ? "selector_error"
+                : "no_endpoint_candidates",
+              selectorError: endpointSelectionError?.message,
+            }
+          );
+          failedProviderIds.push(currentProvider.id);
+          attemptCount = maxAttemptsPerProvider;
+        } else {
+          endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+        }
       }
 
       // Truncate endpoints to maxRetryAttempts count
