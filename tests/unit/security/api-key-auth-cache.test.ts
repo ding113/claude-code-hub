@@ -8,8 +8,8 @@ const noteExistingKey = vi.fn();
 const cacheActiveKey = vi.fn(async () => {});
 const cacheAuthResult = vi.fn(async () => {});
 const cacheUser = vi.fn(async () => {});
-const getCachedActiveKey = vi.fn<Parameters<(keyString: string) => Promise<Key | null>>, Promise<Key | null>>();
-const getCachedUser = vi.fn<Parameters<(userId: number) => Promise<User | null>>, Promise<User | null>>();
+const getCachedActiveKey = vi.fn<(keyString: string) => Promise<Key | null>>();
+const getCachedUser = vi.fn<(userId: number) => Promise<User | null>>();
 const invalidateCachedKey = vi.fn(async () => {});
 const publishCacheInvalidation = vi.fn(async () => {});
 
@@ -160,6 +160,15 @@ describe("API Key 鉴权缓存：VacuumFilter -> Redis -> DB", () => {
     const { findActiveKeyByKeyString } = await import("@/repository/key");
     await expect(findActiveKeyByKeyString("sk-cached")).resolves.toEqual(cachedKey);
     expect(getCachedActiveKey).toHaveBeenCalledWith("sk-cached");
+    expect(dbSelect).not.toHaveBeenCalled();
+  });
+
+  test("findActiveKeyByKeyString：VF 判定不存在且 Redis 未命中时应短路返回 null", async () => {
+    isDefinitelyNotPresent.mockReturnValueOnce(true);
+    getCachedActiveKey.mockResolvedValueOnce(null);
+
+    const { findActiveKeyByKeyString } = await import("@/repository/key");
+    await expect(findActiveKeyByKeyString("sk-nonexistent")).resolves.toBeNull();
     expect(dbSelect).not.toHaveBeenCalled();
   });
 

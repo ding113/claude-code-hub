@@ -23,7 +23,8 @@ const REDIS_KEYS = {
 };
 
 function isEdgeRuntime(): boolean {
-  return typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge";
+  if (typeof process === "undefined") return true;
+  return process.env.NEXT_RUNTIME === "edge";
 }
 
 function isApiKeyRedisCacheEnabled(): boolean {
@@ -68,6 +69,9 @@ async function sha256Hex(value: string): Promise<string | null> {
 }
 
 function shouldUseRedisClient(): boolean {
+  // Edge runtime/浏览器等无 process 环境：直接禁用
+  if (typeof process === "undefined") return false;
+
   // 与 getRedisClient 的启用条件保持一致，避免在未配置 Redis 时触发热路径 warn 日志
   if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") return false;
   if (!process.env.REDIS_URL) return false;
@@ -142,8 +146,8 @@ function hydrateKeyFromCache(keyString: string, payload: CachedKeyPayloadV1): Ke
     key: keyString,
     createdAt,
     updatedAt,
-    expiresAt: expiresAt === undefined ? undefined : expiresAt ?? undefined,
-    deletedAt: deletedAt === undefined ? undefined : deletedAt ?? undefined,
+    expiresAt: expiresAt === undefined ? undefined : expiresAt,
+    deletedAt: deletedAt === undefined ? undefined : deletedAt,
   } as Key;
 }
 
@@ -168,8 +172,8 @@ function hydrateUserFromCache(payload: CachedUserPayloadV1): User | null {
     ...(payload.user as User),
     createdAt,
     updatedAt,
-    expiresAt: expiresAt === undefined ? undefined : expiresAt ?? undefined,
-    deletedAt: deletedAt === undefined ? undefined : deletedAt ?? undefined,
+    expiresAt: expiresAt === undefined ? undefined : expiresAt,
+    deletedAt: deletedAt === undefined ? undefined : deletedAt,
   } as User;
 }
 

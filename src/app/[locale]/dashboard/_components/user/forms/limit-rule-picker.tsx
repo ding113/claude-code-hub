@@ -109,7 +109,7 @@ export function LimitRulePicker({
     setDailyMode("fixed");
     setDailyTime("00:00");
     setError(null);
-  }, [open]);
+  }, [open, availableTypes]);
 
   const numericValue = useMemo(() => {
     const trimmed = rawValue.trim();

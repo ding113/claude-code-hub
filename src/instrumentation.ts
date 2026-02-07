@@ -256,7 +256,13 @@ export async function register() {
       }
 
       // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
-      apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+      try {
+        apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to start API key vacuum filter preload", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       void startApiKeyVacuumFilterSync();
 
       // 回填 provider_vendors（按域名自动聚合旧 providers）
@@ -360,7 +366,13 @@ export async function register() {
         await runMigrations();
 
         // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
-        apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+        try {
+          apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to start API key vacuum filter preload", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
         void startApiKeyVacuumFilterSync();
 
         // 回填 provider_vendors（按域名自动聚合旧 providers）

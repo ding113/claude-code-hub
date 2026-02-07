@@ -255,8 +255,15 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
 
   if (!key) return null;
   const updated = toKey(key);
-  // 变更 key 后，更新/失效 Redis 缓存（最佳努力，不影响正确性）
-  await cacheActiveKey(updated).catch(() => {});
+  // 变更 key 后，根据活跃状态更新/失效 Redis 缓存（最佳努力，不影响正确性）
+  const expiresAtMs = updated.expiresAt instanceof Date ? updated.expiresAt.getTime() : null;
+  const isExpired = typeof expiresAtMs === "number" && expiresAtMs <= Date.now();
+  const isActive = updated.isEnabled === true && !updated.deletedAt && !isExpired;
+  if (isActive) {
+    await cacheActiveKey(updated).catch(() => {});
+  } else {
+    await invalidateCachedKey(updated.key).catch(() => {});
+  }
   return updated;
 }
 

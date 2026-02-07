@@ -137,9 +137,14 @@ class ApiKeyVacuumFilter {
 
   constructor() {
     // 默认开启；若需要可通过环境变量关闭（避免在无 DB 场景产生额外日志）
-    const isEdgeRuntime =
-      typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge";
-    this.enabled = !isEdgeRuntime && process.env.ENABLE_API_KEY_VACUUM_FILTER !== "false";
+    if (typeof process === "undefined") {
+      // Edge/浏览器等无 process 环境：强制关闭（避免访问 process.env 抛错）
+      this.enabled = false;
+    } else {
+      const isEdgeRuntime = process.env.NEXT_RUNTIME === "edge";
+      this.enabled =
+        !isEdgeRuntime && process.env.ENABLE_API_KEY_VACUUM_FILTER !== "false";
+    }
     this.seed = randomBytes(16);
   }
 
@@ -191,6 +196,20 @@ class ApiKeyVacuumFilter {
       return;
     }
 
+    // 重建进行中：同时写入 pending，确保新 filter 不会漏包含该 key
+    if (this.loadingPromise) {
+      if (this.pendingKeys.size < this.pendingKeysLimit) {
+        this.pendingKeys.add(trimmed);
+      } else {
+        logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
+          limit: this.pendingKeysLimit,
+        });
+      }
+
+      // 合并重建请求：当前重建结束后再跑一次，确保纳入 pendingKeys
+      this.startBackgroundReload({ reason: "pending_key_during_reload", force: true });
+    }
+
     // 注意：不要用 vf.has(key) 来“去重” —— has 可能是短暂假阳性，后续插入/搬移可能让假阳性消失，
     // 从而导致真正存在的 key 没被写入、最终产生误拒绝风险。对新建 key（应唯一）直接 add 更安全。
     const ok = vf.add(trimmed);
@@ -200,7 +219,13 @@ class ApiKeyVacuumFilter {
       });
       // 安全优先：插入失败意味着新 key 可能未被覆盖。
       // 为避免误拒绝（假阴性），临时禁用短路，等待后台重建完成后再恢复。
-      this.pendingKeys.add(trimmed);
+      if (this.pendingKeys.size < this.pendingKeysLimit) {
+        this.pendingKeys.add(trimmed);
+      } else {
+        logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
+          limit: this.pendingKeysLimit,
+        });
+      }
       this.vf = null;
       this.startBackgroundReload({ reason: "insert_failed", force: true });
     }
