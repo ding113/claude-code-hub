@@ -815,6 +815,7 @@ type ProviderEndpointSyncAction =
   | "updated-previous-in-place"
   | "kept-previous-and-created-next"
   | "kept-previous-and-revived-next"
+  | "kept-previous-and-kept-next"
   | "soft-deleted-previous-and-kept-next"
   | "soft-deleted-previous-and-revived-next";
 
@@ -1098,9 +1099,11 @@ export async function syncProviderEndpointOnProviderEdit(
       const ensureResult = await ensureNextEndpointActive();
       return {
         action:
-          ensureResult === "revived-next"
-            ? "kept-previous-and-revived-next"
-            : "kept-previous-and-created-next",
+          ensureResult === "created-next"
+            ? "kept-previous-and-created-next"
+            : ensureResult === "revived-next"
+              ? "kept-previous-and-revived-next"
+              : "kept-previous-and-kept-next",
       };
     }
 
