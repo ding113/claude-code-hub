@@ -105,7 +105,7 @@ export class SessionManager {
    * 从客户端请求中提取 session_id（支持 metadata 或 header）
    *
    * 优先级:
-   * 1. metadata.user_id (Claude Code 主要方式，格式: "{user}_session_{sessionId}")
+   * 1. metadata.user_id (Claude Code 主要方式，典型格式: "user_{hash}_account__session_{sessionId}")
    * 2. metadata.session_id (备选方式)
    */
   static extractClientSessionId(
@@ -135,7 +135,7 @@ export class SessionManager {
     const metadataObj = metadata as Record<string, unknown>;
 
     // 方案 A: 从 metadata.user_id 中提取 (Claude Code 主要方式)
-    // 格式: "user_identifier_session_actual_session_id"
+    // 典型格式: "user_{hash}_account__session_{sessionId}"
     if (typeof metadataObj.user_id === "string" && metadataObj.user_id.length > 0) {
       const userId = metadataObj.user_id;
       const sessionMarker = "_session_";

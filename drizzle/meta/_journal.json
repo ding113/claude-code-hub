@@ -435,6 +435,13 @@
       "when": 1769852342867,
       "tag": "0061_exotic_trauma",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1770442403656,
+      "tag": "0062_exotic_kingpin",
+      "breakpoints": true
     }
   ]
 }

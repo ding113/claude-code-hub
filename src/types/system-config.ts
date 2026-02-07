@@ -57,6 +57,10 @@ export interface SystemSettings {
   // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean;
 
+  // Claude metadata.user_id 注入（默认开启）
+  // 目标：为 Claude 请求补全 metadata.user_id，提升中转缓存命中稳定性
+  enableClaudeMetadataUserIdInjection: boolean;
+
   // 响应整流（默认开启）
   enableResponseFixer: boolean;
   responseFixerConfig: ResponseFixerConfig;
@@ -113,6 +117,9 @@ export interface UpdateSystemSettingsInput {
 
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion?: boolean;
+
+  // Claude metadata.user_id 注入（可选）
+  enableClaudeMetadataUserIdInjection?: boolean;
 
   // 响应整流（可选）
   enableResponseFixer?: boolean;

@@ -12,6 +12,7 @@ export type SpecialSetting =
   | ThinkingSignatureRectifierSpecialSetting
   | ThinkingBudgetRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
+  | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting;
 
@@ -132,6 +133,22 @@ export type CodexSessionIdCompletionSpecialSetting = {
     | "fingerprint_cache"
     | "generated_uuid_v7";
   sessionId: string;
+};
+
+/**
+ * Claude metadata.user_id 注入审计
+ *
+ * 用于记录：在 Claude 请求中注入 metadata.user_id 的命中情况，
+ * 以及跳过注入时的原因（例如客户端已提供、缺少 key/session 信息等）。
+ */
+export type ClaudeMetadataUserIdInjectionSpecialSetting = {
+  type: "claude_metadata_user_id_injection";
+  scope: "request";
+  hit: boolean;
+  action: "injected" | "skipped";
+  reason: "injected" | "already_exists" | "missing_key_id" | "missing_session_id";
+  keyId: number | null;
+  sessionId: string | null;
 };
 
 export type ThinkingBudgetRectifierSpecialSetting = {

@@ -613,6 +613,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // Claude metadata.user_id 注入（默认开启）
+  // 开启后：当 Claude 请求缺少 metadata.user_id 时，自动注入稳定标识用于提升缓存命中
+  enableClaudeMetadataUserIdInjection: boolean('enable_claude_metadata_user_id_injection')
+    .notNull()
+    .default(true),
+
   // 响应整流（默认开启）
   enableResponseFixer: boolean('enable_response_fixer').notNull().default(true),
   responseFixerConfig: jsonb('response_fixer_config')
