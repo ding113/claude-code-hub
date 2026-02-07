@@ -3,6 +3,7 @@
 import { and, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import { CHANNEL_API_KEYS_UPDATED, publishCacheInvalidation } from "@/lib/redis/pubsub";
 import {
   cacheActiveKey,
   cacheAuthResult,
@@ -11,9 +12,8 @@ import {
   getCachedUser,
   invalidateCachedKey,
 } from "@/lib/security/api-key-auth-cache";
-import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
-import { CHANNEL_API_KEYS_UPDATED, publishCacheInvalidation } from "@/lib/redis/pubsub";
+import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";

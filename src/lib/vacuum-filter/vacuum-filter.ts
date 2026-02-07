@@ -237,23 +237,20 @@ function murmur3X86_32x2(
   // tail
   let k1 = 0;
   const tail = blockLen;
-  switch (length & 3) {
-    case 3:
-      k1 ^= bytes[tail + 2] << 16;
-    // falls through
-    case 2:
-      k1 ^= bytes[tail + 1] << 8;
-    // falls through
-    case 1:
-      k1 ^= bytes[tail];
-      k1 = Math.imul(k1, c1) >>> 0;
-      k1 = ((k1 << 15) | (k1 >>> 17)) >>> 0;
-      k1 = Math.imul(k1, c2) >>> 0;
-      hA ^= k1;
-      hB ^= k1;
-      break;
-    default:
-      break;
+  const rem = length & 3;
+  if (rem >= 3) {
+    k1 ^= bytes[tail + 2] << 16;
+  }
+  if (rem >= 2) {
+    k1 ^= bytes[tail + 1] << 8;
+  }
+  if (rem >= 1) {
+    k1 ^= bytes[tail];
+    k1 = Math.imul(k1, c1) >>> 0;
+    k1 = ((k1 << 15) | (k1 >>> 17)) >>> 0;
+    k1 = Math.imul(k1, c2) >>> 0;
+    hA ^= k1;
+    hB ^= k1;
   }
 
   // fmix (A)

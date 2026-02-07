@@ -3,13 +3,13 @@
  * 在服务器启动时自动执行数据库迁移
  */
 
-// instrumentation 需要 Node.js runtime（依赖数据库与 Redis 等 Node 能力）
-export const runtime = "nodejs";
-
 import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
-import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
 import { CHANNEL_API_KEYS_UPDATED, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
+import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
+
+// instrumentation 需要 Node.js runtime（依赖数据库与 Redis 等 Node 能力）
+export const runtime = "nodejs";
 
 const instrumentationState = globalThis as unknown as {
   __CCH_CACHE_CLEANUP_STARTED__?: boolean;

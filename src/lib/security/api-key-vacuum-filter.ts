@@ -152,6 +152,11 @@ class ApiKeyVacuumFilter {
   isDefinitelyNotPresent(keyString: string): boolean | null {
     if (!this.enabled) return null;
 
+    // 重建过程中：安全优先，不短路（避免使用可能过期的 vf 产生误拒绝）
+    if (this.loadingPromise) {
+      return null;
+    }
+
     const vf = this.vf;
     if (!vf) {
       // 懒加载：第一次触发时后台预热（同时保持“安全优先”：不就绪时不短路）
@@ -159,7 +164,7 @@ class ApiKeyVacuumFilter {
       return null;
     }
 
-    return vf.has(keyString) ? false : true;
+    return !vf.has(keyString);
   }
 
   /**
