@@ -3,6 +3,7 @@ import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
 
 const isDefinitelyNotPresent = vi.fn(() => false);
+const noteExistingKey = vi.fn();
 
 const cacheActiveKey = vi.fn(async () => {});
 const cacheAuthResult = vi.fn(async () => {});
@@ -19,7 +20,7 @@ const dbUpdate = vi.fn();
 vi.mock("@/lib/security/api-key-vacuum-filter", () => ({
   apiKeyVacuumFilter: {
     isDefinitelyNotPresent,
-    noteExistingKey: vi.fn(),
+    noteExistingKey,
     startBackgroundReload: vi.fn(),
     getStats: vi.fn(),
   },
@@ -122,6 +123,33 @@ function buildUser(overrides?: Partial<User>): User {
 }
 
 describe("API Key 鉴权缓存：VacuumFilter -> Redis -> DB", () => {
+  test("findActiveKeyByKeyString：Vacuum Filter 误判缺失时，Redis 命中应纠正（避免误拒绝）", async () => {
+    const cachedKey = buildKey({ key: "sk-cached-missing" });
+    isDefinitelyNotPresent.mockReturnValueOnce(true);
+    getCachedActiveKey.mockResolvedValueOnce(cachedKey);
+
+    const { findActiveKeyByKeyString } = await import("@/repository/key");
+    await expect(findActiveKeyByKeyString("sk-cached-missing")).resolves.toEqual(cachedKey);
+    expect(noteExistingKey).toHaveBeenCalledWith("sk-cached-missing");
+    expect(dbSelect).not.toHaveBeenCalled();
+  });
+
+  test("validateApiKeyAndGetUser：Vacuum Filter 误判缺失时，Redis key+user 命中应纠正（避免误拒绝）", async () => {
+    const cachedKey = buildKey({ key: "sk-cached-missing", userId: 10 });
+    const cachedUser = buildUser({ id: 10 });
+    isDefinitelyNotPresent.mockReturnValueOnce(true);
+    getCachedActiveKey.mockResolvedValueOnce(cachedKey);
+    getCachedUser.mockResolvedValueOnce(cachedUser);
+
+    const { validateApiKeyAndGetUser } = await import("@/repository/key");
+    await expect(validateApiKeyAndGetUser("sk-cached-missing")).resolves.toEqual({
+      user: cachedUser,
+      key: cachedKey,
+    });
+    expect(noteExistingKey).toHaveBeenCalledWith("sk-cached-missing");
+    expect(dbSelect).not.toHaveBeenCalled();
+  });
+
   test("findActiveKeyByKeyString：Redis 命中时应避免打 DB", async () => {
     const cachedKey = buildKey({ key: "sk-cached" });
     getCachedActiveKey.mockResolvedValueOnce(cachedKey);

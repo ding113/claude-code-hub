@@ -181,7 +181,9 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
   // 将新建 key 写入 Vacuum Filter（提升新 key 的即时可用性；失败不影响正确性）
   apiKeyVacuumFilter.noteExistingKey(created.key);
   // Redis 缓存（最佳努力，不影响正确性）
-  cacheActiveKey(created).catch(() => {});
+  // 注意：多实例环境下其它实例可能在 Vacuum Filter 尚未重建时收到新 key 的请求。
+  // 为减少“新 key 立刻使用偶发 401”的窗口，这里尽量等待 key 缓存写入完成（失败则降级）。
+  await cacheActiveKey(created).catch(() => {});
   // 多实例：广播 key 集合变更，触发其它实例重建 Vacuum Filter，避免误拒绝
   if (process.env.ENABLE_RATE_LIMIT === "true" && process.env.REDIS_URL) {
     await publishCacheInvalidation(CHANNEL_API_KEYS_UPDATED);
@@ -426,15 +428,23 @@ export async function deleteKey(id: number): Promise<boolean> {
 }
 
 export async function findActiveKeyByKeyString(keyString: string): Promise<Key | null> {
-  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
-  if (apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true) {
-    return null;
-  }
+  const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
 
   // Redis 缓存命中：避免打 DB
   const cached = await getCachedActiveKey(keyString);
   if (cached) {
+    // 多实例一致性：若 Vacuum Filter 判定缺失但 Redis 命中，说明本机 filter 可能滞后。
+    // 最佳努力将 key 写入本机 filter（不影响正确性，仅提升后续性能）。
+    if (vfSaysMissing) {
+      apiKeyVacuumFilter.noteExistingKey(keyString);
+    }
     return cached;
+  }
+
+  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
+  // 注意：此处必须放在 Redis 读取之后，避免多实例环境中新建 key 的短暂误拒绝窗口。
+  if (vfSaysMissing) {
+    return null;
   }
 
   const [key] = await db
@@ -480,14 +490,17 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
 export async function validateApiKeyAndGetUser(
   keyString: string
 ): Promise<{ user: User; key: Key } | null> {
-  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
-  if (apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true) {
-    return null;
-  }
+  const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
 
   // 默认鉴权链路：Vacuum Filter -> Redis -> DB
   const cachedKey = await getCachedActiveKey(keyString);
   if (cachedKey) {
+    // 多实例一致性：若 Vacuum Filter 判定缺失但 Redis 命中，说明本机 filter 可能滞后。
+    // 最佳努力将 key 写入本机 filter（不影响正确性，仅提升后续性能）。
+    if (vfSaysMissing) {
+      apiKeyVacuumFilter.noteExistingKey(keyString);
+    }
+
     const cachedUser = await getCachedUser(cachedKey.userId);
     if (cachedUser) {
       return { user: cachedUser, key: cachedKey };
@@ -531,6 +544,12 @@ export async function validateApiKeyAndGetUser(
     const user = toUser(userRow);
     cacheUser(user).catch(() => {});
     return { user, key: cachedKey };
+  }
+
+  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
+  // 注意：此处必须放在 Redis 读取之后，避免多实例环境中新建 key 的短暂误拒绝窗口。
+  if (vfSaysMissing) {
+    return null;
   }
 
   const result = await db
