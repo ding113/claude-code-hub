@@ -4,6 +4,36 @@
 
 ---
 
+## v0.5.4 (2026-02-07)
+
+### 新增
+
+- Gemini 供应商支持 Google Search 网络访问偏好设置，可按供应商配置启用/禁用/继承客户端设置 (#721)
+- 供应商设置 UI 中展示 vendor 端点池信息，便于查看和管理端点分布 (#719)
+- 日志页面成本列支持可切换显示/隐藏，改进类型安全性 (#715) [@lingyin](https://github.com/lingyin)
+
+### 优化
+
+- 端点同步操作包裹在数据库事务中，防止并发竞态条件 (#730)
+- SessionTracker 活跃会话 zsets 按环境 TTL 自动清理过期条目 (#718)
+- 请求过滤器和敏感词热重载缓存失效机制优化 (#710) [@miraserver](https://github.com/miraserver)
+- UI 货币显示遵循系统 currencyDisplay 设置 (#717)
+
+### 修复
+
+- 修复标准路径供应商错误回退到旧版 provider url 的问题
+- 修复 /api/actions 认证会话透传问题，解决 getUsers 返回空数据 (#720) [@Longlone](https://github.com/Longlone)
+- 修复 OpenAI chat completion 格式的 usage 提取逻辑 (#716)
+- 修复 Thinking 签名整流器对 "cannot be modified" 错误的检测
+- 修复 auth session storage 导出和测试 mock 类型
+
+### 其他
+
+- 升级 jspdf 依赖
+- 新增大量单元测试覆盖：端点同步事务、会话追踪清理、Gemini Google Search 覆写、热重载单例、货币格式化等
+
+---
+
 ## v0.5.3 (2026-02-03)
 
 ### 新增
