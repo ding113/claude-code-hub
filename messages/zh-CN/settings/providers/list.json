@@ -33,5 +33,11 @@
   "toggleSuccessDesc": "供应商 \"{name}\" 状态已更新",
   "toggleFailed": "状态切换失败",
   "statusEnabled": "启用",
-  "statusDisabled": "禁用"
+  "statusDisabled": "禁用",
+  "actions": "操作",
+  "actionClone": "克隆",
+  "actionResetCircuit": "重置熔断",
+  "actionResetUsage": "重置用量",
+  "actionDelete": "删除",
+  "selectProvider": "选择 {name}"
 }

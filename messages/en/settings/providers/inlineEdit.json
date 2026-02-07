@@ -1,12 +1,27 @@
 {
+  "addGroup": "Add group",
   "cancel": "Cancel",
   "costMultiplierInvalid": "Please enter a non-negative number",
   "costMultiplierLabel": "Cost Multiplier",
+  "createGroup": "Create \"{name}\"",
+  "editGroups": "Edit Groups",
+  "globalPriority": "Global Priority",
+  "groupPriorityLabel": "Per-Group Priority",
+  "groupPriorityPlaceholder": "Use global",
+  "groupSaveError": "Failed to save group changes",
+  "groupValidation": {
+    "empty": "Group name cannot be empty",
+    "noComma": "Group name cannot contain comma",
+    "tooLong": "Group name cannot exceed 50 characters"
+  },
+  "noGroupsAvailable": "No groups available",
   "priorityInvalid": "Please enter an integer >= 0",
   "priorityLabel": "Priority",
   "save": "Save",
+  "saving": "Saving...",
   "saveFailed": "Save failed",
   "saveSuccess": "Saved successfully",
+  "searchGroups": "Search groups...",
   "weightInvalid": "Please enter an integer between 1 and 100",
   "weightLabel": "Weight"
 }

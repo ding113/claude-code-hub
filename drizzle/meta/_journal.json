@@ -442,6 +442,13 @@
       "when": 1770185417918,
       "tag": "0062_aromatic_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1770189816007,
+      "tag": "0063_harsh_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

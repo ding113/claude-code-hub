@@ -33,5 +33,11 @@
   "unknownError": "Unknown error",
   "viewFullKey": "View Complete API Key",
   "viewFullKeyDesc": "Please keep it safe and don't share it with others",
-  "weight": "Weight"
+  "weight": "Weight",
+  "actions": "Actions",
+  "actionClone": "Clone",
+  "actionResetCircuit": "Reset Circuit",
+  "actionResetUsage": "Reset Usage",
+  "actionDelete": "Delete",
+  "selectProvider": "Select {name}"
 }

@@ -1,12 +1,27 @@
 {
+  "addGroup": "新增分組",
   "cancel": "放棄",
   "costMultiplierInvalid": "請輸入大於等於 0 的數字",
   "costMultiplierLabel": "成本倍數",
+  "createGroup": "建立 \"{name}\"",
+  "editGroups": "編輯分組",
+  "globalPriority": "全域優先級",
+  "groupPriorityLabel": "分組優先級",
+  "groupPriorityPlaceholder": "使用全域值",
+  "groupSaveError": "儲存分組失敗",
+  "groupValidation": {
+    "empty": "分組名稱不能為空",
+    "noComma": "分組名稱不能包含逗號",
+    "tooLong": "分組名稱不能超過50字元"
+  },
+  "noGroupsAvailable": "無可用分組",
   "priorityInvalid": "請輸入大於等於 0 的整數",
   "priorityLabel": "優先級",
   "save": "儲存",
+  "saving": "儲存中...",
   "saveFailed": "儲存失敗",
   "saveSuccess": "儲存成功",
+  "searchGroups": "搜尋分組...",
   "weightInvalid": "請輸入 1-100 之間的整數",
   "weightLabel": "權重"
 }

@@ -9,5 +9,8 @@
     "active": "已啟用",
     "all": "所有狀態",
     "inactive": "已停用"
-  }
+  },
+  "mobileFilter": "篩選",
+  "mobileFilterCount": "篩選 ({count})",
+  "resetFilters": "重置篩選"
 }

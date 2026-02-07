@@ -70,6 +70,12 @@
         "label": "供应商分组",
         "placeholder": "例如 premium, economy",
         "desc": "分组标签。从列表选择或输入新名称后按 Enter 创建（最多50字符）。只有 providerGroup 匹配的用户才能使用此供应商。"
+      },
+      "groupPriorities": {
+        "label": "分组优先级覆盖",
+        "desc": "为特定分组设置独立的优先级。留空则使用上方的全局优先级。",
+        "placeholder": "使用全局优先级",
+        "noGroups": "请先设置分组标签，才能配置分组优先级"
       }
     },
     "cacheTtl": {

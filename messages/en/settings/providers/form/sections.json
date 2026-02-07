@@ -296,6 +296,12 @@
         "label": "Provider Group",
         "placeholder": "e.g. premium, economy"
       },
+      "groupPriorities": {
+        "label": "Per-Group Priority",
+        "desc": "Override global priority for specific groups. Leave empty to use the global priority above.",
+        "placeholder": "Use global priority",
+        "noGroups": "Set a group tag first to configure per-group priorities"
+      },
       "priority": {
         "desc": "Lower value = higher priority (0 is highest). The system only chooses from the highest priority tier. Suggested: primary=0, standby=1, emergency=2",
         "label": "Priority",
