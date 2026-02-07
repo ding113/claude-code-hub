@@ -137,9 +137,11 @@ export class RequestFilterEngine {
       try {
         const { eventEmitter } = await import("@/lib/event-emitter");
         const handler = () => {
+          logger.info("[RequestFilterEngine] Received requestFiltersUpdated event, reloading...");
           void this.reload();
         };
         eventEmitter.on("requestFiltersUpdated", handler);
+        logger.info("[RequestFilterEngine] Subscribed to local eventEmitter");
 
         // Store cleanup function
         this.eventEmitterCleanup = () => {
@@ -151,15 +153,20 @@ export class RequestFilterEngine {
           const { CHANNEL_REQUEST_FILTERS_UPDATED, subscribeCacheInvalidation } = await import(
             "@/lib/redis/pubsub"
           );
-          this.redisPubSubCleanup = await subscribeCacheInvalidation(
+          const cleanup = await subscribeCacheInvalidation(
             CHANNEL_REQUEST_FILTERS_UPDATED,
             handler
           );
-        } catch {
-          // 忽略导入错误
+          if (cleanup) {
+            this.redisPubSubCleanup = cleanup;
+            logger.info("[RequestFilterEngine] Subscribed to Redis pub/sub channel");
+          }
+          // If null, pubsub.ts already logged; nothing to do
+        } catch (error) {
+          logger.warn("[RequestFilterEngine] Failed to subscribe to Redis pub/sub", { error });
         }
-      } catch {
-        // 忽略导入错误
+      } catch (error) {
+        logger.warn("[RequestFilterEngine] Failed to setup event listener", { error });
       }
     }
   }
@@ -219,7 +226,7 @@ export class RequestFilterEngine {
         return cached;
       });
 
-      // Разделяем фильтры по типу привязки
+      // Split filters by binding type
       this.globalFilters = cachedFilters
         .filter((f) => f.bindingType === "global" || !f.bindingType)
         .sort((a, b) => a.priority - b.priority || a.id - b.id);
@@ -233,9 +240,10 @@ export class RequestFilterEngine {
 
       this.lastReloadTime = Date.now();
       this.isInitialized = true;
-      logger.info("[RequestFilterEngine] Filters loaded", {
+      logger.info("[RequestFilterEngine] Filters reloaded", {
         globalCount: this.globalFilters.length,
         providerCount: this.providerFilters.length,
+        timestamp: new Date().toISOString(),
       });
     } catch (error) {
       logger.error("[RequestFilterEngine] Failed to reload filters", { error });
@@ -255,7 +263,7 @@ export class RequestFilterEngine {
   }
 
   /**
-   * Применить глобальные фильтры (вызывается ДО выбора провайдера)
+   * Apply global filters (called BEFORE provider selection)
    */
   async applyGlobal(session: ProxySession): Promise<void> {
     // Optimization #4: Early exit if already initialized and empty
@@ -283,7 +291,7 @@ export class RequestFilterEngine {
   }
 
   /**
-   * Применить фильтры для конкретного провайдера (вызывается ПОСЛЕ выбора провайдера)
+   * Apply filters for a specific provider (called AFTER provider selection)
    */
   async applyForProvider(session: ProxySession): Promise<void> {
     // Optimization #4: Early exit if already initialized and empty
@@ -302,7 +310,7 @@ export class RequestFilterEngine {
     }
 
     for (const filter of this.providerFilters) {
-      // Проверяем соответствие привязки
+      // Check binding match
       let matches = false;
 
       if (filter.bindingType === "providers") {
@@ -336,8 +344,8 @@ export class RequestFilterEngine {
   }
 
   /**
-   * @deprecated Используйте applyGlobal() вместо этого метода.
-   * Оставлено для обратной совместимости.
+   * @deprecated Use applyGlobal() instead of this method.
+   * Kept for backward compatibility.
    */
   async apply(session: ProxySession): Promise<void> {
     await this.applyGlobal(session);
@@ -478,4 +486,9 @@ export class RequestFilterEngine {
   }
 }
 
-export const requestFilterEngine = new RequestFilterEngine();
+// Use globalThis to guarantee a single instance across workers
+const g = globalThis as unknown as { __CCH_REQUEST_FILTER_ENGINE__?: RequestFilterEngine };
+if (!g.__CCH_REQUEST_FILTER_ENGINE__) {
+  g.__CCH_REQUEST_FILTER_ENGINE__ = new RequestFilterEngine();
+}
+export const requestFilterEngine = g.__CCH_REQUEST_FILTER_ENGINE__;

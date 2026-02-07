@@ -3,6 +3,7 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { sensitiveWords } from "@/drizzle/schema";
+import { emitSensitiveWordsUpdated } from "@/lib/emit-event";
 
 export interface SensitiveWord {
   id: number;
@@ -70,6 +71,8 @@ export async function createSensitiveWord(data: {
     })
     .returning();
 
+  await emitSensitiveWordsUpdated();
+
   return {
     id: result.id,
     word: result.word,
@@ -106,6 +109,8 @@ export async function updateSensitiveWord(
     return null;
   }
 
+  await emitSensitiveWordsUpdated();
+
   return {
     id: result.id,
     word: result.word,
@@ -123,5 +128,8 @@ export async function updateSensitiveWord(
 export async function deleteSensitiveWord(id: number): Promise<boolean> {
   const result = await db.delete(sensitiveWords).where(eq(sensitiveWords.id, id)).returning();
 
-  return result.length > 0;
+  if (result.length === 0) return false;
+
+  await emitSensitiveWordsUpdated();
+  return true;
 }

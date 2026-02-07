@@ -55,6 +55,12 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
     ),
 ]);
 
+// Gemini (generateContent API) Google Search preference
+// - 'inherit': follow client request (default)
+// - 'enabled': force inject googleSearch tool
+// - 'disabled': force remove googleSearch tool from request
+const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
+
 /**
  * 用户创建数据验证schema
  */
@@ -477,6 +483,7 @@ export const CreateProviderSchema = z
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional().default("inherit"),
     anthropic_thinking_budget_preference:
       ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional().default("inherit"),
+    gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional().default("inherit"),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")
@@ -670,6 +677,7 @@ export const UpdateProviderSchema = z
     codex_parallel_tool_calls_preference: CODEX_PARALLEL_TOOL_CALLS_PREFERENCE.optional(),
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional(),
     anthropic_thinking_budget_preference: ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional(),
+    gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional(),
     max_retry_attempts: z.coerce
       .number()
       .int("重试次数必须是整数")

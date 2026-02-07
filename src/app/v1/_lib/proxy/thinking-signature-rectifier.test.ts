@@ -88,6 +88,22 @@ describe("thinking-signature-rectifier", () => {
         detectThinkingSignatureRectifierTrigger("Signature: EXTRA INPUTS ARE NOT PERMITTED")
       ).toBe("invalid_signature_in_thinking_block");
     });
+
+    test("should detect 'cannot be modified' error", () => {
+      // thinking/redacted_thinking block was modified by client
+      expect(
+        detectThinkingSignatureRectifierTrigger(
+          "`thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response."
+        )
+      ).toBe("invalid_signature_in_thinking_block");
+
+      // JSON format with request id
+      expect(
+        detectThinkingSignatureRectifierTrigger(
+          '{"error":{"type":"<nil>","message":"***.***.content.53: `thinking` or `redacted_thinking` blocks in the latest assistant message cannot be modified. These blocks must remain as they were in the original response. (request id: 20260203160354671091064E4xAq0t0)"},"type":"error"}'
+        )
+      ).toBe("invalid_signature_in_thinking_block");
+    });
   });
 
   describe("rectifyAnthropicRequestMessage", () => {

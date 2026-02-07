@@ -23,6 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import type { CurrencyCode } from "@/lib/utils/currency";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
@@ -189,6 +190,17 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       return result.data;
     },
     enabled: isAdmin,
+  });
+
+  // Fetch system settings for currency display
+  const { data: systemSettings } = useQuery({
+    queryKey: ["system-settings"],
+    queryFn: async () => {
+      const response = await fetch("/api/system-settings");
+      if (!response.ok) throw new Error("Failed to fetch settings");
+      return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
+    },
+    staleTime: 30_000,
   });
 
   const allUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
@@ -691,7 +703,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             onLoadMore={fetchNextPage}
             scrollResetKey={scrollResetKey}
             currentUser={currentUser}
-            currencyCode="USD"
+            currencyCode={systemSettings?.currencyDisplay ?? "USD"}
             onCreateUser={isAdmin ? handleCreateUser : handleCreateKey}
             onAddKey={handleAddKey}
             highlightKeyIds={shouldHighlightKeys ? matchingKeyIds : undefined}

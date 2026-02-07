@@ -6,6 +6,7 @@ import type {
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
+  GeminiGoogleSearchPreference,
   McpPassthroughType,
   ProviderDisplay,
   ProviderType,
@@ -51,6 +52,8 @@ export interface RoutingState {
   // Anthropic-specific
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference;
+  // Gemini-specific
+  geminiGoogleSearchPreference: GeminiGoogleSearchPreference;
 }
 
 export interface RateLimitState {
@@ -125,6 +128,7 @@ export type ProviderFormAction =
   | { type: "SET_CODEX_PARALLEL_TOOL_CALLS"; payload: CodexParallelToolCallsPreference }
   | { type: "SET_ANTHROPIC_MAX_TOKENS"; payload: AnthropicMaxTokensPreference }
   | { type: "SET_ANTHROPIC_THINKING_BUDGET"; payload: AnthropicThinkingBudgetPreference }
+  | { type: "SET_GEMINI_GOOGLE_SEARCH"; payload: GeminiGoogleSearchPreference }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }
   | { type: "SET_LIMIT_DAILY_USD"; payload: number | null }

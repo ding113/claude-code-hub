@@ -8,6 +8,10 @@
       "title": "API 端點",
       "desc": "設定 API 請求的基礎 URL"
     },
+    "endpointPool": {
+      "title": "端點池",
+      "desc": "管理此供應商類型的端點池"
+    },
     "auth": {
       "title": "身份驗證",
       "desc": "提供用於驗證的 API 金鑰"
@@ -234,6 +238,18 @@
         },
         "placeholder": "如 10240",
         "maxOutButton": "拉滿 (32000)"
+      }
+    },
+    "geminiOverrides": {
+      "title": "Gemini 參數覆寫",
+      "desc": "在供應商層級覆寫 Gemini API 請求參數",
+      "googleSearch": {
+        "label": "Google Search 聯網",
+        "options": {
+          "inherit": "不覆寫（遵循客戶端）",
+          "enabled": "強制開啟",
+          "disabled": "強制關閉"
+        }
       }
     },
     "context1m": {

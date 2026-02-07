@@ -1,5 +1,5 @@
 {
-  "id": "05e212c9-aa64-4ae7-9232-12a76cd2b81a",
+  "id": "0bb539db-ea09-4259-9267-2d82d6bfb278",
   "prevId": "ae09efb5-f924-4c72-b41f-baccc1765fcb",
   "version": "7",
   "dialect": "postgresql",
@@ -1916,6 +1916,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "gemini_google_search_preference": {
+          "name": "gemini_google_search_preference",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "tpm": {
           "name": "tpm",
           "type": "integer",
@@ -2477,13 +2483,6 @@
         },
         "enable_codex_session_id_completion": {
           "name": "enable_codex_session_id_completion",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "enable_claude_metadata_user_id_injection": {
-          "name": "enable_claude_metadata_user_id_injection",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,

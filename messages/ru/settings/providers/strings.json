@@ -88,6 +88,7 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "Метка (необязательно)",
   "endpointLabelPlaceholder": "Продакшн",
+  "sortOrder": "Порядок",
   "editEndpoint": "Редактировать эндпоинт",
   "editVendor": "Редактировать вендора",
   "vendorName": "Название вендора",
@@ -102,5 +103,15 @@
   "vendorUpdateSuccess": "Вендор обновлён",
   "vendorUpdateFailed": "Не удалось обновить вендора",
   "vendorDeleteSuccess": "Вендор удалён",
-  "vendorDeleteFailed": "Не удалось удалить вендора"
+  "vendorDeleteFailed": "Не удалось удалить вендора",
+  "endpointStatus": {
+    "viewDetails": "Подробнее ({count})",
+    "activeEndpoints": "Активные эндпоинты",
+    "noEndpoints": "Нет эндпоинтов",
+    "healthy": "Доступен",
+    "unhealthy": "Недоступен",
+    "unknown": "Неизвестно",
+    "circuitOpen": "Цепь открыта",
+    "circuitHalfOpen": "Цепь полуоткрыта"
+  }
 }

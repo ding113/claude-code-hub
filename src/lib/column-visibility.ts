@@ -17,7 +17,8 @@ export type LogsTableColumn =
   | "provider"
   | "tokens"
   | "cache"
-  | "performance";
+  | "performance"
+  | "cost";
 
 /**
  * Default visible columns (all visible by default)
@@ -30,12 +31,13 @@ export const DEFAULT_VISIBLE_COLUMNS: LogsTableColumn[] = [
   "tokens",
   "cache",
   "performance",
+  "cost",
 ];
 
 /**
  * Columns that cannot be hidden (always visible)
  */
-export const ALWAYS_VISIBLE_COLUMNS = ["time", "model", "cost", "status"] as const;
+export const ALWAYS_VISIBLE_COLUMNS = ["time", "model", "status"] as const;
 
 /**
  * Get the storage key for a specific user and table

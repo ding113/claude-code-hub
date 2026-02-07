@@ -4,6 +4,7 @@ import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
+import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
@@ -11,22 +12,15 @@ import { toProvider } from "./_shared/transformers";
 import {
   ensureProviderEndpointExistsForUrl,
   getOrCreateProviderVendorIdFromUrls,
+  syncProviderEndpointOnProviderEdit,
   tryDeleteProviderVendorIfEmpty,
 } from "./provider-endpoints";
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
-  const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
-    providerUrl: providerData.url,
-    websiteUrl: providerData.website_url ?? null,
-    faviconUrl: providerData.favicon_url ?? null,
-    displayName: providerData.name,
-  });
-
   const dbData = {
     name: providerData.name,
     url: providerData.url,
     key: providerData.key,
-    providerVendorId,
     isEnabled: providerData.is_enabled,
     weight: providerData.weight,
     priority: providerData.priority,
@@ -71,85 +65,100 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexParallelToolCallsPreference: providerData.codex_parallel_tool_calls_preference ?? null,
     anthropicMaxTokensPreference: providerData.anthropic_max_tokens_preference ?? null,
     anthropicThinkingBudgetPreference: providerData.anthropic_thinking_budget_preference ?? null,
+    geminiGoogleSearchPreference: providerData.gemini_google_search_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
     rpd: providerData.rpd,
     cc: providerData.cc,
   };
 
-  const [provider] = await db.insert(providers).values(dbData).returning({
-    id: providers.id,
-    name: providers.name,
-    url: providers.url,
-    key: providers.key,
-    providerVendorId: providers.providerVendorId,
-    isEnabled: providers.isEnabled,
-    weight: providers.weight,
-    priority: providers.priority,
-    costMultiplier: providers.costMultiplier,
-    groupTag: providers.groupTag,
-    providerType: providers.providerType,
-    preserveClientIp: providers.preserveClientIp,
-    modelRedirects: providers.modelRedirects,
-    allowedModels: providers.allowedModels,
-    mcpPassthroughType: providers.mcpPassthroughType,
-    mcpPassthroughUrl: providers.mcpPassthroughUrl,
-    limit5hUsd: providers.limit5hUsd,
-    limitDailyUsd: providers.limitDailyUsd,
-    dailyResetMode: providers.dailyResetMode,
-    dailyResetTime: providers.dailyResetTime,
-    limitWeeklyUsd: providers.limitWeeklyUsd,
-    limitMonthlyUsd: providers.limitMonthlyUsd,
-    limitTotalUsd: providers.limitTotalUsd,
-    totalCostResetAt: providers.totalCostResetAt,
-    limitConcurrentSessions: providers.limitConcurrentSessions,
-    maxRetryAttempts: providers.maxRetryAttempts,
-    circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
-    circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
-    circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
-    proxyUrl: providers.proxyUrl,
-    proxyFallbackToDirect: providers.proxyFallbackToDirect,
-    firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-    streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
-    requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
-    websiteUrl: providers.websiteUrl,
-    faviconUrl: providers.faviconUrl,
-    cacheTtlPreference: providers.cacheTtlPreference,
-    context1mPreference: providers.context1mPreference,
-    codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
-    codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
-    codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
-    codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
-    anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
-    anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
-    tpm: providers.tpm,
-    rpm: providers.rpm,
-    rpd: providers.rpd,
-    cc: providers.cc,
-    createdAt: providers.createdAt,
-    updatedAt: providers.updatedAt,
-    deletedAt: providers.deletedAt,
-  });
+  return db.transaction(async (tx) => {
+    const providerVendorId = await getOrCreateProviderVendorIdFromUrls(
+      {
+        providerUrl: providerData.url,
+        websiteUrl: providerData.website_url ?? null,
+        faviconUrl: providerData.favicon_url ?? null,
+        displayName: providerData.name,
+      },
+      { tx }
+    );
 
-  const created = toProvider(provider);
-
-  if (created.providerVendorId) {
-    try {
-      await ensureProviderEndpointExistsForUrl({
-        vendorId: created.providerVendorId,
-        providerType: created.providerType,
-        url: created.url,
-      });
-    } catch (error) {
-      logger.warn("[Provider] Failed to seed provider endpoint from provider.url", {
+    const [provider] = await tx
+      .insert(providers)
+      .values({
+        ...dbData,
         providerVendorId,
-        providerType: created.providerType,
-        error: error instanceof Error ? error.message : String(error),
+      })
+      .returning({
+        id: providers.id,
+        name: providers.name,
+        url: providers.url,
+        key: providers.key,
+        providerVendorId: providers.providerVendorId,
+        isEnabled: providers.isEnabled,
+        weight: providers.weight,
+        priority: providers.priority,
+        costMultiplier: providers.costMultiplier,
+        groupTag: providers.groupTag,
+        providerType: providers.providerType,
+        preserveClientIp: providers.preserveClientIp,
+        modelRedirects: providers.modelRedirects,
+        allowedModels: providers.allowedModels,
+        mcpPassthroughType: providers.mcpPassthroughType,
+        mcpPassthroughUrl: providers.mcpPassthroughUrl,
+        limit5hUsd: providers.limit5hUsd,
+        limitDailyUsd: providers.limitDailyUsd,
+        dailyResetMode: providers.dailyResetMode,
+        dailyResetTime: providers.dailyResetTime,
+        limitWeeklyUsd: providers.limitWeeklyUsd,
+        limitMonthlyUsd: providers.limitMonthlyUsd,
+        limitTotalUsd: providers.limitTotalUsd,
+        totalCostResetAt: providers.totalCostResetAt,
+        limitConcurrentSessions: providers.limitConcurrentSessions,
+        maxRetryAttempts: providers.maxRetryAttempts,
+        circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
+        circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
+        circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+        proxyUrl: providers.proxyUrl,
+        proxyFallbackToDirect: providers.proxyFallbackToDirect,
+        firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+        streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+        requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
+        websiteUrl: providers.websiteUrl,
+        faviconUrl: providers.faviconUrl,
+        cacheTtlPreference: providers.cacheTtlPreference,
+        context1mPreference: providers.context1mPreference,
+        codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
+        codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
+        codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
+        codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+        anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
+        anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+        geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+        tpm: providers.tpm,
+        rpm: providers.rpm,
+        rpd: providers.rpd,
+        cc: providers.cc,
+        createdAt: providers.createdAt,
+        updatedAt: providers.updatedAt,
+        deletedAt: providers.deletedAt,
       });
-    }
-  }
 
-  return created;
+    const created = toProvider(provider);
+
+    if (created.providerVendorId) {
+      await ensureProviderEndpointExistsForUrl(
+        {
+          vendorId: created.providerVendorId,
+          providerType: created.providerType,
+          url: created.url,
+        },
+        { tx }
+      );
+    }
+
+    return created;
+  });
 }
 
 export async function findProviderList(
@@ -202,6 +211,7 @@ export async function findProviderList(
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -278,6 +288,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -358,6 +369,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
       rpd: providers.rpd,
@@ -381,8 +393,7 @@ export async function updateProvider(
     return findProviderById(id);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const dbData: any = {
+  const dbData: Partial<typeof providers.$inferInsert> = {
     updatedAt: new Date(),
   };
 
@@ -466,131 +477,187 @@ export async function updateProvider(
   if (providerData.anthropic_thinking_budget_preference !== undefined)
     dbData.anthropicThinkingBudgetPreference =
       providerData.anthropic_thinking_budget_preference ?? null;
+  if (providerData.gemini_google_search_preference !== undefined)
+    dbData.geminiGoogleSearchPreference = providerData.gemini_google_search_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
   if (providerData.rpm !== undefined) dbData.rpm = providerData.rpm;
   if (providerData.rpd !== undefined) dbData.rpd = providerData.rpd;
   if (providerData.cc !== undefined) dbData.cc = providerData.cc;
 
-  let previousVendorId: number | null = null;
-  if (providerData.url !== undefined || providerData.website_url !== undefined) {
-    const [current] = await db
-      .select({
-        url: providers.url,
-        websiteUrl: providers.websiteUrl,
-        faviconUrl: providers.faviconUrl,
-        name: providers.name,
-        providerVendorId: providers.providerVendorId,
-      })
-      .from(providers)
-      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
-      .limit(1);
+  const shouldRefreshVendor =
+    providerData.url !== undefined || providerData.website_url !== undefined;
+  const shouldSyncEndpoint = shouldRefreshVendor || providerData.provider_type !== undefined;
 
-    if (current) {
-      previousVendorId = current.providerVendorId;
-      const providerVendorId = await getOrCreateProviderVendorIdFromUrls({
-        providerUrl: providerData.url ?? current.url,
-        websiteUrl: providerData.website_url ?? current.websiteUrl,
-        faviconUrl: providerData.favicon_url ?? current.faviconUrl,
-        displayName: providerData.name ?? current.name,
-      });
-      dbData.providerVendorId = providerVendorId;
-    }
-  }
+  const updateResult = await db.transaction(async (tx) => {
+    let previousVendorId: number | null = null;
+    let previousUrl: string | null = null;
+    let previousProviderType: Provider["providerType"] | null = null;
+    let endpointCircuitResetId: number | null = null;
 
-  const [provider] = await db
-    .update(providers)
-    .set(dbData)
-    .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
-    .returning({
-      id: providers.id,
-      name: providers.name,
-      url: providers.url,
-      key: providers.key,
-      providerVendorId: providers.providerVendorId,
-      isEnabled: providers.isEnabled,
-      weight: providers.weight,
-      priority: providers.priority,
-      costMultiplier: providers.costMultiplier,
-      groupTag: providers.groupTag,
-      providerType: providers.providerType,
-      preserveClientIp: providers.preserveClientIp,
-      modelRedirects: providers.modelRedirects,
-      allowedModels: providers.allowedModels,
-      mcpPassthroughType: providers.mcpPassthroughType,
-      mcpPassthroughUrl: providers.mcpPassthroughUrl,
-      limit5hUsd: providers.limit5hUsd,
-      limitDailyUsd: providers.limitDailyUsd,
-      dailyResetMode: providers.dailyResetMode,
-      dailyResetTime: providers.dailyResetTime,
-      limitWeeklyUsd: providers.limitWeeklyUsd,
-      limitMonthlyUsd: providers.limitMonthlyUsd,
-      limitTotalUsd: providers.limitTotalUsd,
-      totalCostResetAt: providers.totalCostResetAt,
-      limitConcurrentSessions: providers.limitConcurrentSessions,
-      maxRetryAttempts: providers.maxRetryAttempts,
-      circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
-      circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
-      circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
-      proxyUrl: providers.proxyUrl,
-      proxyFallbackToDirect: providers.proxyFallbackToDirect,
-      firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
-      streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
-      requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
-      websiteUrl: providers.websiteUrl,
-      faviconUrl: providers.faviconUrl,
-      cacheTtlPreference: providers.cacheTtlPreference,
-      context1mPreference: providers.context1mPreference,
-      codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
-      codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
-      codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
-      codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
-      anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
-      anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
-      tpm: providers.tpm,
-      rpm: providers.rpm,
-      rpd: providers.rpd,
-      cc: providers.cc,
-      createdAt: providers.createdAt,
-      updatedAt: providers.updatedAt,
-      deletedAt: providers.deletedAt,
-    });
+    if (shouldSyncEndpoint) {
+      const [current] = await tx
+        .select({
+          url: providers.url,
+          websiteUrl: providers.websiteUrl,
+          faviconUrl: providers.faviconUrl,
+          name: providers.name,
+          providerVendorId: providers.providerVendorId,
+          providerType: providers.providerType,
+        })
+        .from(providers)
+        .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+        .limit(1);
 
-  if (!provider) return null;
-  const transformed = toProvider(provider);
+      if (current) {
+        previousVendorId = current.providerVendorId;
+        previousUrl = current.url;
+        previousProviderType = current.providerType;
 
-  if (
-    providerData.url !== undefined ||
-    providerData.provider_type !== undefined ||
-    providerData.website_url !== undefined
-  ) {
-    if (
-      transformed.providerVendorId &&
-      (providerData.url !== undefined ||
-        transformed.providerVendorId !== previousVendorId ||
-        previousVendorId === null)
-    ) {
-      try {
-        await ensureProviderEndpointExistsForUrl({
-          vendorId: transformed.providerVendorId,
-          providerType: transformed.providerType,
-          url: transformed.url,
-        });
-      } catch (error) {
-        logger.warn("[Provider] Failed to seed provider endpoint after provider update", {
-          providerId: transformed.id,
-          providerVendorId: transformed.providerVendorId,
-          providerType: transformed.providerType,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        if (shouldRefreshVendor) {
+          const providerVendorId = await getOrCreateProviderVendorIdFromUrls(
+            {
+              providerUrl: providerData.url ?? current.url,
+              websiteUrl: providerData.website_url ?? current.websiteUrl,
+              faviconUrl: providerData.favicon_url ?? current.faviconUrl,
+              displayName: providerData.name ?? current.name,
+            },
+            { tx }
+          );
+          dbData.providerVendorId = providerVendorId;
+        }
       }
     }
+
+    const [provider] = await tx
+      .update(providers)
+      .set(dbData)
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .returning({
+        id: providers.id,
+        name: providers.name,
+        url: providers.url,
+        key: providers.key,
+        providerVendorId: providers.providerVendorId,
+        isEnabled: providers.isEnabled,
+        weight: providers.weight,
+        priority: providers.priority,
+        costMultiplier: providers.costMultiplier,
+        groupTag: providers.groupTag,
+        providerType: providers.providerType,
+        preserveClientIp: providers.preserveClientIp,
+        modelRedirects: providers.modelRedirects,
+        allowedModels: providers.allowedModels,
+        mcpPassthroughType: providers.mcpPassthroughType,
+        mcpPassthroughUrl: providers.mcpPassthroughUrl,
+        limit5hUsd: providers.limit5hUsd,
+        limitDailyUsd: providers.limitDailyUsd,
+        dailyResetMode: providers.dailyResetMode,
+        dailyResetTime: providers.dailyResetTime,
+        limitWeeklyUsd: providers.limitWeeklyUsd,
+        limitMonthlyUsd: providers.limitMonthlyUsd,
+        limitTotalUsd: providers.limitTotalUsd,
+        totalCostResetAt: providers.totalCostResetAt,
+        limitConcurrentSessions: providers.limitConcurrentSessions,
+        maxRetryAttempts: providers.maxRetryAttempts,
+        circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
+        circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
+        circuitBreakerHalfOpenSuccessThreshold: providers.circuitBreakerHalfOpenSuccessThreshold,
+        proxyUrl: providers.proxyUrl,
+        proxyFallbackToDirect: providers.proxyFallbackToDirect,
+        firstByteTimeoutStreamingMs: providers.firstByteTimeoutStreamingMs,
+        streamingIdleTimeoutMs: providers.streamingIdleTimeoutMs,
+        requestTimeoutNonStreamingMs: providers.requestTimeoutNonStreamingMs,
+        websiteUrl: providers.websiteUrl,
+        faviconUrl: providers.faviconUrl,
+        cacheTtlPreference: providers.cacheTtlPreference,
+        context1mPreference: providers.context1mPreference,
+        codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
+        codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
+        codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
+        codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+        anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
+        anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+        geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
+        tpm: providers.tpm,
+        rpm: providers.rpm,
+        rpd: providers.rpd,
+        cc: providers.cc,
+        createdAt: providers.createdAt,
+        updatedAt: providers.updatedAt,
+        deletedAt: providers.deletedAt,
+      });
+
+    if (!provider) return null;
+    const transformed = toProvider(provider);
+
+    if (shouldSyncEndpoint && transformed.providerVendorId) {
+      if (previousUrl && previousProviderType) {
+        const syncResult = await syncProviderEndpointOnProviderEdit(
+          {
+            providerId: transformed.id,
+            vendorId: transformed.providerVendorId,
+            providerType: transformed.providerType,
+            previousVendorId,
+            previousProviderType,
+            previousUrl,
+            nextUrl: transformed.url,
+            keepPreviousWhenReferenced: true,
+          },
+          { tx }
+        );
+
+        endpointCircuitResetId = syncResult.resetCircuitEndpointId ?? null;
+      } else {
+        await ensureProviderEndpointExistsForUrl(
+          {
+            vendorId: transformed.providerVendorId,
+            providerType: transformed.providerType,
+            url: transformed.url,
+          },
+          { tx }
+        );
+      }
+    }
+
+    return {
+      provider: transformed,
+      previousVendorIdToCleanup:
+        previousVendorId && transformed.providerVendorId !== previousVendorId
+          ? previousVendorId
+          : null,
+      endpointCircuitResetId,
+    };
+  });
+
+  if (!updateResult) {
+    return null;
   }
 
-  if (previousVendorId && transformed.providerVendorId !== previousVendorId) {
-    await tryDeleteProviderVendorIfEmpty(previousVendorId);
+  if (updateResult.endpointCircuitResetId != null) {
+    try {
+      await resetEndpointCircuit(updateResult.endpointCircuitResetId);
+    } catch (error) {
+      logger.warn("updateProvider:reset_endpoint_circuit_failed", {
+        providerId: updateResult.provider.id,
+        endpointId: updateResult.endpointCircuitResetId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
-  return transformed;
+  if (updateResult.previousVendorIdToCleanup) {
+    try {
+      await tryDeleteProviderVendorIfEmpty(updateResult.previousVendorIdToCleanup);
+    } catch (error) {
+      logger.warn("updateProvider:vendor_cleanup_failed", {
+        providerId: updateResult.provider.id,
+        previousVendorId: updateResult.previousVendorIdToCleanup,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return updateResult.provider;
 }
 
 export async function updateProviderPrioritiesBatch(

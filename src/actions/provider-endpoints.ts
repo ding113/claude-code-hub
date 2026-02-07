@@ -333,7 +333,15 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
     }
 
     // Auto cleanup: if the vendor has no active providers/endpoints, delete it as well.
-    await tryDeleteProviderVendorIfEmpty(endpoint.vendorId);
+    try {
+      await tryDeleteProviderVendorIfEmpty(endpoint.vendorId);
+    } catch (error) {
+      logger.warn("removeProviderEndpoint:vendor_cleanup_failed", {
+        endpointId: parsed.data.endpointId,
+        vendorId: endpoint.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
 
     return { ok: true };
   } catch (error) {
