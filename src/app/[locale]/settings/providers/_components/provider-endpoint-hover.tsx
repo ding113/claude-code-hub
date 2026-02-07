@@ -121,9 +121,7 @@ function EndpointRow({ endpoint, isOpen }: { endpoint: ProviderEndpoint; isOpen:
       </div>
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium truncate text-foreground/90">
-            {endpoint.url}
-          </span>
+          <span className="text-xs font-medium truncate text-foreground/90">{endpoint.url}</span>
           {endpoint.lastProbeLatencyMs != null && (
             <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
               {endpoint.lastProbeLatencyMs}ms
