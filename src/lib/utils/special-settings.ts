@@ -75,6 +75,15 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.source,
         setting.sessionId,
       ]);
+    case "claude_metadata_user_id_injection":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.action,
+        setting.reason,
+        setting.keyId,
+        setting.sessionId,
+      ]);
     case "thinking_budget_rectifier":
       return JSON.stringify([
         setting.type,

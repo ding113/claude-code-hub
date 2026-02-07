@@ -152,6 +152,7 @@ function createFallbackSettings(): SystemSettings {
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
     enableCodexSessionIdCompletion: true,
+    enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
     responseFixerConfig: {
       fixTruncatedJson: true,
@@ -194,6 +195,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
+      enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: systemSettings.enableResponseFixer,
       responseFixerConfig: systemSettings.responseFixerConfig,
       quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
@@ -352,6 +354,11 @@ export async function updateSystemSettings(
       updates.enableCodexSessionIdCompletion = payload.enableCodexSessionIdCompletion;
     }
 
+    // Claude metadata.user_id 注入开关（如果提供）
+    if (payload.enableClaudeMetadataUserIdInjection !== undefined) {
+      updates.enableClaudeMetadataUserIdInjection = payload.enableClaudeMetadataUserIdInjection;
+    }
+
     // 响应整流开关（如果提供）
     if (payload.enableResponseFixer !== undefined) {
       updates.enableResponseFixer = payload.enableResponseFixer;
@@ -407,6 +414,7 @@ export async function updateSystemSettings(
         enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
         enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
+        enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
         enableResponseFixer: systemSettings.enableResponseFixer,
         responseFixerConfig: systemSettings.responseFixerConfig,
         quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,

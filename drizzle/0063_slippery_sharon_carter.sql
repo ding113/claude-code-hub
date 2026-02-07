@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_claude_metadata_user_id_injection" boolean DEFAULT true NOT NULL;

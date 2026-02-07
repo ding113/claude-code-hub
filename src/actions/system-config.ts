@@ -59,6 +59,7 @@ export async function saveSystemSettings(formData: {
   enableThinkingSignatureRectifier?: boolean;
   enableThinkingBudgetRectifier?: boolean;
   enableCodexSessionIdCompletion?: boolean;
+  enableClaudeMetadataUserIdInjection?: boolean;
   enableResponseFixer?: boolean;
   responseFixerConfig?: Partial<ResponseFixerConfig>;
   // Quota lease settings
@@ -93,6 +94,7 @@ export async function saveSystemSettings(formData: {
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: validated.enableThinkingBudgetRectifier,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
+      enableClaudeMetadataUserIdInjection: validated.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: validated.enableResponseFixer,
       responseFixerConfig: validated.responseFixerConfig,
       quotaDbRefreshIntervalSeconds: validated.quotaDbRefreshIntervalSeconds,

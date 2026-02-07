@@ -193,6 +193,8 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
+    enableClaudeMetadataUserIdInjection:
+      dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
     responseFixerConfig: {
       ...defaultResponseFixerConfig,
