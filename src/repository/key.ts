@@ -3,6 +3,14 @@
 import { and, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import {
+  cacheActiveKey,
+  cacheAuthResult,
+  cacheUser,
+  getCachedActiveKey,
+  getCachedUser,
+  invalidateCachedKey,
+} from "@/lib/security/api-key-auth-cache";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
 import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
@@ -162,6 +170,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitTotalUsd: keys.limitTotalUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
     providerGroup: keys.providerGroup,
+    cacheTtlPreference: keys.cacheTtlPreference,
     createdAt: keys.createdAt,
     updatedAt: keys.updatedAt,
     deletedAt: keys.deletedAt,
@@ -170,6 +179,8 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
   const created = toKey(key);
   // 将新建 key 写入 Vacuum Filter（提升新 key 的即时可用性；失败不影响正确性）
   apiKeyVacuumFilter.noteExistingKey(created.key);
+  // Redis 缓存（最佳努力，不影响正确性）
+  cacheActiveKey(created).catch(() => {});
   return created;
 }
 
@@ -236,7 +247,10 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
     });
 
   if (!key) return null;
-  return toKey(key);
+  const updated = toKey(key);
+  // 变更 key 后，更新/失效 Redis 缓存（最佳努力，不影响正确性）
+  cacheActiveKey(updated).catch(() => {});
+  return updated;
 }
 
 export async function findActiveKeyByUserIdAndName(
@@ -398,8 +412,11 @@ export async function deleteKey(id: number): Promise<boolean> {
     .update(keys)
     .set({ deletedAt: new Date() })
     .where(and(eq(keys.id, id), isNull(keys.deletedAt)))
-    .returning({ id: keys.id });
+    .returning({ id: keys.id, key: keys.key });
 
+  if (result.length > 0) {
+    invalidateCachedKey(result[0].key).catch(() => {});
+  }
   return result.length > 0;
 }
 
@@ -407,6 +424,12 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
   // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
   if (apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true) {
     return null;
+  }
+
+  // Redis 缓存命中：避免打 DB
+  const cached = await getCachedActiveKey(keyString);
+  if (cached) {
+    return cached;
   }
 
   const [key] = await db
@@ -427,6 +450,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -442,7 +466,9 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
     );
 
   if (!key) return null;
-  return toKey(key);
+  const active = toKey(key);
+  cacheActiveKey(active).catch(() => {});
+  return active;
 }
 
 // 验证 API Key 并返回用户信息
@@ -452,6 +478,54 @@ export async function validateApiKeyAndGetUser(
   // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
   if (apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true) {
     return null;
+  }
+
+  // 默认鉴权链路：Vacuum Filter -> Redis -> DB
+  const cachedKey = await getCachedActiveKey(keyString);
+  if (cachedKey) {
+    const cachedUser = await getCachedUser(cachedKey.userId);
+    if (cachedUser) {
+      return { user: cachedUser, key: cachedKey };
+    }
+
+    // user 缓存 miss：仅补齐 user（相较 join 更轻量）
+    const [userRow] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        description: users.description,
+        role: users.role,
+        rpm: users.rpmLimit,
+        dailyQuota: users.dailyLimitUsd,
+        providerGroup: users.providerGroup,
+        tags: users.tags,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        deletedAt: users.deletedAt,
+        limit5hUsd: users.limit5hUsd,
+        limitWeeklyUsd: users.limitWeeklyUsd,
+        limitMonthlyUsd: users.limitMonthlyUsd,
+        limitTotalUsd: users.limitTotalUsd,
+        limitConcurrentSessions: users.limitConcurrentSessions,
+        dailyResetMode: users.dailyResetMode,
+        dailyResetTime: users.dailyResetTime,
+        isEnabled: users.isEnabled,
+        expiresAt: users.expiresAt,
+        allowedClients: users.allowedClients,
+        allowedModels: users.allowedModels,
+      })
+      .from(users)
+      .where(and(eq(users.id, cachedKey.userId), isNull(users.deletedAt)));
+
+    if (!userRow) {
+      // join 语义：用户被删除则 key 无效；顺带清理 key 缓存避免重复 miss
+      invalidateCachedKey(keyString).catch(() => {});
+      return null;
+    }
+
+    const user = toUser(userRow);
+    cacheUser(user).catch(() => {});
+    return { user, key: cachedKey };
   }
 
   const result = await db
@@ -565,6 +639,8 @@ export async function validateApiKeyAndGetUser(
     deletedAt: row.keyDeletedAt,
   });
 
+  // 最佳努力：写入 Redis 缓存（不影响正确性）
+  cacheAuthResult(keyString, { user, key }).catch(() => {});
   return { user, key };
 }
 

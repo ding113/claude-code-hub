@@ -3,6 +3,7 @@
 import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users } from "@/drizzle/schema";
+import { cacheUser, invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
 
@@ -86,7 +87,9 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     allowedModels: users.allowedModels,
   });
 
-  return toUser(user);
+  const created = toUser(user);
+  cacheUser(created).catch(() => {});
+  return created;
 }
 
 export async function findUserList(limit: number = 50, offset: number = 0): Promise<User[]> {
@@ -432,7 +435,9 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
 
   if (!user) return null;
 
-  return toUser(user);
+  const updated = toUser(user);
+  cacheUser(updated).catch(() => {});
+  return updated;
 }
 
 export async function deleteUser(id: number): Promise<boolean> {
@@ -442,6 +447,9 @@ export async function deleteUser(id: number): Promise<boolean> {
     .where(and(eq(users.id, id), isNull(users.deletedAt)))
     .returning({ id: users.id });
 
+  if (result.length > 0) {
+    invalidateCachedUser(id).catch(() => {});
+  }
   return result.length > 0;
 }
 
@@ -456,6 +464,7 @@ export async function markUserExpired(userId: number): Promise<boolean> {
     .where(and(eq(users.id, userId), eq(users.isEnabled, true), isNull(users.deletedAt)))
     .returning({ id: users.id });
 
+  invalidateCachedUser(userId).catch(() => {});
   return result.length > 0;
 }
 
