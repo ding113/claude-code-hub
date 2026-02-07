@@ -300,5 +300,8 @@ jobs:
             | Changing unrelated code | Scope creep, new bugs | Only touch what was mentioned |
             | Defensive responses | Damages collaboration | Thank reviewer, address concern |
 
-          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Grep,Glob,Bash(*)"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 999
+            --allowedTools Read,Write,Edit,Grep,Glob,Bash(*)
           use_commit_signing: false

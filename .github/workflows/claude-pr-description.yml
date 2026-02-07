@@ -361,5 +361,8 @@ jobs:
             | Missing obvious Issue links | Loses traceability | Search thoroughly before writing |
             | Over-long descriptions | Wastes reviewer time | Be concise and structured |
 
-          claude_args: "--max-turns 999 --allowedTools Read,Bash(*),Grep,Glob"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 999
+            --allowedTools Read,Bash(*),Grep,Glob
           use_commit_signing: false

@@ -166,5 +166,8 @@ jobs:
             6. **DO** verify labels exist before trying to apply them
             7. **DO** prefer specific labels over generic ones
 
-          claude_args: "--max-turns 999 --allowedTools Bash(*)"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 999
+            --allowedTools Bash(*)
           use_commit_signing: false

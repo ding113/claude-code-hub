@@ -363,5 +363,8 @@ jobs:
             | Promising features | Creates false expectations | Only mention what exists in code |
             | Mentioning triggers/commands | Clutters response, not their concern | Focus on answering their question |
 
-          claude_args: "--max-turns 999 --allowedTools Read,Bash(*),Grep,Glob"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 999
+            --allowedTools Read,Bash(*),Grep,Glob
           use_commit_signing: false

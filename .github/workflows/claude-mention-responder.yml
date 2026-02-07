@@ -233,5 +233,8 @@ jobs:
             - If making code changes, explain what you changed and why
             - If unsure, ask for clarification rather than guessing
 
-          claude_args: "--max-turns 999 --allowedTools Read,Write,Edit,Grep,Glob,Bash(*)"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 999
+            --allowedTools Read,Write,Edit,Grep,Glob,Bash(*)
           use_commit_signing: false

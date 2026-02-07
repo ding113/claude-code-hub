@@ -139,5 +139,8 @@ jobs:
             - Issues that received "oncall" label (with numbers and brief reasons)
             - Close calls that almost qualified but didn't
 
-          claude_args: "--max-turns 999 --allowedTools Bash(*)"
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 999
+            --allowedTools Bash(*)
           use_commit_signing: false
