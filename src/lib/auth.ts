@@ -162,8 +162,9 @@ export async function getSession(options?: {
   // 优先读取 adapter 注入的请求级会话（适配 /api/actions 等非 Next 原生上下文场景）
   const scoped = getScopedAuthContext();
   if (scoped) {
-    // 关键：scoped 会话必须遵循其“创建时语义”，并允许内部显式降权校验
-    const effectiveAllowReadOnlyAccess = options?.allowReadOnlyAccess ?? scoped.allowReadOnlyAccess;
+    // 关键：scoped 会话必须遵循其"创建时语义"，仅允许内部显式降权（不允许提权）
+    const effectiveAllowReadOnlyAccess =
+      scoped.allowReadOnlyAccess && (options?.allowReadOnlyAccess ?? true);
     if (!effectiveAllowReadOnlyAccess && !scoped.session.key.canLoginWebUi) {
       return null;
     }

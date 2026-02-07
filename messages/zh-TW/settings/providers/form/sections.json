@@ -8,6 +8,10 @@
       "title": "API 端點",
       "desc": "設定 API 請求的基礎 URL"
     },
+    "endpointPool": {
+      "title": "端點池",
+      "desc": "管理此供應商類型的端點池"
+    },
     "auth": {
       "title": "身份驗證",
       "desc": "提供用於驗證的 API 金鑰"

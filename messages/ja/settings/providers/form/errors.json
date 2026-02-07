@@ -2,7 +2,10 @@
   "addFailed": "プロバイダーの追加に失敗しました",
   "deleteFailed": "プロバイダーの削除に失敗しました",
   "groupTagTooLong": "プロバイダーグループが長すぎます（合計{max}文字まで）",
+  "keyRequired": "API キーを入力してください",
+  "nameRequired": "プロバイダー名を入力してください",
   "invalidUrl": "有効な API アドレスを入力してください",
+  "urlRequired": "プロバイダー URL を入力してください",
   "invalidWebsiteUrl": "有効な公式サイト URL を入力してください",
   "updateFailed": "プロバイダーの更新に失敗しました"
 }

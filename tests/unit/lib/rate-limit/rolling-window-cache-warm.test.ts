@@ -31,6 +31,10 @@ vi.mock("@/lib/redis", () => ({
   getRedisClient: () => redisClient,
 }));
 
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn(async () => "Asia/Shanghai"),
+}));
+
 const statisticsMock = {
   sumKeyTotalCost: vi.fn(async () => 0),
   sumUserCostToday: vi.fn(async () => 0),

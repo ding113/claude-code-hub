@@ -1,3 +1,4 @@
+import { logger } from "@/lib/logger";
 import type { GeminiGoogleSearchPreference, ProviderType } from "@/types/provider";
 import type { GeminiGoogleSearchOverrideSpecialSetting } from "@/types/special-settings";
 
@@ -117,7 +118,10 @@ export function applyGeminiGoogleSearchOverrideWithAudit(
   } else if (preference === "disabled") {
     action = hadGoogleSearch ? "remove" : "passthrough";
   } else {
-    // Unreachable with current validation, but handle gracefully
+    logger.warn("applyGeminiGoogleSearchOverrideWithAudit: unknown preference value", {
+      preference,
+      providerId: provider.id,
+    });
     return { request, audit: null };
   }
 

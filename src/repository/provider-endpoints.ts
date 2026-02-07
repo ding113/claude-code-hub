@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import {
   providerEndpointProbeLogs,
@@ -8,6 +8,7 @@ import {
   providers,
   providerVendors,
 } from "@/drizzle/schema";
+import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import type {
   ProviderEndpoint,
@@ -16,6 +17,41 @@ import type {
   ProviderType,
   ProviderVendor,
 } from "@/types/provider";
+
+type TransactionExecutor = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type QueryExecutor = Pick<
+  TransactionExecutor,
+  "select" | "insert" | "update" | "delete" | "execute"
+>;
+
+function isUniqueViolationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    cause?: { code?: string; message?: string };
+  };
+
+  if (candidate.code === "23505") {
+    return true;
+  }
+
+  if (typeof candidate.message === "string" && candidate.message.includes("duplicate key value")) {
+    return true;
+  }
+
+  if (candidate.cause?.code === "23505") {
+    return true;
+  }
+
+  return (
+    typeof candidate.cause?.message === "string" &&
+    candidate.cause.message.includes("duplicate key value")
+  );
+}
 
 function toDate(value: unknown): Date {
   if (value instanceof Date) return value;
@@ -252,12 +288,17 @@ export async function deleteProviderEndpointProbeLogsBeforeDateBatch(input: {
   return typeof rowCount === "number" ? rowCount : 0;
 }
 
-export async function getOrCreateProviderVendorIdFromUrls(input: {
-  providerUrl: string;
-  websiteUrl?: string | null;
-  faviconUrl?: string | null;
-  displayName?: string | null;
-}): Promise<number> {
+export async function getOrCreateProviderVendorIdFromUrls(
+  input: {
+    providerUrl: string;
+    websiteUrl?: string | null;
+    faviconUrl?: string | null;
+    displayName?: string | null;
+  },
+  options?: { tx?: QueryExecutor }
+): Promise<number> {
+  const executor = options?.tx ?? db;
+
   // Use new computeVendorKey for consistent vendor key calculation
   const websiteDomain = await computeVendorKey({
     providerUrl: input.providerUrl,
@@ -267,7 +308,7 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
     throw new Error("Failed to resolve provider vendor domain");
   }
 
-  const existing = await db
+  const existing = await executor
     .select({ id: providerVendors.id })
     .from(providerVendors)
     .where(eq(providerVendors.websiteDomain, websiteDomain))
@@ -277,7 +318,7 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
   }
 
   const now = new Date();
-  const inserted = await db
+  const inserted = await executor
     .insert(providerVendors)
     .values({
       websiteDomain,
@@ -293,7 +334,7 @@ export async function getOrCreateProviderVendorIdFromUrls(input: {
     return inserted[0].id;
   }
 
-  const fallback = await db
+  const fallback = await executor
     .select({ id: providerVendors.id })
     .from(providerVendors)
     .where(eq(providerVendors.websiteDomain, websiteDomain))
@@ -556,57 +597,58 @@ export async function deleteProviderVendor(vendorId: number): Promise<boolean> {
   return deleted;
 }
 
-export async function tryDeleteProviderVendorIfEmpty(vendorId: number): Promise<boolean> {
-  try {
-    return await db.transaction(async (tx) => {
-      // 1) Must have no active providers (soft-deleted rows still exist but should not block).
-      const [activeProvider] = await tx
-        .select({ id: providers.id })
-        .from(providers)
-        .where(and(eq(providers.providerVendorId, vendorId), isNull(providers.deletedAt)))
-        .limit(1);
+export async function tryDeleteProviderVendorIfEmpty(
+  vendorId: number,
+  options?: { tx?: QueryExecutor }
+): Promise<boolean> {
+  const runInTx = async (tx: QueryExecutor): Promise<boolean> => {
+    // 1) Must have no active providers (soft-deleted rows still exist but should not block).
+    const [activeProvider] = await tx
+      .select({ id: providers.id })
+      .from(providers)
+      .where(and(eq(providers.providerVendorId, vendorId), isNull(providers.deletedAt)))
+      .limit(1);
 
-      if (activeProvider) {
-        return false;
-      }
+    if (activeProvider) {
+      return false;
+    }
 
-      // 2) Must have no active endpoints.
-      const [activeEndpoint] = await tx
-        .select({ id: providerEndpoints.id })
-        .from(providerEndpoints)
-        .where(and(eq(providerEndpoints.vendorId, vendorId), isNull(providerEndpoints.deletedAt)))
-        .limit(1);
+    // 2) Must have no active endpoints.
+    const [activeEndpoint] = await tx
+      .select({ id: providerEndpoints.id })
+      .from(providerEndpoints)
+      .where(and(eq(providerEndpoints.vendorId, vendorId), isNull(providerEndpoints.deletedAt)))
+      .limit(1);
 
-      if (activeEndpoint) {
-        return false;
-      }
+    if (activeEndpoint) {
+      return false;
+    }
 
-      // 3) Hard delete soft-deleted providers to satisfy FK `onDelete: restrict`.
-      await tx
-        .delete(providers)
-        .where(and(eq(providers.providerVendorId, vendorId), isNotNull(providers.deletedAt)));
+    // 3) Hard delete soft-deleted providers to satisfy FK `onDelete: restrict`.
+    await tx
+      .delete(providers)
+      .where(and(eq(providers.providerVendorId, vendorId), isNotNull(providers.deletedAt)));
 
-      // 4) Delete vendor. Endpoints will be physically removed by FK cascade.
-      const deleted = await tx
-        .delete(providerVendors)
-        .where(
-          and(
-            eq(providerVendors.id, vendorId),
-            sql`NOT EXISTS (SELECT 1 FROM providers p WHERE p.provider_vendor_id = ${vendorId} AND p.deleted_at IS NULL)`,
-            sql`NOT EXISTS (SELECT 1 FROM provider_endpoints e WHERE e.vendor_id = ${vendorId} AND e.deleted_at IS NULL)`
-          )
+    // 4) Delete vendor. Endpoints will be physically removed by FK cascade.
+    const deleted = await tx
+      .delete(providerVendors)
+      .where(
+        and(
+          eq(providerVendors.id, vendorId),
+          sql`NOT EXISTS (SELECT 1 FROM providers p WHERE p.provider_vendor_id = ${vendorId} AND p.deleted_at IS NULL)`,
+          sql`NOT EXISTS (SELECT 1 FROM provider_endpoints e WHERE e.vendor_id = ${vendorId} AND e.deleted_at IS NULL)`
         )
-        .returning({ id: providerVendors.id });
+      )
+      .returning({ id: providerVendors.id });
 
-      return deleted.length > 0;
-    });
-  } catch (error) {
-    logger.warn("[ProviderVendor] Auto delete failed", {
-      vendorId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
+    return deleted.length > 0;
+  };
+
+  if (options?.tx) {
+    return await runInTx(options.tx);
   }
+
+  return await db.transaction(async (tx) => runInTx(tx));
 }
 
 export async function findProviderEndpointsByVendorAndType(
@@ -714,26 +756,31 @@ export async function createProviderEndpoint(payload: {
   return toProviderEndpoint(row);
 }
 
-export async function ensureProviderEndpointExistsForUrl(input: {
-  vendorId: number;
-  providerType: ProviderType;
-  url: string;
-  label?: string | null;
-}): Promise<boolean> {
+export async function ensureProviderEndpointExistsForUrl(
+  input: {
+    vendorId: number;
+    providerType: ProviderType;
+    url: string;
+    label?: string | null;
+  },
+  options?: { tx?: QueryExecutor }
+): Promise<boolean> {
+  const executor = options?.tx ?? db;
+
   const trimmedUrl = input.url.trim();
   if (!trimmedUrl) {
-    return false;
+    throw new Error("[ProviderEndpointEnsure] url is required");
   }
 
   try {
     // eslint-disable-next-line no-new
     new URL(trimmedUrl);
   } catch {
-    return false;
+    throw new Error("[ProviderEndpointEnsure] url must be a valid URL");
   }
 
   const now = new Date();
-  const inserted = await db
+  const inserted = await executor
     .insert(providerEndpoints)
     .values({
       vendorId: input.vendorId,
@@ -748,6 +795,373 @@ export async function ensureProviderEndpointExistsForUrl(input: {
     .returning({ id: providerEndpoints.id });
 
   return inserted.length > 0;
+}
+
+export interface SyncProviderEndpointOnProviderEditInput {
+  providerId: number;
+  vendorId: number;
+  providerType: ProviderType;
+  previousVendorId?: number | null;
+  previousProviderType?: ProviderType | null;
+  previousUrl: string;
+  nextUrl: string;
+  keepPreviousWhenReferenced?: boolean;
+}
+
+type ProviderEndpointSyncAction =
+  | "noop"
+  | "created-next"
+  | "revived-next"
+  | "updated-previous-in-place"
+  | "kept-previous-and-created-next"
+  | "kept-previous-and-revived-next"
+  | "kept-previous-and-kept-next"
+  | "soft-deleted-previous-and-kept-next"
+  | "soft-deleted-previous-and-revived-next";
+
+export interface SyncProviderEndpointOnProviderEditResult {
+  action: ProviderEndpointSyncAction;
+  resetCircuitEndpointId?: number;
+}
+
+export async function syncProviderEndpointOnProviderEdit(
+  input: SyncProviderEndpointOnProviderEditInput,
+  options?: { tx?: QueryExecutor }
+): Promise<SyncProviderEndpointOnProviderEditResult> {
+  const previousUrl = input.previousUrl.trim();
+  const nextUrl = input.nextUrl.trim();
+
+  if (!nextUrl) {
+    throw new Error("[ProviderEndpointSync] nextUrl is required");
+  }
+
+  try {
+    // eslint-disable-next-line no-new
+    new URL(nextUrl);
+  } catch {
+    throw new Error("[ProviderEndpointSync] nextUrl must be a valid URL");
+  }
+
+  const previousVendorId = input.previousVendorId ?? input.vendorId;
+  const previousProviderType = input.previousProviderType ?? input.providerType;
+  const keepPreviousWhenReferenced = input.keepPreviousWhenReferenced !== false;
+
+  const runInTx = async (tx: QueryExecutor): Promise<SyncProviderEndpointOnProviderEditResult> => {
+    const now = new Date();
+
+    const loadEndpoint = async (args: {
+      vendorId: number;
+      providerType: ProviderType;
+      url: string;
+    }): Promise<{ id: number; deletedAt: Date | null; isEnabled: boolean } | null> => {
+      const [row] = await tx
+        .select({
+          id: providerEndpoints.id,
+          deletedAt: providerEndpoints.deletedAt,
+          isEnabled: providerEndpoints.isEnabled,
+        })
+        .from(providerEndpoints)
+        .where(
+          and(
+            eq(providerEndpoints.vendorId, args.vendorId),
+            eq(providerEndpoints.providerType, args.providerType),
+            eq(providerEndpoints.url, args.url)
+          )
+        )
+        .limit(1);
+
+      return row
+        ? {
+            id: row.id,
+            deletedAt: row.deletedAt,
+            isEnabled: row.isEnabled,
+          }
+        : null;
+    };
+
+    const hasActiveReferencesOnPreviousUrl = async (): Promise<boolean> => {
+      const [activeReference] = await tx
+        .select({ id: providers.id })
+        .from(providers)
+        .where(
+          and(
+            eq(providers.providerVendorId, previousVendorId),
+            eq(providers.providerType, previousProviderType),
+            eq(providers.url, previousUrl),
+            isNull(providers.deletedAt),
+            ne(providers.id, input.providerId)
+          )
+        )
+        .limit(1);
+
+      return Boolean(activeReference);
+    };
+
+    const ensureNextEndpointActive = async (options?: {
+      reactivateDisabled?: boolean;
+    }): Promise<"created-next" | "revived-next" | "noop"> => {
+      const reactivateDisabled = options?.reactivateDisabled ?? true;
+      const nextEndpoint = await loadEndpoint({
+        vendorId: input.vendorId,
+        providerType: input.providerType,
+        url: nextUrl,
+      });
+
+      if (!nextEndpoint) {
+        const inserted = await tx
+          .insert(providerEndpoints)
+          .values({
+            vendorId: input.vendorId,
+            providerType: input.providerType,
+            url: nextUrl,
+            label: null,
+            updatedAt: now,
+          })
+          .onConflictDoNothing({
+            target: [
+              providerEndpoints.vendorId,
+              providerEndpoints.providerType,
+              providerEndpoints.url,
+            ],
+          })
+          .returning({ id: providerEndpoints.id });
+
+        if (inserted[0]) {
+          return "created-next";
+        }
+
+        const concurrentEndpoint = await loadEndpoint({
+          vendorId: input.vendorId,
+          providerType: input.providerType,
+          url: nextUrl,
+        });
+
+        if (!concurrentEndpoint) {
+          throw new Error("[ProviderEndpointSync] failed to load next endpoint after conflict");
+        }
+
+        if (concurrentEndpoint.deletedAt !== null) {
+          await tx
+            .update(providerEndpoints)
+            .set({
+              deletedAt: null,
+              isEnabled: true,
+              updatedAt: now,
+            })
+            .where(eq(providerEndpoints.id, concurrentEndpoint.id));
+
+          return "revived-next";
+        }
+
+        if (reactivateDisabled && !concurrentEndpoint.isEnabled) {
+          await tx
+            .update(providerEndpoints)
+            .set({
+              isEnabled: true,
+              updatedAt: now,
+            })
+            .where(eq(providerEndpoints.id, concurrentEndpoint.id));
+
+          return "revived-next";
+        }
+
+        return "noop";
+      }
+
+      if (nextEndpoint.deletedAt !== null) {
+        await tx
+          .update(providerEndpoints)
+          .set({
+            deletedAt: null,
+            isEnabled: true,
+            updatedAt: now,
+          })
+          .where(eq(providerEndpoints.id, nextEndpoint.id));
+
+        return "revived-next";
+      }
+
+      if (reactivateDisabled && !nextEndpoint.isEnabled) {
+        await tx
+          .update(providerEndpoints)
+          .set({
+            isEnabled: true,
+            updatedAt: now,
+          })
+          .where(eq(providerEndpoints.id, nextEndpoint.id));
+
+        return "revived-next";
+      }
+
+      return "noop";
+    };
+
+    const previousKeyEqualsNextKey =
+      previousVendorId === input.vendorId &&
+      previousProviderType === input.providerType &&
+      previousUrl === nextUrl;
+
+    if (previousKeyEqualsNextKey) {
+      const ensureResult = await ensureNextEndpointActive({
+        reactivateDisabled: false,
+      });
+      return { action: ensureResult === "noop" ? "noop" : ensureResult };
+    }
+
+    const previousEndpoint = await loadEndpoint({
+      vendorId: previousVendorId,
+      providerType: previousProviderType,
+      url: previousUrl,
+    });
+
+    const nextEndpoint = await loadEndpoint({
+      vendorId: input.vendorId,
+      providerType: input.providerType,
+      url: nextUrl,
+    });
+
+    if (previousEndpoint && !nextEndpoint) {
+      const previousIsReferenced =
+        keepPreviousWhenReferenced && (await hasActiveReferencesOnPreviousUrl());
+
+      if (!previousIsReferenced) {
+        const updatePreviousEndpointInPlace = async (executor: QueryExecutor): Promise<void> => {
+          await executor
+            .update(providerEndpoints)
+            .set({
+              vendorId: input.vendorId,
+              providerType: input.providerType,
+              url: nextUrl,
+              deletedAt: null,
+              isEnabled: true,
+              lastProbedAt: null,
+              lastProbeOk: null,
+              lastProbeStatusCode: null,
+              lastProbeLatencyMs: null,
+              lastProbeErrorType: null,
+              lastProbeErrorMessage: null,
+              updatedAt: now,
+            })
+            .where(eq(providerEndpoints.id, previousEndpoint.id));
+        };
+
+        let movedInPlace = false;
+        const executorWithSavepoint = tx as QueryExecutor & {
+          transaction?: <T>(runInTx: (nestedTx: TransactionExecutor) => Promise<T>) => Promise<T>;
+        };
+
+        if (typeof executorWithSavepoint.transaction === "function") {
+          try {
+            await executorWithSavepoint.transaction(async (nestedTx) => {
+              await updatePreviousEndpointInPlace(nestedTx);
+            });
+            movedInPlace = true;
+          } catch (error) {
+            if (!isUniqueViolationError(error)) {
+              throw error;
+            }
+          }
+        } else {
+          // No savepoint support means we cannot safely continue after unique violations.
+          await updatePreviousEndpointInPlace(tx);
+          movedInPlace = true;
+        }
+
+        if (movedInPlace) {
+          return {
+            action: "updated-previous-in-place",
+            // Reset is an external side-effect and must run only after transaction commit.
+            resetCircuitEndpointId: previousEndpoint.id,
+          };
+        }
+
+        const ensureResult = await ensureNextEndpointActive();
+
+        await tx
+          .update(providerEndpoints)
+          .set({
+            deletedAt: now,
+            isEnabled: false,
+            updatedAt: now,
+          })
+          .where(
+            and(eq(providerEndpoints.id, previousEndpoint.id), isNull(providerEndpoints.deletedAt))
+          );
+
+        return {
+          action:
+            ensureResult === "revived-next"
+              ? "soft-deleted-previous-and-revived-next"
+              : "soft-deleted-previous-and-kept-next",
+        };
+      }
+
+      const ensureResult = await ensureNextEndpointActive();
+      return {
+        action:
+          ensureResult === "created-next"
+            ? "kept-previous-and-created-next"
+            : ensureResult === "revived-next"
+              ? "kept-previous-and-revived-next"
+              : "kept-previous-and-kept-next",
+      };
+    }
+
+    const ensureResult = await ensureNextEndpointActive();
+
+    if (
+      previousEndpoint &&
+      nextEndpoint &&
+      previousEndpoint.id !== nextEndpoint.id &&
+      previousEndpoint.deletedAt === null
+    ) {
+      const previousIsReferenced =
+        keepPreviousWhenReferenced && (await hasActiveReferencesOnPreviousUrl());
+
+      if (!previousIsReferenced) {
+        await tx
+          .update(providerEndpoints)
+          .set({
+            deletedAt: now,
+            isEnabled: false,
+            updatedAt: now,
+          })
+          .where(
+            and(eq(providerEndpoints.id, previousEndpoint.id), isNull(providerEndpoints.deletedAt))
+          );
+
+        return {
+          action:
+            ensureResult === "revived-next"
+              ? "soft-deleted-previous-and-revived-next"
+              : "soft-deleted-previous-and-kept-next",
+        };
+      }
+    }
+
+    return { action: ensureResult === "noop" ? "noop" : ensureResult };
+  };
+
+  if (options?.tx) {
+    return await runInTx(options.tx);
+  }
+
+  const result = await db.transaction(async (tx) => runInTx(tx));
+
+  if (result.resetCircuitEndpointId != null) {
+    try {
+      await resetEndpointCircuit(result.resetCircuitEndpointId);
+    } catch (error) {
+      logger.warn("syncProviderEndpointOnProviderEdit:reset_endpoint_circuit_failed", {
+        endpointId: result.resetCircuitEndpointId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return { action: result.action };
+  }
+
+  return result;
 }
 
 export async function backfillProviderEndpointsFromProviders(): Promise<{

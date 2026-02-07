@@ -211,14 +211,15 @@ describe("reclusterProviderVendors", () => {
       getOrCreateProviderVendorIdFromUrlsMock.mockResolvedValue(2);
       backfillProviderEndpointsFromProvidersMock.mockResolvedValue({});
       tryDeleteProviderVendorIfEmptyMock.mockResolvedValue(true);
-      dbMock.transaction.mockImplementation(async (fn) => {
-        return fn({
-          update: vi.fn().mockReturnValue({
-            set: vi.fn().mockReturnValue({
-              where: vi.fn().mockResolvedValue({}),
-            }),
+      const tx = {
+        update: vi.fn().mockReturnValue({
+          set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue({}),
           }),
-        });
+        }),
+      };
+      dbMock.transaction.mockImplementation(async (fn) => {
+        return fn(tx);
       });
 
       const { reclusterProviderVendors } = await import("@/actions/providers");
@@ -229,6 +230,13 @@ describe("reclusterProviderVendors", () => {
         expect(result.data.applied).toBe(true);
       }
       expect(dbMock.transaction).toHaveBeenCalled();
+      expect(getOrCreateProviderVendorIdFromUrlsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerUrl: "http://192.168.1.1:8080/v1/messages",
+          websiteUrl: null,
+        }),
+        { tx }
+      );
     });
 
     it("publishes cache invalidation after apply", async () => {
