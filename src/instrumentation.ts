@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
+import { CHANNEL_API_KEYS_UPDATED, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
 
 const instrumentationState = globalThis as unknown as {
   __CCH_CACHE_CLEANUP_STARTED__?: boolean;
@@ -16,6 +17,8 @@ const instrumentationState = globalThis as unknown as {
   __CCH_SHUTDOWN_IN_PROGRESS__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_STARTED__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_API_KEY_VF_SYNC_STARTED__?: boolean;
+  __CCH_API_KEY_VF_SYNC_CLEANUP__?: (() => void) | null;
 };
 
 /**
@@ -83,6 +86,42 @@ async function startCloudPriceSyncScheduler(): Promise<void> {
   }
 }
 
+/**
+ * 多实例：订阅 API Key 变更广播，触发本机 Vacuum Filter 失效并重建。
+ *
+ * 目标：
+ * - 避免“本机 filter 漏包含新 key”导致的误拒绝
+ * - 重建失败/Redis 未配置时自动降级（不阻塞启动）
+ */
+async function startApiKeyVacuumFilterSync(): Promise<void> {
+  if (instrumentationState.__CCH_API_KEY_VF_SYNC_STARTED__) {
+    return;
+  }
+
+  // 与 Redis client 的启用条件保持一致：未启用限流/未配置 Redis 时不尝试订阅，避免额外 warn 日志
+  if (process.env.ENABLE_RATE_LIMIT !== "true" || !process.env.REDIS_URL) {
+    return;
+  }
+
+  try {
+    const cleanup = await subscribeCacheInvalidation(CHANNEL_API_KEYS_UPDATED, () => {
+      apiKeyVacuumFilter.invalidateAndReload({ reason: "api_keys_updated" });
+    });
+
+    if (!cleanup) {
+      return;
+    }
+
+    instrumentationState.__CCH_API_KEY_VF_SYNC_STARTED__ = true;
+    instrumentationState.__CCH_API_KEY_VF_SYNC_CLEANUP__ = cleanup;
+    logger.info("[Instrumentation] API Key Vacuum Filter sync enabled");
+  } catch (error) {
+    logger.warn("[Instrumentation] API Key Vacuum Filter sync init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
@@ -118,6 +157,15 @@ export async function register() {
           instrumentationState.__CCH_CACHE_CLEANUP_STARTED__ = false;
         } catch (error) {
           logger.warn("[Instrumentation] Failed to stop cache cleanup", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        try {
+          instrumentationState.__CCH_API_KEY_VF_SYNC_CLEANUP__?.();
+          instrumentationState.__CCH_API_KEY_VF_SYNC_STARTED__ = false;
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to cleanup API key vacuum filter sync", {
             error: error instanceof Error ? error.message : String(error),
           });
         }
@@ -209,6 +257,7 @@ export async function register() {
 
       // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
       apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+      void startApiKeyVacuumFilterSync();
 
       // 回填 provider_vendors（按域名自动聚合旧 providers）
       try {
@@ -312,6 +361,7 @@ export async function register() {
 
         // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
         apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+        void startApiKeyVacuumFilterSync();
 
         // 回填 provider_vendors（按域名自动聚合旧 providers）
         try {

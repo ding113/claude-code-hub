@@ -31,6 +31,13 @@ type ApiKeyVacuumFilterStats = {
 
 type ReloadOptions = {
   reason: string;
+  /**
+   * 是否强制触发（忽略 cooldown）。
+   *
+   * 用途：
+   * - 多实例场景收到“key 已新增”的广播后，需要尽快重建避免误拒绝
+   */
+  force?: boolean;
 };
 
 /**
@@ -113,6 +120,15 @@ class ApiKeyVacuumFilter {
   private vf: VacuumFilter | null = null;
   private loadingPromise: Promise<void> | null = null;
 
+  // 关键：当 vf 尚未就绪（或正在重建）时，新 key 可能在这段窗口期被创建。
+  // 若不记录并在下一次重建时纳入，会导致“漏包含”有效 key，从而误拒绝（假阴性）。
+  private readonly pendingKeys = new Set<string>();
+  private readonly pendingKeysLimit = 10_000;
+
+  // 若重建过程中又收到新的重建请求（例如：多实例收到 key 创建广播），需要串行再跑一次。
+  private pendingReloadReason: string | null = null;
+  private pendingReloadForce = false;
+
   private lastReloadAttemptAt: number | null = null;
   private readonly reloadCooldownMs = 10_000;
 
@@ -152,29 +168,65 @@ class ApiKeyVacuumFilter {
    * 注意：写入失败不会影响正确性（仍会走 DB），只是降低短路命中率；失败后可依赖后台重建修复。
    */
   noteExistingKey(keyString: string): void {
+    if (!this.enabled) return;
+    const trimmed = keyString.trim();
+    if (!trimmed) return;
+
     const vf = this.vf;
-    if (!vf) return;
+    if (!vf) {
+      // vf 未就绪：记录到 pending，确保下一次重建会覆盖到该 key（避免误拒绝）
+      if (this.pendingKeys.size < this.pendingKeysLimit) {
+        this.pendingKeys.add(trimmed);
+      } else {
+        logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
+          limit: this.pendingKeysLimit,
+        });
+      }
+      this.startBackgroundReload({ reason: "pending_key", force: true });
+      return;
+    }
 
     // 注意：不要用 vf.has(key) 来“去重” —— has 可能是短暂假阳性，后续插入/搬移可能让假阳性消失，
     // 从而导致真正存在的 key 没被写入、最终产生误拒绝风险。对新建 key（应唯一）直接 add 更安全。
-    const ok = vf.add(keyString);
+    const ok = vf.add(trimmed);
     if (!ok) {
       logger.warn("[ApiKeyVacuumFilter] Insert failed; scheduling rebuild", {
-        keyLength: keyString.length,
+        keyLength: trimmed.length,
       });
       // 安全优先：插入失败意味着新 key 可能未被覆盖。
       // 为避免误拒绝（假阴性），临时禁用短路，等待后台重建完成后再恢复。
+      this.pendingKeys.add(trimmed);
       this.vf = null;
-      this.startBackgroundReload({ reason: "insert_failed" });
+      this.startBackgroundReload({ reason: "insert_failed", force: true });
     }
+  }
+
+  /**
+   * 外部触发：标记过滤器可能已过期，并强制后台重建。
+   *
+   * 典型场景：多实例环境下，某个实例创建了新 key；其它实例需要尽快重建，避免误拒绝。
+   */
+  invalidateAndReload(options: ReloadOptions): void {
+    if (!this.enabled) return;
+    this.vf = null;
+    this.startBackgroundReload({ ...options, force: true });
   }
 
   startBackgroundReload(options: ReloadOptions): void {
     if (!this.enabled) return;
-    if (this.loadingPromise) return;
+    if (this.loadingPromise) {
+      // 重建进行中：合并请求，待当前重建结束后再跑一次（避免“读到旧快照”漏新 key）
+      this.pendingReloadReason = options.reason;
+      this.pendingReloadForce = this.pendingReloadForce || options.force === true;
+      return;
+    }
 
     const now = Date.now();
-    if (this.lastReloadAttemptAt && now - this.lastReloadAttemptAt < this.reloadCooldownMs) {
+    if (
+      options.force !== true &&
+      this.lastReloadAttemptAt &&
+      now - this.lastReloadAttemptAt < this.reloadCooldownMs
+    ) {
       return;
     }
     this.lastReloadAttemptAt = now;
@@ -188,6 +240,15 @@ class ApiKeyVacuumFilter {
       })
       .finally(() => {
         this.loadingPromise = null;
+
+        // 若重建期间又收到新的重建请求，串行补一次（避免漏 key）
+        if (this.pendingReloadReason) {
+          const reason = this.pendingReloadReason;
+          const force = this.pendingReloadForce;
+          this.pendingReloadReason = null;
+          this.pendingReloadForce = false;
+          this.startBackgroundReload({ reason, force });
+        }
       });
   }
 
@@ -239,12 +300,21 @@ class ApiKeyVacuumFilter {
       .map((r) => r.key)
       .filter((v): v is string => typeof v === "string" && v.length > 0);
 
+    // 将 pendingKeys 合并进来：覆盖“重建窗口期创建的新 key”
+    const pendingSnapshot =
+      this.pendingKeys.size > 0 ? Array.from(this.pendingKeys.values()) : [];
+
     const built = buildVacuumFilterFromKeyStrings({
-      keyStrings,
+      keyStrings: pendingSnapshot.length > 0 ? keyStrings.concat(pendingSnapshot) : keyStrings,
       fingerprintBits: this.fingerprintBits,
       maxKickSteps: this.maxKickSteps,
       seed: this.seed,
     });
+
+    // 仅在重建成功后清理 pending（失败会保留，避免漏 key）
+    for (const k of pendingSnapshot) {
+      this.pendingKeys.delete(k);
+    }
 
     this.vf = built;
     this.sourceKeyCount = new Set(keyStrings).size;

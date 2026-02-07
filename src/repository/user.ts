@@ -88,7 +88,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
   });
 
   const created = toUser(user);
-  cacheUser(created).catch(() => {});
+  await cacheUser(created).catch(() => {});
   return created;
 }
 
@@ -436,7 +436,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (!user) return null;
 
   const updated = toUser(user);
-  cacheUser(updated).catch(() => {});
+  await cacheUser(updated).catch(() => {});
   return updated;
 }
 
@@ -448,7 +448,7 @@ export async function deleteUser(id: number): Promise<boolean> {
     .returning({ id: users.id });
 
   if (result.length > 0) {
-    invalidateCachedUser(id).catch(() => {});
+    await invalidateCachedUser(id).catch(() => {});
   }
   return result.length > 0;
 }
@@ -464,7 +464,7 @@ export async function markUserExpired(userId: number): Promise<boolean> {
     .where(and(eq(users.id, userId), eq(users.isEnabled, true), isNull(users.deletedAt)))
     .returning({ id: users.id });
 
-  invalidateCachedUser(userId).catch(() => {});
+  await invalidateCachedUser(userId).catch(() => {});
   return result.length > 0;
 }
 

@@ -13,6 +13,7 @@ import {
 } from "@/lib/security/api-key-auth-cache";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
+import { CHANNEL_API_KEYS_UPDATED, publishCacheInvalidation } from "@/lib/redis/pubsub";
 import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
@@ -181,6 +182,10 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
   apiKeyVacuumFilter.noteExistingKey(created.key);
   // Redis 缓存（最佳努力，不影响正确性）
   cacheActiveKey(created).catch(() => {});
+  // 多实例：广播 key 集合变更，触发其它实例重建 Vacuum Filter，避免误拒绝
+  if (process.env.ENABLE_RATE_LIMIT === "true" && process.env.REDIS_URL) {
+    await publishCacheInvalidation(CHANNEL_API_KEYS_UPDATED);
+  }
   return created;
 }
 
@@ -249,7 +254,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (!key) return null;
   const updated = toKey(key);
   // 变更 key 后，更新/失效 Redis 缓存（最佳努力，不影响正确性）
-  cacheActiveKey(updated).catch(() => {});
+  await cacheActiveKey(updated).catch(() => {});
   return updated;
 }
 
@@ -415,7 +420,7 @@ export async function deleteKey(id: number): Promise<boolean> {
     .returning({ id: keys.id, key: keys.key });
 
   if (result.length > 0) {
-    invalidateCachedKey(result[0].key).catch(() => {});
+    await invalidateCachedKey(result[0].key).catch(() => {});
   }
   return result.length > 0;
 }

@@ -10,6 +10,7 @@ const cacheUser = vi.fn(async () => {});
 const getCachedActiveKey = vi.fn<Parameters<(keyString: string) => Promise<Key | null>>, Promise<Key | null>>();
 const getCachedUser = vi.fn<Parameters<(userId: number) => Promise<User | null>>, Promise<User | null>>();
 const invalidateCachedKey = vi.fn(async () => {});
+const publishCacheInvalidation = vi.fn(async () => {});
 
 const dbSelect = vi.fn();
 const dbInsert = vi.fn();
@@ -31,6 +32,15 @@ vi.mock("@/lib/security/api-key-auth-cache", () => ({
   getCachedActiveKey,
   getCachedUser,
   invalidateCachedKey,
+}));
+
+vi.mock("@/lib/redis/pubsub", () => ({
+  CHANNEL_ERROR_RULES_UPDATED: "cch:cache:error_rules:updated",
+  CHANNEL_REQUEST_FILTERS_UPDATED: "cch:cache:request_filters:updated",
+  CHANNEL_SENSITIVE_WORDS_UPDATED: "cch:cache:sensitive_words:updated",
+  CHANNEL_API_KEYS_UPDATED: "cch:cache:api_keys:updated",
+  publishCacheInvalidation,
+  subscribeCacheInvalidation: vi.fn(async () => null),
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -252,6 +262,53 @@ describe("API Key 鉴权缓存：VacuumFilter -> Redis -> DB", () => {
 });
 
 describe("API Key 鉴权缓存：写入/失效点覆盖", () => {
+  test("createKey：应广播 API key 集合变更（多实例触发 Vacuum Filter 重建）", async () => {
+    const prevEnableRateLimit = process.env.ENABLE_RATE_LIMIT;
+    const prevRedisUrl = process.env.REDIS_URL;
+    process.env.ENABLE_RATE_LIMIT = "true";
+    process.env.REDIS_URL = "redis://localhost:6379";
+
+    const now = new Date("2026-01-02T00:00:00.000Z");
+    const keyRow = {
+      id: 1,
+      userId: 10,
+      key: "sk-created",
+      name: "k1",
+      isEnabled: true,
+      expiresAt: null,
+      canLoginWebUi: true,
+      limit5hUsd: null,
+      limitDailyUsd: null,
+      dailyResetMode: "fixed",
+      dailyResetTime: "00:00",
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitTotalUsd: null,
+      limitConcurrentSessions: 0,
+      providerGroup: null,
+      cacheTtlPreference: null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    };
+
+    dbInsert.mockReturnValueOnce({
+      values: () => ({
+        returning: async () => [keyRow],
+      }),
+    });
+
+    try {
+      const { createKey } = await import("@/repository/key");
+      const created = await createKey({ user_id: 10, name: "k1", key: "sk-created" });
+      expect(created.key).toBe("sk-created");
+      expect(publishCacheInvalidation).toHaveBeenCalledWith("cch:cache:api_keys:updated");
+    } finally {
+      process.env.ENABLE_RATE_LIMIT = prevEnableRateLimit;
+      process.env.REDIS_URL = prevRedisUrl;
+    }
+  });
+
   test("updateKey：应触发 cacheActiveKey", async () => {
     const keyRow = {
       id: 1,
