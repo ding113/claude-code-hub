@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 13500",
-    "build": "next build && cp VERSION .next/standalone/VERSION",
+    "build": "next build && node scripts/copy-version-to-standalone.js",
     "start": "next start",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",

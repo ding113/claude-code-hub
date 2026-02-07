@@ -4,6 +4,7 @@ import { and, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql, sum } from
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
+import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
 import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
@@ -166,7 +167,10 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     deletedAt: keys.deletedAt,
   });
 
-  return toKey(key);
+  const created = toKey(key);
+  // 将新建 key 写入 Vacuum Filter（提升新 key 的即时可用性；失败不影响正确性）
+  apiKeyVacuumFilter.noteExistingKey(created.key);
+  return created;
 }
 
 export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key | null> {
@@ -400,6 +404,11 @@ export async function deleteKey(id: number): Promise<boolean> {
 }
 
 export async function findActiveKeyByKeyString(keyString: string): Promise<Key | null> {
+  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
+  if (apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true) {
+    return null;
+  }
+
   const [key] = await db
     .select({
       id: keys.id,
@@ -440,6 +449,11 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
 export async function validateApiKeyAndGetUser(
   keyString: string
 ): Promise<{ user: User; key: Key } | null> {
+  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
+  if (apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true) {
+    return null;
+  }
+
   const result = await db
     .select({
       // Key fields

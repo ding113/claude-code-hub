@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 import { startCacheCleanup, stopCacheCleanup } from "@/lib/cache/session-cache";
 import { logger } from "@/lib/logger";
+import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
 
 const instrumentationState = globalThis as unknown as {
   __CCH_CACHE_CLEANUP_STARTED__?: boolean;
@@ -206,6 +207,9 @@ export async function register() {
         logger.info("[Instrumentation] AUTO_MIGRATE=false: skipping migrations");
       }
 
+      // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
+      apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+
       // 回填 provider_vendors（按域名自动聚合旧 providers）
       try {
         const { backfillProviderVendorsFromProviders } = await import(
@@ -305,6 +309,9 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+
+        // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
+        apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
 
         // 回填 provider_vendors（按域名自动聚合旧 providers）
         try {
