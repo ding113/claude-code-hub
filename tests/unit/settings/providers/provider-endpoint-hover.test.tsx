@@ -223,7 +223,11 @@ describe("ProviderEndpointHover", () => {
       document.querySelectorAll("[data-testid='tooltip-content'] span.truncate")
     ).map((el) => el.textContent);
 
-    expect(labels).toEqual(["Healthy Endpoint", "Unknown Endpoint", "Unhealthy Endpoint"]);
+    expect(labels).toEqual([
+      "https://api.anthropic.com/v1",
+      "https://api.anthropic.com/v3",
+      "https://api.anthropic.com/v2",
+    ]);
 
     unmount();
   });

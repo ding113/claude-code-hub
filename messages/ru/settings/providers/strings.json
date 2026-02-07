@@ -111,7 +111,7 @@
     "healthy": "Доступен",
     "unhealthy": "Недоступен",
     "unknown": "Неизвестно",
-    "circuitOpen": "Circuit открыт",
-    "circuitHalfOpen": "Circuit полуоткрыт"
+    "circuitOpen": "Цепь открыта",
+    "circuitHalfOpen": "Цепь полуоткрыта"
   }
 }

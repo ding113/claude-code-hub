@@ -113,7 +113,13 @@ class ErrorRuleDetector {
         const { CHANNEL_ERROR_RULES_UPDATED, subscribeCacheInvalidation } = await import(
           "@/lib/redis/pubsub"
         );
-        await subscribeCacheInvalidation(CHANNEL_ERROR_RULES_UPDATED, handleUpdated);
+        const cleanup = await subscribeCacheInvalidation(
+          CHANNEL_ERROR_RULES_UPDATED,
+          handleUpdated
+        );
+        if (cleanup) {
+          logger.info("[ErrorRuleDetector] Subscribed to Redis pub/sub channel");
+        }
       } catch {
         // 忽略导入错误（可能在 Edge runtime 中）
       }

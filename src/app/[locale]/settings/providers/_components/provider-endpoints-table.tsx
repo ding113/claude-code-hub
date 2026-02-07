@@ -1,7 +1,6 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
 import { Edit2, Loader2, MoreHorizontal, Play, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
@@ -33,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RelativeTime } from "@/components/ui/relative-time";
 import {
   Select,
   SelectContent,
@@ -301,13 +301,12 @@ function EndpointRow({
       <TableCell>
         <div className="flex items-center gap-3">
           <EndpointLatencySparkline endpointId={endpoint.id} limit={12} />
-          {endpoint.lastProbedAt ? (
-            <span className="text-muted-foreground text-[10px] whitespace-nowrap">
-              {formatDistanceToNow(new Date(endpoint.lastProbedAt), { addSuffix: true })}
-            </span>
-          ) : (
-            <span className="text-muted-foreground text-[10px]">-</span>
-          )}
+          <RelativeTime
+            date={endpoint.lastProbedAt}
+            format="short"
+            fallback="-"
+            className="text-muted-foreground text-[10px] whitespace-nowrap"
+          />
         </div>
       </TableCell>
       {!readOnly && (
