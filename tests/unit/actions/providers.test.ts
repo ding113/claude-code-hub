@@ -497,6 +497,65 @@ describe("Provider Actions - Async Optimization", () => {
       expect(result.ok).toBe(true);
       expect(revalidatePathMock).not.toHaveBeenCalled();
     });
+
+    it("editProvider endpoint sync: should forward url/provider_type edits to repository", async () => {
+      const nextUrl = "https://new.example.com/v1/responses";
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        url: nextUrl,
+        provider_type: "codex",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          url: nextUrl,
+          provider_type: "codex",
+        })
+      );
+      expect(publishProviderCacheInvalidationMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("editProvider endpoint sync: should generate favicon_url when website_url is updated", async () => {
+      const nextUrl = "https://new.example.com/v1/messages";
+      const nextWebsiteUrl = "https://vendor.example.com/home";
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        url: nextUrl,
+        website_url: nextWebsiteUrl,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          url: nextUrl,
+          website_url: nextWebsiteUrl,
+          favicon_url: "https://www.google.com/s2/favicons?domain=vendor.example.com&sz=32",
+        })
+      );
+    });
+
+    it("editProvider endpoint sync: should clear favicon_url when website_url is cleared", async () => {
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        url: "https://new.example.com/v1/messages",
+        website_url: null,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          website_url: null,
+          favicon_url: null,
+        })
+      );
+    });
   });
 
   describe("deleteProvider", () => {

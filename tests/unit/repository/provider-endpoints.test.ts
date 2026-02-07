@@ -17,7 +17,7 @@ function createThenableQuery<T>(result: T) {
 }
 
 describe("provider-endpoints repository", () => {
-  test("ensureProviderEndpointExistsForUrl: url 为空时返回 false 且不写 DB", async () => {
+  test("ensureProviderEndpointExistsForUrl: url 为空时抛错且不写 DB", async () => {
     vi.resetModules();
 
     const insertMock = vi.fn();
@@ -28,17 +28,17 @@ describe("provider-endpoints repository", () => {
     }));
 
     const { ensureProviderEndpointExistsForUrl } = await import("@/repository/provider-endpoints");
-    const ok = await ensureProviderEndpointExistsForUrl({
-      vendorId: 1,
-      providerType: "claude",
-      url: "   ",
-    });
-
-    expect(ok).toBe(false);
+    await expect(
+      ensureProviderEndpointExistsForUrl({
+        vendorId: 1,
+        providerType: "claude",
+        url: "   ",
+      })
+    ).rejects.toThrow("[ProviderEndpointEnsure] url is required");
     expect(insertMock).not.toHaveBeenCalled();
   });
 
-  test("ensureProviderEndpointExistsForUrl: url 非法时返回 false 且不写 DB", async () => {
+  test("ensureProviderEndpointExistsForUrl: url 非法时抛错且不写 DB", async () => {
     vi.resetModules();
 
     const insertMock = vi.fn();
@@ -49,13 +49,13 @@ describe("provider-endpoints repository", () => {
     }));
 
     const { ensureProviderEndpointExistsForUrl } = await import("@/repository/provider-endpoints");
-    const ok = await ensureProviderEndpointExistsForUrl({
-      vendorId: 1,
-      providerType: "claude",
-      url: "not a url",
-    });
-
-    expect(ok).toBe(false);
+    await expect(
+      ensureProviderEndpointExistsForUrl({
+        vendorId: 1,
+        providerType: "claude",
+        url: "not a url",
+      })
+    ).rejects.toThrow("[ProviderEndpointEnsure] url must be a valid URL");
     expect(insertMock).not.toHaveBeenCalled();
   });
 
@@ -120,6 +120,37 @@ describe("provider-endpoints repository", () => {
     });
 
     expect(ok).toBe(false);
+  });
+
+  test("ensureProviderEndpointExistsForUrl: 非编辑路径保持 insert-only 语义（不触发 update/transaction）", async () => {
+    vi.resetModules();
+
+    const returning = vi.fn(async () => []);
+    const onConflictDoNothing = vi.fn(() => ({ returning }));
+    const values = vi.fn(() => ({ onConflictDoNothing }));
+    const insertMock = vi.fn(() => ({ values }));
+    const updateMock = vi.fn();
+    const transactionMock = vi.fn();
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        insert: insertMock,
+        update: updateMock,
+        transaction: transactionMock,
+      },
+    }));
+
+    const { ensureProviderEndpointExistsForUrl } = await import("@/repository/provider-endpoints");
+    const ok = await ensureProviderEndpointExistsForUrl({
+      vendorId: 1,
+      providerType: "codex",
+      url: "https://api.example.com/v1/responses",
+    });
+
+    expect(ok).toBe(false);
+    expect(insertMock).toHaveBeenCalledTimes(1);
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(transactionMock).not.toHaveBeenCalled();
   });
 
   test("backfillProviderEndpointsFromProviders: 全部无效时不写 DB", async () => {
@@ -390,7 +421,7 @@ describe("provider-endpoints repository", () => {
     expect(deleteMock).toHaveBeenCalledTimes(2);
   });
 
-  test("tryDeleteProviderVendorIfEmpty: transaction 抛错时返回 false", async () => {
+  test("tryDeleteProviderVendorIfEmpty: transaction 抛错时抛出异常", async () => {
     vi.resetModules();
 
     const transactionMock = vi.fn(async () => {
@@ -404,9 +435,7 @@ describe("provider-endpoints repository", () => {
     }));
 
     const { tryDeleteProviderVendorIfEmpty } = await import("@/repository/provider-endpoints");
-    const ok = await tryDeleteProviderVendorIfEmpty(123);
-
-    expect(ok).toBe(false);
+    await expect(tryDeleteProviderVendorIfEmpty(123)).rejects.toThrow("boom");
   });
 
   test("deleteProviderVendor: vendor 存在时返回 true 且执行级联删除", async () => {
