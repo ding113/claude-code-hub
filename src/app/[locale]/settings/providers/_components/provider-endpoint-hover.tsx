@@ -72,7 +72,7 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
         </TooltipTrigger>
         <TooltipContent
           side="right"
-          className="p-0 border shadow-lg rounded-lg overflow-hidden min-w-[280px] max-w-[320px]"
+          className="p-0 border shadow-lg rounded-lg overflow-hidden min-w-[280px] max-w-[320px] bg-popover text-popover-foreground"
         >
           <div className="bg-muted/40 px-3 py-2 border-b">
             <h4 className="text-xs font-semibold text-foreground">
@@ -122,9 +122,9 @@ function EndpointRow({ endpoint, isOpen }: { endpoint: ProviderEndpoint; isOpen:
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-medium truncate text-foreground/90">
-            {endpoint.label || endpoint.url}
+            {endpoint.url}
           </span>
-          {endpoint.lastProbeLatencyMs && (
+          {endpoint.lastProbeLatencyMs != null && (
             <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
               {endpoint.lastProbeLatencyMs}ms
             </span>
@@ -144,7 +144,9 @@ function EndpointRow({ endpoint, isOpen }: { endpoint: ProviderEndpoint; isOpen:
                 statusModel.color
               )}
             >
-              {circuitState}
+              {circuitState === "open"
+                ? t("endpointStatus.circuitOpen")
+                : t("endpointStatus.circuitHalfOpen")}
             </Badge>
           )}
         </div>

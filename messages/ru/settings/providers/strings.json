@@ -105,7 +105,7 @@
   "vendorDeleteSuccess": "Вендор удалён",
   "vendorDeleteFailed": "Не удалось удалить вендора",
   "endpointStatus": {
-    "viewDetails": "Подробнее",
+    "viewDetails": "Подробнее ({count})",
     "activeEndpoints": "Активные эндпоинты",
     "noEndpoints": "Нет эндпоинтов",
     "healthy": "Доступен",

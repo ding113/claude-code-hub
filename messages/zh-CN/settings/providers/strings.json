@@ -105,7 +105,7 @@
   "vendorDeleteSuccess": "服务商删除成功",
   "vendorDeleteFailed": "删除服务商失败",
   "endpointStatus": {
-    "viewDetails": "查看详情",
+    "viewDetails": "查看详情（{count}）",
     "activeEndpoints": "启用端点",
     "noEndpoints": "无端点",
     "healthy": "健康",

@@ -55,6 +55,7 @@ import {
   getProviderTypeConfig,
   getProviderTypeTranslationKey,
 } from "@/lib/provider-type-utils";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 import { EndpointLatencySparkline } from "./endpoint-latency-sparkline";
 import { UrlPreview } from "./forms/url-preview";
@@ -96,8 +97,10 @@ export function ProviderEndpointsTable({
 
   // Build query key based on whether we filter by type
   const queryKey = providerType
-    ? ["provider-endpoints", vendorId, providerType, queryKeySuffix].filter(Boolean)
-    : ["provider-endpoints", vendorId, queryKeySuffix].filter(Boolean);
+    ? ["provider-endpoints", vendorId, providerType, queryKeySuffix].filter(
+        (value) => value != null
+      )
+    : ["provider-endpoints", vendorId, queryKeySuffix].filter((value) => value != null);
 
   const { data: rawEndpoints = [], isLoading } = useQuery({
     queryKey,
@@ -371,6 +374,7 @@ export function AddEndpointButton({
   queryKeySuffix,
 }: AddEndpointButtonProps) {
   const t = useTranslations("settings.providers");
+  const tErrors = useTranslations("errors");
   const tTypes = useTranslations("settings.providers.types");
   const tCommon = useTranslations("settings.common");
   const [open, setOpen] = useState(false);
@@ -422,12 +426,16 @@ export function AddEndpointButton({
         if (fixedProviderType) {
           queryClient.invalidateQueries({
             queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
-              Boolean
+              (value) => value != null
             ),
           });
         }
       } else {
-        toast.error(res.error || t("endpointAddFailed"));
+        toast.error(
+          res.errorCode
+            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+            : t("endpointAddFailed")
+        );
       }
     } catch (_err) {
       toast.error(t("endpointAddFailed"));
@@ -551,6 +559,7 @@ export function AddEndpointButton({
 
 function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
   const t = useTranslations("settings.providers");
+  const tErrors = useTranslations("errors");
   const tCommon = useTranslations("settings.common");
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -585,7 +594,11 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
         setOpen(false);
         queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
       } else {
-        toast.error(res.error || t("endpointUpdateFailed"));
+        toast.error(
+          res.errorCode
+            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+            : t("endpointUpdateFailed")
+        );
       }
     } catch (_err) {
       toast.error(t("endpointUpdateFailed"));

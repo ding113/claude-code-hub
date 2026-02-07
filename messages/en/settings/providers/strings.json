@@ -105,7 +105,7 @@
   "vendorDeleteSuccess": "Vendor deleted successfully",
   "vendorDeleteFailed": "Failed to delete vendor",
   "endpointStatus": {
-    "viewDetails": "View Details",
+    "viewDetails": "View Details ({count})",
     "activeEndpoints": "Active Endpoints",
     "noEndpoints": "No Endpoints",
     "healthy": "Healthy",
