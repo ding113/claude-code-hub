@@ -162,6 +162,42 @@ describe("syncProviderEndpointOnProviderEdit", () => {
     );
   });
 
+  test("in-place url move with external tx should defer circuit reset until caller commits", async () => {
+    const oldUrl = "https://old.example.com/v1/messages";
+    const newUrl = "https://new.example.com/v1/messages";
+    const {
+      syncProviderEndpointOnProviderEdit,
+      tx,
+      transactionMock,
+      resetEndpointCircuitMock,
+      updatePayloads,
+      mocks,
+    } = await arrangeSyncTest([[{ id: 7, deletedAt: null, isEnabled: true }], [], []]);
+
+    const result = await syncProviderEndpointOnProviderEdit(
+      {
+        providerId: 1,
+        vendorId: 11,
+        providerType: "claude",
+        previousVendorId: 11,
+        previousProviderType: "claude",
+        previousUrl: oldUrl,
+        nextUrl: newUrl,
+        keepPreviousWhenReferenced: true,
+      },
+      { tx }
+    );
+
+    expect(result).toEqual({
+      action: "updated-previous-in-place",
+      resetCircuitEndpointId: 7,
+    });
+    expect(mocks.updateMock).toHaveBeenCalledTimes(1);
+    expect(updatePayloads[0]).toEqual(expect.objectContaining({ url: newUrl }));
+    expect(transactionMock).not.toHaveBeenCalled();
+    expect(resetEndpointCircuitMock).not.toHaveBeenCalled();
+  });
+
   test("concurrent insert conflict should degrade to noop instead of throwing", async () => {
     const oldUrl = "https://old.example.com/v1/messages";
     const newUrl = "https://new.example.com/v1/messages";

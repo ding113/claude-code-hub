@@ -818,12 +818,15 @@ type ProviderEndpointSyncAction =
   | "soft-deleted-previous-and-kept-next"
   | "soft-deleted-previous-and-revived-next";
 
+export interface SyncProviderEndpointOnProviderEditResult {
+  action: ProviderEndpointSyncAction;
+  resetCircuitEndpointId?: number;
+}
+
 export async function syncProviderEndpointOnProviderEdit(
   input: SyncProviderEndpointOnProviderEditInput,
   options?: { tx?: QueryExecutor }
-): Promise<{
-  action: ProviderEndpointSyncAction;
-}> {
+): Promise<SyncProviderEndpointOnProviderEditResult> {
   const previousUrl = input.previousUrl.trim();
   const nextUrl = input.nextUrl.trim();
 
@@ -842,7 +845,7 @@ export async function syncProviderEndpointOnProviderEdit(
   const previousProviderType = input.previousProviderType ?? input.providerType;
   const keepPreviousWhenReferenced = input.keepPreviousWhenReferenced !== false;
 
-  const runInTx = async (tx: QueryExecutor): Promise<{ action: ProviderEndpointSyncAction }> => {
+  const runInTx = async (tx: QueryExecutor): Promise<SyncProviderEndpointOnProviderEditResult> => {
     const now = new Date();
 
     const loadEndpoint = async (args: {
@@ -1064,10 +1067,11 @@ export async function syncProviderEndpointOnProviderEdit(
         }
 
         if (movedInPlace) {
-          // URL moved in-place on same endpoint id; clear stale endpoint circuit state as well.
-          await resetEndpointCircuit(previousEndpoint.id);
-
-          return { action: "updated-previous-in-place" };
+          return {
+            action: "updated-previous-in-place",
+            // Reset is an external side-effect and must run only after transaction commit.
+            resetCircuitEndpointId: previousEndpoint.id,
+          };
         }
 
         const ensureResult = await ensureNextEndpointActive();
@@ -1139,7 +1143,22 @@ export async function syncProviderEndpointOnProviderEdit(
     return await runInTx(options.tx);
   }
 
-  return db.transaction(async (tx) => runInTx(tx));
+  const result = await db.transaction(async (tx) => runInTx(tx));
+
+  if (result.resetCircuitEndpointId != null) {
+    try {
+      await resetEndpointCircuit(result.resetCircuitEndpointId);
+    } catch (error) {
+      logger.warn("syncProviderEndpointOnProviderEdit:reset_endpoint_circuit_failed", {
+        endpointId: result.resetCircuitEndpointId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return { action: result.action };
+  }
+
+  return result;
 }
 
 export async function backfillProviderEndpointsFromProviders(): Promise<{

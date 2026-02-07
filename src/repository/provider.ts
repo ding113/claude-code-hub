@@ -4,6 +4,7 @@ import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
+import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
@@ -491,6 +492,7 @@ export async function updateProvider(
     let previousVendorId: number | null = null;
     let previousUrl: string | null = null;
     let previousProviderType: Provider["providerType"] | null = null;
+    let endpointCircuitResetId: number | null = null;
 
     if (shouldSyncEndpoint) {
       const [current] = await tx
@@ -590,7 +592,7 @@ export async function updateProvider(
 
     if (shouldSyncEndpoint && transformed.providerVendorId) {
       if (previousUrl && previousProviderType) {
-        await syncProviderEndpointOnProviderEdit(
+        const syncResult = await syncProviderEndpointOnProviderEdit(
           {
             providerId: transformed.id,
             vendorId: transformed.providerVendorId,
@@ -603,6 +605,8 @@ export async function updateProvider(
           },
           { tx }
         );
+
+        endpointCircuitResetId = syncResult.resetCircuitEndpointId ?? null;
       } else {
         await ensureProviderEndpointExistsForUrl(
           {
@@ -621,11 +625,24 @@ export async function updateProvider(
         previousVendorId && transformed.providerVendorId !== previousVendorId
           ? previousVendorId
           : null,
+      endpointCircuitResetId,
     };
   });
 
   if (!updateResult) {
     return null;
+  }
+
+  if (updateResult.endpointCircuitResetId != null) {
+    try {
+      await resetEndpointCircuit(updateResult.endpointCircuitResetId);
+    } catch (error) {
+      logger.warn("updateProvider:reset_endpoint_circuit_failed", {
+        providerId: updateResult.provider.id,
+        endpointId: updateResult.endpointCircuitResetId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   if (updateResult.previousVendorIdToCleanup) {

@@ -113,21 +113,27 @@ async function arrangeUrlEditRedScenario(input: {
   });
 
   const db = createDbMock(currentRow, updatedRow);
-  vi.doMock("../../../src/drizzle/db", () => ({ db }));
+  vi.doMock("@/drizzle/db", () => ({ db }));
 
   const getOrCreateProviderVendorIdFromUrlsMock = vi.fn(async () => nextVendorId);
   const ensureProviderEndpointExistsForUrlMock = vi.fn(async () => true);
   const tryDeleteProviderVendorIfEmptyMock = vi.fn(async () => false);
-  const syncProviderEndpointOnProviderEditMock = vi.fn(async () => ({ action: "noop" }));
+  const syncProviderEndpointOnProviderEditMock = vi.fn(
+    async (): Promise<{ action: string; resetCircuitEndpointId?: number }> => ({ action: "noop" })
+  );
+  const resetEndpointCircuitMock = vi.fn(async () => {});
 
-  vi.doMock("../../../src/repository/provider-endpoints", () => ({
+  vi.doMock("@/repository/provider-endpoints", () => ({
     getOrCreateProviderVendorIdFromUrls: getOrCreateProviderVendorIdFromUrlsMock,
     ensureProviderEndpointExistsForUrl: ensureProviderEndpointExistsForUrlMock,
     tryDeleteProviderVendorIfEmpty: tryDeleteProviderVendorIfEmptyMock,
     syncProviderEndpointOnProviderEdit: syncProviderEndpointOnProviderEditMock,
   }));
+  vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+    resetEndpointCircuit: resetEndpointCircuitMock,
+  }));
 
-  const { updateProvider } = await import("../../../src/repository/provider");
+  const { updateProvider } = await import("@/repository/provider");
 
   return {
     updateProvider,
@@ -135,6 +141,7 @@ async function arrangeUrlEditRedScenario(input: {
       ensureProviderEndpointExistsForUrlMock,
       syncProviderEndpointOnProviderEditMock,
       tryDeleteProviderVendorIfEmptyMock,
+      resetEndpointCircuitMock,
     },
   };
 }
@@ -158,6 +165,22 @@ describe("provider repository - endpoint sync on edit (#722 RED)", () => {
       }),
       expect.objectContaining({ tx: expect.any(Object) })
     );
+  });
+
+  test("sync result with reset endpoint id should reset circuit after update commit", async () => {
+    const oldUrl = "https://old.example.com/v1/messages";
+    const newUrl = "https://new.example.com/v1/messages";
+
+    const { updateProvider, mocks } = await arrangeUrlEditRedScenario({ oldUrl, newUrl });
+    mocks.syncProviderEndpointOnProviderEditMock.mockResolvedValueOnce({
+      action: "updated-previous-in-place",
+      resetCircuitEndpointId: 7,
+    });
+
+    await updateProvider(1, { url: newUrl });
+
+    expect(mocks.resetEndpointCircuitMock).toHaveBeenCalledTimes(1);
+    expect(mocks.resetEndpointCircuitMock).toHaveBeenCalledWith(7);
   });
 
   test("old-url exists + new-url exists: should avoid duplicate accumulation and not call insert-only ensure", async () => {
