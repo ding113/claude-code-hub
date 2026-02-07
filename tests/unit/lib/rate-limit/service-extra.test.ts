@@ -54,6 +54,12 @@ vi.mock("@/lib/redis", () => ({
   getRedisClient: () => redisClientRef,
 }));
 
+const resolveSystemTimezoneMock = vi.hoisted(() => vi.fn(async () => "Asia/Shanghai"));
+
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: resolveSystemTimezoneMock,
+}));
+
 const statisticsMock = {
   // service.ts 顶层静态导入需要这些 export 存在
   sumKeyTotalCost: vi.fn(async () => 0),
@@ -85,6 +91,7 @@ describe("RateLimitService - other quota paths", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    resolveSystemTimezoneMock.mockResolvedValue("Asia/Shanghai");
     pipelineCalls.length = 0;
     vi.useFakeTimers();
     vi.setSystemTime(new Date(nowMs));
