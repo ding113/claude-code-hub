@@ -206,14 +206,18 @@ function filterPrivateParameters(obj: unknown): unknown {
  * - sessionId: 当前请求的 session ID
  *
  * 注意：如果请求体中已存在 metadata.user_id，则保持原样不修改
+ * @internal
  */
-function injectClaudeMetadataUserId(
+export function injectClaudeMetadataUserId(
   message: Record<string, unknown>,
   session: ProxySession
 ): Record<string, unknown> {
   // 检查是否已存在 metadata.user_id
-  const existingMetadata = message.metadata as Record<string, unknown> | undefined;
-  if (existingMetadata?.user_id) {
+  const existingMetadata =
+    typeof message.metadata === "object" && message.metadata !== null
+      ? (message.metadata as Record<string, unknown>)
+      : undefined;
+  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
     logger.debug("[ProxyForwarder] metadata.user_id already exists, skipping injection");
     return message;
   }
@@ -222,7 +226,7 @@ function injectClaudeMetadataUserId(
   const keyId = session.authState?.key?.id;
   const sessionId = session.sessionId;
 
-  if (!keyId || !sessionId) {
+  if (keyId == null || !sessionId) {
     logger.debug("[ProxyForwarder] Missing keyId or sessionId, skipping metadata injection");
     return message;
   }
