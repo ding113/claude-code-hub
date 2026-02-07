@@ -2,14 +2,25 @@
  * @vitest-environment happy-dom
  */
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { Dialog } from "@/components/ui/dialog";
-import { ProviderForm } from "@/app/[locale]/settings/providers/_components/forms/provider-form";
+import { ProviderForm } from "../../../../src/app/[locale]/settings/providers/_components/forms/provider-form";
+import { Dialog } from "../../../../src/components/ui/dialog";
 import enMessages from "../../../../messages/en";
+import type { ProviderDisplay } from "../../../../src/types/provider";
+
+let queryClient: QueryClient;
+
+function hasOwn(obj: object, prop: PropertyKey): boolean {
+  return (Object as unknown as { hasOwn: (obj: object, prop: PropertyKey) => boolean }).hasOwn(
+    obj,
+    prop
+  );
+}
 
 const sonnerMocks = vi.hoisted(() => ({
   toast: {
@@ -20,9 +31,9 @@ const sonnerMocks = vi.hoisted(() => ({
 vi.mock("sonner", () => sonnerMocks);
 
 const providersActionMocks = vi.hoisted(() => ({
-  addProvider: vi.fn(async () => ({ ok: true })),
-  editProvider: vi.fn(async () => ({ ok: true })),
-  removeProvider: vi.fn(async () => ({ ok: true })),
+  addProvider: vi.fn(async (_data: unknown) => ({ ok: true })),
+  editProvider: vi.fn(async (_providerId: number, _data: unknown) => ({ ok: true })),
+  removeProvider: vi.fn(async (_providerId: number) => ({ ok: true })),
   getUnmaskedProviderKey: vi.fn(async () => ({ ok: true, data: { key: "test-key" } })),
   getProviderTestPresets: vi.fn(async () => ({ ok: true, data: [] })),
   getModelSuggestionsByProviderGroup: vi.fn(async () => []),
@@ -40,6 +51,13 @@ const modelPricesActionMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/actions/model-prices", () => modelPricesActionMocks);
 
+const providerEndpointsActionMocks = vi.hoisted(() => ({
+  getProviderVendors: vi.fn(async () => []),
+  getProviderEndpoints: vi.fn(async () => []),
+  addProviderEndpoint: vi.fn(async () => ({ ok: true, data: { endpoint: {} } })),
+}));
+vi.mock("@/actions/provider-endpoints", () => providerEndpointsActionMocks);
+
 function loadMessages() {
   return {
     common: enMessages.common,
@@ -56,7 +74,7 @@ function render(node: ReactNode) {
   const root = createRoot(container);
 
   act(() => {
-    root.render(node);
+    root.render(<QueryClientProvider client={queryClient}>{node}</QueryClientProvider>);
   });
 
   return {
@@ -79,6 +97,12 @@ function setNativeValue(element: HTMLInputElement, value: string) {
 
 describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)", () => {
   beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
     vi.clearAllMocks();
 
     // happy-dom 在部分运行时可能不会提供完整的 Storage 实现，这里做最小 mock，避免组件读写报错
@@ -86,7 +110,7 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
     const storage = (() => {
       let store: Record<string, string> = {};
       return {
-        getItem: (key: string) => (Object.hasOwn(store, key) ? store[key] : null),
+        getItem: (key: string) => (hasOwn(store, key) ? store[key] : null),
         setItem: (key: string, value: string) => {
           store[key] = String(value);
         },
@@ -114,7 +138,7 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
   test("填写总消费上限后提交应调用 editProvider 且 payload 携带 limit_total_usd", async () => {
     const messages = loadMessages();
 
-    const provider = {
+    const provider: ProviderDisplay = {
       id: 1,
       name: "p",
       url: "https://example.com",
@@ -125,6 +149,7 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
       costMultiplier: 1,
       groupTag: null,
       providerType: "claude",
+      providerVendorId: null,
       preserveClientIp: false,
       modelRedirects: null,
       allowedModels: null,
@@ -136,6 +161,7 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
       dailyResetTime: "00:00",
       limitWeeklyUsd: null,
       limitMonthlyUsd: null,
+      limitTotalUsd: null,
       limitConcurrentSessions: 0,
       maxRetryAttempts: null,
       circuitBreakerFailureThreshold: 5,
@@ -150,13 +176,19 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
       faviconUrl: null,
       cacheTtlPreference: null,
       context1mPreference: null,
+      codexReasoningEffortPreference: null,
+      codexReasoningSummaryPreference: null,
+      codexTextVerbosityPreference: null,
+      codexParallelToolCallsPreference: null,
+      anthropicMaxTokensPreference: null,
+      anthropicThinkingBudgetPreference: null,
       tpm: null,
       rpm: null,
       rpd: null,
       cc: null,
       createdAt: "2026-01-04",
       updatedAt: "2026-01-04",
-    } as any;
+    };
 
     const { unmount } = render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -197,8 +229,10 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
     }
 
     expect(providersActionMocks.editProvider).toHaveBeenCalledTimes(1);
-    const [, payload] = providersActionMocks.editProvider.mock.calls[0] as [number, any];
-    expect(Object.hasOwn(payload, "limit_total_usd")).toBe(true);
+    const payload = providersActionMocks.editProvider.mock.calls[0]?.[1] as {
+      limit_total_usd?: unknown;
+    };
+    expect(hasOwn(payload, "limit_total_usd")).toBe(true);
     expect(payload.limit_total_usd).toBe(10.5);
 
     unmount();
@@ -207,12 +241,18 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
 
 describe("ProviderForm: 新增成功后应重置总消费上限输入", () => {
   beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
     vi.clearAllMocks();
 
     const storage = (() => {
       let store: Record<string, string> = {};
       return {
-        getItem: (key: string) => (Object.hasOwn(store, key) ? store[key] : null),
+        getItem: (key: string) => (hasOwn(store, key) ? store[key] : null),
         setItem: (key: string, value: string) => {
           store[key] = String(value);
         },
@@ -299,7 +339,9 @@ describe("ProviderForm: 新增成功后应重置总消费上限输入", () => {
     }
 
     expect(providersActionMocks.addProvider).toHaveBeenCalledTimes(1);
-    const [payload] = providersActionMocks.addProvider.mock.calls[0] as [any];
+    const payload = providersActionMocks.addProvider.mock.calls[0]?.[0] as {
+      limit_total_usd?: unknown;
+    };
     expect(payload.limit_total_usd).toBe(10.5);
 
     // 等待一次调度，让 React 处理新增成功后的 state 重置

@@ -1,8 +1,10 @@
 "use client";
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { getProviderEndpoints, getProviderVendors } from "@/actions/provider-endpoints";
 import { addProvider, editProvider, removeProvider } from "@/actions/providers";
 import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
@@ -18,7 +20,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { isValidUrl } from "@/lib/utils/validation";
-import type { ProviderDisplay, ProviderType } from "@/types/provider";
+import type {
+  ProviderDisplay,
+  ProviderEndpoint,
+  ProviderType,
+  ProviderVendor,
+} from "@/types/provider";
 import { FormTabNav } from "./components/form-tab-nav";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { TabId } from "./provider-form-types";
@@ -27,6 +34,29 @@ import { LimitsSection } from "./sections/limits-section";
 import { NetworkSection } from "./sections/network-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
+
+function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+
+  const candidates = [trimmed];
+  if (!/^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)) {
+    candidates.push(`https://${trimmed}`);
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = new URL(candidate);
+      const hostname = parsed.hostname?.toLowerCase();
+      if (!hostname) continue;
+      return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
 
 export interface ProviderFormProps {
   mode: "create" | "edit";
@@ -60,6 +90,80 @@ function ProviderFormContent({
   const { state, dispatch, mode, provider, hideUrl } = useProviderForm();
   const [isPending, startTransition] = useTransition();
   const isEdit = mode === "edit";
+
+  const queryClient = useQueryClient();
+  const { data: vendors = [] } = useQuery<ProviderVendor[]>({
+    queryKey: ["provider-vendors"],
+    queryFn: getProviderVendors,
+  });
+
+  const websiteDomain = useMemo(
+    () => normalizeWebsiteDomainFromUrl(state.basic.websiteUrl),
+    [state.basic.websiteUrl]
+  );
+
+  const resolvedEndpointPoolVendorId = useMemo(() => {
+    // Edit mode: vendor id already attached to provider record
+    if (isEdit) {
+      return provider?.providerVendorId ?? null;
+    }
+
+    // Create/clone: resolve vendor from websiteUrl hostname
+    if (!websiteDomain) return null;
+    const vendor = vendors.find((v) => v.websiteDomain === websiteDomain);
+    return vendor?.id ?? null;
+  }, [isEdit, provider?.providerVendorId, vendors, websiteDomain]);
+
+  const endpointPoolQueryKey = useMemo(() => {
+    if (resolvedEndpointPoolVendorId == null) return null;
+    return [
+      "provider-endpoints",
+      resolvedEndpointPoolVendorId,
+      state.routing.providerType,
+      "provider-form",
+    ] as const;
+  }, [resolvedEndpointPoolVendorId, state.routing.providerType]);
+
+  const { data: endpointPoolEndpoints = [] } = useQuery<ProviderEndpoint[]>({
+    enabled: !hideUrl && endpointPoolQueryKey != null,
+    queryKey: endpointPoolQueryKey ?? ["provider-endpoints", "unresolved", "provider-form"],
+    queryFn: async () => {
+      if (resolvedEndpointPoolVendorId == null) return [];
+      return await getProviderEndpoints({
+        vendorId: resolvedEndpointPoolVendorId,
+        providerType: state.routing.providerType,
+      });
+    },
+  });
+
+  const enabledEndpointPoolEndpoints = useMemo(
+    () => endpointPoolEndpoints.filter((e) => e.isEnabled && !e.deletedAt),
+    [endpointPoolEndpoints]
+  );
+
+  const endpointPoolHasEnabledEndpoints = enabledEndpointPoolEndpoints.length > 0;
+  const endpointPoolPreferredUrl =
+    (enabledEndpointPoolEndpoints[0] ?? endpointPoolEndpoints[0])?.url ?? null;
+
+  const endpointPoolHideLegacyUrlInput =
+    !hideUrl && resolvedEndpointPoolVendorId != null && endpointPoolHasEnabledEndpoints;
+
+  // Keep state.basic.url usable across other sections when legacy URL input is hidden.
+  useEffect(() => {
+    if (isEdit) return;
+    if (hideUrl) return;
+    if (!endpointPoolHideLegacyUrlInput) return;
+    if (!endpointPoolPreferredUrl) return;
+    if (state.basic.url.trim()) return;
+    dispatch({ type: "SET_URL", payload: endpointPoolPreferredUrl });
+  }, [
+    isEdit,
+    hideUrl,
+    endpointPoolHideLegacyUrlInput,
+    endpointPoolPreferredUrl,
+    state.basic.url,
+    dispatch,
+  ]);
 
   // Update URL when resolved URL changes
   useEffect(() => {
@@ -142,12 +246,15 @@ function ProviderFormContent({
     if (!state.basic.name.trim()) {
       return t("errors.nameRequired");
     }
-    if (!hideUrl && !state.basic.url.trim()) {
+
+    const needsLegacyUrl = !hideUrl && !endpointPoolHideLegacyUrlInput;
+    if (needsLegacyUrl && !state.basic.url.trim()) {
       return t("errors.urlRequired");
     }
-    if (!hideUrl && !isValidUrl(state.basic.url)) {
+    if (needsLegacyUrl && !isValidUrl(state.basic.url)) {
       return t("errors.invalidUrl");
     }
+
     if (!isEdit && !state.basic.key.trim()) {
       return t("errors.keyRequired");
     }
@@ -187,9 +294,13 @@ function ProviderFormContent({
         const trimmedKey = state.basic.key.trim();
 
         // Base form data without key (for type safety)
+        const effectiveProviderUrl = endpointPoolHideLegacyUrlInput
+          ? (endpointPoolPreferredUrl ?? state.basic.url).trim()
+          : state.basic.url.trim();
+
         const baseFormData = {
           name: state.basic.name.trim(),
-          url: state.basic.url.trim(),
+          url: effectiveProviderUrl,
           website_url: state.basic.websiteUrl?.trim() || null,
           provider_type: state.routing.providerType,
           preserve_client_ip: state.routing.preserveClientIp,
@@ -208,6 +319,7 @@ function ProviderFormContent({
           codex_parallel_tool_calls_preference: state.routing.codexParallelToolCallsPreference,
           anthropic_max_tokens_preference: state.routing.anthropicMaxTokensPreference,
           anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
+          gemini_google_search_preference: state.routing.geminiGoogleSearchPreference,
           limit_5h_usd: state.rateLimit.limit5hUsd,
           limit_daily_usd: state.rateLimit.limitDailyUsd,
           daily_reset_mode: state.rateLimit.dailyResetMode,
@@ -248,16 +360,20 @@ function ProviderFormContent({
           const createFormData = { ...baseFormData, key: trimmedKey };
           const res = await addProvider(createFormData);
           if (!res.ok) {
-            toast.error(res.error || t("errors.createFailed"));
+            toast.error(res.error || t("errors.addFailed"));
             return;
           }
+
+          queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+          queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+
           toast.success(t("success.created"));
           dispatch({ type: "RESET_FORM" });
         }
         onSuccess?.();
       } catch (e) {
         console.error("Form submission error:", e);
-        toast.error(isEdit ? t("errors.updateFailed") : t("errors.createFailed"));
+        toast.error(isEdit ? t("errors.updateFailed") : t("errors.addFailed"));
       }
     });
   };
@@ -303,7 +419,8 @@ function ProviderFormContent({
     const status: Partial<Record<TabId, "default" | "warning" | "configured">> = {};
 
     // Basic - warning if required fields missing
-    if (!state.basic.name.trim() || (!hideUrl && !state.basic.url.trim())) {
+    const needsLegacyUrl = !hideUrl && !endpointPoolHideLegacyUrlInput;
+    if (!state.basic.name.trim() || (needsLegacyUrl && !state.basic.url.trim())) {
       status.basic = "warning";
     }
 
@@ -365,7 +482,18 @@ function ProviderFormContent({
                 sectionRefs.current.basic = el;
               }}
             >
-              <BasicInfoSection autoUrlPending={autoUrlPending} />
+              <BasicInfoSection
+                autoUrlPending={autoUrlPending}
+                endpointPool={
+                  !hideUrl && resolvedEndpointPoolVendorId != null
+                    ? {
+                        vendorId: resolvedEndpointPoolVendorId,
+                        providerType: state.routing.providerType,
+                        hideLegacyUrlInput: endpointPoolHideLegacyUrlInput,
+                      }
+                    : null
+                }
+              />
             </div>
 
             {/* Routing Section */}

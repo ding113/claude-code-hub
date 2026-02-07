@@ -8,6 +8,10 @@
       "title": "API Endpoint",
       "desc": "Configure the base URL for API requests"
     },
+    "endpointPool": {
+      "title": "Endpoint Pool",
+      "desc": "Manage vendor endpoints for this provider type"
+    },
     "auth": {
       "title": "Authentication",
       "desc": "Provide your API key for authentication"
@@ -233,6 +237,18 @@
         },
         "placeholder": "e.g. 10240",
         "maxOutButton": "Max Out (32000)"
+      }
+    },
+    "geminiOverrides": {
+      "title": "Gemini Parameter Overrides",
+      "desc": "Override Gemini API request parameters at the provider level",
+      "googleSearch": {
+        "label": "Google Search (Web Access)",
+        "options": {
+          "inherit": "No override (follow client)",
+          "enabled": "Force enabled",
+          "disabled": "Force disabled"
+        }
       }
     },
     "context1m": {

@@ -280,6 +280,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
         anthropicMaxTokensPreference: provider.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
+        geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
         rpd: provider.rpd,
@@ -764,7 +765,15 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
 
     // Auto cleanup: delete vendor if it has no active providers/endpoints.
     if (provider?.providerVendorId) {
-      await tryDeleteProviderVendorIfEmpty(provider.providerVendorId);
+      try {
+        await tryDeleteProviderVendorIfEmpty(provider.providerVendorId);
+      } catch (error) {
+        logger.warn("removeProvider:vendor_cleanup_failed", {
+          providerId,
+          vendorId: provider.providerVendorId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     // 广播缓存更新（跨实例即时生效）
@@ -3712,10 +3721,13 @@ export async function reclusterProviderVendors(args: {
           if (!provider) continue;
 
           // Get or create new vendor
-          const newVendorId = await getOrCreateProviderVendorIdFromUrls({
-            providerUrl: provider.url,
-            websiteUrl: provider.websiteUrl ?? null,
-          });
+          const newVendorId = await getOrCreateProviderVendorIdFromUrls(
+            {
+              providerUrl: provider.url,
+              websiteUrl: provider.websiteUrl ?? null,
+            },
+            { tx }
+          );
 
           // Update provider's vendorId
           await tx
@@ -3730,7 +3742,14 @@ export async function reclusterProviderVendors(args: {
 
       // Cleanup empty vendors
       for (const oldVendorId of oldVendorIds) {
-        await tryDeleteProviderVendorIfEmpty(oldVendorId);
+        try {
+          await tryDeleteProviderVendorIfEmpty(oldVendorId);
+        } catch (error) {
+          logger.warn("reclusterProviderVendors:vendor_cleanup_failed", {
+            vendorId: oldVendorId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       // Publish cache invalidation

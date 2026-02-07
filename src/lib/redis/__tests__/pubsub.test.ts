@@ -5,8 +5,10 @@ class MockRedis extends EventEmitter {
   publish = vi.fn();
   subscribe = vi.fn();
   unsubscribe = vi.fn();
+  disconnect = vi.fn();
   quit = vi.fn();
   duplicate = vi.fn();
+  status = "wait";
 }
 
 vi.mock("@/lib/logger", () => ({
@@ -22,7 +24,7 @@ vi.mock("@/lib/redis/client", () => ({
   getRedisClient: vi.fn(),
 }));
 
-describe("Redis Pub/Sub 缓存失效通知", () => {
+describe("Redis Pub/Sub cache invalidation", () => {
   beforeEach(() => {
     vi.resetModules();
   });
@@ -64,7 +66,15 @@ describe("Redis Pub/Sub 缓存失效通知", () => {
     const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
     const onInvalidate = vi.fn();
 
-    const cleanup = await subscribeCacheInvalidation("test-channel", onInvalidate);
+    // Start subscription (will wait for ready)
+    const subscribePromise = subscribeCacheInvalidation("test-channel", onInvalidate);
+
+    // Simulate connection ready
+    subscriber.status = "ready";
+    subscriber.emit("ready");
+
+    const cleanup = await subscribePromise;
+    expect(cleanup).not.toBeNull();
     expect(typeof cleanup).toBe("function");
 
     expect(base.duplicate).toHaveBeenCalledTimes(1);
@@ -73,9 +83,47 @@ describe("Redis Pub/Sub 缓存失效通知", () => {
     subscriber.emit("message", "test-channel", Date.now().toString());
     expect(onInvalidate).toHaveBeenCalledTimes(1);
 
-    cleanup();
+    cleanup!();
     subscriber.emit("message", "test-channel", Date.now().toString());
     expect(onInvalidate).toHaveBeenCalledTimes(1);
+  });
+
+  test("subscribeCacheInvalidation: should resubscribe on reconnect", async () => {
+    const base = new MockRedis();
+    const subscriber = new MockRedis();
+    base.duplicate.mockReturnValue(subscriber);
+    subscriber.subscribe.mockResolvedValue(1);
+
+    const { getRedisClient } = await import("@/lib/redis/client");
+    (getRedisClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue(base);
+
+    const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
+    const onInvalidate = vi.fn();
+
+    const subscribePromise = subscribeCacheInvalidation("test-channel", onInvalidate);
+
+    subscriber.status = "ready";
+    subscriber.emit("ready");
+
+    const cleanup = await subscribePromise;
+    expect(cleanup).not.toBeNull();
+    expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
+
+    subscriber.subscribe.mockClear();
+    subscriber.emit("close");
+    subscriber.emit("ready");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
+    expect(subscriber.subscribe).toHaveBeenCalledWith("test-channel");
+
+    subscriber.subscribe.mockClear();
+    subscriber.emit("close");
+    subscriber.emit("ready");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(subscriber.subscribe).toHaveBeenCalledTimes(1);
+    expect(subscriber.subscribe).toHaveBeenCalledWith("test-channel");
+
+    cleanup!();
   });
 
   test("subscribeCacheInvalidation: should handle Redis not configured gracefully", async () => {
@@ -85,7 +133,87 @@ describe("Redis Pub/Sub 缓存失效通知", () => {
     const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
     const cleanup = await subscribeCacheInvalidation("test-channel", vi.fn());
 
-    expect(typeof cleanup).toBe("function");
-    expect(() => cleanup()).not.toThrow();
+    expect(cleanup).toBeNull();
+  });
+
+  test("subscribeCacheInvalidation: should return null on connection error", async () => {
+    const base = new MockRedis();
+    const subscriber = new MockRedis();
+    base.duplicate.mockReturnValue(subscriber);
+
+    const { getRedisClient } = await import("@/lib/redis/client");
+    (getRedisClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue(base);
+
+    const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
+    const onInvalidate = vi.fn();
+
+    // Start subscription
+    const subscribePromise = subscribeCacheInvalidation("test-channel", onInvalidate);
+
+    // Simulate connection error
+    subscriber.emit("error", new Error("Connection refused"));
+
+    const cleanup = await subscribePromise;
+    expect(cleanup).toBeNull();
+    expect(onInvalidate).not.toHaveBeenCalled();
+  });
+
+  test("subscribeCacheInvalidation: should rollback callback when subscribe fails and allow retry", async () => {
+    const base = new MockRedis();
+    const subscriber = new MockRedis();
+    base.duplicate.mockReturnValue(subscriber);
+    subscriber.subscribe
+      .mockRejectedValueOnce(new Error("Subscribe failed"))
+      .mockResolvedValueOnce(1);
+
+    const { getRedisClient } = await import("@/lib/redis/client");
+    (getRedisClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue(base);
+
+    const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
+
+    const onInvalidateA = vi.fn();
+    const subscribePromiseA = subscribeCacheInvalidation("test-channel", onInvalidateA);
+
+    subscriber.status = "ready";
+    subscriber.emit("ready");
+
+    const cleanupA = await subscribePromiseA;
+    expect(cleanupA).toBeNull();
+
+    const onInvalidateB = vi.fn();
+    const cleanupB = await subscribeCacheInvalidation("test-channel", onInvalidateB);
+    expect(cleanupB).not.toBeNull();
+    expect(typeof cleanupB).toBe("function");
+
+    subscriber.emit("message", "test-channel", Date.now().toString());
+
+    expect(onInvalidateA).not.toHaveBeenCalled();
+    expect(onInvalidateB).toHaveBeenCalledTimes(1);
+    expect(subscriber.subscribe).toHaveBeenCalledTimes(2);
+
+    cleanupB!();
+  });
+
+  test("subscribeCacheInvalidation: should timeout waiting for ready and disconnect subscriber", async () => {
+    vi.useFakeTimers();
+    try {
+      const base = new MockRedis();
+      const subscriber = new MockRedis();
+      base.duplicate.mockReturnValue(subscriber);
+
+      const { getRedisClient } = await import("@/lib/redis/client");
+      (getRedisClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue(base);
+
+      const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
+      const subscribePromise = subscribeCacheInvalidation("test-channel", vi.fn());
+
+      await vi.advanceTimersByTimeAsync(10000);
+
+      const cleanup = await subscribePromise;
+      expect(cleanup).toBeNull();
+      expect(subscriber.disconnect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

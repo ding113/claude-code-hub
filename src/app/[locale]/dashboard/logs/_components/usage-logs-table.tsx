@@ -361,7 +361,7 @@ export function UsageLogsTable({
                         </TooltipProvider>
                       ) : isNonBilling ? (
                         "-"
-                      ) : log.costUsd ? (
+                      ) : log.costUsd != null ? (
                         <TooltipProvider>
                           <Tooltip delayDuration={250}>
                             <TooltipTrigger asChild>

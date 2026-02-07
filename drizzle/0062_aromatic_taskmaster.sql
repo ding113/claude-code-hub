@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ADD COLUMN "gemini_google_search_preference" varchar(20);

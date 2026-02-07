@@ -282,6 +282,12 @@ export const providers = pgTable('providers', {
   anthropicMaxTokensPreference: varchar('anthropic_max_tokens_preference', { length: 20 }),
   anthropicThinkingBudgetPreference: varchar('anthropic_thinking_budget_preference', { length: 20 }),
 
+  // Gemini (generateContent API) parameter overrides (only for gemini/gemini-cli providers)
+  // - 'inherit' or null: follow client request
+  // - 'enabled': force inject googleSearch tool
+  // - 'disabled': force remove googleSearch tool from request
+  geminiGoogleSearchPreference: varchar('gemini_google_search_preference', { length: 20 }),
+
   // 废弃（保留向后兼容，但不再使用）
   tpm: integer('tpm').default(0),
   rpm: integer('rpm').default(0),

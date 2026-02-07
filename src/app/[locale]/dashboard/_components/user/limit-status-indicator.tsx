@@ -47,7 +47,7 @@ export function LimitStatusIndicator({
   label,
   variant = "default",
   showPercentage = false,
-  unit = "$",
+  unit = "",
 }: LimitStatusIndicatorProps) {
   const isSet = typeof value === "number" && Number.isFinite(value);
   const hasUsage = typeof usage === "number" && Number.isFinite(usage);

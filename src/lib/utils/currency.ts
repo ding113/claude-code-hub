@@ -132,4 +132,16 @@ export function formatCurrency(
   return `${config.symbol}${formatted}`;
 }
 
+/**
+ * Get currency symbol from currency code
+ * @param currencyCode - Currency code (default "USD")
+ * @returns Currency symbol (e.g., "$", "¥", "€")
+ */
+export function getCurrencySymbol(currencyCode?: CurrencyCode | string): string {
+  if (!currencyCode || !(currencyCode in CURRENCY_CONFIG)) {
+    return CURRENCY_CONFIG.USD.symbol;
+  }
+  return CURRENCY_CONFIG[currencyCode as CurrencyCode].symbol;
+}
+
 export { Decimal };

@@ -15,6 +15,7 @@ import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
+import { applyGeminiGoogleSearchOverrideWithAudit } from "@/lib/gemini/provider-overrides";
 import { logger } from "@/lib/logger";
 import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
@@ -57,6 +58,10 @@ import {
   rectifyAnthropicRequestMessage,
 } from "./thinking-signature-rectifier";
 
+/** Default User-Agent for Codex CLI requests when none is provided */
+export const DEFAULT_CODEX_USER_AGENT =
+  "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
+
 const STANDARD_ENDPOINTS = [
   "/v1/messages",
   "/v1/messages/count_tokens",
@@ -64,6 +69,8 @@ const STANDARD_ENDPOINTS = [
   "/v1/chat/completions",
   "/v1/models",
 ];
+
+const STRICT_STANDARD_ENDPOINTS = ["/v1/messages", "/v1/responses", "/v1/chat/completions"];
 
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
@@ -224,37 +231,63 @@ export class ProxyForwarder {
       let thinkingBudgetRectifierRetried = false;
 
       const requestPath = session.requestUrl.pathname;
+      const providerVendorId = currentProvider.providerVendorId ?? 0;
       const isMcpRequest =
         currentProvider.providerType !== "gemini" &&
         currentProvider.providerType !== "gemini-cli" &&
         !STANDARD_ENDPOINTS.includes(requestPath);
+      const shouldEnforceStrictEndpointPool =
+        !isMcpRequest && STRICT_STANDARD_ENDPOINTS.includes(requestPath) && providerVendorId > 0;
+      let endpointSelectionError: Error | null = null;
 
       const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
 
       if (isMcpRequest) {
         endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
-      } else if (currentProvider.providerVendorId && currentProvider.providerVendorId > 0) {
+      } else if (providerVendorId > 0) {
         try {
           const preferred = await getPreferredProviderEndpoints({
-            vendorId: currentProvider.providerVendorId,
+            vendorId: providerVendorId,
             providerType: currentProvider.providerType,
           });
           endpointCandidates.push(...preferred.map((e) => ({ endpointId: e.id, baseUrl: e.url })));
         } catch (error) {
-          logger.warn(
-            "[ProxyForwarder] Failed to load provider endpoints, fallback to provider.url",
-            {
-              providerId: currentProvider.id,
-              vendorId: currentProvider.providerVendorId,
-              providerType: currentProvider.providerType,
-              error: error instanceof Error ? error.message : String(error),
-            }
-          );
+          endpointSelectionError =
+            error instanceof Error
+              ? error
+              : new Error(typeof error === "string" ? error : String(error));
+          logger.warn("[ProxyForwarder] Failed to load provider endpoints", {
+            providerId: currentProvider.id,
+            vendorId: providerVendorId,
+            providerType: currentProvider.providerType,
+            error: endpointSelectionError.message,
+            strictEndpointPolicy: shouldEnforceStrictEndpointPool,
+            reason: "selector_error",
+          });
         }
       }
 
       if (endpointCandidates.length === 0) {
-        endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+        if (shouldEnforceStrictEndpointPool) {
+          logger.warn(
+            "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
+            {
+              providerId: currentProvider.id,
+              vendorId: providerVendorId,
+              providerType: currentProvider.providerType,
+              requestPath,
+              reason: "strict_blocked_legacy_fallback",
+              strictBlockCause: endpointSelectionError
+                ? "selector_error"
+                : "no_endpoint_candidates",
+              selectorError: endpointSelectionError?.message,
+            }
+          );
+          failedProviderIds.push(currentProvider.id);
+          attemptCount = maxAttemptsPerProvider;
+        } else {
+          endpointCandidates.push({ endpointId: null, baseUrl: currentProvider.url });
+        }
       }
 
       // Truncate endpoints to maxRetryAttempts count
@@ -1279,7 +1312,43 @@ export class ProxyForwarder {
       // 1. 直接透传请求体（不转换）- 仅对有 body 的请求
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
       if (hasBody) {
-        const bodyString = JSON.stringify(session.request.message);
+        let bodyToSerialize = session.request.message as Record<string, unknown>;
+
+        // Apply Gemini Google Search override if configured
+        const { request: overriddenBody, audit: googleSearchAudit } =
+          applyGeminiGoogleSearchOverrideWithAudit(provider, bodyToSerialize);
+        if (googleSearchAudit) {
+          session.addSpecialSetting(googleSearchAudit);
+          bodyToSerialize = overriddenBody;
+          session.request.message = overriddenBody;
+
+          // Persist special settings immediately (same pattern as Anthropic overrides)
+          const specialSettings = session.getSpecialSettings();
+          if (session.sessionId) {
+            await SessionManager.storeSessionSpecialSettings(
+              session.sessionId,
+              specialSettings,
+              session.requestSequence
+            ).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to store Gemini special settings", {
+                error: err,
+                sessionId: session.sessionId,
+              });
+            });
+          }
+          if (session.messageContext?.id) {
+            await updateMessageRequestDetails(session.messageContext.id, {
+              specialSettings,
+            }).catch((err) => {
+              logger.error("[ProxyForwarder] Failed to persist Gemini special settings", {
+                error: err,
+                messageRequestId: session.messageContext?.id,
+              });
+            });
+          }
+        }
+
+        const bodyString = JSON.stringify(bodyToSerialize);
         requestBody = bodyString;
       }
 
@@ -2214,10 +2283,9 @@ export class ProxyForwarder {
       // 注意：使用 ?? 而非 || 以确保空字符串 UA 能被正确保留
       let resolvedUA: string;
       if (wasModified) {
-        resolvedUA =
-          filteredUA ?? originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+        resolvedUA = filteredUA ?? originalUA ?? DEFAULT_CODEX_USER_AGENT;
       } else {
-        resolvedUA = originalUA ?? "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64";
+        resolvedUA = originalUA ?? DEFAULT_CODEX_USER_AGENT;
       }
       overrides["user-agent"] = resolvedUA;
 
