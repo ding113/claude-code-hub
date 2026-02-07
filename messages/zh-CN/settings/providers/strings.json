@@ -88,6 +88,7 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "标签（可选）",
   "endpointLabelPlaceholder": "生产环境",
+  "sortOrder": "排序",
   "editEndpoint": "编辑端点",
   "editVendor": "编辑服务商",
   "vendorName": "服务商名称",
@@ -102,5 +103,15 @@
   "vendorUpdateSuccess": "服务商更新成功",
   "vendorUpdateFailed": "更新服务商失败",
   "vendorDeleteSuccess": "服务商删除成功",
-  "vendorDeleteFailed": "删除服务商失败"
+  "vendorDeleteFailed": "删除服务商失败",
+  "endpointStatus": {
+    "viewDetails": "查看详情（{count}）",
+    "activeEndpoints": "启用端点",
+    "noEndpoints": "无端点",
+    "healthy": "健康",
+    "unhealthy": "故障",
+    "unknown": "未知",
+    "circuitOpen": "熔断开启",
+    "circuitHalfOpen": "熔断半开"
+  }
 }

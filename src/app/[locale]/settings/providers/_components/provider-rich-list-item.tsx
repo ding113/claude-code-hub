@@ -1,5 +1,5 @@
 "use client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle,
@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { getProviderVendors } from "@/actions/provider-endpoints";
 import {
   editProvider,
   getUnmaskedProviderKey,
@@ -55,6 +56,7 @@ import type { ProviderDisplay, ProviderStatistics } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { InlineEditPopover } from "./inline-edit-popover";
+import { ProviderEndpointHover } from "./provider-endpoint-hover";
 
 interface ProviderRichListItemProps {
   provider: ProviderDisplay;
@@ -95,6 +97,12 @@ export function ProviderRichListItem({
 }: ProviderRichListItemProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["provider-vendors"],
+    queryFn: async () => await getProviderVendors(),
+    staleTime: 60000,
+  });
+
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
   const [showKeyDialog, setShowKeyDialog] = useState(false);
@@ -146,6 +154,10 @@ export function ProviderRichListItem({
   const typeKey = getProviderTypeTranslationKey(provider.providerType);
   const typeLabel = tTypes(`${typeKey}.label`);
   const typeDescription = tTypes(`${typeKey}.description`);
+
+  const vendor = provider.providerVendorId
+    ? vendors.find((v) => v.id === provider.providerVendorId)
+    : undefined;
 
   useEffect(() => {
     setClipboardAvailable(isClipboardSupported());
@@ -445,8 +457,17 @@ export function ProviderRichListItem({
           </div>
 
           <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
-            {/* URL */}
-            <span className="truncate max-w-[300px]">{provider.url}</span>
+            {/* Vendor & Endpoints OR Legacy URL */}
+            {vendor ? (
+              <div className="flex items-center gap-2">
+                <span className="truncate max-w-[300px] font-medium text-foreground/80">
+                  {vendor.displayName || vendor.websiteDomain}
+                </span>
+                <ProviderEndpointHover vendorId={vendor.id} providerType={provider.providerType} />
+              </div>
+            ) : (
+              <span className="truncate max-w-[300px]">{provider.url}</span>
+            )}
 
             {/* 官网链接 */}
             {provider.websiteUrl && (

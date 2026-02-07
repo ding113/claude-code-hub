@@ -8,6 +8,10 @@
       "title": "API エンドポイント",
       "desc": "API リクエストのベース URL を設定"
     },
+    "endpointPool": {
+      "title": "エンドポイントプール",
+      "desc": "このプロバイダー種別のエンドポイントを管理"
+    },
     "auth": {
       "title": "認証",
       "desc": "認証用の API キーを入力"

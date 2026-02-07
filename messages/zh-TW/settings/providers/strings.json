@@ -88,6 +88,7 @@
   "endpointUrlPlaceholder": "https://api.example.com/v1",
   "endpointLabelOptional": "標籤（選填）",
   "endpointLabelPlaceholder": "生產環境",
+  "sortOrder": "排序",
   "editEndpoint": "編輯端點",
   "editVendor": "編輯供應商",
   "vendorName": "供應商名稱",
@@ -102,5 +103,15 @@
   "vendorUpdateSuccess": "供應商已更新",
   "vendorUpdateFailed": "更新供應商失敗",
   "vendorDeleteSuccess": "供應商已刪除",
-  "vendorDeleteFailed": "刪除供應商失敗"
+  "vendorDeleteFailed": "刪除供應商失敗",
+  "endpointStatus": {
+    "viewDetails": "檢視詳情（{count}）",
+    "activeEndpoints": "啟用端點",
+    "noEndpoints": "無端點",
+    "healthy": "健康",
+    "unhealthy": "故障",
+    "unknown": "未知",
+    "circuitOpen": "熔斷開啟",
+    "circuitHalfOpen": "熔斷半開"
+  }
 }
