@@ -10,7 +10,10 @@ import type { ProxySession } from "./session";
  * - ResponseHandler：在流正常结束后，基于最终响应体做一次补充检查，然后再更新熔断/endpoint/会话绑定。
  *
  * 说明：
- * - 这里选择“把元信息挂到 session 上”而不是改动大量类型/函数签名，避免改动面过大；
+ * - 这里选择使用 WeakMap，而不是把字段挂到 session 上：
+ *   - 避免污染 ProxySession 对象；
+ *   - 更类型安全；
+ *   - 元信息生命周期跟随 session 实例，消费后可立即清理。
  * - 元信息是一次性的：消费后会被清空，避免跨请求污染。
  */
 export type DeferredStreamingFinalization = {
@@ -26,26 +29,23 @@ export type DeferredStreamingFinalization = {
   upstreamStatusCode: number;
 };
 
-type SessionWithDeferred = ProxySession & {
-  deferredStreamingFinalization?: DeferredStreamingFinalization;
-};
+const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();
 
 export function setDeferredStreamingFinalization(
   session: ProxySession,
   meta: DeferredStreamingFinalization
 ): void {
   // Forwarder 在识别到 SSE 时调用：标记该请求需要在流结束后“二次结算”。
-  (session as SessionWithDeferred).deferredStreamingFinalization = meta;
+  deferredMeta.set(session, meta);
 }
 
 export function consumeDeferredStreamingFinalization(
   session: ProxySession
 ): DeferredStreamingFinalization | null {
-  const s = session as SessionWithDeferred;
-  const meta = s.deferredStreamingFinalization ?? null;
+  const meta = deferredMeta.get(session) ?? null;
   if (meta) {
     // 只允许消费一次：避免重复结算（例如多个后台统计任务并行时）。
-    s.deferredStreamingFinalization = undefined;
+    deferredMeta.delete(session);
   }
   return meta;
 }

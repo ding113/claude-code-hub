@@ -26,9 +26,27 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     expect(res.isError).toBe(true);
   });
 
-  test("纯 JSON：JSON 数组不视为错误（避免误判）", () => {
+  test("JSON 数组输入不视为错误（目前不做解析）", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('[{"error":"something"}]');
     expect(res.isError).toBe(false);
+  });
+
+  test("reason 应对 Bearer token 做脱敏（避免写入日志/Redis/DB）", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText('{"error":"Bearer abc.def_ghi"}');
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      expect(res.reason).toContain("Bearer [REDACTED]");
+      expect(res.reason).not.toContain("abc.def_ghi");
+    }
+  });
+
+  test("reason 应对常见 API key 前缀做脱敏（避免写入日志/Redis/DB）", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText('{"error":"sk-1234567890abcdef123456"}');
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      expect(res.reason).toContain("[REDACTED_KEY]");
+      expect(res.reason).not.toContain("sk-1234567890abcdef123456");
+    }
   });
 
   test("纯 JSON：error 为空字符串不视为错误", () => {

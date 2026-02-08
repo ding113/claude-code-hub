@@ -114,12 +114,41 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     return { effectiveStatusCode, errorMessage };
   }
 
+  // meta 由 Forwarder 在“拿到 upstream Response 的那一刻”记录，代表真正产生本次流的 provider。
+  // 即使 session.provider 在之后被其它逻辑意外修改（极端情况），我们仍以 meta 为准更新：
+  // - provider/endpoint 熔断与统计
+  // - session 智能绑定
+  // 这样能避免把成功/失败记到错误的 provider 上。
+  let providerForChain = provider;
   if (provider.id !== meta.providerId) {
     logger.warn("[ResponseHandler] Deferred streaming meta provider mismatch", {
       sessionId: session.sessionId ?? null,
       metaProviderId: meta.providerId,
       currentProviderId: provider.id,
+      canonicalProviderId: meta.providerId,
     });
+
+    // 尝试用 meta.providerId 找回正确的 Provider 对象，保证 providerChain 的审计数据一致
+    try {
+      const providers = await session.getProvidersSnapshot();
+      const resolved = providers.find((p) => p.id === meta.providerId);
+      if (resolved) {
+        providerForChain = resolved;
+      } else {
+        logger.warn("[ResponseHandler] Deferred streaming meta provider not found in snapshot", {
+          sessionId: session.sessionId ?? null,
+          metaProviderId: meta.providerId,
+          currentProviderId: provider.id,
+        });
+      }
+    } catch (resolveError) {
+      logger.warn("[ResponseHandler] Failed to resolve meta provider from snapshot", {
+        sessionId: session.sessionId ?? null,
+        metaProviderId: meta.providerId,
+        currentProviderId: provider.id,
+        error: resolveError,
+      });
+    }
   }
 
   if (detected.isError) {
@@ -161,7 +190,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     // 记录到决策链（用于日志展示与 DB 持久化）。
     // 注意：这里用 effectiveStatusCode（502）而不是 upstreamStatusCode（200），
     // 以便让内部链路明确显示这是一次失败（否则会被误读为成功）。
-    session.addProviderToChain(provider, {
+    session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
       reason: "retry_failed",
@@ -240,7 +269,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     });
   }
 
-  session.addProviderToChain(provider, {
+  session.addProviderToChain(providerForChain, {
     endpointId: meta.endpointId,
     endpointUrl: meta.endpointUrl,
     reason: meta.isFirstAttempt ? "request_success" : "retry_success",

@@ -20,6 +20,7 @@ import { parseSSEData } from "@/lib/utils/sse";
  * - 仅基于结构化字段做启发式判断：`error` 与 `message`；
  * - 不扫描模型生成的正文内容（例如 content/choices），避免把用户/模型自然语言里的 "error" 误判为上游错误；
  * - message 关键字检测仅对“小体积 JSON”启用，降低误判与性能开销。
+ * - reason 字段会做脱敏与截断：避免把上游错误中可能包含的敏感信息写入日志/Redis/DB。
  */
 export type UpstreamErrorDetectionResult =
   | { isError: false }
@@ -39,7 +40,8 @@ type DetectionOptions = {
   /**
    * message 关键字匹配规则（默认 /error/i）。
    *
-   * 注意：该规则只用于检查 `message` 或 `error.message` 字段（字符串）。
+   * 注意：该规则只用于检查 `message` 字段（字符串）。
+   * `error.message` 属于更强信号：只要 `error` 非空（含对象形式），就会直接判定为错误。
    */
   messageKeyword?: RegExp;
 };
@@ -66,8 +68,44 @@ function hasNonEmptyValue(value: unknown): boolean {
   return true;
 }
 
+function sanitizeErrorTextForReason(text: string): string {
+  // 注意：这里的目的不是“完美脱敏”，而是尽量降低上游错误信息中意外夹带敏感内容的风险。
+  // 若后续发现更多敏感模式，可在不改变检测语义的前提下补充。
+  let sanitized = text;
+
+  // Bearer token
+  sanitized = sanitized.replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]");
+
+  // Common API key prefixes (OpenAI/Claude/Codex 等)
+  sanitized = sanitized.replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b/giu, "[REDACTED_KEY]");
+  sanitized = sanitized.replace(/\bAIza[0-9A-Za-z_-]{16,}\b/g, "[REDACTED_KEY]");
+
+  // JWT（base64url 三段）
+  sanitized = sanitized.replace(
+    /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g,
+    "[JWT]"
+  );
+
+  // Email
+  sanitized = sanitized.replace(
+    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    "[EMAIL]"
+  );
+
+  // 通用敏感键值（尽量覆盖常见写法）
+  sanitized = sanitized.replace(
+    /\b(password|token|secret|api[_-]?key)\b\s*[:=]\s*['"]?[^'"\s]+['"]?/gi,
+    "$1:***"
+  );
+
+  // 常见配置/凭证路径（避免把文件名/路径泄露到审计字段里）
+  sanitized = sanitized.replace(/\/[\w.-]+\.(?:env|ya?ml|json|conf|ini)/gi, "[PATH]");
+
+  return sanitized;
+}
+
 function truncateForReason(text: string, maxLen: number = 200): string {
-  const trimmed = text.trim();
+  const trimmed = sanitizeErrorTextForReason(text).trim();
   if (trimmed.length <= maxLen) return trimmed;
   return `${trimmed.slice(0, maxLen)}…`;
 }
@@ -79,7 +117,7 @@ function detectFromJsonObject(
 ): UpstreamErrorDetectionResult {
   // 判定优先级：
   // 1) `error` 非空：直接判定为错误（强信号）
-  // 2) 小体积 JSON 下，`message` / `error.message` 命中关键字：判定为错误（弱信号，但能覆盖部分“错误只写在 message”场景）
+  // 2) 小体积 JSON 下，`message` 命中关键字：判定为错误（弱信号，但能覆盖部分“错误只写在 message”场景）
   const errorValue = obj.error;
   if (hasNonEmptyValue(errorValue)) {
     // 优先展示 string 或 error.message，避免把整个对象塞进 reason
@@ -119,7 +157,7 @@ function detectFromJsonObject(
  * 用于“流式 SSE 已经结束后”的补充检查：
  * - 响应体为空：视为错误
  * - JSON 里包含非空 error 字段：视为错误
- * - 小于 1000 字符的 JSON：若 message（或 error.message）包含 "error" 字样：视为错误
+ * - 小于 1000 字符的 JSON：若 message 包含 "error" 字样：视为错误
  *
  * 注意与限制：
  * - 该函数不负责判断 HTTP 状态码；调用方通常只在“上游返回 200 且 SSE 正常结束后”使用它。
@@ -141,8 +179,10 @@ export function detectUpstreamErrorFromSseOrJsonText(
     return { isError: true, reason: "上游返回 200 但响应体为空" };
   }
 
-  // 情况 1：纯 JSON（上游可能 Content-Type 设置为 SSE，但实际上返回 JSON）
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+  // 情况 1：纯 JSON（对象）
+  // 上游可能 Content-Type 设置为 SSE，但实际上返回 JSON；此处只处理对象格式（{...}），
+  // 不处理数组（[...]）以避免误判（数组场景的语义差异较大，后续若确认需要再扩展）。
+  if (trimmed.startsWith("{")) {
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       if (isPlainRecord(parsed)) {
@@ -157,6 +197,9 @@ export function detectUpstreamErrorFromSseOrJsonText(
   // 情况 2：SSE 文本。快速过滤：既无 "error" 也无 "message" key 时跳过解析
   // 注意：这里用 key 形式的引号匹配，尽量避免模型正文里出现 error 造成的无谓解析。
   // 代价：如果上游返回的并非标准 JSON key（极少见），这里可能漏检；但我们偏向保守与低误判。
+  //
+  // 额外说明：这里刻意只匹配 `"error"` / `"message"`（含双引号），
+  // 若正文里出现被转义的 `\"error\"`（字符串内容），不会命中，这是为了避免误判。
   if (!text.includes("\"error\"") && !text.includes("\"message\"")) {
     return { isError: false };
   }
@@ -165,11 +208,22 @@ export function detectUpstreamErrorFromSseOrJsonText(
   const events = parseSSEData(text);
   for (const evt of events) {
     if (!isPlainRecord(evt.data)) continue;
+    // 性能优化：只有在 message 是字符串、且“看起来足够小”时才需要精确计算 JSON 字符数。
+    // 对大多数 SSE 事件（message 为对象、或没有 message），无需 JSON.stringify。
     let chars = 0;
-    try {
-      chars = JSON.stringify(evt.data).length;
-    } catch {
-      // ignore
+    const errorValue = evt.data.error;
+    const messageValue = evt.data.message;
+    if (!hasNonEmptyValue(errorValue) && typeof messageValue === "string") {
+      if (messageValue.length >= merged.maxJsonCharsForMessageCheck) {
+        chars = merged.maxJsonCharsForMessageCheck; // >= 阈值即可跳过 message 关键字判定
+      } else {
+        try {
+          chars = JSON.stringify(evt.data).length;
+        } catch {
+          // stringify 失败时回退为近似值（仍保持“仅小体积 JSON 才做 message 检测”的意图）
+          chars = messageValue.length;
+        }
+      }
     }
 
     const res = detectFromJsonObject(evt.data, chars, merged);
