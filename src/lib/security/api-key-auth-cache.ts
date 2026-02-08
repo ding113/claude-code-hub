@@ -76,7 +76,8 @@ function shouldUseRedisClient(): boolean {
   // 与 getRedisClient 的启用条件保持一致，避免在未配置 Redis 时触发热路径 warn 日志
   if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") return false;
   if (!process.env.REDIS_URL) return false;
-  if (process.env.ENABLE_RATE_LIMIT !== "true") return false;
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0") return false;
   return true;
 }
 

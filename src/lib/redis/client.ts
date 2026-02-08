@@ -21,7 +21,8 @@ function maskRedisUrl(redisUrl: string) {
  * Includes servername for SNI (Server Name Indication) support.
  */
 function buildTlsConfig(redisUrl: string): Record<string, unknown> {
-  const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
+  const raw = process.env.REDIS_TLS_REJECT_UNAUTHORIZED?.trim();
+  const rejectUnauthorized = raw !== "false" && raw !== "0";
 
   try {
     const url = new URL(redisUrl);
@@ -79,7 +80,8 @@ export function getRedisClient(): Redis | null {
   }
 
   const redisUrl = process.env.REDIS_URL;
-  const isEnabled = process.env.ENABLE_RATE_LIMIT === "true";
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  const isEnabled = rateLimitRaw !== "false" && rateLimitRaw !== "0";
 
   if (!isEnabled || !redisUrl) {
     logger.warn("[Redis] Rate limiting disabled or REDIS_URL not configured");
@@ -112,7 +114,8 @@ export function getRedisClient(): Redis | null {
 
     // 2. 如果使用 rediss://，则添加显式的 TLS 配置（支持跳过证书验证）
     if (useTls) {
-      const rejectUnauthorized = process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== "false";
+      const raw = process.env.REDIS_TLS_REJECT_UNAUTHORIZED?.trim();
+      const rejectUnauthorized = raw !== "false" && raw !== "0";
       logger.info("[Redis] Using TLS connection (rediss://)", {
         redisUrl: safeRedisUrl,
         rejectUnauthorized,

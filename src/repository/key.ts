@@ -185,7 +185,8 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
   // 为减少“新 key 立刻使用偶发 401”的窗口，这里尽量等待 key 缓存写入完成（失败则降级）。
   await cacheActiveKey(created).catch(() => {});
   // 多实例：广播 key 集合变更，触发其它实例重建 Vacuum Filter，避免误拒绝
-  if (process.env.ENABLE_RATE_LIMIT === "true" && process.env.REDIS_URL) {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (process.env.REDIS_URL && rateLimitRaw !== "false" && rateLimitRaw !== "0") {
     await publishCacheInvalidation(CHANNEL_API_KEYS_UPDATED);
   }
   return created;

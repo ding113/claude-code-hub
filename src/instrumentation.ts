@@ -99,7 +99,8 @@ async function startApiKeyVacuumFilterSync(): Promise<void> {
   }
 
   // 与 Redis client 的启用条件保持一致：未启用限流/未配置 Redis 时不尝试订阅，避免额外 warn 日志
-  if (process.env.ENABLE_RATE_LIMIT !== "true" || !process.env.REDIS_URL) {
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (rateLimitRaw === "false" || rateLimitRaw === "0" || !process.env.REDIS_URL) {
     return;
   }
 

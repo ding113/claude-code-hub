@@ -447,6 +447,16 @@ describe("ApiKeyAuthCache：Redis key（哈希/命名/TTL/失效）", () => {
     expect(getRedisClient).not.toHaveBeenCalled();
   });
 
+  test("ENABLE_RATE_LIMIT=1：应允许使用 Redis 缓存（兼容 1/0 写法）", async () => {
+    setEnv({ ENABLE_RATE_LIMIT: "1" });
+    const { cacheActiveKey } = await import("@/lib/security/api-key-auth-cache");
+
+    await cacheActiveKey(buildKey({ key: "sk-rate-limit-1" }));
+
+    expect(getRedisClient).toHaveBeenCalled();
+    expect(currentRedis!.setex).toHaveBeenCalledTimes(1);
+  });
+
   test("crypto.subtle 缺失：sha256Hex 返回 null，应自动回落（不触发 Redis 调用）", async () => {
     vi.unstubAllGlobals();
     vi.stubGlobal("crypto", {} as unknown as Crypto);
