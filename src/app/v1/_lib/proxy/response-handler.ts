@@ -73,6 +73,13 @@ type FinalizeDeferredStreamingResult = {
    * 内部记录的错误原因（用于写入 DB/监控，帮助定位“假 200”问题）。
    */
   errorMessage: string | null;
+  /**
+   * 写入 DB 时用于归因的 providerId（优先使用 deferred meta 的 providerId）。
+   *
+   * 说明：对 SSE 来说，session.provider 可能在后续逻辑里被更新/覆盖；而 deferred meta 代表本次流真正对应的 provider。
+   * 该字段用于保证 DB 的 providerId 与 providerChain/熔断归因一致。
+   */
+  providerIdForPersistence: number | null;
 };
 
 /**
@@ -89,17 +96,23 @@ type FinalizeDeferredStreamingResult = {
  *
  * @param streamEndedNormally - 必须是 reader 读到 done=true 的“自然结束”；超时/中断等异常结束由其它逻辑处理。
  * @param clientAborted - 标记是否为客户端主动中断（用于内部状态码映射，避免把中断记为 200 completed）
+ * @param abortReason - 非自然结束时的原因码（用于内部记录/熔断归因；不会影响客户端响应）
  */
 async function finalizeDeferredStreamingFinalizationIfNeeded(
   session: ProxySession,
   allContent: string,
   upstreamStatusCode: number,
   streamEndedNormally: boolean,
-  clientAborted: boolean
+  clientAborted: boolean,
+  abortReason?: string
 ): Promise<FinalizeDeferredStreamingResult> {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
 
+  const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
+
+  // 注意：未自然结束时不做“假 200”检测（内容可能是部分流/截断），
+  // 此处返回 `{isError:false}` 仅表示“跳过检测”，最终仍会在下面按中断/超时视为失败结算。
   const detected = streamEndedNormally
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
@@ -114,7 +127,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     errorMessage = detected.code;
   } else if (!streamEndedNormally) {
     effectiveStatusCode = clientAborted ? 499 : 502;
-    errorMessage = clientAborted ? "CLIENT_ABORTED" : "STREAM_ABORTED";
+    errorMessage = clientAborted ? "CLIENT_ABORTED" : (abortReason ?? "STREAM_ABORTED");
   } else {
     effectiveStatusCode = upstreamStatusCode;
     errorMessage = null;
@@ -124,7 +137,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 只返回“内部状态码 + 错误原因”，由调用方写入统计；
   // - 不在这里更新熔断/绑定（meta 缺失意味着 Forwarder 没有启用延迟结算；provider 缺失意味着无法归因）。
   if (!meta || !provider) {
-    return { effectiveStatusCode, errorMessage };
+    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
   }
 
   // meta 由 Forwarder 在“拿到 upstream Response 的那一刻”记录，代表真正产生本次流的 provider。
@@ -207,7 +220,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       errorMessage: errorMessage ?? undefined,
     });
 
-    return { effectiveStatusCode, errorMessage };
+    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
   }
 
   if (detected.isError) {
@@ -259,7 +272,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       errorMessage: detected.code,
     });
 
-    return { effectiveStatusCode, errorMessage };
+    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
   }
 
   // ========== 真正成功（SSE 完整结束且未命中错误判定）==========
@@ -345,7 +358,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     statusCode: meta.upstreamStatusCode,
   });
 
-  return { effectiveStatusCode, errorMessage };
+  return { effectiveStatusCode, errorMessage, providerIdForPersistence };
 }
 
 export class ProxyResponseHandler {
@@ -917,7 +930,8 @@ export class ProxyResponseHandler {
               allContent,
               finalized.effectiveStatusCode,
               duration,
-              finalized.errorMessage ?? undefined
+              finalized.errorMessage ?? undefined,
+              finalized.providerIdForPersistence ?? undefined
             );
           } catch (error) {
             if (!isClientAbortError(error as Error)) {
@@ -1095,17 +1109,20 @@ export class ProxyResponseHandler {
       const finalizeStream = async (
         allContent: string,
         streamEndedNormally: boolean,
-        clientAborted: boolean
+        clientAborted: boolean,
+        abortReason?: string
       ): Promise<void> => {
         const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
           session,
           allContent,
           statusCode,
           streamEndedNormally,
-          clientAborted
+          clientAborted,
+          abortReason
         );
         const effectiveStatusCode = finalized.effectiveStatusCode;
         const streamErrorMessage = finalized.errorMessage;
+        const providerIdForPersistence = finalized.providerIdForPersistence;
 
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId) {
@@ -1224,7 +1241,7 @@ export class ProxyResponseHandler {
           providerChain: session.getProviderChain(),
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
-          providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
+          providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
         });
       };
@@ -1284,7 +1301,29 @@ export class ProxyResponseHandler {
         clearIdleTimer();
         const allContent = flushAndJoin();
         const clientAborted = session.clientAbortSignal?.aborted ?? false;
-        await finalizeStream(allContent, streamEndedNormally, clientAborted);
+        try {
+          await finalizeStream(allContent, streamEndedNormally, clientAborted);
+        } catch (finalizeError) {
+          logger.error("ResponseHandler: Failed to finalize stream", {
+            taskId,
+            providerId: provider.id,
+            providerName: provider.name,
+            messageId: messageContext.id,
+            streamEndedNormally,
+            clientAborted,
+            finalizeError,
+          });
+
+          // 回退：避免 finalizeStream 失败导致 request record 未被更新
+          await persistRequestFailure({
+            session,
+            messageContext,
+            statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
+            error: finalizeError,
+            taskId,
+            phase: "stream",
+          });
+        }
       } catch (error) {
         // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端/上游中断
         const err = error as Error;
@@ -1311,32 +1350,30 @@ export class ProxyResponseHandler {
               errorName: err.name,
             });
 
-            // ⚠️ 计入熔断器（动态导入避免循环依赖）
+            // 注意：无法重试，因为客户端已收到 HTTP 200
+            // 错误已记录，不抛出异常（避免影响后台任务）
+
+            // 结算并消费 deferred meta，确保 provider chain/熔断归因完整
             try {
-              const { recordFailure } = await import("@/lib/circuit-breaker");
-              await recordFailure(provider.id, err);
-              logger.debug("ResponseHandler: Response timeout recorded in circuit breaker", {
-                providerId: provider.id,
+              const allContent = flushAndJoin();
+              await finalizeStream(allContent, false, false, "STREAM_RESPONSE_TIMEOUT");
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize response-timeout stream", {
+                taskId,
+                messageId: messageContext.id,
+                finalizeError,
               });
-            } catch (cbError) {
-              logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
-                providerId: provider.id,
-                error: cbError,
+
+              // 回退：至少保证 DB 记录能落下，避免 orphan record
+              await persistRequestFailure({
+                session,
+                messageContext,
+                statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
+                error: err,
+                taskId,
+                phase: "stream",
               });
             }
-
-            // 注意：无法重试，因为客户端已收到 HTTP 200
-            // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
-
-            // 更新数据库记录（避免 orphan record）
-            await persistRequestFailure({
-              session,
-              messageContext,
-              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
-              error: err,
-              taskId,
-              phase: "stream",
-            });
           } else if (isIdleTimeout) {
             // ⚠️ 静默期超时：计入熔断器并记录错误日志
             logger.error("ResponseHandler: Streaming idle timeout", {
@@ -1347,32 +1384,30 @@ export class ProxyResponseHandler {
               chunksCollected: chunks.length,
             });
 
-            // ⚠️ 计入熔断器（动态导入避免循环依赖）
+            // 注意：无法重试，因为客户端已收到 HTTP 200
+            // 错误已记录，不抛出异常（避免影响后台任务）
+
+            // 结算并消费 deferred meta，确保 provider chain/熔断归因完整
             try {
-              const { recordFailure } = await import("@/lib/circuit-breaker");
-              await recordFailure(provider.id, err);
-              logger.debug("ResponseHandler: Streaming idle timeout recorded in circuit breaker", {
-                providerId: provider.id,
+              const allContent = flushAndJoin();
+              await finalizeStream(allContent, false, false, "STREAM_IDLE_TIMEOUT");
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize idle-timeout stream", {
+                taskId,
+                messageId: messageContext.id,
+                finalizeError,
               });
-            } catch (cbError) {
-              logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
-                providerId: provider.id,
-                error: cbError,
+
+              // 回退：至少保证 DB 记录能落下，避免 orphan record
+              await persistRequestFailure({
+                session,
+                messageContext,
+                statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
+                error: err,
+                taskId,
+                phase: "stream",
               });
             }
-
-            // 注意：无法重试，因为客户端已收到 HTTP 200
-            // 错误已记录，熔断器已更新，不抛出异常（避免影响后台任务）
-
-            // 更新数据库记录（避免 orphan record - 这是导致 185 个孤儿记录的根本原因！）
-            await persistRequestFailure({
-              session,
-              messageContext,
-              statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
-              error: err,
-              taskId,
-              phase: "stream",
-            });
           } else if (!clientAborted) {
             // 上游在流式过程中意外中断：视为供应商/网络错误
             logger.error("ResponseHandler: Upstream stream aborted unexpectedly", {
@@ -1385,14 +1420,27 @@ export class ProxyResponseHandler {
               errorMessage: err.message || "(empty message)",
             });
 
-            await persistRequestFailure({
-              session,
-              messageContext,
-              statusCode: 502,
-              error: err,
-              taskId,
-              phase: "stream",
-            });
+            // 结算并消费 deferred meta，确保 provider chain/熔断归因完整
+            try {
+              const allContent = flushAndJoin();
+              await finalizeStream(allContent, false, false, "STREAM_UPSTREAM_ABORTED");
+            } catch (finalizeError) {
+              logger.error("ResponseHandler: Failed to finalize upstream-aborted stream", {
+                taskId,
+                messageId: messageContext.id,
+                finalizeError,
+              });
+
+              // 回退：至少保证 DB 记录能落下，避免 orphan record
+              await persistRequestFailure({
+                session,
+                messageContext,
+                statusCode: 502,
+                error: err,
+                taskId,
+                phase: "stream",
+              });
+            }
           } else {
             // 客户端主动中断：正常日志，不抛出错误
             logger.warn("ResponseHandler: Stream reading aborted by client", {
@@ -1421,15 +1469,27 @@ export class ProxyResponseHandler {
         } else {
           logger.error("Failed to save SSE content:", error);
 
-          // 更新数据库记录（避免 orphan record）
-          await persistRequestFailure({
-            session,
-            messageContext,
-            statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
-            error,
-            taskId,
-            phase: "stream",
-          });
+          // 结算并消费 deferred meta，确保 provider chain/熔断归因完整
+          try {
+            const allContent = flushAndJoin();
+            await finalizeStream(allContent, false, clientAborted, "STREAM_PROCESSING_ERROR");
+          } catch (finalizeError) {
+            logger.error("ResponseHandler: Failed to finalize stream after processing error", {
+              taskId,
+              messageId: messageContext.id,
+              finalizeError,
+            });
+
+            // 回退：至少保证 DB 记录能落下，避免 orphan record
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: statusCode && statusCode >= 400 ? statusCode : 500,
+              error,
+              taskId,
+              phase: "stream",
+            });
+          }
         }
       } finally {
         // 确保资源释放
@@ -2143,12 +2203,15 @@ export async function finalizeRequestStats(
   responseText: string,
   statusCode: number,
   duration: number,
-  errorMessage?: string
+  errorMessage?: string,
+  providerIdOverride?: number
 ): Promise<void> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
     return;
   }
+
+  const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
 
   // 1. 结束请求状态追踪
   ProxyStatusTracker.getInstance().endRequest(messageContext.user.id, messageContext.id);
@@ -2167,7 +2230,7 @@ export async function finalizeRequestStats(
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
-      providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
+      providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
     });
     return;
@@ -2256,7 +2319,7 @@ export async function finalizeRequestStats(
     providerChain: session.getProviderChain(),
     ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
-    providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
+    providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
   });
 }

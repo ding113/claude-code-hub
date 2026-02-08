@@ -1,9 +1,16 @@
 import { describe, expect, test } from "vitest";
-import { detectUpstreamErrorFromSseOrJsonText } from "./upstream-error-detection";
+import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
 
 describe("detectUpstreamErrorFromSseOrJsonText", () => {
   test("空响应体视为错误", () => {
     expect(detectUpstreamErrorFromSseOrJsonText("")).toEqual({
+      isError: true,
+      code: "FAKE_200_EMPTY_BODY",
+    });
+  });
+
+  test("纯空白响应体视为错误", () => {
+    expect(detectUpstreamErrorFromSseOrJsonText("   \n\t  ")).toEqual({
       isError: true,
       code: "FAKE_200_EMPTY_BODY",
     });
@@ -131,6 +138,24 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
   test("纯 JSON：小于 1000 字符且 message 包含 error 字样视为错误", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('{"message":"some error happened"}');
     expect(res.isError).toBe(true);
+  });
+
+  test("纯 JSON：options.messageKeyword 可覆盖默认关键字判定", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText('{"message":"boom happened"}', {
+      messageKeyword: /boom/i,
+    });
+    expect(res).toEqual({
+      isError: true,
+      code: "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH",
+      detail: "boom happened",
+    });
+  });
+
+  test("纯 JSON：options.maxJsonCharsForMessageCheck 可关闭 message 关键字检测", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText('{"message":"some error happened"}', {
+      maxJsonCharsForMessageCheck: 5,
+    });
+    expect(res.isError).toBe(false);
   });
 
   test("纯 JSON：大于等于 1000 字符时不做 message 关键字判定", () => {
