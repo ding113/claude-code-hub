@@ -122,7 +122,7 @@ class ApiKeyVacuumFilter {
 
   // 关键：当 vf 尚未就绪（或正在重建）时，新 key 可能在这段窗口期被创建。
   // 若不记录并在下一次重建时纳入，会导致“漏包含”有效 key，从而误拒绝（假阴性）。
-  private readonly pendingKeys = new Set<string>();
+  private pendingKeys = new Set<string>();
   private readonly pendingKeysLimit = 10_000;
 
   // 若重建过程中又收到新的重建请求（例如：多实例收到 key 创建广播），需要串行再跑一次。
@@ -330,20 +330,31 @@ class ApiKeyVacuumFilter {
       .map((r) => r.key)
       .filter((v): v is string => typeof v === "string" && v.length > 0);
 
-    // 将 pendingKeys 合并进来：覆盖“重建窗口期创建的新 key”
+    // 将 pendingKeys 合并进来：覆盖“重建窗口期创建的新 key”。
+    // 通过“Set 交换”获得快照，避免 snapshot-merge-clear 的竞态窗口：
+    // - reload 期间新增的 key 会进入新的 pendingKeys
+    // - 本次快照 key 会被纳入 built filter
+    // - 若 build 失败，会将快照 key 合并回 pendingKeys，避免漏 key
+    const pendingSnapshotSet = this.pendingKeys;
+    this.pendingKeys = new Set<string>();
     const pendingSnapshot =
-      this.pendingKeys.size > 0 ? Array.from(this.pendingKeys.values()) : [];
+      pendingSnapshotSet.size > 0 ? Array.from(pendingSnapshotSet.values()) : [];
 
-    const built = buildVacuumFilterFromKeyStrings({
-      keyStrings: pendingSnapshot.length > 0 ? keyStrings.concat(pendingSnapshot) : keyStrings,
-      fingerprintBits: this.fingerprintBits,
-      maxKickSteps: this.maxKickSteps,
-      seed: this.seed,
-    });
-
-    // 仅在重建成功后清理 pending（失败会保留，避免漏 key）
-    for (const k of pendingSnapshot) {
-      this.pendingKeys.delete(k);
+    let built: VacuumFilter;
+    try {
+      built = buildVacuumFilterFromKeyStrings({
+        keyStrings: pendingSnapshot.length > 0 ? keyStrings.concat(pendingSnapshot) : keyStrings,
+        fingerprintBits: this.fingerprintBits,
+        maxKickSteps: this.maxKickSteps,
+        seed: this.seed,
+      });
+    } catch (error) {
+      // build 失败：回滚快照，避免漏 key（同时保留 reload 期间新增的 key）
+      for (const k of pendingSnapshotSet.values()) {
+        if (this.pendingKeys.size >= this.pendingKeysLimit) break;
+        this.pendingKeys.add(k);
+      }
+      throw error;
     }
 
     this.vf = built;
