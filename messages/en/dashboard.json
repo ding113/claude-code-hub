@@ -243,6 +243,7 @@
         "billingRedirected": "billing: redirected"
       },
       "errorMessage": "Error Message",
+      "fake200ForwardedNotice": "Note: For streaming requests, this failure may be detected only after the stream ends; the response content may already have been forwarded to the client.",
       "filteredProviders": "Filtered Providers",
       "providerChain": {
         "title": "Provider Decision Chain Timeline",

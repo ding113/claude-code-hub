@@ -243,6 +243,7 @@
         "billingRedirected": "課金: 実際"
       },
       "errorMessage": "エラーメッセージ",
+      "fake200ForwardedNotice": "注意：ストリーミング要求では、失敗判定がストリーム終了後になる場合があります。応答内容は既にクライアントへ転送されている可能性があります。",
       "filteredProviders": "フィルタされたプロバイダー",
       "providerChain": {
         "title": "プロバイダー決定チェーンタイムライン",

@@ -252,6 +252,7 @@ const messages = {
           default: "No error",
         },
         errorMessage: "Error message",
+        fake200ForwardedNotice: "Note: detected after stream end; payload may have been forwarded",
         viewDetails: "View details",
         filteredProviders: "Filtered providers",
         providerChain: {
@@ -325,6 +326,21 @@ function parseHtml(html: string) {
 }
 
 describe("error-details-dialog layout", () => {
+  test("renders fake-200 forwarded notice when errorMessage is a FAKE_200_* code", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={502}
+        errorMessage={"FAKE_200_EMPTY_BODY"}
+        providerChain={null}
+        sessionId={null}
+      />
+    );
+
+    expect(html).toContain("FAKE_200_EMPTY_BODY");
+    expect(html).toContain("Note: detected after stream end; payload may have been forwarded");
+  });
+
   test("renders special settings section when specialSettings exists", () => {
     const html = renderWithIntl(
       <ErrorDetailsDialog

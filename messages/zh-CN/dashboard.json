@@ -243,6 +243,7 @@
         "billingRedirected": "计费: 实际"
       },
       "errorMessage": "错误信息",
+      "fake200ForwardedNotice": "提示：对于流式请求，该失败可能在流结束后才被识别；响应内容可能已原样透传给客户端。",
       "filteredProviders": "被过滤的供应商",
       "providerChain": {
         "title": "供应商决策链时间线",

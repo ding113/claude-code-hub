@@ -243,6 +243,7 @@
         "billingRedirected": "計費: 實際"
       },
       "errorMessage": "錯誤訊息",
+      "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
       "filteredProviders": "被過濾的供應商",
       "providerChain": {
         "title": "供應商決策鏈時間軸",
