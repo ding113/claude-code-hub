@@ -379,9 +379,14 @@ export class ProxyForwarder {
           const isSSE = contentType.includes("text/event-stream");
 
           // ========== 流式响应：延迟成功判定（避免“假 200”）==========
-          // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）
-          // 这种情况下如果立即记录 success / 绑定 session，会导致后续复用同一 provider，影响自动重试与故障转移策略
-          // 解决：把成功/失败的最终结算交给 ResponseHandler，在 SSE 完整结束后再决定
+          // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
+          // 如果在“收到响应头”时就立刻记录 success / 更新 session 绑定：
+          // - 会把会话粘到一个实际不可用的 provider；
+          // - 熔断/故障转移统计被误记为成功；
+          // - 客户端下一次自动重试可能仍复用到同一 provider，导致“假 200”让重试失效。
+          //
+          // 解决：Forwarder 只负责尽快把 Response 返回给下游开始透传，
+          // 把最终成功/失败结算延迟到 ResponseHandler：等 SSE 正常结束后再基于最终 body 补充检查并更新内部状态。
           if (isSSE) {
             setDeferredStreamingFinalization(session, {
               providerId: currentProvider.id,

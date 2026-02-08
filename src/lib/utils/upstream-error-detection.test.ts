@@ -14,8 +14,20 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     expect(res.isError).toBe(true);
   });
 
+  test("纯 JSON：error 为对象且 error.message 非空视为错误", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText(
+      JSON.stringify({ error: { message: "error: no credentials" } })
+    );
+    expect(res.isError).toBe(true);
+  });
+
   test("纯 JSON：error 为空字符串不视为错误", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('{"error":""}');
+    expect(res.isError).toBe(false);
+  });
+
+  test("纯 JSON：message 不包含关键字不视为错误", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText('{"message":"all good"}');
     expect(res.isError).toBe(false);
   });
 
@@ -32,8 +44,19 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     expect(res.isError).toBe(false);
   });
 
+  test("纯 JSON：非法 JSON 不抛错且不视为错误", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText("{not-json}");
+    expect(res.isError).toBe(false);
+  });
+
   test("SSE：data JSON 包含非空 error 字段视为错误", () => {
     const sse = ['event: message', 'data: {"error":"当前无可用凭证"}', ""].join("\n");
+    const res = detectUpstreamErrorFromSseOrJsonText(sse);
+    expect(res.isError).toBe(true);
+  });
+
+  test("SSE：data JSON error 为对象且 error.message 非空视为错误", () => {
+    const sse = ['data: {"error":{"message":"ERROR: no credentials"}}', ""].join("\n");
     const res = detectUpstreamErrorFromSseOrJsonText(sse);
     expect(res.isError).toBe(true);
   });
@@ -44,10 +67,25 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     expect(res.isError).toBe(true);
   });
 
+  test("SSE：message 为对象时不应误判为错误", () => {
+    // 类 Anthropic SSE：message 字段通常是对象（不是错误字符串）
+    const sse = [
+      'data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant"}}',
+      "",
+    ].join("\n");
+    const res = detectUpstreamErrorFromSseOrJsonText(sse);
+    expect(res.isError).toBe(false);
+  });
+
+  test("SSE：不包含 error/message key 时不解析且不视为错误", () => {
+    const sse = ['data: {"foo":"bar"}', ""].join("\n");
+    const res = detectUpstreamErrorFromSseOrJsonText(sse);
+    expect(res.isError).toBe(false);
+  });
+
   test("SSE：仅有 [DONE] 不视为错误", () => {
     const sse = ["data: [DONE]", ""].join("\n");
     const res = detectUpstreamErrorFromSseOrJsonText(sse);
     expect(res.isError).toBe(false);
   });
 });
-

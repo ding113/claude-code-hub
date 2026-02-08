@@ -62,10 +62,33 @@ function cleanResponseHeaders(headers: Headers): Headers {
 }
 
 type FinalizeDeferredStreamingResult = {
+  /**
+   * “内部结算用”的状态码。
+   *
+   * 注意：这不会改变客户端实际收到的 HTTP 状态码（SSE 已经开始透传后无法回头改）。
+   * 这里的目的仅是让内部统计/熔断/会话绑定把“假 200”按失败处理。
+   */
   effectiveStatusCode: number;
+  /**
+   * 内部记录的错误原因（用于写入 DB/监控，帮助定位“假 200”问题）。
+   */
   errorMessage: string | null;
 };
 
+/**
+ * 若本次 SSE 被标记为“延迟结算”，则在流结束后补齐成功/失败的最终判定。
+ *
+ * 触发条件
+ * - Forwarder 收到 Response 且识别为 SSE 时，会在 session 上挂载 DeferredStreamingFinalization 元信息。
+ * - ResponseHandler 在后台读取完整 SSE 内容后，调用本函数：
+ *   - 如果内容看起来是上游错误 JSON（假 200），则：
+ *     - 计入熔断器失败；
+ *     - 不更新 session 智能绑定（避免把会话粘到坏 provider）；
+ *     - 内部状态码改为 502（只影响统计与后续重试选择，不影响本次客户端响应）。
+ *   - 如果流正常结束且未命中错误判定，则按成功结算并更新绑定/熔断/endpoint 成功率。
+ *
+ * @param streamEndedNormally - 必须是 reader 读到 done=true 的“自然结束”；超时/中断等异常结束由其它逻辑处理。
+ */
 async function finalizeDeferredStreamingFinalizationIfNeeded(
   session: ProxySession,
   allContent: string,
@@ -79,10 +102,14 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
 
+  // “假 200”统一映射为 502：既能让内部状态落到 error 分支，
+  // 也能让后续熔断/故障转移策略按“上游错误”处理。
   const effectiveStatusCode = detected.isError ? 502 : upstreamStatusCode;
   const errorMessage = detected.isError ? detected.reason : null;
 
-  // 未启用延迟结算 / 未正常结束：只返回判定结果，不做熔断/绑定更新
+  // 未启用延迟结算 / provider 缺失 / 未自然结束：
+  // - 只返回“内部状态码 + 错误原因”，由调用方写入统计；
+  // - 不在这里更新熔断/绑定（异常结束场景通常已有专门逻辑做 recordFailure/persistRequestFailure）。
   if (!meta || !provider || !streamEndedNormally) {
     return { effectiveStatusCode, errorMessage };
   }
@@ -106,6 +133,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     // 计入熔断器：让后续请求能正确触发故障转移/熔断
     try {
+      // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
       const { recordFailure } = await import("@/lib/circuit-breaker");
       await recordFailure(meta.providerId, new Error(detected.reason));
     } catch (cbError) {
@@ -115,7 +143,9 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       });
     }
 
-    // 记录到决策链（用于日志展示）
+    // 记录到决策链（用于日志展示与 DB 持久化）。
+    // 注意：这里用 effectiveStatusCode（502）而不是 upstreamStatusCode（200），
+    // 以便让内部链路明确显示这是一次失败（否则会被误读为成功）。
     session.addProviderToChain(provider, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
@@ -1987,6 +2017,9 @@ async function updateRequestCostFromUsage(
 /**
  * 统一的请求统计处理方法
  * 用于消除 Gemini 透传、普通非流式、普通流式之间的重复统计逻辑
+ *
+ * @param statusCode - 内部结算状态码（可能与客户端实际收到的 HTTP 状态不同，例如“假 200”会被映射为 502）
+ * @param errorMessage - 可选的内部错误原因（用于把假 200/解析失败等信息写入 DB 与监控）
  */
 export async function finalizeRequestStats(
   session: ProxySession,
