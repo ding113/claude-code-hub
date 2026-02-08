@@ -1,21 +1,6 @@
 import { logger } from "@/lib/logger";
 import { VacuumFilter } from "@/lib/vacuum-filter/vacuum-filter";
-
-function randomBytes(size: number): Uint8Array {
-  const out = new Uint8Array(size);
-  const webCrypto = (globalThis as unknown as { crypto?: { getRandomValues(bytes: Uint8Array): void } })
-    .crypto;
-  if (webCrypto && typeof webCrypto.getRandomValues === "function") {
-    webCrypto.getRandomValues(out);
-    return out;
-  }
-
-  // 兜底：极端环境无 Web Crypto 时，使用 Math.random（仅用于 seed，不影响正确性）
-  for (let i = 0; i < out.length; i++) {
-    out[i] = Math.floor(Math.random() * 256);
-  }
-  return out;
-}
+import { randomBytes } from "@/lib/vacuum-filter/random";
 
 type ApiKeyVacuumFilterStats = {
   enabled: boolean;

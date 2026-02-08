@@ -1,15 +1,8 @@
+import { randomBytes } from "@/lib/vacuum-filter/random";
+
 const textEncoder = new TextEncoder();
 const BUCKET_SIZE = 4 as const;
 const DEFAULT_SCRATCH_BYTES = 256;
-
-type WebCryptoLike = {
-  getRandomValues(bytes: Uint8Array): Uint8Array;
-};
-
-function getWebCrypto(): WebCryptoLike | null {
-  const c = (globalThis as unknown as { crypto?: WebCryptoLike }).crypto;
-  return c && typeof c.getRandomValues === "function" ? c : null;
-}
 
 /**
  * Vacuum Filter（真空过滤器）
@@ -163,21 +156,6 @@ function properAltRange(bucketCount: number, groupIndex: number): number {
     altRange *= 2;
   }
   return altRange;
-}
-
-function randomBytes(size: number): Uint8Array {
-  const out = new Uint8Array(size);
-  const webCrypto = getWebCrypto();
-  if (webCrypto) {
-    webCrypto.getRandomValues(out);
-    return out;
-  }
-
-  // 兜底：极端环境无 Web Crypto 时，使用 Math.random（仅用于 seed，不影响正确性）
-  for (let i = 0; i < out.length; i++) {
-    out[i] = Math.floor(Math.random() * 256);
-  }
-  return out;
 }
 
 function normalizeSeed(seed?: VacuumFilterInitOptions["seed"]): Uint8Array {

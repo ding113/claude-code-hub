@@ -243,35 +243,20 @@ describe("ApiKeyAuthCache：Redis key（哈希/命名/TTL/失效）", () => {
     expect(currentRedis!.del).toHaveBeenCalledWith(redisKey);
   });
 
-  test("getCachedActiveKey：disabled/deleted/expired 应视为失效并清理", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-10T00:00:00.000Z"));
+  describe("getCachedActiveKey：disabled/deleted/expired 应视为失效并清理", () => {
+    const cases = [
+      { name: "disabled", payload: { isEnabled: false } },
+      { name: "deleted", payload: { deletedAt: "2026-01-01T00:00:00.000Z" } },
+      { name: "expired", payload: { expiresAt: "2026-01-01T00:00:00.000Z" } },
+    ] as const;
 
-    const { getCachedActiveKey } = await import("@/lib/security/api-key-auth-cache");
+    test.each(cases)("$name", async ({ name, payload }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-10T00:00:00.000Z"));
 
-    const cases: Array<{
-      name: string;
-      payload: Record<string, unknown>;
-    }> = [
-      {
-        name: "disabled",
-        payload: { isEnabled: false },
-      },
-      {
-        name: "deleted",
-        payload: { deletedAt: "2026-01-01T00:00:00.000Z" },
-      },
-      {
-        name: "expired",
-        payload: { expiresAt: "2026-01-01T00:00:00.000Z" },
-      },
-    ];
+      const { getCachedActiveKey } = await import("@/lib/security/api-key-auth-cache");
 
-    for (const c of cases) {
-      currentRedis!.get.mockClear();
-      currentRedis!.del.mockClear();
-
-      const keyString = `sk-${c.name}`;
+      const keyString = `sk-${name}`;
       const redisKey = `api_key_auth:v1:key:${sha256HexNode(keyString)}`;
       currentRedis!.store.set(
         redisKey,
@@ -288,22 +273,17 @@ describe("ApiKeyAuthCache：Redis key（哈希/命名/TTL/失效）", () => {
             limitConcurrentSessions: 0,
             createdAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-02T00:00:00.000Z",
-            ...c.payload,
+            ...payload,
           },
         })
       );
 
       await expect(getCachedActiveKey(keyString)).resolves.toBeNull();
       expect(currentRedis!.del).toHaveBeenCalledWith(redisKey);
-    }
+    });
   });
 
-  test("cacheActiveKey：非活跃 key（禁用/已删/已过期/无效 expiresAt）应删除缓存，不应 setex", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-10T00:00:00.000Z"));
-
-    const { cacheActiveKey } = await import("@/lib/security/api-key-auth-cache");
-
+  describe("cacheActiveKey：非活跃 key（禁用/已删/已过期/无效 expiresAt）应删除缓存，不应 setex", () => {
     const cases: Array<{ name: string; key: Key }> = [
       { name: "disabled", key: buildKey({ key: "sk-disabled", isEnabled: false }) },
       {
@@ -321,16 +301,18 @@ describe("ApiKeyAuthCache：Redis key（哈希/命名/TTL/失效）", () => {
       },
     ];
 
-    for (const c of cases) {
-      currentRedis!.setex.mockClear();
-      currentRedis!.del.mockClear();
+    test.each(cases)("$name", async ({ key }) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-10T00:00:00.000Z"));
 
-      await cacheActiveKey(c.key);
+      const { cacheActiveKey } = await import("@/lib/security/api-key-auth-cache");
 
-      const expectedRedisKey = `api_key_auth:v1:key:${sha256HexNode(c.key.key)}`;
+      await cacheActiveKey(key);
+
+      const expectedRedisKey = `api_key_auth:v1:key:${sha256HexNode(key.key)}`;
       expect(currentRedis!.setex).not.toHaveBeenCalled();
       expect(currentRedis!.del).toHaveBeenCalledWith(expectedRedisKey);
-    }
+    });
   });
 
   test("cacheActiveKey：应按 key.expiresAt 剩余时间收敛 TTL（秒）", async () => {

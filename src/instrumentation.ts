@@ -123,6 +123,20 @@ async function startApiKeyVacuumFilterSync(): Promise<void> {
   }
 }
 
+function warmupApiKeyVacuumFilter(): void {
+  // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
+  try {
+    apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
+  } catch (error) {
+    logger.warn("[Instrumentation] Failed to start API key vacuum filter preload", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // 多实例：订阅 key 变更广播以触发本机 filter 重建
+  void startApiKeyVacuumFilterSync();
+}
+
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
@@ -256,15 +270,7 @@ export async function register() {
         logger.info("[Instrumentation] AUTO_MIGRATE=false: skipping migrations");
       }
 
-      // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
-      try {
-        apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
-      } catch (error) {
-        logger.warn("[Instrumentation] Failed to start API key vacuum filter preload", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-      void startApiKeyVacuumFilterSync();
+      warmupApiKeyVacuumFilter();
 
       // 回填 provider_vendors（按域名自动聚合旧 providers）
       try {
@@ -366,15 +372,7 @@ export async function register() {
       if (isConnected) {
         await runMigrations();
 
-        // 预热 API Key Vacuum Filter（减少无效 key 对 DB 的压力）
-        try {
-          apiKeyVacuumFilter.startBackgroundReload({ reason: "startup" });
-        } catch (error) {
-          logger.warn("[Instrumentation] Failed to start API key vacuum filter preload", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-        void startApiKeyVacuumFilterSync();
+        warmupApiKeyVacuumFilter();
 
         // 回填 provider_vendors（按域名自动聚合旧 providers）
         try {
