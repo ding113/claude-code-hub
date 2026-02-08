@@ -11,6 +11,7 @@ import { SessionTracker } from "@/lib/session-tracker";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { parseSSEData } from "@/lib/utils/sse";
+import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
 import {
   updateMessageRequestCost,
   updateMessageRequestDetails,
@@ -23,6 +24,7 @@ import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { isClientAbortError } from "./errors";
 import type { ProxySession } from "./session";
+import { consumeDeferredStreamingFinalization } from "./stream-finalization";
 
 export type UsageMetrics = {
   input_tokens?: number;
@@ -57,6 +59,159 @@ function cleanResponseHeaders(headers: Headers): Headers {
   cleaned.delete("content-length"); // body 改变后长度无效，Response API 会重新计算
 
   return cleaned;
+}
+
+type FinalizeDeferredStreamingResult = {
+  effectiveStatusCode: number;
+  errorMessage: string | null;
+};
+
+async function finalizeDeferredStreamingFinalizationIfNeeded(
+  session: ProxySession,
+  allContent: string,
+  upstreamStatusCode: number,
+  streamEndedNormally: boolean
+): Promise<FinalizeDeferredStreamingResult> {
+  const meta = consumeDeferredStreamingFinalization(session);
+  const provider = session.provider;
+
+  const detected = streamEndedNormally
+    ? detectUpstreamErrorFromSseOrJsonText(allContent)
+    : ({ isError: false } as const);
+
+  const effectiveStatusCode = detected.isError ? 502 : upstreamStatusCode;
+  const errorMessage = detected.isError ? detected.reason : null;
+
+  // 未启用延迟结算 / 未正常结束：只返回判定结果，不做熔断/绑定更新
+  if (!meta || !provider || !streamEndedNormally) {
+    return { effectiveStatusCode, errorMessage };
+  }
+
+  if (provider.id !== meta.providerId) {
+    logger.warn("[ResponseHandler] Deferred streaming meta provider mismatch", {
+      sessionId: session.sessionId ?? null,
+      metaProviderId: meta.providerId,
+      currentProviderId: provider.id,
+    });
+  }
+
+  if (detected.isError) {
+    logger.warn("[ResponseHandler] SSE completed but body indicates error (fake 200)", {
+      providerId: meta.providerId,
+      providerName: meta.providerName,
+      upstreamStatusCode: meta.upstreamStatusCode,
+      effectiveStatusCode,
+      reason: detected.reason,
+    });
+
+    // 计入熔断器：让后续请求能正确触发故障转移/熔断
+    try {
+      const { recordFailure } = await import("@/lib/circuit-breaker");
+      await recordFailure(meta.providerId, new Error(detected.reason));
+    } catch (cbError) {
+      logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
+        providerId: meta.providerId,
+        error: cbError,
+      });
+    }
+
+    // 记录到决策链（用于日志展示）
+    session.addProviderToChain(provider, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: "retry_failed",
+      attemptNumber: meta.attemptNumber,
+      statusCode: effectiveStatusCode,
+      errorMessage: detected.reason,
+    });
+
+    return { effectiveStatusCode, errorMessage };
+  }
+
+  // ========== 真正成功（SSE 完整结束且未命中错误判定）==========
+  if (meta.endpointId != null) {
+    try {
+      const { recordEndpointSuccess } = await import("@/lib/endpoint-circuit-breaker");
+      await recordEndpointSuccess(meta.endpointId);
+    } catch (endpointError) {
+      logger.warn("[ResponseHandler] Failed to record endpoint success (stream)", {
+        endpointId: meta.endpointId,
+        providerId: meta.providerId,
+        error: endpointError,
+      });
+    }
+  }
+
+  try {
+    const { recordSuccess } = await import("@/lib/circuit-breaker");
+    await recordSuccess(meta.providerId);
+  } catch (cbError) {
+    logger.warn("[ResponseHandler] Failed to record streaming success in circuit breaker", {
+      providerId: meta.providerId,
+      error: cbError,
+    });
+  }
+
+  // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
+  if (session.sessionId) {
+    const result = await SessionManager.updateSessionBindingSmart(
+      session.sessionId,
+      meta.providerId,
+      meta.providerPriority,
+      meta.isFirstAttempt,
+      meta.isFailoverSuccess
+    );
+
+    if (result.updated) {
+      logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
+        sessionId: session.sessionId,
+        providerId: meta.providerId,
+        providerName: meta.providerName,
+        priority: meta.providerPriority,
+        reason: result.reason,
+        details: result.details,
+        attemptNumber: meta.attemptNumber,
+        totalProvidersAttempted: meta.totalProvidersAttempted,
+      });
+    } else {
+      logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
+        sessionId: session.sessionId,
+        providerId: meta.providerId,
+        providerName: meta.providerName,
+        priority: meta.providerPriority,
+        reason: result.reason,
+        details: result.details,
+      });
+    }
+
+    // ⭐ 统一更新两个数据源（确保监控数据一致）
+    void SessionManager.updateSessionProvider(session.sessionId, {
+      providerId: meta.providerId,
+      providerName: meta.providerName,
+    }).catch((err) => {
+      logger.error("[ResponseHandler] Failed to update session provider info (stream)", {
+        error: err,
+      });
+    });
+  }
+
+  session.addProviderToChain(provider, {
+    endpointId: meta.endpointId,
+    endpointUrl: meta.endpointUrl,
+    reason: meta.isFirstAttempt ? "request_success" : "retry_success",
+    attemptNumber: meta.attemptNumber,
+    statusCode: meta.upstreamStatusCode,
+  });
+
+  logger.info("[ResponseHandler] Streaming request finalized as success", {
+    providerId: meta.providerId,
+    providerName: meta.providerName,
+    attemptNumber: meta.attemptNumber,
+    totalProvidersAttempted: meta.totalProvidersAttempted,
+    statusCode: meta.upstreamStatusCode,
+  });
+
+  return { effectiveStatusCode, errorMessage };
 }
 
 export class ProxyResponseHandler {
@@ -576,12 +731,16 @@ export class ProxyResponseHandler {
             const chunks: string[] = [];
             const decoder = new TextDecoder();
             let isFirstChunk = true;
+            let streamEndedNormally = false;
 
             while (true) {
               if (session.clientAbortSignal?.aborted) break;
 
               const { done, value } = await reader.read();
-              if (done) break;
+              if (done) {
+                streamEndedNormally = true;
+                break;
+              }
               if (value) {
                 if (isFirstChunk) {
                   isFirstChunk = false;
@@ -608,7 +767,19 @@ export class ProxyResponseHandler {
 
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
-            await finalizeRequestStats(session, allContent, statusCode, duration);
+            const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
+              session,
+              allContent,
+              statusCode,
+              streamEndedNormally
+            );
+            await finalizeRequestStats(
+              session,
+              allContent,
+              finalized.effectiveStatusCode,
+              duration,
+              finalized.errorMessage ?? undefined
+            );
           } catch (error) {
             if (!isClientAbortError(error as Error)) {
               logger.error("[ResponseHandler] Gemini passthrough stats task failed:", error);
@@ -779,7 +950,19 @@ export class ProxyResponseHandler {
         return chunks.join("");
       };
 
-      const finalizeStream = async (allContent: string): Promise<void> => {
+      const finalizeStream = async (
+        allContent: string,
+        streamEndedNormally: boolean
+      ): Promise<void> => {
+        const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
+          session,
+          allContent,
+          statusCode,
+          streamEndedNormally
+        );
+        const effectiveStatusCode = finalized.effectiveStatusCode;
+        const streamErrorMessage = finalized.errorMessage;
+
         // 存储响应体到 Redis（5分钟过期）
         if (session.sessionId) {
           void SessionManager.storeSessionResponse(
@@ -839,10 +1022,10 @@ export class ProxyResponseHandler {
         await trackCostToRedis(session, usageForCost);
 
         // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId && usageForCost) {
+        if (session.sessionId) {
           let costUsdStr: string | undefined;
           try {
-            if (session.request.model) {
+            if (usageForCost && session.request.model) {
               const priceData = await session.getCachedPriceDataByBillingSource();
               if (priceData) {
                 const cost = calculateRequestCost(
@@ -862,22 +1045,28 @@ export class ProxyResponseHandler {
             });
           }
 
-          void SessionManager.updateSessionUsage(session.sessionId, {
-            inputTokens: usageForCost.input_tokens,
-            outputTokens: usageForCost.output_tokens,
-            cacheCreationInputTokens: usageForCost.cache_creation_input_tokens,
-            cacheReadInputTokens: usageForCost.cache_read_input_tokens,
-            costUsd: costUsdStr,
-            status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-            statusCode: statusCode,
-          }).catch((error: unknown) => {
+          const payload: SessionUsageUpdate = {
+            status: effectiveStatusCode >= 200 && effectiveStatusCode < 300 ? "completed" : "error",
+            statusCode: effectiveStatusCode,
+            ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
+          };
+
+          if (usageForCost) {
+            payload.inputTokens = usageForCost.input_tokens;
+            payload.outputTokens = usageForCost.output_tokens;
+            payload.cacheCreationInputTokens = usageForCost.cache_creation_input_tokens;
+            payload.cacheReadInputTokens = usageForCost.cache_read_input_tokens;
+            payload.costUsd = costUsdStr;
+          }
+
+          void SessionManager.updateSessionUsage(session.sessionId, payload).catch((error: unknown) => {
             logger.error("[ResponseHandler] Failed to update session usage:", error);
           });
         }
 
         // 保存扩展信息（status code, tokens, provider chain）
         await updateMessageRequestDetails(messageContext.id, {
-          statusCode: statusCode,
+          statusCode: effectiveStatusCode,
           inputTokens: usageForCost?.input_tokens,
           outputTokens: usageForCost?.output_tokens,
           ttfbMs: session.ttfbMs,
@@ -887,6 +1076,7 @@ export class ProxyResponseHandler {
           cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
           cacheTtlApplied: usageForCost?.cache_ttl ?? null,
           providerChain: session.getProviderChain(),
+          ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
@@ -894,6 +1084,7 @@ export class ProxyResponseHandler {
       };
 
       try {
+        let streamEndedNormally = false;
         while (true) {
           // 检查取消信号
           if (session.clientAbortSignal?.aborted || abortController.signal.aborted) {
@@ -907,6 +1098,7 @@ export class ProxyResponseHandler {
 
           const { value, done } = await reader.read();
           if (done) {
+            streamEndedNormally = true;
             break;
           }
           if (value) {
@@ -945,7 +1137,7 @@ export class ProxyResponseHandler {
         // ⭐ 流式读取完成：清除静默期计时器
         clearIdleTimer();
         const allContent = flushAndJoin();
-        await finalizeStream(allContent);
+        await finalizeStream(allContent, streamEndedNormally);
       } catch (error) {
         // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端/上游中断
         const err = error as Error;
@@ -1070,7 +1262,7 @@ export class ProxyResponseHandler {
             });
             try {
               const allContent = flushAndJoin();
-              await finalizeStream(allContent);
+              await finalizeStream(allContent, false);
             } catch (finalizeError) {
               logger.error("ResponseHandler: Failed to finalize aborted stream response", {
                 taskId,
@@ -1800,7 +1992,8 @@ export async function finalizeRequestStats(
   session: ProxySession,
   responseText: string,
   statusCode: number,
-  duration: number
+  duration: number,
+  errorMessage?: string
 ): Promise<void> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
@@ -1820,6 +2013,7 @@ export async function finalizeRequestStats(
     // 即使没有 usageMetrics，也需要更新状态码和 provider chain
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
+      ...(errorMessage ? { errorMessage } : {}),
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
@@ -1892,6 +2086,7 @@ export async function finalizeRequestStats(
       costUsd: costUsdStr,
       status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
       statusCode: statusCode,
+      ...(errorMessage ? { errorMessage } : {}),
     }).catch((error: unknown) => {
       logger.error("[ResponseHandler] Failed to update session usage:", error);
     });
@@ -1909,6 +2104,7 @@ export async function finalizeRequestStats(
     cacheCreation1hInputTokens: normalizedUsage.cache_creation_1h_input_tokens,
     cacheTtlApplied: normalizedUsage.cache_ttl ?? null,
     providerChain: session.getProviderChain(),
+    ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
     providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),

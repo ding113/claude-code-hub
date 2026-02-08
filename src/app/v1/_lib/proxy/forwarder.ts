@@ -49,6 +49,7 @@ import {
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
+import { setDeferredStreamingFinalization } from "./stream-finalization";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
@@ -376,6 +377,35 @@ export class ProxyForwarder {
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
           const isSSE = contentType.includes("text/event-stream");
+
+          // ========== 流式响应：延迟成功判定（避免“假 200”）==========
+          // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）
+          // 这种情况下如果立即记录 success / 绑定 session，会导致后续复用同一 provider，影响自动重试与故障转移策略
+          // 解决：把成功/失败的最终结算交给 ResponseHandler，在 SSE 完整结束后再决定
+          if (isSSE) {
+            setDeferredStreamingFinalization(session, {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              providerPriority: currentProvider.priority || 0,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              isFirstAttempt: totalProvidersAttempted === 1 && attemptCount === 1,
+              isFailoverSuccess: totalProvidersAttempted > 1,
+              endpointId: activeEndpoint.endpointId,
+              endpointUrl: endpointAudit.endpointUrl,
+              upstreamStatusCode: response.status,
+            });
+
+            logger.info("ProxyForwarder: Streaming response received, deferring finalization", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              statusCode: response.status,
+            });
+
+            return response;
+          }
 
           if (!isSSE) {
             // 非流式响应：检测空响应
