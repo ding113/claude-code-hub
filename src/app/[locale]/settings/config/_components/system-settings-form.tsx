@@ -173,9 +173,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
-        setEnableClaudeMetadataUserIdInjection(
-          result.data.enableClaudeMetadataUserIdInjection
-        );
+        setEnableClaudeMetadataUserIdInjection(result.data.enableClaudeMetadataUserIdInjection);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
         setQuotaDbRefreshIntervalSeconds(result.data.quotaDbRefreshIntervalSeconds ?? 10);

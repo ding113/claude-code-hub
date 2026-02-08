@@ -112,8 +112,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
-      enableClaudeMetadataUserIdInjection:
-        DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
+      enableClaudeMetadataUserIdInjection: DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
       responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
       quotaDbRefreshIntervalSeconds: 10,

@@ -275,10 +275,7 @@ export function injectClaudeMetadataUserId(
   }
 
   // 生成稳定的 user hash（基于 API Key ID）
-  const stableHash = crypto
-    .createHash("sha256")
-    .update(`claude_user_${keyId}`)
-    .digest("hex");
+  const stableHash = crypto.createHash("sha256").update(`claude_user_${keyId}`).digest("hex");
 
   // 构建 user_id
   const userId = `user_${stableHash}_account__session_${sessionId}`;

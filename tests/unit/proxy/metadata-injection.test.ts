@@ -88,10 +88,12 @@ describe("injectClaudeMetadataUserId", () => {
     const sessionA = createSession(7, "sess_one");
     const sessionB = createSession(7, "sess_two");
 
-    const userIdA = (injectClaudeMetadataUserId(messageA, sessionA).metadata as Record<string, unknown>)
-      .user_id as string;
-    const userIdB = (injectClaudeMetadataUserId(messageB, sessionB).metadata as Record<string, unknown>)
-      .user_id as string;
+    const userIdA = (
+      injectClaudeMetadataUserId(messageA, sessionA).metadata as Record<string, unknown>
+    ).user_id as string;
+    const userIdB = (
+      injectClaudeMetadataUserId(messageB, sessionB).metadata as Record<string, unknown>
+    ).user_id as string;
 
     expect(extractUserHash(userIdA)).toBe(extractUserHash(userIdB));
   });
@@ -102,10 +104,12 @@ describe("injectClaudeMetadataUserId", () => {
     const sessionA = createSession(7, "sess_same");
     const sessionB = createSession(8, "sess_same");
 
-    const userIdA = (injectClaudeMetadataUserId(messageA, sessionA).metadata as Record<string, unknown>)
-      .user_id as string;
-    const userIdB = (injectClaudeMetadataUserId(messageB, sessionB).metadata as Record<string, unknown>)
-      .user_id as string;
+    const userIdA = (
+      injectClaudeMetadataUserId(messageA, sessionA).metadata as Record<string, unknown>
+    ).user_id as string;
+    const userIdB = (
+      injectClaudeMetadataUserId(messageB, sessionB).metadata as Record<string, unknown>
+    ).user_id as string;
 
     expect(extractUserHash(userIdA)).not.toBe(extractUserHash(userIdB));
   });
