@@ -51,6 +51,70 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     }
   });
 
+  test("detail 应对 JWT 做脱敏（避免泄露到日志/Redis/DB）", () => {
+    const jwt = "eyJaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbb.cccccccccccccccccccc";
+    const res = detectUpstreamErrorFromSseOrJsonText(JSON.stringify({ error: jwt }));
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      const detail = res.detail ?? "";
+      expect(detail).toContain("[JWT]");
+      expect(detail).not.toContain("eyJaaaaaaaaaaaaaaa");
+    }
+  });
+
+  test("detail 应对 email 做脱敏（避免泄露到日志/Redis/DB）", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText(
+      JSON.stringify({ error: "user@example.com is not allowed" })
+    );
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      const detail = res.detail ?? "";
+      expect(detail).toContain("[EMAIL]");
+      expect(detail).not.toContain("user@example.com");
+    }
+  });
+
+  test("detail 应对通用敏感键值做脱敏（避免泄露到日志/Redis/DB）", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText(
+      JSON.stringify({ error: "token=abc123 secret:xyz password:\"p@ss\" api_key=key123" })
+    );
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      const detail = res.detail ?? "";
+      expect(detail).toContain("token:***");
+      expect(detail).toContain("secret:***");
+      expect(detail).toContain("password:***");
+      expect(detail).toContain("api_key:***");
+      expect(detail).not.toContain("abc123");
+      expect(detail).not.toContain("xyz");
+      expect(detail).not.toContain("p@ss");
+      expect(detail).not.toContain("key123");
+    }
+  });
+
+  test("detail 应对常见配置/凭证路径做脱敏（避免泄露到日志/Redis/DB）", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText(
+      JSON.stringify({ error: "failed to read /etc/app/config.yaml" })
+    );
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      const detail = res.detail ?? "";
+      expect(detail).toContain("[PATH]");
+      expect(detail).not.toContain("config.yaml");
+    }
+  });
+
+  test("detail 过长时应截断（避免把大段响应写入日志/DB）", () => {
+    const longText = "a".repeat(250);
+    const res = detectUpstreamErrorFromSseOrJsonText(JSON.stringify({ error: longText }));
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      const detail = res.detail ?? "";
+      expect(detail.endsWith("…")).toBe(true);
+      expect(detail.length).toBeLessThanOrEqual(201);
+    }
+  });
+
   test("纯 JSON：error 为空字符串不视为错误", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('{"error":""}');
     expect(res.isError).toBe(false);

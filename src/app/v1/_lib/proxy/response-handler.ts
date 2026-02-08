@@ -164,8 +164,40 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     }
   }
 
-  // 未自然结束：不更新熔断/绑定（中断/超时等通常由其它逻辑处理），但要避免把它误记为 200 completed。
+  // 未自然结束：不更新 session 绑定（避免把会话粘到不稳定 provider），但要避免把它误记为 200 completed。
+  //
+  // 同时，为了让故障转移/熔断能正确工作：
+  // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
+  // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
   if (!streamEndedNormally) {
+    if (!clientAborted) {
+      try {
+        // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
+        const { recordFailure } = await import("@/lib/circuit-breaker");
+        await recordFailure(meta.providerId, new Error(errorMessage ?? "STREAM_ABORTED"));
+      } catch (cbError) {
+        logger.warn("[ResponseHandler] Failed to record streaming failure in circuit breaker", {
+          providerId: meta.providerId,
+          sessionId: session.sessionId ?? null,
+          error: cbError,
+        });
+      }
+
+      if (meta.endpointId != null) {
+        try {
+          const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
+          await recordEndpointFailure(meta.endpointId, new Error(errorMessage ?? "STREAM_ABORTED"));
+        } catch (endpointError) {
+          logger.warn("[ResponseHandler] Failed to record endpoint failure (stream aborted)", {
+            endpointId: meta.endpointId,
+            providerId: meta.providerId,
+            sessionId: session.sessionId ?? null,
+            error: endpointError,
+          });
+        }
+      }
+    }
+
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
@@ -830,6 +862,9 @@ export class ProxyResponseHandler {
             const reader = responseForStats.body?.getReader();
             if (!reader) return;
 
+            // 注意：即使 STORE_SESSION_RESPONSE_BODY=false（不写入 Redis），这里也会在内存中累积完整流内容：
+            // - 用于解析 usage/cost 与内部结算（例如“假 200”检测）
+            // 因此该开关仅影响“是否持久化”，不用于控制流式内存占用。
             const chunks: string[] = [];
             const decoder = new TextDecoder();
             let isFirstChunk = true;
@@ -977,6 +1012,9 @@ export class ProxyResponseHandler {
     const processingPromise = (async () => {
       const reader = internalStream.getReader();
       const decoder = new TextDecoder();
+      // 注意：即使 STORE_SESSION_RESPONSE_BODY=false（不写入 Redis），这里也会在内存中累积完整流内容：
+      // - 用于解析 usage/cost 与内部结算（例如“假 200”检测）
+      // 因此该开关仅影响“是否持久化”，不用于控制流式内存占用。
       const chunks: string[] = [];
       let usageForCost: UsageMetrics | null = null;
       let isFirstChunk = true; // ⭐ 标记是否为第一块数据
