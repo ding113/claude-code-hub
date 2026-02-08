@@ -179,7 +179,11 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
 
   const created = toKey(key);
   // 将新建 key 写入 Vacuum Filter（提升新 key 的即时可用性；失败不影响正确性）
-  apiKeyVacuumFilter.noteExistingKey(created.key);
+  try {
+    apiKeyVacuumFilter.noteExistingKey(created.key);
+  } catch {
+    // ignore
+  }
   // Redis 缓存（最佳努力，不影响正确性）
   // 注意：多实例环境下其它实例可能在 Vacuum Filter 尚未重建时收到新 key 的请求。
   // 为减少“新 key 立刻使用偶发 401”的窗口，这里尽量等待 key 缓存写入完成（失败则降级）。

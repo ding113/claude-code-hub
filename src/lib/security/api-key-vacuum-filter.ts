@@ -136,14 +136,14 @@ class ApiKeyVacuumFilter {
   private sourceKeyCount = 0;
 
   constructor() {
-    // 默认开启；若需要可通过环境变量关闭（避免在无 DB 场景产生额外日志）
+    // 默认关闭；可通过环境变量开启（避免升级后在无 DB/无需求场景产生额外开销）
     if (typeof process === "undefined") {
       // Edge/浏览器等无 process 环境：强制关闭（避免访问 process.env 抛错）
       this.enabled = false;
     } else {
       const isEdgeRuntime = process.env.NEXT_RUNTIME === "edge";
       const raw = process.env.ENABLE_API_KEY_VACUUM_FILTER?.trim();
-      this.enabled = !isEdgeRuntime && raw !== "false" && raw !== "0";
+      this.enabled = !isEdgeRuntime && (raw === "true" || raw === "1");
     }
     this.seed = randomBytes(16);
   }
@@ -182,43 +182,58 @@ class ApiKeyVacuumFilter {
     const trimmed = keyString.trim();
     if (!trimmed) return;
 
-    const vf = this.vf;
-    if (!vf) {
-      // vf 未就绪：记录到 pending，确保下一次重建会覆盖到该 key（避免误拒绝）
-      if (this.pendingKeys.size < this.pendingKeysLimit) {
-        this.pendingKeys.add(trimmed);
-      } else {
-        logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
-          limit: this.pendingKeysLimit,
-        });
-      }
-      this.startBackgroundReload({ reason: "pending_key", force: true });
-      return;
-    }
-
-    // 重建进行中：同时写入 pending，确保新 filter 不会漏包含该 key
-    if (this.loadingPromise) {
-      if (this.pendingKeys.size < this.pendingKeysLimit) {
-        this.pendingKeys.add(trimmed);
-      } else {
-        logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
-          limit: this.pendingKeysLimit,
-        });
+    try {
+      const vf = this.vf;
+      if (!vf) {
+        // vf 未就绪：记录到 pending，确保下一次重建会覆盖到该 key（避免误拒绝）
+        if (this.pendingKeys.size < this.pendingKeysLimit) {
+          this.pendingKeys.add(trimmed);
+        } else {
+          logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
+            limit: this.pendingKeysLimit,
+          });
+        }
+        this.startBackgroundReload({ reason: "pending_key", force: true });
+        return;
       }
 
-      // 合并重建请求：当前重建结束后再跑一次，确保纳入 pendingKeys
-      this.startBackgroundReload({ reason: "pending_key_during_reload", force: true });
-    }
+      // 重建进行中：同时写入 pending，确保新 filter 不会漏包含该 key
+      if (this.loadingPromise) {
+        if (this.pendingKeys.size < this.pendingKeysLimit) {
+          this.pendingKeys.add(trimmed);
+        } else {
+          logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
+            limit: this.pendingKeysLimit,
+          });
+        }
 
-    // 注意：不要用 vf.has(key) 来“去重” —— has 可能是短暂假阳性，后续插入/搬移可能让假阳性消失，
-    // 从而导致真正存在的 key 没被写入、最终产生误拒绝风险。对新建 key（应唯一）直接 add 更安全。
-    const ok = vf.add(trimmed);
-    if (!ok) {
-      logger.warn("[ApiKeyVacuumFilter] Insert failed; scheduling rebuild", {
-        keyLength: trimmed.length,
+        // 合并重建请求：当前重建结束后再跑一次，确保纳入 pendingKeys
+        this.startBackgroundReload({ reason: "pending_key_during_reload", force: true });
+      }
+
+      // 注意：不要用 vf.has(key) 来“去重” —— has 可能是短暂假阳性，后续插入/搬移可能让假阳性消失，
+      // 从而导致真正存在的 key 没被写入、最终产生误拒绝风险。对新建 key（应唯一）直接 add 更安全。
+      const ok = vf.add(trimmed);
+      if (!ok) {
+        logger.warn("[ApiKeyVacuumFilter] Insert failed; scheduling rebuild", {
+          keyLength: trimmed.length,
+        });
+        // 安全优先：插入失败意味着新 key 可能未被覆盖。
+        // 为避免误拒绝（假阴性），临时禁用短路，等待后台重建完成后再恢复。
+        if (this.pendingKeys.size < this.pendingKeysLimit) {
+          this.pendingKeys.add(trimmed);
+        } else {
+          logger.warn("[ApiKeyVacuumFilter] Pending keys overflow; scheduling rebuild", {
+            limit: this.pendingKeysLimit,
+          });
+        }
+        this.vf = null;
+        this.startBackgroundReload({ reason: "insert_failed", force: true });
+      }
+    } catch (error) {
+      logger.warn("[ApiKeyVacuumFilter] noteExistingKey failed; scheduling rebuild", {
+        error: error instanceof Error ? error.message : String(error),
       });
-      // 安全优先：插入失败意味着新 key 可能未被覆盖。
-      // 为避免误拒绝（假阴性），临时禁用短路，等待后台重建完成后再恢复。
       if (this.pendingKeys.size < this.pendingKeysLimit) {
         this.pendingKeys.add(trimmed);
       } else {
@@ -227,7 +242,11 @@ class ApiKeyVacuumFilter {
         });
       }
       this.vf = null;
-      this.startBackgroundReload({ reason: "insert_failed", force: true });
+      try {
+        this.startBackgroundReload({ reason: "note_existing_key_failed", force: true });
+      } catch {
+        // ignore
+      }
     }
   }
 
