@@ -48,9 +48,11 @@ vi.mock("@/lib/redis", () => ({
 
 // Mock config - we'll control STORE_SESSION_MESSAGES dynamically
 let mockStoreMessages = false;
+let mockStoreSessionResponseBody = true;
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: () => ({
     STORE_SESSION_MESSAGES: mockStoreMessages,
+    STORE_SESSION_RESPONSE_BODY: mockStoreSessionResponseBody,
     SESSION_TTL: 300,
   }),
 }));
@@ -62,10 +64,12 @@ describe("SessionManager - Redaction based on STORE_SESSION_MESSAGES", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockStoreMessages = false; // default: redact
+    mockStoreSessionResponseBody = true; // default: store response body
   });
 
   afterEach(() => {
     mockStoreMessages = false;
+    mockStoreSessionResponseBody = true;
   });
 
   describe("storeSessionMessages", () => {
@@ -160,6 +164,14 @@ describe("SessionManager - Redaction based on STORE_SESSION_MESSAGES", () => {
   });
 
   describe("storeSessionResponse", () => {
+    it("should skip storing response body when STORE_SESSION_RESPONSE_BODY=false", async () => {
+      mockStoreSessionResponseBody = false;
+
+      await SessionManager.storeSessionResponse("sess_disabled", '{"message":"hello"}', 1);
+
+      expect(redisMock.setex).not.toHaveBeenCalled();
+    });
+
     it("should store redacted JSON response when STORE_SESSION_MESSAGES=false", async () => {
       mockStoreMessages = false;
       const responseBody = {

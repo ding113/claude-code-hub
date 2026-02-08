@@ -1331,7 +1331,11 @@ export class SessionManager {
   /**
    * 存储 session 响应体（临时存储，5分钟过期）
    *
-   * 存储策略受 STORE_SESSION_MESSAGES 控制：
+   * 存储行为受 STORE_SESSION_RESPONSE_BODY 控制：
+   * - true (默认)：存储响应体到 Redis 临时缓存
+   * - false：不存储（注意：不影响本次请求处理与统计，仅影响后续查看 response body）
+   *
+   * 存储策略（脱敏/原样）受 STORE_SESSION_MESSAGES 控制：
    * - true：原样存储响应内容
    * - false（默认）：对 JSON 响应体中的 message 内容脱敏 [REDACTED]
    *
@@ -1344,6 +1348,10 @@ export class SessionManager {
     response: string | object,
     requestSequence?: number
   ): Promise<void> {
+    // 允许通过环境变量显式关闭响应体存储（例如隐私/节省 Redis 内存）。
+    // 注意：这里仅关闭“写入 Redis”这一步；调用方仍然可能在内存中读取响应体用于统计或错误检测。
+    if (!getEnvConfig().STORE_SESSION_RESPONSE_BODY) return;
+
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 
