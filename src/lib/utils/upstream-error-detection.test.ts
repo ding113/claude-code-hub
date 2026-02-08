@@ -5,7 +5,7 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
   test("空响应体视为错误", () => {
     expect(detectUpstreamErrorFromSseOrJsonText("")).toEqual({
       isError: true,
-      reason: "上游返回 200 但响应体为空",
+      code: "FAKE_200_EMPTY_BODY",
     });
   });
 
@@ -31,21 +31,23 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     expect(res.isError).toBe(false);
   });
 
-  test("reason 应对 Bearer token 做脱敏（避免写入日志/Redis/DB）", () => {
+  test("detail 应对 Bearer token 做脱敏（避免泄露到日志/Redis/DB）", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('{"error":"Bearer abc.def_ghi"}');
     expect(res.isError).toBe(true);
     if (res.isError) {
-      expect(res.reason).toContain("Bearer [REDACTED]");
-      expect(res.reason).not.toContain("abc.def_ghi");
+      const detail = res.detail ?? "";
+      expect(detail).toContain("Bearer [REDACTED]");
+      expect(detail).not.toContain("abc.def_ghi");
     }
   });
 
-  test("reason 应对常见 API key 前缀做脱敏（避免写入日志/Redis/DB）", () => {
+  test("detail 应对常见 API key 前缀做脱敏（避免泄露到日志/Redis/DB）", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('{"error":"sk-1234567890abcdef123456"}');
     expect(res.isError).toBe(true);
     if (res.isError) {
-      expect(res.reason).toContain("[REDACTED_KEY]");
-      expect(res.reason).not.toContain("sk-1234567890abcdef123456");
+      const detail = res.detail ?? "";
+      expect(detail).toContain("[REDACTED_KEY]");
+      expect(detail).not.toContain("sk-1234567890abcdef123456");
     }
   });
 

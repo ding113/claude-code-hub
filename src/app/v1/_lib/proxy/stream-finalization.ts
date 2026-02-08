@@ -42,6 +42,8 @@ export function setDeferredStreamingFinalization(
 export function consumeDeferredStreamingFinalization(
   session: ProxySession
 ): DeferredStreamingFinalization | null {
+  // 备注：该函数内部无 await，JS 事件循环保证它是“原子”的（不会被并发打断）。
+  // 即使多个后台任务先后调用，也只有第一次能拿到 meta，其余调用都会得到 null。
   const meta = deferredMeta.get(session) ?? null;
   if (meta) {
     // 只允许消费一次：避免重复结算（例如多个后台统计任务并行时）。

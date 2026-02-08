@@ -20,13 +20,15 @@ import { parseSSEData } from "@/lib/utils/sse";
  * - 仅基于结构化字段做启发式判断：`error` 与 `message`；
  * - 不扫描模型生成的正文内容（例如 content/choices），避免把用户/模型自然语言里的 "error" 误判为上游错误；
  * - message 关键字检测仅对“小体积 JSON”启用，降低误判与性能开销。
- * - reason 字段会做脱敏与截断：避免把上游错误中可能包含的敏感信息写入日志/Redis/DB。
+ * - 返回的 `code` 是语言无关的错误码（便于写入 DB/监控/告警）；
+ * - 返回的 `detail`（如有）会做脱敏与截断：用于日志排查，但不建议直接作为用户展示文案。
  */
 export type UpstreamErrorDetectionResult =
   | { isError: false }
   | {
       isError: true;
-      reason: string;
+      code: string;
+      detail?: string;
     };
 
 type DetectionOptions = {
@@ -49,6 +51,13 @@ type DetectionOptions = {
 const DEFAULT_MAX_JSON_CHARS_FOR_MESSAGE_CHECK = 1000;
 const DEFAULT_MESSAGE_KEYWORD = /error/i;
 
+const FAKE_200_CODES = {
+  EMPTY_BODY: "FAKE_200_EMPTY_BODY",
+  JSON_ERROR_NON_EMPTY: "FAKE_200_JSON_ERROR_NON_EMPTY",
+  JSON_ERROR_MESSAGE_NON_EMPTY: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
+  JSON_MESSAGE_KEYWORD_MATCH: "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH",
+} as const;
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
@@ -68,7 +77,7 @@ function hasNonEmptyValue(value: unknown): boolean {
   return true;
 }
 
-function sanitizeErrorTextForReason(text: string): string {
+function sanitizeErrorTextForDetail(text: string): string {
   // 注意：这里的目的不是“完美脱敏”，而是尽量降低上游错误信息中意外夹带敏感内容的风险。
   // 若后续发现更多敏感模式，可在不改变检测语义的前提下补充。
   let sanitized = text;
@@ -104,8 +113,8 @@ function sanitizeErrorTextForReason(text: string): string {
   return sanitized;
 }
 
-function truncateForReason(text: string, maxLen: number = 200): string {
-  const trimmed = sanitizeErrorTextForReason(text).trim();
+function truncateForDetail(text: string, maxLen: number = 200): string {
+  const trimmed = sanitizeErrorTextForDetail(text).trim();
   if (trimmed.length <= maxLen) return trimmed;
   return `${trimmed.slice(0, maxLen)}…`;
 }
@@ -120,22 +129,24 @@ function detectFromJsonObject(
   // 2) 小体积 JSON 下，`message` 命中关键字：判定为错误（弱信号，但能覆盖部分“错误只写在 message”场景）
   const errorValue = obj.error;
   if (hasNonEmptyValue(errorValue)) {
-    // 优先展示 string 或 error.message，避免把整个对象塞进 reason
+    // 优先展示 string 或 error.message，避免把整个对象塞进 detail
     if (typeof errorValue === "string") {
       return {
         isError: true,
-        reason: `上游返回 200 但 JSON.error 非空: ${truncateForReason(errorValue)}`,
+        code: FAKE_200_CODES.JSON_ERROR_NON_EMPTY,
+        detail: truncateForDetail(errorValue),
       };
     }
 
     if (isPlainRecord(errorValue) && typeof errorValue.message === "string") {
       return {
         isError: true,
-        reason: `上游返回 200 但 JSON.error.message 非空: ${truncateForReason(errorValue.message)}`,
+        code: FAKE_200_CODES.JSON_ERROR_MESSAGE_NON_EMPTY,
+        detail: truncateForDetail(errorValue.message),
       };
     }
 
-    return { isError: true, reason: "上游返回 200 但 JSON.error 非空" };
+    return { isError: true, code: FAKE_200_CODES.JSON_ERROR_NON_EMPTY };
   }
 
   if (rawJsonChars < options.maxJsonCharsForMessageCheck) {
@@ -145,7 +156,8 @@ function detectFromJsonObject(
     if (message && options.messageKeyword.test(message)) {
       return {
         isError: true,
-        reason: `上游返回 200 但 JSON.message 命中关键字: ${truncateForReason(message)}`,
+        code: FAKE_200_CODES.JSON_MESSAGE_KEYWORD_MATCH,
+        detail: truncateForDetail(message),
       };
     }
   }
@@ -176,7 +188,7 @@ export function detectUpstreamErrorFromSseOrJsonText(
 
   const trimmed = text.trim();
   if (!trimmed) {
-    return { isError: true, reason: "上游返回 200 但响应体为空" };
+    return { isError: true, code: FAKE_200_CODES.EMPTY_BODY };
   }
 
   // 情况 1：纯 JSON（对象）

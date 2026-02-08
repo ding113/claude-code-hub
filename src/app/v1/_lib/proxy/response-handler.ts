@@ -88,12 +88,14 @@ type FinalizeDeferredStreamingResult = {
  *   - 如果流正常结束且未命中错误判定，则按成功结算并更新绑定/熔断/endpoint 成功率。
  *
  * @param streamEndedNormally - 必须是 reader 读到 done=true 的“自然结束”；超时/中断等异常结束由其它逻辑处理。
+ * @param clientAborted - 标记是否为客户端主动中断（用于内部状态码映射，避免把中断记为 200 completed）
  */
 async function finalizeDeferredStreamingFinalizationIfNeeded(
   session: ProxySession,
   allContent: string,
   upstreamStatusCode: number,
-  streamEndedNormally: boolean
+  streamEndedNormally: boolean,
+  clientAborted: boolean
 ): Promise<FinalizeDeferredStreamingResult> {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
@@ -102,15 +104,26 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
 
-  // “假 200”统一映射为 502：既能让内部状态落到 error 分支，
-  // 也能让后续熔断/故障转移策略按“上游错误”处理。
-  const effectiveStatusCode = detected.isError ? 502 : upstreamStatusCode;
-  const errorMessage = detected.isError ? detected.reason : null;
+  // “内部结算用”的状态码（不会改变客户端实际 HTTP 状态码）。
+  // - 假 200：映射为 502，确保内部统计/熔断/会话绑定把它当作失败。
+  // - 未自然结束：也应映射为失败（避免把中断/部分流误记为 200 completed）。
+  let effectiveStatusCode: number;
+  let errorMessage: string | null;
+  if (detected.isError) {
+    effectiveStatusCode = 502;
+    errorMessage = detected.code;
+  } else if (!streamEndedNormally) {
+    effectiveStatusCode = clientAborted ? 499 : 502;
+    errorMessage = clientAborted ? "CLIENT_ABORTED" : "STREAM_ABORTED";
+  } else {
+    effectiveStatusCode = upstreamStatusCode;
+    errorMessage = null;
+  }
 
-  // 未启用延迟结算 / provider 缺失 / 未自然结束：
+  // 未启用延迟结算 / provider 缺失：
   // - 只返回“内部状态码 + 错误原因”，由调用方写入统计；
-  // - 不在这里更新熔断/绑定（异常结束场景通常已有专门逻辑做 recordFailure/persistRequestFailure）。
-  if (!meta || !provider || !streamEndedNormally) {
+  // - 不在这里更新熔断/绑定（meta 缺失意味着 Forwarder 没有启用延迟结算；provider 缺失意味着无法归因）。
+  if (!meta || !provider) {
     return { effectiveStatusCode, errorMessage };
   }
 
@@ -151,20 +164,35 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     }
   }
 
+  // 未自然结束：不更新熔断/绑定（中断/超时等通常由其它逻辑处理），但要避免把它误记为 200 completed。
+  if (!streamEndedNormally) {
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: "system_error",
+      attemptNumber: meta.attemptNumber,
+      statusCode: effectiveStatusCode,
+      errorMessage: errorMessage ?? undefined,
+    });
+
+    return { effectiveStatusCode, errorMessage };
+  }
+
   if (detected.isError) {
     logger.warn("[ResponseHandler] SSE completed but body indicates error (fake 200)", {
       providerId: meta.providerId,
       providerName: meta.providerName,
       upstreamStatusCode: meta.upstreamStatusCode,
       effectiveStatusCode,
-      reason: detected.reason,
+      code: detected.code,
+      detail: detected.detail ?? null,
     });
 
     // 计入熔断器：让后续请求能正确触发故障转移/熔断
     try {
       // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
       const { recordFailure } = await import("@/lib/circuit-breaker");
-      await recordFailure(meta.providerId, new Error(detected.reason));
+      await recordFailure(meta.providerId, new Error(detected.code));
     } catch (cbError) {
       logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
         providerId: meta.providerId,
@@ -177,7 +205,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     if (meta.endpointId != null) {
       try {
         const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
-        await recordEndpointFailure(meta.endpointId, new Error(detected.reason));
+        await recordEndpointFailure(meta.endpointId, new Error(detected.code));
       } catch (endpointError) {
         logger.warn("[ResponseHandler] Failed to record endpoint failure (fake 200)", {
           endpointId: meta.endpointId,
@@ -196,7 +224,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       reason: "retry_failed",
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
-      errorMessage: detected.reason,
+      errorMessage: detected.code,
     });
 
     return { effectiveStatusCode, errorMessage };
@@ -827,6 +855,7 @@ export class ProxyResponseHandler {
             const flushed = decoder.decode();
             if (flushed) chunks.push(flushed);
             const allContent = chunks.join("");
+            const clientAborted = session.clientAbortSignal?.aborted ?? false;
 
             // 存储响应体到 Redis（5分钟过期）
             if (session.sessionId) {
@@ -845,7 +874,8 @@ export class ProxyResponseHandler {
               session,
               allContent,
               statusCode,
-              streamEndedNormally
+              streamEndedNormally,
+              clientAborted
             );
             await finalizeRequestStats(
               session,
@@ -1026,13 +1056,15 @@ export class ProxyResponseHandler {
 
       const finalizeStream = async (
         allContent: string,
-        streamEndedNormally: boolean
+        streamEndedNormally: boolean,
+        clientAborted: boolean
       ): Promise<void> => {
         const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
           session,
           allContent,
           statusCode,
-          streamEndedNormally
+          streamEndedNormally,
+          clientAborted
         );
         const effectiveStatusCode = finalized.effectiveStatusCode;
         const streamErrorMessage = finalized.errorMessage;
@@ -1211,7 +1243,8 @@ export class ProxyResponseHandler {
         // ⭐ 流式读取完成：清除静默期计时器
         clearIdleTimer();
         const allContent = flushAndJoin();
-        await finalizeStream(allContent, streamEndedNormally);
+        const clientAborted = session.clientAbortSignal?.aborted ?? false;
+        await finalizeStream(allContent, streamEndedNormally, clientAborted);
       } catch (error) {
         // 检测 AbortError 的来源：响应超时 vs 静默期超时 vs 客户端/上游中断
         const err = error as Error;
@@ -1336,7 +1369,7 @@ export class ProxyResponseHandler {
             });
             try {
               const allContent = flushAndJoin();
-              await finalizeStream(allContent, false);
+              await finalizeStream(allContent, false, true);
             } catch (finalizeError) {
               logger.error("ResponseHandler: Failed to finalize aborted stream response", {
                 taskId,
