@@ -317,7 +317,7 @@ export async function getCachedUser(userId: number): Promise<User | null> {
       return null;
     }
 
-    // validateApiKeyAndGetUser 的语义：user 仅要求“未删除”
+    // validateApiKeyAndGetUser 的语义：user 仅要求“未删除”；isEnabled/expiresAt 等状态由上层按需校验（如 auth.ts）
     if (hydrated.deletedAt) {
       redis.del(redisKey).catch(() => {});
       return null;

@@ -113,6 +113,26 @@ describe("auth.ts：validateKey（Vacuum Filter -> Redis -> DB）", () => {
     expect(isDefinitelyNotPresent).toHaveBeenCalledWith("sk-user-login");
   });
 
+  test("用户禁用：缓存命中也应拒绝（保护登录/会话）", async () => {
+    const cachedKey = buildKey({ key: "sk-user-disabled", canLoginWebUi: true, userId: 10 });
+    const cachedUser = buildUser({ id: 10, isEnabled: false });
+    getCachedActiveKey.mockResolvedValueOnce(cachedKey);
+    getCachedUser.mockResolvedValueOnce(cachedUser);
+
+    const { validateKey } = await import("@/lib/auth");
+    await expect(validateKey("sk-user-disabled")).resolves.toBeNull();
+  });
+
+  test("用户过期：缓存命中也应拒绝（保护登录/会话）", async () => {
+    const cachedKey = buildKey({ key: "sk-user-expired", canLoginWebUi: true, userId: 10 });
+    const cachedUser = buildUser({ id: 10, expiresAt: new Date("2000-01-01T00:00:00.000Z") });
+    getCachedActiveKey.mockResolvedValueOnce(cachedKey);
+    getCachedUser.mockResolvedValueOnce(cachedUser);
+
+    const { validateKey } = await import("@/lib/auth");
+    await expect(validateKey("sk-user-expired")).resolves.toBeNull();
+  });
+
   test("canLoginWebUi=false 且 allowReadOnlyAccess=false：缓存命中也应拒绝", async () => {
     const cachedKey = buildKey({ key: "sk-no-webui", canLoginWebUi: false, userId: 10 });
     const cachedUser = buildUser({ id: 10 });
@@ -136,4 +156,3 @@ describe("auth.ts：validateKey（Vacuum Filter -> Redis -> DB）", () => {
     });
   });
 });
-

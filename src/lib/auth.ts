@@ -114,6 +114,14 @@ export async function validateKey(
 
   const { user, key } = authResult;
 
+  // 用户状态校验：与 v1 proxy 侧保持一致，避免禁用/过期用户继续登录或持有会话
+  if (!user.isEnabled) {
+    return null;
+  }
+  if (user.expiresAt && user.expiresAt.getTime() <= Date.now()) {
+    return null;
+  }
+
   // 检查 Web UI 登录权限
   if (!allowReadOnlyAccess && !key.canLoginWebUi) {
     return null;
