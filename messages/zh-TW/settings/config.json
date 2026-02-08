@@ -55,6 +55,8 @@
     "enableThinkingBudgetRectifierDesc": "當 Anthropic 類型供應商返回 budget_tokens < 1024 錯誤時，自動將 thinking 預算設為最大值（32000），並在需要時將 max_tokens 設為 64000，然後重試一次（預設開啟）。",
     "enableCodexSessionIdCompletion": "啟用 Codex Session ID 補全",
     "enableCodexSessionIdCompletionDesc": "當 Codex 請求僅提供 session_id（請求頭）或 prompt_cache_key（請求體）之一時，自動補全另一個；若兩者皆缺失，則產生 UUID v7 會話 ID，並在同一對話內穩定複用。",
+    "enableClaudeMetadataUserIdInjection": "啟用 Claude metadata.user_id 注入",
+    "enableClaudeMetadataUserIdInjectionDesc": "當 Claude 請求缺少 metadata.user_id 時，自動注入穩定 user_id（格式：user_{hash}_account__session_{sessionId}）；若客戶端已提供則保留原值不覆蓋。",
     "interceptAnthropicWarmupRequests": "攔截 Warmup 請求（Anthropic）",
     "interceptAnthropicWarmupRequestsDesc": "開啟後，識別到 Claude Code 的 Warmup 探測請求將由 CCH 直接搶答短回應，避免存取上游供應商；該請求會記錄在日誌中，但不計費、不限流、不計入統計。",
     "keepDays": "保留天數",

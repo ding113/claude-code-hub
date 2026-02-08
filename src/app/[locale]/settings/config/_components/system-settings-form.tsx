@@ -50,6 +50,7 @@ interface SystemSettingsFormProps {
     | "enableThinkingSignatureRectifier"
     | "enableThinkingBudgetRectifier"
     | "enableCodexSessionIdCompletion"
+    | "enableClaudeMetadataUserIdInjection"
     | "enableResponseFixer"
     | "responseFixerConfig"
     | "quotaDbRefreshIntervalSeconds"
@@ -91,6 +92,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [enableCodexSessionIdCompletion, setEnableCodexSessionIdCompletion] = useState(
     initialSettings.enableCodexSessionIdCompletion
+  );
+  const [enableClaudeMetadataUserIdInjection, setEnableClaudeMetadataUserIdInjection] = useState(
+    initialSettings.enableClaudeMetadataUserIdInjection
   );
   const [enableResponseFixer, setEnableResponseFixer] = useState(
     initialSettings.enableResponseFixer
@@ -141,6 +145,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableThinkingSignatureRectifier,
         enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion,
+        enableClaudeMetadataUserIdInjection,
         enableResponseFixer,
         responseFixerConfig,
         quotaDbRefreshIntervalSeconds,
@@ -168,6 +173,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
+        setEnableClaudeMetadataUserIdInjection(
+          result.data.enableClaudeMetadataUserIdInjection
+        );
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
         setQuotaDbRefreshIntervalSeconds(result.data.quotaDbRefreshIntervalSeconds ?? 10);
@@ -434,6 +442,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-codex-session-id-completion"
             checked={enableCodexSessionIdCompletion}
             onCheckedChange={(checked) => setEnableCodexSessionIdCompletion(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Enable Claude metadata.user_id Injection */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-teal-500/10 text-teal-400 shrink-0">
+              <Terminal className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("enableClaudeMetadataUserIdInjection")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableClaudeMetadataUserIdInjectionDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-claude-metadata-user-id-injection"
+            checked={enableClaudeMetadataUserIdInjection}
+            onCheckedChange={(checked) => setEnableClaudeMetadataUserIdInjection(checked)}
             disabled={isPending}
           />
         </div>

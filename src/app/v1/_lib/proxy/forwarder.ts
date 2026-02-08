@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
@@ -27,6 +28,7 @@ import {
 } from "@/lib/vendor-type-circuit-breaker";
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
+import type { ClaudeMetadataUserIdInjectionSpecialSetting } from "@/types/special-settings";
 
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
@@ -202,6 +204,212 @@ function filterPrivateParameters(obj: unknown): unknown {
   }
 
   return filtered;
+}
+
+type ClaudeMetadataUserIdInjectionResult = {
+  message: Record<string, unknown>;
+  audit: ClaudeMetadataUserIdInjectionSpecialSetting;
+};
+
+async function persistSpecialSettings(session: ProxySession): Promise<void> {
+  const specialSettings = session.getSpecialSettings();
+  if (!specialSettings || specialSettings.length === 0) {
+    return;
+  }
+
+  if (session.sessionId) {
+    await SessionManager.storeSessionSpecialSettings(
+      session.sessionId,
+      specialSettings,
+      session.requestSequence
+    ).catch((err) => {
+      logger.error("[ProxyForwarder] Failed to store special settings", {
+        error: err,
+        sessionId: session.sessionId,
+      });
+    });
+  }
+
+  if (session.messageContext?.id) {
+    await updateMessageRequestDetails(session.messageContext.id, {
+      specialSettings,
+    }).catch((err) => {
+      logger.error("[ProxyForwarder] Failed to persist special settings", {
+        error: err,
+        messageRequestId: session.messageContext?.id,
+      });
+    });
+  }
+}
+
+/**
+ * 为 Claude 请求注入 metadata.user_id
+ *
+ * 格式：user_{stableHash}_account__session_{sessionId}
+ * - stableHash: 基于 API Key ID 生成的稳定哈希（64位 hex），生成后保持不变
+ * - sessionId: 当前请求的 session ID
+ *
+ * 注意：如果请求体中已存在 metadata.user_id，则保持原样不修改
+ * @internal
+ */
+export function injectClaudeMetadataUserId(
+  message: Record<string, unknown>,
+  session: ProxySession
+): Record<string, unknown> {
+  const existingMetadata =
+    typeof message.metadata === "object" && message.metadata !== null
+      ? (message.metadata as Record<string, unknown>)
+      : undefined;
+
+  // 检查是否已存在 metadata.user_id
+  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
+    return message;
+  }
+
+  // 获取必要信息
+  const keyId = session.authState?.key?.id;
+  const sessionId = session.sessionId;
+
+  if (keyId == null || !sessionId) {
+    return message;
+  }
+
+  // 生成稳定的 user hash（基于 API Key ID）
+  const stableHash = crypto
+    .createHash("sha256")
+    .update(`claude_user_${keyId}`)
+    .digest("hex");
+
+  // 构建 user_id
+  const userId = `user_${stableHash}_account__session_${sessionId}`;
+
+  // 注入 metadata
+  const newMetadata = {
+    ...existingMetadata,
+    user_id: userId,
+  };
+
+  return {
+    ...message,
+    metadata: newMetadata,
+  };
+}
+
+function applyClaudeMetadataUserIdInjectionWithAudit(
+  message: Record<string, unknown>,
+  session: ProxySession,
+  enabled: boolean
+): ClaudeMetadataUserIdInjectionResult | null {
+  const keyId = session.authState?.key?.id ?? null;
+  const sessionId = session.sessionId ?? null;
+
+  if (!enabled) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "disabled",
+      keyId,
+      sessionId,
+    });
+    return null;
+  }
+
+  const existingMetadata =
+    typeof message.metadata === "object" && message.metadata !== null
+      ? (message.metadata as Record<string, unknown>)
+      : undefined;
+
+  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "already_exists",
+      keyId,
+      sessionId,
+    });
+
+    return {
+      message,
+      audit: {
+        type: "claude_metadata_user_id_injection",
+        scope: "request",
+        hit: false,
+        action: "skipped",
+        reason: "already_exists",
+        keyId,
+        sessionId,
+      },
+    };
+  }
+
+  if (keyId == null) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "missing_key_id",
+      keyId,
+      sessionId,
+    });
+
+    return {
+      message,
+      audit: {
+        type: "claude_metadata_user_id_injection",
+        scope: "request",
+        hit: false,
+        action: "skipped",
+        reason: "missing_key_id",
+        keyId,
+        sessionId,
+      },
+    };
+  }
+
+  if (!sessionId) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "missing_session_id",
+      keyId,
+      sessionId,
+    });
+
+    return {
+      message,
+      audit: {
+        type: "claude_metadata_user_id_injection",
+        scope: "request",
+        hit: false,
+        action: "skipped",
+        reason: "missing_session_id",
+        keyId,
+        sessionId,
+      },
+    };
+  }
+
+  const injectedMessage = injectClaudeMetadataUserId(message, session);
+
+  logger.info("[ProxyForwarder] Claude metadata.user_id injection applied", {
+    enabled,
+    hit: true,
+    reason: "injected",
+    keyId,
+    sessionId,
+  });
+
+  return {
+    message: injectedMessage,
+    audit: {
+      type: "claude_metadata_user_id_injection",
+      scope: "request",
+      hit: true,
+      action: "injected",
+      reason: "injected",
+      keyId,
+      sessionId,
+    },
+  };
 }
 
 export class ProxyForwarder {
@@ -1620,8 +1828,30 @@ export class ProxyForwarder {
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
       if (hasBody) {
-        const filteredMessage = filterPrivateParameters(session.request.message);
-        const bodyString = JSON.stringify(filteredMessage);
+        const filteredMessage = filterPrivateParameters(session.request.message) as Record<
+          string,
+          unknown
+        >;
+
+        // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
+        let messageToSend: Record<string, unknown> = filteredMessage;
+        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+          const settings = await getCachedSystemSettings();
+          const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
+          const injection = applyClaudeMetadataUserIdInjectionWithAudit(
+            filteredMessage,
+            session,
+            enabled
+          );
+
+          if (injection) {
+            messageToSend = injection.message;
+            session.addSpecialSetting(injection.audit);
+            await persistSpecialSettings(session);
+          }
+        }
+
+        const bodyString = JSON.stringify(messageToSend);
         requestBody = bodyString;
 
         try {
