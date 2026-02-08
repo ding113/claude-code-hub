@@ -493,7 +493,7 @@
       "providers": "Поставщики",
       "models": "Модели",
       "noDetailedData": "Подробные данные отсутствуют",
-      "storageTip": "Подробные данные не найдены. Чтобы просмотреть детали запроса, проверьте, установлена ли переменная окружения STORE_SESSION_MESSAGES в значение true. Примечание: включение увеличит использование памяти Redis и может содержать конфиденциальную информацию.",
+      "storageTip": "Подробные данные не найдены. Возможные причины: Redis отключен/недоступен (REDIS_URL + ENABLE_RATE_LIMIT=true), данные истекли (SESSION_TTL, по умолчанию 300с), или сохранение тела ответа отключено (STORE_SESSION_RESPONSE_BODY=false, влияет только на тело ответа). Чтобы сохранять сообщения без маскировки, установите STORE_SESSION_MESSAGES=true.",
       "clientInfo": "Информация о клиенте",
       "requestHeaders": "Заголовки запроса",
       "requestBody": "Тело запроса",
@@ -571,7 +571,7 @@
       "fetchFailed": "Не удалось получить",
       "unknownError": "Неизвестная ошибка",
       "storageNotEnabled": "Не сохранено",
-      "storageNotEnabledHint": "Подсказка: установите переменную окружения STORE_SESSION_MESSAGES=true, чтобы включить сохранение сообщений"
+      "storageNotEnabledHint": "Подсказка: проверьте REDIS_URL и ENABLE_RATE_LIMIT=true (кэш деталей сессии). Чтобы сохранять сообщения без маскировки, установите STORE_SESSION_MESSAGES=true."
     },
     "errors": {
       "copyFailed": "Не удалось скопировать"

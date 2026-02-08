@@ -493,7 +493,7 @@
       "providers": "Providers",
       "models": "Models",
       "noDetailedData": "No detailed data available",
-      "storageTip": "No detailed data found. To view request details, please check if the environment variable STORE_SESSION_MESSAGES is set to true. Note: Enabling this increases Redis memory usage and may include sensitive information.",
+      "storageTip": "No detailed data found. Possible reasons: Redis is disabled/unavailable (REDIS_URL + ENABLE_RATE_LIMIT=true), the data expired (SESSION_TTL, default 300s), or response body storage is disabled (STORE_SESSION_RESPONSE_BODY=false, affects response body only). To store unredacted messages, set STORE_SESSION_MESSAGES=true.",
       "clientInfo": "Client Info",
       "requestHeaders": "Request Headers",
       "requestBody": "Request Body",
@@ -571,7 +571,7 @@
       "fetchFailed": "Fetch Failed",
       "unknownError": "Unknown Error",
       "storageNotEnabled": "Not Stored",
-      "storageNotEnabledHint": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages storage"
+      "storageNotEnabledHint": "Tip: Check REDIS_URL and ENABLE_RATE_LIMIT=true (session details cache). To store unredacted messages, set STORE_SESSION_MESSAGES=true."
     },
     "errors": {
       "copyFailed": "Copy Failed"
