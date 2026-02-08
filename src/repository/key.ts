@@ -186,12 +186,24 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
   }
   // Redis 缓存（最佳努力，不影响正确性）
   // 注意：多实例环境下其它实例可能在 Vacuum Filter 尚未重建时收到新 key 的请求。
-  // 为减少“新 key 立刻使用偶发 401”的窗口，这里尽量等待 key 缓存写入完成（失败则降级）。
-  await cacheActiveKey(created).catch(() => {});
+  // 为减少“新 key 立刻使用偶发 401”的窗口，这里会等待 Redis 写入/广播；
+  // 但必须设置超时上限，避免 Redis 慢/不可用时拖慢 key 创建。
+  const redisBestEffortTimeoutMs = 200;
+  const redisTasks: Array<Promise<unknown>> = [];
+
+  redisTasks.push(cacheActiveKey(created).catch(() => {}));
+
   // 多实例：广播 key 集合变更，触发其它实例重建 Vacuum Filter，避免误拒绝
   const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
   if (process.env.REDIS_URL && rateLimitRaw !== "false" && rateLimitRaw !== "0") {
-    await publishCacheInvalidation(CHANNEL_API_KEYS_UPDATED);
+    redisTasks.push(publishCacheInvalidation(CHANNEL_API_KEYS_UPDATED).catch(() => {}));
+  }
+
+  if (redisTasks.length > 0) {
+    await Promise.race([
+      Promise.all(redisTasks),
+      new Promise<void>((resolve) => setTimeout(resolve, redisBestEffortTimeoutMs)),
+    ]);
   }
   return created;
 }
