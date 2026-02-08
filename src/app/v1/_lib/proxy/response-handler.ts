@@ -139,8 +139,23 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     } catch (cbError) {
       logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
         providerId: meta.providerId,
+        sessionId: session.sessionId ?? null,
         error: cbError,
       });
+    }
+
+    // endpoint 级熔断：与成功路径保持对称，避免“假 200”只影响 provider 而不影响 endpoint 健康度
+    if (meta.endpointId != null) {
+      try {
+        const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
+        await recordEndpointFailure(meta.endpointId, new Error(detected.reason));
+      } catch (endpointError) {
+        logger.warn("[ResponseHandler] Failed to record endpoint failure (fake 200)", {
+          endpointId: meta.endpointId,
+          providerId: meta.providerId,
+          error: endpointError,
+        });
+      }
     }
 
     // 记录到决策链（用于日志展示与 DB 持久化）。
@@ -182,7 +197,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     });
   }
 
-  // ⭐ 成功后绑定 session 到供应商（智能绑定策略）
+  // 成功后绑定 session 到供应商（智能绑定策略）
   if (session.sessionId) {
     const result = await SessionManager.updateSessionBindingSmart(
       session.sessionId,
@@ -214,7 +229,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       });
     }
 
-    // ⭐ 统一更新两个数据源（确保监控数据一致）
+    // 统一更新两个数据源（确保监控数据一致）
     void SessionManager.updateSessionProvider(session.sessionId, {
       providerId: meta.providerId,
       providerName: meta.providerName,

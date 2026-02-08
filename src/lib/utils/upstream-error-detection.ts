@@ -101,12 +101,7 @@ function detectFromJsonObject(
   }
 
   if (rawJsonChars < options.maxJsonCharsForMessageCheck) {
-    const message =
-      typeof obj.message === "string"
-        ? obj.message
-        : isPlainRecord(obj.error) && typeof obj.error.message === "string"
-          ? obj.error.message
-          : null;
+    const message = typeof obj.message === "string" ? obj.message : null;
 
     // 注意：仅检查 message 字段本身，不扫描其它字段。
     if (message && options.messageKeyword.test(message)) {

@@ -21,6 +21,16 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     expect(res.isError).toBe(true);
   });
 
+  test.each(['{"error":true}', '{"error":42}'])("纯 JSON：error 为非字符串类型也应视为错误（%s）", (body) => {
+    const res = detectUpstreamErrorFromSseOrJsonText(body);
+    expect(res.isError).toBe(true);
+  });
+
+  test("纯 JSON：JSON 数组不视为错误（避免误判）", () => {
+    const res = detectUpstreamErrorFromSseOrJsonText('[{"error":"something"}]');
+    expect(res.isError).toBe(false);
+  });
+
   test("纯 JSON：error 为空字符串不视为错误", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('{"error":""}');
     expect(res.isError).toBe(false);
