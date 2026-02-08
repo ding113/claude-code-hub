@@ -142,8 +142,8 @@ class ApiKeyVacuumFilter {
       this.enabled = false;
     } else {
       const isEdgeRuntime = process.env.NEXT_RUNTIME === "edge";
-      this.enabled =
-        !isEdgeRuntime && process.env.ENABLE_API_KEY_VACUUM_FILTER !== "false";
+      const raw = process.env.ENABLE_API_KEY_VACUUM_FILTER?.trim();
+      this.enabled = !isEdgeRuntime && raw !== "false" && raw !== "0";
     }
     this.seed = randomBytes(16);
   }

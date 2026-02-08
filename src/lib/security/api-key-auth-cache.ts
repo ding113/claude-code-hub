@@ -29,7 +29,8 @@ function isEdgeRuntime(): boolean {
 
 function isApiKeyRedisCacheEnabled(): boolean {
   if (isEdgeRuntime()) return false;
-  return process.env.ENABLE_API_KEY_REDIS_CACHE !== "false";
+  const raw = process.env.ENABLE_API_KEY_REDIS_CACHE?.trim();
+  return raw !== "false" && raw !== "0";
 }
 
 function getCacheTtlSeconds(): number {

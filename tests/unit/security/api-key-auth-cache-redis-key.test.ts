@@ -413,6 +413,17 @@ describe("ApiKeyAuthCache：Redis key（哈希/命名/TTL/失效）", () => {
     expect(currentRedis!.del).not.toHaveBeenCalled();
   });
 
+  test("ENABLE_API_KEY_REDIS_CACHE=0：应完全禁用缓存（不触发 Redis 调用）", async () => {
+    setEnv({ ENABLE_API_KEY_REDIS_CACHE: "0" });
+    const { cacheActiveKey } = await import("@/lib/security/api-key-auth-cache");
+
+    await cacheActiveKey(buildKey({ key: "sk-disabled-by-env-0" }));
+
+    expect(getRedisClient).not.toHaveBeenCalled();
+    expect(currentRedis!.setex).not.toHaveBeenCalled();
+    expect(currentRedis!.del).not.toHaveBeenCalled();
+  });
+
   test("NEXT_RUNTIME=edge：应禁用缓存（避免在 Edge runtime 引入 Node Redis 依赖）", async () => {
     setEnv({ NEXT_RUNTIME: "edge" });
     const { getCachedActiveKey } = await import("@/lib/security/api-key-auth-cache");
