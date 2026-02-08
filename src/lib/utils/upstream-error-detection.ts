@@ -96,10 +96,7 @@ function sanitizeErrorTextForDetail(text: string): string {
   );
 
   // Email
-  sanitized = sanitized.replace(
-    /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
-    "[EMAIL]"
-  );
+  sanitized = sanitized.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[EMAIL]");
 
   // 通用敏感键值（尽量覆盖常见写法）
   sanitized = sanitized.replace(
@@ -180,11 +177,12 @@ export function detectUpstreamErrorFromSseOrJsonText(
   text: string,
   options: DetectionOptions = {}
 ): UpstreamErrorDetectionResult {
-  const merged: Required<Pick<DetectionOptions, "maxJsonCharsForMessageCheck" | "messageKeyword">> = {
-    maxJsonCharsForMessageCheck:
-      options.maxJsonCharsForMessageCheck ?? DEFAULT_MAX_JSON_CHARS_FOR_MESSAGE_CHECK,
-    messageKeyword: options.messageKeyword ?? DEFAULT_MESSAGE_KEYWORD,
-  };
+  const merged: Required<Pick<DetectionOptions, "maxJsonCharsForMessageCheck" | "messageKeyword">> =
+    {
+      maxJsonCharsForMessageCheck:
+        options.maxJsonCharsForMessageCheck ?? DEFAULT_MAX_JSON_CHARS_FOR_MESSAGE_CHECK,
+      messageKeyword: options.messageKeyword ?? DEFAULT_MESSAGE_KEYWORD,
+    };
 
   const trimmed = text.trim();
   if (!trimmed) {
@@ -212,7 +210,7 @@ export function detectUpstreamErrorFromSseOrJsonText(
   //
   // 额外说明：这里刻意只匹配 `"error"` / `"message"`（含双引号），
   // 若正文里出现被转义的 `\"error\"`（字符串内容），不会命中，这是为了避免误判。
-  if (!text.includes("\"error\"") && !text.includes("\"message\"")) {
+  if (!text.includes('"error"') && !text.includes('"message"')) {
     return { isError: false };
   }
 

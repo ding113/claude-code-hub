@@ -504,8 +504,8 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
             ttfbMs: session.ttfbMs ?? duration,
             providerChain: session.getProviderChain(),
-            model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
-            providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+            model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+            providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
           });
           const tracker = ProxyStatusTracker.getInstance();
@@ -660,8 +660,8 @@ export class ProxyResponseHandler {
             cacheCreation1hInputTokens: usageMetrics?.cache_creation_1h_input_tokens,
             cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
             providerChain: session.getProviderChain(),
-            model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
-            providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+            model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+            providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
           });
 
@@ -1203,9 +1203,11 @@ export class ProxyResponseHandler {
             payload.costUsd = costUsdStr;
           }
 
-          void SessionManager.updateSessionUsage(session.sessionId, payload).catch((error: unknown) => {
-            logger.error("[ResponseHandler] Failed to update session usage:", error);
-          });
+          void SessionManager.updateSessionUsage(session.sessionId, payload).catch(
+            (error: unknown) => {
+              logger.error("[ResponseHandler] Failed to update session usage:", error);
+            }
+          );
         }
 
         // 保存扩展信息（status code, tokens, provider chain）
@@ -1221,8 +1223,8 @@ export class ProxyResponseHandler {
           cacheTtlApplied: usageForCost?.cache_ttl ?? null,
           providerChain: session.getProviderChain(),
           ...(streamErrorMessage ? { errorMessage: streamErrorMessage } : {}),
-          model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
-          providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+          model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
+          providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
         });
       };
@@ -2165,7 +2167,7 @@ export async function finalizeRequestStats(
       ttfbMs: session.ttfbMs ?? duration,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
-      providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
     });
     return;
@@ -2254,7 +2256,7 @@ export async function finalizeRequestStats(
     providerChain: session.getProviderChain(),
     ...(errorMessage ? { errorMessage } : {}),
     model: session.getCurrentModel() ?? undefined,
-    providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+    providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
   });
 }
@@ -2410,7 +2412,7 @@ async function persistRequestFailure(options: {
       ttfbMs: phase === "non-stream" ? (session.ttfbMs ?? duration) : session.ttfbMs,
       providerChain: session.getProviderChain(),
       model: session.getCurrentModel() ?? undefined,
-      providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
+      providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
     });
 

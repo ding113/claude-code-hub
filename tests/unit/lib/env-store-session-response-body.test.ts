@@ -42,4 +42,3 @@ describe("EnvSchema - STORE_SESSION_RESPONSE_BODY", () => {
     expect(result.STORE_SESSION_RESPONSE_BODY).toBe(true);
   });
 });
-

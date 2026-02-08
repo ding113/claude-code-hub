@@ -21,7 +21,10 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     expect(res.isError).toBe(true);
   });
 
-  test.each(['{"error":true}', '{"error":42}'])("纯 JSON：error 为非字符串类型也应视为错误（%s）", (body) => {
+  test.each([
+    '{"error":true}',
+    '{"error":42}',
+  ])("纯 JSON：error 为非字符串类型也应视为错误（%s）", (body) => {
     const res = detectUpstreamErrorFromSseOrJsonText(body);
     expect(res.isError).toBe(true);
   });
@@ -76,7 +79,7 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
 
   test("detail 应对通用敏感键值做脱敏（避免泄露到日志/Redis/DB）", () => {
     const res = detectUpstreamErrorFromSseOrJsonText(
-      JSON.stringify({ error: "token=abc123 secret:xyz password:\"p@ss\" api_key=key123" })
+      JSON.stringify({ error: 'token=abc123 secret:xyz password:"p@ss" api_key=key123' })
     );
     expect(res.isError).toBe(true);
     if (res.isError) {
@@ -144,7 +147,7 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
   });
 
   test("SSE：data JSON 包含非空 error 字段视为错误", () => {
-    const sse = ['event: message', 'data: {"error":"当前无可用凭证"}', ""].join("\n");
+    const sse = ["event: message", 'data: {"error":"当前无可用凭证"}', ""].join("\n");
     const res = detectUpstreamErrorFromSseOrJsonText(sse);
     expect(res.isError).toBe(true);
   });
