@@ -276,7 +276,7 @@ Docker Compose is the **preferred deployment method** — it automatically provi
 | `REDIS_URL`                                | `redis://localhost:6379` | Redis endpoint, supports `rediss://` for TLS providers.                                              |
 | `REDIS_TLS_REJECT_UNAUTHORIZED`            | `true`                   | Validate Redis TLS certificates; set `false` to skip (for self-signed/shared certs).                 |
 | `ENABLE_RATE_LIMIT`                        | `true`                   | Toggles multi-dimensional rate limiting; Fail-Open handles Redis outages gracefully.                 |
-| `ENABLE_API_KEY_VACUUM_FILTER`             | `false`                  | Enables API Key Vacuum Filter (negative short-circuit only; disable for troubleshooting).            |
+| `ENABLE_API_KEY_VACUUM_FILTER`             | `true`                   | Enables API Key Vacuum Filter (negative short-circuit only; set to `false/0` to disable).            |
 | `ENABLE_API_KEY_REDIS_CACHE`               | `true`                   | Enables API Key auth Redis cache (requires Redis; auto-fallback to DB on errors).                    |
 | `API_KEY_AUTH_CACHE_TTL_SECONDS`           | `60`                     | API Key auth cache TTL in seconds (default 60, max 3600).                                             |
 | `SESSION_TTL`                              | `300`                    | Session cache window (seconds) that drives vendor reuse.                                             |

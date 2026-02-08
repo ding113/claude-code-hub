@@ -121,14 +121,16 @@ class ApiKeyVacuumFilter {
   private sourceKeyCount = 0;
 
   constructor() {
-    // 默认关闭；可通过环境变量开启（避免升级后在无 DB/无需求场景产生额外开销）
+    // 默认开启：升级后无需额外配置即可启用（仅负向短路；不会影响鉴权正确性）。
+    // 如需排查或节省资源，可通过环境变量显式关闭：ENABLE_API_KEY_VACUUM_FILTER=false/0
     if (typeof process === "undefined") {
       // Edge/浏览器等无 process 环境：强制关闭（避免访问 process.env 抛错）
       this.enabled = false;
     } else {
       const isEdgeRuntime = process.env.NEXT_RUNTIME === "edge";
       const raw = process.env.ENABLE_API_KEY_VACUUM_FILTER?.trim();
-      this.enabled = !isEdgeRuntime && (raw === "true" || raw === "1");
+      const explicitlyDisabled = raw === "false" || raw === "0";
+      this.enabled = !isEdgeRuntime && !explicitlyDisabled;
     }
     this.seed = randomBytes(16);
   }

@@ -286,7 +286,7 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 | `REDIS_URL`                                | `redis://localhost:6379` | Redis 地址，支持 `rediss://` 用于 TLS。                                      |
 | `REDIS_TLS_REJECT_UNAUTHORIZED`            | `true`                   | 是否验证 Redis TLS 证书；设为 `false` 可跳过验证（用于自签/共享证书）。      |
 | `ENABLE_RATE_LIMIT`                        | `true`                   | 控制多维限流开关；Fail-Open 策略在 Redis 不可用时自动降级。                  |
-| `ENABLE_API_KEY_VACUUM_FILTER`             | `false`                  | 是否启用 API Key 真空过滤器（仅负向短路无效 key；可关闭用于排查/节省内存）。 |
+| `ENABLE_API_KEY_VACUUM_FILTER`             | `true`                   | 是否启用 API Key 真空过滤器（仅负向短路无效 key；可设为 `false/0` 关闭用于排查/节省内存）。 |
 | `ENABLE_API_KEY_REDIS_CACHE`               | `true`                   | 是否启用 API Key 鉴权 Redis 缓存（需 Redis 可用；异常自动回落到 DB）。       |
 | `API_KEY_AUTH_CACHE_TTL_SECONDS`           | `60`                     | API Key 鉴权缓存 TTL（秒，默认 60，最大 3600）。                              |
 | `SESSION_TTL`                              | `300`                    | Session 缓存时间（秒），影响供应商复用策略。                                 |

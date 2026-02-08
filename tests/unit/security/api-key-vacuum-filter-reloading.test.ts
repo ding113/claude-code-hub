@@ -68,4 +68,16 @@ describe("ApiKeyVacuumFilter：重建窗口安全性", () => {
     expect(apiKeyVacuumFilter.getStats().enabled).toBe(false);
     expect(apiKeyVacuumFilter.isDefinitelyNotPresent("missing")).toBeNull();
   });
+
+  test("未设置 ENABLE_API_KEY_VACUUM_FILTER：应默认启用（仅负向短路）", async () => {
+    vi.resetModules();
+    // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+    delete (globalThis as unknown as { __CCH_API_KEY_VACUUM_FILTER__?: unknown })
+      .__CCH_API_KEY_VACUUM_FILTER__;
+
+    setEnv({ NEXT_RUNTIME: "nodejs", ENABLE_API_KEY_VACUUM_FILTER: undefined });
+    const { apiKeyVacuumFilter } = await import("@/lib/security/api-key-vacuum-filter");
+
+    expect(apiKeyVacuumFilter.getStats().enabled).toBe(true);
+  });
 });
