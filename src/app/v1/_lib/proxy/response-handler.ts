@@ -111,9 +111,13 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
 
-  // 注意：未自然结束时不做“假 200”检测（内容可能是部分流/截断），
+  // 仅在“上游 HTTP=200 且流自然结束”时做“假 200”检测：
+  // - 非 200：HTTP 已经表明失败（无需额外启发式）
+  // - 非自然结束：内容可能是部分流/截断，启发式会显著提高误判风险
+  //
   // 此处返回 `{isError:false}` 仅表示“跳过检测”，最终仍会在下面按中断/超时视为失败结算。
-  const detected = streamEndedNormally
+  const shouldDetectFake200 = streamEndedNormally && upstreamStatusCode === 200;
+  const detected = shouldDetectFake200
     ? detectUpstreamErrorFromSseOrJsonText(allContent)
     : ({ isError: false } as const);
 
