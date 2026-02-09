@@ -200,7 +200,9 @@ describe("ApiKeyAuthCache：Redis key（哈希/命名/TTL/失效）", () => {
   });
 
   test("cacheActiveKey + getCachedActiveKey：应可回读并水合 Date 字段", async () => {
-    const { cacheActiveKey, getCachedActiveKey } = await import("@/lib/security/api-key-auth-cache");
+    const { cacheActiveKey, getCachedActiveKey } = await import(
+      "@/lib/security/api-key-auth-cache"
+    );
     const key = buildKey({ key: "sk-roundtrip" });
 
     await cacheActiveKey(key);
@@ -451,7 +453,9 @@ describe("ApiKeyAuthCache：Redis key（哈希/命名/TTL/失效）", () => {
   });
 
   test("Redis 异常：get/setex 抛错时应 fail-open（不影响鉴权正确性）", async () => {
-    const { cacheActiveKey, getCachedActiveKey } = await import("@/lib/security/api-key-auth-cache");
+    const { cacheActiveKey, getCachedActiveKey } = await import(
+      "@/lib/security/api-key-auth-cache"
+    );
     currentRedis!.setex.mockRejectedValueOnce(new Error("REDIS_DOWN"));
     await expect(cacheActiveKey(buildKey({ key: "sk-redis-down" }))).resolves.toBeUndefined();
 

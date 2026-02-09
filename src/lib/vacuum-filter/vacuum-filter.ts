@@ -193,10 +193,7 @@ function murmur3X86_32x2(
 
   for (let base = 0; base < blockLen; base += 4) {
     let k =
-      (bytes[base] |
-        (bytes[base + 1] << 8) |
-        (bytes[base + 2] << 16) |
-        (bytes[base + 3] << 24)) >>>
+      (bytes[base] | (bytes[base + 1] << 8) | (bytes[base + 2] << 16) | (bytes[base + 3] << 24)) >>>
       0;
 
     k = Math.imul(k, c1) >>> 0;
@@ -298,9 +295,7 @@ export class VacuumFilter {
 
     // tagMask：用于从哈希中截取 fingerprint（32-bit 特判；避免 1<<31 的有符号溢出陷阱）
     this.tagMask =
-      this.fingerprintBits === 32
-        ? 0xffffffff
-        : (0xffffffff >>> (32 - this.fingerprintBits)) >>> 0;
+      this.fingerprintBits === 32 ? 0xffffffff : (0xffffffff >>> (32 - this.fingerprintBits)) >>> 0;
 
     const rawTargetLoadFactor = options.targetLoadFactor;
     const rawTargetLoadFactorValue =

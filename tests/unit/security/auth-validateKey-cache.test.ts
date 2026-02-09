@@ -109,7 +109,10 @@ describe("auth.ts：validateKey（Vacuum Filter -> Redis -> DB）", () => {
     getCachedUser.mockResolvedValueOnce(cachedUser);
 
     const { validateKey } = await import("@/lib/auth");
-    await expect(validateKey("sk-user-login")).resolves.toEqual({ user: cachedUser, key: cachedKey });
+    await expect(validateKey("sk-user-login")).resolves.toEqual({
+      user: cachedUser,
+      key: cachedKey,
+    });
     expect(isDefinitelyNotPresent).toHaveBeenCalledWith("sk-user-login");
   });
 

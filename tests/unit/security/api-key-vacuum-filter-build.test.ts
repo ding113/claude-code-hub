@@ -2,7 +2,9 @@ import { describe, expect, test, vi } from "vitest";
 
 describe("buildVacuumFilterFromKeyStrings", () => {
   test("应去重并忽略空字符串，且覆盖所有 key", async () => {
-    const { buildVacuumFilterFromKeyStrings } = await import("@/lib/security/api-key-vacuum-filter");
+    const { buildVacuumFilterFromKeyStrings } = await import(
+      "@/lib/security/api-key-vacuum-filter"
+    );
     const vf = buildVacuumFilterFromKeyStrings({
       keyStrings: ["k1", "k2", "k1", ""],
       fingerprintBits: 32,
@@ -16,7 +18,9 @@ describe("buildVacuumFilterFromKeyStrings", () => {
   });
 
   test("空数组输入：应返回空 filter", async () => {
-    const { buildVacuumFilterFromKeyStrings } = await import("@/lib/security/api-key-vacuum-filter");
+    const { buildVacuumFilterFromKeyStrings } = await import(
+      "@/lib/security/api-key-vacuum-filter"
+    );
     const vf = buildVacuumFilterFromKeyStrings({
       keyStrings: [],
       fingerprintBits: 32,
@@ -28,7 +32,9 @@ describe("buildVacuumFilterFromKeyStrings", () => {
   });
 
   test("全空字符串：应返回空 filter", async () => {
-    const { buildVacuumFilterFromKeyStrings } = await import("@/lib/security/api-key-vacuum-filter");
+    const { buildVacuumFilterFromKeyStrings } = await import(
+      "@/lib/security/api-key-vacuum-filter"
+    );
     const vf = buildVacuumFilterFromKeyStrings({
       keyStrings: ["", "", ""],
       fingerprintBits: 32,
@@ -61,7 +67,9 @@ describe("buildVacuumFilterFromKeyStrings", () => {
       return { VacuumFilter };
     });
 
-    const { buildVacuumFilterFromKeyStrings } = await import("@/lib/security/api-key-vacuum-filter");
+    const { buildVacuumFilterFromKeyStrings } = await import(
+      "@/lib/security/api-key-vacuum-filter"
+    );
     buildVacuumFilterFromKeyStrings({
       keyStrings: ["k1"],
       fingerprintBits: 32,
