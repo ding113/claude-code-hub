@@ -1743,9 +1743,11 @@ export async function updateProviderEndpoint(
   const now = new Date();
   const updates: Partial<typeof providerEndpoints.$inferInsert> = { updatedAt: now };
   if (expectedEditableFields.url !== undefined) updates.url = expectedEditableFields.url;
-  if (payload.label !== undefined) updates.label = payload.label;
-  if (payload.sortOrder !== undefined) updates.sortOrder = payload.sortOrder;
-  if (payload.isEnabled !== undefined) updates.isEnabled = payload.isEnabled;
+  if (expectedEditableFields.label !== undefined) updates.label = expectedEditableFields.label;
+  if (expectedEditableFields.sortOrder !== undefined)
+    updates.sortOrder = expectedEditableFields.sortOrder;
+  if (expectedEditableFields.isEnabled !== undefined)
+    updates.isEnabled = expectedEditableFields.isEnabled;
 
   try {
     const rows = await db

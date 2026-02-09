@@ -421,14 +421,18 @@ export function AddEndpointButton({
         toast.success(t("endpointAddSuccess"));
         setOpen(false);
         // Invalidate both specific and general queries
-        // Use void to catch promise errors silently to avoid double toast
-        void queryClient.invalidateQueries({ queryKey: ["provider-endpoints", vendorId] });
+        // Explicitly suppress rejections to avoid double toast
+        queryClient
+          .invalidateQueries({ queryKey: ["provider-endpoints", vendorId] })
+          .catch(() => undefined);
         if (fixedProviderType) {
-          void queryClient.invalidateQueries({
-            queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
-              (value) => value != null
-            ),
-          });
+          queryClient
+            .invalidateQueries({
+              queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
+                (value) => value != null
+              ),
+            })
+            .catch(() => undefined);
         }
         return;
       }
@@ -593,7 +597,7 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
       if (res.ok) {
         toast.success(t("endpointUpdateSuccess"));
         setOpen(false);
-        void queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] }).catch(() => undefined);
         return;
       }
 
