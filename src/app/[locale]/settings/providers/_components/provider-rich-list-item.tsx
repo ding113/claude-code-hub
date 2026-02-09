@@ -124,6 +124,7 @@ export function ProviderRichListItem({
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
   const [showKeyDialog, setShowKeyDialog] = useState(false);
+  const [mobileDeleteDialogOpen, setMobileDeleteDialogOpen] = useState(false);
   const [unmaskedKey, setUnmaskedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [clipboardAvailable, setClipboardAvailable] = useState(false);
@@ -597,36 +598,40 @@ export function ProviderRichListItem({
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <DropdownMenuItem className="text-destructive">
-                      <Trash className="mr-2 h-4 w-4" />
-                      {tList("actionDelete")}
-                    </DropdownMenuItem>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>{tList("confirmDeleteTitle")}</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {tList("confirmDeleteMessage", { name: provider.name })}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <div className="flex justify-end gap-2">
-                      <AlertDialogCancel>{tList("cancelButton")}</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDelete}
-                        className="bg-red-600 hover:bg-red-700"
-                        disabled={deletePending}
-                      >
-                        {tList("deleteButton")}
-                      </AlertDialogAction>
-                    </div>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onSelect={() => setMobileDeleteDialogOpen(true)}
+                >
+                  <Trash className="mr-2 h-4 w-4" />
+                  {tList("actionDelete")}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
         </div>
+
+        {canEdit && (
+          <AlertDialog open={mobileDeleteDialogOpen} onOpenChange={setMobileDeleteDialogOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>{tList("confirmDeleteTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {tList("confirmDeleteMessage", { name: provider.name })}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="flex justify-end gap-2">
+                <AlertDialogCancel>{tList("cancelButton")}</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-red-600 hover:bg-red-700"
+                  disabled={deletePending}
+                >
+                  {tList("deleteButton")}
+                </AlertDialogAction>
+              </div>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
 
         {/* Desktop: original info section (hidden on mobile) */}
         <div className="hidden md:flex items-center gap-2 flex-shrink-0">
