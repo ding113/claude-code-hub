@@ -1,8 +1,7 @@
 import { cookies, headers } from "next/headers";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { findActiveKeyByKeyString } from "@/repository/key";
-import { findUserById } from "@/repository/user";
+import { validateApiKeyAndGetUser } from "@/repository/key";
 import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
 
@@ -107,18 +106,24 @@ export async function validateKey(
     return { user: adminUser, key: adminKey };
   }
 
-  const key = await findActiveKeyByKeyString(keyString);
-  if (!key) {
+  // 默认鉴权链路：Vacuum Filter（仅负向短路） → Redis（key/user 缓存） → DB（权威校验）
+  const authResult = await validateApiKeyAndGetUser(keyString);
+  if (!authResult) {
+    return null;
+  }
+
+  const { user, key } = authResult;
+
+  // 用户状态校验：与 v1 proxy 侧保持一致，避免禁用/过期用户继续登录或持有会话
+  if (!user.isEnabled) {
+    return null;
+  }
+  if (user.expiresAt && user.expiresAt.getTime() <= Date.now()) {
     return null;
   }
 
   // 检查 Web UI 登录权限
   if (!allowReadOnlyAccess && !key.canLoginWebUi) {
-    return null;
-  }
-
-  const user = await findUserById(key.userId);
-  if (!user) {
     return null;
   }
 

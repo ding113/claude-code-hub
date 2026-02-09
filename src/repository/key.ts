@@ -3,6 +3,16 @@
 import { and, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import { CHANNEL_API_KEYS_UPDATED, publishCacheInvalidation } from "@/lib/redis/pubsub";
+import {
+  cacheActiveKey,
+  cacheAuthResult,
+  cacheUser,
+  getCachedActiveKey,
+  getCachedUser,
+  invalidateCachedKey,
+} from "@/lib/security/api-key-auth-cache";
+import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
@@ -161,12 +171,41 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitTotalUsd: keys.limitTotalUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
     providerGroup: keys.providerGroup,
+    cacheTtlPreference: keys.cacheTtlPreference,
     createdAt: keys.createdAt,
     updatedAt: keys.updatedAt,
     deletedAt: keys.deletedAt,
   });
 
-  return toKey(key);
+  const created = toKey(key);
+  // 将新建 key 写入 Vacuum Filter（提升新 key 的即时可用性；失败不影响正确性）
+  try {
+    apiKeyVacuumFilter.noteExistingKey(created.key);
+  } catch {
+    // ignore
+  }
+  // Redis 缓存（最佳努力，不影响正确性）
+  // 注意：多实例环境下其它实例可能在 Vacuum Filter 尚未重建时收到新 key 的请求。
+  // 为减少“新 key 立刻使用偶发 401”的窗口，这里会等待 Redis 写入/广播；
+  // 但必须设置超时上限，避免 Redis 慢/不可用时拖慢 key 创建。
+  const redisBestEffortTimeoutMs = 200;
+  const redisTasks: Array<Promise<unknown>> = [];
+
+  redisTasks.push(cacheActiveKey(created).catch(() => {}));
+
+  // 多实例：广播 key 集合变更，触发其它实例重建 Vacuum Filter，避免误拒绝
+  const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
+  if (process.env.REDIS_URL && rateLimitRaw !== "false" && rateLimitRaw !== "0") {
+    redisTasks.push(publishCacheInvalidation(CHANNEL_API_KEYS_UPDATED).catch(() => {}));
+  }
+
+  if (redisTasks.length > 0) {
+    await Promise.race([
+      Promise.all(redisTasks),
+      new Promise<void>((resolve) => setTimeout(resolve, redisBestEffortTimeoutMs)),
+    ]);
+  }
+  return created;
 }
 
 export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key | null> {
@@ -232,7 +271,17 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
     });
 
   if (!key) return null;
-  return toKey(key);
+  const updated = toKey(key);
+  // 变更 key 后，根据活跃状态更新/失效 Redis 缓存（最佳努力，不影响正确性）
+  const expiresAtMs = updated.expiresAt instanceof Date ? updated.expiresAt.getTime() : null;
+  const isExpired = typeof expiresAtMs === "number" && expiresAtMs <= Date.now();
+  const isActive = updated.isEnabled === true && !updated.deletedAt && !isExpired;
+  if (isActive) {
+    await cacheActiveKey(updated).catch(() => {});
+  } else {
+    await invalidateCachedKey(updated.key).catch(() => {});
+  }
+  return updated;
 }
 
 export async function findActiveKeyByUserIdAndName(
@@ -394,12 +443,34 @@ export async function deleteKey(id: number): Promise<boolean> {
     .update(keys)
     .set({ deletedAt: new Date() })
     .where(and(eq(keys.id, id), isNull(keys.deletedAt)))
-    .returning({ id: keys.id });
+    .returning({ id: keys.id, key: keys.key });
 
+  if (result.length > 0) {
+    await invalidateCachedKey(result[0].key).catch(() => {});
+  }
   return result.length > 0;
 }
 
 export async function findActiveKeyByKeyString(keyString: string): Promise<Key | null> {
+  const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
+
+  // Redis 缓存命中：避免打 DB
+  const cached = await getCachedActiveKey(keyString);
+  if (cached) {
+    // 多实例一致性：若 Vacuum Filter 判定缺失但 Redis 命中，说明本机 filter 可能滞后。
+    // 最佳努力将 key 写入本机 filter（不影响正确性，仅提升后续性能）。
+    if (vfSaysMissing) {
+      apiKeyVacuumFilter.noteExistingKey(keyString);
+    }
+    return cached;
+  }
+
+  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
+  // 注意：此处必须放在 Redis 读取之后，避免多实例环境中新建 key 的短暂误拒绝窗口。
+  if (vfSaysMissing) {
+    return null;
+  }
+
   const [key] = await db
     .select({
       id: keys.id,
@@ -418,6 +489,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
+      cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
       updatedAt: keys.updatedAt,
       deletedAt: keys.deletedAt,
@@ -433,13 +505,77 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
     );
 
   if (!key) return null;
-  return toKey(key);
+  const active = toKey(key);
+  cacheActiveKey(active).catch(() => {});
+  return active;
 }
 
 // 验证 API Key 并返回用户信息
 export async function validateApiKeyAndGetUser(
   keyString: string
 ): Promise<{ user: User; key: Key } | null> {
+  const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
+
+  // 默认鉴权链路：Vacuum Filter -> Redis -> DB
+  const cachedKey = await getCachedActiveKey(keyString);
+  if (cachedKey) {
+    // 多实例一致性：若 Vacuum Filter 判定缺失但 Redis 命中，说明本机 filter 可能滞后。
+    // 最佳努力将 key 写入本机 filter（不影响正确性，仅提升后续性能）。
+    if (vfSaysMissing) {
+      apiKeyVacuumFilter.noteExistingKey(keyString);
+    }
+
+    const cachedUser = await getCachedUser(cachedKey.userId);
+    if (cachedUser) {
+      return { user: cachedUser, key: cachedKey };
+    }
+
+    // user 缓存 miss：仅补齐 user（相较 join 更轻量）
+    const [userRow] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        description: users.description,
+        role: users.role,
+        rpm: users.rpmLimit,
+        dailyQuota: users.dailyLimitUsd,
+        providerGroup: users.providerGroup,
+        tags: users.tags,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        deletedAt: users.deletedAt,
+        limit5hUsd: users.limit5hUsd,
+        limitWeeklyUsd: users.limitWeeklyUsd,
+        limitMonthlyUsd: users.limitMonthlyUsd,
+        limitTotalUsd: users.limitTotalUsd,
+        limitConcurrentSessions: users.limitConcurrentSessions,
+        dailyResetMode: users.dailyResetMode,
+        dailyResetTime: users.dailyResetTime,
+        isEnabled: users.isEnabled,
+        expiresAt: users.expiresAt,
+        allowedClients: users.allowedClients,
+        allowedModels: users.allowedModels,
+      })
+      .from(users)
+      .where(and(eq(users.id, cachedKey.userId), isNull(users.deletedAt)));
+
+    if (!userRow) {
+      // join 语义：用户被删除则 key 无效；顺带清理 key 缓存避免重复 miss
+      invalidateCachedKey(keyString).catch(() => {});
+      return null;
+    }
+
+    const user = toUser(userRow);
+    cacheUser(user).catch(() => {});
+    return { user, key: cachedKey };
+  }
+
+  // Vacuum Filter 负向短路：肯定不存在则直接返回 null，避免打 DB
+  // 注意：此处必须放在 Redis 读取之后，避免多实例环境中新建 key 的短暂误拒绝窗口。
+  if (vfSaysMissing) {
+    return null;
+  }
+
   const result = await db
     .select({
       // Key fields
@@ -551,6 +687,8 @@ export async function validateApiKeyAndGetUser(
     deletedAt: row.keyDeletedAt,
   });
 
+  // 最佳努力：写入 Redis 缓存（不影响正确性）
+  cacheAuthResult(keyString, { user, key }).catch(() => {});
   return { user, key };
 }
 
