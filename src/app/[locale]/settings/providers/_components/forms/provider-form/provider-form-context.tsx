@@ -47,6 +47,7 @@ export function createInitialState(
       modelRedirects: sourceProvider?.modelRedirects ?? {},
       allowedModels: sourceProvider?.allowedModels ?? [],
       priority: sourceProvider?.priority ?? 0,
+      groupPriorities: sourceProvider?.groupPriorities ?? {},
       weight: sourceProvider?.weight ?? 1,
       costMultiplier: sourceProvider?.costMultiplier ?? 1.0,
       cacheTtlPreference: sourceProvider?.cacheTtlPreference ?? "inherit",
@@ -141,6 +142,8 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, allowedModels: action.payload } };
     case "SET_PRIORITY":
       return { ...state, routing: { ...state.routing, priority: action.payload } };
+    case "SET_GROUP_PRIORITIES":
+      return { ...state, routing: { ...state.routing, groupPriorities: action.payload } };
     case "SET_WEIGHT":
       return { ...state, routing: { ...state.routing, weight: action.payload } };
     case "SET_COST_MULTIPLIER":

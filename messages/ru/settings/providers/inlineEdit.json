@@ -1,12 +1,27 @@
 {
+  "addGroup": "Добавить группу",
   "cancel": "Отмена",
   "costMultiplierInvalid": "Введите число не меньше 0",
   "costMultiplierLabel": "Коэф цены",
+  "createGroup": "Создать \"{name}\"",
+  "editGroups": "Редактировать группы",
+  "globalPriority": "Глобальный приоритет",
+  "groupPriorityLabel": "Приоритет по группам",
+  "groupPriorityPlaceholder": "Глобальное значение",
+  "groupSaveError": "Не удалось сохранить изменения группы",
+  "groupValidation": {
+    "empty": "Название группы не может быть пустым",
+    "noComma": "Название группы не может содержать запятую",
+    "tooLong": "Название группы не может превышать 50 символов"
+  },
+  "noGroupsAvailable": "Нет доступных групп",
   "priorityInvalid": "Введите целое число >= 0",
   "priorityLabel": "Приоритет",
   "save": "Сохранить",
+  "saving": "Сохранение...",
   "saveFailed": "Не удалось сохранить",
   "saveSuccess": "Успешно сохранено",
+  "searchGroups": "Поиск групп...",
   "weightInvalid": "Введите целое число от 1 до 100",
   "weightLabel": "Вес"
 }

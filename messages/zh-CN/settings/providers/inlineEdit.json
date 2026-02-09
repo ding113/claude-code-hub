@@ -1,12 +1,27 @@
 {
-  "save": "保存",
+  "addGroup": "添加分组",
   "cancel": "取消",
-  "saveSuccess": "保存成功",
-  "saveFailed": "保存失败",
-  "priorityLabel": "优先级",
-  "weightLabel": "权重",
+  "costMultiplierInvalid": "请输入大于等于 0 的数字",
   "costMultiplierLabel": "成本倍数",
+  "createGroup": "创建 \"{name}\"",
+  "editGroups": "编辑分组",
+  "globalPriority": "全局优先级",
+  "groupPriorityLabel": "分组优先级",
+  "groupPriorityPlaceholder": "使用全局值",
+  "groupSaveError": "保存分组失败",
+  "groupValidation": {
+    "empty": "分组名不能为空",
+    "noComma": "分组名不能包含逗号",
+    "tooLong": "分组名不能超过50字符"
+  },
+  "noGroupsAvailable": "无可用分组",
   "priorityInvalid": "请输入大于等于 0 的整数",
+  "priorityLabel": "优先级",
+  "save": "保存",
+  "saving": "保存中...",
+  "saveFailed": "保存失败",
+  "saveSuccess": "保存成功",
+  "searchGroups": "搜索分组...",
   "weightInvalid": "请输入 1-100 之间的整数",
-  "costMultiplierInvalid": "请输入大于等于 0 的数字"
+  "weightLabel": "权重"
 }
