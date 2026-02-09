@@ -1,5 +1,5 @@
 {
-  "id": "5d3e46c6-0881-4776-ae60-4b8e4d06f999",
+  "id": "9fd69a68-7794-42af-ac5f-83f874adeecf",
   "prevId": "40d9ed20-d9e3-42a4-9357-3e17e4b06ba1",
   "version": "7",
   "dialect": "postgresql",
@@ -1415,7 +1415,6 @@
             }
           ],
           "isUnique": true,
-          "where": "\"provider_endpoints\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1670,6 +1669,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "group_priorities": {
+          "name": "group_priorities",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'null'::jsonb"
         },
         "cost_multiplier": {
           "name": "cost_multiplier",

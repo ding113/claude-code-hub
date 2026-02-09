@@ -51,6 +51,7 @@ import {
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
+import { setDeferredStreamingFinalization } from "./stream-finalization";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
@@ -581,6 +582,40 @@ export class ProxyForwarder {
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
           const isSSE = contentType.includes("text/event-stream");
+
+          // ========== 流式响应：延迟成功判定（避免“假 200”）==========
+          // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
+          // 如果在“收到响应头”时就立刻记录 success / 更新 session 绑定：
+          // - 会把会话粘到一个实际不可用的 provider；
+          // - 熔断/故障转移统计被误记为成功；
+          // - 客户端下一次自动重试可能仍复用到同一 provider，导致“假 200”让重试失效。
+          //
+          // 解决：Forwarder 只负责尽快把 Response 返回给下游开始透传，
+          // 把最终成功/失败结算延迟到 ResponseHandler：等 SSE 正常结束后再基于最终 body 补充检查并更新内部状态。
+          if (isSSE) {
+            setDeferredStreamingFinalization(session, {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              providerPriority: currentProvider.priority || 0,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              isFirstAttempt: totalProvidersAttempted === 1 && attemptCount === 1,
+              isFailoverSuccess: totalProvidersAttempted > 1,
+              endpointId: activeEndpoint.endpointId,
+              endpointUrl: endpointAudit.endpointUrl,
+              upstreamStatusCode: response.status,
+            });
+
+            logger.info("ProxyForwarder: Streaming response received, deferring finalization", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              statusCode: response.status,
+            });
+
+            return response;
+          }
 
           if (!isSSE) {
             // 非流式响应：检测空响应

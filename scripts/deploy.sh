@@ -578,6 +578,7 @@ ENABLE_RATE_LIMIT=true
 # Session Configuration
 SESSION_TTL=300
 STORE_SESSION_MESSAGES=false
+STORE_SESSION_RESPONSE_BODY=true
 
 # Cookie Security
 ENABLE_SECURE_COOKIES=${secure_cookies}

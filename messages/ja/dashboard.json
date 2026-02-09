@@ -243,6 +243,7 @@
         "billingRedirected": "課金: 実際"
       },
       "errorMessage": "エラーメッセージ",
+      "fake200ForwardedNotice": "注意：ストリーミング要求では、失敗判定がストリーム終了後になる場合があります。応答内容は既にクライアントへ転送されている可能性があります。",
       "filteredProviders": "フィルタされたプロバイダー",
       "providerChain": {
         "title": "プロバイダー決定チェーンタイムライン",
@@ -493,7 +494,7 @@
       "providers": "プロバイダー",
       "models": "モデル",
       "noDetailedData": "詳細データなし",
-      "storageTip": "詳細データが見つかりません。リクエストの詳細を表示するには、環境変数 STORE_SESSION_MESSAGES が true に設定されているか確認してください。注意：有効にすると Redis のメモリ使用量が増加し、機密情報が含まれる可能性があります。",
+      "storageTip": "詳細データが見つかりません。原因の例：Redis が未設定/利用不可 (REDIS_URL + ENABLE_RATE_LIMIT=true)、データの期限切れ (SESSION_TTL、既定 300 秒)、または応答本文の保存を無効化 (STORE_SESSION_RESPONSE_BODY=false、応答本文のみ)。未マスクの messages を保存するには STORE_SESSION_MESSAGES=true を設定してください。",
       "clientInfo": "クライアント情報",
       "requestHeaders": "リクエストヘッダー",
       "requestBody": "リクエストボディ",
@@ -571,7 +572,7 @@
       "fetchFailed": "取得失敗",
       "unknownError": "不明なエラー",
       "storageNotEnabled": "未保存",
-      "storageNotEnabledHint": "ヒント: メッセージの保存を有効にするには、環境変数 STORE_SESSION_MESSAGES=true を設定してください"
+      "storageNotEnabledHint": "ヒント: REDIS_URL と ENABLE_RATE_LIMIT=true を確認してください (セッション詳細キャッシュ)。未マスクの messages を保存するには STORE_SESSION_MESSAGES=true を設定してください。"
     },
     "errors": {
       "copyFailed": "コピー失敗"

@@ -85,6 +85,7 @@ export function toProvider(dbProvider: any): Provider {
     isEnabled: dbProvider?.isEnabled ?? true,
     weight: dbProvider?.weight ?? 1,
     priority: dbProvider?.priority ?? 0,
+    groupPriorities: dbProvider?.groupPriorities ?? null,
     costMultiplier: dbProvider?.costMultiplier ? parseFloat(dbProvider.costMultiplier) : 1.0,
     groupTag: dbProvider?.groupTag ?? null,
     providerType: dbProvider?.providerType ?? "claude",

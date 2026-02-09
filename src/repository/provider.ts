@@ -24,6 +24,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     isEnabled: providerData.is_enabled,
     weight: providerData.weight,
     priority: providerData.priority,
+    groupPriorities: providerData.group_priorities ?? null,
     costMultiplier:
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0",
     groupTag: providerData.group_tag,
@@ -175,6 +176,7 @@ export async function findProviderList(
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
+      groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
@@ -252,6 +254,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
+      groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
@@ -333,6 +336,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
+      groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
@@ -403,6 +407,8 @@ export async function updateProvider(
   if (providerData.is_enabled !== undefined) dbData.isEnabled = providerData.is_enabled;
   if (providerData.weight !== undefined) dbData.weight = providerData.weight;
   if (providerData.priority !== undefined) dbData.priority = providerData.priority;
+  if (providerData.group_priorities !== undefined)
+    dbData.groupPriorities = providerData.group_priorities ?? null;
   if (providerData.cost_multiplier !== undefined)
     dbData.costMultiplier =
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0";
@@ -541,6 +547,7 @@ export async function updateProvider(
         isEnabled: providers.isEnabled,
         weight: providers.weight,
         priority: providers.priority,
+        groupPriorities: providers.groupPriorities,
         costMultiplier: providers.costMultiplier,
         groupTag: providers.groupTag,
         providerType: providers.providerType,

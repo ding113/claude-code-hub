@@ -7,6 +7,8 @@ import { getRedisClient } from "./client";
 export const CHANNEL_ERROR_RULES_UPDATED = "cch:cache:error_rules:updated";
 export const CHANNEL_REQUEST_FILTERS_UPDATED = "cch:cache:request_filters:updated";
 export const CHANNEL_SENSITIVE_WORDS_UPDATED = "cch:cache:sensitive_words:updated";
+// API Key 集合发生变化（典型：创建新 key）时，通知各实例重建 Vacuum Filter，避免误拒绝
+export const CHANNEL_API_KEYS_UPDATED = "cch:cache:api_keys:updated";
 
 type CacheInvalidationCallback = () => void;
 

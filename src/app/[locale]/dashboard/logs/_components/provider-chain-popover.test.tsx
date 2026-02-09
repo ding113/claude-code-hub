@@ -85,6 +85,7 @@ const messages = {
       },
       details: {
         clickStatusCode: "Click status code",
+        fake200ForwardedNotice: "Note: payload may have been forwarded",
       },
     },
   },
@@ -256,6 +257,25 @@ describe("provider-chain-popover group badges", () => {
 });
 
 describe("provider-chain-popover layout", () => {
+  test("renders fake-200 forwarded notice when chain has FAKE_200_* errorMessage", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "retry_failed",
+            statusCode: 502,
+            errorMessage: "FAKE_200_EMPTY_BODY",
+          },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    expect(html).toContain("Note: payload may have been forwarded");
+  });
+
   test("requestCount<=1 branch keeps truncation container shrinkable", () => {
     const html = renderWithIntl(
       <ProviderChainPopover

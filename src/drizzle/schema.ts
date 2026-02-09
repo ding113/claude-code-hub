@@ -162,6 +162,7 @@ export const providers = pgTable('providers', {
 
   // 优先级和分组配置
   priority: integer('priority').notNull().default(0),
+  groupPriorities: jsonb('group_priorities').$type<Record<string, number> | null>().default(null),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
 

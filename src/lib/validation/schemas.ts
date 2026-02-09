@@ -31,13 +31,13 @@ const ANTHROPIC_MAX_TOKENS_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "max_tokens must be 'inherit' or a numeric string")
+    .regex(/^\d+$/, 'max_tokens 必须为 "inherit" 或数字字符串')
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
         return num >= 1 && num <= 64000;
       },
-      { message: "max_tokens must be between 1 and 64000" }
+      { message: "max_tokens 必须在 1 到 64000 之间" }
     ),
 ]);
 
@@ -45,13 +45,13 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "thinking.budget_tokens must be 'inherit' or a numeric string")
+    .regex(/^\d+$/, 'thinking.budget_tokens 必须为 "inherit" 或数字字符串')
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
         return num >= 1024 && num <= 32000;
       },
-      { message: "thinking.budget_tokens must be between 1024 and 32000" }
+      { message: "thinking.budget_tokens 必须在 1024 到 32000 之间" }
     ),
 ]);
 
@@ -409,6 +409,11 @@ export const CreateProviderSchema = z
       .max(2147483647, "优先级超出整数范围")
       .optional()
       .default(0),
+    group_priorities: z
+      .record(z.string(), z.number().int().min(0).max(2147483647))
+      .nullable()
+      .optional()
+      .default(null),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
@@ -609,6 +614,10 @@ export const UpdateProviderSchema = z
       .int("优先级必须是整数")
       .min(0, "优先级不能为负数")
       .max(2147483647, "优先级超出整数范围")
+      .optional(),
+    group_priorities: z
+      .record(z.string(), z.number().int().min(0).max(2147483647))
+      .nullable()
       .optional(),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),

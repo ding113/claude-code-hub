@@ -9,5 +9,8 @@
     "all": "全部",
     "default": "default"
   },
-  "circuitBroken": "熔断"
+  "circuitBroken": "熔断",
+  "mobileFilter": "筛选",
+  "mobileFilterCount": "筛选 ({count})",
+  "resetFilters": "重置筛选"
 }
