@@ -10,6 +10,10 @@ import {
 } from "@/drizzle/schema";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import {
+  PROVIDER_ENDPOINT_CONFLICT_CODE,
+  PROVIDER_ENDPOINT_WRITE_READ_INCONSISTENCY_CODE,
+} from "@/lib/provider-endpoint-error-codes";
 import type {
   ProviderEndpoint,
   ProviderEndpointProbeLog,
@@ -59,8 +63,6 @@ function isUniqueViolationError(error: unknown): boolean {
     candidate.cause.message.includes("duplicate key value")
   );
 }
-
-const DIRECT_ENDPOINT_EDIT_CONFLICT_CODE = "PROVIDER_ENDPOINT_CONFLICT";
 
 function toDate(value: unknown): Date {
   if (value instanceof Date) return value;
@@ -1774,7 +1776,9 @@ export async function updateProviderEndpoint(
       return consistentAfterRead;
     }
 
-    throw new Error("[ProviderEndpointEdit] write-read consistency check failed");
+    throw Object.assign(new Error("[ProviderEndpointEdit] write-read consistency check failed"), {
+      code: PROVIDER_ENDPOINT_WRITE_READ_INCONSISTENCY_CODE,
+    });
   } catch (error) {
     if (!isUniqueViolationError(error)) {
       throw error;
@@ -1790,7 +1794,7 @@ export async function updateProviderEndpoint(
     }
 
     throw Object.assign(new Error("[ProviderEndpointEdit] endpoint conflict"), {
-      code: DIRECT_ENDPOINT_EDIT_CONFLICT_CODE,
+      code: PROVIDER_ENDPOINT_CONFLICT_CODE,
       cause: error,
     });
   }

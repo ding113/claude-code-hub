@@ -8,6 +8,7 @@ import {
   resetEndpointCircuit as resetEndpointCircuitState,
 } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import { PROVIDER_ENDPOINT_CONFLICT_CODE } from "@/lib/provider-endpoint-error-codes";
 import { probeProviderEndpointAndRecord } from "@/lib/provider-endpoints/probe";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
@@ -141,7 +142,7 @@ function isDirectEndpointEditConflictError(error: unknown): boolean {
     cause?: { code?: string; message?: string };
   };
 
-  if (candidate.code === "PROVIDER_ENDPOINT_CONFLICT" || candidate.code === "23505") {
+  if (candidate.code === PROVIDER_ENDPOINT_CONFLICT_CODE || candidate.code === "23505") {
     return true;
   }
 
