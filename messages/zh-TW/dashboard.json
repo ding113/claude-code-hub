@@ -243,6 +243,7 @@
         "billingRedirected": "計費: 實際"
       },
       "errorMessage": "錯誤訊息",
+      "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
       "filteredProviders": "被過濾的供應商",
       "providerChain": {
         "title": "供應商決策鏈時間軸",
@@ -493,7 +494,7 @@
       "providers": "供應商",
       "models": "Model",
       "noDetailedData": "暫無詳細資料",
-      "storageTip": "未找到詳細資料。如需查看請求詳情，請檢查環境變數 STORE_SESSION_MESSAGES 是否已設定為 true。注意：啟用後會增加 Redis 記憶體使用，且可能包含敏感資訊。",
+      "storageTip": "未找到詳細資料。可能原因：Redis 未設定/不可用（REDIS_URL + ENABLE_RATE_LIMIT=true）、資料已過期（SESSION_TTL，預設 300 秒），或已停用回應本文儲存（STORE_SESSION_RESPONSE_BODY=false，僅影響回應本文）。如需儲存未脫敏的 messages，請設定 STORE_SESSION_MESSAGES=true。",
       "clientInfo": "用戶端資訊",
       "requestHeaders": "請求頭",
       "requestBody": "請求體",
@@ -571,7 +572,7 @@
       "fetchFailed": "取得失敗",
       "unknownError": "未知錯誤",
       "storageNotEnabled": "未儲存",
-      "storageNotEnabledHint": "提示：請設定環境變數 STORE_SESSION_MESSAGES=true 以啟用訊息儲存"
+      "storageNotEnabledHint": "提示：請檢查 REDIS_URL 與 ENABLE_RATE_LIMIT=true（用於 Session 詳情快取）；如需儲存未脫敏的 messages，請設定 STORE_SESSION_MESSAGES=true。"
     },
     "errors": {
       "copyFailed": "複製失敗"

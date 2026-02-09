@@ -243,6 +243,7 @@
         "billingRedirected": "计费: 实际"
       },
       "errorMessage": "错误信息",
+      "fake200ForwardedNotice": "提示：对于流式请求，该失败可能在流结束后才被识别；响应内容可能已原样透传给客户端。",
       "filteredProviders": "被过滤的供应商",
       "providerChain": {
         "title": "供应商决策链时间线",
@@ -493,7 +494,7 @@
       "providers": "供应商",
       "models": "模型",
       "noDetailedData": "暂无详细数据",
-      "storageTip": "未找到详细数据。如需查看请求详情，请检查环境变量 STORE_SESSION_MESSAGES 是否已设置为 true。注意：启用后会增加 Redis 内存使用，且可能包含敏感信息。",
+      "storageTip": "未找到详细数据。可能原因：Redis 未配置/不可用（REDIS_URL + ENABLE_RATE_LIMIT=true）、数据已过期（SESSION_TTL，默认 300 秒），或已禁用响应体存储（STORE_SESSION_RESPONSE_BODY=false，仅影响响应体）。如需保存未脱敏 messages，请设置 STORE_SESSION_MESSAGES=true。",
       "clientInfo": "客户端信息",
       "requestHeaders": "请求头",
       "requestBody": "请求体",
@@ -571,7 +572,7 @@
       "fetchFailed": "获取失败",
       "unknownError": "未知错误",
       "storageNotEnabled": "未存储",
-      "storageNotEnabledHint": "提示：请设置环境变量 STORE_SESSION_MESSAGES=true 以启用 messages 存储"
+      "storageNotEnabledHint": "提示：请检查 REDIS_URL 与 ENABLE_RATE_LIMIT=true（用于会话详情缓存）；如需保存未脱敏 messages，请设置 STORE_SESSION_MESSAGES=true。"
     },
     "errors": {
       "copyFailed": "复制失败"
