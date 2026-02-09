@@ -308,6 +308,10 @@ function ProviderFormContent({
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
           priority: state.routing.priority,
+          group_priorities:
+            Object.keys(state.routing.groupPriorities).length > 0
+              ? state.routing.groupPriorities
+              : null,
           weight: state.routing.weight,
           cost_multiplier: state.routing.costMultiplier,
           group_tag: state.routing.groupTag.length > 0 ? state.routing.groupTag.join(",") : null,

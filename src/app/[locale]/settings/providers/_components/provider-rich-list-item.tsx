@@ -7,6 +7,7 @@ import {
   Edit,
   Globe,
   Key,
+  MoreHorizontal,
   RotateCcw,
   Trash,
   XCircle,
@@ -44,6 +45,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
@@ -55,8 +63,10 @@ import { formatCurrency } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatistics } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
+import { GroupEditCombobox } from "./group-edit-combobox";
 import { InlineEditPopover } from "./inline-edit-popover";
 import { ProviderEndpointHover } from "./provider-endpoint-hover";
+import { PriorityEditPopover } from "./priority-edit-popover";
 
 interface ProviderRichListItemProps {
   provider: ProviderDisplay;
@@ -74,10 +84,14 @@ interface ProviderRichListItemProps {
   enableMultiProviderTypes: boolean;
   isMultiSelectMode?: boolean;
   isSelected?: boolean;
+  activeGroupFilter?: string | null;
   onSelectChange?: (checked: boolean) => void;
   onEdit?: () => void;
   onClone?: () => void;
   onDelete?: () => void;
+  allGroups?: string[];
+  userGroups?: string[];
+  isAdmin?: boolean;
 }
 
 export function ProviderRichListItem({
@@ -90,10 +104,14 @@ export function ProviderRichListItem({
   enableMultiProviderTypes,
   isMultiSelectMode = false,
   isSelected = false,
+  activeGroupFilter = null,
   onSelectChange,
   onEdit: onEditProp,
   onClone: onCloneProp,
   onDelete: onDeleteProp,
+  allGroups = [],
+  userGroups = [],
+  isAdmin = false,
 }: ProviderRichListItemProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -359,48 +377,276 @@ export function ProviderRichListItem({
     };
   };
 
-  const handleSavePriority = createSaveHandler("priority");
   const handleSaveWeight = createSaveHandler("weight");
   const handleSaveCostMultiplier = createSaveHandler("cost_multiplier");
 
+  const providerGroups = provider.groupTag
+    ? provider.groupTag
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [];
+
+  const handleSaveGroups = async (groups: string[]): Promise<boolean> => {
+    try {
+      const groupTag = groups.length > 0 ? groups.join(",") : null;
+      const res = await editProvider(provider.id, { group_tag: groupTag });
+      if (res.ok) {
+        toast.success(tInline("saveSuccess"));
+        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        router.refresh();
+        return true;
+      }
+      toast.error(tInline("groupSaveError"), {
+        description: res.error || tList("unknownError"),
+      });
+      return false;
+    } catch (error) {
+      console.error("Failed to save groups:", error);
+      toast.error(tInline("groupSaveError"), { description: tList("unknownError") });
+      return false;
+    }
+  };
+
+  const handleSavePriorityWithGroups = async (
+    newGlobal: number,
+    newGroupPriorities: Record<string, number> | null
+  ): Promise<boolean> => {
+    try {
+      const res = await editProvider(provider.id, {
+        priority: newGlobal,
+        group_priorities: newGroupPriorities,
+      });
+      if (res.ok) {
+        toast.success(tInline("saveSuccess"));
+        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        router.refresh();
+        return true;
+      }
+      toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
+      return false;
+    } catch (error) {
+      console.error("Failed to update priority:", error);
+      toast.error(tInline("saveFailed"), { description: tList("unknownError") });
+      return false;
+    }
+  };
+
   return (
     <>
-      <div className="flex items-center gap-4 py-3 px-4 border-b hover:bg-muted/50 transition-colors">
-        {/* 多选模式下显示 checkbox */}
+      <div className="rounded-lg border bg-card p-4 md:rounded-none md:border-0 md:border-b md:bg-transparent md:p-0 md:py-3 md:px-4 flex flex-col gap-3 md:flex-row md:items-center md:gap-4 hover:bg-muted/50 transition-colors">
+        {/* Checkbox: shared between mobile and desktop */}
         {isMultiSelectMode && (
           <Checkbox
             checked={isSelected}
             onCheckedChange={(checked) => onSelectChange?.(Boolean(checked))}
             onClick={(e) => e.stopPropagation()}
-            aria-label={`Select ${provider.name}`}
+            aria-label={tList("selectProvider", { name: provider.name })}
+            className="flex-shrink-0"
           />
         )}
 
-        {/* 左侧：状态和类型图标 */}
-        <div className="flex items-center gap-2">
-          {/* 启用状态指示器 */}
+        {/* Mobile: top row with name and switch */}
+        <div className="flex items-center justify-between md:hidden">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {provider.isEnabled ? (
+              <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+            ) : (
+              <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
+            )}
+            <div
+              className={`flex items-center justify-center w-6 h-6 rounded ${typeConfig.bgColor} flex-shrink-0`}
+              title={`${typeLabel} - ${typeDescription}`}
+              aria-label={typeLabel}
+            >
+              <TypeIcon className="h-3.5 w-3.5" aria-hidden />
+            </div>
+            <span className="font-semibold truncate">{provider.name}</span>
+          </div>
+          {canEdit && (
+            <Switch
+              checked={provider.isEnabled}
+              onCheckedChange={handleToggle}
+              disabled={togglePending}
+              className="data-[state=checked]:bg-green-500"
+            />
+          )}
+        </div>
+
+        {/* Mobile: status badges */}
+        <div className="flex flex-wrap items-center gap-1.5 md:hidden">
+          {canEdit ? (
+            <GroupEditCombobox
+              currentGroups={providerGroups}
+              allGroups={allGroups}
+              userGroups={userGroups}
+              isAdmin={isAdmin}
+              onSave={handleSaveGroups}
+            />
+          ) : providerGroups.length > 0 ? (
+            providerGroups.map((tag, index) => {
+              const bgColor = getGroupColor(tag);
+              return (
+                <Badge
+                  key={`${tag}-${index}`}
+                  className="text-xs"
+                  style={{ backgroundColor: bgColor, color: getContrastTextColor(bgColor) }}
+                >
+                  {tag}
+                </Badge>
+              );
+            })
+          ) : (
+            <Badge variant="outline">{PROVIDER_GROUP.DEFAULT}</Badge>
+          )}
+          {healthStatus?.circuitState === "open" && (
+            <Badge variant="destructive" className="flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              {tList("circuitBroken")}
+            </Badge>
+          )}
+        </div>
+
+        {/* Mobile: metrics row */}
+        <div className="flex items-center gap-3 text-sm md:hidden">
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">{tList("priority")}:</span>
+            <span className="font-medium tabular-nums">
+              {canEdit ? (
+                <PriorityEditPopover
+                  globalPriority={provider.priority}
+                  groupPriorities={provider.groupPriorities}
+                  groups={providerGroups}
+                  activeGroupFilter={activeGroupFilter ?? null}
+                  validator={validatePriority}
+                  onSave={handleSavePriorityWithGroups}
+                />
+              ) : (
+                provider.priority
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">{tList("weight")}:</span>
+            <span className="font-medium tabular-nums">
+              {canEdit ? (
+                <InlineEditPopover
+                  value={provider.weight}
+                  label={tInline("weightLabel")}
+                  type="integer"
+                  validator={validateWeight}
+                  onSave={handleSaveWeight}
+                />
+              ) : (
+                provider.weight
+              )}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">{tList("costMultiplier")}:</span>
+            <span className="font-medium tabular-nums">
+              {canEdit ? (
+                <InlineEditPopover
+                  value={provider.costMultiplier}
+                  label={tInline("costMultiplierLabel")}
+                  validator={validateCostMultiplier}
+                  onSave={handleSaveCostMultiplier}
+                  suffix="x"
+                  type="number"
+                />
+              ) : (
+                <>{provider.costMultiplier}x</>
+              )}
+            </span>
+          </div>
+        </div>
+
+        {/* Mobile: actions */}
+        <div className="flex items-center justify-end gap-2 md:hidden">
+          {canEdit && (
+            <Button variant="outline" className="min-h-[44px] min-w-[44px]" onClick={handleEdit}>
+              <Edit className="h-4 w-4" />
+            </Button>
+          )}
+          {canEdit && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="min-h-[44px] min-w-[44px]"
+                  aria-label={tList("actions")}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleClone}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  {tList("actionClone")}
+                </DropdownMenuItem>
+                {healthStatus?.circuitState === "open" && (
+                  <DropdownMenuItem onClick={handleResetCircuit} disabled={resetPending}>
+                    <RotateCcw className="mr-2 h-4 w-4 text-orange-600" />
+                    {tList("actionResetCircuit")}
+                  </DropdownMenuItem>
+                )}
+                {provider.limitTotalUsd !== null && provider.limitTotalUsd > 0 && (
+                  <DropdownMenuItem onClick={handleResetTotalUsage} disabled={resetUsagePending}>
+                    <RotateCcw className="mr-2 h-4 w-4 text-blue-600" />
+                    {tList("actionResetUsage")}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <DropdownMenuItem className="text-destructive">
+                      <Trash className="mr-2 h-4 w-4" />
+                      {tList("actionDelete")}
+                    </DropdownMenuItem>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{tList("confirmDeleteTitle")}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {tList("confirmDeleteMessage", { name: provider.name })}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <div className="flex justify-end gap-2">
+                      <AlertDialogCancel>{tList("cancelButton")}</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDelete}
+                        className="bg-red-600 hover:bg-red-700"
+                        disabled={deletePending}
+                      >
+                        {tList("deleteButton")}
+                      </AlertDialogAction>
+                    </div>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        {/* Desktop: original info section (hidden on mobile) */}
+        <div className="hidden md:flex items-center gap-2 flex-shrink-0">
           {provider.isEnabled ? (
             <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
           ) : (
             <XCircle className="h-4 w-4 text-gray-400 flex-shrink-0" />
           )}
-
-          {/* 类型图标 */}
           <div
             className={`flex items-center justify-center w-6 h-6 rounded ${typeConfig.bgColor} flex-shrink-0`}
-            title={`${typeLabel} · ${typeDescription}`}
+            title={`${typeLabel} - ${typeDescription}`}
             aria-label={typeLabel}
           >
             <TypeIcon className="h-3.5 w-3.5" aria-hidden />
           </div>
         </div>
 
-        {/* 中间：名称、URL、官网、tag、熔断状态 */}
-        <div className="flex-1 min-w-0">
+        <div className="hidden md:block flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Favicon */}
             {provider.faviconUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={provider.faviconUrl}
                 alt=""
@@ -410,52 +656,40 @@ export function ProviderRichListItem({
                 }}
               />
             )}
-
-            {/* 名称 */}
             <span className="font-semibold truncate">{provider.name}</span>
-
-            {/* Group Tags (supports comma-separated values) */}
-            {(provider.groupTag
-              ? provider.groupTag
-                  .split(",")
-                  .map((t) => t.trim())
-                  .filter(Boolean)
-              : []
-            ).length > 0 ? (
-              provider.groupTag
-                ?.split(",")
-                .map((t) => t.trim())
-                .filter(Boolean)
-                .map((tag, index) => {
-                  const bgColor = getGroupColor(tag);
-                  return (
-                    <Badge
-                      key={`${tag}-${index}`}
-                      className="flex-shrink-0 text-xs"
-                      style={{
-                        backgroundColor: bgColor,
-                        color: getContrastTextColor(bgColor),
-                      }}
-                    >
-                      {tag}
-                    </Badge>
-                  );
-                })
+            {canEdit ? (
+              <GroupEditCombobox
+                currentGroups={providerGroups}
+                allGroups={allGroups}
+                userGroups={userGroups}
+                isAdmin={isAdmin}
+                onSave={handleSaveGroups}
+              />
+            ) : providerGroups.length > 0 ? (
+              providerGroups.map((tag, index) => {
+                const bgColor = getGroupColor(tag);
+                return (
+                  <Badge
+                    key={`${tag}-${index}`}
+                    className="flex-shrink-0 text-xs"
+                    style={{ backgroundColor: bgColor, color: getContrastTextColor(bgColor) }}
+                  >
+                    {tag}
+                  </Badge>
+                );
+              })
             ) : (
               <Badge variant="outline" className="flex-shrink-0">
                 {PROVIDER_GROUP.DEFAULT}
               </Badge>
             )}
-
-            {/* 熔断器警告 */}
-            {healthStatus && healthStatus.circuitState === "open" && (
+            {healthStatus?.circuitState === "open" && (
               <Badge variant="destructive" className="flex items-center gap-1 flex-shrink-0">
                 <AlertTriangle className="h-3 w-3" />
                 {tList("circuitBroken")}
               </Badge>
             )}
           </div>
-
           <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
             {/* Vendor & Endpoints OR Legacy URL */}
             {vendor ? (
@@ -482,8 +716,6 @@ export function ProviderRichListItem({
                 {tList("officialWebsite")}
               </a>
             )}
-
-            {/* API Key 展示（仅管理员） */}
             {canEdit && (
               <button
                 onClick={(e) => {
@@ -496,8 +728,6 @@ export function ProviderRichListItem({
                 {provider.maskedKey}
               </button>
             )}
-
-            {/* 超时配置可视化（紧凑格式） */}
             <span className="text-xs text-muted-foreground flex-shrink-0">
               {tTimeout("summary", {
                 streaming:
@@ -517,18 +747,19 @@ export function ProviderRichListItem({
           </div>
         </div>
 
-        {/* 右侧：指标（仅桌面端） */}
+        {/* Desktop: metrics */}
         <div className="hidden md:grid grid-cols-3 gap-4 text-center flex-shrink-0">
           <div>
             <div className="text-xs text-muted-foreground">{tList("priority")}</div>
             <div className="font-medium">
               {canEdit ? (
-                <InlineEditPopover
-                  value={provider.priority}
-                  label={tInline("priorityLabel")}
-                  type="integer"
+                <PriorityEditPopover
+                  globalPriority={provider.priority}
+                  groupPriorities={provider.groupPriorities}
+                  groups={providerGroups}
+                  activeGroupFilter={activeGroupFilter ?? null}
                   validator={validatePriority}
-                  onSave={handleSavePriority}
+                  onSave={handleSavePriorityWithGroups}
                 />
               ) : (
                 <span>{provider.priority}</span>
@@ -570,7 +801,7 @@ export function ProviderRichListItem({
           </div>
         </div>
 
-        {/* 今日用量（仅大屏） */}
+        {/* Desktop: today usage */}
         <div className="hidden lg:block text-center flex-shrink-0 min-w-[100px]">
           <div className="text-xs text-muted-foreground">{tList("todayUsageLabel")}</div>
           {statisticsLoading ? (
@@ -595,9 +826,8 @@ export function ProviderRichListItem({
           )}
         </div>
 
-        {/* 操作按钮 */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {/* 启用/禁用切换 */}
+        {/* Desktop: action buttons */}
+        <div className="hidden md:flex items-center gap-1 flex-shrink-0">
           {canEdit && (
             <Switch
               checked={provider.isEnabled}
@@ -606,8 +836,6 @@ export function ProviderRichListItem({
               className="data-[state=checked]:bg-green-500"
             />
           )}
-
-          {/* 编辑按钮 */}
           {canEdit && (
             <Button
               size="icon"
@@ -621,8 +849,6 @@ export function ProviderRichListItem({
               <Edit className="h-4 w-4" />
             </Button>
           )}
-
-          {/* 克隆按钮 */}
           {canEdit && (
             <Button
               size="icon"
@@ -636,9 +862,7 @@ export function ProviderRichListItem({
               <Copy className="h-4 w-4" />
             </Button>
           )}
-
-          {/* 熔断重置按钮（仅熔断时显示） */}
-          {canEdit && healthStatus && healthStatus.circuitState === "open" && (
+          {canEdit && healthStatus?.circuitState === "open" && (
             <Button
               size="icon"
               variant="ghost"
@@ -651,8 +875,6 @@ export function ProviderRichListItem({
               <RotateCcw className="h-4 w-4 text-orange-600" />
             </Button>
           )}
-
-          {/* 总用量重置按钮（仅配置了总限额时显示） */}
           {canEdit && provider.limitTotalUsd !== null && provider.limitTotalUsd > 0 && (
             <Button
               size="icon"
@@ -667,8 +889,6 @@ export function ProviderRichListItem({
               <RotateCcw className="h-4 w-4 text-blue-600" />
             </Button>
           )}
-
-          {/* 删除按钮 */}
           {canEdit && (
             <AlertDialog>
               <AlertDialogTrigger asChild>

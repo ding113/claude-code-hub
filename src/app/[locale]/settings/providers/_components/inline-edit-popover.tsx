@@ -5,8 +5,10 @@ import { useTranslations } from "next-intl";
 import type * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
 export interface InlineEditPopoverProps {
@@ -29,6 +31,7 @@ export function InlineEditPopover({
   type = "number",
 }: InlineEditPopoverProps) {
   const t = useTranslations("settings.providers.inlineEdit");
+  const isDesktop = useMediaQuery("(min-width: 768px)");
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(() => value.toString());
   const [saving, setSaving] = useState(false);
@@ -102,24 +105,133 @@ export function InlineEditPopover({
     }
   };
 
-  return (
-    <Popover open={open} onOpenChange={handleOpenChange}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={disabled}
-          className={cn(
-            "tabular-nums font-medium underline-offset-4 rounded-sm",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-            disabled ? "cursor-default text-muted-foreground" : "cursor-pointer hover:underline"
-          )}
+  const triggerButton = (
+    <button
+      type="button"
+      disabled={disabled}
+      className={cn(
+        "tabular-nums font-medium underline-offset-4 rounded-sm",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        disabled ? "cursor-default text-muted-foreground" : "cursor-pointer hover:underline"
+      )}
+      onPointerDown={stopPropagation}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!isDesktop) handleOpenChange(true);
+      }}
+    >
+      {value}
+      {suffix}
+    </button>
+  );
+
+  const formContent = (
+    <div className="grid gap-2">
+      <div className="text-xs font-medium md:block hidden">{label}</div>
+      <div className="flex items-center gap-2">
+        <Input
+          ref={inputRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          disabled={disabled || saving}
+          className="w-full md:w-24 tabular-nums"
+          aria-label={label}
+          aria-invalid={validationError != null}
+          type="number"
+          inputMode="decimal"
+          step={type === "integer" ? "1" : "any"}
           onPointerDown={stopPropagation}
           onClick={stopPropagation}
-        >
-          {value}
-          {suffix}
-        </button>
-      </PopoverTrigger>
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Escape") {
+              e.preventDefault();
+              handleCancel();
+            }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void handleSave();
+            }
+          }}
+        />
+        {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
+      </div>
+      {validationError && <div className="text-xs text-destructive">{validationError}</div>}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button type="button" size="sm" variant="outline" onClick={handleCancel} disabled={saving}>
+          {t("cancel")}
+        </Button>
+        <Button type="button" size="sm" onClick={handleSave} disabled={!canSave}>
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {t("save")}
+        </Button>
+      </div>
+    </div>
+  );
+
+  if (!isDesktop) {
+    return (
+      <>
+        {triggerButton}
+        <Drawer open={open} onOpenChange={handleOpenChange}>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>{label}</DrawerTitle>
+            </DrawerHeader>
+            <div className="px-4 pb-6">
+              <div className="grid gap-3">
+                <Input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  disabled={disabled || saving}
+                  className="tabular-nums text-lg"
+                  aria-label={label}
+                  aria-invalid={validationError != null}
+                  type="number"
+                  inputMode="decimal"
+                  step={type === "integer" ? "1" : "any"}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      handleCancel();
+                    }
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleSave();
+                    }
+                  }}
+                />
+                {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
+                {validationError && (
+                  <div className="text-sm text-destructive">{validationError}</div>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleCancel}
+                    disabled={saving}
+                    className="flex-1"
+                    size="lg"
+                  >
+                    {t("cancel")}
+                  </Button>
+                  <Button onClick={handleSave} disabled={!canSave} className="flex-1" size="lg">
+                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {t("save")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DrawerContent>
+        </Drawer>
+      </>
+    );
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>{triggerButton}</PopoverTrigger>
 
       <PopoverContent
         align="center"
@@ -129,56 +241,7 @@ export function InlineEditPopover({
         onPointerDown={stopPropagation}
         onClick={stopPropagation}
       >
-        <div className="grid gap-2">
-          <div className="text-xs font-medium">{label}</div>
-
-          <div className="flex items-center gap-2">
-            <Input
-              ref={inputRef}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              disabled={disabled || saving}
-              className="w-24 tabular-nums"
-              aria-label={label}
-              aria-invalid={validationError != null}
-              type="number"
-              inputMode="decimal"
-              step={type === "integer" ? "1" : "any"}
-              onPointerDown={stopPropagation}
-              onClick={stopPropagation}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  handleCancel();
-                }
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void handleSave();
-                }
-              }}
-            />
-            {suffix && <span className="text-sm text-muted-foreground">{suffix}</span>}
-          </div>
-
-          {validationError && <div className="text-xs text-destructive">{validationError}</div>}
-
-          <div className="flex items-center justify-end gap-2 pt-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleCancel}
-              disabled={saving}
-            >
-              {t("cancel")}
-            </Button>
-            <Button type="button" size="sm" onClick={handleSave} disabled={!canSave}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {t("save")}
-            </Button>
-          </div>
-        </div>
+        {formContent}
       </PopoverContent>
     </Popover>
   );
