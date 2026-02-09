@@ -367,6 +367,102 @@ describe("ProviderEndpointsTable", () => {
 
     unmount();
   });
+
+  test("edit dialog shows ONLY success toast on success", async () => {
+    providerEndpointsActionMocks.getProviderEndpointsByVendor.mockResolvedValueOnce([
+      {
+        id: 11,
+        vendorId: 1,
+        providerType: "claude",
+        url: "https://original.example.com/v1",
+        label: null,
+        sortOrder: 0,
+        isEnabled: true,
+        lastProbedAt: null,
+        lastProbeOk: null,
+        lastProbeLatencyMs: null,
+        createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
+      },
+    ]);
+
+    const { unmount } = renderWithProviders(<ProviderEndpointsTable vendorId={1} />);
+
+    await flushTicks(6);
+
+    const editButtons = document.querySelectorAll("button");
+    const editButton = Array.from(editButtons).find((btn) => btn.querySelector("svg.lucide-pen"));
+    expect(editButton).toBeDefined();
+
+    act(() => {
+      editButton?.click();
+    });
+
+    await flushTicks(4);
+
+    const form = document.querySelector("form");
+    act(() => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    await flushTicks(4);
+
+    expect(sonnerMocks.toast.success).toHaveBeenCalledTimes(1);
+    expect(sonnerMocks.toast.error).toHaveBeenCalledTimes(0);
+
+    unmount();
+  });
+
+  test("edit dialog shows ONLY error toast on failure", async () => {
+    providerEndpointsActionMocks.getProviderEndpointsByVendor.mockResolvedValueOnce([
+      {
+        id: 12,
+        vendorId: 1,
+        providerType: "claude",
+        url: "https://original.example.com/v1",
+        label: null,
+        sortOrder: 0,
+        isEnabled: true,
+        lastProbedAt: null,
+        lastProbeOk: null,
+        lastProbeLatencyMs: null,
+        createdAt: "2026-01-01",
+        updatedAt: "2026-01-01",
+      },
+    ]);
+
+    providerEndpointsActionMocks.editProviderEndpoint.mockResolvedValueOnce({
+      ok: false,
+      error: "Update failed",
+      errorCode: "UPDATE_FAILED",
+    } as any);
+
+    const { unmount } = renderWithProviders(<ProviderEndpointsTable vendorId={1} />);
+
+    await flushTicks(6);
+
+    const editButtons = document.querySelectorAll("button");
+    const editButton = Array.from(editButtons).find((btn) => btn.querySelector("svg.lucide-pen"));
+    expect(editButton).toBeDefined();
+
+    act(() => {
+      editButton?.click();
+    });
+
+    await flushTicks(4);
+
+    const form = document.querySelector("form");
+    act(() => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    await flushTicks(4);
+
+    expect(sonnerMocks.toast.success).toHaveBeenCalledTimes(0);
+    expect(sonnerMocks.toast.error).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
 });
 
 describe("AddEndpointButton", () => {
