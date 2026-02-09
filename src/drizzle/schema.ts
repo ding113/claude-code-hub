@@ -339,7 +339,7 @@ export const providerEndpoints = pgTable('provider_endpoints', {
     table.vendorId,
     table.providerType,
     table.url
-  ),
+  ).where(sql`${table.deletedAt} IS NULL`),
   providerEndpointsVendorTypeIdx: index('idx_provider_endpoints_vendor_type').on(
     table.vendorId,
     table.providerType

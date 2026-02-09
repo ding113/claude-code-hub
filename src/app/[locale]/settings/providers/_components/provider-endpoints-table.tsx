@@ -421,21 +421,23 @@ export function AddEndpointButton({
         toast.success(t("endpointAddSuccess"));
         setOpen(false);
         // Invalidate both specific and general queries
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints", vendorId] });
+        // Use void to catch promise errors silently to avoid double toast
+        void queryClient.invalidateQueries({ queryKey: ["provider-endpoints", vendorId] });
         if (fixedProviderType) {
-          queryClient.invalidateQueries({
+          void queryClient.invalidateQueries({
             queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
               (value) => value != null
             ),
           });
         }
-      } else {
-        toast.error(
-          res.errorCode
-            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-            : t("endpointAddFailed")
-        );
+        return;
       }
+
+      toast.error(
+        res.errorCode
+          ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+          : t("endpointAddFailed")
+      );
     } catch (_err) {
       toast.error(t("endpointAddFailed"));
     } finally {
@@ -591,14 +593,15 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
       if (res.ok) {
         toast.success(t("endpointUpdateSuccess"));
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
-      } else {
-        toast.error(
-          res.errorCode
-            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-            : t("endpointUpdateFailed")
-        );
+        void queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+        return;
       }
+
+      toast.error(
+        res.errorCode
+          ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+          : t("endpointUpdateFailed")
+      );
     } catch (_err) {
       toast.error(t("endpointUpdateFailed"));
     } finally {

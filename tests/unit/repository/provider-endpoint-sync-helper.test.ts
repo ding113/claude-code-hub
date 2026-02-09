@@ -221,7 +221,7 @@ describe("syncProviderEndpointOnProviderEdit", () => {
     expect(resetEndpointCircuitMock).not.toHaveBeenCalled();
   });
 
-  test("in-place move unique conflict should fallback to keep-next and soft-delete previous", async () => {
+  test("in-place move unique conflict should fallback to conservative keep-previous behavior", async () => {
     const oldUrl = "https://old.example.com/v1/messages";
     const newUrl = "https://new.example.com/v1/messages";
     const { syncProviderEndpointOnProviderEdit, updatePayloads, mocks, resetEndpointCircuitMock } =
@@ -250,14 +250,42 @@ describe("syncProviderEndpointOnProviderEdit", () => {
       keepPreviousWhenReferenced: true,
     });
 
-    expect(result).toEqual({ action: "soft-deleted-previous-and-kept-next" });
+    expect(result).toEqual({ action: "kept-previous-and-kept-next" });
     expect(mocks.insertMock).toHaveBeenCalledTimes(1);
-    expect(mocks.updateMock).toHaveBeenCalledTimes(2);
-    expect(updatePayloads[1]).toEqual(
+    expect(mocks.updateMock).toHaveBeenCalledTimes(1);
+    expect(updatePayloads[0]).toEqual(
       expect.objectContaining({
-        isEnabled: false,
+        url: newUrl,
       })
     );
+    expect(resetEndpointCircuitMock).not.toHaveBeenCalled();
+  });
+
+  test("when next endpoint already exists, should keep previous endpoint under conservative policy", async () => {
+    const oldUrl = "https://old.example.com/v1/messages";
+    const newUrl = "https://new.example.com/v1/messages";
+    const { syncProviderEndpointOnProviderEdit, mocks, resetEndpointCircuitMock } =
+      await arrangeSyncTest([
+        [{ id: 7, deletedAt: null, isEnabled: true }],
+        [{ id: 9, deletedAt: null, isEnabled: true }],
+        [{ id: 9, deletedAt: null, isEnabled: true }],
+        [],
+      ]);
+
+    const result = await syncProviderEndpointOnProviderEdit({
+      providerId: 1,
+      vendorId: 11,
+      providerType: "claude",
+      previousVendorId: 11,
+      previousProviderType: "claude",
+      previousUrl: oldUrl,
+      nextUrl: newUrl,
+      keepPreviousWhenReferenced: true,
+    });
+
+    expect(result).toEqual({ action: "kept-previous-and-kept-next" });
+    expect(mocks.updateMock).not.toHaveBeenCalled();
+    expect(mocks.insertMock).not.toHaveBeenCalled();
     expect(resetEndpointCircuitMock).not.toHaveBeenCalled();
   });
 

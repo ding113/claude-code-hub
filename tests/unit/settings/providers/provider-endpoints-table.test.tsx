@@ -492,6 +492,78 @@ describe("AddEndpointButton", () => {
 
     unmount();
   });
+
+  test("should show ONLY success toast on success", async () => {
+    const { unmount } = renderWithProviders(<AddEndpointButton vendorId={1} />);
+
+    await flushTicks(2);
+
+    const addButton = document.querySelector("button");
+    act(() => {
+      addButton?.click();
+    });
+
+    await flushTicks(2);
+
+    const urlInput = document.querySelector<HTMLInputElement>('input[name="url"]');
+    act(() => {
+      if (urlInput) {
+        urlInput.value = "https://test.example.com/v1";
+        urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    const form = document.querySelector("form");
+    act(() => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    await flushTicks(4);
+
+    expect(sonnerMocks.toast.success).toHaveBeenCalledTimes(1);
+    expect(sonnerMocks.toast.error).toHaveBeenCalledTimes(0);
+
+    unmount();
+  });
+
+  test("should show ONLY error toast on failure", async () => {
+    providerEndpointsActionMocks.addProviderEndpoint.mockResolvedValueOnce({
+      ok: false,
+      error: "Some error",
+      errorCode: "CREATE_FAILED",
+    } as any);
+
+    const { unmount } = renderWithProviders(<AddEndpointButton vendorId={1} />);
+
+    await flushTicks(2);
+
+    const addButton = document.querySelector("button");
+    act(() => {
+      addButton?.click();
+    });
+
+    await flushTicks(2);
+
+    const urlInput = document.querySelector<HTMLInputElement>('input[name="url"]');
+    act(() => {
+      if (urlInput) {
+        urlInput.value = "https://test.example.com/v1";
+        urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+
+    const form = document.querySelector("form");
+    act(() => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    await flushTicks(4);
+
+    expect(sonnerMocks.toast.success).toHaveBeenCalledTimes(0);
+    expect(sonnerMocks.toast.error).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
 });
 
 describe("ProviderEndpointsSection", () => {

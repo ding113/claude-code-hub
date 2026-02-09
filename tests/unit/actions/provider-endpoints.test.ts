@@ -9,6 +9,7 @@ const publishProviderCacheInvalidationMock = vi.fn();
 const findProviderEndpointByIdMock = vi.fn();
 const softDeleteProviderEndpointMock = vi.fn();
 const tryDeleteProviderVendorIfEmptyMock = vi.fn();
+const updateProviderEndpointMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -60,7 +61,7 @@ vi.mock("@/repository", () => ({
   findProviderVendors: vi.fn(async () => []),
   softDeleteProviderEndpoint: softDeleteProviderEndpointMock,
   tryDeleteProviderVendorIfEmpty: tryDeleteProviderVendorIfEmptyMock,
-  updateProviderEndpoint: vi.fn(async () => null),
+  updateProviderEndpoint: updateProviderEndpointMock,
   updateProviderVendor: updateProviderVendorMock,
 }));
 
@@ -137,6 +138,68 @@ describe("provider-endpoints actions", () => {
         faviconUrl: null,
       })
     );
+  });
+
+  it("editProviderEndpoint: conflict maps to CONFLICT errorCode", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+    updateProviderEndpointMock.mockRejectedValue(
+      Object.assign(new Error("[ProviderEndpointEdit] endpoint conflict"), {
+        code: "PROVIDER_ENDPOINT_CONFLICT",
+      })
+    );
+
+    const { editProviderEndpoint } = await import("@/actions/provider-endpoints");
+    const res = await editProviderEndpoint({
+      endpointId: 42,
+      url: "https://next.example.com/v1/messages",
+    });
+
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("CONFLICT");
+    expect(res.error).not.toContain("duplicate key value");
+  });
+
+  it("editProviderEndpoint: success returns ok with endpoint payload", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    const endpoint = {
+      id: 42,
+      vendorId: 123,
+      providerType: "claude" as const,
+      url: "https://next.example.com/v1/messages",
+      label: "primary",
+      sortOrder: 7,
+      isEnabled: false,
+      lastProbedAt: null,
+      lastProbeOk: null,
+      lastProbeStatusCode: null,
+      lastProbeLatencyMs: null,
+      lastProbeErrorType: null,
+      lastProbeErrorMessage: null,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      deletedAt: null,
+    };
+
+    updateProviderEndpointMock.mockResolvedValue(endpoint);
+
+    const { editProviderEndpoint } = await import("@/actions/provider-endpoints");
+    const res = await editProviderEndpoint({
+      endpointId: 42,
+      url: endpoint.url,
+      label: endpoint.label,
+      sortOrder: endpoint.sortOrder,
+      isEnabled: endpoint.isEnabled,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.data?.endpoint).toEqual(endpoint);
+    expect(updateProviderEndpointMock).toHaveBeenCalledWith(42, {
+      url: endpoint.url,
+      label: endpoint.label,
+      sortOrder: endpoint.sortOrder,
+      isEnabled: endpoint.isEnabled,
+    });
   });
 
   it("removeProviderVendor: deletes vendor and publishes cache invalidation", async () => {

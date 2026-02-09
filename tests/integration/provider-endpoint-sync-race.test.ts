@@ -115,8 +115,8 @@ run("Provider endpoint sync on edit (integration race)", () => {
 
       expect(previousAfter).toBeDefined();
       expect(previousAfter?.url).toBe(oldUrl);
-      expect(previousAfter?.deletedAt).toBeTruthy();
-      expect(previousAfter?.isEnabled).toBe(false);
+      expect(previousAfter?.deletedAt).toBeNull();
+      expect(previousAfter?.isEnabled).toBe(true);
 
       const activeEndpoints = await findProviderEndpointsByVendorAndType(
         vendorId!,
@@ -124,9 +124,11 @@ run("Provider endpoint sync on edit (integration race)", () => {
       );
 
       const nextActive = activeEndpoints.filter((endpoint) => endpoint.url === nextUrl);
+      const previousActive = activeEndpoints.filter((endpoint) => endpoint.url === oldUrl);
       expect(nextActive).toHaveLength(1);
       expect(nextActive[0]?.isEnabled).toBe(true);
-      expect(activeEndpoints.some((endpoint) => endpoint.url === oldUrl)).toBe(false);
+      expect(previousActive).toHaveLength(1);
+      expect(previousActive[0]?.isEnabled).toBe(true);
 
       const providerAfter = await findProviderById(created.id);
       expect(providerAfter?.url).toBe(nextUrl);

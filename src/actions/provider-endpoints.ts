@@ -130,6 +130,41 @@ async function getAdminSession() {
   return session;
 }
 
+function isDirectEndpointEditConflictError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    cause?: { code?: string; message?: string };
+  };
+
+  if (candidate.code === "PROVIDER_ENDPOINT_CONFLICT" || candidate.code === "23505") {
+    return true;
+  }
+
+  if (typeof candidate.message === "string") {
+    if (candidate.message.includes("[ProviderEndpointEdit] endpoint conflict")) {
+      return true;
+    }
+
+    if (candidate.message.includes("duplicate key value")) {
+      return true;
+    }
+  }
+
+  if (candidate.cause?.code === "23505") {
+    return true;
+  }
+
+  return (
+    typeof candidate.cause?.message === "string" &&
+    candidate.cause.message.includes("duplicate key value")
+  );
+}
+
 export async function getProviderVendors(): Promise<ProviderVendor[]> {
   try {
     const session = await getAdminSession();
@@ -289,8 +324,16 @@ export async function editProviderEndpoint(
     return { ok: true, data: { endpoint } };
   } catch (error) {
     logger.error("editProviderEndpoint:error", error);
-    const message = error instanceof Error ? error.message : "更新端点失败";
-    return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
+
+    if (isDirectEndpointEditConflictError(error)) {
+      return {
+        ok: false,
+        error: "端点 URL 与同供应商类型下的其他端点冲突",
+        errorCode: ERROR_CODES.CONFLICT,
+      };
+    }
+
+    return { ok: false, error: "更新端点失败", errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
 

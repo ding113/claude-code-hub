@@ -364,13 +364,18 @@ function ProviderFormContent({
             return;
           }
 
-          queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-          queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+          void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+          void queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
 
           toast.success(t("success.created"));
           dispatch({ type: "RESET_FORM" });
         }
-        onSuccess?.();
+
+        try {
+          onSuccess?.();
+        } catch (e) {
+          console.error("onSuccess callback failed", e);
+        }
       } catch (e) {
         console.error("Form submission error:", e);
         toast.error(isEdit ? t("errors.updateFailed") : t("errors.addFailed"));
