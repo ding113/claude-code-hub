@@ -183,14 +183,16 @@ describe("VacuumFilter.has bench (local only)", () => {
             const hitsVf = runVf(lookups);
             const t3 = process.hrtime.bigint();
             vfNsSamples.push(nsPerOp(t3 - t2, LOOKUPS));
-            if (typeof scenario.expectedHitsVf === "number") expect(hitsVf).toBe(scenario.expectedHitsVf);
+            if (typeof scenario.expectedHitsVf === "number")
+              expect(hitsVf).toBe(scenario.expectedHitsVf);
           } else {
             gcIfAvailable();
             const t0 = process.hrtime.bigint();
             const hitsVf = runVf(lookups);
             const t1 = process.hrtime.bigint();
             vfNsSamples.push(nsPerOp(t1 - t0, LOOKUPS));
-            if (typeof scenario.expectedHitsVf === "number") expect(hitsVf).toBe(scenario.expectedHitsVf);
+            if (typeof scenario.expectedHitsVf === "number")
+              expect(hitsVf).toBe(scenario.expectedHitsVf);
 
             gcIfAvailable();
             const t2 = process.hrtime.bigint();
@@ -218,4 +220,3 @@ describe("VacuumFilter.has bench (local only)", () => {
     60_000
   );
 });
-
