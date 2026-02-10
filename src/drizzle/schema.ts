@@ -284,7 +284,7 @@ export const providers = pgTable('providers', {
   anthropicThinkingBudgetPreference: varchar('anthropic_thinking_budget_preference', { length: 20 }),
 
   // Anthropic adaptive thinking config (JSONB)
-  // When anthropicThinkingBudgetPreference === "adaptive", this stores the structured config
+  // Independent config for adaptive thinking mode; takes priority over budget override when model matches
   anthropicAdaptiveThinking: jsonb('anthropic_adaptive_thinking')
     .$type<{ effort: string; modelMatchMode: string; models: string[] } | null>()
     .default(null),

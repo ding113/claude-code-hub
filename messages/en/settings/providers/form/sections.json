@@ -230,16 +230,17 @@
       },
       "thinkingBudget": {
         "label": "Thinking Budget Override",
-        "help": "Override thinking.budget_tokens in request body. Range: 1024-32000. Forces thinking.type to 'enabled' when set.",
+        "help": "Override thinking.budget_tokens in request body. Range: 1024-32000. Forces thinking.type to 'enabled' when set. If adaptive thinking is also enabled and model matches, adaptive takes priority.",
         "options": {
           "inherit": "No override (follow client)",
-          "custom": "Custom",
-          "adaptive": "Adaptive Thinking"
+          "custom": "Custom"
         },
         "placeholder": "e.g. 10240",
         "maxOutButton": "Max Out (32000)"
       },
       "adaptiveThinking": {
+        "label": "Adaptive Thinking",
+        "help": "Enable adaptive thinking mode. When enabled and model matches, overrides thinking budget. Non-matching models fall back to thinking budget override.",
         "effort": {
           "label": "Effort Level",
           "help": "Controls depth of reasoning. Higher effort = deeper thinking.",

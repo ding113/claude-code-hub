@@ -60,26 +60,24 @@ export function applyAnthropicProviderOverrides(
     output.max_tokens = maxTokens;
   }
 
-  if (provider.anthropicThinkingBudgetPreference === "adaptive") {
-    const config = provider.anthropicAdaptiveThinking;
-    if (config) {
-      const modelId = typeof request.model === "string" ? request.model : null;
-      const isMatch =
-        config.modelMatchMode === "all" ||
-        (modelId !== null &&
-          config.models.some((m) => modelId === m || modelId.startsWith(`${m}-`)));
-      if (isMatch) {
-        ensureCloned();
-        output.thinking = { type: "adaptive" };
-        const existingOutputConfig = isPlainObject(output.output_config)
-          ? output.output_config
-          : {};
-        output.output_config = { ...existingOutputConfig, effort: config.effort };
-      }
+  // Step 1: Try adaptive thinking (independent of budgetPreference)
+  const adaptiveConfig = provider.anthropicAdaptiveThinking;
+  if (adaptiveConfig) {
+    const modelId = typeof request.model === "string" ? request.model : null;
+    const isMatch =
+      adaptiveConfig.modelMatchMode === "all" ||
+      (modelId !== null &&
+        adaptiveConfig.models.some((m) => modelId === m || modelId.startsWith(`${m}-`)));
+    if (isMatch) {
+      ensureCloned();
+      output.thinking = { type: "adaptive" };
+      const existingOutputConfig = isPlainObject(output.output_config) ? output.output_config : {};
+      output.output_config = { ...existingOutputConfig, effort: adaptiveConfig.effort };
+      return output;
     }
-    return output;
   }
 
+  // Step 2: Fall through to thinking budget override
   const thinkingBudget = normalizeNumericPreference(provider.anthropicThinkingBudgetPreference);
   if (thinkingBudget !== null) {
     ensureCloned();
@@ -116,12 +114,10 @@ export function applyAnthropicProviderOverridesWithAudit(
   }
 
   const maxTokens = normalizeNumericPreference(provider.anthropicMaxTokensPreference);
-  const isAdaptive = provider.anthropicThinkingBudgetPreference === "adaptive";
-  const thinkingBudget = isAdaptive
-    ? null
-    : normalizeNumericPreference(provider.anthropicThinkingBudgetPreference);
+  const hasAdaptiveConfig = provider.anthropicAdaptiveThinking != null;
+  const thinkingBudget = normalizeNumericPreference(provider.anthropicThinkingBudgetPreference);
 
-  const hit = maxTokens !== null || thinkingBudget !== null || isAdaptive;
+  const hit = maxTokens !== null || thinkingBudget !== null || hasAdaptiveConfig;
 
   if (!hit) {
     return { request, audit: null };

@@ -231,16 +231,17 @@
       },
       "thinkingBudget": {
         "label": "思考予算オーバーライド",
-        "help": "リクエストボディの thinking.budget_tokens を上書きします。範囲：1024-32000。設定すると thinking.type が 'enabled' に強制されます。",
+        "help": "リクエストボディの thinking.budget_tokens を上書きします。範囲：1024-32000。設定すると thinking.type が 'enabled' に強制されます。アダプティブ思考も有効でモデルが一致する場合、アダプティブが優先されます。",
         "options": {
           "inherit": "上書きなし（クライアントに従う）",
-          "custom": "カスタム",
-          "adaptive": "アダプティブ思考"
+          "custom": "カスタム"
         },
         "placeholder": "例: 10240",
         "maxOutButton": "最大化 (32000)"
       },
       "adaptiveThinking": {
+        "label": "アダプティブ思考",
+        "help": "アダプティブ思考モードを有効にします。有効かつモデルが一致する場合、思考予算オーバーライドより優先されます。一致しないモデルは思考予算オーバーライドにフォールバックします。",
         "effort": {
           "label": "思考レベル",
           "help": "推論の深さを制御します。高いほど深く考えます。",

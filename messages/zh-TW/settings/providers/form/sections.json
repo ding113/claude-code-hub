@@ -231,16 +231,17 @@
       },
       "thinkingBudget": {
         "label": "思考預算覆寫",
-        "help": "覆寫請求體中的 thinking.budget_tokens。範圍：1024-32000。設置後會強制 thinking.type 為 'enabled'。",
+        "help": "覆寫請求體中的 thinking.budget_tokens。範圍：1024-32000。設置後會強制 thinking.type 為 'enabled'。如果同時啟用了自適應思考且模型匹配，則自適應優先。",
         "options": {
           "inherit": "不覆寫（遵循客戶端）",
-          "custom": "自訂",
-          "adaptive": "自適應思考"
+          "custom": "自訂"
         },
         "placeholder": "如 10240",
         "maxOutButton": "拉滿 (32000)"
       },
       "adaptiveThinking": {
+        "label": "自適應思考",
+        "help": "啟用自適應思考模式。啟用且模型匹配時優先於思考預算覆寫，不匹配的模型回退到思考預算覆寫。",
         "effort": {
           "label": "思考深度",
           "help": "控制推理深度。越高 = 思考越深入。",

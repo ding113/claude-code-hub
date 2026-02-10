@@ -43,7 +43,6 @@ const ANTHROPIC_MAX_TOKENS_PREFERENCE = z.union([
 
 const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
   z.literal("inherit"),
-  z.literal("adaptive"),
   z
     .string()
     .regex(/^\d+$/, 'thinking.budget_tokens 必须为 "inherit" 或数字字符串')
@@ -596,16 +595,6 @@ export const CreateProviderSchema = z
   .superRefine((data, ctx) => {
     const maxTokens = data.anthropic_max_tokens_preference;
     const budget = data.anthropic_thinking_budget_preference;
-    if (budget === "adaptive") {
-      if (!data.anthropic_adaptive_thinking) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "adaptive thinking config is required when mode is adaptive",
-          path: ["anthropic_adaptive_thinking"],
-        });
-      }
-      return;
-    }
     if (maxTokens && maxTokens !== "inherit" && budget && budget !== "inherit") {
       const maxTokensNum = Number.parseInt(maxTokens, 10);
       const budgetNum = Number.parseInt(budget, 10);
@@ -806,16 +795,6 @@ export const UpdateProviderSchema = z
   .superRefine((data, ctx) => {
     const maxTokens = data.anthropic_max_tokens_preference;
     const budget = data.anthropic_thinking_budget_preference;
-    if (budget === "adaptive") {
-      if (!data.anthropic_adaptive_thinking) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "adaptive thinking config is required when mode is adaptive",
-          path: ["anthropic_adaptive_thinking"],
-        });
-      }
-      return;
-    }
     if (maxTokens && maxTokens !== "inherit" && budget && budget !== "inherit") {
       const maxTokensNum = Number.parseInt(maxTokens, 10);
       const budgetNum = Number.parseInt(budget, 10);

@@ -140,6 +140,7 @@ export type ProviderFormAction =
       payload: AnthropicAdaptiveThinkingModelMatchMode;
     }
   | { type: "SET_ADAPTIVE_THINKING_MODELS"; payload: string[] }
+  | { type: "SET_ADAPTIVE_THINKING_ENABLED"; payload: boolean }
   | { type: "SET_GEMINI_GOOGLE_SEARCH"; payload: GeminiGoogleSearchPreference }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }

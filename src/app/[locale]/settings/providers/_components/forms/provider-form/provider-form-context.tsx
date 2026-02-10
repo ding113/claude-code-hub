@@ -179,12 +179,19 @@ export function providerFormReducer(
         routing: { ...state.routing, anthropicMaxTokensPreference: action.payload },
       };
     case "SET_ANTHROPIC_THINKING_BUDGET":
-      if (action.payload === "adaptive") {
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicThinkingBudgetPreference: action.payload,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_ENABLED":
+      if (action.payload) {
         return {
           ...state,
           routing: {
             ...state.routing,
-            anthropicThinkingBudgetPreference: "adaptive",
             anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking ?? {
               effort: "high",
               modelMatchMode: "specific",
@@ -197,9 +204,7 @@ export function providerFormReducer(
         ...state,
         routing: {
           ...state.routing,
-          anthropicThinkingBudgetPreference: action.payload,
-          anthropicAdaptiveThinking:
-            action.payload === "inherit" ? null : state.routing.anthropicAdaptiveThinking,
+          anthropicAdaptiveThinking: null,
         },
       };
     case "SET_ADAPTIVE_THINKING_EFFORT":

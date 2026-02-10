@@ -607,20 +607,13 @@ export function RoutingSection() {
                         value={
                           state.routing.anthropicThinkingBudgetPreference === "inherit"
                             ? "inherit"
-                            : state.routing.anthropicThinkingBudgetPreference === "adaptive"
-                              ? "adaptive"
-                              : "custom"
+                            : "custom"
                         }
                         onValueChange={(val) => {
                           if (val === "inherit") {
                             dispatch({
                               type: "SET_ANTHROPIC_THINKING_BUDGET",
                               payload: "inherit",
-                            });
-                          } else if (val === "adaptive") {
-                            dispatch({
-                              type: "SET_ANTHROPIC_THINKING_BUDGET",
-                              payload: "adaptive",
                             });
                           } else {
                             dispatch({
@@ -643,56 +636,50 @@ export function RoutingSection() {
                           <SelectItem value="custom">
                             {t("sections.routing.anthropicOverrides.thinkingBudget.options.custom")}
                           </SelectItem>
-                          <SelectItem value="adaptive">
-                            {t(
-                              "sections.routing.anthropicOverrides.thinkingBudget.options.adaptive"
-                            )}
-                          </SelectItem>
                         </SelectContent>
                       </Select>
-                      {state.routing.anthropicThinkingBudgetPreference !== "inherit" &&
-                        state.routing.anthropicThinkingBudgetPreference !== "adaptive" && (
-                          <>
-                            <Input
-                              type="number"
-                              value={state.routing.anthropicThinkingBudgetPreference}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (val === "") {
-                                  dispatch({
-                                    type: "SET_ANTHROPIC_THINKING_BUDGET",
-                                    payload: "inherit",
-                                  });
-                                } else {
-                                  dispatch({
-                                    type: "SET_ANTHROPIC_THINKING_BUDGET",
-                                    payload: val,
-                                  });
-                                }
-                              }}
-                              placeholder={t(
-                                "sections.routing.anthropicOverrides.thinkingBudget.placeholder"
-                              )}
-                              disabled={state.ui.isPending}
-                              min="1024"
-                              max="32000"
-                              className="flex-1"
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
+                      {state.routing.anthropicThinkingBudgetPreference !== "inherit" && (
+                        <>
+                          <Input
+                            type="number"
+                            value={state.routing.anthropicThinkingBudgetPreference}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "") {
                                 dispatch({
                                   type: "SET_ANTHROPIC_THINKING_BUDGET",
-                                  payload: "32000",
-                                })
+                                  payload: "inherit",
+                                });
+                              } else {
+                                dispatch({
+                                  type: "SET_ANTHROPIC_THINKING_BUDGET",
+                                  payload: val,
+                                });
                               }
-                              className="px-3 py-2 text-xs bg-primary/10 hover:bg-primary/20 text-primary rounded-md transition-colors whitespace-nowrap"
-                              disabled={state.ui.isPending}
-                            >
-                              {t("sections.routing.anthropicOverrides.thinkingBudget.maxOutButton")}
-                            </button>
-                          </>
-                        )}
+                            }}
+                            placeholder={t(
+                              "sections.routing.anthropicOverrides.thinkingBudget.placeholder"
+                            )}
+                            disabled={state.ui.isPending}
+                            min="1024"
+                            max="32000"
+                            className="flex-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              dispatch({
+                                type: "SET_ANTHROPIC_THINKING_BUDGET",
+                                payload: "32000",
+                              })
+                            }
+                            className="px-3 py-2 text-xs bg-primary/10 hover:bg-primary/20 text-primary rounded-md transition-colors whitespace-nowrap"
+                            disabled={state.ui.isPending}
+                          >
+                            {t("sections.routing.anthropicOverrides.thinkingBudget.maxOutButton")}
+                          </button>
+                        </>
+                      )}
                       <Info className="h-4 w-4 text-muted-foreground shrink-0" />
                     </div>
                   </TooltipTrigger>
@@ -704,133 +691,141 @@ export function RoutingSection() {
                 </Tooltip>
               </SmartInputWrapper>
 
-              {state.routing.anthropicThinkingBudgetPreference === "adaptive" &&
-                state.routing.anthropicAdaptiveThinking && (
-                  <div className="ml-4 space-y-3 border-l-2 border-primary/20 pl-4">
-                    <SmartInputWrapper
-                      label={t("sections.routing.anthropicOverrides.adaptiveThinking.effort.label")}
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex gap-2 items-center">
-                            <Select
-                              value={state.routing.anthropicAdaptiveThinking.effort}
-                              onValueChange={(val) =>
-                                dispatch({
-                                  type: "SET_ADAPTIVE_THINKING_EFFORT",
-                                  payload: val as AnthropicAdaptiveThinkingEffort,
-                                })
-                              }
-                              disabled={state.ui.isPending}
-                            >
-                              <SelectTrigger className="w-40">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {(["low", "medium", "high", "max"] as const).map((level) => (
-                                  <SelectItem key={level} value={level}>
-                                    {t(
-                                      `sections.routing.anthropicOverrides.adaptiveThinking.effort.options.${level}`
-                                    )}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Info className="h-4 w-4 text-muted-foreground shrink-0" />
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs">
-                          <p className="text-sm">
-                            {t("sections.routing.anthropicOverrides.adaptiveThinking.effort.help")}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </SmartInputWrapper>
+              <ToggleRow
+                label={t("sections.routing.anthropicOverrides.adaptiveThinking.label")}
+                description={t("sections.routing.anthropicOverrides.adaptiveThinking.help")}
+              >
+                <Switch
+                  checked={state.routing.anthropicAdaptiveThinking !== null}
+                  onCheckedChange={(checked) =>
+                    dispatch({ type: "SET_ADAPTIVE_THINKING_ENABLED", payload: checked })
+                  }
+                  disabled={state.ui.isPending}
+                />
+              </ToggleRow>
 
-                    <SmartInputWrapper
-                      label={t(
-                        "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.label"
-                      )}
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex gap-2 items-center">
-                            <Select
-                              value={state.routing.anthropicAdaptiveThinking.modelMatchMode}
-                              onValueChange={(val) =>
-                                dispatch({
-                                  type: "SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE",
-                                  payload: val as AnthropicAdaptiveThinkingModelMatchMode,
-                                })
-                              }
-                              disabled={state.ui.isPending}
-                            >
-                              <SelectTrigger className="w-40">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="all">
+              {state.routing.anthropicAdaptiveThinking && (
+                <div className="ml-4 space-y-3 border-l-2 border-primary/20 pl-4">
+                  <SmartInputWrapper
+                    label={t("sections.routing.anthropicOverrides.adaptiveThinking.effort.label")}
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex gap-2 items-center">
+                          <Select
+                            value={state.routing.anthropicAdaptiveThinking.effort}
+                            onValueChange={(val) =>
+                              dispatch({
+                                type: "SET_ADAPTIVE_THINKING_EFFORT",
+                                payload: val as AnthropicAdaptiveThinkingEffort,
+                              })
+                            }
+                            disabled={state.ui.isPending}
+                          >
+                            <SelectTrigger className="w-40">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["low", "medium", "high", "max"] as const).map((level) => (
+                                <SelectItem key={level} value={level}>
                                   {t(
-                                    "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.options.all"
+                                    `sections.routing.anthropicOverrides.adaptiveThinking.effort.options.${level}`
                                   )}
                                 </SelectItem>
-                                <SelectItem value="specific">
-                                  {t(
-                                    "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.options.specific"
-                                  )}
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Info className="h-4 w-4 text-muted-foreground shrink-0" />
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs">
-                          <p className="text-sm">
-                            {t(
-                              "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.help"
-                            )}
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </SmartInputWrapper>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-sm">
+                          {t("sections.routing.anthropicOverrides.adaptiveThinking.effort.help")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </SmartInputWrapper>
 
-                    {state.routing.anthropicAdaptiveThinking.modelMatchMode === "specific" && (
-                      <SmartInputWrapper
-                        label={t(
-                          "sections.routing.anthropicOverrides.adaptiveThinking.models.label"
-                        )}
-                      >
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex gap-2 items-center">
-                              <TagInput
-                                value={state.routing.anthropicAdaptiveThinking.models}
-                                onChange={(models) =>
-                                  dispatch({
-                                    type: "SET_ADAPTIVE_THINKING_MODELS",
-                                    payload: models,
-                                  })
-                                }
-                                placeholder={t(
-                                  "sections.routing.anthropicOverrides.adaptiveThinking.models.placeholder"
-                                )}
-                                disabled={state.ui.isPending}
-                              />
-                              <Info className="h-4 w-4 text-muted-foreground shrink-0" />
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-xs">
-                            <p className="text-sm">
-                              {t(
-                                "sections.routing.anthropicOverrides.adaptiveThinking.models.help"
-                              )}
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </SmartInputWrapper>
+                  <SmartInputWrapper
+                    label={t(
+                      "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.label"
                     )}
-                  </div>
-                )}
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex gap-2 items-center">
+                          <Select
+                            value={state.routing.anthropicAdaptiveThinking.modelMatchMode}
+                            onValueChange={(val) =>
+                              dispatch({
+                                type: "SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE",
+                                payload: val as AnthropicAdaptiveThinkingModelMatchMode,
+                              })
+                            }
+                            disabled={state.ui.isPending}
+                          >
+                            <SelectTrigger className="w-40">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">
+                                {t(
+                                  "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.options.all"
+                                )}
+                              </SelectItem>
+                              <SelectItem value="specific">
+                                {t(
+                                  "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.options.specific"
+                                )}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-sm">
+                          {t(
+                            "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.help"
+                          )}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </SmartInputWrapper>
+
+                  {state.routing.anthropicAdaptiveThinking.modelMatchMode === "specific" && (
+                    <SmartInputWrapper
+                      label={t("sections.routing.anthropicOverrides.adaptiveThinking.models.label")}
+                    >
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex gap-2 items-center">
+                            <TagInput
+                              value={state.routing.anthropicAdaptiveThinking.models}
+                              onChange={(models) =>
+                                dispatch({
+                                  type: "SET_ADAPTIVE_THINKING_MODELS",
+                                  payload: models,
+                                })
+                              }
+                              placeholder={t(
+                                "sections.routing.anthropicOverrides.adaptiveThinking.models.placeholder"
+                              )}
+                              disabled={state.ui.isPending}
+                            />
+                            <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm">
+                            {t("sections.routing.anthropicOverrides.adaptiveThinking.models.help")}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </SmartInputWrapper>
+                  )}
+                </div>
+              )}
             </div>
           </SectionCard>
         )}

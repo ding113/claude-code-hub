@@ -153,16 +153,17 @@
       },
       "thinkingBudget": {
         "label": "思考预算覆写",
-        "help": "覆写请求体中的 thinking.budget_tokens。范围：1024-32000。设置后会强制 thinking.type 为 'enabled'。",
+        "help": "覆写请求体中的 thinking.budget_tokens。范围：1024-32000。设置后会强制 thinking.type 为 'enabled'。如果同时启用了自适应思考且模型匹配，则自适应优先。",
         "options": {
           "inherit": "不覆写（遵循客户端）",
-          "custom": "自定义",
-          "adaptive": "自适应思考"
+          "custom": "自定义"
         },
         "placeholder": "如 10240",
         "maxOutButton": "拉满 (32000)"
       },
       "adaptiveThinking": {
+        "label": "自适应思考",
+        "help": "启用自适应思考模式。启用且模型匹配时优先于思考预算覆写，不匹配的模型回退到思考预算覆写。",
         "effort": {
           "label": "思考深度",
           "help": "控制推理深度。越高 = 思考越深入。",

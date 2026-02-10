@@ -33,9 +33,8 @@ export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
 // Anthropic (Messages API) parameter overrides
 // - "inherit": follow client request (default)
 // - numeric string: force override to that value
-// - "adaptive": use adaptive thinking mode (read config from anthropicAdaptiveThinking)
 export type AnthropicMaxTokensPreference = "inherit" | string;
-export type AnthropicThinkingBudgetPreference = "inherit" | "adaptive" | string;
+export type AnthropicThinkingBudgetPreference = "inherit" | string;
 
 // Anthropic adaptive thinking configuration
 export type AnthropicAdaptiveThinkingEffort = "low" | "medium" | "high" | "max";
