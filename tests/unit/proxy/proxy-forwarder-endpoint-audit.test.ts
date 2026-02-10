@@ -532,7 +532,7 @@ describe("ProxyForwarder - endpoint audit", () => {
       "doForward"
     );
 
-    await ProxyForwarder.send(session).catch(() => {});
+    await expect(ProxyForwarder.send(session)).rejects.toThrow();
 
     expect(doForward).not.toHaveBeenCalled();
 
@@ -580,7 +580,7 @@ describe("ProxyForwarder - endpoint audit", () => {
       "doForward"
     );
 
-    await ProxyForwarder.send(session).catch(() => {});
+    await expect(ProxyForwarder.send(session)).rejects.toThrow();
 
     expect(doForward).not.toHaveBeenCalled();
 
@@ -618,7 +618,7 @@ describe("ProxyForwarder - endpoint audit", () => {
     session1.setProvider(provider1);
     mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("timeout"));
 
-    await ProxyForwarder.send(session1).catch(() => {});
+    await expect(ProxyForwarder.send(session1)).rejects.toThrow();
 
     const chain1 = session1.getProviderChain();
     const item1 = chain1.find((i) => i.reason === "endpoint_pool_exhausted");
@@ -644,7 +644,7 @@ describe("ProxyForwarder - endpoint audit", () => {
       available: 0,
     });
 
-    await ProxyForwarder.send(session2).catch(() => {});
+    await expect(ProxyForwarder.send(session2)).rejects.toThrow();
 
     const chain2 = session2.getProviderChain();
     const item2 = chain2.find((i) => i.reason === "endpoint_pool_exhausted");
@@ -678,7 +678,7 @@ describe("ProxyForwarder - endpoint audit", () => {
       "doForward"
     );
 
-    await ProxyForwarder.send(session).catch(() => {});
+    await expect(ProxyForwarder.send(session)).rejects.toThrow();
 
     expect(doForward).not.toHaveBeenCalled();
 

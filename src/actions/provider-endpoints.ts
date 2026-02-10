@@ -124,7 +124,7 @@ const SetVendorTypeManualOpenSchema = z.object({
 });
 
 const BatchGetEndpointCircuitInfoSchema = z.object({
-  endpointIds: z.array(EndpointIdSchema).min(0).max(500),
+  endpointIds: z.array(EndpointIdSchema).max(500),
 });
 
 async function getAdminSession() {

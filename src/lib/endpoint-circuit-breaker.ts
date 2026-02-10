@@ -247,8 +247,11 @@ export async function triggerEndpointCircuitBreakerAlert(
         vendorId = endpoint.vendorId;
         endpointLabel = endpoint.label || "";
       }
-    } catch {
-      // DB lookup failure should not block alert
+    } catch (lookupError) {
+      logger.warn("[EndpointCircuitBreaker] Failed to enrich alert with endpoint info", {
+        endpointId,
+        error: lookupError instanceof Error ? lookupError.message : String(lookupError),
+      });
     }
 
     await sendCircuitBreakerAlert({

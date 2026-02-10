@@ -157,11 +157,11 @@ export function resolveEndpointDisplayStatus(
     };
   }
 
-  // Priority 2/3: Circuit Closed - check enabled/disabled
+  // Priority 2/3: Circuit Closed - check enabled/disabled (no circuit incident)
   const isExplicitlyDisabled = endpoint.isEnabled === false;
   return {
     status: isExplicitlyDisabled ? "disabled" : "enabled",
-    source: "endpoint",
+    source: "provider",
     priority: isExplicitlyDisabled ? 3 : 2,
   };
 }

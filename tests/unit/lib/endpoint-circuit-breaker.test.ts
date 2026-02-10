@@ -126,6 +126,7 @@ describe("endpoint-circuit-breaker", () => {
     vi.resetModules();
 
     const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
     vi.doMock("@/lib/notification/notifier", () => ({
       sendCircuitBreakerAlert: sendAlertMock,
     }));

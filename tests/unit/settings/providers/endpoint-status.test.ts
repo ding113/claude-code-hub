@@ -171,7 +171,7 @@ describe("resolveEndpointDisplayStatus", () => {
 
       expect(result).toEqual({
         status: "enabled",
-        source: "endpoint",
+        source: "provider",
         priority: 2,
       });
     });
@@ -182,7 +182,7 @@ describe("resolveEndpointDisplayStatus", () => {
 
       expect(result).toEqual({
         status: "disabled",
-        source: "endpoint",
+        source: "provider",
         priority: 3,
       });
     });
@@ -193,7 +193,7 @@ describe("resolveEndpointDisplayStatus", () => {
 
       expect(result).toEqual({
         status: "enabled",
-        source: "endpoint",
+        source: "provider",
         priority: 2,
       });
     });
@@ -204,7 +204,7 @@ describe("resolveEndpointDisplayStatus", () => {
 
       expect(result).toEqual({
         status: "enabled",
-        source: "endpoint",
+        source: "provider",
         priority: 2,
       });
     });
@@ -235,7 +235,7 @@ describe("resolveEndpointDisplayStatus", () => {
 
       expect(result).toEqual({
         status: "enabled",
-        source: "endpoint",
+        source: "provider",
         priority: 2,
       });
     });
@@ -246,7 +246,7 @@ describe("resolveEndpointDisplayStatus", () => {
 
       expect(result).toEqual({
         status: "enabled",
-        source: "endpoint",
+        source: "provider",
         priority: 2,
       });
     });
@@ -259,7 +259,7 @@ describe("resolveEndpointDisplayStatus", () => {
 
       expect(result).toEqual({
         status: "enabled",
-        source: "endpoint",
+        source: "provider",
         priority: 2,
       });
     });

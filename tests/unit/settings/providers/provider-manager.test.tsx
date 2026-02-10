@@ -386,7 +386,7 @@ describe("ProviderManager layered circuit labels", () => {
     makeProvider({ id: 3, name: "Provider Both Broken" }),
   ];
 
-  test("passes endpointCircuitInfo to ProviderList for rendering", () => {
+  test("counts all providers with any circuit open for layered labels", () => {
     const healthStatus = {
       1: {
         circuitState: "open" as const,
