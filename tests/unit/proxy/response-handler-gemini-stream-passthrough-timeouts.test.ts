@@ -224,7 +224,9 @@ async function startSseServer(handler: Parameters<typeof createServer>[0]): Prom
 async function readWithTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   timeoutMs: number
-): Promise<{ ok: true; value: ReadableStreamReadResult<Uint8Array> } | { ok: false; reason: "timeout" }> {
+): Promise<
+  { ok: true; value: ReadableStreamReadResult<Uint8Array> } | { ok: false; reason: "timeout" }
+> {
   const result = await Promise.race([
     reader.read().then((value) => ({ ok: true as const, value })),
     new Promise<{ ok: false; reason: "timeout" }>((resolve) =>
@@ -253,7 +255,11 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         url: baseUrl,
         firstByteTimeoutStreamingMs: 200,
       });
-      const session = createSession({ clientAbortSignal: clientAbortController.signal, messageId: 1, userId: 1 });
+      const session = createSession({
+        clientAbortSignal: clientAbortController.signal,
+        messageId: 1,
+        userId: 1,
+      });
       session.setProvider(provider);
 
       const doForward = (
@@ -295,10 +301,10 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         connection: "keep-alive",
       });
       res.flushHeaders();
-      res.write("data: {\"x\":1}\n\n");
+      res.write('data: {"x":1}\n\n');
       setTimeout(() => {
         try {
-          res.write("data: {\"x\":2}\n\n");
+          res.write('data: {"x":2}\n\n');
           res.end();
         } catch {
           // ignore
@@ -313,7 +319,11 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         firstByteTimeoutStreamingMs: 100,
         streamingIdleTimeoutMs: 0,
       });
-      const session = createSession({ clientAbortSignal: clientAbortController.signal, messageId: 2, userId: 1 });
+      const session = createSession({
+        clientAbortSignal: clientAbortController.signal,
+        messageId: 2,
+        userId: 1,
+      });
       session.setProvider(provider);
 
       const doForward = (
@@ -340,7 +350,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       }
 
       // 第二块数据在 150ms 发送，若首字节超时未被清除，则 100ms 左右就会被中断拿不到第二块
-      expect(fullText).toContain("\"x\":2");
+      expect(fullText).toContain('"x":2');
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();
@@ -357,7 +367,7 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         connection: "keep-alive",
       });
       res.flushHeaders();
-      res.write("data: {\"x\":1}\n\n");
+      res.write('data: {"x":1}\n\n');
       // 不再发送数据，也不结束连接
     });
 
@@ -368,7 +378,11 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         firstByteTimeoutStreamingMs: 1000,
         streamingIdleTimeoutMs: 120,
       });
-      const session = createSession({ clientAbortSignal: clientAbortController.signal, messageId: 3, userId: 1 });
+      const session = createSession({
+        clientAbortSignal: clientAbortController.signal,
+        messageId: 3,
+        userId: 1,
+      });
       session.setProvider(provider);
 
       const doForward = (
