@@ -75,6 +75,9 @@ function createProvider(overrides: Partial<Provider> = {}): Provider {
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    anthropicMaxTokensPreference: null,
+    anthropicThinkingBudgetPreference: null,
+    geminiGoogleSearchPreference: null,
     tpm: 0,
     rpm: 0,
     rpd: 0,
@@ -175,6 +178,7 @@ describe("ProxyForwarder - non-ok response body hang", () => {
       const session = createSession({ clientAbortSignal: clientAbortController.signal });
       session.setProvider(provider);
 
+      // 直接测试 doForward 以隔离单次转发行为，避免 send() 的重试/供应商切换逻辑干扰。
       const doForward = (
         ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown }
       ).doForward;
@@ -222,6 +226,7 @@ describe("ProxyForwarder - non-ok response body hang", () => {
       const session = createSession({ clientAbortSignal: clientAbortController.signal });
       session.setProvider(provider);
 
+      // 直接测试 doForward 以隔离单次转发行为，避免 send() 的重试/供应商切换逻辑干扰。
       const doForward = (
         ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown }
       ).doForward;

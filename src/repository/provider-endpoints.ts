@@ -370,7 +370,7 @@ export async function deleteProviderEndpointProbeLogsBeforeDateBatch(input: {
   batchSize?: number;
 }): Promise<number> {
   const batchSize = input.batchSize ?? 10_000;
-  // ⚠️ 兼容性：某些运行时/驱动组合会把 Date 参数序列化成
+  // Note: 兼容性：某些运行时/驱动组合会把 Date 参数序列化成
   // "Mon Feb ... GMT+0800 (China Standard Time)" 这类字符串，Postgres 无法解析（time zone not recognized）。
   // 统一转为 ISO-8601，并显式 cast 为 timestamptz，避免清理任务异常导致日志堆积。
   const beforeDateIso = input.beforeDate.toISOString();
