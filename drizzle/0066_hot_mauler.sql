@@ -1,1 +1,1 @@
-ALTER TABLE "providers" ADD COLUMN "anthropic_adaptive_thinking" jsonb DEFAULT 'null'::jsonb;
+ALTER TABLE "providers" ADD COLUMN "anthropic_adaptive_thinking" jsonb DEFAULT NULL;
