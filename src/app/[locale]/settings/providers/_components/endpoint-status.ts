@@ -19,6 +19,22 @@ export type EndpointStatusToken =
   | "circuit-open"
   | "circuit-half-open";
 
+/**
+ * Source of incident for unified status semantics.
+ * - "provider": Incident originates from provider-level health check
+ * - "endpoint": Incident originates from endpoint-level health check (circuit breaker)
+ */
+export type IncidentSource = "provider" | "endpoint";
+
+/**
+ * Resolved display status for endpoint with unified semantics.
+ */
+export interface EndpointDisplayStatus {
+  status: string;
+  source: IncidentSource;
+  priority: number;
+}
+
 export interface EndpointStatusModel {
   status: EndpointStatusToken;
   labelKey: string;
@@ -103,5 +119,49 @@ export function getEndpointStatusModel(
     color: "text-slate-400",
     bgColor: "bg-slate-400/10",
     borderColor: "border-slate-400/30",
+  };
+}
+
+/**
+ * Resolves the display status for an endpoint with unified semantics.
+ *
+ * Priority order:
+ * 1. circuit-open (priority 0) - Circuit breaker has opened
+ * 2. circuit-half-open (priority 1) - Circuit breaker is testing recovery
+ * 3. enabled (priority 2) - Circuit closed and endpoint is enabled
+ * 4. disabled (priority 3) - Circuit closed but endpoint is disabled
+ *
+ * @param endpoint - Endpoint data with optional isEnabled property
+ * @param circuitState - Current circuit breaker state
+ * @returns Display status with source indicator and priority
+ */
+export function resolveEndpointDisplayStatus(
+  endpoint: { lastProbeOk: boolean | null; isEnabled?: boolean | null },
+  circuitState?: EndpointCircuitState | null
+): EndpointDisplayStatus {
+  // Priority 0: Circuit Open
+  if (circuitState === "open") {
+    return {
+      status: "circuit-open",
+      source: "endpoint",
+      priority: 0,
+    };
+  }
+
+  // Priority 1: Circuit Half-Open
+  if (circuitState === "half-open") {
+    return {
+      status: "circuit-half-open",
+      source: "endpoint",
+      priority: 1,
+    };
+  }
+
+  // Priority 2/3: Circuit Closed - check enabled/disabled
+  const isExplicitlyDisabled = endpoint.isEnabled === false;
+  return {
+    status: isExplicitlyDisabled ? "disabled" : "enabled",
+    source: "endpoint",
+    priority: isExplicitlyDisabled ? 3 : 2,
   };
 }
