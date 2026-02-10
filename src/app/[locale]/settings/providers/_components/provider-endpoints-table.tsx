@@ -421,21 +421,27 @@ export function AddEndpointButton({
         toast.success(t("endpointAddSuccess"));
         setOpen(false);
         // Invalidate both specific and general queries
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints", vendorId] });
+        // Explicitly suppress rejections to avoid double toast
+        queryClient
+          .invalidateQueries({ queryKey: ["provider-endpoints", vendorId] })
+          .catch(() => undefined);
         if (fixedProviderType) {
-          queryClient.invalidateQueries({
-            queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
-              (value) => value != null
-            ),
-          });
+          queryClient
+            .invalidateQueries({
+              queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
+                (value) => value != null
+              ),
+            })
+            .catch(() => undefined);
         }
-      } else {
-        toast.error(
-          res.errorCode
-            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-            : t("endpointAddFailed")
-        );
+        return;
       }
+
+      toast.error(
+        res.errorCode
+          ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+          : t("endpointAddFailed")
+      );
     } catch (_err) {
       toast.error(t("endpointAddFailed"));
     } finally {
@@ -591,14 +597,15 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
       if (res.ok) {
         toast.success(t("endpointUpdateSuccess"));
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
-      } else {
-        toast.error(
-          res.errorCode
-            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-            : t("endpointUpdateFailed")
-        );
+        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] }).catch(() => undefined);
+        return;
       }
+
+      toast.error(
+        res.errorCode
+          ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+          : t("endpointUpdateFailed")
+      );
     } catch (_err) {
       toast.error(t("endpointUpdateFailed"));
     } finally {

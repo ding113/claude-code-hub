@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
-import { VacuumFilter } from "@/lib/vacuum-filter/vacuum-filter";
 import { randomBytes } from "@/lib/vacuum-filter/random";
+import { VacuumFilter } from "@/lib/vacuum-filter/vacuum-filter";
 
 type ApiKeyVacuumFilterStats = {
   enabled: boolean;

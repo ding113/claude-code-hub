@@ -23,6 +23,7 @@ export default defineConfig({
       "tests/integration/notification-bindings.test.ts",
       "tests/integration/auth.test.ts",
       "tests/integration/provider-endpoint-sync-race.test.ts",
+      "tests/integration/provider-endpoint-regression-742.test.ts",
       // 需要 DB 的 API 测试（从主配置排除，在此运行）
       "tests/api/users-actions.test.ts",
       "tests/api/providers-actions.test.ts",

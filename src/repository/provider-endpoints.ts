@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, gt, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import {
   providerEndpointProbeLogs,
@@ -10,6 +10,10 @@ import {
 } from "@/drizzle/schema";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
+import {
+  PROVIDER_ENDPOINT_CONFLICT_CODE,
+  PROVIDER_ENDPOINT_WRITE_READ_INCONSISTENCY_CODE,
+} from "@/lib/provider-endpoint-error-codes";
 import type {
   ProviderEndpoint,
   ProviderEndpointProbeLog,
@@ -23,6 +27,13 @@ type QueryExecutor = Pick<
   TransactionExecutor,
   "select" | "insert" | "update" | "delete" | "execute"
 >;
+
+const providerEndpointsConflictTarget = [
+  providerEndpoints.vendorId,
+  providerEndpoints.providerType,
+  providerEndpoints.url,
+];
+const providerEndpointsConflictWhere = sql`${providerEndpoints.deletedAt} IS NULL`;
 
 function isUniqueViolationError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
@@ -193,6 +204,94 @@ function toProviderEndpoint(row: any): ProviderEndpoint {
     updatedAt: toDate(row.updatedAt),
     deletedAt: toNullableDate(row.deletedAt),
   };
+}
+
+const providerEndpointSelectFields = {
+  id: providerEndpoints.id,
+  vendorId: providerEndpoints.vendorId,
+  providerType: providerEndpoints.providerType,
+  url: providerEndpoints.url,
+  label: providerEndpoints.label,
+  sortOrder: providerEndpoints.sortOrder,
+  isEnabled: providerEndpoints.isEnabled,
+  lastProbedAt: providerEndpoints.lastProbedAt,
+  lastProbeOk: providerEndpoints.lastProbeOk,
+  lastProbeStatusCode: providerEndpoints.lastProbeStatusCode,
+  lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
+  lastProbeErrorType: providerEndpoints.lastProbeErrorType,
+  lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
+  createdAt: providerEndpoints.createdAt,
+  updatedAt: providerEndpoints.updatedAt,
+  deletedAt: providerEndpoints.deletedAt,
+};
+
+type EditableEndpointFields = Pick<ProviderEndpoint, "url" | "label" | "sortOrder" | "isEnabled">;
+
+function pickEditableFieldExpectations(payload: {
+  url?: string;
+  label?: string | null;
+  sortOrder?: number;
+  isEnabled?: boolean;
+}): Partial<EditableEndpointFields> {
+  const expected: Partial<EditableEndpointFields> = {};
+
+  if (payload.url !== undefined) {
+    expected.url = payload.url.trim();
+  }
+  if (payload.label !== undefined) {
+    expected.label = payload.label;
+  }
+  if (payload.sortOrder !== undefined) {
+    expected.sortOrder = payload.sortOrder;
+  }
+  if (payload.isEnabled !== undefined) {
+    expected.isEnabled = payload.isEnabled;
+  }
+
+  return expected;
+}
+
+function matchesEditableFieldExpectations(
+  endpoint: ProviderEndpoint,
+  expected: Partial<EditableEndpointFields>
+): boolean {
+  if (expected.url !== undefined && endpoint.url !== expected.url) {
+    return false;
+  }
+  if (expected.label !== undefined && endpoint.label !== expected.label) {
+    return false;
+  }
+  if (expected.sortOrder !== undefined && endpoint.sortOrder !== expected.sortOrder) {
+    return false;
+  }
+  if (expected.isEnabled !== undefined && endpoint.isEnabled !== expected.isEnabled) {
+    return false;
+  }
+  return true;
+}
+
+async function findActiveProviderEndpointById(
+  endpointId: number
+): Promise<ProviderEndpoint | null> {
+  const rows = await db
+    .select(providerEndpointSelectFields)
+    .from(providerEndpoints)
+    .where(and(eq(providerEndpoints.id, endpointId), isNull(providerEndpoints.deletedAt)))
+    .limit(1);
+
+  return rows[0] ? toProviderEndpoint(rows[0]) : null;
+}
+
+async function readConsistentProviderEndpointAfterWrite(input: {
+  endpointId: number;
+  expected: Partial<EditableEndpointFields>;
+}): Promise<ProviderEndpoint | null> {
+  const current = await findActiveProviderEndpointById(input.endpointId);
+  if (!current) {
+    return null;
+  }
+
+  return matchesEditableFieldExpectations(current, input.expected) ? current : null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -790,7 +889,8 @@ export async function ensureProviderEndpointExistsForUrl(
       updatedAt: now,
     })
     .onConflictDoNothing({
-      target: [providerEndpoints.vendorId, providerEndpoints.providerType, providerEndpoints.url],
+      target: providerEndpointsConflictTarget,
+      where: providerEndpointsConflictWhere,
     })
     .returning({ id: providerEndpoints.id });
 
@@ -918,11 +1018,8 @@ export async function syncProviderEndpointOnProviderEdit(
             updatedAt: now,
           })
           .onConflictDoNothing({
-            target: [
-              providerEndpoints.vendorId,
-              providerEndpoints.providerType,
-              providerEndpoints.url,
-            ],
+            target: providerEndpointsConflictTarget,
+            where: providerEndpointsConflictWhere,
           })
           .returning({ id: providerEndpoints.id });
 
@@ -994,6 +1091,16 @@ export async function syncProviderEndpointOnProviderEdit(
       }
 
       return "noop";
+    };
+
+    const mapEnsureResultToKeptAction = (
+      ensureResult: "created-next" | "revived-next" | "noop"
+    ): ProviderEndpointSyncAction => {
+      return ensureResult === "created-next"
+        ? "kept-previous-and-created-next"
+        : ensureResult === "revived-next"
+          ? "kept-previous-and-revived-next"
+          : "kept-previous-and-kept-next";
     };
 
     const previousKeyEqualsNextKey =
@@ -1077,6 +1184,12 @@ export async function syncProviderEndpointOnProviderEdit(
 
         const ensureResult = await ensureNextEndpointActive();
 
+        if (keepPreviousWhenReferenced) {
+          return {
+            action: mapEnsureResultToKeptAction(ensureResult),
+          };
+        }
+
         await tx
           .update(providerEndpoints)
           .set({
@@ -1098,12 +1211,7 @@ export async function syncProviderEndpointOnProviderEdit(
 
       const ensureResult = await ensureNextEndpointActive();
       return {
-        action:
-          ensureResult === "created-next"
-            ? "kept-previous-and-created-next"
-            : ensureResult === "revived-next"
-              ? "kept-previous-and-revived-next"
-              : "kept-previous-and-kept-next",
+        action: mapEnsureResultToKeptAction(ensureResult),
       };
     }
 
@@ -1119,6 +1227,12 @@ export async function syncProviderEndpointOnProviderEdit(
         keepPreviousWhenReferenced && (await hasActiveReferencesOnPreviousUrl());
 
       if (!previousIsReferenced) {
+        if (keepPreviousWhenReferenced) {
+          return {
+            action: mapEnsureResultToKeptAction(ensureResult),
+          };
+        }
+
         await tx
           .update(providerEndpoints)
           .set({
@@ -1164,35 +1278,151 @@ export async function syncProviderEndpointOnProviderEdit(
   return result;
 }
 
-export async function backfillProviderEndpointsFromProviders(): Promise<{
+type BackfillProviderEndpointCandidate = {
+  key: string;
+  providerId: number;
+  vendorId: number;
+  providerType: ProviderType;
+  url: string;
+};
+
+type BackfillProviderEndpointRisk =
+  | "deterministic-safe-insert"
+  | "historical-ambiguous-report-only"
+  | "invalid-provider-row";
+
+type BackfillProviderEndpointReason =
+  | "missing-active-endpoint"
+  | "historical-soft-deleted-endpoint-present"
+  | "active-provider-vendor-id-invalid"
+  | "active-provider-url-empty"
+  | "active-provider-url-invalid";
+
+export interface BackfillProviderEndpointSample {
+  providerId: number | null;
+  vendorId: number | null;
+  providerType: ProviderType | null;
+  url: string;
+  key: string | null;
+  risk: BackfillProviderEndpointRisk;
+  reason: BackfillProviderEndpointReason;
+}
+
+export interface BackfillProviderEndpointsFromProvidersOptions {
+  mode?: "dry-run" | "apply";
+  sampleLimit?: number;
+  vendorIds?: number[];
+}
+
+export interface BackfillProviderEndpointsFromProvidersSummary {
   inserted: number;
   uniqueCandidates: number;
   skippedInvalid: number;
-}> {
+}
+
+export interface BackfillProviderEndpointsFromProvidersReport
+  extends BackfillProviderEndpointsFromProvidersSummary {
+  mode: "dry-run" | "apply";
+  repaired: number;
+  scannedProviders: number;
+  missingActiveEndpoints: number;
+  deterministicCandidates: number;
+  reportOnlyHistoricalCandidates: number;
+  reportOnlyTotal: number;
+  sampleLimit: number;
+  riskSummary: {
+    deterministicSafeInsert: number;
+    reportOnlyHistoricalAmbiguous: number;
+    reportOnlyInvalidProvider: number;
+  };
+  samples: {
+    deterministic: BackfillProviderEndpointSample[];
+    reportOnlyHistorical: BackfillProviderEndpointSample[];
+    invalid: BackfillProviderEndpointSample[];
+  };
+}
+
+function toProviderEndpointCandidateKey(input: {
+  vendorId: number;
+  providerType: ProviderType;
+  url: string;
+}): string {
+  return `${input.vendorId}|${input.providerType}|${input.url}`;
+}
+
+function clampSampleLimit(value: number | undefined): number {
+  if (!Number.isFinite(value) || (value ?? 0) <= 0) {
+    return 20;
+  }
+  return Math.min(Math.trunc(value ?? 20), 2000);
+}
+
+function sanitizeBackfillVendorScope(vendorIds: number[] | undefined): number[] {
+  if (!vendorIds || vendorIds.length === 0) {
+    return [];
+  }
+
+  const unique = new Set<number>();
+  for (const vendorId of vendorIds) {
+    if (Number.isInteger(vendorId) && vendorId > 0) {
+      unique.add(vendorId);
+    }
+  }
+
+  return [...unique].sort((left, right) => left - right);
+}
+
+function pushBackfillSample(
+  samples: BackfillProviderEndpointSample[],
+  sample: BackfillProviderEndpointSample,
+  sampleLimit: number
+): void {
+  if (samples.length < sampleLimit) {
+    samples.push(sample);
+  }
+}
+
+function compareBackfillCandidates(
+  left: BackfillProviderEndpointCandidate,
+  right: BackfillProviderEndpointCandidate
+): number {
+  if (left.vendorId !== right.vendorId) {
+    return left.vendorId - right.vendorId;
+  }
+  if (left.providerType !== right.providerType) {
+    return left.providerType.localeCompare(right.providerType);
+  }
+  return left.url.localeCompare(right.url);
+}
+
+export async function backfillProviderEndpointsFromProviders(): Promise<BackfillProviderEndpointsFromProvidersSummary>;
+export async function backfillProviderEndpointsFromProviders(
+  options: BackfillProviderEndpointsFromProvidersOptions
+): Promise<BackfillProviderEndpointsFromProvidersReport>;
+export async function backfillProviderEndpointsFromProviders(
+  options?: BackfillProviderEndpointsFromProvidersOptions
+): Promise<
+  BackfillProviderEndpointsFromProvidersSummary | BackfillProviderEndpointsFromProvidersReport
+> {
+  const mode = options?.mode ?? "apply";
   const pageSize = 1000;
   const insertBatchSize = 500;
+  const sampleLimit = clampSampleLimit(options?.sampleLimit);
+  const scopedVendorIds = sanitizeBackfillVendorScope(options?.vendorIds);
 
   let lastProviderId = 0;
+  let scannedProviders = 0;
   let skippedInvalid = 0;
-  let insertedTotal = 0;
-  const seen = new Set<string>();
-  const pending: Array<{ vendorId: number; providerType: ProviderType; url: string }> = [];
 
-  const flush = async (): Promise<void> => {
-    if (pending.length === 0) return;
-    const now = new Date();
-    const inserted = await db
-      .insert(providerEndpoints)
-      .values(pending.map((value) => ({ ...value, updatedAt: now })))
-      .onConflictDoNothing({
-        target: [providerEndpoints.vendorId, providerEndpoints.providerType, providerEndpoints.url],
-      })
-      .returning({ id: providerEndpoints.id });
-    insertedTotal += inserted.length;
-    pending.length = 0;
-  };
+  const candidatesByKey = new Map<string, BackfillProviderEndpointCandidate>();
+  const invalidSamples: BackfillProviderEndpointSample[] = [];
 
   while (true) {
+    const whereClauses = [isNull(providers.deletedAt), gt(providers.id, lastProviderId)];
+    if (scopedVendorIds.length > 0) {
+      whereClauses.push(inArray(providers.providerVendorId, scopedVendorIds));
+    }
+
     const rows = await db
       .select({
         id: providers.id,
@@ -1201,7 +1431,7 @@ export async function backfillProviderEndpointsFromProviders(): Promise<{
         url: providers.url,
       })
       .from(providers)
-      .where(and(isNull(providers.deletedAt), gt(providers.id, lastProviderId)))
+      .where(and(...whereClauses))
       .orderBy(asc(providers.id))
       .limit(pageSize);
 
@@ -1211,15 +1441,42 @@ export async function backfillProviderEndpointsFromProviders(): Promise<{
 
     for (const row of rows) {
       lastProviderId = Math.max(lastProviderId, row.id);
+      scannedProviders += 1;
 
       if (!row.vendorId || row.vendorId <= 0) {
-        skippedInvalid++;
+        skippedInvalid += 1;
+        pushBackfillSample(
+          invalidSamples,
+          {
+            providerId: row.id,
+            vendorId: row.vendorId ?? null,
+            providerType: row.providerType,
+            url: row.url,
+            key: null,
+            risk: "invalid-provider-row",
+            reason: "active-provider-vendor-id-invalid",
+          },
+          sampleLimit
+        );
         continue;
       }
 
       const trimmedUrl = row.url.trim();
       if (!trimmedUrl) {
-        skippedInvalid++;
+        skippedInvalid += 1;
+        pushBackfillSample(
+          invalidSamples,
+          {
+            providerId: row.id,
+            vendorId: row.vendorId,
+            providerType: row.providerType,
+            url: row.url,
+            key: null,
+            risk: "invalid-provider-row",
+            reason: "active-provider-url-empty",
+          },
+          sampleLimit
+        );
         continue;
       }
 
@@ -1227,89 +1484,320 @@ export async function backfillProviderEndpointsFromProviders(): Promise<{
         // eslint-disable-next-line no-new
         new URL(trimmedUrl);
       } catch {
-        skippedInvalid++;
+        skippedInvalid += 1;
+        pushBackfillSample(
+          invalidSamples,
+          {
+            providerId: row.id,
+            vendorId: row.vendorId,
+            providerType: row.providerType,
+            url: trimmedUrl,
+            key: null,
+            risk: "invalid-provider-row",
+            reason: "active-provider-url-invalid",
+          },
+          sampleLimit
+        );
         continue;
       }
 
-      const key = `${row.vendorId}|${row.providerType}|${trimmedUrl}`;
-      if (seen.has(key)) {
+      const key = toProviderEndpointCandidateKey({
+        vendorId: row.vendorId,
+        providerType: row.providerType,
+        url: trimmedUrl,
+      });
+
+      if (candidatesByKey.has(key)) {
         continue;
       }
-      seen.add(key);
-      pending.push({ vendorId: row.vendorId, providerType: row.providerType, url: trimmedUrl });
+
+      candidatesByKey.set(key, {
+        key,
+        providerId: row.id,
+        vendorId: row.vendorId,
+        providerType: row.providerType,
+        url: trimmedUrl,
+      });
+    }
+  }
+
+  const candidateKeys = new Set(candidatesByKey.keys());
+  const activeEndpointKeys = new Set<string>();
+
+  if (candidateKeys.size > 0) {
+    let lastEndpointId = 0;
+    while (true) {
+      const whereClauses = [
+        isNull(providerEndpoints.deletedAt),
+        gt(providerEndpoints.id, lastEndpointId),
+      ];
+      if (scopedVendorIds.length > 0) {
+        whereClauses.push(inArray(providerEndpoints.vendorId, scopedVendorIds));
+      }
+
+      const rows = await db
+        .select({
+          id: providerEndpoints.id,
+          vendorId: providerEndpoints.vendorId,
+          providerType: providerEndpoints.providerType,
+          url: providerEndpoints.url,
+        })
+        .from(providerEndpoints)
+        .where(and(...whereClauses))
+        .orderBy(asc(providerEndpoints.id))
+        .limit(pageSize);
+
+      if (rows.length === 0) {
+        break;
+      }
+
+      for (const row of rows) {
+        lastEndpointId = Math.max(lastEndpointId, row.id);
+        const key = toProviderEndpointCandidateKey({
+          vendorId: row.vendorId,
+          providerType: row.providerType,
+          url: row.url.trim(),
+        });
+        if (candidateKeys.has(key)) {
+          activeEndpointKeys.add(key);
+        }
+      }
+
+      if (activeEndpointKeys.size === candidateKeys.size) {
+        break;
+      }
+    }
+  }
+
+  const missingCandidates = [...candidatesByKey.values()]
+    .filter((candidate) => !activeEndpointKeys.has(candidate.key))
+    .sort(compareBackfillCandidates);
+
+  const missingCandidateKeys = new Set(missingCandidates.map((candidate) => candidate.key));
+  const historicalSoftDeletedKeys = new Set<string>();
+
+  if (missingCandidateKeys.size > 0) {
+    let lastEndpointId = 0;
+    while (true) {
+      const whereClauses = [
+        isNotNull(providerEndpoints.deletedAt),
+        gt(providerEndpoints.id, lastEndpointId),
+      ];
+      if (scopedVendorIds.length > 0) {
+        whereClauses.push(inArray(providerEndpoints.vendorId, scopedVendorIds));
+      }
+
+      const rows = await db
+        .select({
+          id: providerEndpoints.id,
+          vendorId: providerEndpoints.vendorId,
+          providerType: providerEndpoints.providerType,
+          url: providerEndpoints.url,
+        })
+        .from(providerEndpoints)
+        .where(and(...whereClauses))
+        .orderBy(asc(providerEndpoints.id))
+        .limit(pageSize);
+
+      if (rows.length === 0) {
+        break;
+      }
+
+      for (const row of rows) {
+        lastEndpointId = Math.max(lastEndpointId, row.id);
+        const key = toProviderEndpointCandidateKey({
+          vendorId: row.vendorId,
+          providerType: row.providerType,
+          url: row.url.trim(),
+        });
+        if (missingCandidateKeys.has(key)) {
+          historicalSoftDeletedKeys.add(key);
+        }
+      }
+
+      if (historicalSoftDeletedKeys.size === missingCandidateKeys.size) {
+        break;
+      }
+    }
+  }
+
+  const deterministicSamples: BackfillProviderEndpointSample[] = [];
+  const reportOnlyHistoricalSamples: BackfillProviderEndpointSample[] = [];
+  const deterministicCandidates: BackfillProviderEndpointCandidate[] = [];
+  let reportOnlyHistoricalCandidates = 0;
+
+  for (const candidate of missingCandidates) {
+    if (historicalSoftDeletedKeys.has(candidate.key)) {
+      reportOnlyHistoricalCandidates += 1;
+      pushBackfillSample(
+        reportOnlyHistoricalSamples,
+        {
+          providerId: candidate.providerId,
+          vendorId: candidate.vendorId,
+          providerType: candidate.providerType,
+          url: candidate.url,
+          key: candidate.key,
+          risk: "historical-ambiguous-report-only",
+          reason: "historical-soft-deleted-endpoint-present",
+        },
+        sampleLimit
+      );
+      continue;
+    }
+
+    deterministicCandidates.push(candidate);
+    pushBackfillSample(
+      deterministicSamples,
+      {
+        providerId: candidate.providerId,
+        vendorId: candidate.vendorId,
+        providerType: candidate.providerType,
+        url: candidate.url,
+        key: candidate.key,
+        risk: "deterministic-safe-insert",
+        reason: "missing-active-endpoint",
+      },
+      sampleLimit
+    );
+  }
+
+  let repaired = 0;
+  if (mode === "apply" && deterministicCandidates.length > 0) {
+    const pending: Array<{ vendorId: number; providerType: ProviderType; url: string }> = [];
+    const flush = async (): Promise<void> => {
+      if (pending.length === 0) {
+        return;
+      }
+
+      const now = new Date();
+      const inserted = await db
+        .insert(providerEndpoints)
+        .values(pending.map((value) => ({ ...value, updatedAt: now })))
+        .onConflictDoNothing({
+          target: providerEndpointsConflictTarget,
+          where: providerEndpointsConflictWhere,
+        })
+        .returning({ id: providerEndpoints.id });
+      repaired += inserted.length;
+      pending.length = 0;
+    };
+
+    for (const candidate of deterministicCandidates) {
+      pending.push({
+        vendorId: candidate.vendorId,
+        providerType: candidate.providerType,
+        url: candidate.url,
+      });
 
       if (pending.length >= insertBatchSize) {
         await flush();
       }
     }
+
+    await flush();
   }
 
-  await flush();
-  return { inserted: insertedTotal, uniqueCandidates: seen.size, skippedInvalid };
+  const report: BackfillProviderEndpointsFromProvidersReport = {
+    mode,
+    inserted: repaired,
+    repaired,
+    uniqueCandidates: candidatesByKey.size,
+    skippedInvalid,
+    scannedProviders,
+    missingActiveEndpoints: missingCandidates.length,
+    deterministicCandidates: deterministicCandidates.length,
+    reportOnlyHistoricalCandidates,
+    reportOnlyTotal: reportOnlyHistoricalCandidates + skippedInvalid,
+    sampleLimit,
+    riskSummary: {
+      deterministicSafeInsert: deterministicCandidates.length,
+      reportOnlyHistoricalAmbiguous: reportOnlyHistoricalCandidates,
+      reportOnlyInvalidProvider: skippedInvalid,
+    },
+    samples: {
+      deterministic: deterministicSamples,
+      reportOnlyHistorical: reportOnlyHistoricalSamples,
+      invalid: invalidSamples,
+    },
+  };
+
+  if (options === undefined) {
+    return {
+      inserted: report.inserted,
+      uniqueCandidates: report.uniqueCandidates,
+      skippedInvalid: report.skippedInvalid,
+    };
+  }
+
+  return report;
 }
 
 export async function updateProviderEndpoint(
   endpointId: number,
   payload: { url?: string; label?: string | null; sortOrder?: number; isEnabled?: boolean }
 ): Promise<ProviderEndpoint | null> {
-  if (Object.keys(payload).length === 0) {
-    const existing = await db
-      .select({
-        id: providerEndpoints.id,
-        vendorId: providerEndpoints.vendorId,
-        providerType: providerEndpoints.providerType,
-        url: providerEndpoints.url,
-        label: providerEndpoints.label,
-        sortOrder: providerEndpoints.sortOrder,
-        isEnabled: providerEndpoints.isEnabled,
-        lastProbedAt: providerEndpoints.lastProbedAt,
-        lastProbeOk: providerEndpoints.lastProbeOk,
-        lastProbeStatusCode: providerEndpoints.lastProbeStatusCode,
-        lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
-        lastProbeErrorType: providerEndpoints.lastProbeErrorType,
-        lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
-        createdAt: providerEndpoints.createdAt,
-        updatedAt: providerEndpoints.updatedAt,
-        deletedAt: providerEndpoints.deletedAt,
-      })
-      .from(providerEndpoints)
-      .where(and(eq(providerEndpoints.id, endpointId), isNull(providerEndpoints.deletedAt)))
-      .limit(1);
+  const expectedEditableFields = pickEditableFieldExpectations(payload);
 
-    return existing[0] ? toProviderEndpoint(existing[0]) : null;
+  if (Object.keys(payload).length === 0) {
+    return findActiveProviderEndpointById(endpointId);
   }
 
   const now = new Date();
   const updates: Partial<typeof providerEndpoints.$inferInsert> = { updatedAt: now };
-  if (payload.url !== undefined) updates.url = payload.url;
-  if (payload.label !== undefined) updates.label = payload.label;
-  if (payload.sortOrder !== undefined) updates.sortOrder = payload.sortOrder;
-  if (payload.isEnabled !== undefined) updates.isEnabled = payload.isEnabled;
+  if (expectedEditableFields.url !== undefined) updates.url = expectedEditableFields.url;
+  if (expectedEditableFields.label !== undefined) updates.label = expectedEditableFields.label;
+  if (expectedEditableFields.sortOrder !== undefined)
+    updates.sortOrder = expectedEditableFields.sortOrder;
+  if (expectedEditableFields.isEnabled !== undefined)
+    updates.isEnabled = expectedEditableFields.isEnabled;
 
-  const rows = await db
-    .update(providerEndpoints)
-    .set(updates)
-    .where(and(eq(providerEndpoints.id, endpointId), isNull(providerEndpoints.deletedAt)))
-    .returning({
-      id: providerEndpoints.id,
-      vendorId: providerEndpoints.vendorId,
-      providerType: providerEndpoints.providerType,
-      url: providerEndpoints.url,
-      label: providerEndpoints.label,
-      sortOrder: providerEndpoints.sortOrder,
-      isEnabled: providerEndpoints.isEnabled,
-      lastProbedAt: providerEndpoints.lastProbedAt,
-      lastProbeOk: providerEndpoints.lastProbeOk,
-      lastProbeStatusCode: providerEndpoints.lastProbeStatusCode,
-      lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
-      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
-      lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
-      createdAt: providerEndpoints.createdAt,
-      updatedAt: providerEndpoints.updatedAt,
-      deletedAt: providerEndpoints.deletedAt,
+  try {
+    const rows = await db
+      .update(providerEndpoints)
+      .set(updates)
+      .where(and(eq(providerEndpoints.id, endpointId), isNull(providerEndpoints.deletedAt)))
+      .returning(providerEndpointSelectFields);
+
+    const updated = rows[0] ? toProviderEndpoint(rows[0]) : null;
+    if (!updated) {
+      return null;
+    }
+
+    if (matchesEditableFieldExpectations(updated, expectedEditableFields)) {
+      return updated;
+    }
+
+    const consistentAfterRead = await readConsistentProviderEndpointAfterWrite({
+      endpointId,
+      expected: expectedEditableFields,
     });
 
-  return rows[0] ? toProviderEndpoint(rows[0]) : null;
+    if (consistentAfterRead) {
+      return consistentAfterRead;
+    }
+
+    throw Object.assign(new Error("[ProviderEndpointEdit] write-read consistency check failed"), {
+      code: PROVIDER_ENDPOINT_WRITE_READ_INCONSISTENCY_CODE,
+    });
+  } catch (error) {
+    if (!isUniqueViolationError(error)) {
+      throw error;
+    }
+
+    const consistentAfterConflict = await readConsistentProviderEndpointAfterWrite({
+      endpointId,
+      expected: expectedEditableFields,
+    });
+
+    if (consistentAfterConflict) {
+      return consistentAfterConflict;
+    }
+
+    throw Object.assign(new Error("[ProviderEndpointEdit] endpoint conflict"), {
+      code: PROVIDER_ENDPOINT_CONFLICT_CODE,
+      cause: error,
+    });
+  }
 }
 
 export async function softDeleteProviderEndpoint(endpointId: number): Promise<boolean> {
