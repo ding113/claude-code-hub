@@ -287,6 +287,7 @@ describe("AgentPool", () => {
         }
       } finally {
         await realPool.shutdown();
+        vi.useFakeTimers();
       }
     });
 
