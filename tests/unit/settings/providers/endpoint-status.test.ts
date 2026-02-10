@@ -198,7 +198,7 @@ describe("resolveEndpointDisplayStatus", () => {
       });
     });
 
-    it("should return disabled when circuit is closed and isEnabled is null", () => {
+    it("should return enabled when circuit is closed and isEnabled is null", () => {
       const endpoint = createEndpoint(true, null as unknown as undefined);
       const result = resolveEndpointDisplayStatus(endpoint, "closed");
 

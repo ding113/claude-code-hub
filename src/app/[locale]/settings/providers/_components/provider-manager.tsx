@@ -109,7 +109,7 @@ export function ProviderManager({
       }
       // Endpoint-level circuit open
       const endpoints = endpointCircuitInfo[providerId];
-      if (endpoints?.some((ep) => ep.circuitState === "open")) {
+      if (Array.isArray(endpoints) && endpoints.some((ep) => ep.circuitState === "open")) {
         return true;
       }
       return false;

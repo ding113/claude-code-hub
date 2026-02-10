@@ -523,8 +523,8 @@ export class ProxyForwarder {
           session.addProviderToChain(currentProvider, {
             reason: "endpoint_pool_exhausted",
             strictBlockCause: strictBlockCause as ProviderChainItem["strictBlockCause"],
-            endpointFilterStats: filterStats,
-            decisionContext: exhaustionContext as ProviderChainItem["decisionContext"],
+            ...(filterStats ? { endpointFilterStats: filterStats } : {}),
+            errorMessage: endpointSelectionError?.message,
           });
 
           failedProviderIds.push(currentProvider.id);

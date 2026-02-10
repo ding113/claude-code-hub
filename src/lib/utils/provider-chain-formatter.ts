@@ -720,7 +720,7 @@ export function formatProviderTimeline(
       timeline += `${t("timeline.provider", { provider: item.name })}\n`;
 
       // 端点过滤统计
-      if (item.endpointFilterStats) {
+      if (item.endpointFilterStats && typeof item.endpointFilterStats.total === "number") {
         const stats = item.endpointFilterStats;
         timeline += `\n${t("timeline.endpointStats")}:\n`;
         timeline += `${t("timeline.endpointStatsTotal", { count: stats.total })}\n`;

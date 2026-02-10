@@ -558,15 +558,8 @@ describe("ProxyForwarder - endpoint audit", () => {
       available: 0,
     });
 
-    // decisionContext should contain strictBlockCause
-    expect(exhaustedItem!.decisionContext).toBeDefined();
-    expect(exhaustedItem!.decisionContext).toEqual(
-      expect.objectContaining({
-        strictBlockCause: "no_endpoint_candidates",
-      })
-    );
-    // Should NOT contain selectorError for no_endpoint_candidates
-    expect(exhaustedItem!.decisionContext).not.toHaveProperty("selectorError");
+    // errorMessage should be undefined for no_endpoint_candidates (no exception)
+    expect(exhaustedItem!.errorMessage).toBeUndefined();
   });
 
   test("endpoint pool exhausted (selector_error) should record endpoint_pool_exhausted with selectorError in decisionContext", async () => {
@@ -609,14 +602,8 @@ describe("ProxyForwarder - endpoint audit", () => {
     // endpointFilterStats should be undefined for selector_error
     expect(exhaustedItem!.endpointFilterStats).toBeUndefined();
 
-    // decisionContext should contain strictBlockCause and selectorError
-    expect(exhaustedItem!.decisionContext).toBeDefined();
-    expect(exhaustedItem!.decisionContext).toEqual(
-      expect.objectContaining({
-        strictBlockCause: "selector_error",
-        selectorError: "Redis connection lost",
-      })
-    );
+    // errorMessage should contain the selector error message
+    expect(exhaustedItem!.errorMessage).toBe("Redis connection lost");
   });
 
   test("selector_error and no_endpoint_candidates are correctly distinguished in provider chain", async () => {
@@ -638,9 +625,7 @@ describe("ProxyForwarder - endpoint audit", () => {
     expect(item1).toBeDefined();
     expect(item1!.strictBlockCause).toBe("selector_error");
     expect(item1!.endpointFilterStats).toBeUndefined();
-    expect(item1!.decisionContext).toEqual(
-      expect.objectContaining({ strictBlockCause: "selector_error" })
-    );
+    expect(item1!.errorMessage).toBe("timeout");
 
     // Test 2: no_endpoint_candidates (empty array returned)
     const session2 = createSession(new URL("https://example.com/v1/chat/completions"));
@@ -671,10 +656,7 @@ describe("ProxyForwarder - endpoint audit", () => {
       circuitOpen: 3,
       available: 0,
     });
-    expect(item2!.decisionContext).toEqual(
-      expect.objectContaining({ strictBlockCause: "no_endpoint_candidates" })
-    );
-    expect(item2!.decisionContext).not.toHaveProperty("selectorError");
+    expect(item2!.errorMessage).toBeUndefined();
   });
 
   test("endpointFilterStats should gracefully handle getEndpointFilterStats failure", async () => {

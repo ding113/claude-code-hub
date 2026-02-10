@@ -26,7 +26,7 @@ import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderDisplay, ProviderVendor } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderEndpointsSection } from "./provider-endpoints-table";
-import type { EndpointCircuitInfoMap } from "./provider-manager";
+
 import { VendorKeysCompactList } from "./vendor-keys-compact-list";
 
 interface ProviderVendorViewProps {
@@ -34,8 +34,6 @@ interface ProviderVendorViewProps {
   currentUser?: User;
   enableMultiProviderTypes: boolean;
   healthStatus: Record<number, any>;
-  /** Endpoint-level circuit breaker info, keyed by provider ID */
-  endpointCircuitInfo?: EndpointCircuitInfoMap;
   statistics: Record<number, any>;
   statisticsLoading: boolean;
   currencyCode: CurrencyCode;

@@ -235,21 +235,25 @@ export async function triggerEndpointCircuitBreakerAlert(
   try {
     const { sendCircuitBreakerAlert } = await import("@/lib/notification/notifier");
 
-    // Try to enrich with endpoint URL from database
+    // Try to enrich with endpoint URL and vendor info from database
     let endpointUrl: string | undefined;
+    let vendorId = 0;
+    let endpointLabel = "";
     try {
       const { findProviderEndpointById } = await import("@/repository");
       const endpoint = await findProviderEndpointById(endpointId);
       if (endpoint) {
         endpointUrl = endpoint.url;
+        vendorId = endpoint.vendorId;
+        endpointLabel = endpoint.label || "";
       }
     } catch {
       // DB lookup failure should not block alert
     }
 
     await sendCircuitBreakerAlert({
-      providerId: endpointId, // Use endpointId as providerId for dedup purposes
-      providerName: "",
+      providerId: vendorId,
+      providerName: endpointLabel || `endpoint:${endpointId}`,
       failureCount,
       retryAt,
       lastError,

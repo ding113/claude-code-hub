@@ -144,8 +144,8 @@ describe("endpoint-circuit-breaker", () => {
 
     expect(sendAlertMock).toHaveBeenCalledTimes(1);
     expect(sendAlertMock).toHaveBeenCalledWith({
-      providerId: 5,
-      providerName: "",
+      providerId: 0,
+      providerName: "endpoint:5",
       failureCount: 3,
       retryAt: "2026-01-01T00:05:00.000Z",
       lastError: "connection refused",
@@ -156,6 +156,8 @@ describe("endpoint-circuit-breaker", () => {
   });
 
   test("triggerEndpointCircuitBreakerAlert should include endpointUrl when available", async () => {
+    vi.resetModules();
+
     const sendAlertMock = vi.fn(async () => {});
     vi.doMock("@/lib/notification/notifier", () => ({
       sendCircuitBreakerAlert: sendAlertMock,
@@ -187,8 +189,8 @@ describe("endpoint-circuit-breaker", () => {
 
     expect(sendAlertMock).toHaveBeenCalledTimes(1);
     expect(sendAlertMock).toHaveBeenCalledWith({
-      providerId: 10,
-      providerName: "",
+      providerId: 1,
+      providerName: "Custom Endpoint",
       failureCount: 3,
       retryAt: "2026-01-01T00:05:00.000Z",
       lastError: "timeout",

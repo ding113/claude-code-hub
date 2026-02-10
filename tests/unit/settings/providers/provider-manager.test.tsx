@@ -326,18 +326,18 @@ describe("ProviderManager circuitBrokenCount with endpoint circuits", () => {
 
     // Find and click the circuit broken toggle
     const toggle = container.querySelector("#circuit-broken-filter");
-    if (toggle) {
-      act(() => {
-        toggle.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      });
+    expect(toggle).not.toBeNull();
 
-      // After activating the filter, only Provider B should be shown
-      const listItems = container.querySelectorAll("[data-testid^='provider-']");
-      const providerNames = Array.from(listItems).map((el) => el.textContent);
-      expect(providerNames).toContain("Provider B");
-      expect(providerNames).not.toContain("Provider A");
-      expect(providerNames).not.toContain("Provider C");
-    }
+    act(() => {
+      toggle!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    // After activating the filter, only Provider B should be shown
+    const listItems = container.querySelectorAll("[data-testid^='provider-']");
+    const providerNames = Array.from(listItems).map((el) => el.textContent);
+    expect(providerNames).toContain("Provider B");
+    expect(providerNames).not.toContain("Provider A");
+    expect(providerNames).not.toContain("Provider C");
 
     unmount();
   });

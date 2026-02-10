@@ -1,7 +1,7 @@
 {
   "circuitBroken": "Сбой соединения",
   "keyCircuitBroken": "Разрыв ключа",
-  "endpointCircuitBroken": "Разрыв endpoint",
+  "endpointCircuitBroken": "Разрыв конечной точки",
   "groups": {
     "all": "Все",
     "default": "default",

@@ -38,7 +38,7 @@
     "concurrentLimit": "Лимит параллельных запросов",
     "http2Fallback": "Откат HTTP/2",
     "clientError": "Ошибка клиента",
-    "endpointPoolExhausted": "Пул эндпоинтов исчерпан"
+    "endpointPoolExhausted": "Пул конечная точкаов исчерпан"
   },
   "reasons": {
     "request_success": "Успешно",
@@ -50,7 +50,7 @@
     "http2_fallback": "Откат HTTP/2",
     "session_reuse": "Повторное использование сессии",
     "initial_selection": "Первоначальный выбор",
-    "endpoint_pool_exhausted": "Пул эндпоинтов исчерпан"
+    "endpoint_pool_exhausted": "Пул конечная точкаов исчерпан"
   },
   "filterReasons": {
     "rate_limited": "Ограничение скорости",
@@ -64,7 +64,7 @@
     "model_not_supported": "Модель не поддерживается",
     "group_mismatch": "Несоответствие группы",
     "health_check_failed": "Проверка состояния не пройдена",
-    "endpoint_circuit_open": "Автомат эндпоинта открыт",
+    "endpoint_circuit_open": "Автомат конечная точкаа открыт",
     "endpoint_disabled": "Эндпоинт отключен"
   },
   "details": {
@@ -190,13 +190,13 @@
     "ruleDescription": "Описание: {description}",
     "ruleHasOverride": "Переопределения: response={response}, statusCode={statusCode}",
     "clientErrorNote": "Эта ошибка вызвана вводом клиента, не повторяется и не учитывается в автомате защиты.",
-    "endpointPoolExhausted": "Пул эндпоинтов исчерпан (все эндпоинты недоступны)",
-    "endpointStats": "Статистика фильтрации эндпоинтов",
-    "endpointStatsTotal": "Всего эндпоинтов: {count}",
-    "endpointStatsEnabled": "Включено эндпоинтов: {count}",
+    "endpointPoolExhausted": "Пул конечная точкаов исчерпан (все конечная точкаы недоступны)",
+    "endpointStats": "Статистика фильтрации конечная точкаов",
+    "endpointStatsTotal": "Всего конечная точкаов: {count}",
+    "endpointStatsEnabled": "Включено конечная точкаов: {count}",
     "endpointStatsCircuitOpen": "Эндпоинтов с открытым автоматом: {count}",
-    "endpointStatsAvailable": "Доступных эндпоинтов: {count}",
-    "strictBlockNoEndpoints": "Строгий режим: нет доступных кандидатов эндпоинтов, провайдер пропущен без отката",
-    "strictBlockSelectorError": "Строгий режим: ошибка селектора эндпоинтов, провайдер пропущен без отката"
+    "endpointStatsAvailable": "Доступных конечная точкаов: {count}",
+    "strictBlockNoEndpoints": "Строгий режим: нет доступных кандидатов конечная точкаов, провайдер пропущен без отката",
+    "strictBlockSelectorError": "Строгий режим: ошибка селектора конечная точкаов, провайдер пропущен без отката"
   }
 }

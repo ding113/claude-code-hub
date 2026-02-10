@@ -25,7 +25,8 @@ export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Pr
     // 防止 5 分钟内重复告警
     const redisClient = getRedisClient();
     const source = data.incidentSource ?? "provider";
-    const dedupSuffix = source === "endpoint" ? `endpoint:${data.endpointId}` : source;
+    const dedupSuffix =
+      source === "endpoint" && data.endpointId != null ? `endpoint:${data.endpointId}` : source;
     if (redisClient) {
       const cacheKey = `circuit-breaker-alert:${data.providerId}:${dedupSuffix}`;
       const cached = await redisClient.get(cacheKey);
