@@ -32,7 +32,8 @@ export interface ProviderChainItem {
     | "retry_with_official_instructions" // Codex instructions 自动重试（官方）
     | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
     | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
-    | "http2_fallback"; // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
+    | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
+    | "endpoint_pool_exhausted"; // 端点池耗尽（所有端点熔断或不可用，严格模式阻止降级）
 
   // === 选择方法（细化） ===
   selectionMethod?:
@@ -53,6 +54,15 @@ export interface ProviderChainItem {
   // 修复：新增熔断计数信息（用于显示距离熔断还有多少次）
   circuitFailureCount?: number; // 失败计数（包含本次失败）
   circuitFailureThreshold?: number; // 熔断阈值
+
+  // 端点池耗尽详情（endpoint_pool_exhausted 专用）
+  strictBlockCause?: "selector_error" | "no_endpoint_candidates"; // 严格模式阻止降级的原因
+  endpointFilterStats?: {
+    total: number; // 总端点数
+    enabled: number; // 启用的端点数
+    circuitOpen: number; // 熔断的端点数
+    available: number; // 可用的端点数（通过熔断检查后）
+  };
 
   // 时间戳和尝试信息
   timestamp?: number;

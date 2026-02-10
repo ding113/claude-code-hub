@@ -1,6 +1,8 @@
 {
   "cancelButton": "キャンセル",
   "circuitBroken": "遮断中",
+  "keyCircuitBroken": "キー遮断",
+  "endpointCircuitBroken": "エンドポイント遮断",
   "clipboardUnavailable": "この環境ではクリップボードを使用できません。手動でコピーしてください。",
   "confirmDeleteMessage": "プロバイダー \"{name}\" を削除してもよろしいですか？この操作は元に戻せません。",
   "confirmDeleteTitle": "プロバイダーの削除を確認しますか?",

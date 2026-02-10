@@ -10,6 +10,8 @@
     "default": "default"
   },
   "circuitBroken": "熔断",
+  "keyCircuitBroken": "Key 熔断",
+  "endpointCircuitBroken": "端点熔断",
   "mobileFilter": "筛选",
   "mobileFilterCount": "筛选 ({count})",
   "resetFilters": "重置筛选"

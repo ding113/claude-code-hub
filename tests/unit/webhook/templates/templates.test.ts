@@ -42,6 +42,77 @@ describe("Message Templates", () => {
       const message = buildCircuitBreakerMessage(data);
       expect(message.header.level).toBe("error");
     });
+
+    it("should default to provider source when incidentSource is not set", () => {
+      const data: CircuitBreakerAlertData = {
+        providerName: "OpenAI",
+        providerId: 1,
+        failureCount: 5,
+        retryAt: "2025-01-02T12:30:00Z",
+      };
+
+      const message = buildCircuitBreakerMessage(data);
+      const sectionsStr = JSON.stringify(message.sections);
+      expect(sectionsStr).toContain("OpenAI");
+      // Default should use provider-style title
+      expect(message.header.title).toMatch(/供应商/);
+    });
+
+    it("should produce provider-specific message when incidentSource is provider", () => {
+      const data: CircuitBreakerAlertData = {
+        providerName: "Anthropic",
+        providerId: 2,
+        failureCount: 3,
+        retryAt: "2025-01-02T13:00:00Z",
+        incidentSource: "provider",
+      };
+
+      const message = buildCircuitBreakerMessage(data);
+      expect(message.header.title).toMatch(/供应商/);
+      const sectionsStr = JSON.stringify(message.sections);
+      expect(sectionsStr).toContain("Anthropic");
+      expect(sectionsStr).toContain("ID: 2");
+    });
+
+    it("should produce endpoint-specific message when incidentSource is endpoint", () => {
+      const data: CircuitBreakerAlertData = {
+        providerName: "OpenAI",
+        providerId: 1,
+        failureCount: 3,
+        retryAt: "2025-01-02T13:00:00Z",
+        incidentSource: "endpoint",
+        endpointId: 42,
+        endpointUrl: "https://api.openai.com/v1",
+      };
+
+      const message = buildCircuitBreakerMessage(data);
+      expect(message.header.title).toMatch(/端点/);
+      const sectionsStr = JSON.stringify(message.sections);
+      expect(sectionsStr).toContain("42");
+      expect(sectionsStr).toContain("https://api.openai.com/v1");
+    });
+
+    it("should include endpoint fields in details when source is endpoint", () => {
+      const data: CircuitBreakerAlertData = {
+        providerName: "OpenAI",
+        providerId: 1,
+        failureCount: 5,
+        retryAt: "2025-01-02T12:30:00Z",
+        lastError: "Connection refused",
+        incidentSource: "endpoint",
+        endpointId: 99,
+        endpointUrl: "https://custom-proxy.example.com/v1",
+      };
+
+      const message = buildCircuitBreakerMessage(data);
+      const sectionsStr = JSON.stringify(message.sections);
+      // Should still include failure count and error
+      expect(sectionsStr).toContain("5");
+      expect(sectionsStr).toContain("Connection refused");
+      // Should include endpoint-specific info
+      expect(sectionsStr).toContain("99");
+      expect(sectionsStr).toContain("https://custom-proxy.example.com/v1");
+    });
   });
 
   describe("buildCostAlertMessage", () => {

@@ -38,6 +38,13 @@ export const TEMPLATE_PLACEHOLDERS = {
     { key: "{{failure_count}}", label: "失败次数", description: "连续失败计数" },
     { key: "{{retry_at}}", label: "恢复时间", description: "预计恢复时间" },
     { key: "{{last_error}}", label: "错误信息", description: "最后一次错误详情" },
+    {
+      key: "{{incident_source}}",
+      label: "熔断来源",
+      description: "provider(Key 熔断) 或 endpoint(Endpoint 熔断)",
+    },
+    { key: "{{endpoint_id}}", label: "端点ID", description: "触发熔断的端点 ID" },
+    { key: "{{endpoint_url}}", label: "端点地址", description: "触发熔断的端点 URL" },
   ],
   daily_leaderboard: [
     { key: "{{date}}", label: "统计日期", description: "YYYY-MM-DD 格式" },
@@ -91,6 +98,9 @@ export function buildTemplateVariables(params: {
     values["{{failure_count}}"] = cb?.failureCount !== undefined ? String(cb.failureCount) : "";
     values["{{retry_at}}"] = cb?.retryAt ?? "";
     values["{{last_error}}"] = cb?.lastError ?? "";
+    values["{{incident_source}}"] = cb?.incidentSource ?? "provider";
+    values["{{endpoint_id}}"] = cb?.endpointId !== undefined ? String(cb.endpointId) : "";
+    values["{{endpoint_url}}"] = cb?.endpointUrl ?? "";
   }
 
   if (notificationType === "daily_leaderboard") {

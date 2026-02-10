@@ -18,7 +18,10 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { applyGeminiGoogleSearchOverrideWithAudit } from "@/lib/gemini/provider-overrides";
 import { logger } from "@/lib/logger";
-import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
+import {
+  getEndpointFilterStats,
+  getPreferredProviderEndpoints,
+} from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
@@ -28,6 +31,7 @@ import {
 } from "@/lib/vendor-type-circuit-breaker";
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
+import type { ProviderChainItem } from "@/types/message";
 import type { ClaudeMetadataUserIdInjectionSpecialSetting } from "@/types/special-settings";
 
 import { GeminiAuth } from "../gemini/auth";
@@ -475,6 +479,10 @@ export class ProxyForwarder {
 
       if (endpointCandidates.length === 0) {
         if (shouldEnforceStrictEndpointPool) {
+          const strictBlockCause = endpointSelectionError
+            ? "selector_error"
+            : "no_endpoint_candidates";
+
           logger.warn(
             "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
             {
@@ -483,12 +491,42 @@ export class ProxyForwarder {
               providerType: currentProvider.providerType,
               requestPath,
               reason: "strict_blocked_legacy_fallback",
-              strictBlockCause: endpointSelectionError
-                ? "selector_error"
-                : "no_endpoint_candidates",
+              strictBlockCause,
               selectorError: endpointSelectionError?.message,
             }
           );
+
+          // Record endpoint pool exhaustion in provider chain for audit trail
+          const exhaustionContext: Record<string, unknown> = { strictBlockCause };
+          if (endpointSelectionError) {
+            exhaustionContext.selectorError = endpointSelectionError.message;
+          }
+
+          // Collect endpoint filter stats for no_endpoint_candidates (selector_error has no data)
+          let filterStats: ProviderChainItem["endpointFilterStats"];
+          if (!endpointSelectionError) {
+            try {
+              const stats = await getEndpointFilterStats({
+                vendorId: providerVendorId,
+                providerType: currentProvider.providerType,
+              });
+              filterStats = stats;
+            } catch (statsError) {
+              logger.warn("[ProxyForwarder] Failed to collect endpoint filter stats", {
+                providerId: currentProvider.id,
+                vendorId: providerVendorId,
+                error: statsError instanceof Error ? statsError.message : String(statsError),
+              });
+            }
+          }
+
+          session.addProviderToChain(currentProvider, {
+            reason: "endpoint_pool_exhausted",
+            strictBlockCause: strictBlockCause as ProviderChainItem["strictBlockCause"],
+            ...(filterStats ? { endpointFilterStats: filterStats } : {}),
+            errorMessage: endpointSelectionError?.message,
+          });
+
           failedProviderIds.push(currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
         } else {

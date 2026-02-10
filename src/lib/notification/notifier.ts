@@ -24,14 +24,18 @@ export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Pr
 
     // 防止 5 分钟内重复告警
     const redisClient = getRedisClient();
+    const source = data.incidentSource ?? "provider";
+    const dedupSuffix =
+      source === "endpoint" && data.endpointId != null ? `endpoint:${data.endpointId}` : source;
     if (redisClient) {
-      const cacheKey = `circuit-breaker-alert:${data.providerId}`;
+      const cacheKey = `circuit-breaker-alert:${data.providerId}:${dedupSuffix}`;
       const cached = await redisClient.get(cacheKey);
 
       if (cached) {
         logger.info({
           action: "circuit_breaker_alert_suppressed",
           providerId: data.providerId,
+          incidentSource: source,
           reason: "duplicate_within_5min",
         });
         return;
@@ -112,11 +116,13 @@ export async function sendCircuitBreakerAlert(data: CircuitBreakerAlertData): Pr
     logger.info({
       action: "circuit_breaker_alert_sent",
       providerId: data.providerId,
+      incidentSource: source,
     });
   } catch (error) {
     logger.error({
       action: "send_circuit_breaker_alert_error",
       providerId: data.providerId,
+      incidentSource: data.incidentSource ?? "provider",
       error: error instanceof Error ? error.message : String(error),
     });
   }

@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
+import type { EndpointCircuitInfoMap } from "./provider-manager";
 import { ProviderRichListItem } from "./provider-rich-list-item";
 
 interface ProviderListProps {
@@ -19,6 +20,8 @@ interface ProviderListProps {
       recoveryMinutes: number | null;
     }
   >;
+  /** Endpoint-level circuit breaker info, keyed by provider ID */
+  endpointCircuitInfo?: EndpointCircuitInfoMap;
   statistics?: ProviderStatisticsMap;
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
@@ -36,6 +39,7 @@ export function ProviderList({
   providers,
   currentUser,
   healthStatus,
+  endpointCircuitInfo = {},
   statistics = {},
   statisticsLoading = false,
   currencyCode = "USD",
@@ -70,6 +74,7 @@ export function ProviderList({
           provider={provider}
           currentUser={currentUser}
           healthStatus={healthStatus[provider.id]}
+          endpointCircuitInfo={endpointCircuitInfo[provider.id]}
           statistics={statistics[provider.id]}
           statisticsLoading={statisticsLoading}
           currencyCode={currencyCode}

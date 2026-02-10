@@ -37,7 +37,8 @@
     "systemError": "系统错误",
     "concurrentLimit": "并发限制",
     "http2Fallback": "HTTP/2 回退",
-    "clientError": "客户端错误"
+    "clientError": "客户端错误",
+    "endpointPoolExhausted": "端点池耗尽"
   },
   "reasons": {
     "request_success": "成功",
@@ -48,7 +49,8 @@
     "concurrent_limit_failed": "并发限制",
     "http2_fallback": "HTTP/2 回退",
     "session_reuse": "会话复用",
-    "initial_selection": "首次选择"
+    "initial_selection": "首次选择",
+    "endpoint_pool_exhausted": "端点池耗尽"
   },
   "filterReasons": {
     "rate_limited": "速率限制",
@@ -61,7 +63,9 @@
     "context_1m_disabled": "1M上下文已禁用",
     "model_not_supported": "不支持该模型",
     "group_mismatch": "分组不匹配",
-    "health_check_failed": "健康检查失败"
+    "health_check_failed": "健康检查失败",
+    "endpoint_circuit_open": "端点已熔断",
+    "endpoint_disabled": "端点已禁用"
   },
   "details": {
     "selectionMethod": "选择方式",
@@ -185,6 +189,14 @@
     "ruleMatchType": "匹配类型: {matchType}",
     "ruleDescription": "规则描述: {description}",
     "ruleHasOverride": "覆写配置: 响应体={response}, 状态码={statusCode}",
-    "clientErrorNote": "此错误由用户输入导致，不会重试，不计入熔断器。"
+    "clientErrorNote": "此错误由用户输入导致，不会重试，不计入熔断器。",
+    "endpointPoolExhausted": "端点池耗尽（所有端点不可用）",
+    "endpointStats": "端点过滤统计",
+    "endpointStatsTotal": "总端点数: {count}",
+    "endpointStatsEnabled": "已启用端点: {count}",
+    "endpointStatsCircuitOpen": "已熔断端点: {count}",
+    "endpointStatsAvailable": "可用端点: {count}",
+    "strictBlockNoEndpoints": "严格模式：无可用端点候选，跳过该供应商且不降级",
+    "strictBlockSelectorError": "严格模式：端点选择器发生错误，跳过该供应商且不降级"
   }
 }

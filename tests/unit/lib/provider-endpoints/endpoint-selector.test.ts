@@ -154,3 +154,93 @@ describe("provider-endpoints: endpoint-selector", () => {
     expect(isOpenMock).not.toHaveBeenCalled();
   });
 });
+
+describe("getEndpointFilterStats", () => {
+  test("should correctly count total, enabled, circuitOpen, and available endpoints", async () => {
+    vi.resetModules();
+
+    const endpoints: ProviderEndpoint[] = [
+      makeEndpoint({ id: 1, isEnabled: true, lastProbeOk: true }),
+      makeEndpoint({ id: 2, isEnabled: true, lastProbeOk: true }),
+      makeEndpoint({ id: 3, isEnabled: true, lastProbeOk: false }),
+      makeEndpoint({ id: 4, isEnabled: false }),
+      makeEndpoint({ id: 5, deletedAt: new Date(1) }),
+    ];
+
+    const findMock = vi.fn(async () => endpoints);
+    // id=2 is circuit open
+    const isOpenMock = vi.fn(async (endpointId: number) => endpointId === 2);
+
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointsByVendorAndType: findMock,
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      isEndpointCircuitOpen: isOpenMock,
+    }));
+
+    const { getEndpointFilterStats } = await import("@/lib/provider-endpoints/endpoint-selector");
+    const stats = await getEndpointFilterStats({ vendorId: 10, providerType: "claude" });
+
+    expect(findMock).toHaveBeenCalledWith(10, "claude");
+    expect(stats).toEqual({
+      total: 5, // all endpoints
+      enabled: 3, // id=1,2,3 (isEnabled && !deletedAt)
+      circuitOpen: 1, // id=2
+      available: 2, // enabled - circuitOpen = 3 - 1
+    });
+  });
+
+  test("should return all zeros when no endpoints exist", async () => {
+    vi.resetModules();
+
+    const findMock = vi.fn(async () => []);
+    const isOpenMock = vi.fn(async () => false);
+
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointsByVendorAndType: findMock,
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      isEndpointCircuitOpen: isOpenMock,
+    }));
+
+    const { getEndpointFilterStats } = await import("@/lib/provider-endpoints/endpoint-selector");
+    const stats = await getEndpointFilterStats({ vendorId: 99, providerType: "codex" });
+
+    expect(stats).toEqual({
+      total: 0,
+      enabled: 0,
+      circuitOpen: 0,
+      available: 0,
+    });
+    expect(isOpenMock).not.toHaveBeenCalled();
+  });
+
+  test("should count all enabled endpoints as circuitOpen when all are open", async () => {
+    vi.resetModules();
+
+    const endpoints: ProviderEndpoint[] = [
+      makeEndpoint({ id: 1, isEnabled: true }),
+      makeEndpoint({ id: 2, isEnabled: true }),
+    ];
+
+    const findMock = vi.fn(async () => endpoints);
+    const isOpenMock = vi.fn(async () => true);
+
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointsByVendorAndType: findMock,
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      isEndpointCircuitOpen: isOpenMock,
+    }));
+
+    const { getEndpointFilterStats } = await import("@/lib/provider-endpoints/endpoint-selector");
+    const stats = await getEndpointFilterStats({ vendorId: 1, providerType: "openai-compatible" });
+
+    expect(stats).toEqual({
+      total: 2,
+      enabled: 2,
+      circuitOpen: 2,
+      available: 0,
+    });
+  });
+});
