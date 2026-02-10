@@ -2384,11 +2384,32 @@ export class ProxyForwarder {
             const fallbackInit = { ...init };
             delete fallbackInit.dispatcher;
             try {
-              response = await fetch(proxyUrl, fallbackInit);
+              response = useErrorTolerantFetch
+                ? await ProxyForwarder.fetchWithoutAutoDecode(
+                    proxyUrl,
+                    fallbackInit,
+                    provider.id,
+                    provider.name,
+                    session
+                  )
+                : await fetch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
                 providerId: provider.id,
                 providerName: provider.name,
               });
+
+              // 重新启动响应超时计时器（如果之前有配置超时时间）
+              // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
+              if (responseTimeoutMs > 0) {
+                responseTimeoutId = setTimeout(() => {
+                  responseController.abort();
+                  logger.warn("ProxyForwarder: Response timeout after direct fallback", {
+                    providerId: provider.id,
+                    providerName: provider.name,
+                    responseTimeoutMs,
+                  });
+                }, responseTimeoutMs);
+              }
               // 成功后跳过 throw，继续执行后续逻辑
             } catch (directError) {
               // 直连也失败，抛出原始错误
@@ -2482,14 +2503,22 @@ export class ProxyForwarder {
     // 检查 HTTP 错误状态（4xx/5xx 均视为失败，触发重试）
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {
-      // HTTP 错误：清除响应超时定时器
-      if (responseTimeoutId) {
-        clearTimeout(responseTimeoutId);
+      // ⚠️ HTTP 错误：不要在读取响应体之前清除响应超时定时器
+      // 原因：某些上游会在返回 4xx/5xx 后“卡住不结束 body”，
+      // 若提前 clearTimeout，会导致 ProxyError.fromUpstreamResponse() 的 response.text() 无限等待，
+      // 从而让整条请求链路（含客户端）悬挂，前端表现为一直“请求中”。
+      //
+      // 正确策略：保留 response timeout 继续监控 body 读取，并在 finally 里清理定时器。
+      try {
+        throw await ProxyError.fromUpstreamResponse(response, {
+          id: provider.id,
+          name: provider.name,
+        });
+      } finally {
+        if (responseTimeoutId) {
+          clearTimeout(responseTimeoutId);
+        }
       }
-      throw await ProxyError.fromUpstreamResponse(response, {
-        id: provider.id,
-        name: provider.name,
-      });
     }
 
     // 将响应超时清理函数和 controller 引用附加到 session，供 response-handler 使用
@@ -2860,7 +2889,7 @@ export class ProxyForwarder {
       // 将 Gunzip 流转换为 Web 流（容错版本）
       bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
 
-      // 移�� content-encoding 和 content-length（避免下游再解压或使用错误长度）
+      // 移除 content-encoding 和 content-length（避免下游再解压或使用错误长度）
       responseHeaders.delete("content-encoding");
       responseHeaders.delete("content-length");
     } else {
