@@ -1,6 +1,8 @@
 {
   "cancelButton": "關閉",
   "circuitBroken": "熔斷中",
+  "keyCircuitBroken": "Key 熔斷",
+  "endpointCircuitBroken": "端點熔斷",
   "clipboardUnavailable": "目前環境無法使用剪貼簿，請手動選取複製。",
   "confirmDeleteMessage": "確定要刪除供應商 \"{name}\" 嗎？此操作無法撤銷。",
   "confirmDeleteTitle": "確認刪除供應商？",

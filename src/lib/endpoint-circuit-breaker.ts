@@ -146,11 +146,27 @@ export async function recordEndpointFailure(endpointId: number, error: Error): P
     health.circuitOpenUntil = Date.now() + config.openDuration;
     health.halfOpenSuccessCount = 0;
 
+    const retryAt = new Date(health.circuitOpenUntil).toISOString();
+
     logger.warn("[EndpointCircuitBreaker] Endpoint circuit opened", {
       endpointId,
       failureCount: health.failureCount,
       threshold: config.failureThreshold,
       errorMessage: error.message,
+    });
+
+    // Async alert (non-blocking)
+    triggerEndpointCircuitBreakerAlert(
+      endpointId,
+      health.failureCount,
+      retryAt,
+      error.message
+    ).catch((err) => {
+      logger.error({
+        action: "trigger_endpoint_circuit_breaker_alert_error",
+        endpointId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
   }
 
@@ -193,4 +209,59 @@ export async function resetEndpointCircuit(endpointId: number): Promise<void> {
   health.halfOpenSuccessCount = 0;
 
   await deleteEndpointCircuitState(endpointId);
+}
+
+/**
+ * Alert data for endpoint circuit breaker events.
+ */
+export interface EndpointCircuitAlertData {
+  endpointId: number;
+  failureCount: number;
+  retryAt: string;
+  lastError: string;
+  endpointUrl?: string;
+}
+
+/**
+ * Trigger circuit breaker alert for an endpoint.
+ * Looks up endpoint info to enrich the alert data, then delegates to sendCircuitBreakerAlert.
+ */
+export async function triggerEndpointCircuitBreakerAlert(
+  endpointId: number,
+  failureCount: number,
+  retryAt: string,
+  lastError: string
+): Promise<void> {
+  try {
+    const { sendCircuitBreakerAlert } = await import("@/lib/notification/notifier");
+
+    // Try to enrich with endpoint URL from database
+    let endpointUrl: string | undefined;
+    try {
+      const { findProviderEndpointById } = await import("@/repository");
+      const endpoint = await findProviderEndpointById(endpointId);
+      if (endpoint) {
+        endpointUrl = endpoint.url;
+      }
+    } catch {
+      // DB lookup failure should not block alert
+    }
+
+    await sendCircuitBreakerAlert({
+      providerId: endpointId, // Use endpointId as providerId for dedup purposes
+      providerName: "",
+      failureCount,
+      retryAt,
+      lastError,
+      incidentSource: "endpoint",
+      endpointId,
+      endpointUrl,
+    });
+  } catch (error) {
+    logger.error({
+      action: "endpoint_circuit_breaker_alert_error",
+      endpointId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

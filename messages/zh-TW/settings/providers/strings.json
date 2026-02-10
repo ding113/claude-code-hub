@@ -112,6 +112,9 @@
     "unhealthy": "故障",
     "unknown": "未知",
     "circuitOpen": "熔斷開啟",
-    "circuitHalfOpen": "熔斷半開"
+    "circuitHalfOpen": "熔斷半開",
+    "resetCircuit": "重置熔斷",
+    "resetCircuitSuccess": "端點熔斷已重置",
+    "resetCircuitFailed": "重置端點熔斷失敗"
   }
 }

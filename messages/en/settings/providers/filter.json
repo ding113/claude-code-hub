@@ -1,5 +1,7 @@
 {
   "circuitBroken": "Circuit Broken",
+  "keyCircuitBroken": "Key Circuit",
+  "endpointCircuitBroken": "Endpoint Circuit",
   "groups": {
     "all": "All",
     "default": "default",

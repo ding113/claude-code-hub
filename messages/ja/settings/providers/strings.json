@@ -112,6 +112,9 @@
     "unhealthy": "異常",
     "unknown": "不明",
     "circuitOpen": "サーキットオープン",
-    "circuitHalfOpen": "サーキット半開"
+    "circuitHalfOpen": "サーキット半開",
+    "resetCircuit": "サーキットリセット",
+    "resetCircuitSuccess": "エンドポイントのサーキットブレーカーをリセットしました",
+    "resetCircuitFailed": "エンドポイントのサーキットブレーカーのリセットに失敗しました"
   }
 }

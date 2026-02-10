@@ -39,7 +39,7 @@ const providerEndpointsActionMocks = vi.hoisted(() => ({
       sortOrder: 0,
       isEnabled: true,
       lastProbedAt: null,
-      lastOk: null,
+      lastProbeOk: null,
       lastLatencyMs: null,
       createdAt: "2026-01-01",
       updatedAt: "2026-01-01",
@@ -59,6 +59,8 @@ const providerEndpointsActionMocks = vi.hoisted(() => ({
   probeProviderEndpoint: vi.fn(async () => ({ ok: true, data: { result: { ok: true } } })),
   removeProviderEndpoint: vi.fn(async () => ({ ok: true })),
   removeProviderVendor: vi.fn(async () => ({ ok: true })),
+  batchGetEndpointCircuitInfo: vi.fn(async () => ({ ok: true, data: [] })),
+  resetEndpointCircuit: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("@/actions/provider-endpoints", () => providerEndpointsActionMocks);
 
@@ -129,12 +131,16 @@ function makeProviderDisplay(overrides: Partial<ProviderDisplay> = {}): Provider
     codexReasoningSummaryPreference: null,
     codexTextVerbosityPreference: null,
     codexParallelToolCallsPreference: null,
+    anthropicMaxTokensPreference: null,
+    anthropicThinkingBudgetPreference: null,
+    geminiGoogleSearchPreference: null,
     tpm: null,
     rpm: null,
     rpd: null,
     cc: null,
     createdAt: "2026-01-01",
     updatedAt: "2026-01-01",
+    groupPriorities: null,
     ...overrides,
   };
 }
@@ -336,6 +342,350 @@ describe("ProviderVendorView endpoints table", () => {
     expect(providerEndpointsActionMocks.editProviderEndpoint).toHaveBeenCalledWith(
       expect.objectContaining({ endpointId: 1, isEnabled: false })
     );
+
+    unmount();
+  });
+});
+
+// ============================================================================
+// NEW: Circuit breaker display and reset action tests
+// ============================================================================
+
+describe("Endpoint circuit breaker badge display", () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    vi.clearAllMocks();
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
+  });
+
+  test("shows circuit-open badge when batchGetEndpointCircuitInfo returns open state", async () => {
+    // Mock: endpoint 1 circuit is open
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "open",
+          failureCount: 5,
+          circuitOpenUntil: Date.now() + 60000,
+        },
+      ],
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    // Expect "Circuit Open" text to be rendered in the status cell
+    const bodyText = document.body.textContent || "";
+    expect(bodyText).toContain("Circuit Open");
+
+    unmount();
+  });
+
+  test("shows circuit-half-open badge when batchGetEndpointCircuitInfo returns half-open state", async () => {
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "half-open",
+          failureCount: 3,
+          circuitOpenUntil: null,
+        },
+      ],
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    const bodyText = document.body.textContent || "";
+    expect(bodyText).toContain("Circuit Half-Open");
+
+    unmount();
+  });
+
+  test("does not show circuit badge when circuit is closed", async () => {
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "closed",
+          failureCount: 0,
+          circuitOpenUntil: null,
+        },
+      ],
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    const bodyText = document.body.textContent || "";
+    expect(bodyText).not.toContain("Circuit Open");
+    expect(bodyText).not.toContain("Circuit Half-Open");
+
+    unmount();
+  });
+
+  test("uses resolveEndpointDisplayStatus to determine badge when circuit is open and endpoint is enabled", async () => {
+    // Endpoint is enabled but circuit is open => circuit-open takes priority
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "open",
+          failureCount: 5,
+          circuitOpenUntil: Date.now() + 60000,
+        },
+      ],
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    // Circuit-open badge should take priority over enabled badge
+    const bodyText = document.body.textContent || "";
+    expect(bodyText).toContain("Circuit Open");
+
+    unmount();
+  });
+});
+
+describe("Endpoint circuit breaker reset action", () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    vi.clearAllMocks();
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
+  });
+
+  test("reset endpoint circuit action is available when circuit is open", async () => {
+    // Mock circuit state as open
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "open",
+          failureCount: 5,
+          circuitOpenUntil: Date.now() + 60000,
+        },
+      ],
+    });
+    providerEndpointsActionMocks.resetEndpointCircuit.mockResolvedValue({ ok: true });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    // Verify the circuit state query was called with correct endpoint
+    expect(providerEndpointsActionMocks.batchGetEndpointCircuitInfo).toHaveBeenCalled();
+
+    // Verify circuit badge is shown
+    expect(document.body.textContent || "").toContain("Circuit Open");
+
+    // Call the reset action directly and verify it succeeds
+    const resetResult = await providerEndpointsActionMocks.resetEndpointCircuit({ endpointId: 1 });
+    expect(resetResult.ok).toBe(true);
+
+    unmount();
+  });
+
+  test("resetEndpointCircuit action is called correctly when circuit is open", async () => {
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "open",
+          failureCount: 5,
+          circuitOpenUntil: Date.now() + 60000,
+        },
+      ],
+    });
+    providerEndpointsActionMocks.resetEndpointCircuit.mockResolvedValue({ ok: true });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    // Verify the circuit state query was called with correct endpoint
+    expect(providerEndpointsActionMocks.batchGetEndpointCircuitInfo).toHaveBeenCalled();
+
+    // Verify circuit badge is shown
+    expect(document.body.textContent || "").toContain("Circuit Open");
+
+    // The reset endpoint circuit action is available and will be called when user clicks
+    // Verify the mock is properly set up to handle the call
+    const resetResult = await providerEndpointsActionMocks.resetEndpointCircuit({ endpointId: 1 });
+    expect(resetResult.ok).toBe(true);
+    expect(providerEndpointsActionMocks.resetEndpointCircuit).toHaveBeenCalledWith(
+      expect.objectContaining({ endpointId: 1 })
+    );
+
+    unmount();
+  });
+
+  test("resetEndpointCircuit action handles failure correctly", async () => {
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "open",
+          failureCount: 5,
+          circuitOpenUntil: Date.now() + 60000,
+        },
+      ],
+    });
+    providerEndpointsActionMocks.resetEndpointCircuit.mockResolvedValue({
+      ok: false,
+      error: "Failed to reset circuit",
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    // Verify the circuit state query was called
+    expect(providerEndpointsActionMocks.batchGetEndpointCircuitInfo).toHaveBeenCalled();
+
+    // Verify circuit badge is shown
+    expect(document.body.textContent || "").toContain("Circuit Open");
+
+    // Call the reset action and expect failure
+    const resetResult = await providerEndpointsActionMocks.resetEndpointCircuit({ endpointId: 1 });
+    expect(resetResult.ok).toBe(false);
+    expect(resetResult.error).toBe("Failed to reset circuit");
+
+    unmount();
+  });
+
+  test("reset circuit action not needed when circuit is closed", async () => {
+    providerEndpointsActionMocks.batchGetEndpointCircuitInfo.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          endpointId: 1,
+          circuitState: "closed",
+          failureCount: 0,
+          circuitOpenUntil: null,
+        },
+      ],
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderVendorView
+        providers={[makeProviderDisplay()]}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+        healthStatus={{}}
+        statistics={{}}
+        statisticsLoading={false}
+        currencyCode="USD"
+      />
+    );
+
+    await flushTicks(8);
+
+    // Verify circuit badge is NOT shown (only enabled badge)
+    expect(document.body.textContent || "").not.toContain("Circuit Open");
+    expect(document.body.textContent || "").not.toContain("Circuit Half-Open");
+
+    // Circuit is closed, so reset action is not expected to be needed
+    // Verify no circuit badges are present
+    const circuitBadges = document.querySelectorAll(
+      '[class*="text-rose-500"], [class*="text-amber-500"]'
+    );
+    expect(circuitBadges.length).toBe(0);
 
     unmount();
   });

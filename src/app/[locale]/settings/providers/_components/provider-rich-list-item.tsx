@@ -78,6 +78,13 @@ interface ProviderRichListItemProps {
     circuitOpenUntil: number | null;
     recoveryMinutes: number | null;
   };
+  /** Endpoint-level circuit breaker info for this provider */
+  endpointCircuitInfo?: Array<{
+    endpointId: number;
+    circuitState: "closed" | "open" | "half-open";
+    failureCount: number;
+    circuitOpenUntil: number | null;
+  }>;
   statistics?: ProviderStatistics;
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
@@ -98,6 +105,7 @@ export function ProviderRichListItem({
   provider,
   currentUser,
   healthStatus,
+  endpointCircuitInfo = [],
   statistics,
   statisticsLoading = false,
   currencyCode = "USD",
@@ -500,10 +508,21 @@ export function ProviderRichListItem({
           ) : (
             <Badge variant="outline">{PROVIDER_GROUP.DEFAULT}</Badge>
           )}
+          {/* Key-level circuit badge */}
           {healthStatus?.circuitState === "open" && (
             <Badge variant="destructive" className="flex items-center gap-1">
               <AlertTriangle className="h-3 w-3" />
-              {tList("circuitBroken")}
+              {tList("keyCircuitBroken")}
+            </Badge>
+          )}
+          {/* Endpoint-level circuit badge */}
+          {endpointCircuitInfo?.some((ep) => ep.circuitState === "open") && (
+            <Badge
+              variant="outline"
+              className="flex items-center gap-1 bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {tList("endpointCircuitBroken")}
             </Badge>
           )}
         </div>
@@ -688,10 +707,21 @@ export function ProviderRichListItem({
                 {PROVIDER_GROUP.DEFAULT}
               </Badge>
             )}
+            {/* Key-level circuit badge */}
             {healthStatus?.circuitState === "open" && (
               <Badge variant="destructive" className="flex items-center gap-1 flex-shrink-0">
                 <AlertTriangle className="h-3 w-3" />
-                {tList("circuitBroken")}
+                {tList("keyCircuitBroken")}
+              </Badge>
+            )}
+            {/* Endpoint-level circuit badge */}
+            {endpointCircuitInfo?.some((ep) => ep.circuitState === "open") && (
+              <Badge
+                variant="outline"
+                className="flex items-center gap-1 flex-shrink-0 bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-700"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {tList("endpointCircuitBroken")}
               </Badge>
             )}
           </div>

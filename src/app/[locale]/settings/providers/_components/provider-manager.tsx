@@ -30,6 +30,17 @@ import { ProviderSortDropdown, type SortKey } from "./provider-sort-dropdown";
 import { ProviderTypeFilter } from "./provider-type-filter";
 import { ProviderVendorView } from "./provider-vendor-view";
 
+/** Per-endpoint circuit breaker state, keyed by provider ID */
+export type EndpointCircuitInfoMap = Record<
+  number,
+  Array<{
+    endpointId: number;
+    circuitState: "closed" | "open" | "half-open";
+    failureCount: number;
+    circuitOpenUntil: number | null;
+  }>
+>;
+
 interface ProviderManagerProps {
   providers: ProviderDisplay[];
   currentUser?: User;
@@ -43,6 +54,8 @@ interface ProviderManagerProps {
       recoveryMinutes: number | null;
     }
   >;
+  /** Endpoint-level circuit breaker info, keyed by provider ID */
+  endpointCircuitInfo?: EndpointCircuitInfoMap;
   statistics?: ProviderStatisticsMap;
   statisticsLoading?: boolean;
   currencyCode?: CurrencyCode;
@@ -56,6 +69,7 @@ export function ProviderManager({
   providers,
   currentUser,
   healthStatus,
+  endpointCircuitInfo = {},
   statistics = {},
   statisticsLoading = false,
   currencyCode = "USD",
@@ -86,10 +100,27 @@ export function ProviderManager({
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
   const [batchActionMode, setBatchActionMode] = useState<BatchActionMode>(null);
 
-  // Count providers with circuit breaker open
+  // Helper: check if a provider has any circuit open (key-level or endpoint-level)
+  const hasAnyCircuitOpen = useCallback(
+    (providerId: number): boolean => {
+      // Key-level circuit open
+      if (healthStatus[providerId]?.circuitState === "open") {
+        return true;
+      }
+      // Endpoint-level circuit open
+      const endpoints = endpointCircuitInfo[providerId];
+      if (endpoints?.some((ep) => ep.circuitState === "open")) {
+        return true;
+      }
+      return false;
+    },
+    [healthStatus, endpointCircuitInfo]
+  );
+
+  // Count providers with circuit breaker open (key-level or endpoint-level, deduplicated)
   const circuitBrokenCount = useMemo(() => {
-    return providers.filter((p) => healthStatus[p.id]?.circuitState === "open").length;
-  }, [providers, healthStatus]);
+    return providers.filter((p) => hasAnyCircuitOpen(p.id)).length;
+  }, [providers, hasAnyCircuitOpen]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -190,9 +221,9 @@ export function ProviderManager({
       });
     }
 
-    // Filter by circuit breaker state
+    // Filter by circuit breaker state (key-level or endpoint-level)
     if (circuitBrokenFilter) {
-      result = result.filter((p) => healthStatus[p.id]?.circuitState === "open");
+      result = result.filter((p) => hasAnyCircuitOpen(p.id));
     }
 
     // 排序
@@ -232,7 +263,7 @@ export function ProviderManager({
     statusFilter,
     groupFilter,
     circuitBrokenFilter,
-    healthStatus,
+    hasAnyCircuitOpen,
   ]);
 
   // Batch selection handlers
@@ -572,6 +603,7 @@ export function ProviderManager({
               providers={filteredProviders}
               currentUser={currentUser}
               healthStatus={healthStatus}
+              endpointCircuitInfo={endpointCircuitInfo}
               statistics={statistics}
               statisticsLoading={statisticsLoading}
               currencyCode={currencyCode}

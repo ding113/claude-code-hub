@@ -5,6 +5,8 @@
   "todayUsageLabel": "今日用量",
   "todayUsageCount": "{count} 次",
   "circuitBroken": "熔断中",
+  "keyCircuitBroken": "Key 熔断",
+  "endpointCircuitBroken": "端点熔断",
   "officialWebsite": "官网",
   "viewFullKey": "查看完整 API Key",
   "viewFullKeyDesc": "请妥善保管，不要泄露给他人",
