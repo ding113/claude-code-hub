@@ -2830,7 +2830,7 @@ export class ProxyForwarder {
       // 将 Gunzip 流转换为 Web 流（容错版本）
       bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
 
-      // 移�� content-encoding 和 content-length（避免下游再解压或使用错误长度）
+      // 移除 content-encoding 和 content-length（避免下游再解压或使用错误长度）
       responseHeaders.delete("content-encoding");
       responseHeaders.delete("content-length");
     } else {
