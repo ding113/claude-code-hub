@@ -123,6 +123,37 @@ describe("VacuumFilter", () => {
     expect(vf.has(longKey)).toBe(false);
   });
 
+  test("fast-reduce bucket index 映射不越界（非 2 的幂 numBuckets）", () => {
+    const vf = new VacuumFilter({
+      maxItems: 20_000,
+      fingerprintBits: 32,
+      maxKickSteps: 500,
+      seed: "unit-test-fast-reduce-index",
+    });
+
+    const numBuckets = vf.capacitySlots() / 4;
+
+    // @ts-expect-error: 单测需要覆盖私有字段（确保走 fast-reduce 分支）
+    const bucketMask = vf.bucketMask as number;
+    // @ts-expect-error: 单测需要覆盖私有字段（确保走 fast-reduce 分支）
+    const fastReduceMul = vf.fastReduceMul as number | null;
+
+    expect(bucketMask).toBe(0);
+    expect(fastReduceMul).not.toBeNull();
+
+    // @ts-expect-error: 单测需要覆盖私有方法的核心不变量
+    const indexTag = (key: string) => vf.indexTag(key) as void;
+
+    for (let i = 0; i < 10_000; i++) {
+      indexTag(`key_${i}`);
+      // @ts-expect-error: 单测需要覆盖私有字段的核心不变量
+      const index = vf.tmpIndex as number;
+      if (index < 0 || index >= numBuckets) {
+        throw new Error(`tmpIndex out of range: ${index} (numBuckets=${numBuckets})`);
+      }
+    }
+  });
+
   test("alternate index 应为可逆映射（alt(alt(i,tag),tag)=i）且不越界", () => {
     const vf = new VacuumFilter({
       maxItems: 50_000,

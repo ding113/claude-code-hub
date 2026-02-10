@@ -511,7 +511,7 @@ export class VacuumFilter {
       bucketMask !== 0
         ? (hvIndex & bucketMask) >>> 0
         : fastReduceMul
-          ? ((hvIndex * fastReduceMul) | 0) >>> 0 // |0 用于截断（等价 floor；值域 < 2^31）
+          ? ((hvIndex * fastReduceMul) >>> 0) // >>>0 用于截断（等价 floor；值域 < 2^32）
           : hvIndex % this.numBuckets;
 
     let tag = (hvTag & this.tagMask) >>> 0;
