@@ -871,7 +871,43 @@ export class ProxyResponseHandler {
           };
 
           let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+          // ⚠️ 保护：避免透传 stats 任务把超大响应体无界缓存在内存中（DoS/OOM 风险）
+          // 说明：这里用于统计/结算的内容仅保留“尾部窗口”（最近 MAX_STATS_BUFFER_BYTES），用于尽可能解析 usage/假200。
+          // 若响应体极大，仍会完整 drain 上游（reader.read），但不再累计完整字符串。
+          const MAX_STATS_BUFFER_BYTES = 10 * 1024 * 1024; // 10MB
           const chunks: string[] = [];
+          const chunkBytes: number[] = [];
+          let chunkHead = 0;
+          let bufferedBytes = 0;
+          let wasTruncated = false;
+
+          const pushChunk = (text: string, bytes: number) => {
+            if (!text) return;
+            chunks.push(text);
+            chunkBytes.push(bytes);
+            bufferedBytes += bytes;
+
+            // 仅保留尾部窗口，避免内存无界增长
+            while (bufferedBytes > MAX_STATS_BUFFER_BYTES && chunkHead < chunkBytes.length) {
+              bufferedBytes -= chunkBytes[chunkHead] ?? 0;
+              chunks[chunkHead] = "";
+              chunkBytes[chunkHead] = 0;
+              chunkHead += 1;
+              wasTruncated = true;
+            }
+
+            // 定期压缩数组，避免 head 指针过大导致 slice/join 性能退化
+            if (chunkHead > 4096) {
+              chunks.splice(0, chunkHead);
+              chunkBytes.splice(0, chunkHead);
+              chunkHead = 0;
+            }
+          };
+
+          const joinChunks = (): string => {
+            if (chunkHead <= 0) return chunks.join("");
+            return chunks.slice(chunkHead).join("");
+          };
           const decoder = new TextDecoder();
           let isFirstChunk = true;
           let streamEndedNormally = false;
@@ -898,7 +934,9 @@ export class ProxyResponseHandler {
                 providerId: provider.id,
                 providerName: provider.name,
                 idleTimeoutMs,
-                chunksCollected: chunks.length,
+                chunksCollected: Math.max(0, chunks.length - chunkHead),
+                bufferedBytes,
+                wasTruncated,
               });
               // 终止上游连接：让透传到客户端的连接也尽快结束，避免永久悬挂占用资源
               try {
@@ -929,8 +967,8 @@ export class ProxyResponseHandler {
 
           const flushAndJoin = (): string => {
             const flushed = decoder.decode();
-            if (flushed) chunks.push(flushed);
-            return chunks.join("");
+            if (flushed) pushChunk(flushed, 0);
+            return joinChunks();
           };
 
           try {
@@ -954,7 +992,9 @@ export class ProxyResponseHandler {
                 // 这里必须结合 abort signal 判断是否为“自然结束”。
                 if (wasResponseControllerAborted || clientAborted) {
                   streamEndedNormally = false;
-                  abortReason = abortReason ?? "STREAM_RESPONSE_TIMEOUT";
+                  if (!abortReason) {
+                    abortReason = clientAborted ? "CLIENT_ABORTED" : "STREAM_RESPONSE_TIMEOUT";
+                  }
                 } else {
                   streamEndedNormally = true;
                 }
@@ -967,7 +1007,7 @@ export class ProxyResponseHandler {
                   session.recordTtfb();
                   clearResponseTimeoutOnce(value.length);
                 }
-                chunks.push(decoder.decode(value, { stream: true }));
+                pushChunk(decoder.decode(value, { stream: true }), value.length);
 
                 // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
                 if (!isFirstChunk) {
@@ -981,13 +1021,20 @@ export class ProxyResponseHandler {
             const clientAborted = session.clientAbortSignal?.aborted ?? false;
 
             // 存储响应体到 Redis（5分钟过期）
-            if (session.sessionId) {
+            if (session.sessionId && !wasTruncated) {
               void SessionManager.storeSessionResponse(
                 session.sessionId,
                 allContent,
                 session.requestSequence
               ).catch((err) => {
                 logger.error("[ResponseHandler] Failed to store stream passthrough response:", err);
+              });
+            } else if (session.sessionId && wasTruncated) {
+              logger.warn("[ResponseHandler] Skip storing passthrough response: body too large", {
+                taskId,
+                providerId: provider.id,
+                providerName: provider.name,
+                maxBytes: MAX_STATS_BUFFER_BYTES,
               });
             }
 
@@ -1014,7 +1061,7 @@ export class ProxyResponseHandler {
             const clientAborted = session.clientAbortSignal?.aborted ?? false;
             const isResponseControllerAborted =
               sessionWithController.responseController?.signal.aborted ?? false;
-            const isIdleTimeout = err.message?.includes("streaming_idle");
+            const isIdleTimeout = !!err.message?.includes("streaming_idle");
 
             abortReason =
               abortReason ??
@@ -1074,22 +1121,51 @@ export class ProxyResponseHandler {
             }
           } finally {
             clearIdleTimer();
-            // 兜底：首块数据未到达时也应清理首字节超时，避免误触发/日志噪音
+            // 兜底：在流结束/中断后清理首字节超时，避免定时器泄漏
+            // 注意：不应在流仍可能继续时清理（否则会让首字节超时失效）
             try {
-              clearResponseTimeoutOnce();
-            } catch {
-              // ignore
+              const wasResponseControllerAborted =
+                sessionWithController.responseController?.signal.aborted ?? false;
+              const clientAborted = session.clientAbortSignal?.aborted ?? false;
+              const shouldClearTimeout =
+                responseTimeoutCleared ||
+                streamEndedNormally ||
+                wasResponseControllerAborted ||
+                clientAborted;
+              if (shouldClearTimeout) {
+                clearResponseTimeoutOnce();
+              }
+            } catch (e) {
+              logger.warn(
+                "[ResponseHandler] Gemini passthrough: Failed to clear response timeout",
+                {
+                  taskId,
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  error: e instanceof Error ? e.message : String(e),
+                }
+              );
             }
             try {
               // 取消 tee 分支，避免 stats 任务提前退出时 backpressure 影响客户端透传
               void reader?.cancel();
-            } catch {
-              // ignore
+            } catch (e) {
+              logger.warn("[ResponseHandler] Gemini passthrough: Failed to cancel stats reader", {
+                taskId,
+                providerId: provider.id,
+                providerName: provider.name,
+                error: e instanceof Error ? e.message : String(e),
+              });
             }
             try {
               reader?.releaseLock();
-            } catch {
-              // ignore
+            } catch (e) {
+              logger.warn("[ResponseHandler] Gemini passthrough: Failed to release reader lock", {
+                taskId,
+                providerId: provider.id,
+                providerName: provider.name,
+                error: e instanceof Error ? e.message : String(e),
+              });
             }
             AsyncTaskManager.cleanup(taskId);
           }

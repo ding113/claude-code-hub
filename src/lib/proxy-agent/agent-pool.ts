@@ -356,11 +356,17 @@ export class AgentPoolImpl implements AgentPool {
   }
 
   private async closeAgent(agent: Dispatcher, key: string): Promise<void> {
+    // 防御性处理：极端情况下（例如 mock/第三方 dispatcher 异常）可能传入空值
+    if (!agent) return;
+
     try {
-      if (typeof agent.close === "function") {
-        await agent.close();
-      } else if (typeof agent.destroy === "function") {
+      // ⚠️ 优先 destroy：undici 的 close() 可能会等待 in-flight 请求结束（流式/卡住时会导致长期阻塞），
+      // 从而让 getAgent/evictEndpoint/cleanup 也被卡住，最终表现为“所有请求都卡在 requesting”。
+      // destroy() 会强制关闭底层连接，更适合作为驱逐/清理时的兜底手段。
+      if (typeof agent.destroy === "function") {
         await agent.destroy();
+      } else if (typeof agent.close === "function") {
+        await agent.close();
       }
     } catch (error) {
       logger.warn("AgentPool: Error closing agent", {

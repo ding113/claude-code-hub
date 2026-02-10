@@ -443,6 +443,36 @@ describe("AgentPool", () => {
       const stats = pool.getPoolStats();
       expect(stats.cacheSize).toBe(0);
     });
+
+    it("should prefer destroy over close to avoid hanging on in-flight streaming requests", async () => {
+      const result = await pool.getAgent({
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: true,
+      });
+
+      const agent = result.agent as unknown as {
+        close?: () => Promise<void>;
+        destroy?: () => Promise<void>;
+      };
+
+      // 模拟：close 可能因等待 in-flight 请求结束而长期不返回
+      if (typeof agent.close === "function") {
+        (
+          agent.close as unknown as { mockImplementation: (fn: () => Promise<void>) => void }
+        ).mockImplementation(() => new Promise<void>(() => {}));
+      }
+
+      await pool.shutdown();
+
+      // destroy 应被优先调用（避免 close 挂死导致 shutdown/evict 卡住）
+      if (typeof agent.destroy === "function") {
+        expect(agent.destroy).toHaveBeenCalled();
+      }
+      if (typeof agent.close === "function") {
+        expect(agent.close).not.toHaveBeenCalled();
+      }
+    });
   });
 });
 

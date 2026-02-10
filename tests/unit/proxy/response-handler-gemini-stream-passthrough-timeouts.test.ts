@@ -225,10 +225,15 @@ async function readWithTimeout(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   timeoutMs: number
 ): Promise<
-  { ok: true; value: ReadableStreamReadResult<Uint8Array> } | { ok: false; reason: "timeout" }
+  | { ok: true; value: ReadableStreamReadResult<Uint8Array> }
+  | { ok: true; error: unknown }
+  | { ok: false; reason: "timeout" }
 > {
   const result = await Promise.race([
-    reader.read().then((value) => ({ ok: true as const, value })),
+    reader
+      .read()
+      .then((value) => ({ ok: true as const, value }))
+      .catch((error) => ({ ok: true as const, error })),
     new Promise<{ ok: false; reason: "timeout" }>((resolve) =>
       setTimeout(() => resolve({ ok: false as const, reason: "timeout" }), timeoutMs)
     ),
@@ -280,11 +285,24 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
       expect(reader).toBeTruthy();
       if (!reader) throw new Error("Missing body reader");
 
+      const startedAt = Date.now();
       const firstRead = await readWithTimeout(reader, 1500);
       if (!firstRead.ok) {
         clientAbortController.abort(new Error("test_timeout"));
         throw new Error("首字节超时未生效：读首块数据在 1.5s 内仍未返回（可能仍会卡死）");
       }
+
+      // 断言：应由超时/中断导致读取结束（done=true 或抛错均可）
+      const ended = ("value" in firstRead && firstRead.value.done === true) || "error" in firstRead;
+      expect(ended).toBe(true);
+
+      // 断言：responseController 应已触发 abort（即首字节超时生效）
+      const sessionWithController = session as unknown as { responseController?: AbortController };
+      expect(sessionWithController.responseController?.signal.aborted).toBe(true);
+
+      // 粗略时间断言：不应立即返回（避免“无关早退”导致假阳性）
+      const elapsed = Date.now() - startedAt;
+      expect(elapsed).toBeGreaterThanOrEqual(120);
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();
@@ -405,7 +423,10 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
 
       const first = await readWithTimeout(reader, 1000);
       expect(first.ok).toBe(true);
-      expect(first.ok && first.value.done).toBe(false);
+      if (!("value" in first)) {
+        throw new Error("首块数据读取异常：预期拿到 value，但得到 error");
+      }
+      expect(first.value.done).toBe(false);
 
       // 静默超时触发后，后续 read 应该在合理时间内结束（done=true 或抛错均可）
       const second = await readWithTimeout(reader, 1500);
