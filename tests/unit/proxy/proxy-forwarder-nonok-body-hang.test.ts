@@ -1,4 +1,5 @@
-import { createServer, type Server } from "node:http";
+import { createServer } from "node:http";
+import type { Socket } from "node:net";
 import { describe, expect, test, vi } from "vitest";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
@@ -133,20 +134,29 @@ function createSession(params?: { clientAbortSignal?: AbortSignal | null }): Pro
   return session as ProxySession;
 }
 
-async function startServer(): Promise<{ server: Server; baseUrl: string }> {
+async function startServer(): Promise<{ baseUrl: string; close: () => Promise<void> }> {
+  const sockets = new Set<Socket>();
   const server = createServer((req, res) => {
     // 模拟上游异常：返回 403，但永远不结束 body（导致 response.text() 无限等待）
     res.writeHead(403, { "content-type": "application/json" });
     res.write(JSON.stringify({ error: { message: "forbidden" } }));
 
-    // 当客户端中断时，主动销毁连接，避免测试进程残留挂起连接
-    req.on("aborted", () => {
+    // 连接/请求关闭时，主动销毁响应，避免测试进程残留挂起连接（降低 flakiness）
+    const cleanup = () => {
       try {
         res.destroy();
       } catch {
         // ignore
       }
-    });
+    };
+
+    req.on("aborted", cleanup);
+    req.on("close", cleanup);
+  });
+
+  server.on("connection", (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
   });
 
   const baseUrl = await new Promise<string>((resolve, reject) => {
@@ -161,12 +171,26 @@ async function startServer(): Promise<{ server: Server; baseUrl: string }> {
     });
   });
 
-  return { server, baseUrl };
+  const close = async () => {
+    // server.close 只停止接收新连接；这里显式销毁已有 socket，避免挂死/跑飞
+    for (const socket of sockets) {
+      try {
+        socket.destroy();
+      } catch {
+        // ignore
+      }
+    }
+    sockets.clear();
+
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  };
+
+  return { baseUrl, close };
 }
 
 describe("ProxyForwarder - non-ok response body hang", () => {
   test("HTTP 4xx/5xx 在 body 不结束时也应被超时中断，避免请求悬挂", async () => {
-    const { server, baseUrl } = await startServer();
+    const { baseUrl, close } = await startServer();
     const clientAbortController = new AbortController();
 
     try {
@@ -180,10 +204,17 @@ describe("ProxyForwarder - non-ok response body hang", () => {
 
       // 直接测试 doForward 以隔离单次转发行为，避免 send() 的重试/供应商切换逻辑干扰。
       const doForward = (
-        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown }
+        ProxyForwarder as unknown as {
+          doForward: (this: typeof ProxyForwarder, ...args: unknown[]) => unknown;
+        }
       ).doForward;
 
-      const forwardPromise = doForward(session, provider, baseUrl) as Promise<Response>;
+      const forwardPromise = doForward.call(
+        ProxyForwarder,
+        session,
+        provider,
+        baseUrl
+      ) as Promise<Response>;
 
       const result = await Promise.race([
         forwardPromise.then(
@@ -207,12 +238,12 @@ describe("ProxyForwarder - non-ok response body hang", () => {
       const err = (result as { type: "rejected"; error: unknown }).error as ProxyError;
       expect(err.statusCode).toBe(403);
     } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await close();
     }
   });
 
   test("代理失败降级到直连后也必须恢复 response timeout，避免非 ok 响应体读取悬挂", async () => {
-    const { server, baseUrl } = await startServer();
+    const { baseUrl, close } = await startServer();
     const clientAbortController = new AbortController();
 
     try {
@@ -228,10 +259,17 @@ describe("ProxyForwarder - non-ok response body hang", () => {
 
       // 直接测试 doForward 以隔离单次转发行为，避免 send() 的重试/供应商切换逻辑干扰。
       const doForward = (
-        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown }
+        ProxyForwarder as unknown as {
+          doForward: (this: typeof ProxyForwarder, ...args: unknown[]) => unknown;
+        }
       ).doForward;
 
-      const forwardPromise = doForward(session, provider, baseUrl) as Promise<Response>;
+      const forwardPromise = doForward.call(
+        ProxyForwarder,
+        session,
+        provider,
+        baseUrl
+      ) as Promise<Response>;
 
       const result = await Promise.race([
         forwardPromise.then(
@@ -255,7 +293,7 @@ describe("ProxyForwarder - non-ok response body hang", () => {
       const err = (result as { type: "rejected"; error: unknown }).error as ProxyError;
       expect(err.statusCode).toBe(403);
     } finally {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await close();
     }
   });
 });

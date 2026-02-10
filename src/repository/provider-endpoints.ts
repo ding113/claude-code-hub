@@ -378,7 +378,7 @@ export async function deleteProviderEndpointProbeLogsBeforeDateBatch(input: {
   const result = await db.execute(sql`
     WITH ids_to_delete AS (
       SELECT id FROM provider_endpoint_probe_logs
-      WHERE created_at < ${beforeDateIso}::timestamptz
+      WHERE created_at < CAST(${beforeDateIso} AS timestamptz)
       ORDER BY created_at ASC
       LIMIT ${batchSize}
       FOR UPDATE SKIP LOCKED
