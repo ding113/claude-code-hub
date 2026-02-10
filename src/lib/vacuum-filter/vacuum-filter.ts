@@ -3,6 +3,14 @@ import { randomBytes } from "@/lib/vacuum-filter/random";
 const textEncoder = new TextEncoder();
 const BUCKET_SIZE = 4 as const;
 const DEFAULT_SCRATCH_BYTES = 256;
+const INV_2_32 = 1 / 4294967296;
+const FAST_REDUCE_MAX_BUCKETS = 1 << 21; // 2^21：保证 hv(32-bit) * buckets 在 IEEE754 中仍可精确表示整数
+const IS_LITTLE_ENDIAN = (() => {
+  const buf = new ArrayBuffer(4);
+  const view = new DataView(buf);
+  view.setUint32(0, 0x11223344, true);
+  return new Uint32Array(buf)[0] === 0x11223344;
+})();
 
 /**
  * Vacuum Filter（真空过滤器）
@@ -174,16 +182,24 @@ function readU32LE(bytes: Uint8Array, offset: number): number {
   );
 }
 
-// MurmurHash3 x86 32-bit x2（共享同一份 bytes 扫描；用于生成 index/tag）
-function murmur3X86_32x2(
+function fmix32(h: number): number {
+  let x = h >>> 0;
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x85ebca6b) >>> 0;
+  x ^= x >>> 13;
+  x = Math.imul(x, 0xc2b2ae35) >>> 0;
+  x ^= x >>> 16;
+  return x >>> 0;
+}
+
+// MurmurHash3 x86 32-bit（用于生成 index；tag 由二次混合派生）
+function murmur3X86_32(
   bytes: Uint8Array,
   len: number,
-  seedA: number,
-  seedB: number,
-  out: Uint32Array
-): void {
-  let hA = seedA >>> 0;
-  let hB = seedB >>> 0;
+  seed: number,
+  words?: Uint32Array
+): number {
+  let h = seed >>> 0;
   const c1 = 0xcc9e2d51;
   const c2 = 0x1b873593;
 
@@ -191,22 +207,32 @@ function murmur3X86_32x2(
   const nblocks = (length / 4) | 0;
   const blockLen = nblocks * 4;
 
-  for (let base = 0; base < blockLen; base += 4) {
-    let k =
-      (bytes[base] | (bytes[base + 1] << 8) | (bytes[base + 2] << 16) | (bytes[base + 3] << 24)) >>>
-      0;
+  if (words && IS_LITTLE_ENDIAN && bytes.byteOffset === 0) {
+    for (let i = 0; i < nblocks; i++) {
+      let k = words[i] >>> 0;
 
-    k = Math.imul(k, c1) >>> 0;
-    k = ((k << 15) | (k >>> 17)) >>> 0;
-    k = Math.imul(k, c2) >>> 0;
+      k = Math.imul(k, c1) >>> 0;
+      k = ((k << 15) | (k >>> 17)) >>> 0;
+      k = Math.imul(k, c2) >>> 0;
 
-    hA ^= k;
-    hA = ((hA << 13) | (hA >>> 19)) >>> 0;
-    hA = (Math.imul(hA, 5) + 0xe6546b64) >>> 0;
+      h ^= k;
+      h = ((h << 13) | (h >>> 19)) >>> 0;
+      h = (Math.imul(h, 5) + 0xe6546b64) >>> 0;
+    }
+  } else {
+    for (let base = 0; base < blockLen; base += 4) {
+      let k =
+        (bytes[base] | (bytes[base + 1] << 8) | (bytes[base + 2] << 16) | (bytes[base + 3] << 24)) >>>
+        0;
 
-    hB ^= k;
-    hB = ((hB << 13) | (hB >>> 19)) >>> 0;
-    hB = (Math.imul(hB, 5) + 0xe6546b64) >>> 0;
+      k = Math.imul(k, c1) >>> 0;
+      k = ((k << 15) | (k >>> 17)) >>> 0;
+      k = Math.imul(k, c2) >>> 0;
+
+      h ^= k;
+      h = ((h << 13) | (h >>> 19)) >>> 0;
+      h = (Math.imul(h, 5) + 0xe6546b64) >>> 0;
+    }
   }
 
   // tail
@@ -224,28 +250,11 @@ function murmur3X86_32x2(
     k1 = Math.imul(k1, c1) >>> 0;
     k1 = ((k1 << 15) | (k1 >>> 17)) >>> 0;
     k1 = Math.imul(k1, c2) >>> 0;
-    hA ^= k1;
-    hB ^= k1;
+    h ^= k1;
   }
 
-  // fmix (A)
-  hA ^= length;
-  hA ^= hA >>> 16;
-  hA = Math.imul(hA, 0x85ebca6b) >>> 0;
-  hA ^= hA >>> 13;
-  hA = Math.imul(hA, 0xc2b2ae35) >>> 0;
-  hA ^= hA >>> 16;
-
-  // fmix (B)
-  hB ^= length;
-  hB ^= hB >>> 16;
-  hB = Math.imul(hB, 0x85ebca6b) >>> 0;
-  hB ^= hB >>> 13;
-  hB = Math.imul(hB, 0xc2b2ae35) >>> 0;
-  hB ^= hB >>> 16;
-
-  out[0] = hA >>> 0;
-  out[1] = hB >>> 0;
+  h ^= length;
+  return fmix32(h);
 }
 
 export class VacuumFilter {
@@ -261,12 +270,14 @@ export class VacuumFilter {
   private readonly lenMasks: [number, number, number, number];
 
   private readonly numBuckets: number;
+  private readonly bucketMask: number;
+  private readonly fastReduceMul: number | null;
   private readonly table: Uint32Array;
   private numItems = 0;
 
   // 热路径优化：避免 TextEncoder.encode 分配；每次 has/add/delete 复用同一块 scratch
   private scratch: Uint8Array = new Uint8Array(DEFAULT_SCRATCH_BYTES);
-  private readonly hashOut: Uint32Array = new Uint32Array(2);
+  private scratch32: Uint32Array = new Uint32Array(this.scratch.buffer);
   private tmpIndex = 0;
   private tmpTag = 0;
 
@@ -320,6 +331,11 @@ export class VacuumFilter {
       const mask = bigSeg - 1;
       this.lenMasks = [mask, mask, mask, mask];
       this.numBuckets = bucketCount;
+      this.bucketMask = (this.numBuckets & (this.numBuckets - 1)) === 0 ? this.numBuckets - 1 : 0;
+      this.fastReduceMul =
+        this.bucketMask === 0 && this.numBuckets <= FAST_REDUCE_MAX_BUCKETS
+          ? this.numBuckets * INV_2_32
+          : null;
       this.table = new Uint32Array(this.numBuckets * BUCKET_SIZE);
       return;
     }
@@ -341,6 +357,11 @@ export class VacuumFilter {
     const segLens = [l0 + 1, l1 + 1, l2 + 1, l3 + 1];
     const maxSegLen = Math.max(...segLens);
     this.numBuckets = roundUpToMultiple(bucketCount, upperPower2(maxSegLen));
+    this.bucketMask = (this.numBuckets & (this.numBuckets - 1)) === 0 ? this.numBuckets - 1 : 0;
+    this.fastReduceMul =
+      this.bucketMask === 0 && this.numBuckets <= FAST_REDUCE_MAX_BUCKETS
+        ? this.numBuckets * INV_2_32
+        : null;
     this.table = new Uint32Array(this.numBuckets * BUCKET_SIZE);
   }
 
@@ -432,32 +453,46 @@ export class VacuumFilter {
 
   private indexTag(key: string): void {
     // 使用 seeded MurmurHash3（32-bit）生成确定性哈希，降低可控输入退化风险
-    // 关键优化：ASCII 快路径（API Key/ID 通常为 ASCII），避免 TextEncoder.encode 分配
+    // 关键优化：尽量走 TextEncoder.encodeInto（无分配，且编码在原生层完成）
     const strLen = key.length;
     if (this.scratch.length < strLen) {
       this.scratch = new Uint8Array(Math.max(this.scratch.length * 2, strLen));
+      this.scratch32 = new Uint32Array(this.scratch.buffer);
     }
 
-    let asciiLen = 0;
-    for (; asciiLen < strLen; asciiLen++) {
-      const c = key.charCodeAt(asciiLen);
-      if (c > 0x7f) break;
-      this.scratch[asciiLen] = c;
+    // encodeInto 可能因 out buffer 不足而截断：read < strLen 时扩容重试
+    let encoded = textEncoder.encodeInto(key, this.scratch);
+    if (encoded.read < strLen) {
+      // UTF-8 最坏 4 bytes/char；用 4x 作为上界（仅影响少见的非 ASCII key）
+      this.scratch = new Uint8Array(Math.max(this.scratch.length * 2, strLen * 4));
+      this.scratch32 = new Uint32Array(this.scratch.buffer);
+      encoded = textEncoder.encodeInto(key, this.scratch);
     }
 
-    if (asciiLen === strLen) {
-      murmur3X86_32x2(this.scratch, strLen, this.hashSeedA, this.hashSeedB, this.hashOut);
-    } else {
-      // 非 ASCII：交给 TextEncoder（少见路径）
-      const keyBytes = textEncoder.encode(key);
-      murmur3X86_32x2(keyBytes, keyBytes.length, this.hashSeedA, this.hashSeedB, this.hashOut);
-    }
+    // 极端情况下 encodeInto 仍可能因缓冲不足而截断：回退到 encode（保证正确性）
+    const bytes = encoded.read < strLen ? textEncoder.encode(key) : this.scratch;
+    const byteLen = encoded.read < strLen ? bytes.length : encoded.written;
+    const hvIndex = murmur3X86_32(
+      bytes,
+      byteLen,
+      this.hashSeedA,
+      bytes === this.scratch ? this.scratch32 : undefined
+    );
+    // tag 从 index hash 二次混合派生（避免再扫一遍 bytes）
+    const hvTag = fmix32((hvIndex ^ this.hashSeedB) >>> 0);
 
-    const hvIndex = this.hashOut[0] >>> 0;
-    const hvTag = this.hashOut[1] >>> 0;
-
-    // 参考实现使用 `hash % numBuckets`。这里保持简单、快速（即便 numBuckets 非 2 的幂也可用）。
-    const index = hvIndex % this.numBuckets;
+    // 参考实现使用 `hash % numBuckets`；这里做一个“尽量快”的等价映射：
+    // - numBuckets 为 2 的幂：位与（最快）
+    // - numBuckets 较小：使用 multiply-high 等价式（避免 `%`）
+    // - 其它：回退到 `%`
+    const bucketMask = this.bucketMask;
+    const fastReduceMul = this.fastReduceMul;
+    const index =
+      bucketMask !== 0
+        ? (hvIndex & bucketMask) >>> 0
+        : fastReduceMul
+          ? ((hvIndex * fastReduceMul) | 0) >>> 0
+          : hvIndex % this.numBuckets;
 
     let tag = (hvTag & this.tagMask) >>> 0;
     if (tag === 0) tag = 1;
