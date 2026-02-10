@@ -123,6 +123,10 @@ const SetVendorTypeManualOpenSchema = z.object({
   manualOpen: z.boolean(),
 });
 
+const BatchGetEndpointCircuitInfoSchema = z.object({
+  endpointIds: z.array(EndpointIdSchema).min(0),
+});
+
 async function getAdminSession() {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
@@ -543,6 +547,59 @@ export async function getEndpointCircuitInfo(input: unknown): Promise<
   } catch (error) {
     logger.error("getEndpointCircuitInfo:error", error);
     const message = error instanceof Error ? error.message : "获取端点熔断状态失败";
+    return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}
+
+export async function batchGetEndpointCircuitInfo(input: unknown): Promise<
+  ActionResult<
+    Array<{
+      endpointId: number;
+      circuitState: "closed" | "open" | "half-open";
+      failureCount: number;
+      circuitOpenUntil: number | null;
+    }>
+  >
+> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const parsed = BatchGetEndpointCircuitInfoSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: formatZodError(parsed.error),
+        errorCode: extractZodErrorCode(parsed.error),
+      };
+    }
+
+    if (parsed.data.endpointIds.length === 0) {
+      return { ok: true, data: [] };
+    }
+
+    const results = await Promise.all(
+      parsed.data.endpointIds.map(async (endpointId) => {
+        const { health } = await getEndpointHealthInfo(endpointId);
+        return {
+          endpointId,
+          circuitState: health.circuitState,
+          failureCount: health.failureCount,
+          circuitOpenUntil: health.circuitOpenUntil,
+        };
+      })
+    );
+
+    return { ok: true, data: results };
+  } catch (error) {
+    logger.error("batchGetEndpointCircuitInfo:error", error);
+    const message = error instanceof Error ? error.message : "批量获取端点熔断状态失败";
     return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
   }
 }

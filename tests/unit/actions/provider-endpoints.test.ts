@@ -259,4 +259,97 @@ describe("provider-endpoints actions", () => {
     expect(res.ok).toBe(true);
     expect(tryDeleteProviderVendorIfEmptyMock).toHaveBeenCalledWith(123);
   });
+
+  describe("batchGetEndpointCircuitInfo", () => {
+    it("returns circuit info for multiple endpoints", async () => {
+      getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+      const { getEndpointHealthInfo } = await import("@/lib/endpoint-circuit-breaker");
+      vi.mocked(getEndpointHealthInfo)
+        .mockResolvedValueOnce({
+          health: {
+            failureCount: 0,
+            lastFailureTime: null,
+            circuitState: "closed" as const,
+            circuitOpenUntil: null,
+            halfOpenSuccessCount: 0,
+          },
+          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
+        })
+        .mockResolvedValueOnce({
+          health: {
+            failureCount: 5,
+            lastFailureTime: Date.now(),
+            circuitState: "open" as const,
+            circuitOpenUntil: Date.now() + 60000,
+            halfOpenSuccessCount: 0,
+          },
+          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
+        })
+        .mockResolvedValueOnce({
+          health: {
+            failureCount: 1,
+            lastFailureTime: Date.now() - 1000,
+            circuitState: "half-open" as const,
+            circuitOpenUntil: null,
+            halfOpenSuccessCount: 0,
+          },
+          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
+        });
+
+      const { batchGetEndpointCircuitInfo } = await import("@/actions/provider-endpoints");
+      const res = await batchGetEndpointCircuitInfo({ endpointIds: [1, 2, 3] });
+
+      expect(res.ok).toBe(true);
+      expect(res.data).toHaveLength(3);
+      expect(res.data?.[0]).toEqual({
+        endpointId: 1,
+        circuitState: "closed",
+        failureCount: 0,
+        circuitOpenUntil: null,
+      });
+      expect(res.data?.[1]).toEqual({
+        endpointId: 2,
+        circuitState: "open",
+        failureCount: 5,
+        circuitOpenUntil: expect.any(Number),
+      });
+      expect(res.data?.[2]).toEqual({
+        endpointId: 3,
+        circuitState: "half-open",
+        failureCount: 1,
+        circuitOpenUntil: null,
+      });
+    });
+
+    it("returns empty array for empty input", async () => {
+      getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+      const { batchGetEndpointCircuitInfo } = await import("@/actions/provider-endpoints");
+      const res = await batchGetEndpointCircuitInfo({ endpointIds: [] });
+
+      expect(res.ok).toBe(true);
+      expect(res.data).toEqual([]);
+    });
+
+    it("requires admin session", async () => {
+      getSessionMock.mockResolvedValue({ user: { role: "user" } });
+
+      const { batchGetEndpointCircuitInfo } = await import("@/actions/provider-endpoints");
+      const res = await batchGetEndpointCircuitInfo({ endpointIds: [1, 2] });
+
+      expect(res.ok).toBe(false);
+      expect(res.errorCode).toBe("PERMISSION_DENIED");
+    });
+
+    it("validates endpointIds are positive integers", async () => {
+      getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+      const { batchGetEndpointCircuitInfo } = await import("@/actions/provider-endpoints");
+      const res = await batchGetEndpointCircuitInfo({ endpointIds: [0, -1, 1] });
+
+      expect(res.ok).toBe(false);
+      expect(res.errorCode).toBe("MIN_VALUE");
+    });
+  });
 });
