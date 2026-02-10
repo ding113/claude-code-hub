@@ -404,7 +404,7 @@ export async function probeProviderEndpoint(input: unknown): Promise<
     endpoint: ProviderEndpoint;
     result: {
       ok: boolean;
-      method: "HEAD" | "GET";
+      method: "HEAD" | "GET" | "TCP";
       statusCode: number | null;
       latencyMs: number | null;
       errorType: string | null;

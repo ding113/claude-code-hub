@@ -1,11 +1,12 @@
 import "server-only";
 
+import net from "node:net";
 import { recordEndpointFailure } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { findProviderEndpointById, recordProviderEndpointProbeResult } from "@/repository";
 import type { ProviderEndpoint, ProviderEndpointProbeSource } from "@/types/provider";
 
-export type EndpointProbeMethod = "HEAD" | "GET";
+export type EndpointProbeMethod = "HEAD" | "GET" | "TCP";
 
 export interface EndpointProbeResult {
   ok: boolean;
@@ -25,6 +26,12 @@ const DEFAULT_TIMEOUT_MS = Math.max(
   1,
   parseIntWithDefault(process.env.ENDPOINT_PROBE_TIMEOUT_MS, 5_000)
 );
+
+function resolveProbeMethod(): EndpointProbeMethod {
+  const raw = process.env.ENDPOINT_PROBE_METHOD?.toUpperCase();
+  if (raw === "HEAD" || raw === "GET") return raw;
+  return "TCP";
+}
 
 function safeUrlForLog(rawUrl: string): string {
   try {
@@ -69,6 +76,75 @@ function toErrorInfo(error: unknown): { type: string; message: string } {
     return { type: "network_error", message: error.message };
   }
   return { type: "unknown_error", message: String(error) };
+}
+
+async function probeEndpointTcp(rawUrl: string, timeoutMs: number): Promise<EndpointProbeResult> {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return {
+      ok: false,
+      method: "TCP",
+      statusCode: null,
+      latencyMs: null,
+      errorType: "invalid_url",
+      errorMessage: "invalid_url",
+    };
+  }
+
+  const port = parsed.port
+    ? Number.parseInt(parsed.port, 10)
+    : parsed.protocol === "https:"
+      ? 443
+      : 80;
+  const host = parsed.hostname;
+
+  const start = Date.now();
+
+  return new Promise<EndpointProbeResult>((resolve) => {
+    const socket = net.createConnection({ host, port, timeout: timeoutMs }, () => {
+      const latencyMs = Date.now() - start;
+      socket.destroy();
+      resolve({
+        ok: true,
+        method: "TCP",
+        statusCode: null,
+        latencyMs,
+        errorType: null,
+        errorMessage: null,
+      });
+    });
+
+    socket.on("timeout", () => {
+      socket.destroy();
+      resolve({
+        ok: false,
+        method: "TCP",
+        statusCode: null,
+        latencyMs: null,
+        errorType: "timeout",
+        errorMessage: "timeout",
+      });
+    });
+
+    socket.on("error", (error) => {
+      const latencyMs = Date.now() - start;
+      logger.debug("[EndpointProbe] TCP probe failed", {
+        url: safeUrlForLog(rawUrl),
+        errorMessage: error.message,
+      });
+      socket.destroy();
+      resolve({
+        ok: false,
+        method: "TCP",
+        statusCode: null,
+        latencyMs,
+        errorType: "network_error",
+        errorMessage: error.message,
+      });
+    });
+  });
 }
 
 async function tryProbe(
@@ -122,6 +198,13 @@ export async function probeEndpointUrl(
   url: string,
   timeoutMs: number = DEFAULT_TIMEOUT_MS
 ): Promise<EndpointProbeResult> {
+  const method = resolveProbeMethod();
+
+  if (method === "TCP") {
+    return probeEndpointTcp(url, timeoutMs);
+  }
+
+  // HTTP-based probing: try HEAD first, fallback to GET on network failure
   const head = await tryProbe(url, "HEAD", timeoutMs);
   if (head.statusCode === null) {
     return tryProbe(url, "GET", timeoutMs);

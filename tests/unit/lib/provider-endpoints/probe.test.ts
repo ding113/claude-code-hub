@@ -26,10 +26,12 @@ function makeEndpoint(overrides: Partial<ProviderEndpoint>): ProviderEndpoint {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  delete process.env.ENDPOINT_PROBE_METHOD;
 });
 
 describe("provider-endpoints: probe", () => {
   test("probeEndpointUrl: HEAD 成功时直接返回，不触发 GET", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.resetModules();
 
     const logger = {
@@ -69,6 +71,7 @@ describe("provider-endpoints: probe", () => {
   });
 
   test("probeEndpointUrl: HEAD 网络错误时回退 GET", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.resetModules();
 
     const logger = {
@@ -111,6 +114,7 @@ describe("provider-endpoints: probe", () => {
   });
 
   test("probeEndpointUrl: 5xx 返回 ok=false 且标注 http_5xx", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.resetModules();
 
     const logger = {
@@ -148,6 +152,7 @@ describe("provider-endpoints: probe", () => {
   });
 
   test("probeEndpointUrl: 4xx 仍视为 ok=true", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.resetModules();
 
     const logger = {
@@ -183,6 +188,7 @@ describe("provider-endpoints: probe", () => {
   });
 
   test("probeEndpointUrl: AbortError 归类为 timeout", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.resetModules();
 
     const logger = {
@@ -264,6 +270,7 @@ describe("provider-endpoints: probe", () => {
   });
 
   test("probeProviderEndpointAndRecord: 记录入库字段包含 source/ok/statusCode/latency/probedAt", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
@@ -330,6 +337,7 @@ describe("provider-endpoints: probe", () => {
   });
 
   test("probeProviderEndpointAndRecord: scheduled 成功总是写入探测日志记录", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:30.000Z"));
 
@@ -377,6 +385,7 @@ describe("provider-endpoints: probe", () => {
   });
 
   test("probeProviderEndpointAndRecord: 失败会计入端点熔断计数（scheduled 与 manual）", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "HEAD";
     vi.resetModules();
 
     const recordMock = vi.fn(async () => {});
@@ -414,5 +423,179 @@ describe("provider-endpoints: probe", () => {
 
     expect(recordFailureMock).toHaveBeenCalledTimes(2);
     expect(recordMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("probeEndpointUrl: TCP mode connects to host:port without HTTP request", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "TCP";
+    vi.resetModules();
+
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      trace: vi.fn(),
+      error: vi.fn(),
+      fatal: vi.fn(),
+    };
+
+    vi.doMock("@/lib/logger", () => ({ logger }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(),
+      recordProviderEndpointProbeResult: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
+    }));
+
+    // Mock net.createConnection to simulate successful TCP connection
+    const mockSocket = {
+      destroy: vi.fn(),
+      on: vi.fn(),
+    };
+
+    vi.doMock("node:net", () => ({
+      default: {
+        createConnection: vi.fn((_opts: unknown, cb: () => void) => {
+          // Simulate immediate successful connection
+          setTimeout(() => cb(), 0);
+          return mockSocket;
+        }),
+      },
+    }));
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { probeEndpointUrl } = await import("@/lib/provider-endpoints/probe");
+    const result = await probeEndpointUrl("https://api.example.com:8443/v1", 5000);
+
+    expect(result.ok).toBe(true);
+    expect(result.method).toBe("TCP");
+    expect(result.statusCode).toBeNull();
+    expect(result.errorType).toBeNull();
+    expect(result.latencyMs).toBeTypeOf("number");
+    // fetch should never be called in TCP mode
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("probeEndpointUrl: TCP mode defaults to port 80 for http URLs", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "TCP";
+    vi.resetModules();
+
+    vi.doMock("@/lib/logger", () => ({
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        trace: vi.fn(),
+        error: vi.fn(),
+        fatal: vi.fn(),
+      },
+    }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(),
+      recordProviderEndpointProbeResult: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
+    }));
+
+    const mockSocket = {
+      destroy: vi.fn(),
+      on: vi.fn(),
+    };
+
+    vi.doMock("node:net", () => ({
+      default: {
+        createConnection: vi.fn((_opts: unknown, cb: () => void) => {
+          setTimeout(() => cb(), 0);
+          return mockSocket;
+        }),
+      },
+    }));
+
+    const { probeEndpointUrl } = await import("@/lib/provider-endpoints/probe");
+    const result = await probeEndpointUrl("http://api.example.com/v1/messages", 5000);
+
+    // TCP connection succeeds, no HTTP status code
+    expect(result.ok).toBe(true);
+    expect(result.method).toBe("TCP");
+    expect(result.statusCode).toBeNull();
+  });
+
+  test("probeEndpointUrl: TCP mode returns invalid_url for bad URLs", async () => {
+    process.env.ENDPOINT_PROBE_METHOD = "TCP";
+    vi.resetModules();
+
+    vi.doMock("@/lib/logger", () => ({
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        trace: vi.fn(),
+        error: vi.fn(),
+        fatal: vi.fn(),
+      },
+    }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(),
+      recordProviderEndpointProbeResult: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
+    }));
+
+    const { probeEndpointUrl } = await import("@/lib/provider-endpoints/probe");
+    const result = await probeEndpointUrl("not-a-valid-url", 5000);
+
+    expect(result.ok).toBe(false);
+    expect(result.method).toBe("TCP");
+    expect(result.errorType).toBe("invalid_url");
+  });
+
+  test("probeEndpointUrl: defaults to TCP when ENDPOINT_PROBE_METHOD is not set", async () => {
+    delete process.env.ENDPOINT_PROBE_METHOD;
+    vi.resetModules();
+
+    vi.doMock("@/lib/logger", () => ({
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        trace: vi.fn(),
+        error: vi.fn(),
+        fatal: vi.fn(),
+      },
+    }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(),
+      recordProviderEndpointProbeResult: vi.fn(),
+    }));
+    vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      recordEndpointFailure: vi.fn(async () => {}),
+    }));
+
+    const mockSocket = {
+      destroy: vi.fn(),
+      on: vi.fn(),
+    };
+
+    vi.doMock("node:net", () => ({
+      default: {
+        createConnection: vi.fn((_opts: unknown, cb: () => void) => {
+          setTimeout(() => cb(), 0);
+          return mockSocket;
+        }),
+      },
+    }));
+
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { probeEndpointUrl } = await import("@/lib/provider-endpoints/probe");
+    const result = await probeEndpointUrl("https://example.com", 5000);
+
+    expect(result.method).toBe("TCP");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

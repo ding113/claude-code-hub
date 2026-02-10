@@ -286,12 +286,24 @@ function EndpointRow({
       if (!res.ok) throw new Error(res.error);
       return res;
     },
+    onMutate: () => {
+      // Optimistic update: immediately set circuit state to closed
+      queryClient.setQueriesData<Record<number, EndpointCircuitState>>(
+        { queryKey: ["endpoint-circuit-info"] },
+        (old) => {
+          if (!old) return old;
+          return { ...old, [endpoint.id]: "closed" as EndpointCircuitState };
+        }
+      );
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["endpoint-circuit-info"] });
       queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
       toast.success(tStatus("resetCircuitSuccess"));
     },
     onError: () => {
+      // Revert optimistic update on failure
+      queryClient.invalidateQueries({ queryKey: ["endpoint-circuit-info"] });
       toast.error(tStatus("resetCircuitFailed"));
     },
   });
@@ -378,6 +390,29 @@ function EndpointRow({
               )}
             </Button>
 
+            {isCircuitTripped && (
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => resetCircuitMutation.mutate()}
+                      disabled={resetCircuitMutation.isPending}
+                    >
+                      {resetCircuitMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{tStatus("resetCircuit")}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             <EditEndpointDialog endpoint={endpoint} />
 
             <DropdownMenu>
@@ -387,15 +422,6 @@ function EndpointRow({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {isCircuitTripped && (
-                  <DropdownMenuItem
-                    onClick={() => resetCircuitMutation.mutate()}
-                    disabled={resetCircuitMutation.isPending}
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    {tStatus("resetCircuit")}
-                  </DropdownMenuItem>
-                )}
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={() => {
