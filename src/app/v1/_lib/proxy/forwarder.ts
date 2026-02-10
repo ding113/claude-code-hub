@@ -2444,14 +2444,22 @@ export class ProxyForwarder {
     // 检查 HTTP 错误状态（4xx/5xx 均视为失败，触发重试）
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {
-      // HTTP 错误：清除响应超时定时器
-      if (responseTimeoutId) {
-        clearTimeout(responseTimeoutId);
+      // ⚠️ HTTP 错误：不要在读取响应体之前清除响应超时定时器
+      // 原因：某些上游会在返回 4xx/5xx 后“卡住不结束 body”，
+      // 若提前 clearTimeout，会导致 ProxyError.fromUpstreamResponse() 的 response.text() 无限等待，
+      // 从而让整条请求链路（含客户端）悬挂，前端表现为一直“请求中”。
+      //
+      // 正确策略：保留 response timeout 继续监控 body 读取，并在 finally 里清理定时器。
+      try {
+        throw await ProxyError.fromUpstreamResponse(response, {
+          id: provider.id,
+          name: provider.name,
+        });
+      } finally {
+        if (responseTimeoutId) {
+          clearTimeout(responseTimeoutId);
+        }
       }
-      throw await ProxyError.fromUpstreamResponse(response, {
-        id: provider.id,
-        name: provider.name,
-      });
     }
 
     // 将响应超时清理函数和 controller 引用附加到 session，供 response-handler 使用
