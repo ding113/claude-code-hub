@@ -156,10 +156,37 @@
         "help": "覆写请求体中的 thinking.budget_tokens。范围：1024-32000。设置后会强制 thinking.type 为 'enabled'。",
         "options": {
           "inherit": "不覆写（遵循客户端）",
-          "custom": "自定义"
+          "custom": "自定义",
+          "adaptive": "自适应思考"
         },
         "placeholder": "如 10240",
         "maxOutButton": "拉满 (32000)"
+      },
+      "adaptiveThinking": {
+        "effort": {
+          "label": "思考深度",
+          "help": "控制推理深度。越高 = 思考越深入。",
+          "options": {
+            "low": "低",
+            "medium": "中",
+            "high": "高（推荐）",
+            "max": "最大"
+          }
+        },
+        "modelMatchMode": {
+          "label": "模型匹配",
+          "help": "哪些模型启用自适应思考。",
+          "options": {
+            "all": "所有模型",
+            "specific": "仅特定模型"
+          }
+        },
+        "models": {
+          "label": "目标模型",
+          "help": "启用自适应思考的模型列表。不匹配的模型保持原样透传。",
+          "placeholder": "如 claude-opus-4-6",
+          "addButton": "添加模型"
+        }
       }
     },
     "geminiOverrides": {

@@ -66,6 +66,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexParallelToolCallsPreference: providerData.codex_parallel_tool_calls_preference ?? null,
     anthropicMaxTokensPreference: providerData.anthropic_max_tokens_preference ?? null,
     anthropicThinkingBudgetPreference: providerData.anthropic_thinking_budget_preference ?? null,
+    anthropicAdaptiveThinking: providerData.anthropic_adaptive_thinking ?? null,
     geminiGoogleSearchPreference: providerData.gemini_google_search_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
@@ -135,6 +136,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
         anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+        anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
         tpm: providers.tpm,
         rpm: providers.rpm,
@@ -483,6 +485,8 @@ export async function updateProvider(
   if (providerData.anthropic_thinking_budget_preference !== undefined)
     dbData.anthropicThinkingBudgetPreference =
       providerData.anthropic_thinking_budget_preference ?? null;
+  if (providerData.anthropic_adaptive_thinking !== undefined)
+    dbData.anthropicAdaptiveThinking = providerData.anthropic_adaptive_thinking ?? null;
   if (providerData.gemini_google_search_preference !== undefined)
     dbData.geminiGoogleSearchPreference = providerData.gemini_google_search_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
@@ -584,6 +588,7 @@ export async function updateProvider(
         codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
         anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+        anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
         tpm: providers.tpm,
         rpm: providers.rpm,

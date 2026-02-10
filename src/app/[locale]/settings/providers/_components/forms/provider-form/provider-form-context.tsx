@@ -62,6 +62,7 @@ export function createInitialState(
       anthropicMaxTokensPreference: sourceProvider?.anthropicMaxTokensPreference ?? "inherit",
       anthropicThinkingBudgetPreference:
         sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
+      anthropicAdaptiveThinking: sourceProvider?.anthropicAdaptiveThinking ?? null,
       geminiGoogleSearchPreference: sourceProvider?.geminiGoogleSearchPreference ?? "inherit",
     },
     rateLimit: {
@@ -178,9 +179,58 @@ export function providerFormReducer(
         routing: { ...state.routing, anthropicMaxTokensPreference: action.payload },
       };
     case "SET_ANTHROPIC_THINKING_BUDGET":
+      if (action.payload === "adaptive") {
+        return {
+          ...state,
+          routing: {
+            ...state.routing,
+            anthropicThinkingBudgetPreference: "adaptive",
+            anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking ?? {
+              effort: "high",
+              modelMatchMode: "specific",
+              models: ["claude-opus-4-6"],
+            },
+          },
+        };
+      }
       return {
         ...state,
-        routing: { ...state.routing, anthropicThinkingBudgetPreference: action.payload },
+        routing: {
+          ...state.routing,
+          anthropicThinkingBudgetPreference: action.payload,
+          anthropicAdaptiveThinking:
+            action.payload === "inherit" ? null : state.routing.anthropicAdaptiveThinking,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_EFFORT":
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking
+            ? { ...state.routing.anthropicAdaptiveThinking, effort: action.payload }
+            : null,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE":
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking
+            ? { ...state.routing.anthropicAdaptiveThinking, modelMatchMode: action.payload }
+            : null,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_MODELS":
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking
+            ? { ...state.routing.anthropicAdaptiveThinking, models: action.payload }
+            : null,
+        },
       };
     case "SET_GEMINI_GOOGLE_SEARCH":
       return {

@@ -323,6 +323,10 @@ function ProviderFormContent({
           codex_parallel_tool_calls_preference: state.routing.codexParallelToolCallsPreference,
           anthropic_max_tokens_preference: state.routing.anthropicMaxTokensPreference,
           anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
+          anthropic_adaptive_thinking:
+            state.routing.anthropicThinkingBudgetPreference === "adaptive"
+              ? state.routing.anthropicAdaptiveThinking
+              : null,
           gemini_google_search_preference: state.routing.geminiGoogleSearchPreference,
           limit_5h_usd: state.rateLimit.limit5hUsd,
           limit_daily_usd: state.rateLimit.limitDailyUsd,
