@@ -62,6 +62,10 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
     modelMatchMode: z.enum(["specific", "all"]),
     models: z.array(z.string().min(1).max(100)).max(50),
   })
+  .refine((data) => data.modelMatchMode !== "specific" || data.models.length > 0, {
+    message: "models must not be empty when modelMatchMode is 'specific'",
+    path: ["models"],
+  })
   .nullable()
   .optional();
 
