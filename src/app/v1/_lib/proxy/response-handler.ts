@@ -133,8 +133,17 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     effectiveStatusCode = clientAborted ? 499 : 502;
     errorMessage = clientAborted ? "CLIENT_ABORTED" : (abortReason ?? "STREAM_ABORTED");
   } else {
+    // streamEndedNormally=true
     effectiveStatusCode = upstreamStatusCode;
-    errorMessage = null;
+
+    if (upstreamStatusCode >= 400) {
+      // 非200错误状态码：解析JSON错误响应
+      const detected = detectUpstreamErrorFromSseOrJsonText(allContent);
+      errorMessage = detected.isError ? detected.code : `HTTP ${upstreamStatusCode}`;
+    } else {
+      // 2xx 成功状态码
+      errorMessage = null;
+    }
   }
 
   // 未启用延迟结算 / provider 缺失：
@@ -274,6 +283,55 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
       errorMessage: detected.code,
+    });
+
+    return { effectiveStatusCode, errorMessage, providerIdForPersistence };
+  }
+
+  // ========== 非200状态码处理（流自然结束但HTTP状态码表示错误）==========
+  if (upstreamStatusCode >= 400 && errorMessage !== null) {
+    logger.warn("[ResponseHandler] SSE completed but HTTP status indicates error", {
+      providerId: meta.providerId,
+      providerName: meta.providerName,
+      upstreamStatusCode,
+      effectiveStatusCode,
+      errorMessage,
+    });
+
+    // 计入熔断器：让后续请求能正确触发故障转移/熔断
+    try {
+      const { recordFailure } = await import("@/lib/circuit-breaker");
+      await recordFailure(meta.providerId, new Error(errorMessage));
+    } catch (cbError) {
+      logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
+        providerId: meta.providerId,
+        sessionId: session.sessionId ?? null,
+        error: cbError,
+      });
+    }
+
+    // endpoint 级熔断：与成功路径保持对称
+    if (meta.endpointId != null) {
+      try {
+        const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
+        await recordEndpointFailure(meta.endpointId, new Error(errorMessage));
+      } catch (endpointError) {
+        logger.warn("[ResponseHandler] Failed to record endpoint failure (non-200)", {
+          endpointId: meta.endpointId,
+          providerId: meta.providerId,
+          error: endpointError,
+        });
+      }
+    }
+
+    // 记录到决策链
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: "retry_failed",
+      attemptNumber: meta.attemptNumber,
+      statusCode: effectiveStatusCode,
+      errorMessage: errorMessage,
     });
 
     return { effectiveStatusCode, errorMessage, providerIdForPersistence };
@@ -453,9 +511,46 @@ export class ProxyResponseHandler {
               });
             }
 
+            // 非200状态码处理：解析错误响应并计入熔断器
+            let errorMessageForFinalize: string | undefined;
+            if (statusCode >= 400) {
+              const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
+              errorMessageForFinalize = detected.isError
+                ? detected.code
+                : `HTTP ${statusCode}`;
+
+              // 计入熔断器
+              try {
+                const { recordFailure } = await import("@/lib/circuit-breaker");
+                await recordFailure(provider.id, new Error(errorMessageForFinalize));
+              } catch (cbError) {
+                logger.warn(
+                  "ResponseHandler: Failed to record non-200 error in circuit breaker (passthrough)",
+                  {
+                    providerId: provider.id,
+                    error: cbError,
+                  }
+                );
+              }
+
+              // 记录到决策链
+              session.addProviderToChain(provider, {
+                reason: "retry_failed",
+                attemptNumber: 1,
+                statusCode: statusCode,
+                errorMessage: errorMessageForFinalize,
+              });
+            }
+
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
-            await finalizeRequestStats(session, responseText, statusCode, duration);
+            await finalizeRequestStats(
+              session,
+              responseText,
+              statusCode,
+              duration,
+              errorMessageForFinalize
+            );
           } catch (error) {
             if (!isClientAbortError(error as Error)) {
               logger.error(
@@ -658,6 +753,33 @@ export class ProxyResponseHandler {
             statusCode: statusCode,
           }).catch((error: unknown) => {
             logger.error("[ResponseHandler] Failed to update session usage:", error);
+          });
+        }
+
+        // 非200状态码处理：解析错误响应并计入熔断器
+        if (statusCode >= 400) {
+          const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
+          const errorMessageForDb = detected.isError
+            ? detected.code
+            : `HTTP ${statusCode}`;
+
+          // 计入熔断器
+          try {
+            const { recordFailure } = await import("@/lib/circuit-breaker");
+            await recordFailure(provider.id, new Error(errorMessageForDb));
+          } catch (cbError) {
+            logger.warn("ResponseHandler: Failed to record non-200 error in circuit breaker", {
+              providerId: provider.id,
+              error: cbError,
+            });
+          }
+
+          // 记录到决策链
+          session.addProviderToChain(provider, {
+            reason: "retry_failed",
+            attemptNumber: 1,
+            statusCode: statusCode,
+            errorMessage: errorMessageForDb,
           });
         }
 
