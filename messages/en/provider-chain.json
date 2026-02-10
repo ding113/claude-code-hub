@@ -37,7 +37,8 @@
     "systemError": "System Error",
     "concurrentLimit": "Concurrent Limit",
     "http2Fallback": "HTTP/2 Fallback",
-    "clientError": "Client Error"
+    "clientError": "Client Error",
+    "endpointPoolExhausted": "Endpoint Pool Exhausted"
   },
   "reasons": {
     "request_success": "Success",
@@ -48,7 +49,8 @@
     "concurrent_limit_failed": "Concurrent Limit",
     "http2_fallback": "HTTP/2 Fallback",
     "session_reuse": "Session Reuse",
-    "initial_selection": "Initial Selection"
+    "initial_selection": "Initial Selection",
+    "endpoint_pool_exhausted": "Endpoint Pool Exhausted"
   },
   "filterReasons": {
     "rate_limited": "Rate Limited",
@@ -61,7 +63,9 @@
     "context_1m_disabled": "1M Context Disabled",
     "model_not_supported": "Model Not Supported",
     "group_mismatch": "Group Mismatch",
-    "health_check_failed": "Health Check Failed"
+    "health_check_failed": "Health Check Failed",
+    "endpoint_circuit_open": "Endpoint Circuit Open",
+    "endpoint_disabled": "Endpoint Disabled"
   },
   "details": {
     "selectionMethod": "Selection",
@@ -185,6 +189,14 @@
     "ruleMatchType": "Match Type: {matchType}",
     "ruleDescription": "Description: {description}",
     "ruleHasOverride": "Overrides: response={response}, statusCode={statusCode}",
-    "clientErrorNote": "This error is caused by client input and is not retried or counted in the circuit breaker."
+    "clientErrorNote": "This error is caused by client input and is not retried or counted in the circuit breaker.",
+    "endpointPoolExhausted": "Endpoint Pool Exhausted (all endpoints unavailable)",
+    "endpointStats": "Endpoint Filter Stats",
+    "endpointStatsTotal": "Total Endpoints: {count}",
+    "endpointStatsEnabled": "Enabled Endpoints: {count}",
+    "endpointStatsCircuitOpen": "Circuit-Open Endpoints: {count}",
+    "endpointStatsAvailable": "Available Endpoints: {count}",
+    "strictBlockNoEndpoints": "Strict mode: no endpoint candidates available, provider skipped without fallback",
+    "strictBlockSelectorError": "Strict mode: endpoint selector encountered an error, provider skipped without fallback"
   }
 }

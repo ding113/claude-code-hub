@@ -63,7 +63,8 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
-    item.reason === "client_error_non_retryable"
+    item.reason === "client_error_non_retryable" ||
+    item.reason === "endpoint_pool_exhausted"
   ) {
     return "✗";
   }
@@ -90,7 +91,8 @@ function isActualRequest(item: ProviderChainItem): boolean {
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
-    item.reason === "client_error_non_retryable"
+    item.reason === "client_error_non_retryable" ||
+    item.reason === "endpoint_pool_exhausted"
   ) {
     return true;
   }
@@ -309,6 +311,8 @@ export function formatProviderDescription(
         desc += ` ${t("description.http2Fallback")}`;
       } else if (item.reason === "client_error_non_retryable") {
         desc += ` ${t("description.clientError")}`;
+      } else if (item.reason === "endpoint_pool_exhausted") {
+        desc += ` ${t("description.endpointPoolExhausted")}`;
       }
 
       desc += "\n";
@@ -707,6 +711,34 @@ export function formatProviderTimeline(
       }
 
       timeline += `\n${t("timeline.completed")}`;
+      continue;
+    }
+
+    // === 端点池耗尽 ===
+    if (item.reason === "endpoint_pool_exhausted") {
+      timeline += `${t("timeline.endpointPoolExhausted")}\n\n`;
+      timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+
+      // 端点过滤统计
+      if (item.endpointFilterStats) {
+        const stats = item.endpointFilterStats;
+        timeline += `\n${t("timeline.endpointStats")}:\n`;
+        timeline += `${t("timeline.endpointStatsTotal", { count: stats.total })}\n`;
+        timeline += `${t("timeline.endpointStatsEnabled", { count: stats.enabled })}\n`;
+        timeline += `${t("timeline.endpointStatsCircuitOpen", { count: stats.circuitOpen })}\n`;
+        timeline += `${t("timeline.endpointStatsAvailable", { count: stats.available })}\n`;
+      }
+
+      // 严格模式阻止原因
+      if (item.strictBlockCause === "no_endpoint_candidates") {
+        timeline += `\n${t("timeline.strictBlockNoEndpoints")}`;
+      } else if (item.strictBlockCause === "selector_error") {
+        timeline += `\n${t("timeline.strictBlockSelectorError")}`;
+        if (item.errorMessage) {
+          timeline += `\n${t("timeline.error", { error: item.errorMessage })}`;
+        }
+      }
+
       continue;
     }
 

@@ -1,5 +1,7 @@
 {
   "circuitBroken": "サーキットブレーカー",
+  "keyCircuitBroken": "キー遮断",
+  "endpointCircuitBroken": "エンドポイント遮断",
   "groups": {
     "all": "すべて",
     "default": "default",

@@ -37,7 +37,8 @@
     "systemError": "Системная ошибка",
     "concurrentLimit": "Лимит параллельных запросов",
     "http2Fallback": "Откат HTTP/2",
-    "clientError": "Ошибка клиента"
+    "clientError": "Ошибка клиента",
+    "endpointPoolExhausted": "Пул эндпоинтов исчерпан"
   },
   "reasons": {
     "request_success": "Успешно",
@@ -48,7 +49,8 @@
     "concurrent_limit_failed": "Лимит параллельных запросов",
     "http2_fallback": "Откат HTTP/2",
     "session_reuse": "Повторное использование сессии",
-    "initial_selection": "Первоначальный выбор"
+    "initial_selection": "Первоначальный выбор",
+    "endpoint_pool_exhausted": "Пул эндпоинтов исчерпан"
   },
   "filterReasons": {
     "rate_limited": "Ограничение скорости",
@@ -61,7 +63,9 @@
     "context_1m_disabled": "1M контекст отключен",
     "model_not_supported": "Модель не поддерживается",
     "group_mismatch": "Несоответствие группы",
-    "health_check_failed": "Проверка состояния не пройдена"
+    "health_check_failed": "Проверка состояния не пройдена",
+    "endpoint_circuit_open": "Автомат эндпоинта открыт",
+    "endpoint_disabled": "Эндпоинт отключен"
   },
   "details": {
     "selectionMethod": "Метод выбора",
@@ -185,6 +189,14 @@
     "ruleMatchType": "Тип совпадения: {matchType}",
     "ruleDescription": "Описание: {description}",
     "ruleHasOverride": "Переопределения: response={response}, statusCode={statusCode}",
-    "clientErrorNote": "Эта ошибка вызвана вводом клиента, не повторяется и не учитывается в автомате защиты."
+    "clientErrorNote": "Эта ошибка вызвана вводом клиента, не повторяется и не учитывается в автомате защиты.",
+    "endpointPoolExhausted": "Пул эндпоинтов исчерпан (все эндпоинты недоступны)",
+    "endpointStats": "Статистика фильтрации эндпоинтов",
+    "endpointStatsTotal": "Всего эндпоинтов: {count}",
+    "endpointStatsEnabled": "Включено эндпоинтов: {count}",
+    "endpointStatsCircuitOpen": "Эндпоинтов с открытым автоматом: {count}",
+    "endpointStatsAvailable": "Доступных эндпоинтов: {count}",
+    "strictBlockNoEndpoints": "Строгий режим: нет доступных кандидатов эндпоинтов, провайдер пропущен без отката",
+    "strictBlockSelectorError": "Строгий режим: ошибка селектора эндпоинтов, провайдер пропущен без отката"
   }
 }

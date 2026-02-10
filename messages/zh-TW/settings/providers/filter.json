@@ -1,5 +1,7 @@
 {
   "circuitBroken": "熔斷",
+  "keyCircuitBroken": "Key 熔斷",
+  "endpointCircuitBroken": "端點熔斷",
   "groups": {
     "all": "所有",
     "default": "default",
