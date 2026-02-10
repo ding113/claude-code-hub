@@ -33,8 +33,18 @@ export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
 // Anthropic (Messages API) parameter overrides
 // - "inherit": follow client request (default)
 // - numeric string: force override to that value
+// - "adaptive": use adaptive thinking mode (read config from anthropicAdaptiveThinking)
 export type AnthropicMaxTokensPreference = "inherit" | string;
-export type AnthropicThinkingBudgetPreference = "inherit" | string;
+export type AnthropicThinkingBudgetPreference = "inherit" | "adaptive" | string;
+
+// Anthropic adaptive thinking configuration
+export type AnthropicAdaptiveThinkingEffort = "low" | "medium" | "high" | "max";
+export type AnthropicAdaptiveThinkingModelMatchMode = "specific" | "all";
+export interface AnthropicAdaptiveThinkingConfig {
+  effort: AnthropicAdaptiveThinkingEffort;
+  modelMatchMode: AnthropicAdaptiveThinkingModelMatchMode;
+  models: string[];
+}
 
 // Gemini (generateContent API) parameter overrides
 // - "inherit": follow client request (default)
@@ -134,6 +144,7 @@ export interface Provider {
   // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
+  anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
 
   // Gemini (generateContent API) parameter overrides (only for gemini/gemini-cli providers)
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
@@ -211,6 +222,7 @@ export interface ProviderDisplay {
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
+  anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
@@ -301,6 +313,7 @@ export interface CreateProviderData {
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
 
   // 废弃字段（保留向后兼容）
@@ -373,6 +386,7 @@ export interface UpdateProviderData {
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
 
   // 废弃字段（保留向后兼容）

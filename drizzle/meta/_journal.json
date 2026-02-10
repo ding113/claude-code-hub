@@ -463,6 +463,13 @@
       "when": 1770607089556,
       "tag": "0065_stale_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1770728835628,
+      "tag": "0066_hot_mauler",
+      "breakpoints": true
     }
   ]
 }

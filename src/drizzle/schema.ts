@@ -283,6 +283,12 @@ export const providers = pgTable('providers', {
   anthropicMaxTokensPreference: varchar('anthropic_max_tokens_preference', { length: 20 }),
   anthropicThinkingBudgetPreference: varchar('anthropic_thinking_budget_preference', { length: 20 }),
 
+  // Anthropic adaptive thinking config (JSONB)
+  // When anthropicThinkingBudgetPreference === "adaptive", this stores the structured config
+  anthropicAdaptiveThinking: jsonb('anthropic_adaptive_thinking')
+    .$type<{ effort: string; modelMatchMode: string; models: string[] } | null>()
+    .default(null),
+
   // Gemini (generateContent API) parameter overrides (only for gemini/gemini-cli providers)
   // - 'inherit' or null: follow client request
   // - 'enabled': force inject googleSearch tool

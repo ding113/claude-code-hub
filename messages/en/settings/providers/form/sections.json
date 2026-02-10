@@ -233,10 +233,37 @@
         "help": "Override thinking.budget_tokens in request body. Range: 1024-32000. Forces thinking.type to 'enabled' when set.",
         "options": {
           "inherit": "No override (follow client)",
-          "custom": "Custom"
+          "custom": "Custom",
+          "adaptive": "Adaptive Thinking"
         },
         "placeholder": "e.g. 10240",
         "maxOutButton": "Max Out (32000)"
+      },
+      "adaptiveThinking": {
+        "effort": {
+          "label": "Effort Level",
+          "help": "Controls depth of reasoning. Higher effort = deeper thinking.",
+          "options": {
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High (Recommended)",
+            "max": "Max"
+          }
+        },
+        "modelMatchMode": {
+          "label": "Model Matching",
+          "help": "Which models should use adaptive thinking.",
+          "options": {
+            "all": "All models",
+            "specific": "Specific models only"
+          }
+        },
+        "models": {
+          "label": "Target Models",
+          "help": "Models that will use adaptive thinking. Non-matching models pass through unchanged.",
+          "placeholder": "e.g. claude-opus-4-6",
+          "addButton": "Add Model"
+        }
       }
     },
     "geminiOverrides": {

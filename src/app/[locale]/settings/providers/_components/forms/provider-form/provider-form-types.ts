@@ -1,5 +1,8 @@
 import type { Dispatch } from "react";
 import type {
+  AnthropicAdaptiveThinkingConfig,
+  AnthropicAdaptiveThinkingEffort,
+  AnthropicAdaptiveThinkingModelMatchMode,
   AnthropicMaxTokensPreference,
   AnthropicThinkingBudgetPreference,
   CodexParallelToolCallsPreference,
@@ -53,6 +56,7 @@ export interface RoutingState {
   // Anthropic-specific
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference;
+  anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   // Gemini-specific
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference;
 }
@@ -130,6 +134,12 @@ export type ProviderFormAction =
   | { type: "SET_CODEX_PARALLEL_TOOL_CALLS"; payload: CodexParallelToolCallsPreference }
   | { type: "SET_ANTHROPIC_MAX_TOKENS"; payload: AnthropicMaxTokensPreference }
   | { type: "SET_ANTHROPIC_THINKING_BUDGET"; payload: AnthropicThinkingBudgetPreference }
+  | { type: "SET_ADAPTIVE_THINKING_EFFORT"; payload: AnthropicAdaptiveThinkingEffort }
+  | {
+      type: "SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE";
+      payload: AnthropicAdaptiveThinkingModelMatchMode;
+    }
+  | { type: "SET_ADAPTIVE_THINKING_MODELS"; payload: string[] }
   | { type: "SET_GEMINI_GOOGLE_SEARCH"; payload: GeminiGoogleSearchPreference }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }

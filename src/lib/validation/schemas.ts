@@ -43,6 +43,7 @@ const ANTHROPIC_MAX_TOKENS_PREFERENCE = z.union([
 
 const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
   z.literal("inherit"),
+  z.literal("adaptive"),
   z
     .string()
     .regex(/^\d+$/, 'thinking.budget_tokens 必须为 "inherit" 或数字字符串')
@@ -54,6 +55,19 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
       { message: "thinking.budget_tokens 必须在 1024 到 32000 之间" }
     ),
 ]);
+
+const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
+  .object({
+    effort: z.enum(["low", "medium", "high", "max"]),
+    modelMatchMode: z.enum(["specific", "all"]),
+    models: z.array(z.string().min(1).max(100)).max(50),
+  })
+  .refine((data) => data.modelMatchMode !== "specific" || data.models.length > 0, {
+    message: "models must not be empty when modelMatchMode is 'specific'",
+    path: ["models"],
+  })
+  .nullable()
+  .optional();
 
 // Gemini (generateContent API) Google Search preference
 // - 'inherit': follow client request (default)
@@ -488,6 +502,7 @@ export const CreateProviderSchema = z
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional().default("inherit"),
     anthropic_thinking_budget_preference:
       ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional().default("inherit"),
+    anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional().default("inherit"),
     max_retry_attempts: z.coerce
       .number()
@@ -581,6 +596,16 @@ export const CreateProviderSchema = z
   .superRefine((data, ctx) => {
     const maxTokens = data.anthropic_max_tokens_preference;
     const budget = data.anthropic_thinking_budget_preference;
+    if (budget === "adaptive") {
+      if (!data.anthropic_adaptive_thinking) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "adaptive thinking config is required when mode is adaptive",
+          path: ["anthropic_adaptive_thinking"],
+        });
+      }
+      return;
+    }
     if (maxTokens && maxTokens !== "inherit" && budget && budget !== "inherit") {
       const maxTokensNum = Number.parseInt(maxTokens, 10);
       const budgetNum = Number.parseInt(budget, 10);
@@ -686,6 +711,7 @@ export const UpdateProviderSchema = z
     codex_parallel_tool_calls_preference: CODEX_PARALLEL_TOOL_CALLS_PREFERENCE.optional(),
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional(),
     anthropic_thinking_budget_preference: ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional(),
+    anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional(),
     max_retry_attempts: z.coerce
       .number()
@@ -780,6 +806,16 @@ export const UpdateProviderSchema = z
   .superRefine((data, ctx) => {
     const maxTokens = data.anthropic_max_tokens_preference;
     const budget = data.anthropic_thinking_budget_preference;
+    if (budget === "adaptive") {
+      if (!data.anthropic_adaptive_thinking) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "adaptive thinking config is required when mode is adaptive",
+          path: ["anthropic_adaptive_thinking"],
+        });
+      }
+      return;
+    }
     if (maxTokens && maxTokens !== "inherit" && budget && budget !== "inherit") {
       const maxTokensNum = Number.parseInt(maxTokens, 10);
       const budgetNum = Number.parseInt(budget, 10);
@@ -905,3 +941,4 @@ export const UpdateSystemSettingsSchema = z.object({
 
 export const anthropicMaxTokensPreferenceSchema = ANTHROPIC_MAX_TOKENS_PREFERENCE;
 export const anthropicThinkingBudgetPreferenceSchema = ANTHROPIC_THINKING_BUDGET_PREFERENCE;
+export const anthropicAdaptiveThinkingConfigSchema = ANTHROPIC_ADAPTIVE_THINKING_CONFIG;

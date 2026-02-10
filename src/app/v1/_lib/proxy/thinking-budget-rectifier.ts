@@ -61,6 +61,24 @@ export function rectifyThinkingBudget(
 
   const thinking = message.thinking as Record<string, unknown> | undefined;
   const currentThinkingType = thinking && typeof thinking.type === "string" ? thinking.type : null;
+
+  if (currentThinkingType === "adaptive") {
+    return {
+      applied: false,
+      before: {
+        maxTokens: currentMaxTokens,
+        thinkingType: currentThinkingType,
+        thinkingBudgetTokens:
+          thinking && typeof thinking.budget_tokens === "number" ? thinking.budget_tokens : null,
+      },
+      after: {
+        maxTokens: currentMaxTokens,
+        thinkingType: currentThinkingType,
+        thinkingBudgetTokens:
+          thinking && typeof thinking.budget_tokens === "number" ? thinking.budget_tokens : null,
+      },
+    };
+  }
   const currentThinkingBudgetTokens =
     thinking && typeof thinking.budget_tokens === "number" ? thinking.budget_tokens : null;
 

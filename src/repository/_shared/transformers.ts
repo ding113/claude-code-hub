@@ -126,6 +126,7 @@ export function toProvider(dbProvider: any): Provider {
     codexParallelToolCallsPreference: dbProvider?.codexParallelToolCallsPreference ?? null,
     anthropicMaxTokensPreference: dbProvider?.anthropicMaxTokensPreference ?? null,
     anthropicThinkingBudgetPreference: dbProvider?.anthropicThinkingBudgetPreference ?? null,
+    anthropicAdaptiveThinking: dbProvider?.anthropicAdaptiveThinking ?? null,
     geminiGoogleSearchPreference: dbProvider?.geminiGoogleSearchPreference ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,

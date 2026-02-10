@@ -234,10 +234,37 @@
         "help": "リクエストボディの thinking.budget_tokens を上書きします。範囲：1024-32000。設定すると thinking.type が 'enabled' に強制されます。",
         "options": {
           "inherit": "上書きなし（クライアントに従う）",
-          "custom": "カスタム"
+          "custom": "カスタム",
+          "adaptive": "アダプティブ思考"
         },
         "placeholder": "例: 10240",
         "maxOutButton": "最大化 (32000)"
+      },
+      "adaptiveThinking": {
+        "effort": {
+          "label": "思考レベル",
+          "help": "推論の深さを制御します。高いほど深く考えます。",
+          "options": {
+            "low": "低",
+            "medium": "中",
+            "high": "高（推奨）",
+            "max": "最大"
+          }
+        },
+        "modelMatchMode": {
+          "label": "モデルマッチング",
+          "help": "アダプティブ思考を使用するモデル。",
+          "options": {
+            "all": "全モデル",
+            "specific": "特定モデルのみ"
+          }
+        },
+        "models": {
+          "label": "対象モデル",
+          "help": "アダプティブ思考を使用するモデルリスト。一致しないモデルはそのまま透過されます。",
+          "placeholder": "例: claude-opus-4-6",
+          "addButton": "モデル追加"
+        }
       }
     },
     "geminiOverrides": {
