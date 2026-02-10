@@ -410,8 +410,12 @@
       "successRate": "Success Rate",
       "avgResponseTime": "Avg Response Time",
       "avgTtfbMs": "Avg TTFB",
-      "avgTokensPerSecond": "Avg tok/s"
+      "avgTokensPerSecond": "Avg tok/s",
+      "avgCostPerRequest": "Avg Cost/Req",
+      "avgCostPerMillionTokens": "Avg Cost/1M Tokens"
     },
+    "expandModelStats": "Expand model details",
+    "collapseModelStats": "Collapse model details",
     "states": {
       "loading": "Loading...",
       "noData": "No data available",

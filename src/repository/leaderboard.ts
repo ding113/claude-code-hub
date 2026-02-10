@@ -41,6 +41,19 @@ export interface ProviderLeaderboardEntry {
   successRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
   avgTtfbMs: number; // 毫秒
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
+  avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
+  avgCostPerMillionTokens: number | null; // totalCost * 1_000_000 / totalTokens, null when totalTokens === 0
+}
+
+/**
+ * 供应商缓存命中率 - 模型级统计
+ */
+export interface ModelCacheHitStat {
+  model: string;
+  totalRequests: number;
+  cacheReadTokens: number;
+  totalInputTokens: number;
+  cacheHitRate: number; // 0-1
 }
 
 /**
@@ -58,6 +71,7 @@ export interface ProviderCacheHitRateLeaderboardEntry {
   /** @deprecated Use totalInputTokens instead */
   totalTokens: number;
   cacheHitRate: number; // 0-1 之间的小数，UI 层负责格式化为百分比
+  modelStats: ModelCacheHitStat[];
 }
 
 /**
@@ -413,16 +427,23 @@ async function findProviderLeaderboardWithTimezone(
     .groupBy(messageRequest.providerId, providers.name)
     .orderBy(desc(sql`sum(${messageRequest.costUsd})`));
 
-  return rankings.map((entry) => ({
-    providerId: entry.providerId,
-    providerName: entry.providerName,
-    totalRequests: entry.totalRequests,
-    totalCost: parseFloat(entry.totalCost),
-    totalTokens: entry.totalTokens,
-    successRate: entry.successRate ?? 0,
-    avgTtfbMs: entry.avgTtfbMs ?? 0,
-    avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
-  }));
+  return rankings.map((entry) => {
+    const totalCost = parseFloat(entry.totalCost);
+    const totalRequests = entry.totalRequests;
+    const totalTokens = entry.totalTokens;
+    return {
+      providerId: entry.providerId,
+      providerName: entry.providerName,
+      totalRequests,
+      totalCost,
+      totalTokens,
+      successRate: entry.successRate ?? 0,
+      avgTtfbMs: entry.avgTtfbMs ?? 0,
+      avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
+      avgCostPerRequest: totalRequests > 0 ? totalCost / totalRequests : null,
+      avgCostPerMillionTokens: totalTokens > 0 ? (totalCost * 1_000_000) / totalTokens : null,
+    };
+  });
 }
 
 /**
@@ -488,6 +509,56 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     .groupBy(messageRequest.providerId, providers.name)
     .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
 
+  // Model-level cache hit breakdown per provider
+  const systemSettings = await getSystemSettings();
+  const billingModelSource = systemSettings.billingModelSource;
+  const modelField =
+    billingModelSource === "original"
+      ? sql<string>`COALESCE(${messageRequest.originalModel}, ${messageRequest.model})`
+      : sql<string>`COALESCE(${messageRequest.model}, ${messageRequest.originalModel})`;
+
+  const modelTotalInput = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
+  const modelCacheRead = sql<number>`COALESCE(sum(COALESCE(${messageRequest.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
+  const modelCacheHitRate = sql<number>`COALESCE(
+    ${modelCacheRead} / NULLIF(${modelTotalInput}, 0::double precision),
+    0::double precision
+  )`;
+
+  const modelRows = await db
+    .select({
+      providerId: messageRequest.providerId,
+      model: modelField,
+      totalRequests: sql<number>`count(*)::double precision`,
+      cacheReadTokens: modelCacheRead,
+      totalInputTokens: modelTotalInput,
+      cacheHitRate: modelCacheHitRate,
+    })
+    .from(messageRequest)
+    .innerJoin(
+      providers,
+      and(sql`${messageRequest.providerId} = ${providers.id}`, isNull(providers.deletedAt))
+    )
+    .where(
+      and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
+    )
+    .groupBy(messageRequest.providerId, modelField)
+    .orderBy(desc(modelCacheHitRate), desc(sql`count(*)`));
+
+  // Group model stats by providerId
+  const modelStatsByProvider = new Map<number, ModelCacheHitStat[]>();
+  for (const row of modelRows) {
+    if (!row.model || row.model.trim() === "") continue;
+    const stats = modelStatsByProvider.get(row.providerId) ?? [];
+    stats.push({
+      model: row.model,
+      totalRequests: row.totalRequests,
+      cacheReadTokens: row.cacheReadTokens,
+      totalInputTokens: row.totalInputTokens,
+      cacheHitRate: Math.min(Math.max(row.cacheHitRate ?? 0, 0), 1),
+    });
+    modelStatsByProvider.set(row.providerId, stats);
+  }
+
   return rankings.map((entry) => ({
     providerId: entry.providerId,
     providerName: entry.providerName,
@@ -498,6 +569,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     totalInputTokens: entry.totalInputTokens,
     totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
     cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
+    modelStats: modelStatsByProvider.get(entry.providerId) ?? [],
   }));
 }
 

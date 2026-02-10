@@ -160,17 +160,41 @@ export async function GET(request: NextRequest) {
         totalCostFormatted: formatCurrency(entry.totalCost, systemSettings.currencyDisplay),
       };
 
-      if (typeof (entry as { cacheCreationCost?: unknown }).cacheCreationCost === "number") {
-        return {
-          ...base,
-          cacheCreationCostFormatted: formatCurrency(
-            (entry as { cacheCreationCost: number }).cacheCreationCost,
-            systemSettings.currencyDisplay
-          ),
-        };
-      }
+      // Provider scope: add avgCost formatted fields
+      const typedEntry = entry as {
+        avgCostPerRequest?: number | null;
+        avgCostPerMillionTokens?: number | null;
+        cacheCreationCost?: number;
+      };
 
-      return base;
+      const providerFields =
+        typeof typedEntry.avgCostPerRequest !== "undefined"
+          ? {
+              avgCostPerRequestFormatted:
+                typedEntry.avgCostPerRequest != null
+                  ? formatCurrency(typedEntry.avgCostPerRequest, systemSettings.currencyDisplay)
+                  : null,
+              avgCostPerMillionTokensFormatted:
+                typedEntry.avgCostPerMillionTokens != null
+                  ? formatCurrency(
+                      typedEntry.avgCostPerMillionTokens,
+                      systemSettings.currencyDisplay
+                    )
+                  : null,
+            }
+          : {};
+
+      const cacheFields =
+        typeof typedEntry.cacheCreationCost === "number"
+          ? {
+              cacheCreationCostFormatted: formatCurrency(
+                typedEntry.cacheCreationCost,
+                systemSettings.currencyDisplay
+              ),
+            }
+          : {};
+
+      return { ...base, ...providerFields, ...cacheFields };
     });
 
     logger.info("Leaderboard API: Access granted", {

@@ -410,8 +410,12 @@
       "successRate": "成功率（%）",
       "avgResponseTime": "平均回覆時間",
       "avgTtfbMs": "平均 TTFB（ms）",
-      "avgTokensPerSecond": "平均輸出速率"
+      "avgTokensPerSecond": "平均輸出速率",
+      "avgCostPerRequest": "平均每次請求成本",
+      "avgCostPerMillionTokens": "平均每百萬 Token 成本"
     },
+    "expandModelStats": "展開模型詳情",
+    "collapseModelStats": "收起模型詳情",
     "states": {
       "loading": "載入中...",
       "noData": "暫無資料",
