@@ -410,8 +410,12 @@
       "successRate": "Процент успеха",
       "avgResponseTime": "Среднее время ответа",
       "avgTtfbMs": "Средний TTFB",
-      "avgTokensPerSecond": "Средн. ток/с"
+      "avgTokensPerSecond": "Средн. ток/с",
+      "avgCostPerRequest": "Ср. стоимость/запрос",
+      "avgCostPerMillionTokens": "Ср. стоимость/1М токенов"
     },
+    "expandModelStats": "Развернуть модели",
+    "collapseModelStats": "Свернуть модели",
     "states": {
       "loading": "Загрузка...",
       "noData": "Нет данных",

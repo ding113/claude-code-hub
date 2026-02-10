@@ -1,8 +1,17 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Award, Medal, Trophy } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Award,
+  ChevronDown,
+  ChevronRight,
+  Medal,
+  Trophy,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -32,6 +41,7 @@ interface LeaderboardTableProps<T> {
   period: LeaderboardPeriod;
   columns: ColumnDef<T>[]; // 不包含"排名"列，组件会自动添加
   getRowKey?: (row: T, index: number) => string | number;
+  renderExpandedContent?: (row: T, index: number) => React.ReactNode | null;
 }
 
 export function LeaderboardTable<T>({
@@ -39,12 +49,27 @@ export function LeaderboardTable<T>({
   period,
   columns,
   getRowKey,
+  renderExpandedContent,
 }: LeaderboardTableProps<T>) {
   const t = useTranslations("dashboard.leaderboard");
 
   // 排序状态
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+
+  // 展开行状态
+  const [expandedRows, setExpandedRows] = useState<Set<string | number>>(new Set());
+  const toggleRow = (key: string | number) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   // 判断列是否需要加粗
   const getShouldBold = (col: ColumnDef<T>) => {
@@ -204,22 +229,53 @@ export function LeaderboardTable<T>({
                 const rank = index + 1;
                 const isTopThree = rank <= 3;
                 const rowKey = getRowKey ? (getRowKey(row, index) ?? index) : index;
+                const hasExpandable = renderExpandedContent != null;
+                const expandedContent = hasExpandable ? renderExpandedContent(row, index) : null;
+                const isExpanded = expandedRows.has(rowKey);
 
                 return (
-                  <TableRow key={rowKey} className={isTopThree ? "bg-muted/50" : ""}>
-                    <TableCell>{getRankBadge(rank)}</TableCell>
-                    {columns.map((col, idx) => {
-                      const shouldBold = getShouldBold(col);
-                      return (
-                        <TableCell
-                          key={idx}
-                          className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
-                        >
-                          {col.cell(row, index)}
+                  <Fragment key={rowKey}>
+                    <TableRow
+                      className={`${isTopThree ? "bg-muted/50" : ""} ${hasExpandable && expandedContent ? "cursor-pointer" : ""}`}
+                      onClick={
+                        hasExpandable && expandedContent ? () => toggleRow(rowKey) : undefined
+                      }
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          {hasExpandable && expandedContent ? (
+                            isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                            )
+                          ) : null}
+                          {getRankBadge(rank)}
+                        </div>
+                      </TableCell>
+                      {columns.map((col, idx) => {
+                        const shouldBold = getShouldBold(col);
+                        return (
+                          <TableCell
+                            key={idx}
+                            className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
+                          >
+                            {col.cell(row, index)}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                    {isExpanded && expandedContent && (
+                      <TableRow
+                        key={`${rowKey}-expanded`}
+                        className="bg-muted/30 hover:bg-muted/30"
+                      >
+                        <TableCell colSpan={columns.length + 1} className="p-0">
+                          {expandedContent}
                         </TableCell>
-                      );
-                    })}
-                  </TableRow>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 );
               })}
             </TableBody>
