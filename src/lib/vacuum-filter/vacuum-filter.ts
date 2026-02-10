@@ -193,12 +193,7 @@ function fmix32(h: number): number {
 }
 
 // MurmurHash3 x86 32-bit（用于生成 index；tag 由二次混合派生）
-function murmur3X86_32(
-  bytes: Uint8Array,
-  len: number,
-  seed: number,
-  words?: Uint32Array
-): number {
+function murmur3X86_32(bytes: Uint8Array, len: number, seed: number, words?: Uint32Array): number {
   let h = seed >>> 0;
   const c1 = 0xcc9e2d51;
   const c2 = 0x1b873593;
@@ -222,7 +217,10 @@ function murmur3X86_32(
   } else {
     for (let base = 0; base < blockLen; base += 4) {
       let k =
-        (bytes[base] | (bytes[base + 1] << 8) | (bytes[base + 2] << 16) | (bytes[base + 3] << 24)) >>>
+        (bytes[base] |
+          (bytes[base + 1] << 8) |
+          (bytes[base + 2] << 16) |
+          (bytes[base + 3] << 24)) >>>
         0;
 
       k = Math.imul(k, c1) >>> 0;
