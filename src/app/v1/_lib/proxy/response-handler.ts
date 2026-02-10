@@ -853,60 +853,131 @@ export class ProxyResponseHandler {
           }
         );
 
-        // ⭐ gemini 透传立即清除首字节超时：透传路径收到响应即视为首字节到达
-        const sessionWithCleanup = session as typeof session & {
-          clearResponseTimeout?: () => void;
-        };
-        if (sessionWithCleanup.clearResponseTimeout) {
-          sessionWithCleanup.clearResponseTimeout();
-          // ⭐ 同步记录 TTFB，与首字节超时口径一致
-          session.recordTtfb();
-          logger.debug(
-            "[ResponseHandler] Gemini passthrough: First byte timeout cleared on response received",
-            {
-              providerId: provider.id,
-              providerName: provider.name,
-            }
-          );
-        }
+        // ⚠️ 注意：不要在“仅收到响应头”时清除首字节超时。
+        // 背景：部分上游可能会快速返回 200 + SSE headers，但随后长时间不发送任何 body 数据。
+        // 若在 headers 阶段就 clearResponseTimeout，会导致首字节超时失效，客户端与服务端都会表现为一直“请求中”。
+        // 透传场景下，我们在后台 stats 读取到第一块数据时再清除超时（与非透传路径口径一致）。
 
         const responseForStats = response.clone();
         const statusCode = response.status;
 
         const taskId = `stream-passthrough-${messageContext.id}`;
         const statsPromise = (async () => {
+          const sessionWithCleanup = session as typeof session & {
+            clearResponseTimeout?: () => void;
+          };
+          const sessionWithController = session as typeof session & {
+            responseController?: AbortController;
+          };
+
+          let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+          const chunks: string[] = [];
+          const decoder = new TextDecoder();
+          let isFirstChunk = true;
+          let streamEndedNormally = false;
+          let responseTimeoutCleared = false;
+          let abortReason: string | undefined;
+
+          // ⭐ 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
+          const idleTimeoutMs =
+            provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
+          let idleTimeoutId: NodeJS.Timeout | null = null;
+          const clearIdleTimer = () => {
+            if (idleTimeoutId) {
+              clearTimeout(idleTimeoutId);
+              idleTimeoutId = null;
+            }
+          };
+          const startIdleTimer = () => {
+            if (idleTimeoutMs === Infinity) return;
+            clearIdleTimer();
+            idleTimeoutId = setTimeout(() => {
+              abortReason = "STREAM_IDLE_TIMEOUT";
+              logger.warn("[ResponseHandler] Gemini passthrough streaming idle timeout triggered", {
+                taskId,
+                providerId: provider.id,
+                providerName: provider.name,
+                idleTimeoutMs,
+                chunksCollected: chunks.length,
+              });
+              // 终止上游连接：让透传到客户端的连接也尽快结束，避免永久悬挂占用资源
+              try {
+                sessionWithController.responseController?.abort(new Error("streaming_idle"));
+              } catch {
+                // ignore
+              }
+            }, idleTimeoutMs);
+          };
+
+          const clearResponseTimeoutOnce = (firstChunkSize?: number) => {
+            if (responseTimeoutCleared) return;
+            if (!sessionWithCleanup.clearResponseTimeout) return;
+            sessionWithCleanup.clearResponseTimeout();
+            responseTimeoutCleared = true;
+            if (firstChunkSize != null) {
+              logger.debug(
+                "[ResponseHandler] Gemini passthrough: First chunk received, response timeout cleared",
+                {
+                  taskId,
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  firstChunkSize,
+                }
+              );
+            }
+          };
+
+          const flushAndJoin = (): string => {
+            const flushed = decoder.decode();
+            if (flushed) chunks.push(flushed);
+            return chunks.join("");
+          };
+
           try {
-            const reader = responseForStats.body?.getReader();
-            if (!reader) return;
+            const body = responseForStats.body;
+            if (!body) return;
+            reader = body.getReader();
 
             // 注意：即使 STORE_SESSION_RESPONSE_BODY=false（不写入 Redis），这里也会在内存中累积完整流内容：
             // - 用于解析 usage/cost 与内部结算（例如“假 200”检测）
             // 因此该开关仅影响“是否持久化”，不用于控制流式内存占用。
-            const chunks: string[] = [];
-            const decoder = new TextDecoder();
-            let isFirstChunk = true;
-            let streamEndedNormally = false;
-
             while (true) {
               if (session.clientAbortSignal?.aborted) break;
 
               const { done, value } = await reader.read();
               if (done) {
-                streamEndedNormally = true;
+                const wasResponseControllerAborted =
+                  sessionWithController.responseController?.signal.aborted ?? false;
+                const clientAborted = session.clientAbortSignal?.aborted ?? false;
+
+                // abort -> nodeStreamToWebStreamSafe 可能会把错误吞掉并 close()，导致 done=true；
+                // 这里必须结合 abort signal 判断是否为“自然结束”。
+                if (wasResponseControllerAborted || clientAborted) {
+                  streamEndedNormally = false;
+                  abortReason = abortReason ?? "STREAM_RESPONSE_TIMEOUT";
+                } else {
+                  streamEndedNormally = true;
+                }
                 break;
               }
+
               if (value) {
                 if (isFirstChunk) {
                   isFirstChunk = false;
                   session.recordTtfb();
+                  clearResponseTimeoutOnce(value.length);
                 }
                 chunks.push(decoder.decode(value, { stream: true }));
+
+                // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
+                if (!isFirstChunk) {
+                  startIdleTimer();
+                }
               }
             }
 
-            const flushed = decoder.decode();
-            if (flushed) chunks.push(flushed);
-            const allContent = chunks.join("");
+            clearIdleTimer();
+            const allContent = flushAndJoin();
             const clientAborted = session.clientAbortSignal?.aborted ?? false;
 
             // 存储响应体到 Redis（5分钟过期）
@@ -927,7 +998,8 @@ export class ProxyResponseHandler {
               allContent,
               statusCode,
               streamEndedNormally,
-              clientAborted
+              clientAborted,
+              abortReason
             );
             await finalizeRequestStats(
               session,
@@ -938,10 +1010,87 @@ export class ProxyResponseHandler {
               finalized.providerIdForPersistence ?? undefined
             );
           } catch (error) {
-            if (!isClientAbortError(error as Error)) {
-              logger.error("[ResponseHandler] Gemini passthrough stats task failed:", error);
+            const err = error as Error;
+            const clientAborted = session.clientAbortSignal?.aborted ?? false;
+            const isResponseControllerAborted =
+              sessionWithController.responseController?.signal.aborted ?? false;
+            const isIdleTimeout = err.message?.includes("streaming_idle");
+
+            abortReason =
+              abortReason ??
+              (clientAborted
+                ? "CLIENT_ABORTED"
+                : isIdleTimeout
+                  ? "STREAM_IDLE_TIMEOUT"
+                  : isResponseControllerAborted
+                    ? "STREAM_RESPONSE_TIMEOUT"
+                    : "STREAM_PROCESSING_ERROR");
+
+            // 透传的 stats 任务失败时，必须尽量落库并结束追踪，避免请求长期停留在“requesting”
+            logger.error("[ResponseHandler] Gemini passthrough stats task failed", {
+              taskId,
+              providerId: provider.id,
+              providerName: provider.name,
+              messageId: messageContext.id,
+              clientAborted,
+              isResponseControllerAborted,
+              isIdleTimeout,
+              abortReason,
+              errorName: err.name,
+              errorMessage: err.message || "(empty message)",
+            });
+
+            try {
+              clearIdleTimer();
+              const allContent = flushAndJoin();
+              const duration = Date.now() - session.startTime;
+
+              const finalized = await finalizeDeferredStreamingFinalizationIfNeeded(
+                session,
+                allContent,
+                statusCode,
+                false,
+                clientAborted,
+                abortReason
+              );
+
+              await finalizeRequestStats(
+                session,
+                allContent,
+                finalized.effectiveStatusCode,
+                duration,
+                finalized.errorMessage ?? abortReason,
+                finalized.providerIdForPersistence ?? undefined
+              );
+            } catch (finalizeError) {
+              await persistRequestFailure({
+                session,
+                messageContext,
+                statusCode: statusCode && statusCode >= 400 ? statusCode : 502,
+                error: finalizeError,
+                taskId,
+                phase: "stream",
+              });
             }
           } finally {
+            clearIdleTimer();
+            // 兜底：首块数据未到达时也应清理首字节超时，避免误触发/日志噪音
+            try {
+              clearResponseTimeoutOnce();
+            } catch {
+              // ignore
+            }
+            try {
+              // 取消 tee 分支，避免 stats 任务提前退出时 backpressure 影响客户端透传
+              void reader?.cancel();
+            } catch {
+              // ignore
+            }
+            try {
+              reader?.releaseLock();
+            } catch {
+              // ignore
+            }
             AsyncTaskManager.cleanup(taskId);
           }
         })();
