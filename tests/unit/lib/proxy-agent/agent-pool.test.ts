@@ -235,6 +235,61 @@ describe("AgentPool", () => {
       expect(result2.agent).not.toBe(result1.agent);
     });
 
+    it("should not hang when evicting an unhealthy agent whose close() never resolves", async () => {
+      // 说明：beforeEach 使用了 fake timers，但此用例需要依赖真实 setTimeout 做“防卡死”断言
+      await pool.shutdown();
+      vi.useRealTimers();
+
+      const realPool = new AgentPoolImpl(defaultConfig);
+
+      const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        try {
+          return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+              timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
+            }),
+          ]);
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      };
+
+      try {
+        const params = {
+          endpointUrl: "https://api.anthropic.com/v1/messages",
+          proxyUrl: null,
+          enableHttp2: true,
+        };
+
+        const result1 = await realPool.getAgent(params);
+        const agent1 = result1.agent as unknown as {
+          close?: { mockImplementation: (fn: () => Promise<void>) => void };
+          destroy?: unknown;
+        };
+
+        // 模拟：close 可能因等待 in-flight 请求结束而长期不返回
+        agent1.close?.mockImplementation(() => new Promise<void>(() => {}));
+
+        realPool.markUnhealthy(result1.cacheKey, "test-hang-close");
+
+        const result2 = await withTimeout(realPool.getAgent(params), 500);
+        expect(result2.isNew).toBe(true);
+        expect(result2.agent).not.toBe(result1.agent);
+
+        // destroy 应被优先调用（避免 close 挂死导致 getAgent/evict 卡住）
+        if (typeof (result1.agent as unknown as { destroy?: unknown }).destroy === "function") {
+          expect((result1.agent as unknown as { destroy: unknown }).destroy).toHaveBeenCalled();
+        }
+        if (typeof (result1.agent as unknown as { close?: unknown }).close === "function") {
+          expect((result1.agent as unknown as { close: unknown }).close).not.toHaveBeenCalled();
+        }
+      } finally {
+        await realPool.shutdown();
+      }
+    });
+
     it("should track unhealthy agents in stats", async () => {
       const params = {
         endpointUrl: "https://api.anthropic.com/v1/messages",
