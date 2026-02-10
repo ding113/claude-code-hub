@@ -12,7 +12,10 @@ const IS_LITTLE_ENDIAN = (() => {
   return new Uint32Array(buf)[0] === 0x11223344;
 })();
 
-function computeFastReduceParams(numBuckets: number): { bucketMask: number; fastReduceMul: number | null } {
+function computeFastReduceParams(numBuckets: number): {
+  bucketMask: number;
+  fastReduceMul: number | null;
+} {
   // 1) numBuckets 为 2 的幂：位与最快
   // 2) 否则使用 multiply-high 等价式：floor(hvIndex * numBuckets / 2^32)
   //    该实现依赖 IEEE754 精度：当 numBuckets <= 2^21 时，32-bit hvIndex 与 numBuckets 的乘积 < 2^53，
