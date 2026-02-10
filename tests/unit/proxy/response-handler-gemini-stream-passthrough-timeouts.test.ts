@@ -55,6 +55,16 @@ vi.mock("@/repository/message", () => ({
   updateMessageRequestDuration: vi.fn(),
 }));
 
+vi.mock("@/repository/system-config", () => ({
+  getSystemSettings: vi.fn(async () => ({ billingModelSource: "original" })),
+}));
+
+vi.mock("@/repository/model-price", () => ({
+  findLatestPriceByModel: vi.fn(async () => ({
+    priceData: { input_cost_per_token: 0, output_cost_per_token: 0 },
+  })),
+}));
+
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     storeSessionResponse: vi.fn(),

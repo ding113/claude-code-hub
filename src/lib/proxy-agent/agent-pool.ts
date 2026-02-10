@@ -360,7 +360,7 @@ export class AgentPoolImpl implements AgentPool {
     if (!agent) return;
 
     try {
-      // ⚠️ 优先 destroy：undici 的 close() 可能会等待 in-flight 请求结束（流式/卡住时会导致长期阻塞），
+      // 注意：优先 destroy。undici 的 close() 可能会等待 in-flight 请求结束（流式/卡住时会导致长期阻塞），
       // 从而让 getAgent/evictEndpoint/cleanup 也被卡住，最终表现为“所有请求都卡在 requesting”。
       // destroy() 会强制关闭底层连接，更适合作为驱逐/清理时的兜底手段。
       if (typeof agent.destroy === "function") {

@@ -853,7 +853,7 @@ export class ProxyResponseHandler {
           }
         );
 
-        // ⚠️ 注意：不要在“仅收到响应头”时清除首字节超时。
+        // 注意：不要在“仅收到响应头”时清除首字节超时。
         // 背景：部分上游可能会快速返回 200 + SSE headers，但随后长时间不发送任何 body 数据。
         // 若在 headers 阶段就 clearResponseTimeout，会导致首字节超时失效，客户端与服务端都会表现为一直“请求中”。
         // 透传场景下，我们在后台 stats 读取到第一块数据时再清除超时（与非透传路径口径一致）。
@@ -871,15 +871,21 @@ export class ProxyResponseHandler {
           };
 
           let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
-          // ⚠️ 保护：避免透传 stats 任务把超大响应体无界缓存在内存中（DoS/OOM 风险）
+          // 保护：避免透传 stats 任务把超大响应体无界缓存在内存中（DoS/OOM 风险）
           // 说明：这里用于统计/结算的内容仅保留“尾部窗口”（最近 MAX_STATS_BUFFER_BYTES），用于尽可能解析 usage/假200。
           // 若响应体极大，仍会完整 drain 上游（reader.read），但不再累计完整字符串。
           const MAX_STATS_BUFFER_BYTES = 10 * 1024 * 1024; // 10MB
+          const MAX_STATS_BUFFER_CHUNKS = 8192;
           const chunks: string[] = [];
           const chunkBytes: number[] = [];
           let chunkHead = 0;
           let bufferedBytes = 0;
           let wasTruncated = false;
+
+          const joinChunks = (): string => {
+            if (chunkHead <= 0) return chunks.join("");
+            return chunks.slice(chunkHead).join("");
+          };
 
           const pushChunk = (text: string, bytes: number) => {
             if (!text) return;
@@ -902,11 +908,17 @@ export class ProxyResponseHandler {
               chunkBytes.splice(0, chunkHead);
               chunkHead = 0;
             }
-          };
 
-          const joinChunks = (): string => {
-            if (chunkHead <= 0) return chunks.join("");
-            return chunks.slice(chunkHead).join("");
+            // 防御：限制 chunk 数量，避免大量超小 chunk 导致对象/数组膨胀（即使总字节数已受限）
+            const keptCount = chunks.length - chunkHead;
+            if (keptCount > MAX_STATS_BUFFER_CHUNKS) {
+              const joined = joinChunks();
+              chunks.length = 0;
+              chunkBytes.length = 0;
+              chunkHead = 0;
+              chunks.push(joined);
+              chunkBytes.push(bufferedBytes);
+            }
           };
           const decoder = new TextDecoder();
           let isFirstChunk = true;
@@ -914,7 +926,7 @@ export class ProxyResponseHandler {
           let responseTimeoutCleared = false;
           let abortReason: string | undefined;
 
-          // ⭐ 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
+          // 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
           const idleTimeoutMs =
             provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
           let idleTimeoutId: NodeJS.Timeout | null = null;
@@ -1057,7 +1069,7 @@ export class ProxyResponseHandler {
               finalized.providerIdForPersistence ?? undefined
             );
           } catch (error) {
-            const err = error as Error;
+            const err = error instanceof Error ? error : new Error(String(error));
             const clientAborted = session.clientAbortSignal?.aborted ?? false;
             const isResponseControllerAborted =
               sessionWithController.responseController?.signal.aborted ?? false;
@@ -1148,7 +1160,20 @@ export class ProxyResponseHandler {
             }
             try {
               // 取消 tee 分支，避免 stats 任务提前退出时 backpressure 影响客户端透传
-              void reader?.cancel();
+              const cancelPromise = reader?.cancel();
+              if (cancelPromise) {
+                cancelPromise.catch((err) => {
+                  logger.warn(
+                    "[ResponseHandler] Gemini passthrough: Failed to cancel stats reader",
+                    {
+                      taskId,
+                      providerId: provider.id,
+                      providerName: provider.name,
+                      error: err instanceof Error ? err.message : String(err),
+                    }
+                  );
+                });
+              }
             } catch (e) {
               logger.warn("[ResponseHandler] Gemini passthrough: Failed to cancel stats reader", {
                 taskId,
