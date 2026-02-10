@@ -245,9 +245,7 @@ describe("Non-200 Status Code Handling", () => {
     });
 
     it("should detect JSON error response with nested error.message", () => {
-      const result = detectUpstreamErrorFromSseOrJsonText(
-        '{"error":{"message":"nested error"}}'
-      );
+      const result = detectUpstreamErrorFromSseOrJsonText('{"error":{"message":"nested error"}}');
       expect(result.isError).toBe(true);
       expect(result.code).toBe("FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
     });
@@ -259,7 +257,9 @@ describe("Non-200 Status Code Handling", () => {
     });
 
     it("should return isError=false for successful JSON without error field", () => {
-      const result = detectUpstreamErrorFromSseOrJsonText('{"choices":[{"message":{"content":"hi"}}]}');
+      const result = detectUpstreamErrorFromSseOrJsonText(
+        '{"choices":[{"message":{"content":"hi"}}]}'
+      );
       expect(result.isError).toBe(false);
     });
   });
@@ -276,9 +276,7 @@ describe("Non-200 Status Code Handling", () => {
 
       if (statusCode >= 400) {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
-        const errorMessageForDb = detected.isError
-          ? detected.code
-          : `HTTP ${statusCode}`;
+        const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
         await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
 
@@ -311,9 +309,7 @@ describe("Non-200 Status Code Handling", () => {
 
       if (statusCode >= 400) {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
-        const errorMessageForDb = detected.isError
-          ? detected.code
-          : `HTTP ${statusCode}`;
+        const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
         await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
 
@@ -342,9 +338,7 @@ describe("Non-200 Status Code Handling", () => {
 
       if (statusCode >= 400) {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
-        const errorMessageForDb = detected.isError
-          ? detected.code
-          : `HTTP ${statusCode}`;
+        const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
         await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
 
@@ -373,9 +367,7 @@ describe("Non-200 Status Code Handling", () => {
 
       if (statusCode >= 400) {
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
-        const errorMessageForDb = detected.isError
-          ? detected.code
-          : `HTTP ${statusCode}`;
+        const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
         await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
 
@@ -407,9 +399,7 @@ describe("Non-200 Status Code Handling", () => {
       if (statusCode >= 400) {
         // This should NOT execute
         const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
-        const errorMessageForDb = detected.isError
-          ? detected.code
-          : `HTTP ${statusCode}`;
+        const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
         await mockRecordFailure(mockProvider.id, new Error(errorMessageForDb));
       }

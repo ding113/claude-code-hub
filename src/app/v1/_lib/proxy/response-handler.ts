@@ -515,9 +515,7 @@ export class ProxyResponseHandler {
             let errorMessageForFinalize: string | undefined;
             if (statusCode >= 400) {
               const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
-              errorMessageForFinalize = detected.isError
-                ? detected.code
-                : `HTTP ${statusCode}`;
+              errorMessageForFinalize = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
               // 计入熔断器
               try {
@@ -759,9 +757,7 @@ export class ProxyResponseHandler {
         // 非200状态码处理：解析错误响应并计入熔断器
         if (statusCode >= 400) {
           const detected = detectUpstreamErrorFromSseOrJsonText(responseText);
-          const errorMessageForDb = detected.isError
-            ? detected.code
-            : `HTTP ${statusCode}`;
+          const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
           // 计入熔断器
           try {
