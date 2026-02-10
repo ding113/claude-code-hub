@@ -206,4 +206,51 @@ describe("ProxyForwarder - non-ok response body hang", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  test("代理失败降级到直连后也必须恢复 response timeout，避免非 ok 响应体读取悬挂", async () => {
+    const { server, baseUrl } = await startServer();
+    const clientAbortController = new AbortController();
+
+    try {
+      const provider = createProvider({
+        url: baseUrl,
+        proxyUrl: "http://127.0.0.1:1", // 不可用的代理，触发 fallbackToDirect
+        proxyFallbackToDirect: true,
+        requestTimeoutNonStreamingMs: 200,
+      });
+
+      const session = createSession({ clientAbortSignal: clientAbortController.signal });
+      session.setProvider(provider);
+
+      const doForward = (
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown }
+      ).doForward;
+
+      const forwardPromise = doForward(session, provider, baseUrl) as Promise<Response>;
+
+      const result = await Promise.race([
+        forwardPromise.then(
+          () => ({ type: "resolved" as const }),
+          (error) => ({ type: "rejected" as const, error })
+        ),
+        new Promise<{ type: "timeout" }>((resolve) =>
+          setTimeout(() => resolve({ type: "timeout" as const }), 2_000)
+        ),
+      ]);
+
+      if (result.type === "timeout") {
+        // 兜底：避免回归时测试套件整体挂死
+        clientAbortController.abort(new Error("test_timeout"));
+        throw new Error("doForward 超时未返回：可能存在代理降级后 response timeout 未恢复的问题");
+      }
+
+      expect(result.type).toBe("rejected");
+      expect(result.type === "rejected" ? result.error : null).toBeInstanceOf(ProxyError);
+
+      const err = (result as { type: "rejected"; error: unknown }).error as ProxyError;
+      expect(err.statusCode).toBe(403);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });

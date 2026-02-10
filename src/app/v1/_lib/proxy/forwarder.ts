@@ -2346,11 +2346,32 @@ export class ProxyForwarder {
             const fallbackInit = { ...init };
             delete fallbackInit.dispatcher;
             try {
-              response = await fetch(proxyUrl, fallbackInit);
+              response = useErrorTolerantFetch
+                ? await ProxyForwarder.fetchWithoutAutoDecode(
+                    proxyUrl,
+                    fallbackInit,
+                    provider.id,
+                    provider.name,
+                    session
+                  )
+                : await fetch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
                 providerId: provider.id,
                 providerName: provider.name,
               });
+
+              // 重新启动响应超时计时器（如果之前有配置超时时间）
+              // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
+              if (responseTimeoutMs > 0) {
+                responseTimeoutId = setTimeout(() => {
+                  responseController.abort();
+                  logger.warn("ProxyForwarder: Response timeout after direct fallback", {
+                    providerId: provider.id,
+                    providerName: provider.name,
+                    responseTimeoutMs,
+                  });
+                }, responseTimeoutMs);
+              }
               // 成功后跳过 throw，继续执行后续逻辑
             } catch (directError) {
               // 直连也失败，抛出原始错误
