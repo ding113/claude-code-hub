@@ -12,6 +12,17 @@ const IS_LITTLE_ENDIAN = (() => {
   return new Uint32Array(buf)[0] === 0x11223344;
 })();
 
+function computeFastReduceParams(numBuckets: number): { bucketMask: number; fastReduceMul: number | null } {
+  // 1) numBuckets 为 2 的幂：位与最快
+  // 2) 否则使用 multiply-high 等价式：floor(hvIndex * numBuckets / 2^32)
+  //    该实现依赖 IEEE754 精度：当 numBuckets <= 2^21 时，32-bit hvIndex 与 numBuckets 的乘积 < 2^53，
+  //    因而计算与截断都保持精确，结果必定落在 [0, numBuckets)。
+  const bucketMask = (numBuckets & (numBuckets - 1)) === 0 ? numBuckets - 1 : 0;
+  const fastReduceMul =
+    bucketMask === 0 && numBuckets <= FAST_REDUCE_MAX_BUCKETS ? numBuckets * INV_2_32 : null;
+  return { bucketMask, fastReduceMul };
+}
+
 /**
  * Vacuum Filter（真空过滤器）
  *
@@ -329,11 +340,9 @@ export class VacuumFilter {
       const mask = bigSeg - 1;
       this.lenMasks = [mask, mask, mask, mask];
       this.numBuckets = bucketCount;
-      this.bucketMask = (this.numBuckets & (this.numBuckets - 1)) === 0 ? this.numBuckets - 1 : 0;
-      this.fastReduceMul =
-        this.bucketMask === 0 && this.numBuckets <= FAST_REDUCE_MAX_BUCKETS
-          ? this.numBuckets * INV_2_32
-          : null;
+      const fast = computeFastReduceParams(this.numBuckets);
+      this.bucketMask = fast.bucketMask;
+      this.fastReduceMul = fast.fastReduceMul;
       this.table = new Uint32Array(this.numBuckets * BUCKET_SIZE);
       return;
     }
@@ -355,11 +364,9 @@ export class VacuumFilter {
     const segLens = [l0 + 1, l1 + 1, l2 + 1, l3 + 1];
     const maxSegLen = Math.max(...segLens);
     this.numBuckets = roundUpToMultiple(bucketCount, upperPower2(maxSegLen));
-    this.bucketMask = (this.numBuckets & (this.numBuckets - 1)) === 0 ? this.numBuckets - 1 : 0;
-    this.fastReduceMul =
-      this.bucketMask === 0 && this.numBuckets <= FAST_REDUCE_MAX_BUCKETS
-        ? this.numBuckets * INV_2_32
-        : null;
+    const fast = computeFastReduceParams(this.numBuckets);
+    this.bucketMask = fast.bucketMask;
+    this.fastReduceMul = fast.fastReduceMul;
     this.table = new Uint32Array(this.numBuckets * BUCKET_SIZE);
   }
 
@@ -454,7 +461,9 @@ export class VacuumFilter {
     // 关键优化：尽量走 TextEncoder.encodeInto（无分配，且编码在原生层完成）
     const strLen = key.length;
     if (this.scratch.length < strLen) {
-      this.scratch = new Uint8Array(Math.max(this.scratch.length * 2, strLen));
+      // 注意：scratch32 需要 4-byte 对齐；否则 new Uint32Array(buffer) 会抛 RangeError。
+      const newLen = roundUpToMultiple(Math.max(this.scratch.length * 2, strLen), 4);
+      this.scratch = new Uint8Array(newLen);
       this.scratch32 = new Uint32Array(this.scratch.buffer);
     }
 
@@ -462,21 +471,31 @@ export class VacuumFilter {
     let encoded = textEncoder.encodeInto(key, this.scratch);
     if (encoded.read < strLen) {
       // UTF-8 最坏 4 bytes/char；用 4x 作为上界（仅影响少见的非 ASCII key）
-      this.scratch = new Uint8Array(Math.max(this.scratch.length * 2, strLen * 4));
+      const newLen = roundUpToMultiple(Math.max(this.scratch.length * 2, strLen * 4), 4);
+      this.scratch = new Uint8Array(newLen);
       this.scratch32 = new Uint32Array(this.scratch.buffer);
       encoded = textEncoder.encodeInto(key, this.scratch);
     }
 
     // 极端情况下 encodeInto 仍可能因缓冲不足而截断：回退到 encode（保证正确性）
-    const bytes = encoded.read < strLen ? textEncoder.encode(key) : this.scratch;
-    const byteLen = encoded.read < strLen ? bytes.length : encoded.written;
-    const hvIndex = murmur3X86_32(
-      bytes,
-      byteLen,
-      this.hashSeedA,
-      bytes === this.scratch ? this.scratch32 : undefined
-    );
+    let bytes: Uint8Array;
+    let byteLen: number;
+    let words: Uint32Array | undefined;
+
+    if (encoded.read < strLen) {
+      bytes = textEncoder.encode(key);
+      byteLen = bytes.length;
+      words = undefined;
+    } else {
+      bytes = this.scratch;
+      byteLen = encoded.written;
+      words = this.scratch32;
+    }
+
+    const hvIndex = murmur3X86_32(bytes, byteLen, this.hashSeedA, words);
+
     // tag 从 index hash 二次混合派生（避免再扫一遍 bytes）
+    // 注意：tag 不再来自“第二份独立 hash”。这会降低 (index, tag) 的独立性，但在 32-bit fingerprint 场景下碰撞概率仍极低。
     const hvTag = fmix32((hvIndex ^ this.hashSeedB) >>> 0);
 
     // 参考实现使用 `hash % numBuckets`；这里做一个“尽量快”的等价映射：
@@ -489,7 +508,7 @@ export class VacuumFilter {
       bucketMask !== 0
         ? (hvIndex & bucketMask) >>> 0
         : fastReduceMul
-          ? ((hvIndex * fastReduceMul) | 0) >>> 0
+          ? ((hvIndex * fastReduceMul) | 0) >>> 0 // |0 用于截断（等价 floor；值域 < 2^31）
           : hvIndex % this.numBuckets;
 
     let tag = (hvTag & this.tagMask) >>> 0;

@@ -107,6 +107,22 @@ describe("VacuumFilter", () => {
     }
   });
 
+  test("超长 key 也应可用（避免 scratch32 对齐导致 RangeError）", () => {
+    const vf = new VacuumFilter({
+      maxItems: 1000,
+      fingerprintBits: 32,
+      maxKickSteps: 500,
+      seed: "unit-test-long-key",
+    });
+
+    // 触发 scratch 扩容：> DEFAULT_SCRATCH_BYTES*2 且不是 4 的倍数
+    const longKey = "a".repeat(1001);
+    expect(vf.add(longKey)).toBe(true);
+    expect(vf.has(longKey)).toBe(true);
+    expect(vf.delete(longKey)).toBe(true);
+    expect(vf.has(longKey)).toBe(false);
+  });
+
   test("alternate index 应为可逆映射（alt(alt(i,tag),tag)=i）且不越界", () => {
     const vf = new VacuumFilter({
       maxItems: 50_000,
