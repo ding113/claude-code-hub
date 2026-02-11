@@ -47,7 +47,8 @@ vi.mock("@/repository/statistics", () => ({
 
 const limitMock = vi.fn();
 const whereMock = vi.fn(() => ({ limit: limitMock }));
-const fromMock = vi.fn(() => ({ where: whereMock }));
+const leftJoinMock = vi.fn(() => ({ where: whereMock }));
+const fromMock = vi.fn(() => ({ leftJoin: leftJoinMock }));
 const selectMock = vi.fn(() => ({ from: fromMock }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -70,9 +71,9 @@ describe("getKeyQuotaUsage - concurrent limit inheritance", () => {
   });
 
   it("Key 并发为 0 时应回退到 User 并发上限", async () => {
-    limitMock
-      .mockResolvedValueOnce([
-        {
+    limitMock.mockResolvedValueOnce([
+      {
+        key: {
           id: 1,
           userId: 10,
           key: "sk-test",
@@ -87,8 +88,9 @@ describe("getKeyQuotaUsage - concurrent limit inheritance", () => {
           dailyResetMode: "fixed",
           limitConcurrentSessions: 0,
         },
-      ])
-      .mockResolvedValueOnce([{ limitConcurrentSessions: 15, deletedAt: null }]);
+        userLimitConcurrentSessions: 15,
+      },
+    ]);
 
     const { getKeyQuotaUsage } = await import("@/actions/key-quota");
     const result = await getKeyQuotaUsage(1);

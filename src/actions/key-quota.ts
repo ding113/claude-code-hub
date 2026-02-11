@@ -49,19 +49,25 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       };
     }
 
-    const [keyRow] = await db
-      .select()
+    const [result] = await db
+      .select({
+        key: keysTable,
+        userLimitConcurrentSessions: usersTable.limitConcurrentSessions,
+      })
       .from(keysTable)
+      .leftJoin(usersTable, and(eq(keysTable.userId, usersTable.id), isNull(usersTable.deletedAt)))
       .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
       .limit(1);
 
-    if (!keyRow) {
+    if (!result) {
       return {
         ok: false,
         error: tError?.("KEY_NOT_FOUND") ?? "",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
+
+    const keyRow = result.key;
 
     // Allow admin to view any key, users can only view their own keys
     if (session.user.role !== "admin" && keyRow.userId !== session.user.id) {
@@ -72,16 +78,9 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       };
     }
 
-    // Key 并发未设置时，继承用户并发上限（避免 UI 显示为“无限制”但实际被 User 并发限制约束）
-    const [userRow] = await db
-      .select({ limitConcurrentSessions: usersTable.limitConcurrentSessions })
-      .from(usersTable)
-      .where(and(eq(usersTable.id, keyRow.userId), isNull(usersTable.deletedAt)))
-      .limit(1);
-
     const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
       keyRow.limitConcurrentSessions ?? 0,
-      userRow?.limitConcurrentSessions ?? null
+      result.userLimitConcurrentSessions ?? null
     );
 
     const settings = await getSystemSettings();
