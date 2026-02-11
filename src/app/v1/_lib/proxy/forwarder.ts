@@ -89,7 +89,7 @@ type CacheTtlOption = CacheTtlPreference | null | undefined;
 // 说明：
 // - 该检查仅用于“空响应/假 200”启发式判定，不用于业务逻辑解析；
 // - 超过上限时，仍认为“非空”，但会跳过 JSON 内容结构检查（避免截断导致误判）。
-const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 1024 * 1024; // 1 MiB
+const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 32 * 1024; // 32 KiB
 
 /**
  * 读取响应体文本，但最多读取 `maxBytes` 字节（用于非流式 2xx 的“空响应/假 200”嗅探）。
