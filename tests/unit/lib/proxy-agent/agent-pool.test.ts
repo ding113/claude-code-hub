@@ -514,6 +514,14 @@ describe("AgentPool", () => {
         destroy?: () => Promise<void>;
       };
 
+      // 说明：本文件顶部已 mock undici Agent/ProxyAgent，因此 destroy/close 应为 vi.fn，断言才有意义
+      if (typeof agent.destroy === "function") {
+        expect(vi.isMockFunction(agent.destroy)).toBe(true);
+      }
+      if (typeof agent.close === "function") {
+        expect(vi.isMockFunction(agent.close)).toBe(true);
+      }
+
       // 模拟：close 可能因等待 in-flight 请求结束而长期不返回
       if (typeof agent.close === "function") {
         vi.mocked(agent.close).mockImplementation(() => new Promise<void>(() => {}));
