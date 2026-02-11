@@ -1,7 +1,11 @@
 import "server-only";
 
 import net from "node:net";
-import { getEndpointCircuitStateSync, recordEndpointFailure, resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
+import {
+  getEndpointCircuitStateSync,
+  recordEndpointFailure,
+  resetEndpointCircuit,
+} from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { findProviderEndpointById, recordProviderEndpointProbeResult } from "@/repository";
 import type { ProviderEndpoint, ProviderEndpointProbeSource } from "@/types/provider";
