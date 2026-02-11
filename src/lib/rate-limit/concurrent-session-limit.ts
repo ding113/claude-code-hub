@@ -1,3 +1,9 @@
+/**
+ * 将输入归一化为正整数限额。
+ *
+ * - 非数字 / 非有限值 / <= 0 视为 0（无限制）
+ * - > 0 时向下取整
+ */
 function normalizePositiveLimit(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return 0;
