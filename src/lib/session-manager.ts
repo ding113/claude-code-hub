@@ -557,6 +557,21 @@ export class SessionManager {
   }
 
   /**
+   * 清除 session 绑定的 provider（用于跨模型 session 绑定过时时）
+   */
+  static async clearSessionProvider(sessionId: string): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      await redis.del(`session:${sessionId}:provider`);
+      logger.trace("SessionManager: Cleared session provider binding", { sessionId });
+    } catch (error) {
+      logger.error("SessionManager: Failed to clear session provider", { error, sessionId });
+    }
+  }
+
+  /**
    * 获取当前绑定供应商的优先级
    *
    * ⚠️ 修复：从 session:provider 读取（真实绑定），而不是 session:info

@@ -558,6 +558,18 @@ export class ProxyProviderResolver {
         requestedModel,
         allowedModels: provider.allowedModels,
       });
+
+      // 清除过时绑定，避免 SET NX 死锁
+      // 当 session 内请求模型发生变化时，旧绑定已无意义，
+      // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
+      await SessionManager.clearSessionProvider(session.sessionId);
+      logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
+        sessionId: session.sessionId,
+        staleProviderId: provider.id,
+        staleProviderName: provider.name,
+        requestedModel,
+      });
+
       return null;
     }
 
