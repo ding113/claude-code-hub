@@ -28,6 +28,25 @@ import {
   shouldHideOutputRate,
 } from "../types";
 
+// UI 仅用于“解释”内部的 FAKE_200_* 错误码，不参与判定逻辑。
+// 这些 code 代表：上游返回了 2xx（看起来成功），但响应体内容更像错误页/错误 JSON。
+function getFake200ReasonKey(code: string): string {
+  switch (code) {
+    case "FAKE_200_EMPTY_BODY":
+      return "fake200Reasons.emptyBody";
+    case "FAKE_200_HTML_BODY":
+      return "fake200Reasons.htmlBody";
+    case "FAKE_200_JSON_ERROR_NON_EMPTY":
+      return "fake200Reasons.jsonErrorNonEmpty";
+    case "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY":
+      return "fake200Reasons.jsonErrorMessageNonEmpty";
+    case "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH":
+      return "fake200Reasons.jsonMessageKeywordMatch";
+    default:
+      return "fake200Reasons.unknown";
+  }
+}
+
 export function SummaryTab({
   statusCode,
   errorMessage,
@@ -67,6 +86,10 @@ export function SummaryTab({
     specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
+  const fake200Reason =
+    isFake200PostStreamFailure && typeof errorMessage === "string"
+      ? t(getFake200ReasonKey(errorMessage))
+      : null;
 
   return (
     <div className="space-y-6">
@@ -426,6 +449,11 @@ export function SummaryTab({
             <p className="text-xs text-rose-800 dark:text-rose-200 line-clamp-3 font-mono">
               {errorMessage.length > 200 ? `${errorMessage.slice(0, 200)}...` : errorMessage}
             </p>
+            {isFake200PostStreamFailure && fake200Reason && (
+              <p className="mt-2 text-[11px] text-rose-800 dark:text-rose-200">
+                {t("fake200DetectedReason", { reason: fake200Reason })}
+              </p>
+            )}
             {/* 注意：假 200 检测发生在 SSE 流式结束后；此时内容已可能透传给客户端，因此需要提示用户避免误解。 */}
             {isFake200PostStreamFailure && (
               <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">

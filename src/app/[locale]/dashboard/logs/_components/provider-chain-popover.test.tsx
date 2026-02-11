@@ -86,6 +86,15 @@ const messages = {
       details: {
         clickStatusCode: "Click status code",
         fake200ForwardedNotice: "Note: payload may have been forwarded",
+        fake200DetectedReason: "Detected reason: {reason}",
+        fake200Reasons: {
+          emptyBody: "Empty response body",
+          htmlBody: "HTML document returned",
+          jsonErrorNonEmpty: "JSON has non-empty error field",
+          jsonErrorMessageNonEmpty: "JSON has non-empty error.message",
+          jsonMessageKeywordMatch: 'JSON message contains "error"',
+          unknown: "Response body indicates an error",
+        },
       },
     },
   },

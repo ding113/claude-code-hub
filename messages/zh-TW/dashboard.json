@@ -244,6 +244,15 @@
       },
       "errorMessage": "錯誤訊息",
       "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
+      "fake200DetectedReason": "檢測原因：{reason}",
+      "fake200Reasons": {
+        "emptyBody": "回應本文為空",
+        "htmlBody": "回傳了 HTML 文件（可能是錯誤頁）",
+        "jsonErrorNonEmpty": "JSON 頂層 error 欄位非空",
+        "jsonErrorMessageNonEmpty": "JSON 中 error.message 非空",
+        "jsonMessageKeywordMatch": "JSON message 欄位包含 \"error\"（啟發式）",
+        "unknown": "回應本文內容顯示錯誤"
+      },
       "filteredProviders": "被過濾的供應商",
       "providerChain": {
         "title": "供應商決策鏈時間軸",

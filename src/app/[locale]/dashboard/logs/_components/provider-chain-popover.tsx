@@ -61,6 +61,25 @@ function parseGroupTags(groupTag?: string | null): string[] {
   return groups;
 }
 
+// UI 仅用于“解释”内部的 FAKE_200_* 错误码，不参与判定逻辑。
+// 这些 code 代表：上游返回了 2xx（看起来成功），但响应体内容更像错误页/错误 JSON。
+function getFake200ReasonKey(code: string): string {
+  switch (code) {
+    case "FAKE_200_EMPTY_BODY":
+      return "logs.details.fake200Reasons.emptyBody";
+    case "FAKE_200_HTML_BODY":
+      return "logs.details.fake200Reasons.htmlBody";
+    case "FAKE_200_JSON_ERROR_NON_EMPTY":
+      return "logs.details.fake200Reasons.jsonErrorNonEmpty";
+    case "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY":
+      return "logs.details.fake200Reasons.jsonErrorMessageNonEmpty";
+    case "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH":
+      return "logs.details.fake200Reasons.jsonMessageKeywordMatch";
+    default:
+      return "logs.details.fake200Reasons.unknown";
+  }
+}
+
 /**
  * Get status icon and color for a provider chain item
  */
@@ -122,6 +141,9 @@ export function ProviderChainPopover({
   const hasFake200PostStreamFailure = chain.some(
     (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
   );
+  const fake200CodeForDisplay = chain.find(
+    (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
+  )?.errorMessage;
 
   // Calculate actual request count (excluding intermediate states)
   const requestCount = chain.filter(isActualRequest).length;
@@ -174,7 +196,16 @@ export function ProviderChainPopover({
                 {hasFake200PostStreamFailure && (
                   <div className="flex items-start gap-1.5 text-[10px] text-amber-500 dark:text-amber-400">
                     <InfoIcon className="h-3 w-3 shrink-0 mt-0.5" aria-hidden="true" />
-                    <span>{t("logs.details.fake200ForwardedNotice")}</span>
+                    <div className="space-y-0.5">
+                      {typeof fake200CodeForDisplay === "string" && (
+                        <div>
+                          {t("logs.details.fake200DetectedReason", {
+                            reason: t(getFake200ReasonKey(fake200CodeForDisplay)),
+                          })}
+                        </div>
+                      )}
+                      <div>{t("logs.details.fake200ForwardedNotice")}</div>
+                    </div>
                   </div>
                 )}
 
@@ -468,9 +499,19 @@ export function ProviderChainPopover({
                     )}
                   </div>
                   {item.errorMessage && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">
-                      {item.errorMessage}
-                    </p>
+                    <>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">
+                        {item.errorMessage}
+                      </p>
+                      {typeof item.errorMessage === "string" &&
+                        item.errorMessage.startsWith("FAKE_200_") && (
+                          <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5 line-clamp-2">
+                            {t("logs.details.fake200DetectedReason", {
+                              reason: t(getFake200ReasonKey(item.errorMessage)),
+                            })}
+                          </p>
+                        )}
+                    </>
                   )}
                 </div>
               </div>

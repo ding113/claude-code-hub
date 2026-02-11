@@ -448,17 +448,39 @@ export class ProxyError extends Error {
    */
   getClientSafeMessage(): string {
     // 注意：一些内部检测/统计用的“错误码”（例如 FAKE_200_*）不适合直接暴露给客户端。
-    // 这里做最小映射：仅在 502 且 message 为 FAKE_200_* 时返回统一文案，并附带安全的上游片段（若有）。
+    // 这里做最小映射：仅在 502 且 message 为 FAKE_200_* 时返回“可读原因说明”，并附带安全的上游片段（若有）。
     if (this.statusCode === 502 && this.message.startsWith("FAKE_200_")) {
+      // 说明：这些 code 都来自内部的“假 200”检测，代表：HTTP 状态码显示成功，但响应体内容更像错误页/错误 JSON。
+      // 我们需要：
+      // 1) 给用户清晰的错误原因（避免只看到一个内部 code）；
+      // 2) 不泄露内部错误码/供应商名称；
+      // 3) 在有 detail 时附带一小段“脱敏 + 截断”的上游片段，帮助排查。
+      const reason = (() => {
+        switch (this.message) {
+          case "FAKE_200_EMPTY_BODY":
+            return "Upstream returned a successful HTTP status, but the response body was empty.";
+          case "FAKE_200_HTML_BODY":
+            return "Upstream returned a successful HTTP status, but the response body looks like an HTML document (likely an error page).";
+          case "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY":
+            return "Upstream returned a successful HTTP status, but the JSON body contains a non-empty `error.message`.";
+          case "FAKE_200_JSON_ERROR_NON_EMPTY":
+            return "Upstream returned a successful HTTP status, but the JSON body contains a non-empty `error` field.";
+          case "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH":
+            return "Upstream returned a successful HTTP status, but the JSON `message` suggests an error (heuristic).";
+          default:
+            return "Upstream returned a successful HTTP status, but the response body indicates an error.";
+        }
+      })();
+
       const detail = this.upstreamError?.body?.trim();
       if (detail) {
         // 注意：对 FAKE_200_* 路径，我们只会写入内部检测得到的脱敏/截断片段（详见 upstream-error-detection.ts）。
         // 这里做一次最小的 whitespace 归一化，避免多行内容污染客户端日志。
         const normalized = detail.replace(/\s+/g, " ").trim();
-        return `Upstream service returned an invalid response: ${normalized}`;
+        return `${reason} Upstream detail: ${normalized}`;
       }
 
-      return "Upstream service returned an invalid response";
+      return reason;
     }
 
     return this.message;

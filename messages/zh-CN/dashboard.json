@@ -244,6 +244,15 @@
       },
       "errorMessage": "错误信息",
       "fake200ForwardedNotice": "提示：对于流式请求，该失败可能在流结束后才被识别；响应内容可能已原样透传给客户端。",
+      "fake200DetectedReason": "检测原因：{reason}",
+      "fake200Reasons": {
+        "emptyBody": "响应体为空",
+        "htmlBody": "返回了 HTML 文档（可能是错误页）",
+        "jsonErrorNonEmpty": "JSON 顶层 error 字段非空",
+        "jsonErrorMessageNonEmpty": "JSON 中 error.message 非空",
+        "jsonMessageKeywordMatch": "JSON message 字段包含 \"error\"（启发式）",
+        "unknown": "响应体内容指示错误"
+      },
       "filteredProviders": "被过滤的供应商",
       "providerChain": {
         "title": "供应商决策链时间线",

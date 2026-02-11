@@ -244,6 +244,15 @@
       },
       "errorMessage": "Сообщение об ошибке",
       "fake200ForwardedNotice": "Примечание: для потоковых запросов эта ошибка может быть обнаружена только после завершения потока; содержимое ответа могло уже быть передано клиенту.",
+      "fake200DetectedReason": "Причина обнаружения: {reason}",
+      "fake200Reasons": {
+        "emptyBody": "Пустое тело ответа",
+        "htmlBody": "Получен HTML-документ (возможно, страница ошибки)",
+        "jsonErrorNonEmpty": "В JSON непустое поле `error`",
+        "jsonErrorMessageNonEmpty": "В JSON непустое `error.message`",
+        "jsonMessageKeywordMatch": "В JSON `message` содержит слово \"error\" (эвристика)",
+        "unknown": "Тело ответа указывает на ошибку"
+      },
       "filteredProviders": "Отфильтрованные поставщики",
       "providerChain": {
         "title": "Хронология цепочки решений поставщика",
