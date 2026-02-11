@@ -67,7 +67,7 @@ const MAY_HAVE_JSON_MESSAGE_KEY = /"message"\s*:/;
 
 const HTML_DOC_SNIFF_MAX_CHARS = 1024;
 const HTML_DOCTYPE_RE = /^<!doctype\s+html[\s>]/i;
-const HTML_HTML_TAG_RE = /<html[\s>]/i;
+const HTML_HTML_TAG_RE = /^<html[\s>]/i;
 
 function isLikelyHtmlDocument(trimmedText: string): boolean {
   if (!trimmedText.startsWith("<")) return false;
