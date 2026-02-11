@@ -703,6 +703,9 @@ export class ProxyForwarder {
           const isHtml =
             normalizedContentType.includes("text/html") ||
             normalizedContentType.includes("application/xhtml+xml");
+          const isJson =
+            normalizedContentType.includes("application/json") ||
+            normalizedContentType.includes("+json");
 
           // ========== 流式响应：延迟成功判定（避免“假 200”）==========
           // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
@@ -739,10 +742,14 @@ export class ProxyForwarder {
           }
 
           // 非流式响应：检测空响应
-          const contentLength = response.headers.get("content-length");
+          const contentLengthHeader = response.headers.get("content-length");
+          const contentLength = contentLengthHeader?.trim() || undefined;
+          const contentLengthBytes = contentLength ? Number.parseInt(contentLength, 10) : null;
+          const hasValidContentLength =
+            contentLengthBytes !== null && Number.isFinite(contentLengthBytes) && contentLengthBytes >= 0;
 
           // 检测 Content-Length: 0 的情况
-          if (contentLength === "0") {
+          if (contentLengthBytes === 0) {
             throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
           }
 
@@ -753,7 +760,12 @@ export class ProxyForwarder {
           // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
           let inspectedText: string | undefined;
           let inspectedTruncated = false;
-          if (isHtml || !contentLength) {
+          const shouldInspectJson =
+            isJson &&
+            hasValidContentLength &&
+            contentLengthBytes <= NON_STREAM_BODY_INSPECTION_MAX_BYTES;
+          const shouldInspectBody = isHtml || !hasValidContentLength || shouldInspectJson;
+          if (shouldInspectBody) {
             // 注意：Response.clone() 会 tee 底层 ReadableStream，可能带来一定的瞬时内存开销；
             // 这里通过“最多读取 32 KiB”并在截断时 cancel 克隆分支来控制开销。
             const clonedResponse = response.clone();
