@@ -19,6 +19,12 @@ function createLoggerMock() {
   };
 }
 
+async function flushPromises(rounds = 2): Promise<void> {
+  for (let i = 0; i < rounds; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -134,6 +140,10 @@ describe("endpoint-circuit-breaker", () => {
       findProviderEndpointById: vi.fn(async () => null),
     }));
 
+    // recordEndpointFailure 会 non-blocking 触发告警；先让 event-loop 跑完再清空计数，避免串台导致误判
+    await flushPromises();
+    sendAlertMock.mockClear();
+
     const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
 
     await triggerEndpointCircuitBreakerAlert(
@@ -183,6 +193,10 @@ describe("endpoint-circuit-breaker", () => {
         deletedAt: null,
       })),
     }));
+
+    // recordEndpointFailure 会 non-blocking 触发告警；先让 event-loop 跑完再清空计数，避免串台导致误判
+    await flushPromises();
+    sendAlertMock.mockClear();
 
     const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
 
