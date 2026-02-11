@@ -248,7 +248,7 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     );
     const failure1 = mocks.recordFailure.mock.calls[0]?.[1];
     expect(failure1).toBeInstanceOf(ProxyError);
-    expect((failure1 as ProxyError).getClientSafeMessage()).toBe(
+    expect((failure1 as ProxyError).getClientSafeMessage()).toContain(
       "Upstream service returned an invalid response"
     );
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
@@ -304,9 +304,10 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     );
     const failure2 = mocks.recordFailure.mock.calls[0]?.[1];
     expect(failure2).toBeInstanceOf(ProxyError);
-    expect((failure2 as ProxyError).getClientSafeMessage()).toBe(
+    expect((failure2 as ProxyError).getClientSafeMessage()).toContain(
       "Upstream service returned an invalid response"
     );
+    expect((failure2 as ProxyError).getClientSafeMessage()).toContain("upstream blocked");
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
@@ -359,9 +360,10 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     );
     const failure3 = mocks.recordFailure.mock.calls[0]?.[1];
     expect(failure3).toBeInstanceOf(ProxyError);
-    expect((failure3 as ProxyError).getClientSafeMessage()).toBe(
+    expect((failure3 as ProxyError).getClientSafeMessage()).toContain(
       "Upstream service returned an invalid response"
     );
+    expect((failure3 as ProxyError).getClientSafeMessage()).toContain("upstream blocked");
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });

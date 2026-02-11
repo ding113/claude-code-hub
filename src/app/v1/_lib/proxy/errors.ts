@@ -448,8 +448,16 @@ export class ProxyError extends Error {
    */
   getClientSafeMessage(): string {
     // 注意：一些内部检测/统计用的“错误码”（例如 FAKE_200_*）不适合直接暴露给客户端。
-    // 这里做最小映射：仅在 502 且 message 为 FAKE_200_* 时返回统一文案。
+    // 这里做最小映射：仅在 502 且 message 为 FAKE_200_* 时返回统一文案，并附带安全的上游片段（若有）。
     if (this.statusCode === 502 && this.message.startsWith("FAKE_200_")) {
+      const detail = this.upstreamError?.body?.trim();
+      if (detail) {
+        // 注意：对 FAKE_200_* 路径，我们只会写入内部检测得到的脱敏/截断片段（详见 upstream-error-detection.ts）。
+        // 这里做一次最小的 whitespace 归一化，避免多行内容污染客户端日志。
+        const normalized = detail.replace(/\s+/g, " ").trim();
+        return `Upstream service returned an invalid response: ${normalized}`;
+      }
+
       return "Upstream service returned an invalid response";
     }
 
