@@ -141,8 +141,10 @@ describe("VacuumFilter", () => {
     expect(bucketMask).toBe(0);
     expect(fastReduceMul).not.toBeNull();
 
-    // @ts-expect-error: 单测需要覆盖私有方法的核心不变量
-    const indexTag = (key: string) => vf.indexTag(key) as void;
+    const indexTag = (key: string): void => {
+      // @ts-expect-error: 单测需要覆盖私有方法的核心不变量
+      vf.indexTag(key);
+    };
 
     for (let i = 0; i < 10_000; i++) {
       indexTag(`key_${i}`);

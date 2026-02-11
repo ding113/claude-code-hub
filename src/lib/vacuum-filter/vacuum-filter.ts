@@ -507,11 +507,13 @@ export class VacuumFilter {
     // - 其它：回退到 `%`
     const bucketMask = this.bucketMask;
     const fastReduceMul = this.fastReduceMul;
+    // fastReduceMul != null 时：value = hvIndex * numBuckets / 2^32 < numBuckets <= 2^21，
+    // 因此 `>>> 0` 与 Math.floor 等价且不会发生 2^32 wrap。
     const index =
       bucketMask !== 0
         ? (hvIndex & bucketMask) >>> 0
-        : fastReduceMul
-          ? (hvIndex * fastReduceMul) >>> 0 // >>>0 用于截断（等价 floor；值域 < 2^32）
+        : fastReduceMul !== null
+          ? (hvIndex * fastReduceMul) >>> 0
           : hvIndex % this.numBuckets;
 
     let tag = (hvTag & this.tagMask) >>> 0;
