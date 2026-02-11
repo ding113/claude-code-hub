@@ -801,6 +801,10 @@ export class ProxyForwarder {
                 body: detected.detail ?? "",
                 providerId: currentProvider.id,
                 providerName: currentProvider.name,
+                // 注意：rawBody 仅用于“本次错误响应”向客户端提供更多排查信息（受系统设置控制），
+                // 不参与规则匹配/持久化，避免污染数据库或误触发覆写规则。
+                rawBody: inspectedText,
+                rawBodyTruncated: inspectedTruncated,
               });
             }
           }

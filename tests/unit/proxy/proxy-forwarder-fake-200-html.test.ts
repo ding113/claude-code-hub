@@ -306,6 +306,8 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect((failure2 as ProxyError).getClientSafeMessage()).toContain("JSON body");
     expect((failure2 as ProxyError).getClientSafeMessage()).toContain("`error`");
     expect((failure2 as ProxyError).getClientSafeMessage()).toContain("upstream blocked");
+    expect((failure2 as ProxyError).upstreamError?.rawBody).toBe(jsonErrorBody);
+    expect((failure2 as ProxyError).upstreamError?.rawBodyTruncated).toBe(false);
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
@@ -361,6 +363,8 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect((failure3 as ProxyError).getClientSafeMessage()).toContain("JSON body");
     expect((failure3 as ProxyError).getClientSafeMessage()).toContain("`error`");
     expect((failure3 as ProxyError).getClientSafeMessage()).toContain("upstream blocked");
+    expect((failure3 as ProxyError).upstreamError?.rawBody).toBe(jsonErrorBody);
+    expect((failure3 as ProxyError).upstreamError?.rawBodyTruncated).toBe(false);
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });

@@ -18,11 +18,29 @@ export class ProxyError extends Error {
     message: string,
     public readonly statusCode: number,
     public readonly upstreamError?: {
-      body: string; // 原始响应体（智能截断）
+      /**
+       * 上游响应体（智能截断）。
+       *
+       * 注意：该字段会进入 getDetailedErrorMessage()，并被记录到数据库中，
+       * 因此不要在这里放入“大段原文”或未脱敏的敏感内容。
+       */
+      body: string;
       parsed?: unknown; // 解析后的 JSON（如果有）
       providerId?: number;
       providerName?: string;
       requestId?: string; // 上游请求 ID（用于覆写响应时注入）
+
+      /**
+       * 上游响应体原文（通常为前缀片段）。
+       *
+       * 设计目标：
+       * - 仅用于“本次错误响应”返回给客户端（受系统设置控制）；
+       * - 不参与规则匹配与持久化（避免污染数据库/日志）。
+       *
+       * 目前主要用于“假 200”检测：HTTP 状态码为 2xx，但 body 实际为错误页/错误 JSON。
+       */
+      rawBody?: string;
+      rawBodyTruncated?: boolean;
     }
   ) {
     super(message);

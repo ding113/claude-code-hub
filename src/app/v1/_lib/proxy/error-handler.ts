@@ -1,3 +1,4 @@
+import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import {
   isClaudeErrorFormat,
   isGeminiErrorFormat,
@@ -236,9 +237,54 @@ export class ProxyErrorHandler {
       overridden: false,
     });
 
+    // verboseProviderError（系统设置）开启时：对“假 200/空响应”等上游异常返回更详细的报告，便于排查。
+    // 注意：
+    // - 该逻辑放在 error override 之后：确保优先级更低，不覆盖用户自定义覆写。
+    // - 仅回传在内存中短暂保留的原文（rawBody），不写入数据库/决策链，避免泄露与持久化污染。
+    let details: Record<string, unknown> | undefined;
+    let upstreamRequestId: string | undefined;
+    const shouldAttachVerboseDetails =
+      (error instanceof ProxyError &&
+        error.statusCode === 502 &&
+        error.message.startsWith("FAKE_200_")) ||
+      isEmptyResponseError(error);
+
+    if (shouldAttachVerboseDetails) {
+      const settings = await getCachedSystemSettings();
+      if (settings.verboseProviderError) {
+        if (error instanceof ProxyError) {
+          upstreamRequestId = error.upstreamError?.requestId;
+          details = {
+            upstreamError: {
+              kind: "fake_200",
+              code: error.message,
+              clientSafeMessage: error.getClientSafeMessage(),
+              rawBody: error.upstreamError?.rawBody,
+              rawBodyTruncated: error.upstreamError?.rawBodyTruncated ?? false,
+            },
+          };
+        } else if (isEmptyResponseError(error)) {
+          details = {
+            upstreamError: {
+              kind: "empty_response",
+              reason: error.reason,
+              clientSafeMessage: error.getClientSafeMessage(),
+              rawBody: "",
+              rawBodyTruncated: false,
+            },
+          };
+        }
+      }
+    }
+
+    const safeRequestId =
+      typeof upstreamRequestId === "string" && upstreamRequestId.trim()
+        ? upstreamRequestId.trim()
+        : undefined;
+
     return await attachSessionIdToErrorResponse(
       session.sessionId,
-      ProxyResponses.buildError(statusCode, clientErrorMessage)
+      ProxyResponses.buildError(statusCode, clientErrorMessage, undefined, details, safeRequestId)
     );
   }
 
