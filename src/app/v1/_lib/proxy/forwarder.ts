@@ -746,7 +746,9 @@ export class ProxyForwarder {
           const contentLength = contentLengthHeader?.trim() || undefined;
           const contentLengthBytes = contentLength ? Number.parseInt(contentLength, 10) : null;
           const hasValidContentLength =
-            contentLengthBytes !== null && Number.isFinite(contentLengthBytes) && contentLengthBytes >= 0;
+            contentLengthBytes !== null &&
+            Number.isFinite(contentLengthBytes) &&
+            contentLengthBytes >= 0;
 
           // 检测 Content-Length: 0 的情况
           if (contentLengthBytes === 0) {
