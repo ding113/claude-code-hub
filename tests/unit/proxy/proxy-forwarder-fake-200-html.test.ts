@@ -369,6 +369,62 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
 
+  test("200 + 非法 Content-Length 时应按缺失处理，避免漏检 HTML 假200", async () => {
+    const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
+    const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });
+
+    const session = createSession();
+    session.setProvider(provider1);
+
+    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    const htmlErrorBody = "<!doctype html><html><body>blocked</body></html>";
+    const okJson = JSON.stringify({ type: "message", content: [{ type: "text", text: "ok" }] });
+
+    doForward.mockResolvedValueOnce(
+      new Response(htmlErrorBody, {
+        status: 200,
+        headers: {
+          // 故意不提供 html/json 的 Content-Type，覆盖“仅靠 body 嗅探”的假200检测分支
+          "content-type": "text/plain; charset=utf-8",
+          // 非法 Content-Length：parseInt("12abc") 会返回 12；修复后应视为非法并进入 body 检查分支
+          "content-length": "12abc",
+        },
+      })
+    );
+
+    doForward.mockResolvedValueOnce(
+      new Response(okJson, {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(okJson.length),
+        },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+    expect(await response.text()).toContain("ok");
+
+    expect(doForward).toHaveBeenCalledTimes(2);
+    expect(doForward.mock.calls[0][1].id).toBe(1);
+    expect(doForward.mock.calls[1][1].id).toBe(2);
+
+    expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledWith(session, [1]);
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ message: "FAKE_200_HTML_BODY" })
+    );
+
+    const failure = mocks.recordFailure.mock.calls[0]?.[1];
+    expect(failure).toBeInstanceOf(ProxyError);
+    expect((failure as ProxyError).upstreamError?.rawBody).toBe(htmlErrorBody);
+    expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
+    expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
+  });
+
   test("缺少 content 字段（missing_content）不应被 JSON 解析 catch 吞掉，应触发切换供应商", async () => {
     const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
     const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });

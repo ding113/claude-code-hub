@@ -744,11 +744,18 @@ export class ProxyForwarder {
           // 非流式响应：检测空响应
           const contentLengthHeader = response.headers.get("content-length");
           const contentLength = contentLengthHeader?.trim() || undefined;
-          const contentLengthBytes = contentLength ? Number.parseInt(contentLength, 10) : null;
-          const hasValidContentLength =
-            contentLengthBytes !== null &&
-            Number.isFinite(contentLengthBytes) &&
-            contentLengthBytes >= 0;
+          const contentLengthBytes = (() => {
+            if (!contentLength) return null;
+
+            // Content-Length 必须是纯数字；parseInt("12abc") 会返回 12，容易误判为合法值，
+            // 从而跳过 “!hasValidContentLength” 的检查分支。
+            if (!/^\d+$/.test(contentLength)) return null;
+
+            const num = Number(contentLength);
+            if (!Number.isSafeInteger(num) || num < 0) return null;
+            return num;
+          })();
+          const hasValidContentLength = contentLengthBytes !== null;
 
           // 检测 Content-Length: 0 的情况
           if (contentLengthBytes === 0) {
@@ -809,9 +816,9 @@ export class ProxyForwarder {
             }
           }
 
-          // 对于没有 Content-Length 的情况，需要 clone 并检查响应体
+          // 对于缺失或非法 Content-Length 的情况，需要 clone 并检查响应体
           // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
-          if (!contentLength) {
+          if (!contentLength || !hasValidContentLength) {
             const responseText = inspectedText ?? "";
 
             if (!responseText || responseText.trim() === "") {

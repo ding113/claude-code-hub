@@ -492,10 +492,22 @@ export class ProxyError extends Error {
 
       const detail = this.upstreamError?.body?.trim();
       if (detail) {
-        // 注意：对 FAKE_200_* 路径，我们只会写入内部检测得到的脱敏/截断片段（详见 upstream-error-detection.ts）。
-        // 这里做一次最小的 whitespace 归一化，避免多行内容污染客户端日志。
+        // 注意：对 FAKE_200_* 路径，我们期望 upstreamError.body 来自内部检测得到的“脱敏 + 截断片段”（详见 upstream-error-detection.ts）。
+        //
+        // 但为避免未来调用方误把“未脱敏的大段原文”塞进 upstreamError.body 导致泄露，
+        // 这里再做一次防御性处理：
+        // - whitespace 归一化（避免多行污染客户端日志）
+        // - 二次截断（上限 200 字符）
+        // - 轻量脱敏（避免明显的 token/key 泄露）
         const normalized = detail.replace(/\s+/g, " ").trim();
-        return `${reason} Upstream detail: ${normalized}`;
+        const maxChars = 200;
+        const clipped =
+          normalized.length > maxChars ? `${normalized.slice(0, maxChars)}…` : normalized;
+        const safe = clipped
+          .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
+          .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b/giu, "[REDACTED_KEY]")
+          .replace(/\bAIza[0-9A-Za-z_-]{16,}\b/g, "[REDACTED_KEY]");
+        return `${reason} Upstream detail: ${safe}`;
       }
 
       return reason;
