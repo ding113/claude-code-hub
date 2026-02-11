@@ -142,32 +142,36 @@ export async function recordEndpointFailure(endpointId: number, error: Error): P
   health.lastFailureTime = Date.now();
 
   if (config.failureThreshold > 0 && health.failureCount >= config.failureThreshold) {
-    health.circuitState = "open";
-    health.circuitOpenUntil = Date.now() + config.openDuration;
-    health.halfOpenSuccessCount = 0;
+    if (health.circuitState !== "open") {
+      // Only set timer and alert on initial transition (closed->open or half-open->open)
+      health.circuitState = "open";
+      health.circuitOpenUntil = Date.now() + config.openDuration;
+      health.halfOpenSuccessCount = 0;
 
-    const retryAt = new Date(health.circuitOpenUntil).toISOString();
+      const retryAt = new Date(health.circuitOpenUntil).toISOString();
 
-    logger.warn("[EndpointCircuitBreaker] Endpoint circuit opened", {
-      endpointId,
-      failureCount: health.failureCount,
-      threshold: config.failureThreshold,
-      errorMessage: error.message,
-    });
-
-    // Async alert (non-blocking)
-    triggerEndpointCircuitBreakerAlert(
-      endpointId,
-      health.failureCount,
-      retryAt,
-      error.message
-    ).catch((err) => {
-      logger.error({
-        action: "trigger_endpoint_circuit_breaker_alert_error",
+      logger.warn("[EndpointCircuitBreaker] Endpoint circuit opened", {
         endpointId,
-        error: err instanceof Error ? err.message : String(err),
+        failureCount: health.failureCount,
+        threshold: config.failureThreshold,
+        errorMessage: error.message,
       });
-    });
+
+      // Async alert (non-blocking)
+      triggerEndpointCircuitBreakerAlert(
+        endpointId,
+        health.failureCount,
+        retryAt,
+        error.message
+      ).catch((err) => {
+        logger.error({
+          action: "trigger_endpoint_circuit_breaker_alert_error",
+          endpointId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    // If already open: failureCount is updated above, but timer stays fixed — no death spiral
   }
 
   persistStateToRedis(endpointId, health);
@@ -198,6 +202,10 @@ export async function recordEndpointSuccess(endpointId: number): Promise<void> {
     health.circuitOpenUntil = null;
     persistStateToRedis(endpointId, health);
   }
+}
+
+export function getEndpointCircuitStateSync(endpointId: number): EndpointCircuitState {
+  return healthMap.get(endpointId)?.circuitState ?? "closed";
 }
 
 export async function resetEndpointCircuit(endpointId: number): Promise<void> {

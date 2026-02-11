@@ -1,7 +1,7 @@
 import "server-only";
 
 import net from "node:net";
-import { recordEndpointFailure } from "@/lib/endpoint-circuit-breaker";
+import { getEndpointCircuitStateSync, recordEndpointFailure, resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { findProviderEndpointById, recordProviderEndpointProbeResult } from "@/repository";
 import type { ProviderEndpoint, ProviderEndpointProbeSource } from "@/types/provider";
@@ -229,6 +229,16 @@ export async function probeProviderEndpointAndRecordByEndpoint(input: {
       ? `HTTP ${result.statusCode}`
       : result.errorType || "probe_failed";
     await recordEndpointFailure(input.endpoint.id, new Error(message));
+  } else {
+    // Probe success: reset circuit breaker if endpoint was open/half-open
+    const currentState = getEndpointCircuitStateSync(input.endpoint.id);
+    if (currentState !== "closed") {
+      await resetEndpointCircuit(input.endpoint.id);
+      logger.info("[EndpointProbe] Probe success, circuit reset", {
+        endpointId: input.endpoint.id,
+        previousState: currentState,
+      });
+    }
   }
 
   // Always record probe results to history table (removed filtering logic)

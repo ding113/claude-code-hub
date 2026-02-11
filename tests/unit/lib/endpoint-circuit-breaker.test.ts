@@ -227,4 +227,74 @@ describe("endpoint-circuit-breaker", () => {
       endpointUrl: "https://custom.example.com/v1/chat/completions",
     });
   });
+
+  test("recordEndpointFailure should NOT reset circuitOpenUntil when already open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    vi.resetModules();
+
+    let redisState: SavedEndpointCircuitState | null = null;
+    const saveMock = vi.fn(async (_endpointId: number, state: SavedEndpointCircuitState) => {
+      redisState = state;
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => redisState),
+      saveEndpointCircuitState: saveMock,
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    const { recordEndpointFailure, isEndpointCircuitOpen } = await import(
+      "@/lib/endpoint-circuit-breaker"
+    );
+
+    // Record 3 failures to open the circuit
+    await recordEndpointFailure(100, new Error("fail"));
+    await recordEndpointFailure(100, new Error("fail"));
+    await recordEndpointFailure(100, new Error("fail"));
+
+    expect(await isEndpointCircuitOpen(100)).toBe(true);
+    const originalOpenUntil = redisState!.circuitOpenUntil;
+    expect(originalOpenUntil).toBe(Date.now() + 300000);
+
+    // Advance 1 min and record another failure — timer must NOT reset
+    vi.advanceTimersByTime(60_000);
+    await recordEndpointFailure(100, new Error("fail again"));
+
+    expect(redisState!.circuitState).toBe("open");
+    expect(redisState!.circuitOpenUntil).toBe(originalOpenUntil); // unchanged!
+    expect(redisState!.failureCount).toBe(4);
+  });
+
+  test("getEndpointCircuitStateSync returns correct state for known and unknown endpoints", async () => {
+    vi.resetModules();
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => null),
+      saveEndpointCircuitState: vi.fn(async () => {}),
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    const { getEndpointCircuitStateSync, recordEndpointFailure } = await import(
+      "@/lib/endpoint-circuit-breaker"
+    );
+
+    // Unknown endpoint returns "closed"
+    expect(getEndpointCircuitStateSync(9999)).toBe("closed");
+
+    // After opening the circuit, sync accessor reflects "open"
+    await recordEndpointFailure(200, new Error("a"));
+    await recordEndpointFailure(200, new Error("b"));
+    await recordEndpointFailure(200, new Error("c"));
+    expect(getEndpointCircuitStateSync(200)).toBe("open");
+  });
 });
