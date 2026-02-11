@@ -716,118 +716,117 @@ export class ProxyForwarder {
             return response;
           }
 
-          if (!isSSE) {
-            // 非流式响应：检测空响应
-            const contentLength = response.headers.get("content-length");
+          // 非流式响应：检测空响应
+          const contentLength = response.headers.get("content-length");
 
-            // 检测 Content-Length: 0 的情况
-            if (contentLength === "0") {
+          // 检测 Content-Length: 0 的情况
+          if (contentLength === "0") {
+            throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
+          }
+
+          // 200 + text/html（或 xhtml）通常是上游网关/WAF/Cloudflare 的错误页，但被包装成了 HTTP 200。
+          // 这种“假 200”会导致：
+          // - 熔断/故障转移统计被误记为成功；
+          // - session 智能绑定被更新到不可用 provider（影响后续重试）。
+          // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
+          let inspectedText: string | undefined;
+          let inspectedTruncated = false;
+          if (isHtml || !contentLength) {
+            const clonedResponse = response.clone();
+            const inspected = await readResponseTextUpTo(
+              clonedResponse,
+              NON_STREAM_BODY_INSPECTION_MAX_BYTES
+            );
+            inspectedText = inspected.text;
+            inspectedTruncated = inspected.truncated;
+          }
+
+          if (isHtml && inspectedText !== undefined) {
+            const detected = detectUpstreamErrorFromSseOrJsonText(inspectedText);
+            if (detected.isError && detected.code === "FAKE_200_HTML_BODY") {
+              throw new ProxyError(detected.code, 502, {
+                body: detected.detail ?? "",
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+              });
+            }
+          }
+
+          // 对于没有 Content-Length 的情况，需要 clone 并检查响应体
+          // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
+          if (!contentLength) {
+            const responseText = inspectedText ?? "";
+
+            if (!responseText || responseText.trim() === "") {
               throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
             }
 
-            // 200 + text/html（或 xhtml）通常是上游网关/WAF/Cloudflare 的错误页，但被包装成了 HTTP 200。
-            // 这种“假 200”会导致：
-            // - 熔断/故障转移统计被误记为成功；
-            // - session 智能绑定被更新到不可用 provider（影响后续重试）。
-            // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
-            let inspectedText: string | undefined;
-            let inspectedTruncated = false;
-            if (isHtml || !contentLength) {
-              const clonedResponse = response.clone();
-              const inspected = await readResponseTextUpTo(
-                clonedResponse,
-                NON_STREAM_BODY_INSPECTION_MAX_BYTES
-              );
-              inspectedText = inspected.text;
-              inspectedTruncated = inspected.truncated;
-            }
-
-            if (isHtml && inspectedText !== undefined) {
-              const detected = detectUpstreamErrorFromSseOrJsonText(inspectedText);
-              if (detected.isError && detected.code === "FAKE_200_HTML_BODY") {
-                throw new ProxyError(detected.code, 502, {
-                  body: detected.detail ?? "",
+            if (inspectedTruncated) {
+              logger.debug(
+                "ProxyForwarder: Response body too large for non-stream content check, skipping JSON parse",
+                {
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
-                });
-              }
-            }
-
-            // 对于没有 Content-Length 的情况，需要 clone 并检查响应体
-            // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
-            if (!contentLength) {
-              const responseText = inspectedText ?? "";
-
-              if (!responseText || responseText.trim() === "") {
-                throw new EmptyResponseError(
-                  currentProvider.id,
-                  currentProvider.name,
-                  "empty_body"
-                );
-              }
-
-              if (inspectedTruncated) {
-                logger.debug(
-                  "ProxyForwarder: Response body too large for non-stream content check, skipping JSON parse",
-                  {
-                    providerId: currentProvider.id,
-                    providerName: currentProvider.name,
-                    contentType,
-                    maxBytes: NON_STREAM_BODY_INSPECTION_MAX_BYTES,
-                  }
-                );
-              } else {
-                // 尝试解析 JSON 并检查是否有输出内容
-                try {
-                  const responseJson = JSON.parse(responseText) as Record<string, unknown>;
-
-                  // 检测 Claude 格式的空响应
-                  if (responseJson.type === "message") {
-                    const content = responseJson.content as unknown[];
-                    if (!content || content.length === 0) {
-                      throw new EmptyResponseError(
-                        currentProvider.id,
-                        currentProvider.name,
-                        "missing_content"
-                      );
-                    }
-                  }
-
-                  // 检测 OpenAI 格式的空响应
-                  if (responseJson.choices !== undefined) {
-                    const choices = responseJson.choices as unknown[];
-                    if (!choices || choices.length === 0) {
-                      throw new EmptyResponseError(
-                        currentProvider.id,
-                        currentProvider.name,
-                        "missing_content"
-                      );
-                    }
-                  }
-
-                  // 检测 usage 中的 output_tokens
-                  const usage = responseJson.usage as Record<string, unknown> | undefined;
-                  if (usage) {
-                    const outputTokens =
-                      (usage.output_tokens as number) || (usage.completion_tokens as number) || 0;
-
-                    if (outputTokens === 0) {
-                      // 输出 token 为 0，可能是空响应
-                      logger.warn("ProxyForwarder: Response has zero output tokens", {
-                        providerId: currentProvider.id,
-                        providerName: currentProvider.name,
-                        usage,
-                      });
-                      // 注意：不抛出错误，因为某些请求（如 count_tokens）可能合法地返回 0 output tokens
-                    }
-                  }
-                } catch (_parseError) {
-                  // JSON 解析失败但响应体不为空，不视为空响应错误
-                  logger.debug("ProxyForwarder: Non-JSON response body, skipping content check", {
-                    providerId: currentProvider.id,
-                    contentType,
-                  });
+                  contentType,
+                  maxBytes: NON_STREAM_BODY_INSPECTION_MAX_BYTES,
                 }
+              );
+            } else {
+              // 尝试解析 JSON 并检查是否有输出内容
+              try {
+                const responseJson = JSON.parse(responseText) as Record<string, unknown>;
+
+                // 检测 Claude 格式的空响应
+                if (responseJson.type === "message") {
+                  const content = responseJson.content as unknown[];
+                  if (!content || content.length === 0) {
+                    throw new EmptyResponseError(
+                      currentProvider.id,
+                      currentProvider.name,
+                      "missing_content"
+                    );
+                  }
+                }
+
+                // 检测 OpenAI 格式的空响应
+                if (responseJson.choices !== undefined) {
+                  const choices = responseJson.choices as unknown[];
+                  if (!choices || choices.length === 0) {
+                    throw new EmptyResponseError(
+                      currentProvider.id,
+                      currentProvider.name,
+                      "missing_content"
+                    );
+                  }
+                }
+
+                // 检测 usage 中的 output_tokens
+                const usage = responseJson.usage as Record<string, unknown> | undefined;
+                if (usage) {
+                  const outputTokens =
+                    (usage.output_tokens as number) || (usage.completion_tokens as number) || 0;
+
+                  if (outputTokens === 0) {
+                    // 输出 token 为 0，可能是空响应
+                    logger.warn("ProxyForwarder: Response has zero output tokens", {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      usage,
+                    });
+                    // 注意：不抛出错误，因为某些请求（如 count_tokens）可能合法地返回 0 output tokens
+                  }
+                }
+              } catch (_parseOrContentError) {
+                // EmptyResponseError 会触发重试/故障转移，不能在这里被当作 JSON 解析错误吞掉。
+                if (isEmptyResponseError(_parseOrContentError)) {
+                  throw _parseOrContentError;
+                }
+
+                // JSON 解析失败但响应体不为空，不视为空响应错误
+                logger.debug("ProxyForwarder: Non-JSON response body, skipping content check", {
+                  providerId: currentProvider.id,
+                  contentType,
+                });
               }
             }
           }
