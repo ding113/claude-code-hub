@@ -25,6 +25,7 @@ import {
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
+import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
 import {
   isVendorTypeCircuitOpen,
   recordVendorTypeAllEndpointsTimeout,
@@ -619,7 +620,11 @@ export class ProxyForwarder {
 
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
-          const isSSE = contentType.includes("text/event-stream");
+          const normalizedContentType = contentType.toLowerCase();
+          const isSSE = normalizedContentType.includes("text/event-stream");
+          const isHtml =
+            normalizedContentType.includes("text/html") ||
+            normalizedContentType.includes("application/xhtml+xml");
 
           // ========== 流式响应：延迟成功判定（避免“假 200”）==========
           // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
@@ -664,11 +669,32 @@ export class ProxyForwarder {
               throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
             }
 
+            // 200 + text/html（或 xhtml）通常是上游网关/WAF/Cloudflare 的错误页，但被包装成了 HTTP 200。
+            // 这种“假 200”会导致：
+            // - 熔断/故障转移统计被误记为成功；
+            // - session 智能绑定被更新到不可用 provider（影响后续重试）。
+            // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
+            let clonedResponseText: string | undefined;
+            if (isHtml || !contentLength) {
+              const clonedResponse = response.clone();
+              clonedResponseText = await clonedResponse.text();
+            }
+
+            if (isHtml && clonedResponseText !== undefined) {
+              const detected = detectUpstreamErrorFromSseOrJsonText(clonedResponseText);
+              if (detected.isError && detected.code === "FAKE_200_HTML_BODY") {
+                throw new ProxyError(detected.code, 502, {
+                  body: detected.detail ?? "",
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                });
+              }
+            }
+
             // 对于没有 Content-Length 的情况，需要 clone 并检查响应体
             // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
             if (!contentLength) {
-              const clonedResponse = response.clone();
-              const responseText = await clonedResponse.text();
+              const responseText = clonedResponseText ?? "";
 
               if (!responseText || responseText.trim() === "") {
                 throw new EmptyResponseError(

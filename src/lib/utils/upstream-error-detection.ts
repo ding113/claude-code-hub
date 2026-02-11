@@ -18,6 +18,7 @@ import { parseSSEData } from "@/lib/utils/sse";
  *
  * 设计目标（偏保守）
  * - 仅基于结构化字段做启发式判断：`error` 与 `message`；
+ * - 对明显的 HTML 文档（doctype/html 标签）做强信号判定，覆盖部分网关/WAF/Cloudflare 返回的“假 200”；
  * - 不扫描模型生成的正文内容（例如 content/choices），避免把用户/模型自然语言里的 "error" 误判为上游错误；
  * - message 关键字检测仅对“小体积 JSON”启用，降低误判与性能开销。
  * - 返回的 `code` 是语言无关的错误码（便于写入 DB/监控/告警）；
@@ -53,6 +54,7 @@ const DEFAULT_MESSAGE_KEYWORD = /error/i;
 
 const FAKE_200_CODES = {
   EMPTY_BODY: "FAKE_200_EMPTY_BODY",
+  HTML_BODY: "FAKE_200_HTML_BODY",
   JSON_ERROR_NON_EMPTY: "FAKE_200_JSON_ERROR_NON_EMPTY",
   JSON_ERROR_MESSAGE_NON_EMPTY: "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY",
   JSON_MESSAGE_KEYWORD_MATCH: "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH",
@@ -62,6 +64,16 @@ const FAKE_200_CODES = {
 // 注意：这里必须是 `"key"\s*:` 形式，避免误命中 JSON 字符串内容里的 `\"key\"`。
 const MAY_HAVE_JSON_ERROR_KEY = /"error"\s*:/;
 const MAY_HAVE_JSON_MESSAGE_KEY = /"message"\s*:/;
+
+const HTML_DOC_SNIFF_MAX_CHARS = 1024;
+const HTML_DOCTYPE_RE = /^<!doctype\s+html[\s>]/i;
+const HTML_HTML_TAG_RE = /<html[\s>]/i;
+
+function isLikelyHtmlDocument(trimmedText: string): boolean {
+  if (!trimmedText.startsWith("<")) return false;
+  const head = trimmedText.slice(0, HTML_DOC_SNIFF_MAX_CHARS);
+  return HTML_DOCTYPE_RE.test(head) || HTML_HTML_TAG_RE.test(head);
+}
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -192,6 +204,20 @@ export function detectUpstreamErrorFromSseOrJsonText(
   const trimmed = text.trim();
   if (!trimmed) {
     return { isError: true, code: FAKE_200_CODES.EMPTY_BODY };
+  }
+
+  // 情况 0：明显的 HTML 文档（通常是网关/WAF/Cloudflare 返回的错误页）
+  //
+  // 说明：
+  // - 此处不依赖 Content-Type：部分上游会缺失/错误设置该字段；
+  // - 仅匹配 doctype/html 标签等“强信号”，避免把普通 `<...>` 文本误判为 HTML 页面。
+  if (isLikelyHtmlDocument(trimmed)) {
+    return {
+      isError: true,
+      code: FAKE_200_CODES.HTML_BODY,
+      // 避免对超大 HTML 做无谓处理：仅截取前段用于脱敏/截断与排查
+      detail: truncateForDetail(trimmed.slice(0, 4096)),
+    };
   }
 
   // 情况 1：纯 JSON（对象）
