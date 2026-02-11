@@ -990,7 +990,8 @@
     "expiresAt": {
       "label": "有効期限",
       "placeholder": "空白の場合は無期限",
-      "description": "有効期限切れ後、ユーザーは自動的に無効化されます"
+      "description": "有効期限切れ後、ユーザーは自動的に無効化されます",
+      "pastWarning": "選択した日付は過去です。保存するとユーザーは直ちに期限切れとなり無効化されます。"
     },
     "allowedClients": {
       "label": "許可されたクライアント",

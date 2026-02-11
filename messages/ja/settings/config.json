@@ -95,7 +95,13 @@
       "leasePercentMonthly": "月次ウィンドウリース比率",
       "leasePercentMonthlyDesc": "各リーススライスの月次制限に対する比率（0-1）",
       "leaseCapUsd": "リース上限（USD）",
-      "leaseCapUsdDesc": "リーススライスごとの絶対上限（米ドル）、空の場合は無制限"
+      "leaseCapUsdDesc": "リーススライスごとの絶対上限（米ドル）、空の場合は無制限",
+      "warnings": {
+        "dbRefreshIntervalTooLow": "更新間隔が {value}s です。DB 負荷が増える可能性があります。",
+        "dbRefreshIntervalTooHigh": "更新間隔が {value}s です。クォータ/制限の反映が遅れる可能性があります。",
+        "leasePercentZero": "比率が 0 です。リース予算が常に 0 になる可能性があります。",
+        "leaseCapZero": "上限が 0 です。リースごとの予算が 0 になる可能性があります。"
+      }
     }
   },
   "section": {

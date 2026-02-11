@@ -1003,7 +1003,8 @@
     "expiresAt": {
       "label": "Expiration Date",
       "placeholder": "Leave empty for never expires",
-      "description": "User will be automatically disabled after expiration"
+      "description": "User will be automatically disabled after expiration",
+      "pastWarning": "Selected date is in the past. The user will expire and be disabled immediately after saving."
     },
     "allowedClients": {
       "label": "Allowed Clients",

@@ -22,7 +22,8 @@ export function createInitialState(
   }
 ): ProviderFormState {
   const isEdit = mode === "edit";
-  const sourceProvider = isEdit ? provider : cloneProvider;
+  const raw = isEdit ? provider : cloneProvider;
+  const sourceProvider = raw ? structuredClone(raw) : undefined;
 
   return {
     basic: {
@@ -322,11 +323,13 @@ export function providerFormReducer(
       return { ...state, ui: { ...state.ui, showFailureThresholdConfirm: action.payload } };
 
     // Reset
-    case "RESET_FORM":
+    case "RESET_FORM": {
+      const fresh = structuredClone(defaultInitialState);
       return {
-        ...defaultInitialState,
-        ui: { ...defaultInitialState.ui, activeTab: state.ui.activeTab },
+        ...fresh,
+        ui: { ...fresh.ui, activeTab: state.ui.activeTab },
       };
+    }
 
     // Load provider data
     case "LOAD_PROVIDER":
