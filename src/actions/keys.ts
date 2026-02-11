@@ -9,6 +9,7 @@ import { keys as keysTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
@@ -715,6 +716,12 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
     const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
+    const { findUserById } = await import("@/repository/user");
+    const user = await findUserById(key.userId);
+    const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
+      key.limitConcurrentSessions,
+      user?.limitConcurrentSessions
+    );
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
@@ -778,7 +785,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         },
         concurrentSessions: {
           current: concurrentSessions,
-          limit: key.limitConcurrentSessions || 0,
+          limit: effectiveConcurrentLimit,
         },
       },
     };

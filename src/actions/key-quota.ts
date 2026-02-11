@@ -3,9 +3,10 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
-import { keys as keysTable } from "@/drizzle/schema";
+import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
@@ -70,6 +71,18 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
         errorCode: ERROR_CODES.PERMISSION_DENIED,
       };
     }
+
+    // Key 并发未设置时，继承用户并发上限（避免 UI 显示为“无限制”但实际被 User 并发限制约束）
+    const [userRow] = await db
+      .select({ limitConcurrentSessions: usersTable.limitConcurrentSessions })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, keyRow.userId), isNull(usersTable.deletedAt)))
+      .limit(1);
+
+    const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
+      keyRow.limitConcurrentSessions ?? 0,
+      userRow?.limitConcurrentSessions ?? null
+    );
 
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
@@ -141,7 +154,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       {
         type: "limitSessions",
         current: concurrentSessions,
-        limit: keyRow.limitConcurrentSessions ?? null,
+        limit: effectiveConcurrentLimit > 0 ? effectiveConcurrentLimit : null,
       },
     ];
 
