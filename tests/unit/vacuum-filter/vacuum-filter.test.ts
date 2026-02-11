@@ -107,6 +107,55 @@ describe("VacuumFilter", () => {
     }
   });
 
+  test("超长 key 也应可用（避免 scratch32 对齐导致 RangeError）", () => {
+    const vf = new VacuumFilter({
+      maxItems: 1000,
+      fingerprintBits: 32,
+      maxKickSteps: 500,
+      seed: "unit-test-long-key",
+    });
+
+    // 触发 scratch 扩容：> DEFAULT_SCRATCH_BYTES*2 且不是 4 的倍数
+    const longKey = "a".repeat(1001);
+    expect(vf.add(longKey)).toBe(true);
+    expect(vf.has(longKey)).toBe(true);
+    expect(vf.delete(longKey)).toBe(true);
+    expect(vf.has(longKey)).toBe(false);
+  });
+
+  test("fast-reduce bucket index 映射不越界（非 2 的幂 numBuckets）", () => {
+    const vf = new VacuumFilter({
+      maxItems: 20_000,
+      fingerprintBits: 32,
+      maxKickSteps: 500,
+      seed: "unit-test-fast-reduce-index",
+    });
+
+    const numBuckets = vf.capacitySlots() / 4;
+
+    // @ts-expect-error: 单测需要覆盖私有字段（确保走 fast-reduce 分支）
+    const bucketMask = vf.bucketMask as number;
+    // @ts-expect-error: 单测需要覆盖私有字段（确保走 fast-reduce 分支）
+    const fastReduceMul = vf.fastReduceMul as number | null;
+
+    expect(bucketMask).toBe(0);
+    expect(fastReduceMul).not.toBeNull();
+
+    const indexTag = (key: string): void => {
+      // @ts-expect-error: 单测需要覆盖私有方法的核心不变量
+      vf.indexTag(key);
+    };
+
+    for (let i = 0; i < 10_000; i++) {
+      indexTag(`key_${i}`);
+      // @ts-expect-error: 单测需要覆盖私有字段的核心不变量
+      const index = vf.tmpIndex as number;
+      if (index < 0 || index >= numBuckets) {
+        throw new Error(`tmpIndex out of range: ${index} (numBuckets=${numBuckets})`);
+      }
+    }
+  });
+
   test("alternate index 应为可逆映射（alt(alt(i,tag),tag)=i）且不越界", () => {
     const vf = new VacuumFilter({
       maxItems: 50_000,
