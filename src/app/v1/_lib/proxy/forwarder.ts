@@ -113,34 +113,45 @@ async function readResponseTextUpTo(
   let bytesRead = 0;
   let truncated = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value || value.byteLength === 0) continue;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
 
-    const remaining = maxBytes - bytesRead;
-    if (remaining <= 0) {
-      truncated = true;
-      break;
+      const remaining = maxBytes - bytesRead;
+      // 注意：remaining<=0 发生在“已经读到下一块 chunk”之后。
+      // 对启发式嗅探而言，直接标记 truncated 并退出即可（等价于丢弃超出上限的后续字节），
+      // 避免对超出部分做无谓的解码开销。
+      if (remaining <= 0) {
+        truncated = true;
+        break;
+      }
+
+      if (value.byteLength > remaining) {
+        chunks.push(decoder.decode(value.subarray(0, remaining), { stream: true }));
+        bytesRead += remaining;
+        truncated = true;
+        break;
+      }
+
+      chunks.push(decoder.decode(value, { stream: true }));
+      bytesRead += value.byteLength;
     }
 
-    if (value.byteLength > remaining) {
-      chunks.push(decoder.decode(value.subarray(0, remaining), { stream: true }));
-      bytesRead += remaining;
-      truncated = true;
-      break;
+    const flushed = decoder.decode();
+    if (flushed) chunks.push(flushed);
+  } finally {
+    if (truncated) {
+      try {
+        await reader.cancel();
+      } catch {
+        // ignore
+      }
     }
 
-    chunks.push(decoder.decode(value, { stream: true }));
-    bytesRead += value.byteLength;
-  }
-
-  const flushed = decoder.decode();
-  if (flushed) chunks.push(flushed);
-
-  if (truncated) {
     try {
-      await reader.cancel();
+      reader.releaseLock();
     } catch {
       // ignore
     }
@@ -740,6 +751,8 @@ export class ProxyForwarder {
           let inspectedText: string | undefined;
           let inspectedTruncated = false;
           if (isHtml || !contentLength) {
+            // 注意：Response.clone() 会 tee 底层 ReadableStream，可能带来一定的瞬时内存开销；
+            // 这里通过“最多读取 32 KiB”并在截断时 cancel 克隆分支来控制开销。
             const clonedResponse = response.clone();
             const inspected = await readResponseTextUpTo(
               clonedResponse,

@@ -447,6 +447,12 @@ export class ProxyError extends Error {
    * - getClientSafeMessage(): 不包含供应商名称，用于返回给客户端
    */
   getClientSafeMessage(): string {
+    // 注意：一些内部检测/统计用的“错误码”（例如 FAKE_200_*）不适合直接暴露给客户端。
+    // 这里做最小映射：仅在 502 且 message 为 FAKE_200_* 时返回统一文案。
+    if (this.statusCode === 502 && this.message.startsWith("FAKE_200_")) {
+      return "Upstream service returned an invalid response";
+    }
+
     return this.message;
   }
 }

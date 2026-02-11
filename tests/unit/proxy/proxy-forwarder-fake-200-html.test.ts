@@ -83,6 +83,7 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 });
 
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
+import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
 
@@ -245,6 +246,11 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
       1,
       expect.objectContaining({ message: "FAKE_200_HTML_BODY" })
     );
+    const failure1 = mocks.recordFailure.mock.calls[0]?.[1];
+    expect(failure1).toBeInstanceOf(ProxyError);
+    expect((failure1 as ProxyError).getClientSafeMessage()).toBe(
+      "Upstream service returned an invalid response"
+    );
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
@@ -295,6 +301,11 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(mocks.recordFailure).toHaveBeenCalledWith(
       1,
       expect.objectContaining({ message: "FAKE_200_JSON_ERROR_NON_EMPTY" })
+    );
+    const failure2 = mocks.recordFailure.mock.calls[0]?.[1];
+    expect(failure2).toBeInstanceOf(ProxyError);
+    expect((failure2 as ProxyError).getClientSafeMessage()).toBe(
+      "Upstream service returned an invalid response"
     );
     expect(mocks.recordSuccess).toHaveBeenCalledWith(2);
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
