@@ -1013,21 +1013,19 @@ export class ProxyResponseHandler {
                 break;
               }
 
-              if (value) {
-                const chunkSize = value.byteLength;
-                if (chunkSize > 0) {
-                  if (isFirstChunk) {
-                    isFirstChunk = false;
-                    session.recordTtfb();
-                    clearResponseTimeoutOnce(chunkSize);
-                  }
-                  pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+              const chunkSize = value?.byteLength ?? 0;
+              if (value && chunkSize > 0) {
+                if (isFirstChunk) {
+                  isFirstChunk = false;
+                  session.recordTtfb();
+                  clearResponseTimeoutOnce(chunkSize);
                 }
+                pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+              }
 
-                // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
-                if (!isFirstChunk) {
-                  startIdleTimer();
-                }
+              // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
+              if (!isFirstChunk) {
+                startIdleTimer();
               }
             }
 

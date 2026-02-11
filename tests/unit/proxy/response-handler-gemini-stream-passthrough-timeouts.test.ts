@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => {
   return {
     isHttp2Enabled: vi.fn(async () => false),
   };
+});
+
+beforeEach(() => {
+  mocks.isHttp2Enabled.mockReset();
+  mocks.isHttp2Enabled.mockResolvedValue(false);
 });
 
 vi.mock("@/lib/config", async (importOriginal) => {
