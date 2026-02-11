@@ -90,7 +90,7 @@ const { mockRecordFailure, mockRecordEndpointFailure, mockRecordEndpointSuccess 
     mockRecordFailure: vi.fn(),
     mockRecordEndpointFailure: vi.fn(),
     mockRecordEndpointSuccess: vi.fn(),
-  }),
+  })
 );
 
 vi.mock("@/lib/circuit-breaker", () => ({
@@ -108,10 +108,7 @@ import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { setDeferredStreamingFinalization } from "@/app/v1/_lib/proxy/stream-finalization";
 import { getSystemSettings } from "@/repository/system-config";
 import { findLatestPriceByModel } from "@/repository/model-price";
-import {
-  updateMessageRequestDetails,
-  updateMessageRequestDuration,
-} from "@/repository/message";
+import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
 import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -187,7 +184,16 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
     getRequestSequence: () => 1,
     addProviderToChain: function (
       this: ProxySession & { providerChain: unknown[] },
-      prov: { id: number; name: string; providerType: string; priority: number; weight: number; costMultiplier: number; groupTag: string; providerVendorId?: string },
+      prov: {
+        id: number;
+        name: string;
+        providerType: string;
+        priority: number;
+        weight: number;
+        costMultiplier: number;
+        groupTag: string;
+        providerVendorId?: string;
+      }
     ) {
       this.providerChain.push({
         id: prov.id,
@@ -205,7 +211,7 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
 
   // Helper setters
   (session as { setOriginalModel(m: string | null): void }).setOriginalModel = function (
-    m: string | null,
+    m: string | null
   ) {
     (this as { originalModelName: string | null }).originalModelName = m;
   };
@@ -344,7 +350,7 @@ describe("Endpoint circuit breaker isolation", () => {
 
     expect(mockRecordFailure).toHaveBeenCalledWith(
       1,
-      expect.objectContaining({ message: expect.stringContaining("FAKE_200") }),
+      expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
   });
