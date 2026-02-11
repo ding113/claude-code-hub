@@ -40,6 +40,10 @@ describe("endpoint-circuit-breaker", () => {
     });
 
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: sendAlertMock,
+    }));
     vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
       loadEndpointCircuitState: loadMock,
       saveEndpointCircuitState: saveMock,
@@ -56,6 +60,12 @@ describe("endpoint-circuit-breaker", () => {
     await recordEndpointFailure(1, new Error("boom"));
     await recordEndpointFailure(1, new Error("boom"));
     await recordEndpointFailure(1, new Error("boom"));
+
+    // 说明：recordEndpointFailure 会触发异步告警（dynamic import + await），此处等待其完成
+    // 避免后续测试覆盖 module mock 时导致 sendAlertMock 被额外调用（CI/bun 环境下更容易触发）。
+    for (let i = 0; i < 10 && sendAlertMock.mock.calls.length === 0; i += 1) {
+      await Promise.resolve();
+    }
 
     const openState = saveMock.mock.calls[
       saveMock.mock.calls.length - 1
