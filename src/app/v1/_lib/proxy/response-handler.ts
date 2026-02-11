@@ -1058,7 +1058,6 @@ export class ProxyResponseHandler {
           let abortReason: string | undefined;
 
           // 静默期 Watchdog：透传也需要支持中途卡住（无新数据推送）
-          const hasFirstByteTimeout = (provider.firstByteTimeoutStreamingMs ?? 0) > 0;
           const idleTimeoutMs =
             provider.streamingIdleTimeoutMs > 0 ? provider.streamingIdleTimeoutMs : Infinity;
           let idleTimeoutId: NodeJS.Timeout | null = null;
@@ -1176,8 +1175,7 @@ export class ProxyResponseHandler {
               }
 
               // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
-              // 若未配置首字节超时，则 done=false 后也启动 idle timer 作为兜底（包含 0-byte chunk/value=undefined）
-              if (!isFirstChunk || !hasFirstByteTimeout) {
+              if (!isFirstChunk) {
                 startIdleTimer();
               }
             }
