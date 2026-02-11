@@ -112,6 +112,9 @@
     "unhealthy": "Unhealthy",
     "unknown": "Unknown",
     "circuitOpen": "Circuit Open",
-    "circuitHalfOpen": "Circuit Half-Open"
+    "circuitHalfOpen": "Circuit Half-Open",
+    "resetCircuit": "Reset Circuit",
+    "resetCircuitSuccess": "Endpoint circuit breaker reset",
+    "resetCircuitFailed": "Failed to reset endpoint circuit breaker"
   }
 }

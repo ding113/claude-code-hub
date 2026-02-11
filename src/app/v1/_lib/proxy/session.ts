@@ -380,8 +380,8 @@ export class ProxySession {
     }
 
     const hash = crypto.createHash("sha256").update(parts.join(":"), "utf8").digest("hex");
-    // 取前 32 位作为稳定 ID，避免过长
-    return `sess_${hash.substring(0, 32)}`;
+    // 格式对齐为 sess_{8位}_{12位}
+    return `sess_${hash.substring(0, 8)}_${hash.substring(8, 20)}`;
   }
 
   /**
@@ -459,7 +459,8 @@ export class ProxySession {
         | "retry_with_official_instructions" // Codex instructions 自动重试（官方）
         | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
         | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
-        | "http2_fallback"; // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
+        | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
+        | "endpoint_pool_exhausted"; // 端点池耗尽（strict endpoint policy 阻止了 fallback）
       selectionMethod?:
         | "session_reuse"
         | "weighted_random"
@@ -476,6 +477,8 @@ export class ProxySession {
       circuitFailureThreshold?: number; // 熔断阈值
       errorDetails?: ProviderChainItem["errorDetails"]; // 结构化错误详情
       decisionContext?: ProviderChainItem["decisionContext"];
+      strictBlockCause?: ProviderChainItem["strictBlockCause"]; // endpoint pool exhaustion cause
+      endpointFilterStats?: ProviderChainItem["endpointFilterStats"]; // endpoint filter statistics
     }
   ): void {
     const item: ProviderChainItem = {
@@ -502,6 +505,8 @@ export class ProxySession {
       circuitFailureThreshold: metadata?.circuitFailureThreshold,
       errorDetails: metadata?.errorDetails, // 结构化错误详情
       decisionContext: metadata?.decisionContext,
+      strictBlockCause: metadata?.strictBlockCause,
+      endpointFilterStats: metadata?.endpointFilterStats,
     };
 
     // 避免重复添加同一个供应商（除非是重试，即有 attemptNumber）

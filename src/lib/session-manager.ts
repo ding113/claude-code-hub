@@ -105,7 +105,7 @@ export class SessionManager {
    * 从客户端请求中提取 session_id（支持 metadata 或 header）
    *
    * 优先级:
-   * 1. metadata.user_id (Claude Code 主要方式，格式: "{user}_session_{sessionId}")
+   * 1. metadata.user_id (Claude Code 主要方式，典型格式: "user_{hash}_account__session_{sessionId}")
    * 2. metadata.session_id (备选方式)
    */
   static extractClientSessionId(
@@ -135,7 +135,7 @@ export class SessionManager {
     const metadataObj = metadata as Record<string, unknown>;
 
     // 方案 A: 从 metadata.user_id 中提取 (Claude Code 主要方式)
-    // 格式: "user_identifier_session_actual_session_id"
+    // 典型格式: "user_{hash}_account__session_{sessionId}"
     if (typeof metadataObj.user_id === "string" && metadataObj.user_id.length > 0) {
       const userId = metadataObj.user_id;
       const sessionMarker = "_session_";
@@ -554,6 +554,21 @@ export class SessionManager {
     }
 
     return null;
+  }
+
+  /**
+   * 清除 session 绑定的 provider（用于跨模型 session 绑定过时时）
+   */
+  static async clearSessionProvider(sessionId: string): Promise<void> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") return;
+
+    try {
+      await redis.del(`session:${sessionId}:provider`);
+      logger.trace("SessionManager: Cleared session provider binding", { sessionId });
+    } catch (error) {
+      logger.error("SessionManager: Failed to clear session provider", { error, sessionId });
+    }
   }
 
   /**
@@ -1331,7 +1346,11 @@ export class SessionManager {
   /**
    * 存储 session 响应体（临时存储，5分钟过期）
    *
-   * 存储策略受 STORE_SESSION_MESSAGES 控制：
+   * 存储行为受 STORE_SESSION_RESPONSE_BODY 控制：
+   * - true (默认)：存储响应体到 Redis 临时缓存
+   * - false：不存储（注意：不影响本次请求处理与统计，仅影响后续查看 response body）
+   *
+   * 存储策略（脱敏/原样）受 STORE_SESSION_MESSAGES 控制：
    * - true：原样存储响应内容
    * - false（默认）：对 JSON 响应体中的 message 内容脱敏 [REDACTED]
    *
@@ -1344,6 +1363,10 @@ export class SessionManager {
     response: string | object,
     requestSequence?: number
   ): Promise<void> {
+    // 允许通过环境变量显式关闭响应体存储（例如隐私/节省 Redis 内存）。
+    // 注意：这里仅关闭“写入 Redis”这一步；调用方仍然可能在内存中读取响应体用于统计或错误检测。
+    if (!getEnvConfig().STORE_SESSION_RESPONSE_BODY) return;
+
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") return;
 

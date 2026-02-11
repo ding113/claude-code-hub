@@ -53,6 +53,38 @@ export async function getPreferredProviderEndpoints(input: {
   return rankProviderEndpoints(candidates);
 }
 
+export interface EndpointFilterStats {
+  total: number;
+  enabled: number;
+  circuitOpen: number;
+  available: number;
+}
+
+/**
+ * Collect endpoint filter statistics for a given vendor/type.
+ *
+ * Used for audit trail when all endpoints are exhausted (strict block).
+ * Returns null only when the raw endpoint query itself fails.
+ */
+export async function getEndpointFilterStats(input: {
+  vendorId: number;
+  providerType: ProviderType;
+}): Promise<EndpointFilterStats> {
+  const endpoints = await findProviderEndpointsByVendorAndType(input.vendorId, input.providerType);
+  const total = endpoints.length;
+  const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt).length;
+
+  const circuitResults = await Promise.all(
+    endpoints
+      .filter((e) => e.isEnabled && !e.deletedAt)
+      .map(async (e) => isEndpointCircuitOpen(e.id))
+  );
+  const circuitOpen = circuitResults.filter(Boolean).length;
+  const available = enabled - circuitOpen;
+
+  return { total, enabled, circuitOpen, available };
+}
+
 export async function pickBestProviderEndpoint(input: {
   vendorId: number;
   providerType: ProviderType;

@@ -1,5 +1,7 @@
 {
   "circuitBroken": "Сбой соединения",
+  "keyCircuitBroken": "Разрыв ключа",
+  "endpointCircuitBroken": "Разрыв конечной точки",
   "groups": {
     "all": "Все",
     "default": "default",
@@ -9,5 +11,8 @@
     "active": "Активные",
     "all": "Все статусы",
     "inactive": "Неактивные"
-  }
+  },
+  "mobileFilter": "Фильтр",
+  "mobileFilterCount": "Фильтр ({count})",
+  "resetFilters": "Сбросить фильтры"
 }

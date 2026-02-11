@@ -558,6 +558,18 @@ export class ProxyProviderResolver {
         requestedModel,
         allowedModels: provider.allowedModels,
       });
+
+      // 清除过时绑定，避免 SET NX 死锁
+      // 当 session 内请求模型发生变化时，旧绑定已无意义，
+      // 清除后新的成功请求可通过 SET NX 重新绑定匹配的 provider
+      await SessionManager.clearSessionProvider(session.sessionId);
+      logger.info("ProviderSelector: Cleared stale provider binding (model mismatch)", {
+        sessionId: session.sessionId,
+        staleProviderId: provider.id,
+        staleProviderName: provider.name,
+        requestedModel,
+      });
+
       return null;
     }
 
@@ -903,12 +915,23 @@ export class ProxyProviderResolver {
     }
 
     // Step 5: 优先级分层（只选择最高优先级的供应商）
-    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
-    const priorities = [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
-      (a, b) => a - b
+    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
+      healthyProviders,
+      effectiveGroupPick
     );
+    const priorities = [
+      ...new Set(
+        healthyProviders.map((p) =>
+          ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
+        )
+      ),
+    ].sort((a, b) => a - b);
     context.priorityLevels = priorities;
-    context.selectedPriority = Math.min(...healthyProviders.map((p) => p.priority || 0));
+    context.selectedPriority = Math.min(
+      ...healthyProviders.map((p) =>
+        ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
+      )
+    );
 
     // Step 6: 成本排序 + 加权选择 + 计算概率
     const totalWeight = topPriorityProviders.reduce((sum, p) => sum + p.weight, 0);
@@ -1024,18 +1047,38 @@ export class ProxyProviderResolver {
   }
 
   /**
-   * 优先级分层：只选择最高优先级的供应商
+   * 解析供应商的有效优先级：优先使用分组覆盖值，回退到全局默认值
+   * 支持逗号分隔的多分组（如 "cli,admin"），取匹配到的最小优先级
    */
-  private static selectTopPriority(providers: Provider[]): Provider[] {
+  static resolveEffectivePriority(provider: Provider, userGroup: string | null): number {
+    if (userGroup && provider.groupPriorities) {
+      const groups = parseGroupString(userGroup);
+      const overrides = groups
+        .map((g) => provider.groupPriorities?.[g])
+        .filter((v): v is number => v !== undefined);
+      if (overrides.length > 0) {
+        return Math.min(...overrides);
+      }
+    }
+    return provider.priority ?? 0;
+  }
+
+  /**
+   * 优先级分层：只选择最高优先级的供应商（支持分组优先级覆盖）
+   */
+  private static selectTopPriority(providers: Provider[], userGroup?: string | null): Provider[] {
     if (providers.length === 0) {
       return [];
     }
 
-    // 找到最小的优先级值（最高优先级）
-    const minPriority = Math.min(...providers.map((p) => p.priority || 0));
+    const group = userGroup ?? null;
+    const minPriority = Math.min(
+      ...providers.map((p) => ProxyProviderResolver.resolveEffectivePriority(p, group))
+    );
 
-    // 只返回该优先级的供应商
-    return providers.filter((p) => (p.priority || 0) === minPriority);
+    return providers.filter(
+      (p) => ProxyProviderResolver.resolveEffectivePriority(p, group) === minPriority
+    );
   }
 
   /**
@@ -1174,7 +1217,10 @@ export class ProxyProviderResolver {
     }
 
     // 优先级分层
-    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(healthyProviders);
+    const topPriorityProviders = ProxyProviderResolver.selectTopPriority(
+      healthyProviders,
+      effectiveGroupPick
+    );
 
     // 成本排序 + 加权随机选择
     const selected = ProxyProviderResolver.selectOptimal(topPriorityProviders);
@@ -1201,10 +1247,17 @@ export class ProxyProviderResolver {
         beforeHealthCheck: typeFiltered.length,
         afterHealthCheck: healthyProviders.length,
         filteredProviders: [],
-        priorityLevels: [...new Set(healthyProviders.map((p) => p.priority || 0))].sort(
-          (a, b) => a - b
+        priorityLevels: [
+          ...new Set(
+            healthyProviders.map((p) =>
+              ProxyProviderResolver.resolveEffectivePriority(p, effectiveGroupPick ?? null)
+            )
+          ),
+        ].sort((a, b) => a - b),
+        selectedPriority: ProxyProviderResolver.resolveEffectivePriority(
+          selected,
+          effectiveGroupPick ?? null
         ),
-        selectedPriority: selected.priority || 0,
         candidatesAtPriority: candidates,
       },
     };

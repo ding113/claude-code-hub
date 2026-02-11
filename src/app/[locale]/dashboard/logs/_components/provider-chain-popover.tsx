@@ -105,6 +105,11 @@ export function ProviderChainPopover({
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
 
+  // “假 200”识别发生在 SSE 流式结束后：此时响应内容可能已透传给客户端，但内部会按失败统计/熔断。
+  const hasFake200PostStreamFailure = chain.some(
+    (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
+  );
+
   // Calculate actual request count (excluding intermediate states)
   const requestCount = chain.filter(isActualRequest).length;
 
@@ -151,6 +156,14 @@ export function ProviderChainPopover({
               <div className="space-y-2">
                 {/* Provider name */}
                 <div className="font-medium text-xs">{displayName}</div>
+
+                {/* 注意：假 200 检测发生在 SSE 流式结束后；此时内容已可能透传给客户端。 */}
+                {hasFake200PostStreamFailure && (
+                  <div className="flex items-start gap-1.5 text-[10px] text-amber-500 dark:text-amber-400">
+                    <InfoIcon className="h-3 w-3 shrink-0 mt-0.5" aria-hidden="true" />
+                    <span>{t("logs.details.fake200ForwardedNotice")}</span>
+                  </div>
+                )}
 
                 {/* Session reuse detailed info */}
                 {isSessionReuse && (
@@ -453,6 +466,12 @@ export function ProviderChainPopover({
         </div>
 
         <div className="p-2 border-t bg-muted/30">
+          {hasFake200PostStreamFailure && (
+            <div className="flex items-start justify-center gap-1.5 text-[10px] text-amber-700 dark:text-amber-300 px-2 pb-1">
+              <InfoIcon className="h-3 w-3 shrink-0 mt-0.5" aria-hidden="true" />
+              <span className="text-center">{t("logs.details.fake200ForwardedNotice")}</span>
+            </div>
+          )}
           <p className="text-[10px] text-muted-foreground text-center">
             {onChainItemClick
               ? t("logs.providerChain.clickItemForDetails")

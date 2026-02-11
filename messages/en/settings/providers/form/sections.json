@@ -230,13 +230,41 @@
       },
       "thinkingBudget": {
         "label": "Thinking Budget Override",
-        "help": "Override thinking.budget_tokens in request body. Range: 1024-32000. Forces thinking.type to 'enabled' when set.",
+        "help": "Override thinking.budget_tokens in request body. Range: 1024-32000. Forces thinking.type to 'enabled' when set. If adaptive thinking is also enabled and model matches, adaptive takes priority.",
         "options": {
           "inherit": "No override (follow client)",
           "custom": "Custom"
         },
         "placeholder": "e.g. 10240",
         "maxOutButton": "Max Out (32000)"
+      },
+      "adaptiveThinking": {
+        "label": "Adaptive Thinking",
+        "help": "Enable adaptive thinking mode. When enabled and model matches, overrides thinking budget. Non-matching models fall back to thinking budget override.",
+        "effort": {
+          "label": "Effort Level",
+          "help": "Controls depth of reasoning. Higher effort = deeper thinking.",
+          "options": {
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High (Recommended)",
+            "max": "Max"
+          }
+        },
+        "modelMatchMode": {
+          "label": "Model Matching",
+          "help": "Which models should use adaptive thinking.",
+          "options": {
+            "all": "All models",
+            "specific": "Specific models only"
+          }
+        },
+        "models": {
+          "label": "Target Models",
+          "help": "Models that will use adaptive thinking. Non-matching models pass through unchanged.",
+          "placeholder": "e.g. claude-opus-4-6",
+          "addButton": "Add Model"
+        }
       }
     },
     "geminiOverrides": {
@@ -295,6 +323,12 @@
         "desc": "Group tag. Select from list or type a new name and press Enter to create (max 50 chars). Only users whose providerGroup matches can use this provider.",
         "label": "Provider Group",
         "placeholder": "e.g. premium, economy"
+      },
+      "groupPriorities": {
+        "label": "Per-Group Priority",
+        "desc": "Override global priority for specific groups. Leave empty to use the global priority above.",
+        "placeholder": "Use global priority",
+        "noGroups": "Set a group tag first to configure per-group priorities"
       },
       "priority": {
         "desc": "Lower value = higher priority (0 is highest). The system only chooses from the highest priority tier. Suggested: primary=0, standby=1, emergency=2",

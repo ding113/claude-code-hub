@@ -85,6 +85,7 @@ export function toProvider(dbProvider: any): Provider {
     isEnabled: dbProvider?.isEnabled ?? true,
     weight: dbProvider?.weight ?? 1,
     priority: dbProvider?.priority ?? 0,
+    groupPriorities: dbProvider?.groupPriorities ?? null,
     costMultiplier: dbProvider?.costMultiplier ? parseFloat(dbProvider.costMultiplier) : 1.0,
     groupTag: dbProvider?.groupTag ?? null,
     providerType: dbProvider?.providerType ?? "claude",
@@ -125,6 +126,7 @@ export function toProvider(dbProvider: any): Provider {
     codexParallelToolCallsPreference: dbProvider?.codexParallelToolCallsPreference ?? null,
     anthropicMaxTokensPreference: dbProvider?.anthropicMaxTokensPreference ?? null,
     anthropicThinkingBudgetPreference: dbProvider?.anthropicThinkingBudgetPreference ?? null,
+    anthropicAdaptiveThinking: dbProvider?.anthropicAdaptiveThinking ?? null,
     geminiGoogleSearchPreference: dbProvider?.geminiGoogleSearchPreference ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
@@ -193,6 +195,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
+    enableClaudeMetadataUserIdInjection: dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
     responseFixerConfig: {
       ...defaultResponseFixerConfig,

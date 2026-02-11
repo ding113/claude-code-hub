@@ -71,6 +71,57 @@ describe("Webhook Template Placeholders", () => {
     expect(vars["{{sections}}"]).toContain("footer");
   });
 
+  it("buildTemplateVariables should include endpoint variables when source is endpoint", () => {
+    const message: StructuredMessage = {
+      header: { title: "端点熔断告警", level: "error" },
+      sections: [],
+      timestamp: new Date("2025-01-02T12:00:00Z"),
+    };
+
+    const vars = buildTemplateVariables({
+      message,
+      notificationType: "circuit_breaker",
+      data: {
+        providerName: "OpenAI",
+        providerId: 1,
+        failureCount: 5,
+        retryAt: "2025-01-02T13:00:00Z",
+        lastError: "connection refused",
+        incidentSource: "endpoint",
+        endpointId: 42,
+        endpointUrl: "https://api.openai.com/v1/chat/completions",
+      },
+    });
+
+    expect(vars["{{incident_source}}"]).toBe("endpoint");
+    expect(vars["{{endpoint_id}}"]).toBe("42");
+    expect(vars["{{endpoint_url}}"]).toBe("https://api.openai.com/v1/chat/completions");
+  });
+
+  it("buildTemplateVariables should have empty endpoint variables when source is provider", () => {
+    const message: StructuredMessage = {
+      header: { title: "供应商熔断告警", level: "error" },
+      sections: [],
+      timestamp: new Date("2025-01-02T12:00:00Z"),
+    };
+
+    const vars = buildTemplateVariables({
+      message,
+      notificationType: "circuit_breaker",
+      data: {
+        providerName: "Anthropic",
+        providerId: 2,
+        failureCount: 3,
+        retryAt: "2025-01-02T13:00:00Z",
+        incidentSource: "provider",
+      },
+    });
+
+    expect(vars["{{incident_source}}"]).toBe("provider");
+    expect(vars["{{endpoint_id}}"]).toBe("");
+    expect(vars["{{endpoint_url}}"]).toBe("");
+  });
+
   it("buildTemplateVariables should handle daily_leaderboard entries JSON stringify errors", () => {
     // 构造循环引用，验证 safeJsonStringify 降级
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

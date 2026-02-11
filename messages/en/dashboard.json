@@ -243,6 +243,7 @@
         "billingRedirected": "billing: redirected"
       },
       "errorMessage": "Error Message",
+      "fake200ForwardedNotice": "Note: For streaming requests, this failure may be detected only after the stream ends; the response content may already have been forwarded to the client.",
       "filteredProviders": "Filtered Providers",
       "providerChain": {
         "title": "Provider Decision Chain Timeline",
@@ -409,8 +410,12 @@
       "successRate": "Success Rate",
       "avgResponseTime": "Avg Response Time",
       "avgTtfbMs": "Avg TTFB",
-      "avgTokensPerSecond": "Avg tok/s"
+      "avgTokensPerSecond": "Avg tok/s",
+      "avgCostPerRequest": "Avg Cost/Req",
+      "avgCostPerMillionTokens": "Avg Cost/1M Tokens"
     },
+    "expandModelStats": "Expand model details",
+    "collapseModelStats": "Collapse model details",
     "states": {
       "loading": "Loading...",
       "noData": "No data available",
@@ -493,7 +498,7 @@
       "providers": "Providers",
       "models": "Models",
       "noDetailedData": "No detailed data available",
-      "storageTip": "No detailed data found. To view request details, please check if the environment variable STORE_SESSION_MESSAGES is set to true. Note: Enabling this increases Redis memory usage and may include sensitive information.",
+      "storageTip": "No detailed data found. Possible reasons: Redis is disabled/unavailable (REDIS_URL + ENABLE_RATE_LIMIT=true), the data expired (SESSION_TTL, default 300s), or response body storage is disabled (STORE_SESSION_RESPONSE_BODY=false, affects response body only). To store unredacted messages, set STORE_SESSION_MESSAGES=true.",
       "clientInfo": "Client Info",
       "requestHeaders": "Request Headers",
       "requestBody": "Request Body",
@@ -571,7 +576,7 @@
       "fetchFailed": "Fetch Failed",
       "unknownError": "Unknown Error",
       "storageNotEnabled": "Not Stored",
-      "storageNotEnabledHint": "Tip: Set environment variable STORE_SESSION_MESSAGES=true to enable messages storage"
+      "storageNotEnabledHint": "Tip: Check REDIS_URL and ENABLE_RATE_LIMIT=true (session details cache). To store unredacted messages, set STORE_SESSION_MESSAGES=true."
     },
     "errors": {
       "copyFailed": "Copy Failed"

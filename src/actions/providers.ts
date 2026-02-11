@@ -56,6 +56,9 @@ import {
 } from "@/repository/provider-endpoints";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
+  AnthropicAdaptiveThinkingConfig,
+  AnthropicMaxTokensPreference,
+  AnthropicThinkingBudgetPreference,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
@@ -244,6 +247,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         isEnabled: provider.isEnabled,
         weight: provider.weight,
         priority: provider.priority,
+        groupPriorities: provider.groupPriorities,
         costMultiplier: provider.costMultiplier,
         groupTag: provider.groupTag,
         providerType: provider.providerType,
@@ -280,6 +284,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
         anthropicMaxTokensPreference: provider.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
+        anthropicAdaptiveThinking: provider.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: provider.geminiGoogleSearchPreference,
         tpm: provider.tpm,
         rpm: provider.rpm,
@@ -467,6 +472,9 @@ export async function addProvider(data: {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
+  anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   max_retry_attempts?: number | null;
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
@@ -616,6 +624,7 @@ export async function editProvider(
     priority?: number;
     cost_multiplier?: number;
     group_tag?: string | null;
+    group_priorities?: Record<string, number> | null;
     provider_type?: ProviderType;
     preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;
@@ -633,6 +642,9 @@ export async function editProvider(
     codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
     codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
     codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+    anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
+    anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+    anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
     max_retry_attempts?: number | null;
     circuit_breaker_failure_threshold?: number;
     circuit_breaker_open_duration?: number;

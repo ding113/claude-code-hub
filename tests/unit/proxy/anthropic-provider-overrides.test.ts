@@ -772,4 +772,383 @@ describe("Anthropic Provider Overrides", () => {
       expect(budgetChange?.after).toBe(10000);
     });
   });
+
+  describe("Adaptive thinking mode", () => {
+    it("should apply adaptive thinking for matching model (all models mode)", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "all" as const,
+          models: [],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+        max_tokens: 8000,
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.thinking).toEqual({ type: "adaptive" });
+      expect(output.output_config).toEqual({ effort: "high" });
+    });
+
+    it("should apply adaptive thinking for matching model (specific models mode)", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "max" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.thinking).toEqual({ type: "adaptive" });
+      expect(output.output_config).toEqual({ effort: "max" });
+    });
+
+    it("should passthrough for non-matching model (specific models mode)", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-sonnet-4-5",
+        messages: [],
+        max_tokens: 8000,
+        thinking: { type: "enabled", budget_tokens: 5000 },
+      };
+      const snapshot = structuredClone(input);
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output).toEqual(snapshot);
+    });
+
+    it("should preserve existing output_config properties", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "medium" as const,
+          modelMatchMode: "all" as const,
+          models: [],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+        output_config: { some_other_field: "preserve" },
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      const outputConfig = output.output_config as Record<string, unknown>;
+      expect(outputConfig.effort).toBe("medium");
+      expect(outputConfig.some_other_field).toBe("preserve");
+    });
+
+    it("should apply adaptive with effort 'low'", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "low" as const,
+          modelMatchMode: "all" as const,
+          models: [],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.output_config).toEqual({ effort: "low" });
+    });
+
+    it("should remove budget_tokens from existing thinking when applying adaptive", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "all" as const,
+          models: [],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+        thinking: { type: "enabled", budget_tokens: 10240 },
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      const thinking = output.thinking as Record<string, unknown>;
+      expect(thinking.type).toBe("adaptive");
+      expect(thinking.budget_tokens).toBeUndefined();
+    });
+
+    it("should passthrough when adaptive config is null (defensive)", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: null,
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+        max_tokens: 8000,
+      };
+      const snapshot = structuredClone(input);
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output).toEqual(snapshot);
+    });
+
+    it("should apply adaptive + max_tokens override together", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicMaxTokensPreference: "32000",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "all" as const,
+          models: [],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+        max_tokens: 8000,
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.max_tokens).toBe(32000);
+      expect(output.thinking).toEqual({ type: "adaptive" });
+      expect(output.output_config).toEqual({ effort: "high" });
+    });
+
+    it("should match model prefix (claude-opus-4-6 matches claude-opus-4-6-20250514)", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6-20250514",
+        messages: [],
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.thinking).toEqual({ type: "adaptive" });
+      expect(output.output_config).toEqual({ effort: "high" });
+    });
+
+    it("should track output_config.effort in audit for adaptive mode", () => {
+      const provider = {
+        id: 1,
+        name: "adaptive-provider",
+        providerType: "claude",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "all" as const,
+          models: [],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+      };
+
+      const result = applyAnthropicProviderOverridesWithAudit(provider, input);
+      expect(result.audit?.hit).toBe(true);
+      expect(result.audit?.changed).toBe(true);
+
+      const effortChange = result.audit?.changes.find((c) => c.path === "output_config.effort");
+      expect(effortChange?.before).toBeNull();
+      expect(effortChange?.after).toBe("high");
+      expect(effortChange?.changed).toBe(true);
+
+      const thinkingTypeChange = result.audit?.changes.find((c) => c.path === "thinking.type");
+      expect(thinkingTypeChange?.after).toBe("adaptive");
+    });
+  });
+
+  describe("Adaptive + Budget coexistence", () => {
+    it("should apply adaptive when model matches, ignoring budget override", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "10240",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+        max_tokens: 32000,
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.thinking).toEqual({ type: "adaptive" });
+      expect(output.output_config).toEqual({ effort: "high" });
+      // Budget should NOT be applied when adaptive matches
+      const thinking = output.thinking as Record<string, unknown>;
+      expect(thinking.budget_tokens).toBeUndefined();
+    });
+
+    it("should fallback to budget when model does not match adaptive config", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "10240",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-sonnet-4-5",
+        messages: [],
+        max_tokens: 32000,
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      const thinking = output.thinking as Record<string, unknown>;
+      expect(thinking.type).toBe("enabled");
+      expect(thinking.budget_tokens).toBe(10240);
+      expect(output.output_config).toBeUndefined();
+    });
+
+    it("should passthrough when model does not match adaptive and budget is inherit", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "inherit",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-sonnet-4-5",
+        messages: [],
+        max_tokens: 32000,
+        thinking: { type: "enabled", budget_tokens: 5000 },
+      };
+      const snapshot = structuredClone(input);
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output).toEqual(snapshot);
+    });
+
+    it("should always apply adaptive when modelMatchMode=all, regardless of budget", () => {
+      const provider = {
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "10240",
+        anthropicAdaptiveThinking: {
+          effort: "max" as const,
+          modelMatchMode: "all" as const,
+          models: [],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-sonnet-4-5",
+        messages: [],
+        max_tokens: 32000,
+      };
+
+      const output = applyAnthropicProviderOverrides(provider, input);
+      expect(output.thinking).toEqual({ type: "adaptive" });
+      expect(output.output_config).toEqual({ effort: "max" });
+    });
+
+    it("should produce correct audit trail when adaptive matches (coexistence)", () => {
+      const provider = {
+        id: 10,
+        name: "coexist-provider",
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "10240",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-opus-4-6",
+        messages: [],
+        max_tokens: 32000,
+      };
+
+      const result = applyAnthropicProviderOverridesWithAudit(provider, input);
+      expect(result.audit?.hit).toBe(true);
+      expect(result.audit?.changed).toBe(true);
+
+      const effortChange = result.audit?.changes.find((c) => c.path === "output_config.effort");
+      expect(effortChange?.after).toBe("high");
+      expect(effortChange?.changed).toBe(true);
+
+      const thinkingTypeChange = result.audit?.changes.find((c) => c.path === "thinking.type");
+      expect(thinkingTypeChange?.after).toBe("adaptive");
+    });
+
+    it("should produce correct audit trail when falling back to budget (coexistence)", () => {
+      const provider = {
+        id: 10,
+        name: "coexist-provider",
+        providerType: "claude",
+        anthropicThinkingBudgetPreference: "10240",
+        anthropicAdaptiveThinking: {
+          effort: "high" as const,
+          modelMatchMode: "specific" as const,
+          models: ["claude-opus-4-6"],
+        },
+      };
+
+      const input: Record<string, unknown> = {
+        model: "claude-sonnet-4-5",
+        messages: [],
+        max_tokens: 32000,
+      };
+
+      const result = applyAnthropicProviderOverridesWithAudit(provider, input);
+      expect(result.audit?.hit).toBe(true);
+      expect(result.audit?.changed).toBe(true);
+
+      const thinkingTypeChange = result.audit?.changes.find((c) => c.path === "thinking.type");
+      expect(thinkingTypeChange?.after).toBe("enabled");
+
+      const budgetChange = result.audit?.changes.find((c) => c.path === "thinking.budget_tokens");
+      expect(budgetChange?.after).toBe(10240);
+
+      // output_config.effort should NOT be set for budget fallback
+      const effortChange = result.audit?.changes.find((c) => c.path === "output_config.effort");
+      expect(effortChange?.changed).toBe(false);
+    });
+  });
 });

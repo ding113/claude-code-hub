@@ -96,6 +96,12 @@ describe("provider-endpoints repository", () => {
         label: null,
       })
     );
+    expect(onConflictDoNothing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: expect.any(Array),
+        where: expect.any(Object),
+      })
+    );
   });
 
   test("ensureProviderEndpointExistsForUrl: 冲突不插入时返回 false", async () => {

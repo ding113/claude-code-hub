@@ -162,6 +162,7 @@ export const providers = pgTable('providers', {
 
   // 优先级和分组配置
   priority: integer('priority').notNull().default(0),
+  groupPriorities: jsonb('group_priorities').$type<Record<string, number> | null>().default(null),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
 
@@ -282,6 +283,12 @@ export const providers = pgTable('providers', {
   anthropicMaxTokensPreference: varchar('anthropic_max_tokens_preference', { length: 20 }),
   anthropicThinkingBudgetPreference: varchar('anthropic_thinking_budget_preference', { length: 20 }),
 
+  // Anthropic adaptive thinking config (JSONB)
+  // Independent config for adaptive thinking mode; takes priority over budget override when model matches
+  anthropicAdaptiveThinking: jsonb('anthropic_adaptive_thinking')
+    .$type<{ effort: string; modelMatchMode: string; models: string[] } | null>()
+    .default(null),
+
   // Gemini (generateContent API) parameter overrides (only for gemini/gemini-cli providers)
   // - 'inherit' or null: follow client request
   // - 'enabled': force inject googleSearch tool
@@ -339,7 +346,7 @@ export const providerEndpoints = pgTable('provider_endpoints', {
     table.vendorId,
     table.providerType,
     table.url
-  ),
+  ).where(sql`${table.deletedAt} IS NULL`),
   providerEndpointsVendorTypeIdx: index('idx_provider_endpoints_vendor_type').on(
     table.vendorId,
     table.providerType
@@ -616,6 +623,12 @@ export const systemSettings = pgTable('system_settings', {
   // Codex Session ID 补全（默认开启）
   // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')
+    .notNull()
+    .default(true),
+
+  // Claude metadata.user_id 注入（默认开启）
+  // 开启后：当 Claude 请求缺少 metadata.user_id 时，自动注入稳定标识用于提升缓存命中
+  enableClaudeMetadataUserIdInjection: boolean('enable_claude_metadata_user_id_injection')
     .notNull()
     .default(true),
 

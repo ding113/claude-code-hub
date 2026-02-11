@@ -18,6 +18,8 @@ import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type {
+  AnthropicAdaptiveThinkingEffort,
+  AnthropicAdaptiveThinkingModelMatchMode,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
@@ -281,6 +283,46 @@ export function RoutingSection() {
               />
             </SmartInputWrapper>
           </div>
+
+          {/* Per-Group Priority Override */}
+          {state.routing.groupTag.length > 0 && (
+            <div className="mt-4 space-y-3">
+              <div className="text-sm font-medium">
+                {t("sections.routing.scheduleParams.groupPriorities.label")}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("sections.routing.scheduleParams.groupPriorities.desc")}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {state.routing.groupTag.map((group) => (
+                  <div key={group} className="flex items-center gap-2">
+                    <Badge variant="outline" className="font-mono text-xs shrink-0">
+                      {group}
+                    </Badge>
+                    <Input
+                      type="number"
+                      value={state.routing.groupPriorities[group] ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const next = { ...state.routing.groupPriorities };
+                        if (val === "") {
+                          delete next[group];
+                        } else {
+                          next[group] = parseInt(val, 10) || 0;
+                        }
+                        dispatch({ type: "SET_GROUP_PRIORITIES", payload: next });
+                      }}
+                      placeholder={t("sections.routing.scheduleParams.groupPriorities.placeholder")}
+                      disabled={state.ui.isPending}
+                      min="0"
+                      step="1"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </SectionCard>
 
         {/* Advanced Settings */}
@@ -600,11 +642,7 @@ export function RoutingSection() {
                         <>
                           <Input
                             type="number"
-                            value={
-                              state.routing.anthropicThinkingBudgetPreference === "inherit"
-                                ? ""
-                                : state.routing.anthropicThinkingBudgetPreference
-                            }
+                            value={state.routing.anthropicThinkingBudgetPreference}
                             onChange={(e) => {
                               const val = e.target.value;
                               if (val === "") {
@@ -652,6 +690,142 @@ export function RoutingSection() {
                   </TooltipContent>
                 </Tooltip>
               </SmartInputWrapper>
+
+              <ToggleRow
+                label={t("sections.routing.anthropicOverrides.adaptiveThinking.label")}
+                description={t("sections.routing.anthropicOverrides.adaptiveThinking.help")}
+              >
+                <Switch
+                  checked={state.routing.anthropicAdaptiveThinking !== null}
+                  onCheckedChange={(checked) =>
+                    dispatch({ type: "SET_ADAPTIVE_THINKING_ENABLED", payload: checked })
+                  }
+                  disabled={state.ui.isPending}
+                />
+              </ToggleRow>
+
+              {state.routing.anthropicAdaptiveThinking && (
+                <div className="ml-4 space-y-3 border-l-2 border-primary/20 pl-4">
+                  <SmartInputWrapper
+                    label={t("sections.routing.anthropicOverrides.adaptiveThinking.effort.label")}
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex gap-2 items-center">
+                          <Select
+                            value={state.routing.anthropicAdaptiveThinking.effort}
+                            onValueChange={(val) =>
+                              dispatch({
+                                type: "SET_ADAPTIVE_THINKING_EFFORT",
+                                payload: val as AnthropicAdaptiveThinkingEffort,
+                              })
+                            }
+                            disabled={state.ui.isPending}
+                          >
+                            <SelectTrigger className="w-40">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(["low", "medium", "high", "max"] as const).map((level) => (
+                                <SelectItem key={level} value={level}>
+                                  {t(
+                                    `sections.routing.anthropicOverrides.adaptiveThinking.effort.options.${level}`
+                                  )}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-sm">
+                          {t("sections.routing.anthropicOverrides.adaptiveThinking.effort.help")}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </SmartInputWrapper>
+
+                  <SmartInputWrapper
+                    label={t(
+                      "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.label"
+                    )}
+                  >
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex gap-2 items-center">
+                          <Select
+                            value={state.routing.anthropicAdaptiveThinking.modelMatchMode}
+                            onValueChange={(val) =>
+                              dispatch({
+                                type: "SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE",
+                                payload: val as AnthropicAdaptiveThinkingModelMatchMode,
+                              })
+                            }
+                            disabled={state.ui.isPending}
+                          >
+                            <SelectTrigger className="w-40">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">
+                                {t(
+                                  "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.options.all"
+                                )}
+                              </SelectItem>
+                              <SelectItem value="specific">
+                                {t(
+                                  "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.options.specific"
+                                )}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <p className="text-sm">
+                          {t(
+                            "sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.help"
+                          )}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </SmartInputWrapper>
+
+                  {state.routing.anthropicAdaptiveThinking.modelMatchMode === "specific" && (
+                    <SmartInputWrapper
+                      label={t("sections.routing.anthropicOverrides.adaptiveThinking.models.label")}
+                    >
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex gap-2 items-center">
+                            <TagInput
+                              value={state.routing.anthropicAdaptiveThinking.models}
+                              onChange={(models) =>
+                                dispatch({
+                                  type: "SET_ADAPTIVE_THINKING_MODELS",
+                                  payload: models,
+                                })
+                              }
+                              placeholder={t(
+                                "sections.routing.anthropicOverrides.adaptiveThinking.models.placeholder"
+                              )}
+                              disabled={state.ui.isPending}
+                            />
+                            <Info className="h-4 w-4 text-muted-foreground shrink-0" />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p className="text-sm">
+                            {t("sections.routing.anthropicOverrides.adaptiveThinking.models.help")}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </SmartInputWrapper>
+                  )}
+                </div>
+              )}
             </div>
           </SectionCard>
         )}

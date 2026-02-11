@@ -47,6 +47,7 @@ export function createInitialState(
       modelRedirects: sourceProvider?.modelRedirects ?? {},
       allowedModels: sourceProvider?.allowedModels ?? [],
       priority: sourceProvider?.priority ?? 0,
+      groupPriorities: sourceProvider?.groupPriorities ?? {},
       weight: sourceProvider?.weight ?? 1,
       costMultiplier: sourceProvider?.costMultiplier ?? 1.0,
       cacheTtlPreference: sourceProvider?.cacheTtlPreference ?? "inherit",
@@ -61,6 +62,7 @@ export function createInitialState(
       anthropicMaxTokensPreference: sourceProvider?.anthropicMaxTokensPreference ?? "inherit",
       anthropicThinkingBudgetPreference:
         sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
+      anthropicAdaptiveThinking: sourceProvider?.anthropicAdaptiveThinking ?? null,
       geminiGoogleSearchPreference: sourceProvider?.geminiGoogleSearchPreference ?? "inherit",
     },
     rateLimit: {
@@ -141,6 +143,8 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, allowedModels: action.payload } };
     case "SET_PRIORITY":
       return { ...state, routing: { ...state.routing, priority: action.payload } };
+    case "SET_GROUP_PRIORITIES":
+      return { ...state, routing: { ...state.routing, groupPriorities: action.payload } };
     case "SET_WEIGHT":
       return { ...state, routing: { ...state.routing, weight: action.payload } };
     case "SET_COST_MULTIPLIER":
@@ -177,7 +181,61 @@ export function providerFormReducer(
     case "SET_ANTHROPIC_THINKING_BUDGET":
       return {
         ...state,
-        routing: { ...state.routing, anthropicThinkingBudgetPreference: action.payload },
+        routing: {
+          ...state.routing,
+          anthropicThinkingBudgetPreference: action.payload,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_ENABLED":
+      if (action.payload) {
+        return {
+          ...state,
+          routing: {
+            ...state.routing,
+            anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking ?? {
+              effort: "high",
+              modelMatchMode: "specific",
+              models: ["claude-opus-4-6"],
+            },
+          },
+        };
+      }
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicAdaptiveThinking: null,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_EFFORT":
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking
+            ? { ...state.routing.anthropicAdaptiveThinking, effort: action.payload }
+            : null,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE":
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking
+            ? { ...state.routing.anthropicAdaptiveThinking, modelMatchMode: action.payload }
+            : null,
+        },
+      };
+    case "SET_ADAPTIVE_THINKING_MODELS":
+      return {
+        ...state,
+        routing: {
+          ...state.routing,
+          anthropicAdaptiveThinking: state.routing.anthropicAdaptiveThinking
+            ? { ...state.routing.anthropicAdaptiveThinking, models: action.payload }
+            : null,
+        },
       };
     case "SET_GEMINI_GOOGLE_SEARCH":
       return {

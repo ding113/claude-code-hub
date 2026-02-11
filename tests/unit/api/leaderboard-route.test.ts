@@ -83,4 +83,119 @@ describe("GET /api/leaderboard", () => {
     expect(options.userTags).toBeUndefined();
     expect(options.userGroups).toBeUndefined();
   });
+
+  describe("additive provider fields", () => {
+    it("includes avgCostPerRequest and avgCostPerMillionTokens in provider scope response", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          providerId: 1,
+          providerName: "test-provider",
+          totalRequests: 100,
+          totalCost: 5.0,
+          totalTokens: 500000,
+          successRate: 0.95,
+          avgTtfbMs: 200,
+          avgTokensPerSecond: 50,
+          avgCostPerRequest: 0.05,
+          avgCostPerMillionTokens: 10.0,
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url = "http://localhost/api/leaderboard?scope=provider&period=daily";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toHaveLength(1);
+
+      const entry = body[0];
+      // Additive fields must be present
+      expect(entry).toHaveProperty("avgCostPerRequest", 0.05);
+      expect(entry).toHaveProperty("avgCostPerMillionTokens", 10.0);
+      // Formatted variants should exist
+      expect(entry).toHaveProperty("avgCostPerRequestFormatted");
+      expect(entry).toHaveProperty("avgCostPerMillionTokensFormatted");
+      // Existing fields must still be present
+      expect(entry).toHaveProperty("totalCostFormatted");
+      expect(entry).toHaveProperty("providerId", 1);
+      expect(entry).toHaveProperty("providerName", "test-provider");
+    });
+
+    it("formats null avgCost fields without error", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          providerId: 2,
+          providerName: "zero-provider",
+          totalRequests: 0,
+          totalCost: 0,
+          totalTokens: 0,
+          successRate: 0,
+          avgTtfbMs: 0,
+          avgTokensPerSecond: 0,
+          avgCostPerRequest: null,
+          avgCostPerMillionTokens: null,
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url = "http://localhost/api/leaderboard?scope=provider&period=daily";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      const entry = body[0];
+      expect(entry.avgCostPerRequest).toBeNull();
+      expect(entry.avgCostPerMillionTokens).toBeNull();
+    });
+
+    it("includes modelStats in providerCacheHitRate scope response", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          providerId: 1,
+          providerName: "cache-provider",
+          totalRequests: 50,
+          cacheReadTokens: 10000,
+          totalCost: 2.5,
+          cacheCreationCost: 1.0,
+          totalInputTokens: 20000,
+          totalTokens: 20000,
+          cacheHitRate: 0.5,
+          modelStats: [
+            {
+              model: "claude-3-opus",
+              totalRequests: 30,
+              cacheReadTokens: 8000,
+              totalInputTokens: 15000,
+              cacheHitRate: 0.53,
+            },
+            {
+              model: "claude-3-sonnet",
+              totalRequests: 20,
+              cacheReadTokens: 2000,
+              totalInputTokens: 5000,
+              cacheHitRate: 0.4,
+            },
+          ],
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url = "http://localhost/api/leaderboard?scope=providerCacheHitRate&period=daily";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(body).toHaveLength(1);
+
+      const entry = body[0];
+      expect(entry).toHaveProperty("modelStats");
+      expect(entry.modelStats).toHaveLength(2);
+      expect(entry.modelStats[0]).toHaveProperty("model", "claude-3-opus");
+      expect(entry.modelStats[0]).toHaveProperty("cacheHitRate", 0.53);
+    });
+  });
 });

@@ -24,6 +24,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     isEnabled: providerData.is_enabled,
     weight: providerData.weight,
     priority: providerData.priority,
+    groupPriorities: providerData.group_priorities ?? null,
     costMultiplier:
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0",
     groupTag: providerData.group_tag,
@@ -65,6 +66,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexParallelToolCallsPreference: providerData.codex_parallel_tool_calls_preference ?? null,
     anthropicMaxTokensPreference: providerData.anthropic_max_tokens_preference ?? null,
     anthropicThinkingBudgetPreference: providerData.anthropic_thinking_budget_preference ?? null,
+    anthropicAdaptiveThinking: providerData.anthropic_adaptive_thinking ?? null,
     geminiGoogleSearchPreference: providerData.gemini_google_search_preference ?? null,
     tpm: providerData.tpm,
     rpm: providerData.rpm,
@@ -134,6 +136,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
         anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+        anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
         tpm: providers.tpm,
         rpm: providers.rpm,
@@ -175,6 +178,7 @@ export async function findProviderList(
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
+      groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
@@ -211,6 +215,7 @@ export async function findProviderList(
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
@@ -252,6 +257,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
+      groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
@@ -288,6 +294,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
@@ -333,6 +340,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       isEnabled: providers.isEnabled,
       weight: providers.weight,
       priority: providers.priority,
+      groupPriorities: providers.groupPriorities,
       costMultiplier: providers.costMultiplier,
       groupTag: providers.groupTag,
       providerType: providers.providerType,
@@ -369,6 +377,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+      anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
       geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
       tpm: providers.tpm,
       rpm: providers.rpm,
@@ -403,6 +412,8 @@ export async function updateProvider(
   if (providerData.is_enabled !== undefined) dbData.isEnabled = providerData.is_enabled;
   if (providerData.weight !== undefined) dbData.weight = providerData.weight;
   if (providerData.priority !== undefined) dbData.priority = providerData.priority;
+  if (providerData.group_priorities !== undefined)
+    dbData.groupPriorities = providerData.group_priorities ?? null;
   if (providerData.cost_multiplier !== undefined)
     dbData.costMultiplier =
       providerData.cost_multiplier != null ? providerData.cost_multiplier.toString() : "1.0";
@@ -477,6 +488,8 @@ export async function updateProvider(
   if (providerData.anthropic_thinking_budget_preference !== undefined)
     dbData.anthropicThinkingBudgetPreference =
       providerData.anthropic_thinking_budget_preference ?? null;
+  if (providerData.anthropic_adaptive_thinking !== undefined)
+    dbData.anthropicAdaptiveThinking = providerData.anthropic_adaptive_thinking ?? null;
   if (providerData.gemini_google_search_preference !== undefined)
     dbData.geminiGoogleSearchPreference = providerData.gemini_google_search_preference ?? null;
   if (providerData.tpm !== undefined) dbData.tpm = providerData.tpm;
@@ -541,6 +554,7 @@ export async function updateProvider(
         isEnabled: providers.isEnabled,
         weight: providers.weight,
         priority: providers.priority,
+        groupPriorities: providers.groupPriorities,
         costMultiplier: providers.costMultiplier,
         groupTag: providers.groupTag,
         providerType: providers.providerType,
@@ -577,6 +591,7 @@ export async function updateProvider(
         codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
         anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
+        anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
         geminiGoogleSearchPreference: providers.geminiGoogleSearchPreference,
         tpm: providers.tpm,
         rpm: providers.rpm,

@@ -8,6 +8,7 @@ import {
   DollarSign,
   ExternalLink,
   Globe,
+  InfoIcon,
   Loader2,
   Monitor,
   Settings2,
@@ -64,6 +65,8 @@ export function SummaryTab({
   const hasRedirect = originalModel && currentModel && originalModel !== currentModel;
   const specialSettingsContent =
     specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
+  const isFake200PostStreamFailure =
+    typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
 
   return (
     <div className="space-y-6">
@@ -423,6 +426,13 @@ export function SummaryTab({
             <p className="text-xs text-rose-800 dark:text-rose-200 line-clamp-3 font-mono">
               {errorMessage.length > 200 ? `${errorMessage.slice(0, 200)}...` : errorMessage}
             </p>
+            {/* 注意：假 200 检测发生在 SSE 流式结束后；此时内容已可能透传给客户端，因此需要提示用户避免误解。 */}
+            {isFake200PostStreamFailure && (
+              <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                <InfoIcon className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{t("fake200ForwardedNotice")}</span>
+              </div>
+            )}
             {errorMessage.length > 200 && onViewLogicTrace && (
               <Button
                 variant="link"

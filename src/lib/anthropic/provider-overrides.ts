@@ -1,3 +1,4 @@
+import type { AnthropicAdaptiveThinkingConfig } from "@/types/provider";
 import type { ProviderParameterOverrideSpecialSetting } from "@/types/special-settings";
 
 type AnthropicProviderOverrideConfig = {
@@ -6,6 +7,7 @@ type AnthropicProviderOverrideConfig = {
   providerType?: string;
   anthropicMaxTokensPreference?: string | null;
   anthropicThinkingBudgetPreference?: string | null;
+  anthropicAdaptiveThinking?: AnthropicAdaptiveThinkingConfig | null;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -58,6 +60,24 @@ export function applyAnthropicProviderOverrides(
     output.max_tokens = maxTokens;
   }
 
+  // Step 1: Try adaptive thinking (independent of budgetPreference)
+  const adaptiveConfig = provider.anthropicAdaptiveThinking;
+  if (adaptiveConfig) {
+    const modelId = typeof request.model === "string" ? request.model : null;
+    const isMatch =
+      adaptiveConfig.modelMatchMode === "all" ||
+      (modelId !== null &&
+        adaptiveConfig.models.some((m) => modelId === m || modelId.startsWith(`${m}-`)));
+    if (isMatch) {
+      ensureCloned();
+      output.thinking = { type: "adaptive" };
+      const existingOutputConfig = isPlainObject(output.output_config) ? output.output_config : {};
+      output.output_config = { ...existingOutputConfig, effort: adaptiveConfig.effort };
+      return output;
+    }
+  }
+
+  // Step 2: Fall through to thinking budget override
   const thinkingBudget = normalizeNumericPreference(provider.anthropicThinkingBudgetPreference);
   if (thinkingBudget !== null) {
     ensureCloned();
@@ -94,9 +114,10 @@ export function applyAnthropicProviderOverridesWithAudit(
   }
 
   const maxTokens = normalizeNumericPreference(provider.anthropicMaxTokensPreference);
+  const hasAdaptiveConfig = provider.anthropicAdaptiveThinking != null;
   const thinkingBudget = normalizeNumericPreference(provider.anthropicThinkingBudgetPreference);
 
-  const hit = maxTokens !== null || thinkingBudget !== null;
+  const hit = maxTokens !== null || thinkingBudget !== null || hasAdaptiveConfig;
 
   if (!hit) {
     return { request, audit: null };
@@ -113,6 +134,13 @@ export function applyAnthropicProviderOverridesWithAudit(
   const afterThinking = isPlainObject(nextRequest.thinking) ? nextRequest.thinking : null;
   const afterThinkingType = toAuditValue(afterThinking?.type);
   const afterThinkingBudgetTokens = toAuditValue(afterThinking?.budget_tokens);
+
+  const afterOutputConfig = isPlainObject(nextRequest.output_config)
+    ? nextRequest.output_config
+    : null;
+  const beforeOutputConfig = isPlainObject(request.output_config) ? request.output_config : null;
+  const afterOutputConfigEffort = toAuditValue(afterOutputConfig?.effort);
+  const beforeOutputConfigEffort = toAuditValue(beforeOutputConfig?.effort);
 
   const changes: ProviderParameterOverrideSpecialSetting["changes"] = [
     {
@@ -132,6 +160,12 @@ export function applyAnthropicProviderOverridesWithAudit(
       before: beforeThinkingBudgetTokens,
       after: afterThinkingBudgetTokens,
       changed: !Object.is(beforeThinkingBudgetTokens, afterThinkingBudgetTokens),
+    },
+    {
+      path: "output_config.effort",
+      before: beforeOutputConfigEffort,
+      after: afterOutputConfigEffort,
+      changed: !Object.is(beforeOutputConfigEffort, afterOutputConfigEffort),
     },
   ];
 

@@ -1,5 +1,8 @@
 import type { Dispatch } from "react";
 import type {
+  AnthropicAdaptiveThinkingConfig,
+  AnthropicAdaptiveThinkingEffort,
+  AnthropicAdaptiveThinkingModelMatchMode,
   AnthropicMaxTokensPreference,
   AnthropicThinkingBudgetPreference,
   CodexParallelToolCallsPreference,
@@ -40,6 +43,7 @@ export interface RoutingState {
   modelRedirects: Record<string, string>;
   allowedModels: string[];
   priority: number;
+  groupPriorities: Record<string, number>;
   weight: number;
   costMultiplier: number;
   cacheTtlPreference: "inherit" | "5m" | "1h";
@@ -52,6 +56,7 @@ export interface RoutingState {
   // Anthropic-specific
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference;
+  anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   // Gemini-specific
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference;
 }
@@ -118,6 +123,7 @@ export type ProviderFormAction =
   | { type: "SET_MODEL_REDIRECTS"; payload: Record<string, string> }
   | { type: "SET_ALLOWED_MODELS"; payload: string[] }
   | { type: "SET_PRIORITY"; payload: number }
+  | { type: "SET_GROUP_PRIORITIES"; payload: Record<string, number> }
   | { type: "SET_WEIGHT"; payload: number }
   | { type: "SET_COST_MULTIPLIER"; payload: number }
   | { type: "SET_CACHE_TTL_PREFERENCE"; payload: "inherit" | "5m" | "1h" }
@@ -128,6 +134,13 @@ export type ProviderFormAction =
   | { type: "SET_CODEX_PARALLEL_TOOL_CALLS"; payload: CodexParallelToolCallsPreference }
   | { type: "SET_ANTHROPIC_MAX_TOKENS"; payload: AnthropicMaxTokensPreference }
   | { type: "SET_ANTHROPIC_THINKING_BUDGET"; payload: AnthropicThinkingBudgetPreference }
+  | { type: "SET_ADAPTIVE_THINKING_EFFORT"; payload: AnthropicAdaptiveThinkingEffort }
+  | {
+      type: "SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE";
+      payload: AnthropicAdaptiveThinkingModelMatchMode;
+    }
+  | { type: "SET_ADAPTIVE_THINKING_MODELS"; payload: string[] }
+  | { type: "SET_ADAPTIVE_THINKING_ENABLED"; payload: boolean }
   | { type: "SET_GEMINI_GOOGLE_SEARCH"; payload: GeminiGoogleSearchPreference }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }

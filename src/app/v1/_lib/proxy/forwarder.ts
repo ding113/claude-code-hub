@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
@@ -17,7 +18,10 @@ import { PROVIDER_DEFAULTS, PROVIDER_LIMITS } from "@/lib/constants/provider.con
 import { recordEndpointFailure, recordEndpointSuccess } from "@/lib/endpoint-circuit-breaker";
 import { applyGeminiGoogleSearchOverrideWithAudit } from "@/lib/gemini/provider-overrides";
 import { logger } from "@/lib/logger";
-import { getPreferredProviderEndpoints } from "@/lib/provider-endpoints/endpoint-selector";
+import {
+  getEndpointFilterStats,
+  getPreferredProviderEndpoints,
+} from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
@@ -27,6 +31,8 @@ import {
 } from "@/lib/vendor-type-circuit-breaker";
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
+import type { ProviderChainItem } from "@/types/message";
+import type { ClaudeMetadataUserIdInjectionSpecialSetting } from "@/types/special-settings";
 
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
@@ -49,6 +55,7 @@ import {
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
+import { setDeferredStreamingFinalization } from "./stream-finalization";
 import {
   detectThinkingBudgetRectifierTrigger,
   rectifyThinkingBudget,
@@ -204,6 +211,209 @@ function filterPrivateParameters(obj: unknown): unknown {
   return filtered;
 }
 
+type ClaudeMetadataUserIdInjectionResult = {
+  message: Record<string, unknown>;
+  audit: ClaudeMetadataUserIdInjectionSpecialSetting;
+};
+
+async function persistSpecialSettings(session: ProxySession): Promise<void> {
+  const specialSettings = session.getSpecialSettings();
+  if (!specialSettings || specialSettings.length === 0) {
+    return;
+  }
+
+  if (session.sessionId) {
+    await SessionManager.storeSessionSpecialSettings(
+      session.sessionId,
+      specialSettings,
+      session.requestSequence
+    ).catch((err) => {
+      logger.error("[ProxyForwarder] Failed to store special settings", {
+        error: err,
+        sessionId: session.sessionId,
+      });
+    });
+  }
+
+  if (session.messageContext?.id) {
+    await updateMessageRequestDetails(session.messageContext.id, {
+      specialSettings,
+    }).catch((err) => {
+      logger.error("[ProxyForwarder] Failed to persist special settings", {
+        error: err,
+        messageRequestId: session.messageContext?.id,
+      });
+    });
+  }
+}
+
+/**
+ * 为 Claude 请求注入 metadata.user_id
+ *
+ * 格式：user_{stableHash}_account__session_{sessionId}
+ * - stableHash: 基于 API Key ID 生成的稳定哈希（64位 hex），生成后保持不变
+ * - sessionId: 当前请求的 session ID
+ *
+ * 注意：如果请求体中已存在 metadata.user_id，则保持原样不修改
+ * @internal
+ */
+export function injectClaudeMetadataUserId(
+  message: Record<string, unknown>,
+  session: ProxySession
+): Record<string, unknown> {
+  const existingMetadata =
+    typeof message.metadata === "object" && message.metadata !== null
+      ? (message.metadata as Record<string, unknown>)
+      : undefined;
+
+  // 检查是否已存在 metadata.user_id
+  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
+    return message;
+  }
+
+  // 获取必要信息
+  const keyId = session.authState?.key?.id;
+  const sessionId = session.sessionId;
+
+  if (keyId == null || !sessionId) {
+    return message;
+  }
+
+  // 生成稳定的 user hash（基于 API Key ID）
+  const stableHash = crypto.createHash("sha256").update(`claude_user_${keyId}`).digest("hex");
+
+  // 构建 user_id
+  const userId = `user_${stableHash}_account__session_${sessionId}`;
+
+  // 注入 metadata
+  const newMetadata = {
+    ...existingMetadata,
+    user_id: userId,
+  };
+
+  return {
+    ...message,
+    metadata: newMetadata,
+  };
+}
+
+function applyClaudeMetadataUserIdInjectionWithAudit(
+  message: Record<string, unknown>,
+  session: ProxySession,
+  enabled: boolean
+): ClaudeMetadataUserIdInjectionResult | null {
+  const keyId = session.authState?.key?.id ?? null;
+  const sessionId = session.sessionId ?? null;
+
+  if (!enabled) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "disabled",
+      keyId,
+      sessionId,
+    });
+    return null;
+  }
+
+  const existingMetadata =
+    typeof message.metadata === "object" && message.metadata !== null
+      ? (message.metadata as Record<string, unknown>)
+      : undefined;
+
+  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "already_exists",
+      keyId,
+      sessionId,
+    });
+
+    return {
+      message,
+      audit: {
+        type: "claude_metadata_user_id_injection",
+        scope: "request",
+        hit: false,
+        action: "skipped",
+        reason: "already_exists",
+        keyId,
+        sessionId,
+      },
+    };
+  }
+
+  if (keyId == null) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "missing_key_id",
+      keyId,
+      sessionId,
+    });
+
+    return {
+      message,
+      audit: {
+        type: "claude_metadata_user_id_injection",
+        scope: "request",
+        hit: false,
+        action: "skipped",
+        reason: "missing_key_id",
+        keyId,
+        sessionId,
+      },
+    };
+  }
+
+  if (!sessionId) {
+    logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
+      enabled,
+      hit: false,
+      reason: "missing_session_id",
+      keyId,
+      sessionId,
+    });
+
+    return {
+      message,
+      audit: {
+        type: "claude_metadata_user_id_injection",
+        scope: "request",
+        hit: false,
+        action: "skipped",
+        reason: "missing_session_id",
+        keyId,
+        sessionId,
+      },
+    };
+  }
+
+  const injectedMessage = injectClaudeMetadataUserId(message, session);
+
+  logger.info("[ProxyForwarder] Claude metadata.user_id injection applied", {
+    enabled,
+    hit: true,
+    reason: "injected",
+    keyId,
+    sessionId,
+  });
+
+  return {
+    message: injectedMessage,
+    audit: {
+      type: "claude_metadata_user_id_injection",
+      scope: "request",
+      hit: true,
+      action: "injected",
+      reason: "injected",
+      keyId,
+      sessionId,
+    },
+  };
+}
+
 export class ProxyForwarder {
   static async send(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
@@ -269,6 +479,10 @@ export class ProxyForwarder {
 
       if (endpointCandidates.length === 0) {
         if (shouldEnforceStrictEndpointPool) {
+          const strictBlockCause = endpointSelectionError
+            ? "selector_error"
+            : "no_endpoint_candidates";
+
           logger.warn(
             "ProxyForwarder: Strict endpoint policy blocked legacy provider.url fallback",
             {
@@ -277,12 +491,42 @@ export class ProxyForwarder {
               providerType: currentProvider.providerType,
               requestPath,
               reason: "strict_blocked_legacy_fallback",
-              strictBlockCause: endpointSelectionError
-                ? "selector_error"
-                : "no_endpoint_candidates",
+              strictBlockCause,
               selectorError: endpointSelectionError?.message,
             }
           );
+
+          // Record endpoint pool exhaustion in provider chain for audit trail
+          const exhaustionContext: Record<string, unknown> = { strictBlockCause };
+          if (endpointSelectionError) {
+            exhaustionContext.selectorError = endpointSelectionError.message;
+          }
+
+          // Collect endpoint filter stats for no_endpoint_candidates (selector_error has no data)
+          let filterStats: ProviderChainItem["endpointFilterStats"];
+          if (!endpointSelectionError) {
+            try {
+              const stats = await getEndpointFilterStats({
+                vendorId: providerVendorId,
+                providerType: currentProvider.providerType,
+              });
+              filterStats = stats;
+            } catch (statsError) {
+              logger.warn("[ProxyForwarder] Failed to collect endpoint filter stats", {
+                providerId: currentProvider.id,
+                vendorId: providerVendorId,
+                error: statsError instanceof Error ? statsError.message : String(statsError),
+              });
+            }
+          }
+
+          session.addProviderToChain(currentProvider, {
+            reason: "endpoint_pool_exhausted",
+            strictBlockCause: strictBlockCause as ProviderChainItem["strictBlockCause"],
+            ...(filterStats ? { endpointFilterStats: filterStats } : {}),
+            errorMessage: endpointSelectionError?.message,
+          });
+
           failedProviderIds.push(currentProvider.id);
           attemptCount = maxAttemptsPerProvider;
         } else {
@@ -376,6 +620,40 @@ export class ProxyForwarder {
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
           const isSSE = contentType.includes("text/event-stream");
+
+          // ========== 流式响应：延迟成功判定（避免“假 200”）==========
+          // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
+          // 如果在“收到响应头”时就立刻记录 success / 更新 session 绑定：
+          // - 会把会话粘到一个实际不可用的 provider；
+          // - 熔断/故障转移统计被误记为成功；
+          // - 客户端下一次自动重试可能仍复用到同一 provider，导致“假 200”让重试失效。
+          //
+          // 解决：Forwarder 只负责尽快把 Response 返回给下游开始透传，
+          // 把最终成功/失败结算延迟到 ResponseHandler：等 SSE 正常结束后再基于最终 body 补充检查并更新内部状态。
+          if (isSSE) {
+            setDeferredStreamingFinalization(session, {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              providerPriority: currentProvider.priority || 0,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              isFirstAttempt: totalProvidersAttempted === 1 && attemptCount === 1,
+              isFailoverSuccess: totalProvidersAttempted > 1,
+              endpointId: activeEndpoint.endpointId,
+              endpointUrl: endpointAudit.endpointUrl,
+              upstreamStatusCode: response.status,
+            });
+
+            logger.info("ProxyForwarder: Streaming response received, deferring finalization", {
+              providerId: currentProvider.id,
+              providerName: currentProvider.name,
+              attemptNumber: attemptCount,
+              totalProvidersAttempted,
+              statusCode: response.status,
+            });
+
+            return response;
+          }
 
           if (!isSSE) {
             // 非流式响应：检测空响应
@@ -1620,8 +1898,30 @@ export class ProxyForwarder {
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
       if (hasBody) {
-        const filteredMessage = filterPrivateParameters(session.request.message);
-        const bodyString = JSON.stringify(filteredMessage);
+        const filteredMessage = filterPrivateParameters(session.request.message) as Record<
+          string,
+          unknown
+        >;
+
+        // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
+        let messageToSend: Record<string, unknown> = filteredMessage;
+        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+          const settings = await getCachedSystemSettings();
+          const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
+          const injection = applyClaudeMetadataUserIdInjectionWithAudit(
+            filteredMessage,
+            session,
+            enabled
+          );
+
+          if (injection) {
+            messageToSend = injection.message;
+            session.addSpecialSetting(injection.audit);
+            await persistSpecialSettings(session);
+          }
+        }
+
+        const bodyString = JSON.stringify(messageToSend);
         requestBody = bodyString;
 
         try {
@@ -2084,11 +2384,32 @@ export class ProxyForwarder {
             const fallbackInit = { ...init };
             delete fallbackInit.dispatcher;
             try {
-              response = await fetch(proxyUrl, fallbackInit);
+              response = useErrorTolerantFetch
+                ? await ProxyForwarder.fetchWithoutAutoDecode(
+                    proxyUrl,
+                    fallbackInit,
+                    provider.id,
+                    provider.name,
+                    session
+                  )
+                : await fetch(proxyUrl, fallbackInit);
               logger.info("ProxyForwarder: Direct connection succeeded after proxy failure", {
                 providerId: provider.id,
                 providerName: provider.name,
               });
+
+              // 重新启动响应超时计时器（如果之前有配置超时时间）
+              // 注意：responseTimeoutId 在 catch 块开头已被清除，这里只需检查 responseTimeoutMs
+              if (responseTimeoutMs > 0) {
+                responseTimeoutId = setTimeout(() => {
+                  responseController.abort();
+                  logger.warn("ProxyForwarder: Response timeout after direct fallback", {
+                    providerId: provider.id,
+                    providerName: provider.name,
+                    responseTimeoutMs,
+                  });
+                }, responseTimeoutMs);
+              }
               // 成功后跳过 throw，继续执行后续逻辑
             } catch (directError) {
               // 直连也失败，抛出原始错误
@@ -2182,14 +2503,22 @@ export class ProxyForwarder {
     // 检查 HTTP 错误状态（4xx/5xx 均视为失败，触发重试）
     // 注意：用户要求所有 4xx 都重试，包括 401、403、429 等
     if (!response.ok) {
-      // HTTP 错误：清除响应超时定时器
-      if (responseTimeoutId) {
-        clearTimeout(responseTimeoutId);
+      // ⚠️ HTTP 错误：不要在读取响应体之前清除响应超时定时器
+      // 原因：某些上游会在返回 4xx/5xx 后“卡住不结束 body”，
+      // 若提前 clearTimeout，会导致 ProxyError.fromUpstreamResponse() 的 response.text() 无限等待，
+      // 从而让整条请求链路（含客户端）悬挂，前端表现为一直“请求中”。
+      //
+      // 正确策略：保留 response timeout 继续监控 body 读取，并在 finally 里清理定时器。
+      try {
+        throw await ProxyError.fromUpstreamResponse(response, {
+          id: provider.id,
+          name: provider.name,
+        });
+      } finally {
+        if (responseTimeoutId) {
+          clearTimeout(responseTimeoutId);
+        }
       }
-      throw await ProxyError.fromUpstreamResponse(response, {
-        id: provider.id,
-        name: provider.name,
-      });
     }
 
     // 将响应超时清理函数和 controller 引用附加到 session，供 response-handler 使用
@@ -2560,7 +2889,7 @@ export class ProxyForwarder {
       // 将 Gunzip 流转换为 Web 流（容错版本）
       bodyStream = ProxyForwarder.nodeStreamToWebStreamSafe(gunzip, providerId, providerName);
 
-      // 移�� content-encoding 和 content-length（避免下游再解压或使用错误长度）
+      // 移除 content-encoding 和 content-length（避免下游再解压或使用错误长度）
       responseHeaders.delete("content-encoding");
       responseHeaders.delete("content-length");
     } else {

@@ -235,6 +235,64 @@ describe("AgentPool", () => {
       expect(result2.agent).not.toBe(result1.agent);
     });
 
+    it("should not hang when evicting an unhealthy agent whose close() never resolves", async () => {
+      // 说明：beforeEach 使用了 fake timers，但此用例需要依赖真实 setTimeout 做“防卡死”断言
+      await pool.shutdown();
+      vi.useRealTimers();
+
+      const realPool = new AgentPoolImpl(defaultConfig);
+
+      const withTimeout = async <T>(promise: Promise<T>, ms: number): Promise<T> => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        try {
+          return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+              timeoutId = setTimeout(() => reject(new Error("timeout")), ms);
+            }),
+          ]);
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      };
+
+      try {
+        const params = {
+          endpointUrl: "https://api.anthropic.com/v1/messages",
+          proxyUrl: null,
+          enableHttp2: true,
+        };
+
+        const result1 = await realPool.getAgent(params);
+        const agent1 = result1.agent as unknown as {
+          close?: () => Promise<void>;
+          destroy?: unknown;
+        };
+
+        // 强制走 close() 分支：模拟某些 dispatcher 不支持 destroy()
+        agent1.destroy = undefined;
+
+        // 模拟：close 可能因等待 in-flight 请求结束而长期不返回
+        let closeCalled = false;
+        agent1.close = () => {
+          closeCalled = true;
+          return new Promise<void>(() => {});
+        };
+
+        realPool.markUnhealthy(result1.cacheKey, "test-hang-close");
+
+        const result2 = await withTimeout(realPool.getAgent(params), 500);
+        expect(result2.isNew).toBe(true);
+        expect(result2.agent).not.toBe(result1.agent);
+
+        // 断言：即使 close() 处于 pending，也不会阻塞 getAgent()，且会触发 close 调用
+        expect(closeCalled).toBe(true);
+      } finally {
+        await realPool.shutdown();
+        vi.useFakeTimers();
+      }
+    });
+
     it("should track unhealthy agents in stats", async () => {
       const params = {
         endpointUrl: "https://api.anthropic.com/v1/messages",
@@ -442,6 +500,34 @@ describe("AgentPool", () => {
 
       const stats = pool.getPoolStats();
       expect(stats.cacheSize).toBe(0);
+    });
+
+    it("should prefer destroy over close to avoid hanging on in-flight streaming requests", async () => {
+      const result = await pool.getAgent({
+        endpointUrl: "https://api.anthropic.com/v1/messages",
+        proxyUrl: null,
+        enableHttp2: true,
+      });
+
+      const agent = result.agent as unknown as {
+        close?: () => Promise<void>;
+        destroy?: () => Promise<void>;
+      };
+
+      // 模拟：close 可能因等待 in-flight 请求结束而长期不返回
+      if (typeof agent.close === "function") {
+        vi.mocked(agent.close).mockImplementation(() => new Promise<void>(() => {}));
+      }
+
+      await pool.shutdown();
+
+      // destroy 应被优先调用（避免 close 挂死导致 shutdown/evict 卡住）
+      if (typeof agent.destroy === "function") {
+        expect(agent.destroy).toHaveBeenCalled();
+      }
+      if (typeof agent.close === "function") {
+        expect(agent.close).not.toHaveBeenCalled();
+      }
     });
   });
 });

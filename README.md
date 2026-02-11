@@ -286,6 +286,9 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 | `REDIS_URL`                                | `redis://localhost:6379` | Redis 地址，支持 `rediss://` 用于 TLS。                                      |
 | `REDIS_TLS_REJECT_UNAUTHORIZED`            | `true`                   | 是否验证 Redis TLS 证书；设为 `false` 可跳过验证（用于自签/共享证书）。      |
 | `ENABLE_RATE_LIMIT`                        | `true`                   | 控制多维限流开关；Fail-Open 策略在 Redis 不可用时自动降级。                  |
+| `ENABLE_API_KEY_VACUUM_FILTER`             | `true`                   | 是否启用 API Key 真空过滤器（仅负向短路无效 key；可设为 `false/0` 关闭用于排查/节省内存）。 |
+| `ENABLE_API_KEY_REDIS_CACHE`               | `true`                   | 是否启用 API Key 鉴权 Redis 缓存（需 Redis 可用；异常自动回落到 DB）。       |
+| `API_KEY_AUTH_CACHE_TTL_SECONDS`           | `60`                     | API Key 鉴权缓存 TTL（秒，默认 60，最大 3600）。                              |
 | `SESSION_TTL`                              | `300`                    | Session 缓存时间（秒），影响供应商复用策略。                                 |
 | `ENABLE_SECURE_COOKIES`                    | `true`                   | 仅 HTTPS 场景能设置 Secure Cookie；HTTP 访问（非 localhost）需改为 `false`。 |
 | `ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS` | `false`                  | 是否将网络错误计入熔断器；开启后能更激进地阻断异常线路。                     |
@@ -293,7 +296,7 @@ Docker Compose 是**首选部署方式**，自动配置数据库、Redis 和应�
 | `APP_URL`                                  | 空                       | 设置后 OpenAPI 文档 `servers` 将展示正确域名/端口。                          |
 | `API_TEST_TIMEOUT_MS`                      | `15000`                  | 供应商 API 测试超时时间（毫秒，范围 5000-120000），跨境网络可适当提高。      |
 
-> 布尔变量请直接写 `true/false` 或 `1/0`，勿加引号，避免被 Zod 转换为真值。更多字段参考 `.env.example`。
+> 布尔变量支持 `true/false` 或 `1/0`；在 `.env` 文件里写成带引号形式也没问题（dotenv 会解析并去掉引号）。更多字段参考 `.env.example`。
 
 ## ❓ FAQ
 

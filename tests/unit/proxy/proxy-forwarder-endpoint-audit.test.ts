@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   return {
     getPreferredProviderEndpoints: vi.fn(),
+    getEndpointFilterStats: vi.fn(async () => null),
     recordEndpointSuccess: vi.fn(async () => {}),
     recordEndpointFailure: vi.fn(async () => {}),
     recordSuccess: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/lib/provider-endpoints/endpoint-selector", () => ({
   getPreferredProviderEndpoints: mocks.getPreferredProviderEndpoints,
+  getEndpointFilterStats: mocks.getEndpointFilterStats,
 }));
 
 vi.mock("@/lib/endpoint-circuit-breaker", () => ({
@@ -504,5 +506,187 @@ describe("ProxyForwarder - endpoint audit", () => {
 
     const warnMessages = vi.mocked(logger.warn).mock.calls.map(([message]) => message);
     expect(warnMessages).not.toContain("[ProxyForwarder] Failed to load provider endpoints");
+  });
+
+  test("endpoint pool exhausted (no_endpoint_candidates) should record endpoint_pool_exhausted in provider chain", async () => {
+    const requestPath = "/v1/messages";
+    const session = createSession(new URL(`https://example.com${requestPath}`));
+    const provider = createProvider({
+      providerType: "claude",
+      providerVendorId: 123,
+      url: "https://provider.example.com/v1/messages",
+    });
+    session.setProvider(provider);
+
+    // Return empty array => no_endpoint_candidates
+    mocks.getPreferredProviderEndpoints.mockResolvedValueOnce([]);
+    mocks.getEndpointFilterStats.mockResolvedValueOnce({
+      total: 3,
+      enabled: 2,
+      circuitOpen: 2,
+      available: 0,
+    });
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+
+    await expect(ProxyForwarder.send(session)).rejects.toThrow();
+
+    expect(doForward).not.toHaveBeenCalled();
+
+    const chain = session.getProviderChain();
+    const exhaustedItem = chain.find((item) => item.reason === "endpoint_pool_exhausted");
+    expect(exhaustedItem).toBeDefined();
+    expect(exhaustedItem).toEqual(
+      expect.objectContaining({
+        id: provider.id,
+        name: provider.name,
+        vendorId: 123,
+        providerType: "claude",
+        reason: "endpoint_pool_exhausted",
+        strictBlockCause: "no_endpoint_candidates",
+      })
+    );
+
+    // endpointFilterStats should be present at top level
+    expect(exhaustedItem!.endpointFilterStats).toEqual({
+      total: 3,
+      enabled: 2,
+      circuitOpen: 2,
+      available: 0,
+    });
+
+    // errorMessage should be undefined for no_endpoint_candidates (no exception)
+    expect(exhaustedItem!.errorMessage).toBeUndefined();
+  });
+
+  test("endpoint pool exhausted (selector_error) should record endpoint_pool_exhausted with selectorError in decisionContext", async () => {
+    const requestPath = "/v1/responses";
+    const session = createSession(new URL(`https://example.com${requestPath}`));
+    const provider = createProvider({
+      providerType: "codex",
+      providerVendorId: 456,
+      url: "https://provider.example.com/v1/responses",
+    });
+    session.setProvider(provider);
+
+    // Throw error => selector_error cause
+    mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("Redis connection lost"));
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+
+    await expect(ProxyForwarder.send(session)).rejects.toThrow();
+
+    expect(doForward).not.toHaveBeenCalled();
+
+    const chain = session.getProviderChain();
+    const exhaustedItem = chain.find((item) => item.reason === "endpoint_pool_exhausted");
+    expect(exhaustedItem).toBeDefined();
+    expect(exhaustedItem).toEqual(
+      expect.objectContaining({
+        id: provider.id,
+        name: provider.name,
+        vendorId: 456,
+        providerType: "codex",
+        reason: "endpoint_pool_exhausted",
+        strictBlockCause: "selector_error",
+      })
+    );
+
+    // selector_error should NOT call getEndpointFilterStats (exception path, no data available)
+    // endpointFilterStats should be undefined for selector_error
+    expect(exhaustedItem!.endpointFilterStats).toBeUndefined();
+
+    // errorMessage should contain the selector error message
+    expect(exhaustedItem!.errorMessage).toBe("Redis connection lost");
+  });
+
+  test("selector_error and no_endpoint_candidates are correctly distinguished in provider chain", async () => {
+    // Test 1: selector_error (exception thrown)
+    const session1 = createSession(new URL("https://example.com/v1/chat/completions"));
+    const provider1 = createProvider({
+      id: 10,
+      name: "p-selector-err",
+      providerType: "openai-compatible",
+      providerVendorId: 789,
+    });
+    session1.setProvider(provider1);
+    mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("timeout"));
+
+    await expect(ProxyForwarder.send(session1)).rejects.toThrow();
+
+    const chain1 = session1.getProviderChain();
+    const item1 = chain1.find((i) => i.reason === "endpoint_pool_exhausted");
+    expect(item1).toBeDefined();
+    expect(item1!.strictBlockCause).toBe("selector_error");
+    expect(item1!.endpointFilterStats).toBeUndefined();
+    expect(item1!.errorMessage).toBe("timeout");
+
+    // Test 2: no_endpoint_candidates (empty array returned)
+    const session2 = createSession(new URL("https://example.com/v1/chat/completions"));
+    const provider2 = createProvider({
+      id: 20,
+      name: "p-empty-pool",
+      providerType: "openai-compatible",
+      providerVendorId: 789,
+    });
+    session2.setProvider(provider2);
+    mocks.getPreferredProviderEndpoints.mockResolvedValueOnce([]);
+    mocks.getEndpointFilterStats.mockResolvedValueOnce({
+      total: 5,
+      enabled: 3,
+      circuitOpen: 3,
+      available: 0,
+    });
+
+    await expect(ProxyForwarder.send(session2)).rejects.toThrow();
+
+    const chain2 = session2.getProviderChain();
+    const item2 = chain2.find((i) => i.reason === "endpoint_pool_exhausted");
+    expect(item2).toBeDefined();
+    expect(item2!.strictBlockCause).toBe("no_endpoint_candidates");
+    expect(item2!.endpointFilterStats).toEqual({
+      total: 5,
+      enabled: 3,
+      circuitOpen: 3,
+      available: 0,
+    });
+    expect(item2!.errorMessage).toBeUndefined();
+  });
+
+  test("endpointFilterStats should gracefully handle getEndpointFilterStats failure", async () => {
+    const requestPath = "/v1/messages";
+    const session = createSession(new URL(`https://example.com${requestPath}`));
+    const provider = createProvider({
+      providerType: "claude",
+      providerVendorId: 123,
+      url: "https://provider.example.com/v1/messages",
+    });
+    session.setProvider(provider);
+
+    mocks.getPreferredProviderEndpoints.mockResolvedValueOnce([]);
+    // Stats call fails - should not break the flow
+    mocks.getEndpointFilterStats.mockRejectedValueOnce(new Error("DB unavailable"));
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+
+    await expect(ProxyForwarder.send(session)).rejects.toThrow();
+
+    expect(doForward).not.toHaveBeenCalled();
+
+    const chain = session.getProviderChain();
+    const exhaustedItem = chain.find((item) => item.reason === "endpoint_pool_exhausted");
+    expect(exhaustedItem).toBeDefined();
+    expect(exhaustedItem!.strictBlockCause).toBe("no_endpoint_candidates");
+    // endpointFilterStats should be undefined when stats call fails
+    expect(exhaustedItem!.endpointFilterStats).toBeUndefined();
   });
 });

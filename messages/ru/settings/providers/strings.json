@@ -112,6 +112,9 @@
     "unhealthy": "Недоступен",
     "unknown": "Неизвестно",
     "circuitOpen": "Цепь открыта",
-    "circuitHalfOpen": "Цепь полуоткрыта"
+    "circuitHalfOpen": "Цепь полуоткрыта",
+    "resetCircuit": "Сброс цепи",
+    "resetCircuitSuccess": "Цепь эндпоинта сброшена",
+    "resetCircuitFailed": "Не удалось сбросить цепь эндпоинта"
   }
 }

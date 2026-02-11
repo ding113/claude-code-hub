@@ -231,13 +231,41 @@
       },
       "thinkingBudget": {
         "label": "思考預算覆寫",
-        "help": "覆寫請求體中的 thinking.budget_tokens。範圍：1024-32000。設置後會強制 thinking.type 為 'enabled'。",
+        "help": "覆寫請求體中的 thinking.budget_tokens。範圍：1024-32000。設置後會強制 thinking.type 為 'enabled'。如果同時啟用了自適應思考且模型匹配，則自適應優先。",
         "options": {
           "inherit": "不覆寫（遵循客戶端）",
           "custom": "自訂"
         },
         "placeholder": "如 10240",
         "maxOutButton": "拉滿 (32000)"
+      },
+      "adaptiveThinking": {
+        "label": "自適應思考",
+        "help": "啟用自適應思考模式。啟用且模型匹配時優先於思考預算覆寫，不匹配的模型回退到思考預算覆寫。",
+        "effort": {
+          "label": "思考深度",
+          "help": "控制推理深度。越高 = 思考越深入。",
+          "options": {
+            "low": "低",
+            "medium": "中",
+            "high": "高（推薦）",
+            "max": "最大"
+          }
+        },
+        "modelMatchMode": {
+          "label": "模型匹配",
+          "help": "哪些模型啟用自適應思考。",
+          "options": {
+            "all": "所有模型",
+            "specific": "僅特定模型"
+          }
+        },
+        "models": {
+          "label": "目標模型",
+          "help": "啟用自適應思考的模型列表。不匹配的模型保持原樣透傳。",
+          "placeholder": "如 claude-opus-4-6",
+          "addButton": "新增模型"
+        }
       }
     },
     "geminiOverrides": {
@@ -296,6 +324,12 @@
         "desc": "分組標籤。從列表選擇或輸入新名稱後按 Enter 創建（最多50字符）。只有 providerGroup 匹配的用戶才能使用此供應商。",
         "label": "供應商分組",
         "placeholder": "例如 premium, economy"
+      },
+      "groupPriorities": {
+        "label": "分組優先級覆蓋",
+        "desc": "為特定分組設定獨立的優先級。留空則使用上方的全域優先級。",
+        "placeholder": "使用全域優先級",
+        "noGroups": "請先設定分組標籤，才能設定分組優先級"
       },
       "priority": {
         "desc": "數值越小，優先級越高（0 最高）。系統只會從最高優先級的供應商中選擇。建議：主力=0，備用=1，緊急備援=2",

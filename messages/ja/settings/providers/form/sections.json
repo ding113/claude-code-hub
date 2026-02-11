@@ -231,13 +231,41 @@
       },
       "thinkingBudget": {
         "label": "思考予算オーバーライド",
-        "help": "リクエストボディの thinking.budget_tokens を上書きします。範囲：1024-32000。設定すると thinking.type が 'enabled' に強制されます。",
+        "help": "リクエストボディの thinking.budget_tokens を上書きします。範囲：1024-32000。設定すると thinking.type が 'enabled' に強制されます。アダプティブ思考も有効でモデルが一致する場合、アダプティブが優先されます。",
         "options": {
           "inherit": "上書きなし（クライアントに従う）",
           "custom": "カスタム"
         },
         "placeholder": "例: 10240",
         "maxOutButton": "最大化 (32000)"
+      },
+      "adaptiveThinking": {
+        "label": "アダプティブ思考",
+        "help": "アダプティブ思考モードを有効にします。有効かつモデルが一致する場合、思考予算オーバーライドより優先されます。一致しないモデルは思考予算オーバーライドにフォールバックします。",
+        "effort": {
+          "label": "思考レベル",
+          "help": "推論の深さを制御します。高いほど深く考えます。",
+          "options": {
+            "low": "低",
+            "medium": "中",
+            "high": "高（推奨）",
+            "max": "最大"
+          }
+        },
+        "modelMatchMode": {
+          "label": "モデルマッチング",
+          "help": "アダプティブ思考を使用するモデル。",
+          "options": {
+            "all": "全モデル",
+            "specific": "特定モデルのみ"
+          }
+        },
+        "models": {
+          "label": "対象モデル",
+          "help": "アダプティブ思考を使用するモデルリスト。一致しないモデルはそのまま透過されます。",
+          "placeholder": "例: claude-opus-4-6",
+          "addButton": "モデル追加"
+        }
       }
     },
     "geminiOverrides": {
@@ -296,6 +324,12 @@
         "desc": "グループタグ。リストから選択するか、新しい名前を入力して Enter で作成（最大50文字）。providerGroup が一致するユーザーのみがこのプロバイダーを使用できます。",
         "label": "プロバイダーグループ",
         "placeholder": "例: premium, economy"
+      },
+      "groupPriorities": {
+        "label": "グループ別優先度",
+        "desc": "特定のグループに個別の優先度を設定します。空欄の場合は上記のグローバル優先度を使用します。",
+        "placeholder": "グローバル優先度を使用",
+        "noGroups": "グループ別優先度を設定するには、先にグループタグを設定してください"
       },
       "priority": {
         "desc": "値が小さいほど優先度が高くなります（0 が最も高い）。システムは最も高い優先度のプロバイダーのみから選択します。推奨: メイン=0、予備=1、緊急=2",

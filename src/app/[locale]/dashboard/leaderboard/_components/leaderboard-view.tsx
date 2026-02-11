@@ -14,6 +14,7 @@ import type {
   DateRangeParams,
   LeaderboardEntry,
   LeaderboardPeriod,
+  ModelCacheHitStat,
   ModelLeaderboardEntry,
   ProviderCacheHitRateLeaderboardEntry,
   ProviderLeaderboardEntry,
@@ -28,7 +29,11 @@ interface LeaderboardViewProps {
 
 type LeaderboardScope = "user" | "provider" | "providerCacheHitRate" | "model";
 type UserEntry = LeaderboardEntry & { totalCostFormatted?: string };
-type ProviderEntry = ProviderLeaderboardEntry & { totalCostFormatted?: string };
+type ProviderEntry = ProviderLeaderboardEntry & {
+  totalCostFormatted?: string;
+  avgCostPerRequestFormatted?: string | null;
+  avgCostPerMillionTokensFormatted?: string | null;
+};
 type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry;
 type ModelEntry = ModelLeaderboardEntry & { totalCostFormatted?: string };
 type AnyEntry = UserEntry | ProviderEntry | ProviderCacheHitRateEntry | ModelEntry;
@@ -163,7 +168,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     scope === "user"
       ? 5
       : scope === "provider"
-        ? 8
+        ? 10
         : scope === "providerCacheHitRate"
           ? 8
           : scope === "model"
@@ -264,6 +269,28 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       },
       sortKey: "avgTokensPerSecond",
       getValue: (row) => (row as ProviderEntry).avgTokensPerSecond ?? 0,
+    },
+    {
+      header: t("columns.avgCostPerRequest"),
+      className: "text-right font-mono",
+      cell: (row) => {
+        const r = row as ProviderEntry;
+        if (r.avgCostPerRequest == null) return "-";
+        return r.avgCostPerRequestFormatted ?? r.avgCostPerRequest.toFixed(4);
+      },
+      sortKey: "avgCostPerRequest",
+      getValue: (row) => (row as ProviderEntry).avgCostPerRequest ?? 0,
+    },
+    {
+      header: t("columns.avgCostPerMillionTokens"),
+      className: "text-right font-mono",
+      cell: (row) => {
+        const r = row as ProviderEntry;
+        if (r.avgCostPerMillionTokens == null) return "-";
+        return r.avgCostPerMillionTokensFormatted ?? r.avgCostPerMillionTokens.toFixed(2);
+      },
+      sortKey: "avgCostPerMillionTokens",
+      getValue: (row) => (row as ProviderEntry).avgCostPerMillionTokens ?? 0,
     },
   ];
 
@@ -484,7 +511,70 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
             </CardContent>
           </Card>
         ) : (
-          <LeaderboardTable data={data} period={period} columns={columns} getRowKey={rowKey} />
+          <LeaderboardTable
+            data={data}
+            period={period}
+            columns={columns}
+            getRowKey={rowKey}
+            renderExpandedContent={
+              scope === "providerCacheHitRate"
+                ? (row) => {
+                    const entry = row as ProviderCacheHitRateEntry & {
+                      modelStats?: ModelCacheHitStat[];
+                    };
+                    if (!entry.modelStats || entry.modelStats.length === 0) return null;
+                    return (
+                      <div className="px-8 py-3">
+                        <div className="text-xs text-muted-foreground mb-2 font-medium">
+                          {t("expandModelStats")}
+                        </div>
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-xs text-muted-foreground border-b">
+                              <th className="text-left py-1 pr-4">{t("columns.model")}</th>
+                              <th className="text-right py-1 pr-4">{t("columns.requests")}</th>
+                              <th className="text-right py-1 pr-4">
+                                {t("columns.cacheReadTokens")}
+                              </th>
+                              <th className="text-right py-1 pr-4">{t("columns.totalTokens")}</th>
+                              <th className="text-right py-1">{t("columns.cacheHitRate")}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {entry.modelStats.map((ms) => {
+                              const rate = (ms.cacheHitRate ?? 0) * 100;
+                              const colorClass =
+                                rate >= 85
+                                  ? "text-green-600 dark:text-green-400"
+                                  : rate >= 60
+                                    ? "text-yellow-600 dark:text-yellow-400"
+                                    : "text-orange-600 dark:text-orange-400";
+                              return (
+                                <tr key={ms.model} className="border-b last:border-b-0">
+                                  <td className="py-1 pr-4 font-mono">{ms.model}</td>
+                                  <td className="text-right py-1 pr-4">
+                                    {ms.totalRequests.toLocaleString()}
+                                  </td>
+                                  <td className="text-right py-1 pr-4">
+                                    {formatTokenAmount(ms.cacheReadTokens)}
+                                  </td>
+                                  <td className="text-right py-1 pr-4">
+                                    {formatTokenAmount(ms.totalInputTokens)}
+                                  </td>
+                                  <td className={`text-right py-1 ${colorClass}`}>
+                                    {rate.toFixed(1)}%
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  }
+                : undefined
+            }
+          />
         )}
       </div>
     </div>

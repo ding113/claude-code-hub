@@ -19,6 +19,12 @@ function createLoggerMock() {
   };
 }
 
+async function flushPromises(rounds = 2): Promise<void> {
+  for (let i = 0; i < rounds; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
@@ -40,6 +46,10 @@ describe("endpoint-circuit-breaker", () => {
     });
 
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: sendAlertMock,
+    }));
     vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
       loadEndpointCircuitState: loadMock,
       saveEndpointCircuitState: saveMock,
@@ -88,6 +98,15 @@ describe("endpoint-circuit-breaker", () => {
 
     await resetEndpointCircuit(1);
     expect(deleteMock).toHaveBeenCalledWith(1);
+
+    // 说明：recordEndpointFailure 在达到阈值后会触发异步告警（dynamic import + await）。
+    // 在 CI/bun 环境下，告警 Promise 可能在下一个测试开始后才完成，从而“借用”后续用例的 module mock，
+    // 导致 sendAlertMock 被额外调用而产生偶发失败。这里用真实计时器让事件循环前进，确保告警任务尽快落地。
+    vi.useRealTimers();
+    const startedAt = Date.now();
+    while (sendAlertMock.mock.calls.length === 0 && Date.now() - startedAt < 1000) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
   });
 
   test("recordEndpointSuccess: closed 且 failureCount>0 时应清零", async () => {
@@ -120,5 +139,162 @@ describe("endpoint-circuit-breaker", () => {
       saveMock.mock.calls.length - 1
     ]?.[1] as SavedEndpointCircuitState;
     expect(lastState.failureCount).toBe(0);
+  });
+
+  test("triggerEndpointCircuitBreakerAlert should call sendCircuitBreakerAlert", async () => {
+    vi.resetModules();
+
+    const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: sendAlertMock,
+    }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(async () => null),
+    }));
+
+    // recordEndpointFailure 会 non-blocking 触发告警；先让 event-loop 跑完再清空计数，避免串台导致误判
+    await flushPromises();
+    sendAlertMock.mockClear();
+
+    const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
+
+    await triggerEndpointCircuitBreakerAlert(
+      5,
+      3,
+      "2026-01-01T00:05:00.000Z",
+      "connection refused"
+    );
+
+    expect(sendAlertMock).toHaveBeenCalledTimes(1);
+    expect(sendAlertMock).toHaveBeenCalledWith({
+      providerId: 0,
+      providerName: "endpoint:5",
+      failureCount: 3,
+      retryAt: "2026-01-01T00:05:00.000Z",
+      lastError: "connection refused",
+      incidentSource: "endpoint",
+      endpointId: 5,
+      endpointUrl: undefined,
+    });
+  });
+
+  test("triggerEndpointCircuitBreakerAlert should include endpointUrl when available", async () => {
+    vi.resetModules();
+
+    const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: sendAlertMock,
+    }));
+    vi.doMock("@/repository", () => ({
+      findProviderEndpointById: vi.fn(async () => ({
+        id: 10,
+        url: "https://custom.example.com/v1/chat/completions",
+        vendorId: 1,
+        providerType: "openai",
+        label: "Custom Endpoint",
+        sortOrder: 0,
+        isEnabled: true,
+        lastProbedAt: null,
+        lastProbeOk: null,
+        lastProbeStatusCode: null,
+        lastProbeLatencyMs: null,
+        lastProbeErrorType: null,
+        lastProbeErrorMessage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      })),
+    }));
+
+    // recordEndpointFailure 会 non-blocking 触发告警；先让 event-loop 跑完再清空计数，避免串台导致误判
+    await flushPromises();
+    sendAlertMock.mockClear();
+
+    const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
+
+    await triggerEndpointCircuitBreakerAlert(10, 3, "2026-01-01T00:05:00.000Z", "timeout");
+
+    expect(sendAlertMock).toHaveBeenCalledTimes(1);
+    expect(sendAlertMock).toHaveBeenCalledWith({
+      providerId: 1,
+      providerName: "Custom Endpoint",
+      failureCount: 3,
+      retryAt: "2026-01-01T00:05:00.000Z",
+      lastError: "timeout",
+      incidentSource: "endpoint",
+      endpointId: 10,
+      endpointUrl: "https://custom.example.com/v1/chat/completions",
+    });
+  });
+
+  test("recordEndpointFailure should NOT reset circuitOpenUntil when already open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    vi.resetModules();
+
+    let redisState: SavedEndpointCircuitState | null = null;
+    const saveMock = vi.fn(async (_endpointId: number, state: SavedEndpointCircuitState) => {
+      redisState = state;
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => redisState),
+      saveEndpointCircuitState: saveMock,
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    const { recordEndpointFailure, isEndpointCircuitOpen } = await import(
+      "@/lib/endpoint-circuit-breaker"
+    );
+
+    // Record 3 failures to open the circuit
+    await recordEndpointFailure(100, new Error("fail"));
+    await recordEndpointFailure(100, new Error("fail"));
+    await recordEndpointFailure(100, new Error("fail"));
+
+    expect(await isEndpointCircuitOpen(100)).toBe(true);
+    const originalOpenUntil = redisState!.circuitOpenUntil;
+    expect(originalOpenUntil).toBe(Date.now() + 300000);
+
+    // Advance 1 min and record another failure — timer must NOT reset
+    vi.advanceTimersByTime(60_000);
+    await recordEndpointFailure(100, new Error("fail again"));
+
+    expect(redisState!.circuitState).toBe("open");
+    expect(redisState!.circuitOpenUntil).toBe(originalOpenUntil); // unchanged!
+    expect(redisState!.failureCount).toBe(4);
+  });
+
+  test("getEndpointCircuitStateSync returns correct state for known and unknown endpoints", async () => {
+    vi.resetModules();
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => null),
+      saveEndpointCircuitState: vi.fn(async () => {}),
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    const { getEndpointCircuitStateSync, recordEndpointFailure } = await import(
+      "@/lib/endpoint-circuit-breaker"
+    );
+
+    // Unknown endpoint returns "closed"
+    expect(getEndpointCircuitStateSync(9999)).toBe("closed");
+
+    // After opening the circuit, sync accessor reflects "open"
+    await recordEndpointFailure(200, new Error("a"));
+    await recordEndpointFailure(200, new Error("b"));
+    await recordEndpointFailure(200, new Error("c"));
+    expect(getEndpointCircuitStateSync(200)).toBe("open");
   });
 });

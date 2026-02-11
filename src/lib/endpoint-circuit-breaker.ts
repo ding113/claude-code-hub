@@ -142,16 +142,36 @@ export async function recordEndpointFailure(endpointId: number, error: Error): P
   health.lastFailureTime = Date.now();
 
   if (config.failureThreshold > 0 && health.failureCount >= config.failureThreshold) {
-    health.circuitState = "open";
-    health.circuitOpenUntil = Date.now() + config.openDuration;
-    health.halfOpenSuccessCount = 0;
+    if (health.circuitState !== "open") {
+      // Only set timer and alert on initial transition (closed->open or half-open->open)
+      health.circuitState = "open";
+      health.circuitOpenUntil = Date.now() + config.openDuration;
+      health.halfOpenSuccessCount = 0;
 
-    logger.warn("[EndpointCircuitBreaker] Endpoint circuit opened", {
-      endpointId,
-      failureCount: health.failureCount,
-      threshold: config.failureThreshold,
-      errorMessage: error.message,
-    });
+      const retryAt = new Date(health.circuitOpenUntil).toISOString();
+
+      logger.warn("[EndpointCircuitBreaker] Endpoint circuit opened", {
+        endpointId,
+        failureCount: health.failureCount,
+        threshold: config.failureThreshold,
+        errorMessage: error.message,
+      });
+
+      // Async alert (non-blocking)
+      triggerEndpointCircuitBreakerAlert(
+        endpointId,
+        health.failureCount,
+        retryAt,
+        error.message
+      ).catch((err) => {
+        logger.error({
+          action: "trigger_endpoint_circuit_breaker_alert_error",
+          endpointId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+    // If already open: failureCount is updated above, but timer stays fixed — no death spiral
   }
 
   persistStateToRedis(endpointId, health);
@@ -184,6 +204,10 @@ export async function recordEndpointSuccess(endpointId: number): Promise<void> {
   }
 }
 
+export function getEndpointCircuitStateSync(endpointId: number): EndpointCircuitState {
+  return healthMap.get(endpointId)?.circuitState ?? "closed";
+}
+
 export async function resetEndpointCircuit(endpointId: number): Promise<void> {
   const health = getOrCreateHealthSync(endpointId);
   health.circuitState = "closed";
@@ -193,4 +217,66 @@ export async function resetEndpointCircuit(endpointId: number): Promise<void> {
   health.halfOpenSuccessCount = 0;
 
   await deleteEndpointCircuitState(endpointId);
+}
+
+/**
+ * Alert data for endpoint circuit breaker events.
+ */
+export interface EndpointCircuitAlertData {
+  endpointId: number;
+  failureCount: number;
+  retryAt: string;
+  lastError: string;
+  endpointUrl?: string;
+}
+
+/**
+ * Trigger circuit breaker alert for an endpoint.
+ * Looks up endpoint info to enrich the alert data, then delegates to sendCircuitBreakerAlert.
+ */
+export async function triggerEndpointCircuitBreakerAlert(
+  endpointId: number,
+  failureCount: number,
+  retryAt: string,
+  lastError: string
+): Promise<void> {
+  try {
+    const { sendCircuitBreakerAlert } = await import("@/lib/notification/notifier");
+
+    // Try to enrich with endpoint URL and vendor info from database
+    let endpointUrl: string | undefined;
+    let vendorId = 0;
+    let endpointLabel = "";
+    try {
+      const { findProviderEndpointById } = await import("@/repository");
+      const endpoint = await findProviderEndpointById(endpointId);
+      if (endpoint) {
+        endpointUrl = endpoint.url;
+        vendorId = endpoint.vendorId;
+        endpointLabel = endpoint.label || "";
+      }
+    } catch (lookupError) {
+      logger.warn("[EndpointCircuitBreaker] Failed to enrich alert with endpoint info", {
+        endpointId,
+        error: lookupError instanceof Error ? lookupError.message : String(lookupError),
+      });
+    }
+
+    await sendCircuitBreakerAlert({
+      providerId: vendorId,
+      providerName: endpointLabel || `endpoint:${endpointId}`,
+      failureCount,
+      retryAt,
+      lastError,
+      incidentSource: "endpoint",
+      endpointId,
+      endpointUrl,
+    });
+  } catch (error) {
+    logger.error({
+      action: "endpoint_circuit_breaker_alert_error",
+      endpointId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

@@ -26,6 +26,7 @@ import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderDisplay, ProviderVendor } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderEndpointsSection } from "./provider-endpoints-table";
+
 import { VendorKeysCompactList } from "./vendor-keys-compact-list";
 
 interface ProviderVendorViewProps {

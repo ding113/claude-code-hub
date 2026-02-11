@@ -1,6 +1,8 @@
 {
   "cancelButton": "Отмена",
   "circuitBroken": "Разорвано",
+  "keyCircuitBroken": "Разрыв ключа",
+  "endpointCircuitBroken": "Разрыв endpoint",
   "clipboardUnavailable": "Буфер обмена недоступен в этой среде. Скопируйте ключ вручную.",
   "confirmDeleteMessage": "Вы уверены, что хотите удалить провайдера \"{name}\"? Это действие нельзя отменить.",
   "confirmDeleteTitle": "Подтвердить удаление провайдера?",
@@ -33,5 +35,11 @@
   "unknownError": "Неизвестная ошибка",
   "viewFullKey": "Просмотр полного API-ключа",
   "viewFullKeyDesc": "Пожалуйста, храните его в безопасности и не делитесь с другими",
-  "weight": "Вес"
+  "weight": "Вес",
+  "actions": "Действия",
+  "actionClone": "Клонировать",
+  "actionResetCircuit": "Сбросить автоматический выключатель",
+  "actionResetUsage": "Сбросить использование",
+  "actionDelete": "Удалить",
+  "selectProvider": "Выбрать {name}"
 }

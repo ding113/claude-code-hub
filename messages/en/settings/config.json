@@ -55,6 +55,8 @@
     "enableThinkingBudgetRectifierDesc": "When Anthropic providers return budget_tokens < 1024 errors, automatically sets thinking budget to maximum (32000) and max_tokens to 64000 if needed, then retries once (enabled by default).",
     "enableCodexSessionIdCompletion": "Enable Codex Session ID Completion",
     "enableCodexSessionIdCompletionDesc": "When Codex requests provide only one of session_id (header) or prompt_cache_key (body), automatically completes the other. If both are missing, generates a UUID v7 session id and reuses it stably within the same conversation.",
+    "enableClaudeMetadataUserIdInjection": "Enable Claude metadata.user_id Injection",
+    "enableClaudeMetadataUserIdInjectionDesc": "When Claude requests are missing metadata.user_id, automatically inject a stable user_id (format: user_{hash}_account__session_{sessionId}). If the client already provides one, keep it unchanged.",
     "interceptAnthropicWarmupRequests": "Intercept Warmup Requests (Anthropic)",
     "interceptAnthropicWarmupRequestsDesc": "When enabled, Claude Code warmup probe requests will be answered by CCH directly to avoid upstream provider calls; the request is logged for audit but is not billed, not rate-limited, and excluded from statistics.",
     "keepDays": "Retention Days",

@@ -31,13 +31,13 @@ const ANTHROPIC_MAX_TOKENS_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "max_tokens must be 'inherit' or a numeric string")
+    .regex(/^\d+$/, 'max_tokens 必须为 "inherit" 或数字字符串')
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
         return num >= 1 && num <= 64000;
       },
-      { message: "max_tokens must be between 1 and 64000" }
+      { message: "max_tokens 必须在 1 到 64000 之间" }
     ),
 ]);
 
@@ -45,15 +45,28 @@ const ANTHROPIC_THINKING_BUDGET_PREFERENCE = z.union([
   z.literal("inherit"),
   z
     .string()
-    .regex(/^\d+$/, "thinking.budget_tokens must be 'inherit' or a numeric string")
+    .regex(/^\d+$/, 'thinking.budget_tokens 必须为 "inherit" 或数字字符串')
     .refine(
       (val) => {
         const num = Number.parseInt(val, 10);
         return num >= 1024 && num <= 32000;
       },
-      { message: "thinking.budget_tokens must be between 1024 and 32000" }
+      { message: "thinking.budget_tokens 必须在 1024 到 32000 之间" }
     ),
 ]);
+
+const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
+  .object({
+    effort: z.enum(["low", "medium", "high", "max"]),
+    modelMatchMode: z.enum(["specific", "all"]),
+    models: z.array(z.string().min(1).max(100)).max(50),
+  })
+  .refine((data) => data.modelMatchMode !== "specific" || data.models.length > 0, {
+    message: "models must not be empty when modelMatchMode is 'specific'",
+    path: ["models"],
+  })
+  .nullable()
+  .optional();
 
 // Gemini (generateContent API) Google Search preference
 // - 'inherit': follow client request (default)
@@ -409,6 +422,11 @@ export const CreateProviderSchema = z
       .max(2147483647, "优先级超出整数范围")
       .optional()
       .default(0),
+    group_priorities: z
+      .record(z.string(), z.number().int().min(0).max(2147483647))
+      .nullable()
+      .optional()
+      .default(null),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
@@ -483,6 +501,7 @@ export const CreateProviderSchema = z
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional().default("inherit"),
     anthropic_thinking_budget_preference:
       ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional().default("inherit"),
+    anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional().default("inherit"),
     max_retry_attempts: z.coerce
       .number()
@@ -610,6 +629,10 @@ export const UpdateProviderSchema = z
       .min(0, "优先级不能为负数")
       .max(2147483647, "优先级超出整数范围")
       .optional(),
+    group_priorities: z
+      .record(z.string(), z.number().int().min(0).max(2147483647))
+      .nullable()
+      .optional(),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
     group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
@@ -677,6 +700,7 @@ export const UpdateProviderSchema = z
     codex_parallel_tool_calls_preference: CODEX_PARALLEL_TOOL_CALLS_PREFERENCE.optional(),
     anthropic_max_tokens_preference: ANTHROPIC_MAX_TOKENS_PREFERENCE.optional(),
     anthropic_thinking_budget_preference: ANTHROPIC_THINKING_BUDGET_PREFERENCE.optional(),
+    anthropic_adaptive_thinking: ANTHROPIC_ADAPTIVE_THINKING_CONFIG,
     gemini_google_search_preference: GEMINI_GOOGLE_SEARCH_PREFERENCE.optional(),
     max_retry_attempts: z.coerce
       .number()
@@ -842,6 +866,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableThinkingBudgetRectifier: z.boolean().optional(),
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion: z.boolean().optional(),
+  // Claude metadata.user_id 注入（可选）
+  enableClaudeMetadataUserIdInjection: z.boolean().optional(),
   // 响应整流（可选）
   enableResponseFixer: z.boolean().optional(),
   responseFixerConfig: z
@@ -894,3 +920,4 @@ export const UpdateSystemSettingsSchema = z.object({
 
 export const anthropicMaxTokensPreferenceSchema = ANTHROPIC_MAX_TOKENS_PREFERENCE;
 export const anthropicThinkingBudgetPreferenceSchema = ANTHROPIC_THINKING_BUDGET_PREFERENCE;
+export const anthropicAdaptiveThinkingConfigSchema = ANTHROPIC_ADAPTIVE_THINKING_CONFIG;

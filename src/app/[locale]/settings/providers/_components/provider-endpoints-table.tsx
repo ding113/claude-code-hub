@@ -1,17 +1,19 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Edit2, Loader2, MoreHorizontal, Play, Plus, Trash2 } from "lucide-react";
+import { Edit2, Loader2, MoreHorizontal, Play, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   addProviderEndpoint,
+  batchGetEndpointCircuitInfo,
   editProviderEndpoint,
   getProviderEndpoints,
   getProviderEndpointsByVendor,
   probeProviderEndpoint,
   removeProviderEndpoint,
+  resetEndpointCircuit,
 } from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,7 @@ import {
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 import { EndpointLatencySparkline } from "./endpoint-latency-sparkline";
+import type { EndpointCircuitState } from "./endpoint-status";
 import { UrlPreview } from "./forms/url-preview";
 
 // ============================================================================
@@ -127,6 +130,24 @@ export function ProviderEndpointsTable({
     });
   }, [rawEndpoints]);
 
+  // Fetch circuit breaker states for all endpoints in batch
+  const endpointIds = useMemo(() => endpoints.map((ep) => ep.id), [endpoints]);
+  const { data: circuitInfoMap = {} } = useQuery({
+    queryKey: ["endpoint-circuit-info", endpointIds.toSorted((a, b) => a - b).join(",")],
+    queryFn: async () => {
+      if (endpointIds.length === 0) return {};
+      const res = await batchGetEndpointCircuitInfo({ endpointIds });
+      if (!res.ok || !res.data) return {};
+      const map: Record<number, EndpointCircuitState> = {};
+      for (const item of res.data) {
+        map[item.endpointId] = item.circuitState as EndpointCircuitState;
+      }
+      return map;
+    },
+    enabled: endpointIds.length > 0,
+    staleTime: 15_000,
+  });
+
   if (isLoading) {
     return <div className="text-center py-4 text-sm text-muted-foreground">{t("keyLoading")}</div>;
   }
@@ -160,6 +181,7 @@ export function ProviderEndpointsTable({
               tTypes={tTypes}
               readOnly={readOnly}
               hideTypeColumn={hideTypeColumn}
+              circuitState={circuitInfoMap[endpoint.id] ?? null}
             />
           ))}
         </TableBody>
@@ -177,13 +199,16 @@ function EndpointRow({
   tTypes,
   readOnly,
   hideTypeColumn,
+  circuitState,
 }: {
   endpoint: ProviderEndpoint;
   tTypes: ReturnType<typeof useTranslations>;
   readOnly: boolean;
   hideTypeColumn: boolean;
+  circuitState: EndpointCircuitState | null;
 }) {
   const t = useTranslations("settings.providers");
+  const tStatus = useTranslations("settings.providers.endpointStatus");
   const tCommon = useTranslations("settings.common");
   const queryClient = useQueryClient();
   const [isProbing, setIsProbing] = useState(false);
@@ -255,6 +280,36 @@ function EndpointRow({
     },
   });
 
+  const resetCircuitMutation = useMutation({
+    mutationFn: async () => {
+      const res = await resetEndpointCircuit({ endpointId: endpoint.id });
+      if (!res.ok) throw new Error(res.error);
+      return res;
+    },
+    onMutate: () => {
+      // Optimistic update: immediately set circuit state to closed
+      queryClient.setQueriesData<Record<number, EndpointCircuitState>>(
+        { queryKey: ["endpoint-circuit-info"] },
+        (old) => {
+          if (!old) return old;
+          return { ...old, [endpoint.id]: "closed" as EndpointCircuitState };
+        }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["endpoint-circuit-info"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      toast.success(tStatus("resetCircuitSuccess"));
+    },
+    onError: () => {
+      // Revert optimistic update on failure
+      queryClient.invalidateQueries({ queryKey: ["endpoint-circuit-info"] });
+      toast.error(tStatus("resetCircuitFailed"));
+    },
+  });
+
+  const isCircuitTripped = circuitState === "open" || circuitState === "half-open";
+
   return (
     <TableRow>
       {!hideTypeColumn && (
@@ -277,8 +332,17 @@ function EndpointRow({
         {endpoint.url}
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          {endpoint.isEnabled ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          {circuitState === "open" ? (
+            <Badge variant="destructive">{tStatus("circuitOpen")}</Badge>
+          ) : circuitState === "half-open" ? (
+            <Badge
+              variant="secondary"
+              className="text-amber-600 bg-amber-500/10 hover:bg-amber-500/20"
+            >
+              {tStatus("circuitHalfOpen")}
+            </Badge>
+          ) : endpoint.isEnabled ? (
             <Badge
               variant="secondary"
               className="text-green-600 bg-green-500/10 hover:bg-green-500/20"
@@ -325,6 +389,29 @@ function EndpointRow({
                 <Play className="h-4 w-4" />
               )}
             </Button>
+
+            {isCircuitTripped && (
+              <TooltipProvider>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => resetCircuitMutation.mutate()}
+                      disabled={resetCircuitMutation.isPending}
+                    >
+                      {resetCircuitMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{tStatus("resetCircuit")}</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
 
             <EditEndpointDialog endpoint={endpoint} />
 
@@ -421,21 +508,27 @@ export function AddEndpointButton({
         toast.success(t("endpointAddSuccess"));
         setOpen(false);
         // Invalidate both specific and general queries
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints", vendorId] });
+        // Explicitly suppress rejections to avoid double toast
+        queryClient
+          .invalidateQueries({ queryKey: ["provider-endpoints", vendorId] })
+          .catch(() => undefined);
         if (fixedProviderType) {
-          queryClient.invalidateQueries({
-            queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
-              (value) => value != null
-            ),
-          });
+          queryClient
+            .invalidateQueries({
+              queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
+                (value) => value != null
+              ),
+            })
+            .catch(() => undefined);
         }
-      } else {
-        toast.error(
-          res.errorCode
-            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-            : t("endpointAddFailed")
-        );
+        return;
       }
+
+      toast.error(
+        res.errorCode
+          ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+          : t("endpointAddFailed")
+      );
     } catch (_err) {
       toast.error(t("endpointAddFailed"));
     } finally {
@@ -591,14 +684,15 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
       if (res.ok) {
         toast.success(t("endpointUpdateSuccess"));
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
-      } else {
-        toast.error(
-          res.errorCode
-            ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
-            : t("endpointUpdateFailed")
-        );
+        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] }).catch(() => undefined);
+        return;
       }
+
+      toast.error(
+        res.errorCode
+          ? getErrorMessage(tErrors, res.errorCode, res.errorParams)
+          : t("endpointUpdateFailed")
+      );
     } catch (_err) {
       toast.error(t("endpointUpdateFailed"));
     } finally {

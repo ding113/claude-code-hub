@@ -308,6 +308,10 @@ function ProviderFormContent({
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
           priority: state.routing.priority,
+          group_priorities:
+            Object.keys(state.routing.groupPriorities).length > 0
+              ? state.routing.groupPriorities
+              : null,
           weight: state.routing.weight,
           cost_multiplier: state.routing.costMultiplier,
           group_tag: state.routing.groupTag.length > 0 ? state.routing.groupTag.join(",") : null,
@@ -319,6 +323,7 @@ function ProviderFormContent({
           codex_parallel_tool_calls_preference: state.routing.codexParallelToolCallsPreference,
           anthropic_max_tokens_preference: state.routing.anthropicMaxTokensPreference,
           anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
+          anthropic_adaptive_thinking: state.routing.anthropicAdaptiveThinking,
           gemini_google_search_preference: state.routing.geminiGoogleSearchPreference,
           limit_5h_usd: state.rateLimit.limit5hUsd,
           limit_daily_usd: state.rateLimit.limitDailyUsd,
@@ -364,13 +369,18 @@ function ProviderFormContent({
             return;
           }
 
-          queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-          queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+          void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+          void queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
 
           toast.success(t("success.created"));
           dispatch({ type: "RESET_FORM" });
         }
-        onSuccess?.();
+
+        try {
+          onSuccess?.();
+        } catch (e) {
+          console.error("onSuccess callback failed", e);
+        }
       } catch (e) {
         console.error("Form submission error:", e);
         toast.error(isEdit ? t("errors.updateFailed") : t("errors.addFailed"));

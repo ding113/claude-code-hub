@@ -36,6 +36,15 @@ export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
 export type AnthropicMaxTokensPreference = "inherit" | string;
 export type AnthropicThinkingBudgetPreference = "inherit" | string;
 
+// Anthropic adaptive thinking configuration
+export type AnthropicAdaptiveThinkingEffort = "low" | "medium" | "high" | "max";
+export type AnthropicAdaptiveThinkingModelMatchMode = "specific" | "all";
+export interface AnthropicAdaptiveThinkingConfig {
+  effort: AnthropicAdaptiveThinkingEffort;
+  modelMatchMode: AnthropicAdaptiveThinkingModelMatchMode;
+  models: string[];
+}
+
 // Gemini (generateContent API) parameter overrides
 // - "inherit": follow client request (default)
 // - "enabled": force inject googleSearch tool
@@ -59,6 +68,7 @@ export interface Provider {
 
   // 优先级和分组配置
   priority: number;
+  groupPriorities: Record<string, number> | null;
   costMultiplier: number;
   groupTag: string | null;
 
@@ -133,6 +143,7 @@ export interface Provider {
   // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
+  anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
 
   // Gemini (generateContent API) parameter overrides (only for gemini/gemini-cli providers)
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
@@ -162,6 +173,7 @@ export interface ProviderDisplay {
   weight: number;
   // 优先级和分组配置
   priority: number;
+  groupPriorities: Record<string, number> | null;
   costMultiplier: number;
   groupTag: string | null;
   // 供应商类型
@@ -209,6 +221,7 @@ export interface ProviderDisplay {
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
+  anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference | null;
   // 废弃字段（保留向后兼容）
   tpm: number | null;
@@ -251,6 +264,7 @@ export interface CreateProviderData {
 
   // 优先级和分组配置
   priority?: number;
+  group_priorities?: Record<string, number> | null;
   cost_multiplier?: number;
   group_tag?: string | null;
 
@@ -298,6 +312,7 @@ export interface CreateProviderData {
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
 
   // 废弃字段（保留向后兼容）
@@ -322,6 +337,7 @@ export interface UpdateProviderData {
 
   // 优先级和分组配置
   priority?: number;
+  group_priorities?: Record<string, number> | null;
   cost_multiplier?: number;
   group_tag?: string | null;
 
@@ -369,6 +385,7 @@ export interface UpdateProviderData {
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
 
   // 废弃字段（保留向后兼容）

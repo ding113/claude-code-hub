@@ -917,6 +917,11 @@ export async function syncDefaultErrorRules(): Promise<{
             matchType: rule.matchType,
             category: rule.category,
             description: rule.description,
+            overrideResponse: rule.overrideResponse ?? null,
+            overrideStatusCode:
+              ("overrideStatusCode" in rule
+                ? (rule as { overrideStatusCode?: number | null }).overrideStatusCode
+                : null) ?? null,
             isEnabled: rule.isEnabled,
             isDefault: true,
             priority: rule.priority,
