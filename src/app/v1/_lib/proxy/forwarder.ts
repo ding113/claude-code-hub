@@ -769,6 +769,11 @@ export class ProxyForwarder {
           // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
           let inspectedText: string | undefined;
           let inspectedTruncated = false;
+          // 注意：这里不会对“大体积 JSON”做假 200 检测（例如 Content-Length > 32KiB）。
+          // 原因：
+          // - 非流式路径需要 clone 并额外读取响应体，会带来额外的内存/延迟开销；
+          // - 大体积 JSON 更可能是正常响应（而不是网关/WAF 的短错误 JSON）。
+          // 这意味着：极少数“超大 JSON 错误体 + HTTP 200”的上游异常可能会漏检。
           const shouldInspectJson =
             isJson &&
             hasValidContentLength &&
