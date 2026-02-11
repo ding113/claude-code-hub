@@ -4,5 +4,12 @@
   "labelEdit": "API キー（空欄のままにすると変更しません）",
   "leaveEmpty": "（空欄のままにすると変更しません）",
   "leaveEmptyDesc": "空欄のままにすると既存のキーを保持します",
-  "placeholder": "API キーを入力"
+  "placeholder": "API キーを入力",
+  "warnings": {
+    "looks_like_auth_header": "リクエストヘッダー（例: Bearer/Authorization/x-api-key）を貼り付けたようです。キー本体のみを入力してください。",
+    "wrapped_in_quotes": "前後が引用符で囲まれています。通常、引用符は不要です。",
+    "contains_non_ascii": "非 ASCII 文字を含んでいます。API キーとしては一般的ではありません。",
+    "contains_whitespace": "空白文字（スペース/改行）を含んでいます。API キーとしては一般的ではありません。",
+    "contains_uncommon_ascii": "一般的でない記号を含んでいます。API キーとしては一般的ではありません。"
+  }
 }

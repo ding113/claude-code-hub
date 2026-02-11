@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { getAvailableProviderGroups } from "@/actions/providers";
@@ -10,11 +10,13 @@ import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
 import { Checkbox } from "@/components/ui/checkbox";
+import { InlineWarning } from "@/components/ui/inline-warning";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
+import { parseYmdToLocalEndOfDay } from "@/lib/utils/date-input";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema } from "@/lib/validation/schemas";
@@ -104,13 +106,6 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       allowedModels: user?.allowedModels || [],
     },
     onSubmit: async (data) => {
-      // 将纯日期转换为当天结束时间（本地时区 23:59:59.999），避免默认 UTC 零点导致提前过期
-      const toEndOfDay = (dateStr: string) => {
-        const d = new Date(dateStr);
-        d.setHours(23, 59, 59, 999);
-        return d;
-      };
-
       startTransition(async () => {
         try {
           let res;
@@ -128,7 +123,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
-              expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
+              expiresAt: data.expiresAt ? parseYmdToLocalEndOfDay(data.expiresAt) : null,
               allowedClients: data.allowedClients,
               allowedModels: data.allowedModels,
             });
@@ -146,7 +141,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
-              expiresAt: data.expiresAt ? toEndOfDay(data.expiresAt) : null,
+              expiresAt: data.expiresAt ? parseYmdToLocalEndOfDay(data.expiresAt) : null,
               allowedClients: data.allowedClients,
               allowedModels: data.allowedModels,
             });
@@ -175,6 +170,14 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
 
   // Use dashboard translations for form
   const tForm = useTranslations("dashboard.userForm");
+
+  const expiresAtPastWarning = useMemo(() => {
+    const expiresAtYmd = form.values.expiresAt ?? "";
+    if (!expiresAtYmd) return null;
+    const date = parseYmdToLocalEndOfDay(expiresAtYmd);
+    if (!date) return null;
+    return date.getTime() <= Date.now() ? tForm("expiresAt.pastWarning") : null;
+  }, [form.values.expiresAt, tForm]);
 
   return (
     <DialogFormLayout
@@ -352,6 +355,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             error={form.getFieldProps("expiresAt").error}
             touched={form.getFieldProps("expiresAt").touched}
           />
+          {expiresAtPastWarning && <InlineWarning>{expiresAtPastWarning}</InlineWarning>}
 
           {/* Allowed Clients (CLI/IDE restrictions) */}
           <div className="space-y-3">

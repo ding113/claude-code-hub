@@ -4,5 +4,12 @@
   "labelEdit": "API Key (Leave empty to keep unchanged)",
   "leaveEmpty": "(Leave empty to keep unchanged)",
   "leaveEmptyDesc": "Leave empty to keep existing key",
-  "placeholder": "Enter API Key"
+  "placeholder": "Enter API Key",
+  "warnings": {
+    "looks_like_auth_header": "Looks like you pasted a request header (e.g., Bearer/Authorization/x-api-key). Please enter the key value only.",
+    "wrapped_in_quotes": "Wrapped in quotes. Usually the quotes are not needed.",
+    "contains_non_ascii": "Contains non-ASCII characters. This is uncommon for API keys.",
+    "contains_whitespace": "Contains whitespace (spaces/newlines). This is uncommon for API keys.",
+    "contains_uncommon_ascii": "Contains uncommon symbols. This is uncommon for API keys."
+  }
 }

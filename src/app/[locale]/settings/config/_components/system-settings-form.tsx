@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { saveSystemSettings } from "@/actions/system-config";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { InlineWarning } from "@/components/ui/inline-warning";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +35,12 @@ import { Switch } from "@/components/ui/switch";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
+import {
+  shouldWarnQuotaDbRefreshIntervalTooHigh,
+  shouldWarnQuotaDbRefreshIntervalTooLow,
+  shouldWarnQuotaLeaseCapZero,
+  shouldWarnQuotaLeasePercentZero,
+} from "@/lib/utils/validation/quota-lease-warnings";
 import type { BillingModelSource, SystemSettings } from "@/types/system-config";
 
 interface SystemSettingsFormProps {
@@ -628,6 +635,20 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.dbRefreshIntervalDesc")}
                   </p>
+                  {shouldWarnQuotaDbRefreshIntervalTooLow(quotaDbRefreshIntervalSeconds) && (
+                    <InlineWarning>
+                      {t("quotaLease.warnings.dbRefreshIntervalTooLow", {
+                        value: quotaDbRefreshIntervalSeconds,
+                      })}
+                    </InlineWarning>
+                  )}
+                  {shouldWarnQuotaDbRefreshIntervalTooHigh(quotaDbRefreshIntervalSeconds) && (
+                    <InlineWarning>
+                      {t("quotaLease.warnings.dbRefreshIntervalTooHigh", {
+                        value: quotaDbRefreshIntervalSeconds,
+                      })}
+                    </InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent 5h */}
@@ -652,6 +673,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercent5hDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercent5h) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent Daily */}
@@ -676,6 +700,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercentDailyDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercentDaily) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent Weekly */}
@@ -700,6 +727,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercentWeeklyDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercentWeekly) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent Monthly */}
@@ -724,6 +754,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercentMonthlyDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercentMonthly) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Cap USD */}
@@ -746,6 +779,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                     className={inputClassName}
                   />
                   <p className="text-xs text-muted-foreground">{t("quotaLease.leaseCapUsdDesc")}</p>
+                  {shouldWarnQuotaLeaseCapZero(quotaLeaseCapUsd) && (
+                    <InlineWarning>{t("quotaLease.warnings.leaseCapZero")}</InlineWarning>
+                  )}
                 </div>
               </div>
             </CollapsibleContent>

@@ -61,3 +61,26 @@ export function parseDateInputAsTimezone(input: string, timezone: string): Date 
   // Convert from timezone local time to UTC
   return fromZonedTime(localDate, timezone);
 }
+
+/**
+ * 将 YYYY-MM-DD 的纯日期字符串解析为“本地时区当天结束时间”（23:59:59.999）。
+ *
+ * 注意：刻意避免 `new Date("YYYY-MM-DD")`，因为该形式在 JS 中按 UTC 解析，
+ * 后续再转换为本地时间时可能出现日期偏差（提前/延后一日）。
+ */
+export function parseYmdToLocalEndOfDay(input: string): Date | null {
+  if (!input) return null;
+  const [year, month, day] = input.split("-").map((v) => Number(v));
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+
+  date.setHours(23, 59, 59, 999);
+  return date;
+}
