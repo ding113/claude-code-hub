@@ -69,6 +69,16 @@ const HTML_DOC_SNIFF_MAX_CHARS = 1024;
 const HTML_DOCTYPE_RE = /^<!doctype\s+html[\s>]/i;
 const HTML_HTML_TAG_RE = /^<html[\s>]/i;
 
+/**
+ * 判断文本是否“很像”一个完整的 HTML 文档（强信号）。
+ *
+ * 规则（偏保守）：
+ * - 仅当文本以 `<` 开头时才继续；
+ * - 仅在前 1024 字符内检测 `<!doctype html ...>` 或以 `<html ...>` 开头；
+ * - 不做 HTML 解析/清洗，避免误判与额外开销。
+ *
+ * 说明：调用方应先对文本做 `trim()`，并在需要时移除 BOM（`\uFEFF`）。
+ */
 function isLikelyHtmlDocument(trimmedText: string): boolean {
   if (!trimmedText.startsWith("<")) return false;
   const head = trimmedText.slice(0, HTML_DOC_SNIFF_MAX_CHARS);
@@ -201,9 +211,15 @@ export function detectUpstreamErrorFromSseOrJsonText(
       messageKeyword: options.messageKeyword ?? DEFAULT_MESSAGE_KEYWORD,
     };
 
-  const trimmed = text.trim();
+  let trimmed = text.trim();
   if (!trimmed) {
     return { isError: true, code: FAKE_200_CODES.EMPTY_BODY };
+  }
+
+  // 某些上游会带 UTF-8 BOM（\uFEFF），会导致 startsWith("{") / startsWith("<") 等快速判断失效。
+  // 这里仅剥离首字符 BOM，并再做一次 trimStart，避免误判。
+  if (trimmed.charCodeAt(0) === 0xfeff) {
+    trimmed = trimmed.slice(1).trimStart();
   }
 
   // 情况 0：明显的 HTML 文档（通常是网关/WAF/Cloudflare 返回的错误页）

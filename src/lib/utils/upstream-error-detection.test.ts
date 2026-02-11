@@ -32,6 +32,24 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     });
   });
 
+  test("带 BOM 的 HTML 文档也应视为错误", () => {
+    const htmlWithBom = "\uFEFF \n<!doctype html>\n<html><head></head><body>blocked</body></html>";
+    const res = detectUpstreamErrorFromSseOrJsonText(htmlWithBom);
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      expect(res.code).toBe("FAKE_200_HTML_BODY");
+    }
+  });
+
+  test("带 BOM 的 JSON error 也应正常识别", () => {
+    const jsonWithBom = '\uFEFF \n{"error":"当前无可用凭证"}';
+    const res = detectUpstreamErrorFromSseOrJsonText(jsonWithBom);
+    expect(res.isError).toBe(true);
+    if (res.isError) {
+      expect(res.code).toBe("FAKE_200_JSON_ERROR_NON_EMPTY");
+    }
+  });
+
   test("纯 JSON：content 内包含 <html> 文本不应误判为 HTML 错误", () => {
     const body = JSON.stringify({
       type: "message",
