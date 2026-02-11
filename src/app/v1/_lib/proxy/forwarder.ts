@@ -85,6 +85,62 @@ const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（
 
 type CacheTtlOption = CacheTtlPreference | null | undefined;
 
+// 非流式响应体检查的上限（字节）：避免上游在 2xx 场景返回超大内容导致内存占用失控。
+// 说明：
+// - 该检查仅用于“空响应/假 200”启发式判定，不用于业务逻辑解析；
+// - 超过上限时，仍认为“非空”，但会跳过 JSON 内容结构检查（避免截断导致误判）。
+const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 1024 * 1024; // 1 MiB
+
+async function readResponseTextUpTo(
+  response: Response,
+  maxBytes: number
+): Promise<{ text: string; truncated: boolean }> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return { text: "", truncated: false };
+  }
+
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let bytesRead = 0;
+  let truncated = false;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value || value.byteLength === 0) continue;
+
+    const remaining = maxBytes - bytesRead;
+    if (remaining <= 0) {
+      truncated = true;
+      break;
+    }
+
+    if (value.byteLength > remaining) {
+      chunks.push(decoder.decode(value.subarray(0, remaining), { stream: true }));
+      bytesRead += remaining;
+      truncated = true;
+      break;
+    }
+
+    chunks.push(decoder.decode(value, { stream: true }));
+    bytesRead += value.byteLength;
+  }
+
+  const flushed = decoder.decode();
+  if (flushed) chunks.push(flushed);
+
+  if (truncated) {
+    try {
+      await reader.cancel();
+    } catch {
+      // ignore
+    }
+  }
+
+  return { text: chunks.join(""), truncated };
+}
+
 function resolveCacheTtlPreference(
   keyPref: CacheTtlOption,
   providerPref: CacheTtlOption
@@ -674,14 +730,20 @@ export class ProxyForwarder {
             // - 熔断/故障转移统计被误记为成功；
             // - session 智能绑定被更新到不可用 provider（影响后续重试）。
             // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
-            let clonedResponseText: string | undefined;
+            let inspectedText: string | undefined;
+            let inspectedTruncated = false;
             if (isHtml || !contentLength) {
               const clonedResponse = response.clone();
-              clonedResponseText = await clonedResponse.text();
+              const inspected = await readResponseTextUpTo(
+                clonedResponse,
+                NON_STREAM_BODY_INSPECTION_MAX_BYTES
+              );
+              inspectedText = inspected.text;
+              inspectedTruncated = inspected.truncated;
             }
 
-            if (isHtml && clonedResponseText !== undefined) {
-              const detected = detectUpstreamErrorFromSseOrJsonText(clonedResponseText);
+            if (isHtml && inspectedText !== undefined) {
+              const detected = detectUpstreamErrorFromSseOrJsonText(inspectedText);
               if (detected.isError && detected.code === "FAKE_200_HTML_BODY") {
                 throw new ProxyError(detected.code, 502, {
                   body: detected.detail ?? "",
@@ -694,7 +756,7 @@ export class ProxyForwarder {
             // 对于没有 Content-Length 的情况，需要 clone 并检查响应体
             // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
             if (!contentLength) {
-              const responseText = clonedResponseText ?? "";
+              const responseText = inspectedText ?? "";
 
               if (!responseText || responseText.trim() === "") {
                 throw new EmptyResponseError(
@@ -704,56 +766,68 @@ export class ProxyForwarder {
                 );
               }
 
-              // 尝试解析 JSON 并检查是否有输出内容
-              try {
-                const responseJson = JSON.parse(responseText) as Record<string, unknown>;
-
-                // 检测 Claude 格式的空响应
-                if (responseJson.type === "message") {
-                  const content = responseJson.content as unknown[];
-                  if (!content || content.length === 0) {
-                    throw new EmptyResponseError(
-                      currentProvider.id,
-                      currentProvider.name,
-                      "missing_content"
-                    );
+              if (inspectedTruncated) {
+                logger.debug(
+                  "ProxyForwarder: Response body too large for non-stream content check, skipping JSON parse",
+                  {
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    contentType,
+                    maxBytes: NON_STREAM_BODY_INSPECTION_MAX_BYTES,
                   }
-                }
+                );
+              } else {
+                // 尝试解析 JSON 并检查是否有输出内容
+                try {
+                  const responseJson = JSON.parse(responseText) as Record<string, unknown>;
 
-                // 检测 OpenAI 格式的空响应
-                if (responseJson.choices !== undefined) {
-                  const choices = responseJson.choices as unknown[];
-                  if (!choices || choices.length === 0) {
-                    throw new EmptyResponseError(
-                      currentProvider.id,
-                      currentProvider.name,
-                      "missing_content"
-                    );
+                  // 检测 Claude 格式的空响应
+                  if (responseJson.type === "message") {
+                    const content = responseJson.content as unknown[];
+                    if (!content || content.length === 0) {
+                      throw new EmptyResponseError(
+                        currentProvider.id,
+                        currentProvider.name,
+                        "missing_content"
+                      );
+                    }
                   }
-                }
 
-                // 检测 usage 中的 output_tokens
-                const usage = responseJson.usage as Record<string, unknown> | undefined;
-                if (usage) {
-                  const outputTokens =
-                    (usage.output_tokens as number) || (usage.completion_tokens as number) || 0;
-
-                  if (outputTokens === 0) {
-                    // 输出 token 为 0，可能是空响应
-                    logger.warn("ProxyForwarder: Response has zero output tokens", {
-                      providerId: currentProvider.id,
-                      providerName: currentProvider.name,
-                      usage,
-                    });
-                    // 注意：不抛出错误，因为某些请求（如 count_tokens）可能合法地返回 0 output tokens
+                  // 检测 OpenAI 格式的空响应
+                  if (responseJson.choices !== undefined) {
+                    const choices = responseJson.choices as unknown[];
+                    if (!choices || choices.length === 0) {
+                      throw new EmptyResponseError(
+                        currentProvider.id,
+                        currentProvider.name,
+                        "missing_content"
+                      );
+                    }
                   }
+
+                  // 检测 usage 中的 output_tokens
+                  const usage = responseJson.usage as Record<string, unknown> | undefined;
+                  if (usage) {
+                    const outputTokens =
+                      (usage.output_tokens as number) || (usage.completion_tokens as number) || 0;
+
+                    if (outputTokens === 0) {
+                      // 输出 token 为 0，可能是空响应
+                      logger.warn("ProxyForwarder: Response has zero output tokens", {
+                        providerId: currentProvider.id,
+                        providerName: currentProvider.name,
+                        usage,
+                      });
+                      // 注意：不抛出错误，因为某些请求（如 count_tokens）可能合法地返回 0 output tokens
+                    }
+                  }
+                } catch (_parseError) {
+                  // JSON 解析失败但响应体不为空，不视为空响应错误
+                  logger.debug("ProxyForwarder: Non-JSON response body, skipping content check", {
+                    providerId: currentProvider.id,
+                    contentType,
+                  });
                 }
-              } catch (_parseError) {
-                // JSON 解析失败但响应体不为空，不视为空响应错误
-                logger.debug("ProxyForwarder: Non-JSON response body, skipping content check", {
-                  providerId: currentProvider.id,
-                  contentType,
-                });
               }
             }
           }
