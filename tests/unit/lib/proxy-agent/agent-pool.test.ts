@@ -516,9 +516,7 @@ describe("AgentPool", () => {
 
       // 模拟：close 可能因等待 in-flight 请求结束而长期不返回
       if (typeof agent.close === "function") {
-        (
-          agent.close as unknown as { mockImplementation: (fn: () => Promise<void>) => void }
-        ).mockImplementation(() => new Promise<void>(() => {}));
+        vi.mocked(agent.close).mockImplementation(() => new Promise<void>(() => {}));
       }
 
       await pool.shutdown();
