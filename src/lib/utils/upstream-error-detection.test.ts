@@ -16,6 +16,31 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     });
   });
 
+  test("明显的 HTML 文档视为错误（覆盖 200+text/html 的“假 200”）", () => {
+    const html = [
+      "<!doctype html>",
+      '<html lang="en">',
+      "<head><title>New API</title></head>",
+      "<body>Something went wrong</body>",
+      "</html>",
+    ].join("\n");
+    const res = detectUpstreamErrorFromSseOrJsonText(html);
+    expect(res).toEqual({
+      isError: true,
+      code: "FAKE_200_HTML_BODY",
+      detail: expect.any(String),
+    });
+  });
+
+  test("纯 JSON：content 内包含 <html> 文本不应误判为 HTML 错误", () => {
+    const body = JSON.stringify({
+      type: "message",
+      content: [{ type: "text", text: "<html>not an error</html>" }],
+    });
+    const res = detectUpstreamErrorFromSseOrJsonText(body);
+    expect(res.isError).toBe(false);
+  });
+
   test("纯 JSON：error 字段非空视为错误", () => {
     const res = detectUpstreamErrorFromSseOrJsonText('{"error":"当前无可用凭证"}');
     expect(res.isError).toBe(true);
