@@ -599,6 +599,9 @@ export class ProxyForwarder {
           session.addProviderToChain(currentProvider, {
             reason: "endpoint_pool_exhausted",
             strictBlockCause: strictBlockCause as ProviderChainItem["strictBlockCause"],
+            // 为避免被 initial_selection/session_reuse 去重吞掉，这里需要写入 attemptNumber。
+            // 同时也能让“决策链/技术时间线”把它当作一次实际尝试（虽然请求未发出）。
+            attemptNumber: 1,
             ...(filterStats ? { endpointFilterStats: filterStats } : {}),
             errorMessage: endpointSelectionError?.message,
           });

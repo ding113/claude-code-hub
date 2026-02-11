@@ -39,7 +39,9 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
+    item.reason === "endpoint_pool_exhausted" ||
     item.reason === "concurrent_limit_failed"
   ) {
     return "failure";

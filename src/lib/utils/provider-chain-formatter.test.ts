@@ -272,6 +272,61 @@ describe("endpoint_pool_exhausted", () => {
 });
 
 // =============================================================================
+// resource_not_found reason tests
+// =============================================================================
+
+describe("resource_not_found", () => {
+  const baseNotFoundItem: ProviderChainItem = {
+    id: 1,
+    name: "provider-a",
+    reason: "resource_not_found",
+    attemptNumber: 1,
+    statusCode: 404,
+    errorMessage: "Not Found",
+    timestamp: 1000,
+    errorDetails: {
+      provider: {
+        id: 1,
+        name: "provider-a",
+        statusCode: 404,
+        statusText: "Not Found",
+      },
+    },
+  };
+
+  describe("formatProviderSummary", () => {
+    test("renders resource_not_found item as failure in summary", () => {
+      const chain: ProviderChainItem[] = [baseNotFoundItem];
+      const result = formatProviderSummary(chain, mockT);
+
+      expect(result).toContain("provider-a");
+      expect(result).toContain("✗");
+    });
+  });
+
+  describe("formatProviderDescription", () => {
+    test("shows resource not found label in request chain", () => {
+      const chain: ProviderChainItem[] = [baseNotFoundItem];
+      const result = formatProviderDescription(chain, mockT);
+
+      expect(result).toContain("provider-a");
+      expect(result).toContain("description.resourceNotFound");
+    });
+  });
+
+  describe("formatProviderTimeline", () => {
+    test("renders resource_not_found with status code and note", () => {
+      const chain: ProviderChainItem[] = [baseNotFoundItem];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(timeline).toContain("timeline.resourceNotFoundFailed [attempt=1]");
+      expect(timeline).toContain("timeline.statusCode [code=404]");
+      expect(timeline).toContain("timeline.resourceNotFoundNote");
+    });
+  });
+});
+
+// =============================================================================
 // Unknown reason graceful degradation
 // =============================================================================
 

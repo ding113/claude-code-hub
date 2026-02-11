@@ -33,7 +33,15 @@ interface ProviderChainPopoverProps {
  */
 function isActualRequest(item: ProviderChainItem): boolean {
   if (item.reason === "concurrent_limit_failed") return true;
-  if (item.reason === "retry_failed" || item.reason === "system_error") return true;
+  if (
+    item.reason === "retry_failed" ||
+    item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
+    item.reason === "client_error_non_retryable" ||
+    item.reason === "endpoint_pool_exhausted"
+  ) {
+    return true;
+  }
   if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
     return true;
   }
@@ -68,7 +76,12 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
     };
   }
-  if (item.reason === "retry_failed" || item.reason === "system_error") {
+  if (
+    item.reason === "retry_failed" ||
+    item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
+    item.reason === "endpoint_pool_exhausted"
+  ) {
     return {
       icon: XCircle,
       color: "text-rose-600",

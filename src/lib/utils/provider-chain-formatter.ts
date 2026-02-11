@@ -63,6 +63,7 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted"
   ) {
@@ -91,6 +92,7 @@ function isActualRequest(item: ProviderChainItem): boolean {
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted"
   ) {
@@ -311,6 +313,8 @@ export function formatProviderDescription(
         desc += ` ${t("description.http2Fallback")}`;
       } else if (item.reason === "client_error_non_retryable") {
         desc += ` ${t("description.clientError")}`;
+      } else if (item.reason === "resource_not_found") {
+        desc += ` ${t("description.resourceNotFound")}`;
       } else if (item.reason === "endpoint_pool_exhausted") {
         desc += ` ${t("description.endpointPoolExhausted")}`;
       }
@@ -433,6 +437,47 @@ export function formatProviderTimeline(
 
       timeline += `\n${t("timeline.selected", { provider: item.name })}`;
       timeline += `\n\n${t("timeline.waiting")}`;
+      continue;
+    }
+
+    // === 资源不存在（上游 404） ===
+    if (item.reason === "resource_not_found") {
+      const attempt = actualAttemptNumber ?? item.attemptNumber ?? 0;
+      timeline += `${t("timeline.resourceNotFoundFailed", { attempt })}\n\n`;
+
+      if (item.errorDetails?.provider) {
+        const p = item.errorDetails.provider;
+        timeline += `${t("timeline.provider", { provider: p.name })}\n`;
+        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${t("timeline.error", { error: p.statusText })}\n`;
+
+        // 计算请求耗时
+        if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
+          const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);
+          timeline += `${t("timeline.requestDuration", { duration })}\n`;
+        }
+
+        // 错误详情（格式化 JSON）
+        if (p.upstreamParsed) {
+          timeline += `\n${t("timeline.errorDetails")}:\n`;
+          timeline += JSON.stringify(p.upstreamParsed, null, 2);
+        } else if (p.upstreamBody) {
+          timeline += `\n${t("timeline.errorDetails")}:\n${p.upstreamBody}`;
+        }
+      } else {
+        timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+        if (item.statusCode) {
+          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+        }
+        timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
+      }
+
+      // 请求详情（用于问题排查）
+      if (item.errorDetails?.request) {
+        timeline += formatRequestDetails(item.errorDetails.request, t);
+      }
+
+      timeline += `\n${t("timeline.resourceNotFoundNote")}`;
       continue;
     }
 
