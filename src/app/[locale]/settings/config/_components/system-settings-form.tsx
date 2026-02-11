@@ -628,7 +628,17 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                     min={1}
                     max={300}
                     value={quotaDbRefreshIntervalSeconds}
-                    onChange={(e) => setQuotaDbRefreshIntervalSeconds(Number(e.target.value))}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (!raw) {
+                        setQuotaDbRefreshIntervalSeconds(1);
+                        return;
+                      }
+                      const parsed = Number(raw);
+                      if (!Number.isFinite(parsed)) return;
+                      const clamped = Math.min(300, Math.max(1, parsed));
+                      setQuotaDbRefreshIntervalSeconds(clamped);
+                    }}
                     disabled={isPending}
                     className={inputClassName}
                   />

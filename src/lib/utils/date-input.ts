@@ -63,6 +63,17 @@ export function parseDateInputAsTimezone(input: string, timezone: string): Date 
 }
 
 /**
+ * 将 Date 格式化为本地时区的 YYYY-MM-DD（用于 date-only 输入控件）。
+ */
+export function formatDateToLocalYmd(value: Date): string {
+  if (Number.isNaN(value.getTime())) return "";
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * 将 YYYY-MM-DD 的纯日期字符串解析为“本地时区当天结束时间”（23:59:59.999）。
  *
  * 注意：刻意避免 `new Date("YYYY-MM-DD")`，因为该形式在 JS 中按 UTC 解析，

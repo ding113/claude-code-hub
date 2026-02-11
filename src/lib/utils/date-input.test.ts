@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { parseYmdToLocalEndOfDay } from "./date-input";
+import { formatDateToLocalYmd, parseYmdToLocalEndOfDay } from "./date-input";
 
 describe("parseYmdToLocalEndOfDay", () => {
   test("empty/invalid input returns null", () => {
@@ -21,5 +21,16 @@ describe("parseYmdToLocalEndOfDay", () => {
     expect(d.getMinutes()).toBe(59);
     expect(d.getSeconds()).toBe(59);
     expect(d.getMilliseconds()).toBe(999);
+  });
+});
+
+describe("formatDateToLocalYmd", () => {
+  test("formats Date as local YYYY-MM-DD", () => {
+    const d = new Date(2026, 1, 11, 12, 0, 0);
+    expect(formatDateToLocalYmd(d)).toBe("2026-02-11");
+  });
+
+  test("invalid date returns empty string", () => {
+    expect(formatDateToLocalYmd(new Date("invalid"))).toBe("");
   });
 });

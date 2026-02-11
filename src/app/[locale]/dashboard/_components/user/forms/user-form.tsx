@@ -16,7 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { USER_LIMITS } from "@/lib/constants/user.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
-import { parseYmdToLocalEndOfDay } from "@/lib/utils/date-input";
+import { formatDateToLocalYmd, parseYmdToLocalEndOfDay } from "@/lib/utils/date-input";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { setZodErrorMap } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema } from "@/lib/validation/schemas";
@@ -101,7 +101,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       limitTotalUsd: user?.limitTotalUsd ?? null,
       limitConcurrentSessions: user?.limitConcurrentSessions ?? null,
       isEnabled: user?.isEnabled ?? true,
-      expiresAt: user?.expiresAt ? user.expiresAt.toISOString().split("T")[0] : "",
+      expiresAt: user?.expiresAt ? formatDateToLocalYmd(user.expiresAt) : "",
       allowedClients: user?.allowedClients || [],
       allowedModels: user?.allowedModels || [],
     },

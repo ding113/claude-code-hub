@@ -8,6 +8,9 @@ interface InlineWarningProps {
   className?: string;
 }
 
+/**
+ * 表单字段的内联警告提示组件（仅提示，不阻止提交）。
+ */
 export function InlineWarning({ children, className }: InlineWarningProps) {
   return (
     <div

@@ -11,6 +11,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { Dialog } from "@/components/ui/dialog";
 import { UserForm } from "@/app/[locale]/dashboard/_components/user/forms/user-form";
+import { formatDateToLocalYmd } from "@/lib/utils/date-input";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -84,6 +85,7 @@ describe("UserForm: 清除 expiresAt 后应提交 null", () => {
   test("编辑模式：点击 Clear Date 后提交应调用 editUser(..., { expiresAt: null })", async () => {
     const messages = loadMessages();
     const expiresAt = new Date("2026-01-04T23:59:59.999Z");
+    const expectedYmd = formatDateToLocalYmd(expiresAt);
 
     const { unmount } = render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -97,7 +99,7 @@ describe("UserForm: 清除 expiresAt 后应提交 null", () => {
     );
 
     await act(async () => {
-      clickButtonByText("2026-01-04");
+      clickButtonByText(expectedYmd);
     });
 
     await act(async () => {
