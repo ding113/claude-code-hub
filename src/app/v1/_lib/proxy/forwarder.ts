@@ -91,6 +91,14 @@ type CacheTtlOption = CacheTtlPreference | null | undefined;
 // - 超过上限时，仍认为“非空”，但会跳过 JSON 内容结构检查（避免截断导致误判）。
 const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 1024 * 1024; // 1 MiB
 
+/**
+ * 读取响应体文本，但最多读取 `maxBytes` 字节（用于非流式 2xx 的“空响应/假 200”嗅探）。
+ *
+ * 注意：
+ * - 该函数只用于启发式检测，不用于业务逻辑解析；
+ * - 超过上限时会 `cancel()` reader，避免继续占用资源；
+ * - 调用方应使用 `response.clone()`，避免消费掉原始响应体，影响后续透传/解析。
+ */
 async function readResponseTextUpTo(
   response: Response,
   maxBytes: number
@@ -742,8 +750,23 @@ export class ProxyForwarder {
           }
 
           if (inspectedText !== undefined) {
-            const detected = detectUpstreamErrorFromSseOrJsonText(inspectedText);
-            if (detected.isError && detected.code === "FAKE_200_HTML_BODY") {
+            // 对非流式 2xx 响应：只启用“强信号”判定（HTML 文档 / 顶层 error 非空 / 空 body）。
+            // `message` 关键字匹配属于弱信号，误判风险更高；该规则主要用于 SSE 结束后的补充检测。
+            const detected = detectUpstreamErrorFromSseOrJsonText(inspectedText, {
+              maxJsonCharsForMessageCheck: 0,
+            });
+
+            if (detected.isError && detected.code === "FAKE_200_EMPTY_BODY") {
+              throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
+            }
+
+            const isStrongFake200 =
+              detected.isError &&
+              (detected.code === "FAKE_200_HTML_BODY" ||
+                detected.code === "FAKE_200_JSON_ERROR_NON_EMPTY" ||
+                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
+
+            if (isStrongFake200) {
               throw new ProxyError(detected.code, 502, {
                 body: detected.detail ?? "",
                 providerId: currentProvider.id,
