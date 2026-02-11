@@ -6,6 +6,7 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
@@ -266,6 +267,11 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
+    const effectiveKeyConcurrentLimit = resolveKeyConcurrentSessionLimit(
+      key.limitConcurrentSessions ?? 0,
+      user.limitConcurrentSessions ?? null
+    );
+
     const [
       keyCost5h,
       keyCostDaily,
@@ -302,7 +308,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       keyLimitWeeklyUsd: key.limitWeeklyUsd ?? null,
       keyLimitMonthlyUsd: key.limitMonthlyUsd ?? null,
       keyLimitTotalUsd: key.limitTotalUsd ?? null,
-      keyLimitConcurrentSessions: key.limitConcurrentSessions ?? null,
+      keyLimitConcurrentSessions: effectiveKeyConcurrentLimit,
       keyCurrent5hUsd: keyCost5h,
       keyCurrentDailyUsd: keyCostDaily,
       keyCurrentWeeklyUsd: keyCostWeekly,
