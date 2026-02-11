@@ -302,6 +302,25 @@ describe("resource_not_found", () => {
       expect(result).toContain("provider-a");
       expect(result).toContain("✗");
     });
+
+    test("renders resource_not_found alongside a successful retry in multi-provider chain", () => {
+      const chain: ProviderChainItem[] = [
+        baseNotFoundItem,
+        {
+          id: 2,
+          name: "provider-b",
+          reason: "retry_success",
+          statusCode: 200,
+          timestamp: 2000,
+          attemptNumber: 1,
+        },
+      ];
+      const result = formatProviderSummary(chain, mockT);
+
+      expect(result).toContain("provider-a");
+      expect(result).toContain("provider-b");
+      expect(result).toMatch(/provider-a\(.*\).*provider-b\(.*\)/);
+    });
   });
 
   describe("formatProviderDescription", () => {
@@ -321,6 +340,30 @@ describe("resource_not_found", () => {
 
       expect(timeline).toContain("timeline.resourceNotFoundFailed [attempt=1]");
       expect(timeline).toContain("timeline.statusCode [code=404]");
+      expect(timeline).toContain("timeline.resourceNotFoundNote");
+    });
+
+    test("degrades gracefully when errorDetails.provider is missing", () => {
+      const chain: ProviderChainItem[] = [
+        {
+          ...baseNotFoundItem,
+          errorDetails: {
+            request: {
+              method: "POST",
+              url: "https://example.com/v1/messages",
+              headers: "{}",
+              body: "{}",
+              bodyTruncated: false,
+            },
+          },
+        },
+      ];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(timeline).toContain("timeline.resourceNotFoundFailed [attempt=1]");
+      expect(timeline).toContain("timeline.provider [provider=provider-a]");
+      expect(timeline).toContain("timeline.statusCode [code=404]");
+      expect(timeline).toContain("timeline.error [error=Not Found]");
       expect(timeline).toContain("timeline.resourceNotFoundNote");
     });
   });
