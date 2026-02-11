@@ -40,6 +40,10 @@ describe("endpoint-circuit-breaker", () => {
     });
 
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/notification/notifier", () => ({
+      sendCircuitBreakerAlert: sendAlertMock,
+    }));
     vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
       loadEndpointCircuitState: loadMock,
       saveEndpointCircuitState: saveMock,
@@ -88,6 +92,15 @@ describe("endpoint-circuit-breaker", () => {
 
     await resetEndpointCircuit(1);
     expect(deleteMock).toHaveBeenCalledWith(1);
+
+    // 说明：recordEndpointFailure 在达到阈值后会触发异步告警（dynamic import + await）。
+    // 在 CI/bun 环境下，告警 Promise 可能在下一个测试开始后才完成，从而“借用”后续用例的 module mock，
+    // 导致 sendAlertMock 被额外调用而产生偶发失败。这里用真实计时器让事件循环前进，确保告警任务尽快落地。
+    vi.useRealTimers();
+    const startedAt = Date.now();
+    while (sendAlertMock.mock.calls.length === 0 && Date.now() - startedAt < 1000) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
   });
 
   test("recordEndpointSuccess: closed 且 failureCount>0 时应清零", async () => {
