@@ -69,6 +69,13 @@ interface SystemSettingsFormProps {
   >;
 }
 
+function clampQuotaDbRefreshIntervalSeconds(raw: string): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 1;
+  const rounded = Math.round(parsed);
+  return Math.min(300, Math.max(1, rounded));
+}
+
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
   const router = useRouter();
   const t = useTranslations("settings.config.form");
@@ -145,12 +152,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       return;
     }
 
-    const quotaDbRefreshIntervalSecondsToSave = (() => {
-      const parsed = Number(quotaDbRefreshIntervalSecondsStr);
-      if (!Number.isFinite(parsed) || parsed < 1) return 1;
-      if (parsed > 300) return 300;
-      return parsed;
-    })();
+    const quotaDbRefreshIntervalSecondsToSave = clampQuotaDbRefreshIntervalSeconds(
+      quotaDbRefreshIntervalSecondsStr
+    );
 
     startTransition(async () => {
       const result = await saveSystemSettings({
@@ -642,15 +646,13 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                     type="number"
                     min={1}
                     max={300}
+                    step={1}
                     value={quotaDbRefreshIntervalSecondsStr}
                     onChange={(e) => setQuotaDbRefreshIntervalSecondsStr(e.target.value)}
                     onBlur={() => {
-                      const parsed = Number(quotaDbRefreshIntervalSecondsStr);
-                      if (!Number.isFinite(parsed) || parsed < 1) {
-                        setQuotaDbRefreshIntervalSecondsStr("1");
-                      } else if (parsed > 300) {
-                        setQuotaDbRefreshIntervalSecondsStr("300");
-                      }
+                      setQuotaDbRefreshIntervalSecondsStr(
+                        String(clampQuotaDbRefreshIntervalSeconds(quotaDbRefreshIntervalSecondsStr))
+                      );
                     }}
                     disabled={isPending}
                     className={inputClassName}
