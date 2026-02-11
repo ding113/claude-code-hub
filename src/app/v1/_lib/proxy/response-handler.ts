@@ -1014,12 +1014,15 @@ export class ProxyResponseHandler {
               }
 
               if (value) {
-                if (isFirstChunk) {
-                  isFirstChunk = false;
-                  session.recordTtfb();
-                  clearResponseTimeoutOnce(value.length);
+                const chunkSize = value.byteLength;
+                if (chunkSize > 0) {
+                  if (isFirstChunk) {
+                    isFirstChunk = false;
+                    session.recordTtfb();
+                    clearResponseTimeoutOnce(chunkSize);
+                  }
+                  pushChunk(decoder.decode(value, { stream: true }), chunkSize);
                 }
-                pushChunk(decoder.decode(value, { stream: true }), value.length);
 
                 // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
                 if (!isFirstChunk) {

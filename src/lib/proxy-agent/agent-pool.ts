@@ -363,10 +363,31 @@ export class AgentPoolImpl implements AgentPool {
       // 注意：优先 destroy。undici 的 close() 可能会等待 in-flight 请求结束（流式/卡住时会导致长期阻塞），
       // 从而让 getAgent/evictEndpoint/cleanup 也被卡住，最终表现为“所有请求都卡在 requesting”。
       // destroy() 会强制关闭底层连接，更适合作为驱逐/清理时的兜底手段。
-      if (typeof agent.destroy === "function") {
-        await agent.destroy();
-      } else if (typeof agent.close === "function") {
-        await agent.close();
+      const operation =
+        typeof agent.destroy === "function"
+          ? ("destroy" as const)
+          : typeof agent.close === "function"
+            ? ("close" as const)
+            : null;
+
+      // 关键点：驱逐/清理路径不能等待 in-flight（否则会把 getAgent() 也阻塞住，导致全局“requesting”）
+      // 因此这里发起 destroy/close 后不 await，仅记录异常，确保 eviction 始终快速返回。
+      if (operation === "destroy") {
+        agent.destroy().catch((error) => {
+          logger.warn("AgentPool: Error closing agent", {
+            key,
+            operation,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+      } else if (operation === "close") {
+        agent.close().catch((error) => {
+          logger.warn("AgentPool: Error closing agent", {
+            key,
+            operation,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
       }
     } catch (error) {
       logger.warn("AgentPool: Error closing agent", {

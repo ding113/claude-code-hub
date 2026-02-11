@@ -265,12 +265,19 @@ describe("AgentPool", () => {
 
         const result1 = await realPool.getAgent(params);
         const agent1 = result1.agent as unknown as {
-          close?: { mockImplementation: (fn: () => Promise<void>) => void };
+          close?: () => Promise<void>;
           destroy?: unknown;
         };
 
+        // 强制走 close() 分支：模拟某些 dispatcher 不支持 destroy()
+        agent1.destroy = undefined;
+
         // 模拟：close 可能因等待 in-flight 请求结束而长期不返回
-        agent1.close?.mockImplementation(() => new Promise<void>(() => {}));
+        let closeCalled = false;
+        agent1.close = () => {
+          closeCalled = true;
+          return new Promise<void>(() => {});
+        };
 
         realPool.markUnhealthy(result1.cacheKey, "test-hang-close");
 
@@ -278,13 +285,8 @@ describe("AgentPool", () => {
         expect(result2.isNew).toBe(true);
         expect(result2.agent).not.toBe(result1.agent);
 
-        // destroy 应被优先调用（避免 close 挂死导致 getAgent/evict 卡住）
-        if (typeof (result1.agent as unknown as { destroy?: unknown }).destroy === "function") {
-          expect((result1.agent as unknown as { destroy: unknown }).destroy).toHaveBeenCalled();
-        }
-        if (typeof (result1.agent as unknown as { close?: unknown }).close === "function") {
-          expect((result1.agent as unknown as { close: unknown }).close).not.toHaveBeenCalled();
-        }
+        // 断言：即使 close() 处于 pending，也不会阻塞 getAgent()，且会触发 close 调用
+        expect(closeCalled).toBe(true);
       } finally {
         await realPool.shutdown();
         vi.useFakeTimers();
