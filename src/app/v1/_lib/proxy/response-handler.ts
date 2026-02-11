@@ -1154,7 +1154,25 @@ export class ProxyResponseHandler {
                   session.recordTtfb();
                   clearResponseTimeoutOnce(chunkSize);
                 }
-                pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+
+                // 尽量填满 head：边界 chunk 可能跨过 head 上限，按 byte 切分以避免 head 少于 1MB
+                if (!inTailMode && headBufferedBytes < MAX_STATS_HEAD_BYTES) {
+                  const remainingHeadBytes = MAX_STATS_HEAD_BYTES - headBufferedBytes;
+                  if (remainingHeadBytes > 0 && chunkSize > remainingHeadBytes) {
+                    const headPart = value.subarray(0, remainingHeadBytes);
+                    const tailPart = value.subarray(remainingHeadBytes);
+
+                    const headText = decoder.decode(headPart, { stream: true });
+                    pushChunk(headText, remainingHeadBytes);
+
+                    const tailText = decoder.decode(tailPart, { stream: true });
+                    pushChunk(tailText, chunkSize - remainingHeadBytes);
+                  } else {
+                    pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+                  }
+                } else {
+                  pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+                }
               }
 
               // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）

@@ -338,9 +338,10 @@ export class AgentPoolImpl implements AgentPool {
       this.cleanupTimer = null;
     }
 
-    for (const [key, cached] of this.cache.entries()) {
-      await this.closeAgent(cached.agent, key);
-    }
+    // closeAgent 本身是 fire-and-forget（不 await destroy/close），这里并行触发即可。
+    await Promise.allSettled(
+      Array.from(this.cache.entries()).map(([key, cached]) => this.closeAgent(cached.agent, key))
+    );
 
     // Best-effort：等待部分 pending cleanup 完成，但永不无限等待（避免重蹈 “close() 等待 in-flight” 的覆辙）
     if (this.pendingCleanups.size > 0) {
