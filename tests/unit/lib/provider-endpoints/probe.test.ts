@@ -50,7 +50,9 @@ describe("provider-endpoints: probe", () => {
       updateProviderEndpointProbeSnapshot: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -90,7 +92,9 @@ describe("provider-endpoints: probe", () => {
       updateProviderEndpointProbeSnapshot: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -133,7 +137,9 @@ describe("provider-endpoints: probe", () => {
       updateProviderEndpointProbeSnapshot: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -171,7 +177,9 @@ describe("provider-endpoints: probe", () => {
       updateProviderEndpointProbeSnapshot: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -207,7 +215,9 @@ describe("provider-endpoints: probe", () => {
       updateProviderEndpointProbeSnapshot: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     const fetchMock = vi.fn(async () => {
@@ -252,7 +262,9 @@ describe("provider-endpoints: probe", () => {
       updateProviderEndpointProbeSnapshot: snapshotMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: recordFailureMock,
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -298,7 +310,9 @@ describe("provider-endpoints: probe", () => {
       updateProviderEndpointProbeSnapshot: snapshotMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: recordFailureMock,
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -368,7 +382,9 @@ describe("provider-endpoints: probe", () => {
       recordProviderEndpointProbeResult: recordMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: recordFailureMock,
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -408,7 +424,9 @@ describe("provider-endpoints: probe", () => {
       recordProviderEndpointProbeResult: recordMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: recordFailureMock,
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     vi.stubGlobal(
@@ -444,7 +462,9 @@ describe("provider-endpoints: probe", () => {
       recordProviderEndpointProbeResult: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     // Mock net.createConnection to simulate successful TCP connection
@@ -497,7 +517,9 @@ describe("provider-endpoints: probe", () => {
       recordProviderEndpointProbeResult: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     const mockSocket = {
@@ -542,7 +564,9 @@ describe("provider-endpoints: probe", () => {
       recordProviderEndpointProbeResult: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     const { probeEndpointUrl } = await import("@/lib/provider-endpoints/probe");
@@ -572,7 +596,9 @@ describe("provider-endpoints: probe", () => {
       recordProviderEndpointProbeResult: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
+      getEndpointCircuitStateSync: vi.fn(() => "closed"),
       recordEndpointFailure: vi.fn(async () => {}),
+      resetEndpointCircuit: vi.fn(async () => {}),
     }));
 
     const mockSocket = {
