@@ -108,6 +108,12 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
     onSubmit: async (data) => {
       startTransition(async () => {
         try {
+          const expiresAt = data.expiresAt ? parseYmdToLocalEndOfDay(data.expiresAt) : null;
+          if (data.expiresAt && !expiresAt) {
+            toast.error(tErrors("INVALID_FORMAT", { field: tErrors("EXPIRES_AT_FIELD") }));
+            return;
+          }
+
           let res;
           if (isEdit && user?.id) {
             res = await editUser(user.id, {
@@ -123,7 +129,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
-              expiresAt: data.expiresAt ? parseYmdToLocalEndOfDay(data.expiresAt) : null,
+              expiresAt,
               allowedClients: data.allowedClients,
               allowedModels: data.allowedModels,
             });
@@ -141,7 +147,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
               isEnabled: data.isEnabled,
-              expiresAt: data.expiresAt ? parseYmdToLocalEndOfDay(data.expiresAt) : null,
+              expiresAt,
               allowedClients: data.allowedClients,
               allowedModels: data.allowedModels,
             });

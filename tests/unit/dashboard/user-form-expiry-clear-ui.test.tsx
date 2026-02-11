@@ -72,7 +72,7 @@ function clickButtonByText(text: string) {
   const buttons = Array.from(document.body.querySelectorAll("button"));
   const btn = buttons.find((b) => (b.textContent || "").includes(text));
   if (!btn) {
-    throw new Error(`未找到按钮: ${text}`);
+    throw new Error(`Button not found: ${text}`);
   }
   btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
