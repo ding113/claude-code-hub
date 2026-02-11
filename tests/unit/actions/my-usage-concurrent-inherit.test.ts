@@ -49,46 +49,55 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
+function createSession(params: {
+  keyLimitConcurrentSessions: number | null;
+  userLimitConcurrentSessions: number | null;
+}) {
+  return {
+    key: {
+      id: 1,
+      key: "sk-test",
+      name: "k",
+      dailyResetTime: "00:00",
+      dailyResetMode: "fixed",
+      limit5hUsd: null,
+      limitDailyUsd: null,
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitTotalUsd: null,
+      limitConcurrentSessions: params.keyLimitConcurrentSessions,
+      providerGroup: null,
+      isEnabled: true,
+      expiresAt: null,
+    },
+    user: {
+      id: 10,
+      name: "u",
+      dailyResetTime: "00:00",
+      dailyResetMode: "fixed",
+      limit5hUsd: null,
+      dailyQuota: null,
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitTotalUsd: null,
+      limitConcurrentSessions: params.userLimitConcurrentSessions,
+      rpm: null,
+      providerGroup: null,
+      isEnabled: true,
+      expiresAt: null,
+      allowedModels: [],
+      allowedClients: [],
+    },
+  };
+}
+
 describe("getMyQuota - concurrent limit inheritance", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    getSessionMock.mockResolvedValue({
-      key: {
-        id: 1,
-        key: "sk-test",
-        name: "k",
-        dailyResetTime: "00:00",
-        dailyResetMode: "fixed",
-        limit5hUsd: null,
-        limitDailyUsd: null,
-        limitWeeklyUsd: null,
-        limitMonthlyUsd: null,
-        limitTotalUsd: null,
-        limitConcurrentSessions: 0,
-        providerGroup: null,
-        isEnabled: true,
-        expiresAt: null,
-      },
-      user: {
-        id: 10,
-        name: "u",
-        dailyResetTime: "00:00",
-        dailyResetMode: "fixed",
-        limit5hUsd: null,
-        dailyQuota: null,
-        limitWeeklyUsd: null,
-        limitMonthlyUsd: null,
-        limitTotalUsd: null,
-        limitConcurrentSessions: 15,
-        rpm: null,
-        providerGroup: null,
-        isEnabled: true,
-        expiresAt: null,
-        allowedModels: [],
-        allowedClients: [],
-      },
-    });
+    getSessionMock.mockResolvedValue(
+      createSession({ keyLimitConcurrentSessions: 0, userLimitConcurrentSessions: 15 })
+    );
   });
 
   it("Key 并发为 0 时应回退到 User 并发上限", async () => {
@@ -98,6 +107,34 @@ describe("getMyQuota - concurrent limit inheritance", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.keyLimitConcurrentSessions).toBe(15);
+    }
+  });
+
+  it("Key 并发为正数时应优先使用 Key 自身上限", async () => {
+    getSessionMock.mockResolvedValue(
+      createSession({ keyLimitConcurrentSessions: 5, userLimitConcurrentSessions: 15 })
+    );
+
+    const { getMyQuota } = await import("@/actions/my-usage");
+    const result = await getMyQuota();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.keyLimitConcurrentSessions).toBe(5);
+    }
+  });
+
+  it("Key=0 且 User=0 时应返回 0（无限制）", async () => {
+    getSessionMock.mockResolvedValue(
+      createSession({ keyLimitConcurrentSessions: 0, userLimitConcurrentSessions: 0 })
+    );
+
+    const { getMyQuota } = await import("@/actions/my-usage");
+    const result = await getMyQuota();
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.keyLimitConcurrentSessions).toBe(0);
     }
   });
 });

@@ -92,7 +92,7 @@ export interface MyUsageQuota {
   keyLimitWeeklyUsd: number | null;
   keyLimitMonthlyUsd: number | null;
   keyLimitTotalUsd: number | null;
-  keyLimitConcurrentSessions: number | null;
+  keyLimitConcurrentSessions: number;
   keyCurrent5hUsd: number;
   keyCurrentDailyUsd: number;
   keyCurrentWeeklyUsd: number;
