@@ -1078,7 +1078,7 @@ export class ProxyResponseHandler {
                 providerId: provider.id,
                 providerName: provider.name,
                 idleTimeoutMs,
-                chunksCollected: Math.max(0, tailChunks.length - tailHead),
+                chunksCollected: headChunks.length + Math.max(0, tailChunks.length - tailHead),
                 headBufferedBytes,
                 tailBufferedBytes,
                 bufferedBytes: headBufferedBytes + tailBufferedBytes,

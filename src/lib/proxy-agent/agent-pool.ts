@@ -405,10 +405,9 @@ export class AgentPoolImpl implements AgentPool {
 
       if (!cleanupPromise) return;
 
-      let trackedPromise: Promise<void>;
       let dropRefTimeoutId: NodeJS.Timeout | null = null;
 
-      trackedPromise = cleanupPromise
+      const trackedPromise: Promise<void> = cleanupPromise
         .catch((error) => {
           logger.warn("AgentPool: Error closing agent", {
             key,
