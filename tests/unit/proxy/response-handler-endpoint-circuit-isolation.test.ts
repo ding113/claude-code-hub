@@ -254,8 +254,8 @@ function setDeferredMeta(session: ProxySession, endpointId: number | null = 42) 
 }
 
 /** Create an SSE stream that emits a fake-200 error body (valid HTTP 200 but error in content). */
-function createFake200StreamResponse(): Response {
-  const body = `data: ${JSON.stringify({ error: { message: "invalid api key" } })}\n\n`;
+function createFake200StreamResponse(errorMessage: string = "invalid api key"): Response {
+  const body = `data: ${JSON.stringify({ error: { message: errorMessage } })}\n\n`;
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -366,6 +366,29 @@ describe("Endpoint circuit breaker isolation", () => {
           item.id === 1 &&
           item.reason === "retry_failed" &&
           item.statusCode === 401 &&
+          item.statusCodeInferred === true
+      )
+    ).toBe(true);
+  });
+
+  it("fake-200 inferred 404 should NOT call recordFailure and should be marked as resource_not_found", async () => {
+    const session = createSession();
+    setDeferredMeta(session, 42);
+
+    const response = createFake200StreamResponse("model not found");
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(mockRecordFailure).not.toHaveBeenCalled();
+    expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+
+    const chain = session.getProviderChain();
+    expect(
+      chain.some(
+        (item) =>
+          item.id === 1 &&
+          item.reason === "resource_not_found" &&
+          item.statusCode === 404 &&
           item.statusCodeInferred === true
       )
     ).toBe(true);

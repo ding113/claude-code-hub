@@ -252,17 +252,23 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       detail: detected.detail ?? null,
     });
 
-    // 计入熔断器：让后续请求能正确触发故障转移/熔断
-    try {
-      // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
-      const { recordFailure } = await import("@/lib/circuit-breaker");
-      await recordFailure(meta.providerId, new Error(detected.code));
-    } catch (cbError) {
-      logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
-        providerId: meta.providerId,
-        sessionId: session.sessionId ?? null,
-        error: cbError,
-      });
+    const chainReason = effectiveStatusCode === 404 ? "resource_not_found" : "retry_failed";
+
+    // 计入熔断器：让后续请求能正确触发故障转移/熔断。
+    //
+    // 注意：404 语义在 forwarder 中属于 RESOURCE_NOT_FOUND，不计入熔断器（避免把“资源/模型不存在”当作供应商故障）。
+    if (effectiveStatusCode !== 404) {
+      try {
+        // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
+        const { recordFailure } = await import("@/lib/circuit-breaker");
+        await recordFailure(meta.providerId, new Error(detected.code));
+      } catch (cbError) {
+        logger.warn("[ResponseHandler] Failed to record fake-200 error in circuit breaker", {
+          providerId: meta.providerId,
+          sessionId: session.sessionId ?? null,
+          error: cbError,
+        });
+      }
     }
 
     // NOTE: Do NOT call recordEndpointFailure here. Fake-200 errors are key-level
@@ -276,7 +282,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
-      reason: "retry_failed",
+      reason: chainReason,
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
       statusCodeInferred,
@@ -296,16 +302,21 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       errorMessage,
     });
 
-    // 计入熔断器：让后续请求能正确触发故障转移/熔断
-    try {
-      const { recordFailure } = await import("@/lib/circuit-breaker");
-      await recordFailure(meta.providerId, new Error(errorMessage));
-    } catch (cbError) {
-      logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
-        providerId: meta.providerId,
-        sessionId: session.sessionId ?? null,
-        error: cbError,
-      });
+    const chainReason = effectiveStatusCode === 404 ? "resource_not_found" : "retry_failed";
+
+    // 计入熔断器：让后续请求能正确触发故障转移/熔断。
+    // 注意：与 forwarder 口径保持一致：404 不计入熔断器（资源不存在不是供应商故障）。
+    if (effectiveStatusCode !== 404) {
+      try {
+        const { recordFailure } = await import("@/lib/circuit-breaker");
+        await recordFailure(meta.providerId, new Error(errorMessage));
+      } catch (cbError) {
+        logger.warn("[ResponseHandler] Failed to record non-200 error in circuit breaker", {
+          providerId: meta.providerId,
+          sessionId: session.sessionId ?? null,
+          error: cbError,
+        });
+      }
     }
 
     // NOTE: Do NOT call recordEndpointFailure here. Non-200 HTTP errors (401, 429,
@@ -316,7 +327,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
-      reason: "retry_failed",
+      reason: chainReason,
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
       errorMessage: errorMessage,
