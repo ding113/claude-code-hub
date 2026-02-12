@@ -77,7 +77,7 @@
     "siteTitlePlaceholder": "例：Claude Code Hub",
     "siteTitleRequired": "站台標題不能為空",
     "verboseProviderError": "詳細供應商錯誤資訊",
-    "verboseProviderErrorDesc": "開啟後，在部分上游異常場景（例如所有供應商不可用、偵測到假200或空回應等）返回更詳細錯誤資訊（可能包含上游回應片段，且可能含敏感資訊）；僅建議在可信環境啟用。關閉後僅返回簡潔錯誤碼。",
+    "verboseProviderErrorDesc": "開啟後，在部分上游異常場景（例如所有供應商不可用、偵測到假200或空回應等）返回更詳細錯誤資訊（可能包含上游回應片段，已做基礎脫敏，但仍可能含敏感資訊）；僅建議在可信環境啟用。關閉後僅返回簡潔錯誤碼。",
     "timezoneLabel": "系統時區",
     "timezoneDescription": "設定系統時區，用於統一後端時間邊界計算和前端日期/時間顯示。留空時使用環境變數 TZ 或預設 UTC。",
     "timezoneAuto": "自動 (使用環境變數 TZ)",

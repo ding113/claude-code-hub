@@ -33,7 +33,7 @@
     "allowGlobalView": "允许查看全站使用量",
     "allowGlobalViewDesc": "关闭后，普通用户在仪表盘仅能查看自己密钥的使用统计。",
     "verboseProviderError": "详细供应商错误信息",
-    "verboseProviderErrorDesc": "开启后，在部分上游异常场景（例如所有供应商不可用、检测到假200或空响应等）返回更详细错误信息（可能包含上游响应片段，且可能含敏感信息）；仅建议在可信环境启用。关闭后仅返回简洁错误码。",
+    "verboseProviderErrorDesc": "开启后，在部分上游异常场景（例如所有供应商不可用、检测到假200或空响应等）返回更详细错误信息（可能包含上游响应片段，已做基础脱敏，但仍可能含敏感信息）；仅建议在可信环境启用。关闭后仅返回简洁错误码。",
     "enableHttp2": "启用 HTTP/2",
     "enableHttp2Desc": "启用后，代理请求将优先使用 HTTP/2 协议。如果 HTTP/2 失败，将自动降级到 HTTP/1.1。",
     "interceptAnthropicWarmupRequests": "拦截 Warmup 请求（Anthropic）",
