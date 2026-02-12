@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { saveSystemSettings } from "@/actions/system-config";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { InlineWarning } from "@/components/ui/inline-warning";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -34,6 +35,12 @@ import { Switch } from "@/components/ui/switch";
 import type { CurrencyCode } from "@/lib/utils";
 import { CURRENCY_CONFIG } from "@/lib/utils";
 import { COMMON_TIMEZONES, getTimezoneLabel } from "@/lib/utils/timezone";
+import {
+  shouldWarnQuotaDbRefreshIntervalTooHigh,
+  shouldWarnQuotaDbRefreshIntervalTooLow,
+  shouldWarnQuotaLeaseCapZero,
+  shouldWarnQuotaLeasePercentZero,
+} from "@/lib/utils/validation/quota-lease-warnings";
 import type { BillingModelSource, SystemSettings } from "@/types/system-config";
 
 interface SystemSettingsFormProps {
@@ -60,6 +67,13 @@ interface SystemSettingsFormProps {
     | "quotaLeasePercentMonthly"
     | "quotaLeaseCapUsd"
   >;
+}
+
+function clampQuotaDbRefreshIntervalSeconds(raw: string): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return 1;
+  const rounded = Math.round(parsed);
+  return Math.min(300, Math.max(1, rounded));
 }
 
 export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps) {
@@ -102,9 +116,15 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [responseFixerConfig, setResponseFixerConfig] = useState(
     initialSettings.responseFixerConfig
   );
-  const [quotaDbRefreshIntervalSeconds, setQuotaDbRefreshIntervalSeconds] = useState(
-    initialSettings.quotaDbRefreshIntervalSeconds ?? 10
+  const [quotaDbRefreshIntervalSecondsStr, setQuotaDbRefreshIntervalSecondsStr] = useState(
+    String(initialSettings.quotaDbRefreshIntervalSeconds ?? 10)
   );
+  const quotaDbRefreshIntervalSeconds = (() => {
+    const trimmed = quotaDbRefreshIntervalSecondsStr.trim();
+    if (!trimmed) return Number.NaN;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  })();
   const [quotaLeasePercent5h, setQuotaLeasePercent5h] = useState(
     initialSettings.quotaLeasePercent5h ?? 0.05
   );
@@ -132,6 +152,10 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
       return;
     }
 
+    const quotaDbRefreshIntervalSecondsToSave = clampQuotaDbRefreshIntervalSeconds(
+      quotaDbRefreshIntervalSecondsStr
+    );
+
     startTransition(async () => {
       const result = await saveSystemSettings({
         siteTitle,
@@ -148,7 +172,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableClaudeMetadataUserIdInjection,
         enableResponseFixer,
         responseFixerConfig,
-        quotaDbRefreshIntervalSeconds,
+        quotaDbRefreshIntervalSeconds: quotaDbRefreshIntervalSecondsToSave,
         quotaLeasePercent5h,
         quotaLeasePercentDaily,
         quotaLeasePercentWeekly,
@@ -176,7 +200,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableClaudeMetadataUserIdInjection(result.data.enableClaudeMetadataUserIdInjection);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
-        setQuotaDbRefreshIntervalSeconds(result.data.quotaDbRefreshIntervalSeconds ?? 10);
+        setQuotaDbRefreshIntervalSecondsStr(
+          String(result.data.quotaDbRefreshIntervalSeconds ?? 10)
+        );
         setQuotaLeasePercent5h(result.data.quotaLeasePercent5h ?? 0.05);
         setQuotaLeasePercentDaily(result.data.quotaLeasePercentDaily ?? 0.05);
         setQuotaLeasePercentWeekly(result.data.quotaLeasePercentWeekly ?? 0.05);
@@ -620,14 +646,34 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                     type="number"
                     min={1}
                     max={300}
-                    value={quotaDbRefreshIntervalSeconds}
-                    onChange={(e) => setQuotaDbRefreshIntervalSeconds(Number(e.target.value))}
+                    step={1}
+                    value={quotaDbRefreshIntervalSecondsStr}
+                    onChange={(e) => setQuotaDbRefreshIntervalSecondsStr(e.target.value)}
+                    onBlur={() => {
+                      setQuotaDbRefreshIntervalSecondsStr(
+                        String(clampQuotaDbRefreshIntervalSeconds(quotaDbRefreshIntervalSecondsStr))
+                      );
+                    }}
                     disabled={isPending}
                     className={inputClassName}
                   />
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.dbRefreshIntervalDesc")}
                   </p>
+                  {shouldWarnQuotaDbRefreshIntervalTooLow(quotaDbRefreshIntervalSeconds) && (
+                    <InlineWarning>
+                      {t("quotaLease.warnings.dbRefreshIntervalTooLow", {
+                        value: quotaDbRefreshIntervalSeconds,
+                      })}
+                    </InlineWarning>
+                  )}
+                  {shouldWarnQuotaDbRefreshIntervalTooHigh(quotaDbRefreshIntervalSeconds) && (
+                    <InlineWarning>
+                      {t("quotaLease.warnings.dbRefreshIntervalTooHigh", {
+                        value: quotaDbRefreshIntervalSeconds,
+                      })}
+                    </InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent 5h */}
@@ -652,6 +698,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercent5hDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercent5h) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent Daily */}
@@ -676,6 +725,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercentDailyDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercentDaily) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent Weekly */}
@@ -700,6 +752,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercentWeeklyDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercentWeekly) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Percent Monthly */}
@@ -724,6 +779,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                   <p className="text-xs text-muted-foreground">
                     {t("quotaLease.leasePercentMonthlyDesc")}
                   </p>
+                  {shouldWarnQuotaLeasePercentZero(quotaLeasePercentMonthly) && (
+                    <InlineWarning>{t("quotaLease.warnings.leasePercentZero")}</InlineWarning>
+                  )}
                 </div>
 
                 {/* Lease Cap USD */}
@@ -746,6 +804,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
                     className={inputClassName}
                   />
                   <p className="text-xs text-muted-foreground">{t("quotaLease.leaseCapUsdDesc")}</p>
+                  {shouldWarnQuotaLeaseCapZero(quotaLeaseCapUsd) && (
+                    <InlineWarning>{t("quotaLease.warnings.leaseCapZero")}</InlineWarning>
+                  )}
                 </div>
               </div>
             </CollapsibleContent>

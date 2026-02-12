@@ -980,7 +980,8 @@
     "expiresAt": {
       "label": "到期時間",
       "placeholder": "留空表示永不過期",
-      "description": "使用者過期後將自動停用"
+      "description": "使用者過期後將自動停用",
+      "pastWarning": "選擇的日期已在過去，儲存後使用者將立即到期並被停用。"
     },
     "allowedClients": {
       "label": "允許的用戶端",

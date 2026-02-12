@@ -209,19 +209,10 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
         });
       }
 
-      if (meta.endpointId != null) {
-        try {
-          const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
-          await recordEndpointFailure(meta.endpointId, new Error(errorMessage ?? "STREAM_ABORTED"));
-        } catch (endpointError) {
-          logger.warn("[ResponseHandler] Failed to record endpoint failure (stream aborted)", {
-            endpointId: meta.endpointId,
-            providerId: meta.providerId,
-            sessionId: session.sessionId ?? null,
-            error: endpointError,
-          });
-        }
-      }
+      // NOTE: Do NOT call recordEndpointFailure here. Stream aborts are key-level
+      // errors (auth, rate limit, bad key). The endpoint itself delivered HTTP 200
+      // successfully. Only forwarder-level failures (timeout, network error) and
+      // probe failures should penalize the endpoint circuit breaker.
     }
 
     session.addProviderToChain(providerForChain, {
@@ -259,19 +250,9 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       });
     }
 
-    // endpoint 级熔断：与成功路径保持对称，避免“假 200”只影响 provider 而不影响 endpoint 健康度
-    if (meta.endpointId != null) {
-      try {
-        const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
-        await recordEndpointFailure(meta.endpointId, new Error(detected.code));
-      } catch (endpointError) {
-        logger.warn("[ResponseHandler] Failed to record endpoint failure (fake 200)", {
-          endpointId: meta.endpointId,
-          providerId: meta.providerId,
-          error: endpointError,
-        });
-      }
-    }
+    // NOTE: Do NOT call recordEndpointFailure here. Fake-200 errors are key-level
+    // issues (invalid key, auth failure). The endpoint returned HTTP 200 successfully;
+    // the error is in the response content, not endpoint connectivity.
 
     // 记录到决策链（用于日志展示与 DB 持久化）。
     // 注意：这里用 effectiveStatusCode（502）而不是 upstreamStatusCode（200），
@@ -310,19 +291,9 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       });
     }
 
-    // endpoint 级熔断：与成功路径保持对称
-    if (meta.endpointId != null) {
-      try {
-        const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
-        await recordEndpointFailure(meta.endpointId, new Error(errorMessage));
-      } catch (endpointError) {
-        logger.warn("[ResponseHandler] Failed to record endpoint failure (non-200)", {
-          endpointId: meta.endpointId,
-          providerId: meta.providerId,
-          error: endpointError,
-        });
-      }
-    }
+    // NOTE: Do NOT call recordEndpointFailure here. Non-200 HTTP errors (401, 429,
+    // etc.) are typically key/auth-level errors. The endpoint was reachable and
+    // responded; only forwarder-level failures should penalize the endpoint breaker.
 
     // 记录到决策链
     session.addProviderToChain(providerForChain, {

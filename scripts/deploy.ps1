@@ -503,6 +503,7 @@ ENABLE_SECURE_COOKIES=$secureCookies
 
 # Circuit Breaker Configuration
 ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS=false
+ENABLE_ENDPOINT_CIRCUIT_BREAKER=false
 
 # Environment
 NODE_ENV=production

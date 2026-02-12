@@ -995,7 +995,8 @@
     "expiresAt": {
       "label": "过期时间",
       "placeholder": "留空表示永不过期",
-      "description": "用户过期后将自动禁用"
+      "description": "用户过期后将自动禁用",
+      "pastWarning": "选择的日期已在过去，保存后用户将立即过期并被禁用。"
     },
     "allowedClients": {
       "label": "允许的客户端",

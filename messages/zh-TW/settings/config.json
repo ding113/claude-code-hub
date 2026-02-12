@@ -95,7 +95,13 @@
       "leasePercentMonthly": "每月窗口租約比例",
       "leasePercentMonthlyDesc": "每次租約切片佔每月限額的比例（0-1）",
       "leaseCapUsd": "租約上限（USD）",
-      "leaseCapUsdDesc": "單次租約切片的絕對上限（美元），為空則不限制"
+      "leaseCapUsdDesc": "單次租約切片的絕對上限（美元），為空則不限制",
+      "warnings": {
+        "dbRefreshIntervalTooLow": "目前刷新間隔為 {value}s，可能增加 DB 壓力。",
+        "dbRefreshIntervalTooHigh": "目前刷新間隔為 {value}s，配額/限額狀態可能更新不及時。",
+        "leasePercentZero": "目前比例為 0，可能導致租約預算始終為 0。",
+        "leaseCapZero": "租約上限為 0 可能導致單次租約預算為 0。"
+      }
     }
   },
   "section": {

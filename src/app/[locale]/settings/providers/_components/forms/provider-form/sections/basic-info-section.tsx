@@ -3,9 +3,11 @@
 import { motion } from "framer-motion";
 import { ExternalLink, Eye, EyeOff, Globe, Key, Link2, User } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ProviderEndpointsSection } from "@/app/[locale]/settings/providers/_components/provider-endpoints-table";
+import { InlineWarning } from "@/components/ui/inline-warning";
 import { Input } from "@/components/ui/input";
+import { detectApiKeyWarnings } from "@/lib/utils/validation/api-key-warnings";
 import type { ProviderType } from "@/types/provider";
 import { UrlPreview } from "../../url-preview";
 import { QuickPasteDialog } from "../components/quick-paste-dialog";
@@ -28,6 +30,8 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
   const isEdit = mode === "edit";
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [showKey, setShowKey] = useState(false);
+
+  const apiKeyWarnings = useMemo(() => detectApiKeyWarnings(state.basic.key), [state.basic.key]);
 
   // Auto-focus name input
   useEffect(() => {
@@ -199,6 +203,14 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
                 {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
+
+            {apiKeyWarnings.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {apiKeyWarnings.map((warningId) => (
+                  <InlineWarning key={warningId}>{t(`key.warnings.${warningId}`)}</InlineWarning>
+                ))}
+              </div>
+            )}
           </SmartInputWrapper>
         </div>
       </SectionCard>
