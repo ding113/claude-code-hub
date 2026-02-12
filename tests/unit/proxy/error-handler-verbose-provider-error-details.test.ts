@@ -109,7 +109,7 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
       providerName: "p1",
       requestId: "req_123",
       rawBody:
-        '<!doctype html><html><body>Authorization: Bearer abc123 sk-1234567890abcdef1234567890 test@example.com</body></html>',
+        "<!doctype html><html><body>Authorization: Bearer abc123 sk-1234567890abcdef1234567890 test@example.com</body></html>",
       rawBodyTruncated: false,
     });
 
