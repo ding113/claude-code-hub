@@ -25,7 +25,10 @@ import {
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
-import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
+import {
+  detectUpstreamErrorFromSseOrJsonText,
+  inferUpstreamErrorStatusCodeFromText,
+} from "@/lib/utils/upstream-error-detection";
 import {
   isVendorTypeCircuitOpen,
   recordVendorTypeAllEndpointsTimeout,
@@ -809,7 +812,10 @@ export class ProxyForwarder {
                 detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
 
             if (isStrongFake200) {
-              throw new ProxyError(detected.code, 502, {
+              const inferredStatus = inferUpstreamErrorStatusCodeFromText(inspectedText);
+              const inferredStatusCode = inferredStatus?.statusCode;
+
+              throw new ProxyError(detected.code, inferredStatusCode ?? 502, {
                 body: detected.detail ?? "",
                 providerId: currentProvider.id,
                 providerName: currentProvider.name,
@@ -817,6 +823,8 @@ export class ProxyForwarder {
                 // 不参与规则匹配/持久化，避免污染数据库或误触发覆写规则。
                 rawBody: inspectedText,
                 rawBodyTruncated: inspectedTruncated,
+                statusCodeInferred: inferredStatusCode !== undefined,
+                statusCodeInferenceMatcherId: inferredStatus?.matcherId,
               });
             }
           }
@@ -1132,6 +1140,7 @@ export class ProxyForwarder {
                       attemptNumber: attemptCount,
                       errorMessage,
                       statusCode: lastError.statusCode,
+                      statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
                       errorDetails: {
                         provider: {
                           id: currentProvider.id,
@@ -1264,6 +1273,7 @@ export class ProxyForwarder {
                       attemptNumber: attemptCount,
                       errorMessage,
                       statusCode: lastError.statusCode,
+                      statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
                       errorDetails: {
                         provider: {
                           id: currentProvider.id,
@@ -1328,6 +1338,7 @@ export class ProxyForwarder {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -1344,6 +1355,7 @@ export class ProxyForwarder {
               attemptNumber: attemptCount,
               errorMessage: errorMessage,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
                 provider: {
                   id: currentProvider.id,
@@ -1466,6 +1478,7 @@ export class ProxyForwarder {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: 404,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -1480,6 +1493,7 @@ export class ProxyForwarder {
               attemptNumber: attemptCount,
               errorMessage: errorMessage,
               statusCode: 404,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
                 provider: {
                   id: currentProvider.id,
@@ -1622,6 +1636,7 @@ export class ProxyForwarder {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -1641,6 +1656,7 @@ export class ProxyForwarder {
               circuitFailureCount: health.failureCount + 1, // 包含本次失败
               circuitFailureThreshold: config.failureThreshold,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
                 provider: {
                   id: currentProvider.id,

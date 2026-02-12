@@ -246,9 +246,7 @@ export class ProxyErrorHandler {
     let details: Record<string, unknown> | undefined;
     let upstreamRequestId: string | undefined;
     const shouldAttachVerboseDetails =
-      (error instanceof ProxyError &&
-        error.statusCode === 502 &&
-        error.message.startsWith("FAKE_200_")) ||
+      (error instanceof ProxyError && error.message.startsWith("FAKE_200_")) ||
       isEmptyResponseError(error);
 
     if (shouldAttachVerboseDetails) {
@@ -264,6 +262,10 @@ export class ProxyErrorHandler {
             upstreamError: {
               kind: "fake_200",
               code: error.message,
+              statusCode: error.statusCode,
+              statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+              statusCodeInferenceMatcherId:
+                error.upstreamError?.statusCodeInferenceMatcherId ?? null,
               clientSafeMessage: error.getClientSafeMessage(),
               rawBody,
               rawBodyTruncated: error.upstreamError?.rawBodyTruncated ?? false,

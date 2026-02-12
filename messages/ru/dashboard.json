@@ -253,6 +253,9 @@
         "jsonMessageKeywordMatch": "В JSON `message` содержит слово \"error\" (эвристика)",
         "unknown": "Тело ответа указывает на ошибку"
       },
+      "statusCodeInferredBadge": "Предположено",
+      "statusCodeInferredTooltip": "Этот код состояния выведен по содержимому тела ответа (например, fake 200) и может отличаться от HTTP-кода апстрима.",
+      "statusCodeInferredSuffix": "(предп.)",
       "filteredProviders": "Отфильтрованные поставщики",
       "providerChain": {
         "title": "Хронология цепочки решений поставщика",

@@ -136,6 +136,7 @@
     "nthAttempt": "第 {attempt} 次嘗試",
     "provider": "供應商: {provider}",
     "statusCode": "狀態碼: {code}",
+    "statusCodeInferred": "狀態碼（推測）: {code}",
     "error": "錯誤: {error}",
     "requestDuration": "請求耗時: {duration}ms",
     "requestDurationSeconds": "請求耗時: {duration}s",

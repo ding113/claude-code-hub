@@ -96,7 +96,8 @@ function getItemStatus(item: ProviderChainItem): {
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
     item.reason === "resource_not_found" ||
-    item.reason === "endpoint_pool_exhausted"
+    item.reason === "endpoint_pool_exhausted" ||
+    item.reason === "vendor_type_all_timeout"
   ) {
     return {
       icon: XCircle,
@@ -116,13 +117,6 @@ function getItemStatus(item: ProviderChainItem): {
       icon: AlertTriangle,
       color: "text-orange-600",
       bgColor: "bg-orange-50 dark:bg-orange-950/30",
-    };
-  }
-  if (item.reason === "endpoint_pool_exhausted" || item.reason === "vendor_type_all_timeout") {
-    return {
-      icon: XCircle,
-      color: "text-rose-600",
-      bgColor: "bg-rose-50 dark:bg-rose-950/30",
     };
   }
   return {
@@ -173,6 +167,7 @@ export function ProviderChainPopover({
       (item) => item.reason === "session_reuse" || item.selectionMethod === "session_reuse"
     );
     const sessionReuseContext = sessionReuseItem?.decisionContext;
+    const singleRequestItem = chain.find(isActualRequest);
 
     return (
       <div className={`${maxWidthClass} min-w-0 w-full`}>
@@ -195,6 +190,30 @@ export function ProviderChainPopover({
               <div className="space-y-2">
                 {/* Provider name */}
                 <div className="font-medium text-xs">{displayName}</div>
+                {singleRequestItem?.statusCode && (
+                  <div className="flex items-center gap-1">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] px-1 py-0",
+                        singleRequestItem.statusCode >= 200 && singleRequestItem.statusCode < 300
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-rose-500 text-rose-600"
+                      )}
+                    >
+                      {singleRequestItem.statusCode}
+                    </Badge>
+                    {singleRequestItem.statusCodeInferred && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1 py-0 border-amber-500 text-amber-700 dark:text-amber-300"
+                        title={t("logs.details.statusCodeInferredTooltip")}
+                      >
+                        {t("logs.details.statusCodeInferredBadge")}
+                      </Badge>
+                    )}
+                  </div>
+                )}
 
                 {/* 注意：假 200 检测发生在 SSE 流式结束后；此时内容已可能透传给客户端。 */}
                 {hasFake200PostStreamFailure && (
@@ -494,6 +513,15 @@ export function ProviderChainPopover({
                         )}
                       >
                         {item.statusCode}
+                      </Badge>
+                    )}
+                    {item.statusCode && item.statusCodeInferred && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1 py-0 border-amber-500 text-amber-700 dark:text-amber-300"
+                        title={t("logs.details.statusCodeInferredTooltip")}
+                      >
+                        {t("logs.details.statusCodeInferredBadge")}
                       </Badge>
                     )}
                     {item.reason && !item.statusCode && (

@@ -87,6 +87,9 @@ const messages = {
         clickStatusCode: "Click status code",
         fake200ForwardedNotice: "Note: payload may have been forwarded",
         fake200DetectedReason: "Detected reason: {reason}",
+        statusCodeInferredBadge: "Inferred",
+        statusCodeInferredTooltip: "This status code is inferred from response body content.",
+        statusCodeInferredSuffix: "(inferred)",
         fake200Reasons: {
           emptyBody: "Empty response body",
           htmlBody: "HTML document returned",
@@ -283,6 +286,25 @@ describe("provider-chain-popover layout", () => {
     );
 
     expect(html).toContain("Note: payload may have been forwarded");
+  });
+
+  test("renders inferred status code badge when statusCodeInferred=true", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "retry_failed",
+            statusCode: 429,
+            statusCodeInferred: true,
+          },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    expect(html).toContain("Inferred");
   });
 
   test("requestCount<=1 branch keeps truncation container shrinkable", () => {

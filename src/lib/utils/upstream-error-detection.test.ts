@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
+import {
+  detectUpstreamErrorFromSseOrJsonText,
+  inferUpstreamErrorStatusCodeFromText,
+} from "@/lib/utils/upstream-error-detection";
 
 describe("detectUpstreamErrorFromSseOrJsonText", () => {
   test("空响应体视为错误", () => {
@@ -252,5 +255,65 @@ describe("detectUpstreamErrorFromSseOrJsonText", () => {
     const sse = ["data: [DONE]", ""].join("\n");
     const res = detectUpstreamErrorFromSseOrJsonText(sse);
     expect(res.isError).toBe(false);
+  });
+});
+
+describe("inferUpstreamErrorStatusCodeFromText", () => {
+  test("空文本不推断状态码", () => {
+    expect(inferUpstreamErrorStatusCodeFromText("")).toBeNull();
+    expect(inferUpstreamErrorStatusCodeFromText("   \n\t  ")).toBeNull();
+  });
+
+  test("可从错误文本中推断 429（rate limit）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText('{"error":"Rate limit exceeded"}')).toEqual({
+      statusCode: 429,
+      matcherId: "rate_limit",
+    });
+  });
+
+  test("可从错误文本中推断 401（invalid api key）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText('{"error":"Invalid API key"}')).toEqual({
+      statusCode: 401,
+      matcherId: "unauthorized",
+    });
+  });
+
+  test("可从错误文本中推断 403（access denied）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText("Access denied")).toEqual({
+      statusCode: 403,
+      matcherId: "forbidden",
+    });
+  });
+
+  test("可从错误文本中推断 402（billing hard limit）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText("billing_hard_limit_reached")).toEqual({
+      statusCode: 402,
+      matcherId: "payment_required",
+    });
+  });
+
+  test("可从错误文本中推断 404（model not found）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText("model not found")).toEqual({
+      statusCode: 404,
+      matcherId: "not_found",
+    });
+  });
+
+  test("可从错误文本中推断 413（payload too large）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText("payload too large")).toEqual({
+      statusCode: 413,
+      matcherId: "payload_too_large",
+    });
+  });
+
+  test("可从错误文本中推断 415（unsupported media type）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText("Unsupported Media Type")).toEqual({
+      statusCode: 415,
+      matcherId: "unsupported_media_type",
+    });
+  });
+
+  test("仅包含泛化 error 字样时不推断（避免误判）", () => {
+    expect(inferUpstreamErrorStatusCodeFromText('{"message":"some error happened"}')).toBeNull();
   });
 });

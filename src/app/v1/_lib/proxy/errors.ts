@@ -41,6 +41,18 @@ export class ProxyError extends Error {
        */
       rawBody?: string;
       rawBodyTruncated?: boolean;
+
+      /**
+       * 标记该 ProxyError 的 statusCode 是否由“响应体内容”推断得出（而非上游真实 HTTP 状态码）。
+       *
+       * 典型场景：上游返回 HTTP 200，但 body 为错误页/错误 JSON（假 200）。此时 CCH 会根据响应体内容推断更贴近语义的 4xx/5xx，
+       * 以便让故障转移/熔断/会话绑定逻辑与“真实上游错误状态码”保持一致。
+       */
+      statusCodeInferred?: boolean;
+      /**
+       * 命中的推断规则 id（仅用于内部调试/审计，不应用于用户展示文案）。
+       */
+      statusCodeInferenceMatcherId?: string;
     }
   ) {
     super(message);
@@ -466,9 +478,9 @@ export class ProxyError extends Error {
    */
   getClientSafeMessage(): string {
     // 注意：一些内部检测/统计用的“错误码”（例如 FAKE_200_*）不适合直接暴露给客户端。
-    // 这里做最小映射：仅在 502 且 message 为 FAKE_200_* 时返回“可读原因说明”，并附带安全的上游片段（若有）。
-    if (this.statusCode === 502 && this.message.startsWith("FAKE_200_")) {
-      // 说明：这些 code 都来自内部的“假 200”检测，代表：HTTP 状态码显示成功，但响应体内容更像错误页/错误 JSON。
+    // 这里做最小映射：当 message 为 FAKE_200_* 时返回“可读原因说明”，并附带安全的上游片段（若有）。
+    if (this.message.startsWith("FAKE_200_")) {
+      // 说明：这些 code 都来自内部的“假 200”检测，代表：上游返回 HTTP 200，但响应体内容更像错误页/错误 JSON。
       // 我们需要：
       // 1) 给用户清晰的错误原因（避免只看到一个内部 code）；
       // 2) 不泄露内部错误码/供应商名称；
@@ -476,19 +488,23 @@ export class ProxyError extends Error {
       const reason = (() => {
         switch (this.message) {
           case "FAKE_200_EMPTY_BODY":
-            return "Upstream returned a successful HTTP status, but the response body was empty.";
+            return "Upstream returned HTTP 200, but the response body was empty.";
           case "FAKE_200_HTML_BODY":
-            return "Upstream returned a successful HTTP status, but the response body looks like an HTML document (likely an error page).";
+            return "Upstream returned HTTP 200, but the response body looks like an HTML document (likely an error page).";
           case "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY":
-            return "Upstream returned a successful HTTP status, but the JSON body contains a non-empty `error.message`.";
+            return "Upstream returned HTTP 200, but the JSON body contains a non-empty `error.message`.";
           case "FAKE_200_JSON_ERROR_NON_EMPTY":
-            return "Upstream returned a successful HTTP status, but the JSON body contains a non-empty `error` field.";
+            return "Upstream returned HTTP 200, but the JSON body contains a non-empty `error` field.";
           case "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH":
-            return "Upstream returned a successful HTTP status, but the JSON `message` suggests an error (heuristic).";
+            return "Upstream returned HTTP 200, but the JSON `message` suggests an error (heuristic).";
           default:
-            return "Upstream returned a successful HTTP status, but the response body indicates an error.";
+            return "Upstream returned HTTP 200, but the response body indicates an error.";
         }
       })();
+
+      const inferredNote = this.upstreamError?.statusCodeInferred
+        ? ` Inferred HTTP status: ${this.statusCode}.`
+        : "";
 
       const detail = this.upstreamError?.body?.trim();
       if (detail) {
@@ -507,10 +523,10 @@ export class ProxyError extends Error {
           .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
           .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b/giu, "[REDACTED_KEY]")
           .replace(/\bAIza[0-9A-Za-z_-]{16,}\b/g, "[REDACTED_KEY]");
-        return `${reason} Upstream detail: ${safe}`;
+        return `${reason}${inferredNote} Upstream detail: ${safe}`;
       }
 
-      return reason;
+      return `${reason}${inferredNote}`;
     }
 
     return this.message;

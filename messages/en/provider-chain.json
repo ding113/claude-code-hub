@@ -136,6 +136,7 @@
     "nthAttempt": "Attempt {attempt}",
     "provider": "Provider: {provider}",
     "statusCode": "Status Code: {code}",
+    "statusCodeInferred": "Status Code (inferred): {code}",
     "error": "Error: {error}",
     "requestDuration": "Request Duration: {duration}ms",
     "requestDurationSeconds": "Request Duration: {duration}s",

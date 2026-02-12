@@ -466,10 +466,10 @@ export function LogicTraceTab({
                 subtitle={
                   isSessionReuse
                     ? item.statusCode
-                      ? `HTTP ${item.statusCode}`
+                      ? `HTTP ${item.statusCode}${item.statusCodeInferred ? ` ${t("statusCodeInferredSuffix")}` : ""}`
                       : item.name
                     : item.statusCode
-                      ? `HTTP ${item.statusCode}`
+                      ? `HTTP ${item.statusCode}${item.statusCodeInferred ? ` ${t("statusCodeInferredSuffix")}` : ""}`
                       : item.reason
                         ? tChain(`reasons.${item.reason}`)
                         : undefined

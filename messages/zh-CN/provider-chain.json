@@ -136,6 +136,7 @@
     "nthAttempt": "第 {attempt} 次尝试",
     "provider": "供应商: {provider}",
     "statusCode": "状态码: {code}",
+    "statusCodeInferred": "状态码（推测）: {code}",
     "error": "错误: {error}",
     "requestDuration": "请求耗时: {duration}ms",
     "requestDurationSeconds": "请求耗时: {duration}s",

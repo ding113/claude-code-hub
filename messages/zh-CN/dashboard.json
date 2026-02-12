@@ -253,6 +253,9 @@
         "jsonMessageKeywordMatch": "JSON message 字段包含 \"error\"（启发式）",
         "unknown": "响应体内容指示错误"
       },
+      "statusCodeInferredBadge": "推测",
+      "statusCodeInferredTooltip": "该状态码根据响应体内容推断（例如假200），可能与上游真实 HTTP 状态码不同。",
+      "statusCodeInferredSuffix": "(推测)",
       "filteredProviders": "被过滤的供应商",
       "providerChain": {
         "title": "供应商决策链时间线",

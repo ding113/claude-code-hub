@@ -183,7 +183,7 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
     ttfbMs: null,
     getRequestSequence: () => 1,
     addProviderToChain: function (
-      this: ProxySession & { providerChain: unknown[] },
+      this: ProxySession & { providerChain: Record<string, unknown>[] },
       prov: {
         id: number;
         name: string;
@@ -193,7 +193,8 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
         costMultiplier: number;
         groupTag: string;
         providerVendorId?: string;
-      }
+      },
+      metadata?: Record<string, unknown>
     ) {
       this.providerChain.push({
         id: prov.id,
@@ -204,7 +205,11 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
         weight: prov.weight,
         costMultiplier: prov.costMultiplier,
         groupTag: prov.groupTag,
-        timestamp: Date.now(),
+        timestamp:
+          typeof metadata?.timestamp === "number" && Number.isFinite(metadata.timestamp)
+            ? metadata.timestamp
+            : Date.now(),
+        ...(metadata ?? {}),
       });
     },
   });
@@ -353,6 +358,17 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+
+    const chain = session.getProviderChain();
+    expect(
+      chain.some(
+        (item) =>
+          item.id === 1 &&
+          item.reason === "retry_failed" &&
+          item.statusCode === 401 &&
+          item.statusCodeInferred === true
+      )
+    ).toBe(true);
   });
 
   it("non-200 HTTP status should call recordFailure but NOT recordEndpointFailure", async () => {

@@ -32,6 +32,22 @@ export type UpstreamErrorDetectionResult =
       detail?: string;
     };
 
+/**
+ * 基于“响应体文本内容”的状态码推断结果。
+ *
+ * 设计目标（偏保守）：
+ * - 仅用于“假 200”场景：上游返回 HTTP 200，但 body 明显是错误页/错误 JSON；
+ * - 用于把内部结算/熔断/故障转移的 statusCode 调整为更贴近真实错误语义的 4xx/5xx；
+ * - 若未命中任何规则，应保持调用方既有默认行为（通常回退为 502）。
+ */
+export type UpstreamErrorStatusInferenceResult = {
+  statusCode: number;
+  /**
+   * 命中的规则 id（用于内部审计/调试；不应作为用户展示文案）。
+   */
+  matcherId: string;
+};
+
 type DetectionOptions = {
   /**
    * 仅对小体积 JSON 启用 message 关键字检测，避免误判与无谓开销。
@@ -68,6 +84,122 @@ const MAY_HAVE_JSON_MESSAGE_KEY = /"message"\s*:/;
 const HTML_DOC_SNIFF_MAX_CHARS = 1024;
 const HTML_DOCTYPE_RE = /^<!doctype\s+html[\s>]/i;
 const HTML_HTML_TAG_RE = /^<html[\s>]/i;
+
+// 状态码推断：为避免在极端大响应体上执行正则带来额外开销，仅取前缀做匹配。
+// 说明：对“假 200”错误页/错误 JSON 来说，关键错误信息通常会出现在前段。
+const STATUS_INFERENCE_MAX_CHARS = 64 * 1024;
+
+// 注意：这些正则只用于“假 200”场景，且仅在 detectUpstreamErrorFromSseOrJsonText 已判定 isError=true 时才会被调用。
+// 因此允许包含少量“关键词启发式”，但仍应尽量避免过宽匹配，降低误判导致“错误码误推断”的概率。
+const ERROR_STATUS_MATCHERS: Array<{ statusCode: number; matcherId: string; re: RegExp }> = [
+  {
+    statusCode: 429,
+    matcherId: "rate_limit",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+429\b|\b429\s+too\s+many\s+requests\b|\btoo\s+many\s+requests\b|\brate\s*limit(?:ed|ing)?\b|\bthrottl(?:e|ed|ing)\b|\bretry-after\b|\bRESOURCE_EXHAUSTED\b|\bRequestLimitExceeded\b|\bThrottling(?:Exception)?\b|\bError\s*1015\b|超出频率|请求过于频繁|限流|稍后重试)/iu,
+  },
+  {
+    statusCode: 402,
+    matcherId: "payment_required",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+402\b|\bpayment\s+required\b|\binsufficient\s+(?:balance|funds|credits)\b|\b(?:out\s+of|no)\s+credits\b|\binsufficient_balance\b|\bbilling_hard_limit_reached\b|\bcard\s+(?:declined|expired)\b|\bpayment\s+(?:method|failed)\b|余额不足|欠费|请充值|支付(?:失败|方式))/iu,
+  },
+  {
+    statusCode: 401,
+    matcherId: "unauthorized",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+401\b|\bunauthori(?:sed|zed)\b|\bunauthenticated\b|\bauthentication\s+failed\b|\b(?:invalid|incorrect|missing)\s+api[-_ ]?key\b|\binvalid\s+token\b|\bexpired\s+token\b|\bsignature\s+(?:invalid|mismatch)\b|\bUNAUTHENTICATED\b|未授权|鉴权失败|密钥无效|token\s*过期)/iu,
+  },
+  {
+    statusCode: 403,
+    matcherId: "forbidden",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+403\b|\bforbidden\b|\bpermission\s+denied\b|\baccess\s+denied\b|\bnot\s+allowed\b|\baccount\s+(?:disabled|suspended|banned)\b|\bnot\s+whitelisted\b|\bPERMISSION_DENIED\b|\bAccessDenied(?:Exception)?\b|\bError\s*1020\b|\b(?:region|country)\b[\s\S]{0,40}\b(?:not\s+supported|blocked)\b|地区不支持|禁止访问|无权限|权限不足|账号被封|地区(?:限制|屏蔽))/iu,
+  },
+  {
+    statusCode: 404,
+    matcherId: "not_found",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+404\b|\bnot\s+found\b|\b(?:model|deployment|endpoint|resource)\s+not\s+found\b|\bunknown\s+model\b|\bdoes\s+not\s+exist\b|\bNOT_FOUND\b|\bResourceNotFoundException\b|未找到|不存在|模型不存在)/iu,
+  },
+  {
+    statusCode: 413,
+    matcherId: "payload_too_large",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+413\b|\bpayload\s+too\s+large\b|\brequest\s+entity\s+too\s+large\b|\bbody\s+too\s+large\b|\bContent-Length\b[\s\S]{0,40}\btoo\s+large\b|\bexceed(?:s|ed)?\b[\s\S]{0,40}\b(?:max(?:imum)?|limit)\b[\s\S]{0,40}\b(?:size|length)\b|请求体过大|内容过大|超过最大)/iu,
+  },
+  {
+    statusCode: 415,
+    matcherId: "unsupported_media_type",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+415\b|\bunsupported\s+media\s+type\b|\binvalid\s+content-type\b|\bContent-Type\b[\s\S]{0,40}\b(?:must\s+be|required)\b|不支持的媒体类型|Content-Type\s*错误)/iu,
+  },
+  {
+    statusCode: 409,
+    matcherId: "conflict",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+409\b|\bconflict\b|\bidempotency(?:-key)?\b|\bABORTED\b|冲突|幂等)/iu,
+  },
+  {
+    statusCode: 422,
+    matcherId: "unprocessable_entity",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+422\b|\bunprocessable\s+entity\b|\bINVALID_ARGUMENT\b[\s\S]{0,40}\bvalidation\b|\bschema\s+validation\b|实体无法处理)/iu,
+  },
+  {
+    statusCode: 408,
+    matcherId: "request_timeout",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+408\b|\brequest\s+timeout\b|请求\s*超时)/iu,
+  },
+  {
+    statusCode: 451,
+    matcherId: "legal_restriction",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+451\b|\bunavailable\s+for\s+legal\s+reasons\b|\bexport\s+control\b|\bsanctions?\b|法律原因不可用|合规限制|出口管制)/iu,
+  },
+  {
+    statusCode: 503,
+    matcherId: "service_unavailable",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+503\b|\bservice\s+unavailable\b|\boverloaded\b|\bserver\s+is\s+busy\b|\btry\s+again\s+later\b|\btemporarily\s+unavailable\b|\bmaintenance\b|\bUNAVAILABLE\b|\bServiceUnavailableException\b|\bError\s*521\b|服务不可用|过载|系统繁忙|维护中)/iu,
+  },
+  {
+    statusCode: 504,
+    matcherId: "gateway_timeout",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+504\b|\bgateway\s+timeout\b|\bupstream\b[\s\S]{0,40}\btim(?:e|ed)\s*out\b|\bDEADLINE_EXCEEDED\b|\bError\s*522\b|\bError\s*524\b|网关超时|上游超时)/iu,
+  },
+  {
+    statusCode: 500,
+    matcherId: "internal_server_error",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+500\b|\binternal\s+server\s+error\b|\bInternalServerException\b|\bINTERNAL\b|内部错误|服务器错误)/iu,
+  },
+  {
+    statusCode: 400,
+    matcherId: "bad_request",
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+400\b|\bbad\s+request\b|\bINVALID_ARGUMENT\b|\bjson\s+parse\b|\binvalid\s+json\b|\bunexpected\s+token\b|无效请求|格式错误|JSON\s*解析失败)/iu,
+  },
+];
+
+/**
+ * 从上游响应体文本中推断一个“更贴近错误语义”的 HTTP 状态码（用于假200修正）。
+ *
+ * 注意：
+ * - 该函数不会判断“是否为错误”，只做“状态码推断”；调用方应确保仅在已判定错误时才调用。
+ * - 未命中时返回 null，调用方应保持现有默认错误码（通常为 502）。
+ */
+export function inferUpstreamErrorStatusCodeFromText(
+  text: string
+): UpstreamErrorStatusInferenceResult | null {
+  let trimmed = text.trim();
+  if (!trimmed) return null;
+
+  // 与 detectUpstreamErrorFromSseOrJsonText 保持一致：移除 UTF-8 BOM，避免关键字匹配失效。
+  if (trimmed.charCodeAt(0) === 0xfeff) {
+    trimmed = trimmed.slice(1).trimStart();
+  }
+
+  const limited =
+    trimmed.length > STATUS_INFERENCE_MAX_CHARS
+      ? trimmed.slice(0, STATUS_INFERENCE_MAX_CHARS)
+      : trimmed;
+
+  for (const matcher of ERROR_STATUS_MATCHERS) {
+    if (matcher.re.test(limited)) {
+      return { statusCode: matcher.statusCode, matcherId: matcher.matcherId };
+    }
+  }
+
+  return null;
+}
 
 /**
  * 判断文本是否“很像”一个完整的 HTML 文档（强信号）。

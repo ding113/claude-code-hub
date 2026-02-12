@@ -129,6 +129,16 @@ function translateCircuitState(state: string | undefined, t: (key: string) => st
   }
 }
 
+function formatTimelineStatusCode(
+  item: ProviderChainItem,
+  code: number,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  return item.statusCodeInferred
+    ? t("timeline.statusCodeInferred", { code })
+    : t("timeline.statusCode", { code });
+}
+
 /**
  * 辅助函数：获取错误码含义
  */
@@ -457,7 +467,7 @@ export function formatProviderTimeline(
       if (item.errorDetails?.provider) {
         const p = item.errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
-        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
 
         // 计算请求耗时
@@ -476,7 +486,7 @@ export function formatProviderTimeline(
       } else {
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
         if (item.statusCode) {
-          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+          timeline += `${formatTimelineStatusCode(item, item.statusCode, t)}\n`;
         }
         timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
       }
@@ -498,7 +508,7 @@ export function formatProviderTimeline(
       if (item.errorDetails?.provider) {
         const p = item.errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
-        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
 
         // 计算请求耗时
@@ -545,7 +555,7 @@ export function formatProviderTimeline(
         // 降级：使用 errorMessage
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
         if (item.statusCode) {
-          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+          timeline += `${formatTimelineStatusCode(item, item.statusCode, t)}\n`;
         }
         timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
 
@@ -633,12 +643,12 @@ export function formatProviderTimeline(
       if (item.errorDetails?.provider) {
         const p = item.errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
-        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
       } else {
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
         if (item.statusCode) {
-          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+          timeline += `${formatTimelineStatusCode(item, item.statusCode, t)}\n`;
         }
         timeline += `${t("timeline.error", { error: item.errorMessage || t("timeline.unknown") })}\n`;
       }

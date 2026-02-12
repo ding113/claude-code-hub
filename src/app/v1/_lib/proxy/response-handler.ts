@@ -11,7 +11,10 @@ import { SessionTracker } from "@/lib/session-tracker";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { parseSSEData } from "@/lib/utils/sse";
-import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
+import {
+  detectUpstreamErrorFromSseOrJsonText,
+  inferUpstreamErrorStatusCodeFromText,
+} from "@/lib/utils/upstream-error-detection";
 import {
   updateMessageRequestCost,
   updateMessageRequestDetails,
@@ -91,7 +94,8 @@ type FinalizeDeferredStreamingResult = {
  *   - 如果内容看起来是上游错误 JSON（假 200），则：
  *     - 计入熔断器失败；
  *     - 不更新 session 智能绑定（避免把会话粘到坏 provider）；
- *     - 内部状态码改为 502（只影响统计与后续重试选择，不影响本次客户端响应）。
+ *     - 内部状态码改为“推断得到的 4xx/5xx”（未命中则回退 502），
+ *       仅影响统计与后续重试选择，不影响本次客户端响应。
  *   - 如果流正常结束且未命中错误判定，则按成功结算并更新绑定/熔断/endpoint 成功率。
  *
  * @param streamEndedNormally - 必须是 reader 读到 done=true 的“自然结束”；超时/中断等异常结束由其它逻辑处理。
@@ -122,12 +126,21 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     : ({ isError: false } as const);
 
   // “内部结算用”的状态码（不会改变客户端实际 HTTP 状态码）。
-  // - 假 200：映射为 502，确保内部统计/熔断/会话绑定把它当作失败。
+  // - 假 200：优先映射为“推断得到的 4xx/5xx”（未命中则回退 502），确保内部统计/熔断/会话绑定把它当作失败。
   // - 未自然结束：也应映射为失败（避免把中断/部分流误记为 200 completed）。
   let effectiveStatusCode: number;
   let errorMessage: string | null;
+  let statusCodeInferred = false;
+  let statusCodeInferenceMatcherId: string | undefined;
   if (detected.isError) {
-    effectiveStatusCode = 502;
+    const inferred = inferUpstreamErrorStatusCodeFromText(allContent);
+    if (inferred) {
+      effectiveStatusCode = inferred.statusCode;
+      statusCodeInferred = true;
+      statusCodeInferenceMatcherId = inferred.matcherId;
+    } else {
+      effectiveStatusCode = 502;
+    }
     errorMessage = detected.code;
   } else if (!streamEndedNormally) {
     effectiveStatusCode = clientAborted ? 499 : 502;
@@ -233,6 +246,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       providerName: meta.providerName,
       upstreamStatusCode: meta.upstreamStatusCode,
       effectiveStatusCode,
+      statusCodeInferred,
+      statusCodeInferenceMatcherId: statusCodeInferenceMatcherId ?? null,
       code: detected.code,
       detail: detected.detail ?? null,
     });
@@ -255,14 +270,16 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     // the error is in the response content, not endpoint connectivity.
 
     // 记录到决策链（用于日志展示与 DB 持久化）。
-    // 注意：这里用 effectiveStatusCode（502）而不是 upstreamStatusCode（200），
-    // 以便让内部链路明确显示这是一次失败（否则会被误读为成功）。
+    // 注意：这里用 effectiveStatusCode（推断得到的 4xx/5xx，或回退 502）
+    // 而不是 upstreamStatusCode（200），以便让内部链路明确显示这是一次失败
+    // （否则会被误读为成功）。
     session.addProviderToChain(providerForChain, {
       endpointId: meta.endpointId,
       endpointUrl: meta.endpointUrl,
       reason: "retry_failed",
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
+      statusCodeInferred,
       errorMessage: detected.code,
     });
 
@@ -2539,7 +2556,8 @@ async function updateRequestCostFromUsage(
  * 统一的请求统计处理方法
  * 用于消除 Gemini 透传、普通非流式、普通流式之间的重复统计逻辑
  *
- * @param statusCode - 内部结算状态码（可能与客户端实际收到的 HTTP 状态不同，例如“假 200”会被映射为 502）
+ * @param statusCode - 内部结算状态码（可能与客户端实际收到的 HTTP 状态不同，例如“假 200”会被推断并映射为更贴近语义的 4xx/5xx；
+ *                   未命中推断规则时回退为 502）
  * @param errorMessage - 可选的内部错误原因（用于把假 200/解析失败等信息写入 DB 与监控）
  */
 export async function finalizeRequestStats(

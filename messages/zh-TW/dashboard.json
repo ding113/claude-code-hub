@@ -253,6 +253,9 @@
         "jsonMessageKeywordMatch": "JSON message 欄位包含 \"error\"（啟發式）",
         "unknown": "回應本文內容顯示錯誤"
       },
+      "statusCodeInferredBadge": "推測",
+      "statusCodeInferredTooltip": "此狀態碼係根據回應內容推測（例如假200），可能與上游真實 HTTP 狀態碼不同。",
+      "statusCodeInferredSuffix": "（推測）",
       "filteredProviders": "被過濾的供應商",
       "providerChain": {
         "title": "供應商決策鏈時間軸",

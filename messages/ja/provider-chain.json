@@ -136,6 +136,7 @@
     "nthAttempt": "試行{attempt}",
     "provider": "プロバイダー: {provider}",
     "statusCode": "ステータスコード: {code}",
+    "statusCodeInferred": "ステータスコード（推定）: {code}",
     "error": "エラー: {error}",
     "requestDuration": "リクエスト時間: {duration}ms",
     "requestDurationSeconds": "リクエスト時間: {duration}s",

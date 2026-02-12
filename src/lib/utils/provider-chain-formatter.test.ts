@@ -447,6 +447,15 @@ describe("resource_not_found", () => {
       expect(timeline).toContain("timeline.resourceNotFoundNote");
     });
 
+    test("renders inferred status code label when statusCodeInferred=true", () => {
+      const chain: ProviderChainItem[] = [{ ...baseNotFoundItem, statusCodeInferred: true }];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(timeline).toContain("timeline.resourceNotFoundFailed [attempt=1]");
+      expect(timeline).toContain("timeline.statusCodeInferred [code=404]");
+      expect(timeline).toContain("timeline.resourceNotFoundNote");
+    });
+
     test("degrades gracefully when errorDetails.provider is missing", () => {
       const chain: ProviderChainItem[] = [
         {

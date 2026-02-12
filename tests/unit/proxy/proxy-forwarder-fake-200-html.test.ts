@@ -369,6 +369,65 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
 
+  test("假200 JSON error 命中 rate limit 关键字时，应推断为 429 并在决策链中标记为推断", async () => {
+    const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
+    const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });
+
+    const session = createSession();
+    session.setProvider(provider1);
+
+    mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+    const doForward = vi.spyOn(ProxyForwarder as any, "doForward");
+
+    const jsonErrorBody = JSON.stringify({ error: "Rate limit exceeded" });
+    const okJson = JSON.stringify({ type: "message", content: [{ type: "text", text: "ok" }] });
+
+    doForward.mockResolvedValueOnce(
+      new Response(jsonErrorBody, {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(jsonErrorBody.length),
+        },
+      })
+    );
+
+    doForward.mockResolvedValueOnce(
+      new Response(okJson, {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(okJson.length),
+        },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+    expect(await response.text()).toContain("ok");
+
+    expect(mocks.recordFailure).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ message: "FAKE_200_JSON_ERROR_NON_EMPTY" })
+    );
+
+    const failure = mocks.recordFailure.mock.calls[0]?.[1];
+    expect(failure).toBeInstanceOf(ProxyError);
+    expect((failure as ProxyError).statusCode).toBe(429);
+    expect((failure as ProxyError).upstreamError?.statusCodeInferred).toBe(true);
+
+    const chain = session.getProviderChain();
+    expect(
+      chain.some(
+        (item) =>
+          item.id === 1 &&
+          item.reason === "retry_failed" &&
+          item.statusCode === 429 &&
+          item.statusCodeInferred === true
+      )
+    ).toBe(true);
+  });
+
   test("200 + 非法 Content-Length 时应按缺失处理，避免漏检 HTML 假200", async () => {
     const provider1 = createProvider({ id: 1, name: "p1", key: "k1", maxRetryAttempts: 1 });
     const provider2 = createProvider({ id: 2, name: "p2", key: "k2", maxRetryAttempts: 1 });

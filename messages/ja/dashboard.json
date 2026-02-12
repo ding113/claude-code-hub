@@ -253,6 +253,9 @@
         "jsonMessageKeywordMatch": "JSON の `message` に \"error\" が含まれています (ヒューリスティック)",
         "unknown": "レスポンス本文がエラーを示しています"
       },
+      "statusCodeInferredBadge": "推定",
+      "statusCodeInferredTooltip": "このステータスコードは応答本文の内容(例: fake 200)から推定されており、上流の HTTP ステータスと異なる場合があります。",
+      "statusCodeInferredSuffix": "(推定)",
       "filteredProviders": "フィルタされたプロバイダー",
       "providerChain": {
         "title": "プロバイダー決定チェーンタイムライン",

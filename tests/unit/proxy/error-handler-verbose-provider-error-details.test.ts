@@ -53,17 +53,19 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
 
   test("verboseProviderError=false 时，不应附带 fake-200 raw body/details", async () => {
     const session = createSession();
-    const err = new ProxyError("FAKE_200_JSON_ERROR_NON_EMPTY", 502, {
+    const err = new ProxyError("FAKE_200_JSON_ERROR_NON_EMPTY", 429, {
       body: "sanitized",
       providerId: 1,
       providerName: "p1",
       requestId: "req_123",
       rawBody: '{"error":"boom"}',
       rawBodyTruncated: false,
+      statusCodeInferred: true,
+      statusCodeInferenceMatcherId: "rate_limit",
     });
 
     const res = await ProxyErrorHandler.handle(session, err);
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(429);
 
     const body = await res.json();
     expect(body.error.details).toBeUndefined();
@@ -74,17 +76,19 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
     mocks.getCachedSystemSettings.mockResolvedValue({ verboseProviderError: true } as any);
 
     const session = createSession();
-    const err = new ProxyError("FAKE_200_HTML_BODY", 502, {
+    const err = new ProxyError("FAKE_200_HTML_BODY", 429, {
       body: "redacted snippet",
       providerId: 1,
       providerName: "p1",
       requestId: "req_123",
       rawBody: "<!doctype html><html><body>blocked</body></html>",
       rawBodyTruncated: false,
+      statusCodeInferred: true,
+      statusCodeInferenceMatcherId: "rate_limit",
     });
 
     const res = await ProxyErrorHandler.handle(session, err);
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(429);
 
     const body = await res.json();
     expect(body.request_id).toBe("req_123");
@@ -92,6 +96,9 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
       upstreamError: {
         kind: "fake_200",
         code: "FAKE_200_HTML_BODY",
+        statusCode: 429,
+        statusCodeInferred: true,
+        statusCodeInferenceMatcherId: "rate_limit",
         clientSafeMessage: expect.any(String),
         rawBody: "<!doctype html><html><body>blocked</body></html>",
         rawBodyTruncated: false,
@@ -103,7 +110,7 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
     mocks.getCachedSystemSettings.mockResolvedValue({ verboseProviderError: true } as any);
 
     const session = createSession();
-    const err = new ProxyError("FAKE_200_HTML_BODY", 502, {
+    const err = new ProxyError("FAKE_200_HTML_BODY", 429, {
       body: "redacted snippet",
       providerId: 1,
       providerName: "p1",
@@ -111,10 +118,12 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
       rawBody:
         "<!doctype html><html><body>Authorization: Bearer abc123 sk-1234567890abcdef1234567890 test@example.com</body></html>",
       rawBodyTruncated: false,
+      statusCodeInferred: true,
+      statusCodeInferenceMatcherId: "rate_limit",
     });
 
     const res = await ProxyErrorHandler.handle(session, err);
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(429);
 
     const body = await res.json();
     expect(body.request_id).toBe("req_123");
@@ -155,13 +164,15 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
     mocks.getErrorOverrideAsync.mockResolvedValue({ response: null, statusCode: 418 });
 
     const session = createSession();
-    const err = new ProxyError("FAKE_200_JSON_ERROR_NON_EMPTY", 502, {
+    const err = new ProxyError("FAKE_200_JSON_ERROR_NON_EMPTY", 429, {
       body: "sanitized",
       providerId: 1,
       providerName: "p1",
       requestId: "req_123",
       rawBody: '{"error":"boom"}',
       rawBodyTruncated: false,
+      statusCodeInferred: true,
+      statusCodeInferenceMatcherId: "rate_limit",
     });
 
     const res = await ProxyErrorHandler.handle(session, err);
