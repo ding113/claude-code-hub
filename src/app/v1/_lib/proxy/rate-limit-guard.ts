@@ -136,6 +136,9 @@ export class ProxyRateLimitGuard {
     // 理论上 session guard 一定会分配 sessionId；这里兜底生成，避免降级回非原子路径
     const ensuredSessionId = session.sessionId ?? SessionManager.generateSessionId();
     if (!session.sessionId) {
+      logger.warn(
+        `[RateLimit] SessionId missing in rate-limit-guard, using fallback: key=${key.id}, user=${user.id} (potential atomicity gap)`
+      );
       session.setSessionId(ensuredSessionId);
     }
 
