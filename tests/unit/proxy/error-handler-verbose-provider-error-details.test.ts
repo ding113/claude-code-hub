@@ -99,6 +99,36 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
     });
   });
 
+  test("verboseProviderError=true 时，rawBody 应做基础脱敏（避免泄露 token/key）", async () => {
+    mocks.getCachedSystemSettings.mockResolvedValue({ verboseProviderError: true } as any);
+
+    const session = createSession();
+    const err = new ProxyError("FAKE_200_HTML_BODY", 502, {
+      body: "redacted snippet",
+      providerId: 1,
+      providerName: "p1",
+      requestId: "req_123",
+      rawBody:
+        '<!doctype html><html><body>Authorization: Bearer abc123 sk-1234567890abcdef1234567890 test@example.com</body></html>',
+      rawBodyTruncated: false,
+    });
+
+    const res = await ProxyErrorHandler.handle(session, err);
+    expect(res.status).toBe(502);
+
+    const body = await res.json();
+    expect(body.request_id).toBe("req_123");
+    expect(body.error.details.upstreamError.kind).toBe("fake_200");
+
+    const rawBody = body.error.details.upstreamError.rawBody as string;
+    expect(rawBody).toContain("Bearer [REDACTED]");
+    expect(rawBody).toContain("[REDACTED_KEY]");
+    expect(rawBody).toContain("[EMAIL]");
+    expect(rawBody).not.toContain("Bearer abc123");
+    expect(rawBody).not.toContain("sk-1234567890abcdef1234567890");
+    expect(rawBody).not.toContain("test@example.com");
+  });
+
   test("verboseProviderError=true 时，空响应错误也应返回详细报告（rawBody 为空字符串）", async () => {
     mocks.getCachedSystemSettings.mockResolvedValue({ verboseProviderError: true } as any);
 

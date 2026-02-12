@@ -7,6 +7,7 @@ import {
 } from "@/lib/error-override-validator";
 import { logger } from "@/lib/logger";
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
+import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
 import { updateMessageRequestDetails, updateMessageRequestDuration } from "@/repository/message";
 import { attachSessionIdToErrorResponse } from "./error-session-id";
 import {
@@ -240,7 +241,8 @@ export class ProxyErrorHandler {
     // verboseProviderError（系统设置）开启时：对“假 200/空响应”等上游异常返回更详细的报告，便于排查。
     // 注意：
     // - 该逻辑放在 error override 之后：确保优先级更低，不覆盖用户自定义覆写。
-    // - 仅回传在内存中短暂保留的原文（rawBody），不写入数据库/决策链，避免泄露与持久化污染。
+    // - rawBody 仅用于本次错误响应回传（受系统设置控制），不写入数据库/决策链；
+    // - 出于安全考虑，这里会对 rawBody 做基础脱敏（Bearer/key/JWT/email 等），避免上游错误页意外回显敏感信息。
     let details: Record<string, unknown> | undefined;
     let upstreamRequestId: string | undefined;
     const shouldAttachVerboseDetails =
@@ -254,12 +256,16 @@ export class ProxyErrorHandler {
       if (settings.verboseProviderError) {
         if (error instanceof ProxyError) {
           upstreamRequestId = error.upstreamError?.requestId;
+          const rawBody =
+            typeof error.upstreamError?.rawBody === "string" && error.upstreamError.rawBody
+              ? sanitizeErrorTextForDetail(error.upstreamError.rawBody)
+              : error.upstreamError?.rawBody;
           details = {
             upstreamError: {
               kind: "fake_200",
               code: error.message,
               clientSafeMessage: error.getClientSafeMessage(),
-              rawBody: error.upstreamError?.rawBody,
+              rawBody,
               rawBodyTruncated: error.upstreamError?.rawBodyTruncated ?? false,
             },
           };

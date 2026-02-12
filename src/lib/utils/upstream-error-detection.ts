@@ -104,7 +104,7 @@ function hasNonEmptyValue(value: unknown): boolean {
   return true;
 }
 
-function sanitizeErrorTextForDetail(text: string): string {
+export function sanitizeErrorTextForDetail(text: string): string {
   // 注意：这里的目的不是“完美脱敏”，而是尽量降低上游错误信息中意外夹带敏感内容的风险。
   // 若后续发现更多敏感模式，可在不改变检测语义的前提下补充。
   let sanitized = text;
