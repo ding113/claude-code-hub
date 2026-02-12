@@ -1,6 +1,6 @@
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
-import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
+import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
 import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
 import { SessionManager } from "@/lib/session-manager";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
@@ -121,16 +121,13 @@ export class ProxyRateLimitGuard {
 
     // 3. Key 并发 Session（避免创建上游连接）
     // Key 未设置时，继承 User 并发上限（避免 UI/心智模型不一致：User 设置了并发，但 Key 仍显示“无限制”）
-    const effectiveKeyConcurrentLimit = resolveKeyConcurrentSessionLimit(
+    const {
+      effectiveKeyLimit: effectiveKeyConcurrentLimit,
+      normalizedUserLimit: normalizedUserConcurrentLimit,
+    } = resolveKeyUserConcurrentSessionLimits(
       key.limitConcurrentSessions ?? 0,
       user.limitConcurrentSessions
     );
-    const normalizedUserConcurrentLimit =
-      typeof user.limitConcurrentSessions === "number" &&
-      Number.isFinite(user.limitConcurrentSessions) &&
-      user.limitConcurrentSessions > 0
-        ? Math.floor(user.limitConcurrentSessions)
-        : 0;
 
     // 注意：并发 Session 限制必须“原子性检查 + 追踪”，否则会被并发击穿（尤其是多 Key 同时使用时）
     // 理论上 session guard 一定会分配 sessionId；这里兜底生成，避免降级回非原子路径
