@@ -31,9 +31,6 @@ afterEach(() => {
 
 describe("endpoint-circuit-breaker", () => {
   test("达到阈值后应打开熔断；到期后进入 half-open；成功后关闭并清零", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
     vi.resetModules();
 
     let redisState: SavedEndpointCircuitState | null = null;
@@ -45,6 +42,9 @@ describe("endpoint-circuit-breaker", () => {
       redisState = null;
     });
 
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
+    }));
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
     const sendAlertMock = vi.fn(async () => {});
     vi.doMock("@/lib/notification/notifier", () => ({
@@ -55,6 +55,9 @@ describe("endpoint-circuit-breaker", () => {
       saveEndpointCircuitState: saveMock,
       deleteEndpointCircuitState: deleteMock,
     }));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
 
     const {
       isEndpointCircuitOpen,
@@ -73,6 +76,10 @@ describe("endpoint-circuit-breaker", () => {
     expect(openState.circuitState).toBe("open");
     expect(openState.failureCount).toBe(3);
     expect(openState.circuitOpenUntil).toBe(Date.now() + 300000);
+
+    // Prime env module cache: under fake timers, dynamic import() inside isEndpointCircuitOpen
+    // may fail to resolve the vi.doMock unless the module is already in the import cache.
+    await import("@/lib/config/env.schema");
 
     expect(await isEndpointCircuitOpen(1)).toBe(true);
 
@@ -110,14 +117,17 @@ describe("endpoint-circuit-breaker", () => {
   });
 
   test("recordEndpointSuccess: closed 且 failureCount>0 时应清零", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
     vi.resetModules();
 
     const saveMock = vi.fn(async () => {});
 
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
+    }));
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
       loadEndpointCircuitState: vi.fn(async () => null),
       saveEndpointCircuitState: saveMock,
@@ -145,6 +155,9 @@ describe("endpoint-circuit-breaker", () => {
     vi.resetModules();
 
     const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
+    }));
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
     vi.doMock("@/lib/notification/notifier", () => ({
       sendCircuitBreakerAlert: sendAlertMock,
@@ -183,6 +196,9 @@ describe("endpoint-circuit-breaker", () => {
     vi.resetModules();
 
     const sendAlertMock = vi.fn(async () => {});
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
+    }));
     vi.doMock("@/lib/notification/notifier", () => ({
       sendCircuitBreakerAlert: sendAlertMock,
     }));
@@ -229,9 +245,6 @@ describe("endpoint-circuit-breaker", () => {
   });
 
   test("recordEndpointFailure should NOT reset circuitOpenUntil when already open", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
     vi.resetModules();
 
     let redisState: SavedEndpointCircuitState | null = null;
@@ -239,6 +252,9 @@ describe("endpoint-circuit-breaker", () => {
       redisState = state;
     });
 
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
+    }));
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
     vi.doMock("@/lib/notification/notifier", () => ({
       sendCircuitBreakerAlert: vi.fn(async () => {}),
@@ -249,7 +265,10 @@ describe("endpoint-circuit-breaker", () => {
       deleteEndpointCircuitState: vi.fn(async () => {}),
     }));
 
-    const { recordEndpointFailure, isEndpointCircuitOpen } = await import(
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { recordEndpointFailure, isEndpointCircuitOpen, getEndpointHealthInfo } = await import(
       "@/lib/endpoint-circuit-breaker"
     );
 
@@ -257,6 +276,15 @@ describe("endpoint-circuit-breaker", () => {
     await recordEndpointFailure(100, new Error("fail"));
     await recordEndpointFailure(100, new Error("fail"));
     await recordEndpointFailure(100, new Error("fail"));
+
+    // Verify circuit was opened (also serves as async flush before isEndpointCircuitOpen)
+    const { health: healthSnap } = await getEndpointHealthInfo(100);
+    expect(healthSnap.circuitState).toBe("open");
+
+    // Prime the env module cache: under fake timers, the dynamic import("@/lib/config/env.schema")
+    // inside isEndpointCircuitOpen may fail to resolve the mock unless the module is already cached.
+    const envMod = await import("@/lib/config/env.schema");
+    expect(envMod.getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER).toBe(true);
 
     expect(await isEndpointCircuitOpen(100)).toBe(true);
     const originalOpenUntil = redisState!.circuitOpenUntil;
@@ -274,6 +302,9 @@ describe("endpoint-circuit-breaker", () => {
   test("getEndpointCircuitStateSync returns correct state for known and unknown endpoints", async () => {
     vi.resetModules();
 
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
+    }));
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
     vi.doMock("@/lib/notification/notifier", () => ({
       sendCircuitBreakerAlert: vi.fn(async () => {}),
@@ -296,5 +327,166 @@ describe("endpoint-circuit-breaker", () => {
     await recordEndpointFailure(200, new Error("b"));
     await recordEndpointFailure(200, new Error("c"));
     expect(getEndpointCircuitStateSync(200)).toBe("open");
+  });
+
+  describe("ENABLE_ENDPOINT_CIRCUIT_BREAKER disabled", () => {
+    test("isEndpointCircuitOpen returns false when ENABLE_ENDPOINT_CIRCUIT_BREAKER=false", async () => {
+      vi.resetModules();
+
+      vi.doMock("@/lib/config/env.schema", () => ({
+        getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: false }),
+      }));
+      vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+      vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+        loadEndpointCircuitState: vi.fn(async () => null),
+        saveEndpointCircuitState: vi.fn(async () => {}),
+        deleteEndpointCircuitState: vi.fn(async () => {}),
+      }));
+
+      const { isEndpointCircuitOpen } = await import("@/lib/endpoint-circuit-breaker");
+
+      expect(await isEndpointCircuitOpen(1)).toBe(false);
+      expect(await isEndpointCircuitOpen(999)).toBe(false);
+    });
+
+    test("recordEndpointFailure is no-op when disabled", async () => {
+      vi.resetModules();
+
+      const saveMock = vi.fn(async () => {});
+
+      vi.doMock("@/lib/config/env.schema", () => ({
+        getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: false }),
+      }));
+      vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+      vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+        loadEndpointCircuitState: vi.fn(async () => null),
+        saveEndpointCircuitState: saveMock,
+        deleteEndpointCircuitState: vi.fn(async () => {}),
+      }));
+
+      const { recordEndpointFailure } = await import("@/lib/endpoint-circuit-breaker");
+
+      await recordEndpointFailure(1, new Error("boom"));
+      await recordEndpointFailure(1, new Error("boom"));
+      await recordEndpointFailure(1, new Error("boom"));
+
+      expect(saveMock).not.toHaveBeenCalled();
+    });
+
+    test("recordEndpointSuccess is no-op when disabled", async () => {
+      vi.resetModules();
+
+      const saveMock = vi.fn(async () => {});
+
+      vi.doMock("@/lib/config/env.schema", () => ({
+        getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: false }),
+      }));
+      vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+      vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+        loadEndpointCircuitState: vi.fn(async () => null),
+        saveEndpointCircuitState: saveMock,
+        deleteEndpointCircuitState: vi.fn(async () => {}),
+      }));
+
+      const { recordEndpointSuccess } = await import("@/lib/endpoint-circuit-breaker");
+
+      await recordEndpointSuccess(1);
+
+      expect(saveMock).not.toHaveBeenCalled();
+    });
+
+    test("triggerEndpointCircuitBreakerAlert is no-op when disabled", async () => {
+      vi.resetModules();
+
+      const sendAlertMock = vi.fn(async () => {});
+
+      vi.doMock("@/lib/config/env.schema", () => ({
+        getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: false }),
+      }));
+      vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+      vi.doMock("@/lib/notification/notifier", () => ({
+        sendCircuitBreakerAlert: sendAlertMock,
+      }));
+      vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+        loadEndpointCircuitState: vi.fn(async () => null),
+        saveEndpointCircuitState: vi.fn(async () => {}),
+        deleteEndpointCircuitState: vi.fn(async () => {}),
+      }));
+
+      const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
+
+      await triggerEndpointCircuitBreakerAlert(
+        5,
+        3,
+        "2026-01-01T00:05:00.000Z",
+        "connection refused"
+      );
+
+      expect(sendAlertMock).not.toHaveBeenCalled();
+    });
+
+    test("initEndpointCircuitBreaker clears in-memory state and Redis keys when disabled", async () => {
+      vi.resetModules();
+
+      const redisMock = {
+        scan: vi
+          .fn()
+          .mockResolvedValueOnce([
+            "0",
+            ["endpoint_circuit_breaker:state:1", "endpoint_circuit_breaker:state:2"],
+          ]),
+        del: vi.fn(async () => {}),
+      };
+
+      vi.doMock("@/lib/config/env.schema", () => ({
+        getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: false }),
+      }));
+      vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+      vi.doMock("@/lib/redis/client", () => ({
+        getRedisClient: () => redisMock,
+      }));
+      vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+        loadEndpointCircuitState: vi.fn(async () => null),
+        saveEndpointCircuitState: vi.fn(async () => {}),
+        deleteEndpointCircuitState: vi.fn(async () => {}),
+      }));
+
+      const { initEndpointCircuitBreaker } = await import("@/lib/endpoint-circuit-breaker");
+      await initEndpointCircuitBreaker();
+
+      expect(redisMock.scan).toHaveBeenCalled();
+      expect(redisMock.del).toHaveBeenCalledWith(
+        "endpoint_circuit_breaker:state:1",
+        "endpoint_circuit_breaker:state:2"
+      );
+    });
+
+    test("initEndpointCircuitBreaker is no-op when enabled", async () => {
+      vi.resetModules();
+
+      const redisMock = {
+        scan: vi.fn(),
+        del: vi.fn(),
+      };
+
+      vi.doMock("@/lib/config/env.schema", () => ({
+        getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
+      }));
+      vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+      vi.doMock("@/lib/redis/client", () => ({
+        getRedisClient: () => redisMock,
+      }));
+      vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+        loadEndpointCircuitState: vi.fn(async () => null),
+        saveEndpointCircuitState: vi.fn(async () => {}),
+        deleteEndpointCircuitState: vi.fn(async () => {}),
+      }));
+
+      const { initEndpointCircuitBreaker } = await import("@/lib/endpoint-circuit-breaker");
+      await initEndpointCircuitBreaker();
+
+      expect(redisMock.scan).not.toHaveBeenCalled();
+      expect(redisMock.del).not.toHaveBeenCalled();
+    });
   });
 });

@@ -33,7 +33,8 @@ export interface ProviderChainItem {
     | "retry_with_cached_instructions" // Codex instructions 智能重试（缓存）
     | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
     | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
-    | "endpoint_pool_exhausted"; // 端点池耗尽（所有端点熔断或不可用，严格模式阻止降级）
+    | "endpoint_pool_exhausted" // 端点池耗尽（所有端点熔断或不可用，严格模式阻止降级）
+    | "vendor_type_all_timeout"; // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
 
   // === 选择方法（细化） ===
   selectionMethod?:

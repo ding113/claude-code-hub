@@ -38,7 +38,8 @@
     "concurrentLimit": "並發限制",
     "http2Fallback": "HTTP/2 回退",
     "clientError": "客戶端錯誤",
-    "endpointPoolExhausted": "端點池耗盡"
+    "endpointPoolExhausted": "端點池耗盡",
+    "vendorTypeAllTimeout": "供應商類型全端點逾時"
   },
   "reasons": {
     "request_success": "成功",
@@ -50,7 +51,8 @@
     "http2_fallback": "HTTP/2 回退",
     "session_reuse": "會話複用",
     "initial_selection": "首次選擇",
-    "endpoint_pool_exhausted": "端點池耗盡"
+    "endpoint_pool_exhausted": "端點池耗盡",
+    "vendor_type_all_timeout": "供應商類型全端點逾時"
   },
   "filterReasons": {
     "rate_limited": "速率限制",
@@ -66,6 +68,12 @@
     "health_check_failed": "健康檢查失敗",
     "endpoint_circuit_open": "端點已熔斷",
     "endpoint_disabled": "端點已停用"
+  },
+  "filterDetails": {
+    "vendor_type_circuit_open": "供應商類型臨時熔斷",
+    "circuit_open": "熔斷器打開",
+    "circuit_half_open": "熔斷器半開",
+    "rate_limited": "費用限制"
   },
   "details": {
     "selectionMethod": "選擇方式",
@@ -197,6 +205,8 @@
     "endpointStatsCircuitOpen": "已熔斷端點: {count}",
     "endpointStatsAvailable": "可用端點: {count}",
     "strictBlockNoEndpoints": "嚴格模式：無可用端點候選，跳過該供應商且不降級",
-    "strictBlockSelectorError": "嚴格模式：端點選擇器發生錯誤，跳過該供應商且不降級"
+    "strictBlockSelectorError": "嚴格模式：端點選擇器發生錯誤，跳過該供應商且不降級",
+    "vendorTypeAllTimeout": "供應商類型全端點逾時（524）",
+    "vendorTypeAllTimeoutNote": "該供應商類型的所有端點均逾時，已觸發供應商類型臨時熔斷。"
   }
 }

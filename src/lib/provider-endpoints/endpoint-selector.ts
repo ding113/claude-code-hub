@@ -41,6 +41,12 @@ export async function getPreferredProviderEndpoints(input: {
     return [];
   }
 
+  // When endpoint circuit breaker is disabled, skip circuit check entirely
+  const { getEnvConfig } = await import("@/lib/config/env.schema");
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return rankProviderEndpoints(filtered);
+  }
+
   const circuitResults = await Promise.all(
     filtered.map(async (endpoint) => ({
       endpoint,
@@ -73,6 +79,12 @@ export async function getEndpointFilterStats(input: {
   const endpoints = await findProviderEndpointsByVendorAndType(input.vendorId, input.providerType);
   const total = endpoints.length;
   const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt).length;
+
+  // When endpoint circuit breaker is disabled, no endpoints can be circuit-open
+  const { getEnvConfig } = await import("@/lib/config/env.schema");
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return { total, enabled, circuitOpen: 0, available: enabled };
+  }
 
   const circuitResults = await Promise.all(
     endpoints
