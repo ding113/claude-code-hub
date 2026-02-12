@@ -1575,6 +1575,26 @@ export class ProxyForwarder {
               allEndpointAttemptsTimedOut &&
               currentProvider.providerVendorId
             ) {
+              // Record to decision chain BEFORE triggering vendor-type circuit breaker
+              session.addProviderToChain(currentProvider, {
+                ...endpointAudit,
+                reason: "vendor_type_all_timeout",
+                attemptNumber: attemptCount,
+                statusCode: 524,
+                errorMessage: errorMessage,
+                errorDetails: {
+                  provider: {
+                    id: currentProvider.id,
+                    name: currentProvider.name,
+                    statusCode: 524,
+                    statusText: proxyError.message,
+                    upstreamBody: proxyError.upstreamError?.body,
+                    upstreamParsed: proxyError.upstreamError?.parsed,
+                  },
+                  request: buildRequestDetails(session),
+                },
+              });
+
               await recordVendorTypeAllEndpointsTimeout(
                 currentProvider.providerVendorId,
                 currentProvider.providerType

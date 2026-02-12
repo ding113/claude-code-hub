@@ -272,6 +272,110 @@ describe("endpoint_pool_exhausted", () => {
 });
 
 // =============================================================================
+// vendor_type_all_timeout reason tests
+// =============================================================================
+
+describe("vendor_type_all_timeout", () => {
+  // ---------------------------------------------------------------------------
+  // Shared fixtures
+  // ---------------------------------------------------------------------------
+  const vendorTypeTimeoutItem: ProviderChainItem = {
+    id: 1,
+    name: "provider-timeout",
+    reason: "vendor_type_all_timeout",
+    timestamp: 1000,
+    statusCode: 524,
+    attemptNumber: 1,
+    errorMessage: "All endpoints timed out",
+    errorDetails: {
+      provider: {
+        id: 1,
+        name: "provider-timeout",
+        statusCode: 524,
+        statusText: "Origin Time-out",
+      },
+      request: {
+        method: "POST",
+        url: "https://api.example.com/v1/messages",
+        headers: "content-type: application/json",
+      },
+    },
+  };
+
+  const vendorTypeTimeoutNoDetails: ProviderChainItem = {
+    id: 1,
+    name: "provider-timeout",
+    reason: "vendor_type_all_timeout",
+    timestamp: 1000,
+    statusCode: 524,
+    errorMessage: "All endpoints timed out",
+  };
+
+  // ---------------------------------------------------------------------------
+  // formatProviderSummary
+  // ---------------------------------------------------------------------------
+
+  describe("formatProviderSummary", () => {
+    test("renders vendor_type_all_timeout with failure mark", () => {
+      const chain: ProviderChainItem[] = [vendorTypeTimeoutItem];
+      const result = formatProviderSummary(chain, mockT);
+
+      expect(result).toContain("provider-timeout");
+      expect(result).toContain("\u2717");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // formatProviderDescription
+  // ---------------------------------------------------------------------------
+
+  describe("formatProviderDescription", () => {
+    test("shows vendor type all timeout label", () => {
+      const chain: ProviderChainItem[] = [vendorTypeTimeoutItem];
+      const result = formatProviderDescription(chain, mockT);
+
+      expect(result).toContain("description.vendorTypeAllTimeout");
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // formatProviderTimeline
+  // ---------------------------------------------------------------------------
+
+  describe("formatProviderTimeline", () => {
+    test("renders vendor_type_all_timeout with provider, statusCode, error, and note", () => {
+      const chain: ProviderChainItem[] = [vendorTypeTimeoutItem];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      // Title
+      expect(timeline).toContain("timeline.vendorTypeAllTimeout");
+      // Provider
+      expect(timeline).toContain("timeline.provider [provider=provider-timeout]");
+      // Status code
+      expect(timeline).toContain("timeline.statusCode [code=524]");
+      // Error from statusText
+      expect(timeline).toContain("timeline.error [error=Origin Time-out]");
+      // Note
+      expect(timeline).toContain("timeline.vendorTypeAllTimeoutNote");
+    });
+
+    test("renders vendor_type_all_timeout without error details", () => {
+      const chain: ProviderChainItem[] = [vendorTypeTimeoutNoDetails];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      // Should still render without crashing
+      expect(timeline).toContain("timeline.vendorTypeAllTimeout");
+      // Falls back to item-level fields
+      expect(timeline).toContain("timeline.provider [provider=provider-timeout]");
+      expect(timeline).toContain("timeline.statusCode [code=524]");
+      expect(timeline).toContain("timeline.error [error=All endpoints timed out]");
+      // Note is always present
+      expect(timeline).toContain("timeline.vendorTypeAllTimeoutNote");
+    });
+  });
+});
+
+// =============================================================================
 // resource_not_found reason tests
 // =============================================================================
 

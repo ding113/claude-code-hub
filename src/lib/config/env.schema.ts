@@ -110,6 +110,10 @@ export const EnvSchema = z.object({
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
   TZ: z.string().default("Asia/Shanghai"),
   ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS: z.string().default("false").transform(booleanTransform),
+  // 端点级别熔断器开关
+  // - false (默认)：禁用端点熔断器，所有端点均可使用
+  // - true：启用端点熔断器，连续失败的端点会被临时屏蔽
+  ENABLE_ENDPOINT_CIRCUIT_BREAKER: z.string().default("false").transform(booleanTransform),
   // 供应商缓存开关
   // - true (默认)：启用进程级缓存，30s TTL，提升供应商查询性能
   // - false：禁用缓存，每次请求直接查询数据库

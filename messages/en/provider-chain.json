@@ -39,7 +39,8 @@
     "concurrentLimit": "Concurrent Limit",
     "http2Fallback": "HTTP/2 Fallback",
     "clientError": "Client Error",
-    "endpointPoolExhausted": "Endpoint Pool Exhausted"
+    "endpointPoolExhausted": "Endpoint Pool Exhausted",
+    "vendorTypeAllTimeout": "Vendor-Type All Endpoints Timeout"
   },
   "reasons": {
     "request_success": "Success",
@@ -52,7 +53,8 @@
     "http2_fallback": "HTTP/2 Fallback",
     "session_reuse": "Session Reuse",
     "initial_selection": "Initial Selection",
-    "endpoint_pool_exhausted": "Endpoint Pool Exhausted"
+    "endpoint_pool_exhausted": "Endpoint Pool Exhausted",
+    "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout"
   },
   "filterReasons": {
     "rate_limited": "Rate Limited",
@@ -68,6 +70,12 @@
     "health_check_failed": "Health Check Failed",
     "endpoint_circuit_open": "Endpoint Circuit Open",
     "endpoint_disabled": "Endpoint Disabled"
+  },
+  "filterDetails": {
+    "vendor_type_circuit_open": "Vendor-type temporarily circuit-broken",
+    "circuit_open": "Circuit breaker open",
+    "circuit_half_open": "Circuit breaker half-open",
+    "rate_limited": "Rate limited"
   },
   "details": {
     "selectionMethod": "Selection",
@@ -201,6 +209,8 @@
     "endpointStatsCircuitOpen": "Circuit-Open Endpoints: {count}",
     "endpointStatsAvailable": "Available Endpoints: {count}",
     "strictBlockNoEndpoints": "Strict mode: no endpoint candidates available, provider skipped without fallback",
-    "strictBlockSelectorError": "Strict mode: endpoint selector encountered an error, provider skipped without fallback"
+    "strictBlockSelectorError": "Strict mode: endpoint selector encountered an error, provider skipped without fallback",
+    "vendorTypeAllTimeout": "Vendor-Type All Endpoints Timeout (524)",
+    "vendorTypeAllTimeoutNote": "All endpoints for this vendor-type timed out. Vendor-type circuit breaker triggered."
   }
 }

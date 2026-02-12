@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
+import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { RateLimitError } from "./errors";
@@ -118,10 +119,15 @@ export class ProxyRateLimitGuard {
     // ========== 第二层：资源/频率保护 ==========
 
     // 3. Key 并发 Session（避免创建上游连接）
+    // Key 未设置时，继承 User 并发上限（避免 UI/心智模型不一致：User 设置了并发，但 Key 仍显示“无限制”）
+    const effectiveKeyConcurrentLimit = resolveKeyConcurrentSessionLimit(
+      key.limitConcurrentSessions ?? 0,
+      user.limitConcurrentSessions
+    );
     const sessionCheck = await RateLimitService.checkSessionLimit(
       key.id,
       "key",
-      key.limitConcurrentSessions ?? 0
+      effectiveKeyConcurrentLimit
     );
 
     if (!sessionCheck.allowed) {

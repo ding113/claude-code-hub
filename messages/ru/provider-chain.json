@@ -39,7 +39,8 @@
     "concurrentLimit": "Лимит параллельных запросов",
     "http2Fallback": "Откат HTTP/2",
     "clientError": "Ошибка клиента",
-    "endpointPoolExhausted": "Пул конечных точек исчерпан"
+    "endpointPoolExhausted": "Пул конечных точек исчерпан",
+    "vendorTypeAllTimeout": "Тайм-аут всех конечных точек"
   },
   "reasons": {
     "request_success": "Успешно",
@@ -52,7 +53,8 @@
     "http2_fallback": "Откат HTTP/2",
     "session_reuse": "Повторное использование сессии",
     "initial_selection": "Первоначальный выбор",
-    "endpoint_pool_exhausted": "Пул конечных точек исчерпан"
+    "endpoint_pool_exhausted": "Пул конечных точек исчерпан",
+    "vendor_type_all_timeout": "Тайм-аут всех конечных точек типа поставщика"
   },
   "filterReasons": {
     "rate_limited": "Ограничение скорости",
@@ -66,8 +68,14 @@
     "model_not_supported": "Модель не поддерживается",
     "group_mismatch": "Несоответствие группы",
     "health_check_failed": "Проверка состояния не пройдена",
-    "endpoint_circuit_open": "Автомат конечная точкаа открыт",
+    "endpoint_circuit_open": "Автомат конечной точки открыт",
     "endpoint_disabled": "Эндпоинт отключен"
+  },
+  "filterDetails": {
+    "vendor_type_circuit_open": "Временное размыкание типа поставщика",
+    "circuit_open": "Размыкатель открыт",
+    "circuit_half_open": "Размыкатель полуоткрыт",
+    "rate_limited": "Ограничение скорости"
   },
   "details": {
     "selectionMethod": "Метод выбора",
@@ -201,6 +209,8 @@
     "endpointStatsCircuitOpen": "Эндпоинтов с открытым автоматом: {count}",
     "endpointStatsAvailable": "Доступных конечных точек: {count}",
     "strictBlockNoEndpoints": "Строгий режим: нет доступных кандидатов конечных точек, провайдер пропущен без отката",
-    "strictBlockSelectorError": "Строгий режим: ошибка селектора конечных точек, провайдер пропущен без отката"
+    "strictBlockSelectorError": "Строгий режим: ошибка селектора конечных точек, провайдер пропущен без отката",
+    "vendorTypeAllTimeout": "Тайм-аут всех конечных точек типа поставщика (524)",
+    "vendorTypeAllTimeoutNote": "Все конечные точки этого типа поставщика превысили тайм-аут. Активирован размыкатель типа поставщика."
   }
 }

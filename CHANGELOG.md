@@ -4,6 +4,41 @@
 
 ---
 
+## v0.5.5 (2026-02-11)
+
+### 新增
+
+- Anthropic 供应商支持 Adaptive Thinking 覆写，可按供应商配置自适应思考模式和努力等级 (#758)
+- 供应商支持按用户组设置独立优先级，实现更精细的负载均衡策略 (#701) [@NieiR](https://github.com/NieiR)
+- 统一供应商-端点熔断可视化和通知机制，提升故障感知体验 (#755)
+- 排行榜新增供应商平均成本指标和缓存命中模型下钻分析 (#753)
+- API Key 与登录鉴权链路安全加固，引入 Vacuum Filter 快速负向过滤，降低数据库压力 (#734) [@tesgth032](https://github.com/tesgth032)
+- 端点探测默认切换为 TCP 模式，改进熔断恢复交互体验 (1291f850)
+- 支持为 Relay 供应商注入 Claude metadata.user_id 以启用上游缓存 (#729) [@ProgramCaiCai](https://github.com/ProgramCaiCai)
+
+### 优化
+
+- Vacuum Filter has 热路径性能优化，降低 API Key 负向短路成本 (#757) [@tesgth032](https://github.com/tesgth032)
+- 解耦 Adaptive Thinking 与 Thinking Budget 偏好设置，支持独立配置 (dc646926)
+
+### 修复
+
+- 修复端点熔断器无法从 OPEN 状态恢复的问题 (632cb856)
+- 修复请求卡死问题：AgentPool 驱逐操作改为非阻塞，防止级联超时 (#759) [@tesgth032](https://github.com/tesgth032)
+- 修复上游非 200 响应未正确触发熔断和回退的问题 (53e3a3e5)
+- 修复上游非 OK 响应 body 挂起导致请求卡死的问题 (#751) [@tesgth032](https://github.com/tesgth032)
+- 修复 SSE 结束后未识别假 200 错误的问题 (#735) [@tesgth032](https://github.com/tesgth032)
+- 修复端点更新回归问题，关联 #742 (#746)
+- 修复 provider_endpoints 查询缺少 anthropicAdaptiveThinking 字段的问题 (d4556158)
+- 修复会话模型切换时旧供应商绑定未清除导致的路由错误 (b83ab2af)
+
+### 其他
+
+- CI 全部 Claude Code GitHub Actions 切换至 claude-opus-4-6 模型 (badf6e25)
+- 新增大量单元测试覆盖：端点熔断恢复、AgentPool 驱逐、非 200 响应处理、Adaptive Thinking 覆写、按组优先级选择、Vacuum Filter、metadata 注入、模型切换绑定清理等
+
+---
+
 ## v0.5.4 (2026-02-07)
 
 ### 新增

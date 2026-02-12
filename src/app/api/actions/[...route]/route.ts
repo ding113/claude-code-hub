@@ -891,7 +891,7 @@ const { route: getMyQuotaRoute, handler: getMyQuotaHandler } = createActionRoute
       keyLimitWeeklyUsd: z.number().nullable(),
       keyLimitMonthlyUsd: z.number().nullable(),
       keyLimitTotalUsd: z.number().nullable(),
-      keyLimitConcurrentSessions: z.number().nullable(),
+      keyLimitConcurrentSessions: z.number(),
       keyCurrent5hUsd: z.number(),
       keyCurrentDailyUsd: z.number(),
       keyCurrentWeeklyUsd: z.number(),

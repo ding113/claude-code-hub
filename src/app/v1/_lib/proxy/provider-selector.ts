@@ -885,7 +885,7 @@ export class ProxyProviderResolver {
           id: p.id,
           name: p.name,
           reason: "circuit_open",
-          details: "供应商类型临时熔断",
+          details: "vendor_type_circuit_open",
         });
         continue;
       }
@@ -896,14 +896,14 @@ export class ProxyProviderResolver {
           id: p.id,
           name: p.name,
           reason: "circuit_open",
-          details: `熔断器${state === "open" ? "打开" : "半开"}`,
+          details: state === "open" ? "circuit_open" : "circuit_half_open",
         });
       } else {
         context.filteredProviders?.push({
           id: p.id,
           name: p.name,
           reason: "rate_limited",
-          details: "费用限制",
+          details: "rate_limited",
         });
       }
     }

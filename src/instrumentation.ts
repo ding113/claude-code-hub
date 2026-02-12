@@ -349,6 +349,16 @@ export async function register() {
         });
       }
 
+      // 初始化端点熔断器（禁用时清理残留状态）
+      try {
+        const { initEndpointCircuitBreaker } = await import("@/lib/endpoint-circuit-breaker");
+        await initEndpointCircuitBreaker();
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to initialize endpoint circuit breaker", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       try {
         const { startEndpointProbeLogCleanup } = await import(
           "@/lib/provider-endpoints/probe-log-cleanup"
@@ -452,6 +462,16 @@ export async function register() {
           startEndpointProbeScheduler();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to start endpoint probe scheduler", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        // 初始化端点熔断器（禁用时清理残留状态）
+        try {
+          const { initEndpointCircuitBreaker } = await import("@/lib/endpoint-circuit-breaker");
+          await initEndpointCircuitBreaker();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to initialize endpoint circuit breaker", {
             error: error instanceof Error ? error.message : String(error),
           });
         }
