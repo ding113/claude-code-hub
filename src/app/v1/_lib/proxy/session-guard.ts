@@ -137,7 +137,13 @@ export class ProxySessionGuard {
 
       // 5. 追踪 session（添加到活跃集合）
       // Warmup 拦截请求不应计入并发会话（避免影响后续真实请求的限额判断）
-      if (!warmupMaybeIntercepted) {
+      // 注意：当启用 Key/User 并发 Session 上限时，必须在 RateLimitGuard 中做“原子性检查+追踪”。
+      // 否则先追踪再检查会导致所有新 session 都被视为“已追踪”，从而击穿并发上限。
+      const hasConcurrentSessionLimit =
+        (session.authState?.key?.limitConcurrentSessions ?? 0) > 0 ||
+        (session.authState?.user?.limitConcurrentSessions ?? 0) > 0;
+
+      if (!warmupMaybeIntercepted && !hasConcurrentSessionLimit) {
         void SessionTracker.trackSession(sessionId, keyId, session.authState?.user?.id).catch(
           (err) => {
             logger.error("[ProxySessionGuard] Failed to track session:", err);

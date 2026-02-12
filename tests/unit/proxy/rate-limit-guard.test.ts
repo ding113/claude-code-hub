@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const rateLimitServiceMock = {
   checkTotalCostLimit: vi.fn(),
   checkSessionLimit: vi.fn(),
+  checkAndTrackKeyUserSession: vi.fn(),
   checkRpmLimit: vi.fn(),
   checkCostLimitsWithLease: vi.fn(),
   checkUserDailyCost: vi.fn(),
@@ -68,6 +69,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     }>;
   }) => {
     return {
+      sessionId: "sess_test",
       authState: {
         user: {
           id: 1,
@@ -104,6 +106,13 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
 
     rateLimitServiceMock.checkTotalCostLimit.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkSessionLimit.mockResolvedValue({ allowed: true });
+    rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValue({
+      allowed: true,
+      keyCount: 0,
+      userCount: 0,
+      trackedKey: false,
+      trackedUser: false,
+    });
     rateLimitServiceMock.checkRpmLimit.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkUserDailyCost.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkCostLimitsWithLease.mockResolvedValue({ allowed: true });
@@ -247,9 +256,14 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
   it("Key 并发 Session 超限应拦截（concurrent_sessions）", async () => {
     const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
 
-    rateLimitServiceMock.checkSessionLimit.mockResolvedValueOnce({
+    rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValueOnce({
       allowed: false,
+      rejectedBy: "key",
       reason: "Key并发 Session 上限已达到（2/1）",
+      keyCount: 2,
+      userCount: 0,
+      trackedKey: false,
+      trackedUser: false,
     });
 
     const session = createSession({
@@ -267,9 +281,15 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
   it("User 并发 Session 超限应拦截（concurrent_sessions）", async () => {
     const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
 
-    rateLimitServiceMock.checkSessionLimit
-      .mockResolvedValueOnce({ allowed: true }) // key session
-      .mockResolvedValueOnce({ allowed: false, reason: "User并发 Session 上限已达到（2/1）" });
+    rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValueOnce({
+      allowed: false,
+      rejectedBy: "user",
+      reason: "User并发 Session 上限已达到（2/1）",
+      keyCount: 0,
+      userCount: 2,
+      trackedKey: false,
+      trackedUser: false,
+    });
 
     const session = createSession({
       user: { limitConcurrentSessions: 1 },
@@ -294,8 +314,13 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
 
     await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
 
-    expect(rateLimitServiceMock.checkSessionLimit).toHaveBeenNthCalledWith(1, 2, "key", 15);
-    expect(rateLimitServiceMock.checkSessionLimit).toHaveBeenNthCalledWith(2, 1, "user", 15);
+    expect(rateLimitServiceMock.checkAndTrackKeyUserSession).toHaveBeenCalledWith(
+      2,
+      1,
+      "sess_test",
+      15,
+      15
+    );
   });
 
   it("User RPM 超限应拦截（rpm）", async () => {

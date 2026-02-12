@@ -190,6 +190,85 @@ describe("RateLimitService - other quota paths", () => {
     expect(ttlMsArg).toBe("300000");
   });
 
+  it("checkAndTrackKeyUserSession：keyLimit/userLimit 均 <=0 时应放行且不追踪", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    const result = await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 0, 0);
+    expect(result).toEqual({
+      allowed: true,
+      keyCount: 0,
+      userCount: 0,
+      trackedKey: false,
+      trackedUser: false,
+    });
+    expect(redisClientRef.eval).not.toHaveBeenCalled();
+  });
+
+  it("checkAndTrackKeyUserSession：Redis 非 ready 时应 Fail Open", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.status = "end";
+    const result = await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 2, 2);
+    expect(result).toEqual({
+      allowed: true,
+      keyCount: 0,
+      userCount: 0,
+      trackedKey: false,
+      trackedUser: false,
+    });
+  });
+
+  it("checkAndTrackKeyUserSession：Key 超限时应返回 not allowed", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce([0, 1, 2, 0, 1, 0]);
+    const result = await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 2, 10);
+    expect(result.allowed).toBe(false);
+    expect(result.rejectedBy).toBe("key");
+    expect(result.reason).toContain("Key并发 Session 上限已达到（2/2）");
+  });
+
+  it("checkAndTrackKeyUserSession：User 超限时应返回 not allowed", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce([0, 2, 1, 0, 2, 0]);
+    const result = await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 10, 2);
+    expect(result.allowed).toBe(false);
+    expect(result.rejectedBy).toBe("user");
+    expect(result.reason).toContain("User并发 Session 上限已达到（2/2）");
+  });
+
+  it("checkAndTrackKeyUserSession：未超限时应返回 allowed 且可标记 tracked", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce([1, 0, 2, 1, 2, 1]);
+    const result = await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 2, 2);
+    expect(result).toEqual({
+      allowed: true,
+      keyCount: 2,
+      userCount: 2,
+      trackedKey: true,
+      trackedUser: true,
+    });
+  });
+
+  it("checkAndTrackKeyUserSession: should pass SESSION_TTL_MS as ARGV[5] to Lua script", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce([1, 0, 1, 1, 1, 1]);
+    await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 2, 2);
+
+    expect(redisClientRef.eval).toHaveBeenCalledTimes(1);
+
+    const evalCall = redisClientRef.eval.mock.calls[0];
+    // evalCall: [script, numkeys, globalKey, keyKey, userKey, sessionId, keyLimit, userLimit, now, ttlMs]
+    // Indices:   0        1        2          3      4       5         6        7         8    9
+    expect(evalCall.length).toBe(10);
+
+    const ttlMsArg = evalCall[9];
+    expect(ttlMsArg).toBe("300000");
+  });
+
   it("trackUserDailyCost：fixed 模式应使用 STRING + TTL", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
