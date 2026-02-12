@@ -3,9 +3,10 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
-import { keys as keysTable } from "@/drizzle/schema";
+import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
@@ -48,19 +49,25 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       };
     }
 
-    const [keyRow] = await db
-      .select()
+    const [result] = await db
+      .select({
+        key: keysTable,
+        userLimitConcurrentSessions: usersTable.limitConcurrentSessions,
+      })
       .from(keysTable)
+      .leftJoin(usersTable, and(eq(keysTable.userId, usersTable.id), isNull(usersTable.deletedAt)))
       .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
       .limit(1);
 
-    if (!keyRow) {
+    if (!result) {
       return {
         ok: false,
         error: tError?.("KEY_NOT_FOUND") ?? "",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
+
+    const keyRow = result.key;
 
     // Allow admin to view any key, users can only view their own keys
     if (session.user.role !== "admin" && keyRow.userId !== session.user.id) {
@@ -70,6 +77,11 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
         errorCode: ERROR_CODES.PERMISSION_DENIED,
       };
     }
+
+    const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
+      keyRow.limitConcurrentSessions ?? 0,
+      result.userLimitConcurrentSessions ?? null
+    );
 
     const settings = await getSystemSettings();
     const currencyCode = settings.currencyDisplay;
@@ -141,7 +153,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       {
         type: "limitSessions",
         current: concurrentSessions,
-        limit: keyRow.limitConcurrentSessions ?? null,
+        limit: effectiveConcurrentLimit > 0 ? effectiveConcurrentLimit : null,
       },
     ];
 
