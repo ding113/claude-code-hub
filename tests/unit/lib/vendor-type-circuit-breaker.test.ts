@@ -24,6 +24,88 @@ afterEach(() => {
 });
 
 describe("vendor-type-circuit-breaker", () => {
+  test("ENABLE_ENDPOINT_CIRCUIT_BREAKER=false 时，isVendorTypeCircuitOpen 始终返回 false", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    vi.resetModules();
+
+    const loadMock = vi.fn(async () => null);
+    const saveMock = vi.fn(async () => {});
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/vendor-type-circuit-breaker-state", () => ({
+      loadVendorTypeCircuitState: loadMock,
+      saveVendorTypeCircuitState: saveMock,
+      deleteVendorTypeCircuitState: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({
+        ENABLE_ENDPOINT_CIRCUIT_BREAKER: false,
+        NODE_ENV: "test",
+      }),
+    }));
+
+    const { isVendorTypeCircuitOpen, recordVendorTypeAllEndpointsTimeout } = await import(
+      "@/lib/vendor-type-circuit-breaker"
+    );
+
+    // 尝试记录熔断
+    await recordVendorTypeAllEndpointsTimeout(100, "claude", 60000);
+    // 不应调用 save
+    expect(saveMock).not.toHaveBeenCalled();
+
+    // 应始终返回 false
+    expect(await isVendorTypeCircuitOpen(100, "claude")).toBe(false);
+  });
+
+  test("ENABLE_ENDPOINT_CIRCUIT_BREAKER=true 时，熔断功能正常工作", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    vi.resetModules();
+
+    let redisState: SavedVendorTypeCircuitState | null = null;
+    const loadMock = vi.fn(async () => redisState);
+    const saveMock = vi.fn(
+      async (
+        _vendorId: number,
+        _providerType: ProviderType,
+        state: SavedVendorTypeCircuitState
+      ) => {
+        redisState = state;
+      }
+    );
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/vendor-type-circuit-breaker-state", () => ({
+      loadVendorTypeCircuitState: loadMock,
+      saveVendorTypeCircuitState: saveMock,
+      deleteVendorTypeCircuitState: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({
+        ENABLE_ENDPOINT_CIRCUIT_BREAKER: true,
+        NODE_ENV: "test",
+      }),
+    }));
+
+    const { isVendorTypeCircuitOpen, recordVendorTypeAllEndpointsTimeout } = await import(
+      "@/lib/vendor-type-circuit-breaker"
+    );
+
+    // 记录熔断
+    await recordVendorTypeAllEndpointsTimeout(101, "claude", 60000);
+    expect(saveMock).toHaveBeenCalled();
+
+    // 应返回 true
+    expect(await isVendorTypeCircuitOpen(101, "claude")).toBe(true);
+
+    // 等待熔断过期
+    vi.advanceTimersByTime(60000 + 1);
+    expect(await isVendorTypeCircuitOpen(101, "claude")).toBe(false);
+  });
+
   test("manual open 时 isVendorTypeCircuitOpen 始终为 true，且自动 open 不应覆盖", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import {
   deleteVendorTypeCircuitState,
@@ -116,6 +117,11 @@ export async function isVendorTypeCircuitOpen(
   vendorId: number,
   providerType: ProviderType
 ): Promise<boolean> {
+  // 检查端点熔断器开关，供应商类型熔断复用此开关
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return false;
+  }
+
   const state = await getOrCreateState(vendorId, providerType);
 
   if (state.manualOpen) {
@@ -141,6 +147,11 @@ export async function recordVendorTypeAllEndpointsTimeout(
   providerType: ProviderType,
   openDurationMs: number = AUTO_OPEN_DURATION_MS
 ): Promise<void> {
+  // 检查端点熔断器开关，供应商类型熔断复用此开关
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return;
+  }
+
   const state = await getOrCreateState(vendorId, providerType);
 
   if (state.manualOpen) {
