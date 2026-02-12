@@ -4,7 +4,6 @@ const generateSessionIdMock = vi.hoisted(() => vi.fn(() => "sess_generated"));
 
 const rateLimitServiceMock = {
   checkTotalCostLimit: vi.fn(),
-  checkSessionLimit: vi.fn(),
   checkAndTrackKeyUserSession: vi.fn(),
   checkRpmLimit: vi.fn(),
   checkCostLimitsWithLease: vi.fn(),
@@ -120,7 +119,6 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     generateSessionIdMock.mockReturnValue("sess_generated");
 
     rateLimitServiceMock.checkTotalCostLimit.mockResolvedValue({ allowed: true });
-    rateLimitServiceMock.checkSessionLimit.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValue({
       allowed: true,
       keyCount: 0,

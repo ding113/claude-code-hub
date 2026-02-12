@@ -94,7 +94,7 @@ describe("SessionTracker - TTL and cleanup", () => {
       // Should call zremrangebyscore with cutoff = now - 600*1000 = now - 600000
       const expectedCutoff = nowMs - 600 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );
@@ -110,7 +110,7 @@ describe("SessionTracker - TTL and cleanup", () => {
       // Default: 300 seconds = 300000 ms
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );
@@ -267,7 +267,7 @@ describe("SessionTracker - TTL and cleanup", () => {
 
       const expectedCutoff = nowMs - 600 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );

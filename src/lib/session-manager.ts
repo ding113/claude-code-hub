@@ -19,6 +19,7 @@ import type {
 } from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import { getRedisClient } from "./redis";
+import { getGlobalActiveSessionsKey, getKeyActiveSessionsKey } from "./redis/active-session-keys";
 import { SessionTracker } from "./session-tracker";
 
 function headersToSanitizedObject(headers: Headers): Record<string, string> {
@@ -1965,14 +1966,14 @@ export class SessionManager {
       pipeline.del(`session:${sessionId}:response`);
 
       // 3. 从 ZSET 中移除（始终尝试，即使查询失败）
-      pipeline.zrem("global:active_sessions", sessionId);
+      pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);
 
       if (providerId) {
         pipeline.zrem(`provider:${providerId}:active_sessions`, sessionId);
       }
 
       if (keyId) {
-        pipeline.zrem(`key:${keyId}:active_sessions`, sessionId);
+        pipeline.zrem(getKeyActiveSessionsKey(keyId), sessionId);
       }
 
       // 4. 删除 hash 映射（如果存在）

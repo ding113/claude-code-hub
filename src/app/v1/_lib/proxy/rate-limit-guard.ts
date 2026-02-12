@@ -134,7 +134,7 @@ export class ProxyRateLimitGuard {
 
     // 注意：并发 Session 限制必须“原子性检查 + 追踪”，否则会被并发击穿（尤其是多 Key 同时使用时）
     // 理论上 session guard 一定会分配 sessionId；这里兜底生成，避免降级回非原子路径
-    const ensuredSessionId = session.sessionId ?? SessionManager.generateSessionId();
+    const ensuredSessionId = session.sessionId || SessionManager.generateSessionId();
     if (!session.sessionId) {
       logger.warn(
         `[RateLimit] SessionId missing in rate-limit-guard, using fallback: key=${key.id}, user=${user.id} (potential atomicity gap)`
@@ -182,7 +182,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 5. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制
+    // 4. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制
     if (user.rpm != null && user.rpm > 0) {
       const rpmCheck = await RateLimitService.checkRpmLimit(user.id, "user", user.rpm);
       if (!rpmCheck.allowed) {

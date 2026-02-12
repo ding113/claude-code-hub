@@ -33,6 +33,7 @@ import Redis, { type RedisOptions } from "ioredis";
 import postgres from "postgres";
 
 import * as schema from "../src/drizzle/schema";
+import { getGlobalActiveSessionsKey, getKeyActiveSessionsKey } from "../src/lib/redis/active-session-keys";
 
 // ============================================================================
 // 常量配置
@@ -585,14 +586,14 @@ async function clearSessionBindings(
       pipeline.del(...keysToDelete);
       commandTypes.push("del");
 
-      pipeline.zrem("global:active_sessions", sessionId);
+      pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);
       commandTypes.push("zrem");
 
       pipeline.zrem(`provider:${binding.providerId}:active_sessions`, sessionId);
       commandTypes.push("zrem");
 
       if (binding.keyId != null) {
-        pipeline.zrem(`key:${binding.keyId}:active_sessions`, sessionId);
+        pipeline.zrem(getKeyActiveSessionsKey(binding.keyId), sessionId);
         commandTypes.push("zrem");
       } else {
         missingKeyRefs += 1;

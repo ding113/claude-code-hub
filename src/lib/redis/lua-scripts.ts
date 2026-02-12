@@ -81,9 +81,12 @@ end
  *   SessionTracker.trackSession，因此此脚本也负责更新 global，保证 Sessions 页面可见性。
  * - key/user 使用 ZSET 分别追踪活跃 sessionId（score=timestamp）
  *
- * KEYS[1]: global:active_sessions
- * KEYS[2]: key:${keyId}:active_sessions
- * KEYS[3]: user:${userId}:active_sessions
+ * Redis Cluster 注意：
+ * - 该脚本同时操作多个 key，因此 KEYS[1..3] 必须共享相同 hash tag（例如 {active_sessions}），否则会触发 CROSSSLOT。
+ *
+ * KEYS[1]: {active_sessions}:global:active_sessions
+ * KEYS[2]: {active_sessions}:key:${keyId}:active_sessions
+ * KEYS[3]: {active_sessions}:user:${userId}:active_sessions
  * ARGV[1]: sessionId
  * ARGV[2]: keyLimit
  * ARGV[3]: userLimit
@@ -112,11 +115,11 @@ if ttl <= 0 then
   ttl = 300000
 end
 
- -- 1. Cleanup expired sessions (TTL window ago)
- local cutoff = now - ttl
- redis.call('ZREMRANGEBYSCORE', global_key, '-inf', cutoff)
- redis.call('ZREMRANGEBYSCORE', key_key, '-inf', cutoff)
- redis.call('ZREMRANGEBYSCORE', user_key, '-inf', cutoff)
+-- 1. Cleanup expired sessions (TTL window ago)
+local cutoff = now - ttl
+redis.call('ZREMRANGEBYSCORE', global_key, '-inf', cutoff)
+redis.call('ZREMRANGEBYSCORE', key_key, '-inf', cutoff)
+redis.call('ZREMRANGEBYSCORE', user_key, '-inf', cutoff)
 
 -- 2. Check if session is already tracked
 local is_tracked_key = redis.call('ZSCORE', key_key, session_id)
@@ -131,9 +134,10 @@ if key_limit > 0 and not is_tracked_key and current_key_count >= key_limit then
   return {0, 1, current_key_count, 0, current_user_count, 0}
 end
 
- -- 5. Check User limit (exclude already tracked session)
- -- Self-heal: 如果 session 已在同一个 key 的集合中，则可视为该 user 的“已存在会话”，避免因为 user 集合缺失
- -- 单条 member 而误拦截（该脚本后续会通过 ZADD 补齐 user 集合）。
+-- 5. Check User limit (exclude already tracked session)
+-- Self-heal: 如果 session 已在同一个 key 的集合中，则可视为该 user 的“已存在会话”，避免因为 user 集合缺失
+-- 单条 member 而误拦截（该脚本后续会通过 ZADD 补齐 user 集合）。
+-- 说明：跨 key 复用同一 sessionId 的场景依赖 is_tracked_user；is_tracked_key 仅覆盖“同一个 key”的自愈。
 if user_limit > 0 and not (is_tracked_user or is_tracked_key) and current_user_count >= user_limit then
   return {0, 2, current_key_count, 0, current_user_count, 0}
 end

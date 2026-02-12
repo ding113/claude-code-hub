@@ -99,7 +99,7 @@ describe("SESSION_TTL environment variable validation", () => {
       // Default: 300 seconds = 300000 ms
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );
@@ -113,7 +113,7 @@ describe("SESSION_TTL environment variable validation", () => {
 
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );
@@ -127,7 +127,7 @@ describe("SESSION_TTL environment variable validation", () => {
 
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );
@@ -141,7 +141,7 @@ describe("SESSION_TTL environment variable validation", () => {
 
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );
@@ -156,7 +156,7 @@ describe("SESSION_TTL environment variable validation", () => {
       // Custom: 600 seconds = 600000 ms
       const expectedCutoff = nowMs - 600 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        "{active_sessions}:global:active_sessions",
         "-inf",
         expectedCutoff
       );

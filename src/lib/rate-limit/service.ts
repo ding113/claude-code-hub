@@ -68,6 +68,11 @@
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 import {
+  getGlobalActiveSessionsKey,
+  getKeyActiveSessionsKey,
+  getUserActiveSessionsKey,
+} from "@/lib/redis/active-session-keys";
+import {
   CHECK_AND_TRACK_KEY_USER_SESSION,
   CHECK_AND_TRACK_SESSION,
   GET_COST_5H_ROLLING_WINDOW,
@@ -581,9 +586,9 @@ export class RateLimitService {
     }
 
     try {
-      const globalKey = "global:active_sessions";
-      const keyKey = `key:${keyId}:active_sessions`;
-      const userKey = `user:${userId}:active_sessions`;
+      const globalKey = getGlobalActiveSessionsKey();
+      const keyKey = getKeyActiveSessionsKey(keyId);
+      const userKey = getUserActiveSessionsKey(userId);
       const now = Date.now();
 
       const result = (await RateLimitService.redis.eval(

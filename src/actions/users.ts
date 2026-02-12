@@ -1560,6 +1560,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     // 2. Clear Redis cache
     const { getRedisClient } = await import("@/lib/redis");
     const { scanPattern } = await import("@/lib/redis/scan-helper");
+    const { getKeyActiveSessionsKey } = await import("@/lib/redis/active-session-keys");
     const redis = getRedisClient();
 
     if (redis && redis.status === "ready") {
@@ -1587,7 +1588,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
 
         // Active sessions
         for (const keyId of keyIds) {
-          pipeline.del(`key:${keyId}:active_sessions`);
+          pipeline.del(getKeyActiveSessionsKey(keyId));
         }
 
         // Cost keys
