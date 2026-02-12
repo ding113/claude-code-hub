@@ -114,6 +114,11 @@ export async function getEndpointHealthInfo(
 }
 
 export async function isEndpointCircuitOpen(endpointId: number): Promise<boolean> {
+  const { getEnvConfig } = await import("@/lib/config/env.schema");
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return false;
+  }
+
   const health = await getOrCreateHealth(endpointId);
 
   if (health.circuitState === "closed") {
@@ -135,6 +140,11 @@ export async function isEndpointCircuitOpen(endpointId: number): Promise<boolean
 }
 
 export async function recordEndpointFailure(endpointId: number, error: Error): Promise<void> {
+  const { getEnvConfig } = await import("@/lib/config/env.schema");
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return;
+  }
+
   const health = await getOrCreateHealth(endpointId);
   const config = DEFAULT_ENDPOINT_CIRCUIT_BREAKER_CONFIG;
 
@@ -178,6 +188,11 @@ export async function recordEndpointFailure(endpointId: number, error: Error): P
 }
 
 export async function recordEndpointSuccess(endpointId: number): Promise<void> {
+  const { getEnvConfig } = await import("@/lib/config/env.schema");
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return;
+  }
+
   const health = await getOrCreateHealth(endpointId);
   const config = DEFAULT_ENDPOINT_CIRCUIT_BREAKER_CONFIG;
 
@@ -240,6 +255,11 @@ export async function triggerEndpointCircuitBreakerAlert(
   retryAt: string,
   lastError: string
 ): Promise<void> {
+  const { getEnvConfig } = await import("@/lib/config/env.schema");
+  if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return;
+  }
+
   try {
     const { sendCircuitBreakerAlert } = await import("@/lib/notification/notifier");
 
@@ -276,6 +296,51 @@ export async function triggerEndpointCircuitBreakerAlert(
     logger.error({
       action: "endpoint_circuit_breaker_alert_error",
       endpointId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Startup initialization: when ENABLE_ENDPOINT_CIRCUIT_BREAKER is disabled,
+ * clear all endpoint circuit breaker states from both in-memory map and Redis
+ * to ensure no stale open states block endpoints.
+ *
+ * Called once at application startup.
+ */
+export async function initEndpointCircuitBreaker(): Promise<void> {
+  const { getEnvConfig } = await import("@/lib/config/env.schema");
+  if (getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+    return;
+  }
+
+  healthMap.clear();
+  loadedFromRedis.clear();
+
+  try {
+    const { getRedisClient } = await import("@/lib/redis/client");
+    const redis = getRedisClient();
+    if (!redis) return;
+
+    const pattern = "endpoint_circuit_breaker:state:*";
+    let cursor = "0";
+    let deletedCount = 0;
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+        deletedCount += keys.length;
+      }
+    } while (cursor !== "0");
+
+    if (deletedCount > 0) {
+      logger.info("[EndpointCircuitBreaker] Cleared stale states on startup (feature disabled)", {
+        deletedCount,
+      });
+    }
+  } catch (error) {
+    logger.warn("[EndpointCircuitBreaker] Failed to clear stale states on startup", {
       error: error instanceof Error ? error.message : String(error),
     });
   }

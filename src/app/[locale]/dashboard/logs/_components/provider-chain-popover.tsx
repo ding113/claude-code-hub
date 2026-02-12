@@ -34,6 +34,9 @@ interface ProviderChainPopoverProps {
 function isActualRequest(item: ProviderChainItem): boolean {
   if (item.reason === "concurrent_limit_failed") return true;
   if (item.reason === "retry_failed" || item.reason === "system_error") return true;
+  if (item.reason === "endpoint_pool_exhausted") return true;
+  if (item.reason === "vendor_type_all_timeout") return true;
+  if (item.reason === "client_error_non_retryable") return true;
   if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
     return true;
   }
@@ -87,6 +90,13 @@ function getItemStatus(item: ProviderChainItem): {
       icon: AlertTriangle,
       color: "text-orange-600",
       bgColor: "bg-orange-50 dark:bg-orange-950/30",
+    };
+  }
+  if (item.reason === "endpoint_pool_exhausted" || item.reason === "vendor_type_all_timeout") {
+    return {
+      icon: XCircle,
+      color: "text-rose-600",
+      bgColor: "bg-rose-50 dark:bg-rose-950/30",
     };
   }
   return {
