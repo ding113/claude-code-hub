@@ -135,10 +135,8 @@ if key_limit > 0 and not is_tracked_key and current_key_count >= key_limit then
 end
 
 -- 5. Check User limit (exclude already tracked session)
--- Self-heal: 如果 session 已在同一个 key 的集合中，则可视为该 user 的“已存在会话”，避免因为 user 集合缺失
--- 单条 member 而误拦截（该脚本后续会通过 ZADD 补齐 user 集合）。
--- 说明：跨 key 复用同一 sessionId 的场景依赖 is_tracked_user；is_tracked_key 仅覆盖“同一个 key”的自愈。
-if user_limit > 0 and not (is_tracked_user or is_tracked_key) and current_user_count >= user_limit then
+-- 说明：User 上限以 user ZSET 为准；key ZSET 不参与 user 维度的“已追踪”判定，避免绕过 user 并发限制。
+if user_limit > 0 and not is_tracked_user and current_user_count >= user_limit then
   return {0, 2, current_key_count, 0, current_user_count, 0}
 end
 
