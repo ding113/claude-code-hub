@@ -19,7 +19,11 @@ import type {
 } from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import { getRedisClient } from "./redis";
-import { getGlobalActiveSessionsKey, getKeyActiveSessionsKey } from "./redis/active-session-keys";
+import {
+  getGlobalActiveSessionsKey,
+  getKeyActiveSessionsKey,
+  getUserActiveSessionsKey,
+} from "./redis/active-session-keys";
 import { SessionTracker } from "./session-tracker";
 
 function headersToSanitizedObject(headers: Headers): Record<string, string> {
@@ -1931,15 +1935,22 @@ export class SessionManager {
       // 1. 先查询绑定信息（用于从 ZSET 中移除）
       let providerId: number | null = null;
       let keyId: number | null = null;
+      let userId: number | null = null;
 
       try {
-        const [providerIdStr, keyIdStr] = await Promise.all([
+        const [providerIdStr, keyIdStr, userIdStr] = await Promise.all([
           redis.get(`session:${sessionId}:provider`),
           redis.get(`session:${sessionId}:key`),
+          redis.hget(`session:${sessionId}:info`, "userId"),
         ]);
 
         providerId = providerIdStr ? parseInt(providerIdStr, 10) : null;
         keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
+        userId = userIdStr ? parseInt(userIdStr, 10) : null;
+
+        if (!Number.isFinite(userId)) {
+          userId = null;
+        }
       } catch (lookupError) {
         // Redis 查询失败不应阻止清理操作，继续执行删除
         logger.warn(
@@ -1974,6 +1985,10 @@ export class SessionManager {
 
       if (keyId) {
         pipeline.zrem(getKeyActiveSessionsKey(keyId), sessionId);
+      }
+
+      if (userId) {
+        pipeline.zrem(getUserActiveSessionsKey(userId), sessionId);
       }
 
       // 4. 删除 hash 映射（如果存在）
