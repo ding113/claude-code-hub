@@ -77,7 +77,7 @@
     "siteTitlePlaceholder": "e.g. Claude Code Hub",
     "siteTitleRequired": "Site title cannot be empty",
     "verboseProviderError": "Verbose Provider Error",
-    "verboseProviderErrorDesc": "When enabled, return more detailed provider error information in some upstream failure scenarios (e.g. all providers unavailable, fake 200, or empty responses). It may include upstream response excerpts in error responses with basic redaction, but may still contain sensitive content; enable only in trusted environments. When disabled, only return a simple error code.",
+    "verboseProviderErrorDesc": "When enabled, return detailed error messages when all providers are unavailable (including provider count, rate limit reasons, etc.); when disabled, only return a simple error code.",
     "timezoneLabel": "System Timezone",
     "timezoneDescription": "Set the system timezone for unified backend time boundary calculations and frontend date/time display. Leave empty to use the TZ environment variable or default to UTC.",
     "timezoneAuto": "Auto (use TZ env variable)",
