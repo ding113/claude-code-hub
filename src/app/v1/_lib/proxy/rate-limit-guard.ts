@@ -2,6 +2,7 @@ import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
+import { SessionManager } from "@/lib/session-manager";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { RateLimitError } from "./errors";
 import type { ProxySession } from "./session";
@@ -132,123 +133,50 @@ export class ProxyRateLimitGuard {
         : 0;
 
     // 注意：并发 Session 限制必须“原子性检查 + 追踪”，否则会被并发击穿（尤其是多 Key 同时使用时）
-    if (session.sessionId) {
-      const concurrentCheck = await RateLimitService.checkAndTrackKeyUserSession(
-        key.id,
-        user.id,
-        session.sessionId,
-        effectiveKeyConcurrentLimit,
-        normalizedUserConcurrentLimit
+    // 理论上 session guard 一定会分配 sessionId；这里兜底生成，避免降级回非原子路径
+    const ensuredSessionId = session.sessionId ?? SessionManager.generateSessionId();
+    if (!session.sessionId) {
+      session.setSessionId(ensuredSessionId);
+    }
+
+    const concurrentCheck = await RateLimitService.checkAndTrackKeyUserSession(
+      key.id,
+      user.id,
+      ensuredSessionId,
+      effectiveKeyConcurrentLimit,
+      normalizedUserConcurrentLimit
+    );
+
+    if (!concurrentCheck.allowed) {
+      const rejectedBy = concurrentCheck.rejectedBy ?? "key";
+      logger.warn(
+        `[RateLimit] ${rejectedBy === "user" ? "User" : "Key"} session limit exceeded: key=${key.id}, user=${user.id}, ${concurrentCheck.reason}`
       );
 
-      if (!concurrentCheck.allowed) {
-        const rejectedBy = concurrentCheck.rejectedBy ?? "key";
-        logger.warn(
-          `[RateLimit] ${rejectedBy === "user" ? "User" : "Key"} session limit exceeded: key=${key.id}, user=${user.id}, ${concurrentCheck.reason}`
-        );
+      const { currentUsage, limitValue } = parseLimitInfo(concurrentCheck.reason!);
 
-        const { currentUsage, limitValue } = parseLimitInfo(concurrentCheck.reason!);
+      const resetTime = new Date().toISOString();
 
-        const resetTime = new Date().toISOString();
-
-        const { getLocale } = await import("next-intl/server");
-        const locale = await getLocale();
-        const message = await getErrorMessageServer(
-          locale,
-          ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
-          {
-            current: String(currentUsage),
-            limit: String(limitValue),
-          }
-        );
-
-        throw new RateLimitError(
-          "rate_limit_error",
-          message,
-          "concurrent_sessions",
-          currentUsage,
-          limitValue,
-          resetTime,
-          null
-        );
-      }
-    } else {
-      // 降级：理论上 session guard 一定会分配 sessionId，此分支用于兼容极端异常
-      const sessionCheck = await RateLimitService.checkSessionLimit(
-        key.id,
-        "key",
-        effectiveKeyConcurrentLimit
-      );
-
-      if (!sessionCheck.allowed) {
-        logger.warn(
-          `[RateLimit] Key session limit exceeded: key=${key.id}, ${sessionCheck.reason}`
-        );
-
-        const { currentUsage, limitValue } = parseLimitInfo(sessionCheck.reason!);
-
-        const resetTime = new Date().toISOString();
-
-        const { getLocale } = await import("next-intl/server");
-        const locale = await getLocale();
-        const message = await getErrorMessageServer(
-          locale,
-          ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
-          {
-            current: String(currentUsage),
-            limit: String(limitValue),
-          }
-        );
-
-        throw new RateLimitError(
-          "rate_limit_error",
-          message,
-          "concurrent_sessions",
-          currentUsage,
-          limitValue,
-          resetTime,
-          null
-        );
-      }
-
-      if (normalizedUserConcurrentLimit > 0) {
-        const userSessionCheck = await RateLimitService.checkSessionLimit(
-          user.id,
-          "user",
-          normalizedUserConcurrentLimit
-        );
-
-        if (!userSessionCheck.allowed) {
-          logger.warn(
-            `[RateLimit] User session limit exceeded: user=${user.id}, ${userSessionCheck.reason}`
-          );
-
-          const { currentUsage, limitValue } = parseLimitInfo(userSessionCheck.reason!);
-
-          const resetTime = new Date().toISOString();
-
-          const { getLocale } = await import("next-intl/server");
-          const locale = await getLocale();
-          const message = await getErrorMessageServer(
-            locale,
-            ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
-            {
-              current: String(currentUsage),
-              limit: String(limitValue),
-            }
-          );
-
-          throw new RateLimitError(
-            "rate_limit_error",
-            message,
-            "concurrent_sessions",
-            currentUsage,
-            limitValue,
-            resetTime,
-            null
-          );
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(
+        locale,
+        ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
+        {
+          current: String(currentUsage),
+          limit: String(limitValue),
         }
-      }
+      );
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "concurrent_sessions",
+        currentUsage,
+        limitValue,
+        resetTime,
+        null
+      );
     }
 
     // 5. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制

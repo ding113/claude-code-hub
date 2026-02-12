@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const generateSessionIdMock = vi.hoisted(() => vi.fn(() => "sess_generated"));
+
 const rateLimitServiceMock = {
   checkTotalCostLimit: vi.fn(),
   checkSessionLimit: vi.fn(),
@@ -11,6 +13,12 @@ const rateLimitServiceMock = {
 
 vi.mock("@/lib/rate-limit", () => ({
   RateLimitService: rateLimitServiceMock,
+}));
+
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    generateSessionId: generateSessionIdMock,
+  },
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -68,7 +76,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       limitConcurrentSessions: number;
     }>;
   }) => {
-    return {
+    const session = {
       sessionId: "sess_test",
       authState: {
         user: {
@@ -99,10 +107,17 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
         },
       },
     } as any;
+
+    session.setSessionId = (id: string) => {
+      session.sessionId = id;
+    };
+
+    return session;
   };
 
   beforeEach(() => {
     vi.clearAllMocks();
+    generateSessionIdMock.mockReturnValue("sess_generated");
 
     rateLimitServiceMock.checkTotalCostLimit.mockResolvedValue({ allowed: true });
     rateLimitServiceMock.checkSessionLimit.mockResolvedValue({ allowed: true });
@@ -497,6 +512,25 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
 
     const session = createSession();
     await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+  });
+
+  it("当 sessionId 缺失时，应兜底生成并继续并发检查", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    const session = createSession() as any;
+    session.sessionId = undefined;
+
+    await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+
+    expect(generateSessionIdMock).toHaveBeenCalledTimes(1);
+    expect(session.sessionId).toBe("sess_generated");
+    expect(rateLimitServiceMock.checkAndTrackKeyUserSession).toHaveBeenCalledWith(
+      2,
+      1,
+      "sess_generated",
+      expect.any(Number),
+      expect.any(Number)
+    );
   });
 
   it("User daily (rolling mode) 超限应使用 checkCostLimitsWithLease", async () => {
