@@ -32,8 +32,8 @@ import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import Redis, { type RedisOptions } from "ioredis";
 import postgres from "postgres";
 
-import * as schema from "../src/drizzle/schema";
-import { getGlobalActiveSessionsKey, getKeyActiveSessionsKey } from "../src/lib/redis/active-session-keys";
+import * as schema from "@/drizzle/schema";
+import { getGlobalActiveSessionsKey, getKeyActiveSessionsKey } from "@/lib/redis/active-session-keys";
 
 // ============================================================================
 // 常量配置

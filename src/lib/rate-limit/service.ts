@@ -81,6 +81,7 @@ import {
   TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import {
   sumKeyTotalCost,
   sumProviderTotalCost,
@@ -574,7 +575,8 @@ export class RateLimitService {
     trackedKey: boolean;
     trackedUser: boolean;
     rejectedBy?: "key" | "user";
-    reason?: string;
+    reasonCode?: string;
+    reasonParams?: Record<string, string | number>;
   }> {
     if (keyLimit <= 0 && userLimit <= 0) {
       return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
@@ -610,7 +612,6 @@ export class RateLimitService {
         const rejectTarget: "key" | "user" = rejectedBy === 1 ? "key" : "user";
         const limit = rejectTarget === "key" ? keyLimit : userLimit;
         const count = rejectTarget === "key" ? keyCount : userCount;
-        const typeLabel = rejectTarget === "key" ? "Key" : "User";
 
         return {
           allowed: false,
@@ -619,7 +620,8 @@ export class RateLimitService {
           trackedKey: false,
           trackedUser: false,
           rejectedBy: rejectTarget,
-          reason: `${typeLabel}并发 Session 上限已达到（${count}/${limit}）`,
+          reasonCode: ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
+          reasonParams: { current: count, limit, target: rejectTarget },
         };
       }
 

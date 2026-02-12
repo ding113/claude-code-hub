@@ -272,7 +272,8 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValueOnce({
       allowed: false,
       rejectedBy: "key",
-      reason: "Key并发 Session 上限已达到（2/1）",
+      reasonCode: "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED",
+      reasonParams: { current: 2, limit: 1, target: "key" },
       keyCount: 2,
       userCount: 0,
       trackedKey: false,
@@ -297,7 +298,8 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValueOnce({
       allowed: false,
       rejectedBy: "user",
-      reason: "User并发 Session 上限已达到（2/1）",
+      reasonCode: "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED",
+      reasonParams: { current: 2, limit: 1, target: "user" },
       keyCount: 0,
       userCount: 2,
       trackedKey: false,

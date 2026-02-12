@@ -225,7 +225,8 @@ describe("RateLimitService - other quota paths", () => {
     const result = await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 2, 10);
     expect(result.allowed).toBe(false);
     expect(result.rejectedBy).toBe("key");
-    expect(result.reason).toContain("Key并发 Session 上限已达到（2/2）");
+    expect(result.reasonCode).toBe("RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED");
+    expect(result.reasonParams).toEqual({ current: 2, limit: 2, target: "key" });
   });
 
   it("checkAndTrackKeyUserSession：User 超限时应返回 not allowed", async () => {
@@ -235,7 +236,8 @@ describe("RateLimitService - other quota paths", () => {
     const result = await RateLimitService.checkAndTrackKeyUserSession(2, 1, "sess", 10, 2);
     expect(result.allowed).toBe(false);
     expect(result.rejectedBy).toBe("user");
-    expect(result.reason).toContain("User并发 Session 上限已达到（2/2）");
+    expect(result.reasonCode).toBe("RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED");
+    expect(result.reasonParams).toEqual({ current: 2, limit: 2, target: "user" });
   });
 
   it("checkAndTrackKeyUserSession：未超限时应返回 allowed 且可标记 tracked", async () => {
