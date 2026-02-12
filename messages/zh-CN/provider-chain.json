@@ -73,7 +73,7 @@
     "vendor_type_circuit_open": "供应商类型临时熔断",
     "circuit_open": "熔断器打开",
     "circuit_half_open": "熔断器半开",
-    "rate_limited": "费用限制"
+    "rate_limited": "速率限制"
   },
   "details": {
     "selectionMethod": "选择方式",

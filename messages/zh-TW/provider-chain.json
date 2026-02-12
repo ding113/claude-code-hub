@@ -73,7 +73,7 @@
     "vendor_type_circuit_open": "供應商類型臨時熔斷",
     "circuit_open": "熔斷器打開",
     "circuit_half_open": "熔斷器半開",
-    "rate_limited": "費用限制"
+    "rate_limited": "速率限制"
   },
   "details": {
     "selectionMethod": "選擇方式",
