@@ -26,6 +26,9 @@ import {
 } from "./redis/active-session-keys";
 import { SessionTracker } from "./session-tracker";
 
+/**
+ * 将已脱敏的 header 文本解析为可序列化对象（用于写入 Session 元信息）。
+ */
 function headersToSanitizedObject(headers: Headers): Record<string, string> {
   const sanitizedText = sanitizeHeaders(headers);
   if (!sanitizedText || sanitizedText === "(empty)") {
@@ -51,6 +54,12 @@ function headersToSanitizedObject(headers: Headers): Record<string, string> {
   return obj;
 }
 
+/**
+ * 解析存储在 Redis 中的 header JSON 字符串。
+ *
+ * - 成功返回 `{ [name]: value }`
+ * - 解析失败/结构不合法则返回 null
+ */
 function parseHeaderRecord(value: string): Record<string, string> | null {
   try {
     const parsed: unknown = JSON.parse(value);
