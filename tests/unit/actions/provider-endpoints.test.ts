@@ -10,6 +10,8 @@ const findProviderEndpointByIdMock = vi.fn();
 const softDeleteProviderEndpointMock = vi.fn();
 const tryDeleteProviderVendorIfEmptyMock = vi.fn();
 const updateProviderEndpointMock = vi.fn();
+const findProviderEndpointProbeLogsBatchMock = vi.fn();
+const findVendorTypeEndpointStatsBatchMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -30,6 +32,7 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 vi.mock("@/lib/endpoint-circuit-breaker", () => ({
+  getAllEndpointHealthStatusAsync: vi.fn(async () => ({})),
   getEndpointHealthInfo: vi.fn(async () => ({ health: {}, config: {} })),
   resetEndpointCircuit: vi.fn(async () => {}),
 }));
@@ -49,6 +52,11 @@ vi.mock("@/lib/vendor-type-circuit-breaker", () => ({
 
 vi.mock("@/lib/provider-endpoints/probe", () => ({
   probeProviderEndpointAndRecord: vi.fn(async () => null),
+}));
+
+vi.mock("@/repository/provider-endpoints-batch", () => ({
+  findProviderEndpointProbeLogsBatch: findProviderEndpointProbeLogsBatchMock,
+  findVendorTypeEndpointStatsBatch: findVendorTypeEndpointStatsBatchMock,
 }));
 
 vi.mock("@/repository", () => ({
@@ -264,43 +272,36 @@ describe("provider-endpoints actions", () => {
     it("returns circuit info for multiple endpoints", async () => {
       getSessionMock.mockResolvedValue({ user: { role: "admin" } });
 
-      const { getEndpointHealthInfo } = await import("@/lib/endpoint-circuit-breaker");
-      vi.mocked(getEndpointHealthInfo)
-        .mockResolvedValueOnce({
-          health: {
-            failureCount: 0,
-            lastFailureTime: null,
-            circuitState: "closed" as const,
-            circuitOpenUntil: null,
-            halfOpenSuccessCount: 0,
-          },
-          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
-        })
-        .mockResolvedValueOnce({
-          health: {
-            failureCount: 5,
-            lastFailureTime: Date.now(),
-            circuitState: "open" as const,
-            circuitOpenUntil: Date.now() + 60000,
-            halfOpenSuccessCount: 0,
-          },
-          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
-        })
-        .mockResolvedValueOnce({
-          health: {
-            failureCount: 1,
-            lastFailureTime: Date.now() - 1000,
-            circuitState: "half-open" as const,
-            circuitOpenUntil: null,
-            halfOpenSuccessCount: 0,
-          },
-          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
-        });
+      const { getAllEndpointHealthStatusAsync } = await import("@/lib/endpoint-circuit-breaker");
+      vi.mocked(getAllEndpointHealthStatusAsync).mockResolvedValue({
+        1: {
+          failureCount: 0,
+          lastFailureTime: null,
+          circuitState: "closed",
+          circuitOpenUntil: null,
+          halfOpenSuccessCount: 0,
+        },
+        2: {
+          failureCount: 5,
+          lastFailureTime: Date.now(),
+          circuitState: "open",
+          circuitOpenUntil: Date.now() + 60000,
+          halfOpenSuccessCount: 0,
+        },
+        3: {
+          failureCount: 1,
+          lastFailureTime: Date.now() - 1000,
+          circuitState: "half-open",
+          circuitOpenUntil: null,
+          halfOpenSuccessCount: 0,
+        },
+      });
 
       const { batchGetEndpointCircuitInfo } = await import("@/actions/provider-endpoints");
       const res = await batchGetEndpointCircuitInfo({ endpointIds: [1, 2, 3] });
 
       expect(res.ok).toBe(true);
+      expect(getAllEndpointHealthStatusAsync).toHaveBeenCalledWith([1, 2, 3], { forceRefresh: true });
       expect(res.data).toHaveLength(3);
       expect(res.data?.[0]).toEqual({
         endpointId: 1,

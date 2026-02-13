@@ -12,7 +12,6 @@ import {
   Trash,
   XCircle,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -121,7 +120,6 @@ export function ProviderRichListItem({
   userGroups = [],
   isAdmin = false,
 }: ProviderRichListItemProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { data: vendors = [] } = useQuery({
     queryKey: ["provider-vendors"],
@@ -223,7 +221,6 @@ export function ProviderRichListItem({
             queryClient.invalidateQueries({ queryKey: ["providers"] });
             queryClient.invalidateQueries({ queryKey: ["providers-health"] });
             queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-            router.refresh();
           } else {
             toast.error(tList("deleteFailed"), {
               description: res.error || tList("unknownError"),
@@ -294,7 +291,6 @@ export function ProviderRichListItem({
           });
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          router.refresh();
         } else {
           toast.error(tList("resetCircuitFailed"), {
             description: res.error || tList("unknownError"),
@@ -320,7 +316,6 @@ export function ProviderRichListItem({
           });
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          router.refresh();
         } else {
           toast.error(tList("resetUsageFailed"), {
             description: res.error || tList("unknownError"),
@@ -349,7 +344,6 @@ export function ProviderRichListItem({
           });
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          router.refresh();
         } else {
           toast.error(tList("toggleFailed"), {
             description: res.error || tList("unknownError"),
@@ -373,7 +367,6 @@ export function ProviderRichListItem({
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
           queryClient.invalidateQueries({ queryKey: ["providers"] });
-          router.refresh();
           return true;
         }
         toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -403,7 +396,6 @@ export function ProviderRichListItem({
       if (res.ok) {
         toast.success(tInline("saveSuccess"));
         queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
         return true;
       }
       toast.error(tInline("groupSaveError"), {
@@ -429,7 +421,6 @@ export function ProviderRichListItem({
       if (res.ok) {
         toast.success(tInline("saveSuccess"));
         queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
         return true;
       }
       toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -973,7 +964,6 @@ export function ProviderRichListItem({
                 setOpenEdit(false);
                 queryClient.invalidateQueries({ queryKey: ["providers"] });
                 queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                router.refresh();
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}
             />
@@ -992,7 +982,6 @@ export function ProviderRichListItem({
                 setOpenClone(false);
                 queryClient.invalidateQueries({ queryKey: ["providers"] });
                 queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                router.refresh();
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}
             />
