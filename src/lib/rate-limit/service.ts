@@ -112,6 +112,12 @@ interface CostLimit {
   resetMode?: DailyResetMode; // 日限额重置模式（仅 daily 使用）
 }
 
+/**
+ * 限流/配额服务：统一封装 Redis + DB 的限额检查与消费追踪。
+ *
+ * 设计约束：
+ * - Redis 不可用时默认 Fail Open，避免误伤正常请求（仍会在日志中记录）。
+ */
 export class RateLimitService {
   // 使用 getter 实现懒加载，避免模块加载时立即连接 Redis（构建阶段触发）
   private static get redis() {

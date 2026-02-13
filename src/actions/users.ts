@@ -83,6 +83,9 @@ export interface BatchUpdateUsersParams {
   };
 }
 
+/**
+ * 批量更新用户时的结构化错误（携带 errorCode 便于前端区分提示）。
+ */
 class BatchUpdateError extends Error {
   readonly errorCode: string;
 
