@@ -27,7 +27,8 @@ function normalizeProbeLog(value: unknown): ProbeLog | null {
   if (typeof rawOk !== "boolean") return null;
 
   const rawLatencyMs = (value as { latencyMs?: unknown }).latencyMs;
-  const latencyMs = typeof rawLatencyMs === "number" ? rawLatencyMs : null;
+  const latencyMs =
+    typeof rawLatencyMs === "number" && Number.isFinite(rawLatencyMs) ? rawLatencyMs : null;
 
   const rawCreatedAt = (value as { createdAt?: unknown }).createdAt;
   const createdAt =
@@ -124,13 +125,26 @@ function normalizeProbeLogsByEndpointId(data: unknown): Record<number, ProbeLog[
 }
 
 let isBatchProbeLogsEndpointAvailable: boolean | undefined;
+let batchProbeLogsEndpointDisabledAt: number | null = null;
+const BATCH_PROBE_LOGS_RETRY_INTERVAL_MS = 5 * 60 * 1000;
+
+function isBatchProbeLogsDisabled(): boolean {
+  if (isBatchProbeLogsEndpointAvailable !== false) return false;
+  if (batchProbeLogsEndpointDisabledAt === null) return true;
+  if (Date.now() - batchProbeLogsEndpointDisabledAt > BATCH_PROBE_LOGS_RETRY_INTERVAL_MS) {
+    isBatchProbeLogsEndpointAvailable = undefined;
+    batchProbeLogsEndpointDisabledAt = null;
+    return false;
+  }
+  return true;
+}
 
 async function tryFetchBatchProbeLogsByEndpointIds(
   endpointIds: number[],
   limit: number
 ): Promise<Record<number, ProbeLog[]> | null> {
   if (endpointIds.length <= 1) return null;
-  if (isBatchProbeLogsEndpointAvailable === false) return null;
+  if (isBatchProbeLogsDisabled()) return null;
   if (process.env.NODE_ENV === "test") return null;
 
   const MAX_ENDPOINT_IDS_PER_BATCH = 500;
@@ -163,6 +177,7 @@ async function tryFetchBatchProbeLogsByEndpointIds(
 
       if (res.status === 404) {
         isBatchProbeLogsEndpointAvailable = false;
+        batchProbeLogsEndpointDisabledAt = Date.now();
         didAnyChunkFail = true;
         stopBatching = true;
         for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
@@ -246,6 +261,7 @@ async function fetchProbeLogsByEndpointIdsIndividually(
   const concurrency = 4;
   let idx = 0;
 
+  // 注意：idx 的读取/自增发生在 await 之前的同步代码段，依赖 JS 单线程语义，因此是安全的。
   const workers = Array.from({ length: Math.min(concurrency, endpointIds.length) }, async () => {
     for (;;) {
       const current = endpointIds[idx];
@@ -351,12 +367,22 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
       return logs
         .slice()
         .reverse()
-        .map((log, idx) => ({
-          index: idx,
-          latencyMs: log.latencyMs ?? null,
-          ok: log.ok,
-          timestamp: log.createdAt ? new Date(log.createdAt).getTime() : undefined,
-        }));
+        .map((log, idx) => {
+          const rawTimestamp =
+            log.createdAt === undefined || log.createdAt === null
+              ? undefined
+              : new Date(log.createdAt).getTime();
+
+          return {
+            index: idx,
+            latencyMs: log.latencyMs ?? null,
+            ok: log.ok,
+            timestamp:
+              rawTimestamp !== undefined && Number.isFinite(rawTimestamp)
+                ? rawTimestamp
+                : undefined,
+          };
+        });
     },
     staleTime: 30_000,
     enabled: isInView,
