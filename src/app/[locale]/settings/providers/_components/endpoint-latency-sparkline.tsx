@@ -20,6 +20,39 @@ type ProbeLog = {
   createdAt?: string | number | Date | null;
 };
 
+function normalizeProbeLog(value: unknown): ProbeLog | null {
+  if (!value || typeof value !== "object") return null;
+
+  const rawOk = (value as { ok?: unknown }).ok;
+  if (typeof rawOk !== "boolean") return null;
+
+  const rawLatencyMs = (value as { latencyMs?: unknown }).latencyMs;
+  const latencyMs = typeof rawLatencyMs === "number" ? rawLatencyMs : null;
+
+  const rawCreatedAt = (value as { createdAt?: unknown }).createdAt;
+  const createdAt =
+    rawCreatedAt === undefined ||
+    rawCreatedAt === null ||
+    typeof rawCreatedAt === "string" ||
+    typeof rawCreatedAt === "number" ||
+    rawCreatedAt instanceof Date
+      ? rawCreatedAt
+      : undefined;
+
+  return { ok: rawOk, latencyMs, createdAt };
+}
+
+function normalizeProbeLogs(value: unknown): ProbeLog[] {
+  if (!Array.isArray(value)) return [];
+
+  const logs: ProbeLog[] = [];
+  for (const item of value) {
+    const normalized = normalizeProbeLog(item);
+    if (normalized) logs.push(normalized);
+  }
+  return logs;
+}
+
 function formatLatency(ms: number | null): string {
   if (ms === null) return "-";
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -55,7 +88,7 @@ function normalizeProbeLogsByEndpointId(data: unknown): Record<number, ProbeLog[
       const endpointId = (item as { endpointId?: unknown }).endpointId;
       const logs = (item as { logs?: unknown }).logs;
       if (typeof endpointId !== "number" || !Array.isArray(logs)) continue;
-      map[endpointId] = logs as ProbeLog[];
+      map[endpointId] = normalizeProbeLogs(logs);
     }
     return map;
   }
@@ -69,7 +102,7 @@ function normalizeProbeLogsByEndpointId(data: unknown): Record<number, ProbeLog[
     for (const [k, v] of Object.entries(raw)) {
       const endpointId = Number.parseInt(k, 10);
       if (!Number.isFinite(endpointId) || !Array.isArray(v)) continue;
-      map[endpointId] = v as ProbeLog[];
+      map[endpointId] = normalizeProbeLogs(v);
     }
     return map;
   }
@@ -82,7 +115,7 @@ function normalizeProbeLogsByEndpointId(data: unknown): Record<number, ProbeLog[
       const endpointId = (item as { endpointId?: unknown }).endpointId;
       const logs = (item as { logs?: unknown }).logs;
       if (typeof endpointId !== "number" || !Array.isArray(logs)) continue;
-      map[endpointId] = logs as ProbeLog[];
+      map[endpointId] = normalizeProbeLogs(logs);
     }
     return map;
   }
@@ -224,7 +257,7 @@ async function fetchProbeLogsByEndpointIdsIndividually(
           endpointId: current,
           limit,
         });
-        map[current] = res.ok && res.data ? (res.data.logs as ProbeLog[]) : [];
+        map[current] = res.ok && res.data ? normalizeProbeLogs(res.data.logs) : [];
       } catch {
         map[current] = [];
       }
