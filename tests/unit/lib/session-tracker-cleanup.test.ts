@@ -4,6 +4,9 @@ import { getGlobalActiveSessionsKey } from "@/lib/redis/active-session-keys";
 let redisClientRef: any;
 const pipelineCalls: Array<unknown[]> = [];
 
+/**
+ * 构造一个可记录调用的 Redis pipeline mock（用于断言 cleanup/expire 等行为）。
+ */
 const makePipeline = () => {
   const pipeline = {
     zadd: vi.fn((...args: unknown[]) => {

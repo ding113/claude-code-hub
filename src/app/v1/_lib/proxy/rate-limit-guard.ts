@@ -30,6 +30,11 @@ function parseLimitInfo(reason: string): { currentUsage: number; limitValue: num
   return { currentUsage: 0, limitValue: 0 };
 }
 
+/**
+ * 限流守卫：集中执行 Key/User 各维度限额校验（含并发 Session / RPM 等资源保护）。
+ *
+ * 调用时机：`ProxySessionGuard` 分配 sessionId 之后、转发到上游之前。
+ */
 export class ProxyRateLimitGuard {
   /**
    * 检查限流（Key 层 + User 层）
