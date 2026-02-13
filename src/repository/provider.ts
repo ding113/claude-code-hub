@@ -987,7 +987,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       // 这里保持原样，交由上层进行展示格式化。
       providerStatisticsCache = {
         timezone,
-        expiresAt: now + PROVIDER_STATISTICS_CACHE_TTL_MS,
+        expiresAt: Date.now() + PROVIDER_STATISTICS_CACHE_TTL_MS,
         data,
       };
 

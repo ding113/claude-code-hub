@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type StableIntersectionObserverInit = IntersectionObserverInit & {
   delay?: number;
@@ -70,19 +70,23 @@ function useStableIntersectionObserverOptions(options?: IntersectionObserverInit
  * - 在 test 环境或缺少 IntersectionObserver 时会直接视为可见，保证可预测性。
  */
 export function useInViewOnce<T extends Element>(options?: IntersectionObserverInit) {
-  const ref = useRef<T | null>(null);
+  const [element, setElement] = useState<T | null>(null);
   const [isInView, setIsInView] = useState(false);
   const stableOptions = useStableIntersectionObserverOptions(options);
 
+  const ref = useCallback((node: T | null) => {
+    setElement(node);
+  }, []);
+
   useEffect(() => {
     if (isInView) return;
-    const el = ref.current;
-    if (!el) return;
 
     if (process.env.NODE_ENV === "test" || typeof IntersectionObserver === "undefined") {
       setIsInView(true);
       return;
     }
+
+    if (!element) return;
 
     const observer = new IntersectionObserver((entries) => {
       const entry = entries[0];
@@ -92,9 +96,9 @@ export function useInViewOnce<T extends Element>(options?: IntersectionObserverI
       }
     }, stableOptions);
 
-    observer.observe(el);
+    observer.observe(element);
     return () => observer.disconnect();
-  }, [isInView, stableOptions]);
+  }, [element, isInView, stableOptions]);
 
   return { ref, isInView };
 }
