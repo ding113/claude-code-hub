@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getGlobalActiveSessionsKey } from "@/lib/redis/active-session-keys";
 
 let redisClientRef: any;
 const pipelineCalls: Array<unknown[]> = [];
@@ -53,6 +54,7 @@ vi.mock("@/lib/redis", () => ({
 
 describe("SessionTracker - TTL and cleanup", () => {
   const nowMs = 1_700_000_000_000;
+  const globalKey = getGlobalActiveSessionsKey();
   const ORIGINAL_SESSION_TTL = process.env.SESSION_TTL;
 
   beforeEach(() => {
@@ -94,7 +96,7 @@ describe("SessionTracker - TTL and cleanup", () => {
       // Should call zremrangebyscore with cutoff = now - 600*1000 = now - 600000
       const expectedCutoff = nowMs - 600 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "{active_sessions}:global:active_sessions",
+        globalKey,
         "-inf",
         expectedCutoff
       );
@@ -110,7 +112,7 @@ describe("SessionTracker - TTL and cleanup", () => {
       // Default: 300 seconds = 300000 ms
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "{active_sessions}:global:active_sessions",
+        globalKey,
         "-inf",
         expectedCutoff
       );
@@ -267,7 +269,7 @@ describe("SessionTracker - TTL and cleanup", () => {
 
       const expectedCutoff = nowMs - 600 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "{active_sessions}:global:active_sessions",
+        globalKey,
         "-inf",
         expectedCutoff
       );

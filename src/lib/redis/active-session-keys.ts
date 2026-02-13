@@ -7,14 +7,23 @@
  */
 const ACTIVE_SESSIONS_HASH_TAG = "{active_sessions}";
 
+/**
+ * 全局活跃 Session ZSET（仅用于观测 / Sessions 页面）。
+ */
 export function getGlobalActiveSessionsKey(): string {
   return `${ACTIVE_SESSIONS_HASH_TAG}:global:active_sessions`;
 }
 
+/**
+ * Key 维度活跃 Session ZSET（用于 Key 并发上限判断）。
+ */
 export function getKeyActiveSessionsKey(keyId: number): string {
   return `${ACTIVE_SESSIONS_HASH_TAG}:key:${keyId}:active_sessions`;
 }
 
+/**
+ * User 维度活跃 Session ZSET（用于跨多 Key 的 User 并发上限判断）。
+ */
 export function getUserActiveSessionsKey(userId: number): string {
   return `${ACTIVE_SESSIONS_HASH_TAG}:user:${userId}:active_sessions`;
 }
