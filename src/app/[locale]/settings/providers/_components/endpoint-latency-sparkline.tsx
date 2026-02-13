@@ -100,16 +100,27 @@ async function tryFetchBatchProbeLogsByEndpointIds(
   if (isBatchProbeLogsEndpointAvailable === false) return null;
   if (process.env.NODE_ENV === "test") return null;
 
-  try {
-    const MAX_ENDPOINT_IDS_PER_BATCH = 500;
-    const chunks: number[][] = [];
-    for (let index = 0; index < endpointIds.length; index += MAX_ENDPOINT_IDS_PER_BATCH) {
-      chunks.push(endpointIds.slice(index, index + MAX_ENDPOINT_IDS_PER_BATCH));
+  const MAX_ENDPOINT_IDS_PER_BATCH = 500;
+  const chunks: number[][] = [];
+  for (let index = 0; index < endpointIds.length; index += MAX_ENDPOINT_IDS_PER_BATCH) {
+    chunks.push(endpointIds.slice(index, index + MAX_ENDPOINT_IDS_PER_BATCH));
+  }
+
+  const merged: Record<number, ProbeLog[]> = {};
+  const fallbackEndpointIds = new Set<number>();
+  const missingFromSuccessfulChunks = new Set<number>();
+  let didAnyChunkSucceed = false;
+  let didAnyChunkFail = false;
+  let stopBatching = false;
+
+  for (const chunk of chunks) {
+    if (stopBatching) {
+      didAnyChunkFail = true;
+      for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
+      continue;
     }
 
-    const merged: Record<number, ProbeLog[]> = {};
-
-    for (const chunk of chunks) {
+    try {
       const res = await fetch("/api/actions/providers/batchGetProviderEndpointProbeLogs", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -119,35 +130,85 @@ async function tryFetchBatchProbeLogsByEndpointIds(
 
       if (res.status === 404) {
         isBatchProbeLogsEndpointAvailable = false;
-        return null;
+        didAnyChunkFail = true;
+        stopBatching = true;
+        for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
+        continue;
       }
 
-      if (!res.ok) return null;
+      if (!res.ok) {
+        didAnyChunkFail = true;
+        for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
+        continue;
+      }
+
       const json = (await res.json()) as { ok?: unknown; data?: unknown };
-      if (json.ok !== true) return null;
+      if (json.ok !== true) {
+        didAnyChunkFail = true;
+        for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
+        continue;
+      }
 
       const normalized = normalizeProbeLogsByEndpointId(json.data);
-      if (!normalized) return null;
-
-      for (const [endpointId, logs] of Object.entries(normalized)) {
-        merged[Number(endpointId)] = logs;
+      if (!normalized) {
+        didAnyChunkFail = true;
+        for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
+        continue;
       }
-    }
 
+      didAnyChunkSucceed = true;
+
+      const normalizedEndpointIds = new Set<number>();
+      for (const [endpointId, logs] of Object.entries(normalized)) {
+        const id = Number(endpointId);
+        normalizedEndpointIds.add(id);
+        merged[id] = logs;
+      }
+
+      for (const endpointId of chunk) {
+        if (!normalizedEndpointIds.has(endpointId)) missingFromSuccessfulChunks.add(endpointId);
+      }
+    } catch {
+      didAnyChunkFail = true;
+      for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
+    }
+  }
+
+  if (!didAnyChunkSucceed) return null;
+
+  if (!didAnyChunkFail) {
     isBatchProbeLogsEndpointAvailable = true;
     return merged;
-  } catch {
-    return null;
   }
+
+  const endpointIdsToFetchIndividually = new Set<number>();
+  for (const endpointId of fallbackEndpointIds) {
+    if (merged[endpointId] === undefined) endpointIdsToFetchIndividually.add(endpointId);
+  }
+  for (const endpointId of missingFromSuccessfulChunks) {
+    if (merged[endpointId] === undefined) endpointIdsToFetchIndividually.add(endpointId);
+  }
+
+  if (endpointIdsToFetchIndividually.size === 0) return merged;
+
+  const rest = await fetchProbeLogsByEndpointIdsIndividually(
+    Array.from(endpointIdsToFetchIndividually),
+    limit
+  ).catch(() => null);
+
+  if (rest) {
+    for (const [endpointId, logs] of Object.entries(rest)) {
+      merged[Number(endpointId)] = logs;
+    }
+  }
+
+  return merged;
 }
 
-async function fetchProbeLogsByEndpointIds(
+async function fetchProbeLogsByEndpointIdsIndividually(
   endpointIds: number[],
   limit: number
 ): Promise<Record<number, ProbeLog[]>> {
-  const batched = await tryFetchBatchProbeLogsByEndpointIds(endpointIds, limit);
-  if (batched) return batched;
-
   const map: Record<number, ProbeLog[]> = {};
   const concurrency = 4;
   let idx = 0;
@@ -174,6 +235,15 @@ async function fetchProbeLogsByEndpointIds(
   return map;
 }
 
+async function fetchProbeLogsByEndpointIds(
+  endpointIds: number[],
+  limit: number
+): Promise<Record<number, ProbeLog[]>> {
+  const batched = await tryFetchBatchProbeLogsByEndpointIds(endpointIds, limit);
+  if (batched) return batched;
+  return fetchProbeLogsByEndpointIdsIndividually(endpointIds, limit);
+}
+
 type BatchRequest = {
   endpointId: number;
   resolve: (logs: ProbeLog[]) => void;
@@ -196,7 +266,7 @@ class ProbeLogsBatcher {
       const delayMs = process.env.NODE_ENV === "test" ? 0 : 10;
       this.flushTimer = setTimeout(() => {
         this.flushTimer = null;
-        void this.flush();
+        void this.flush().catch(() => {});
       }, delayMs);
     });
   }
@@ -205,24 +275,32 @@ class ProbeLogsBatcher {
     const snapshot = new Map(this.pendingByLimit);
     this.pendingByLimit.clear();
 
-    await Promise.all(
-      Array.from(snapshot.entries(), async ([limit, group]) => {
-        const endpointIds = Array.from(group.keys());
-        if (endpointIds.length === 0) return;
+    try {
+      await Promise.all(
+        Array.from(snapshot.entries(), async ([limit, group]) => {
+          const endpointIds = Array.from(group.keys());
+          if (endpointIds.length === 0) return;
 
-        try {
-          const map = await fetchProbeLogsByEndpointIds(endpointIds, limit);
-          for (const [endpointId, requests] of group.entries()) {
-            const logs = map[endpointId] ?? [];
-            for (const req of requests) req.resolve(logs);
+          try {
+            const map = await fetchProbeLogsByEndpointIds(endpointIds, limit);
+            for (const [endpointId, requests] of group.entries()) {
+              const logs = map[endpointId] ?? [];
+              for (const req of requests) req.resolve(logs);
+            }
+          } catch (error) {
+            for (const requests of group.values()) {
+              for (const req of requests) req.reject(error);
+            }
           }
-        } catch (error) {
-          for (const requests of group.values()) {
-            for (const req of requests) req.reject(error);
-          }
+        })
+      );
+    } catch (error) {
+      for (const group of snapshot.values()) {
+        for (const requests of group.values()) {
+          for (const req of requests) req.reject(error);
         }
-      })
-    );
+      }
+    }
   }
 }
 

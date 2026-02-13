@@ -121,6 +121,8 @@ export function VendorKeysCompactList(props: {
                   onSuccess={() => {
                     setCreateOpen(false);
                     queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                    queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
                     queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
                   }}
                 />
