@@ -217,6 +217,15 @@ describe("ProviderRichListItem Endpoint Display", () => {
     const { unmount } = renderWithProviders(
       <ProviderRichListItem
         provider={provider}
+        vendor={{
+          id: 101,
+          websiteDomain: "anthropic.com",
+          displayName: "Anthropic",
+          websiteUrl: "https://anthropic.com",
+          faviconUrl: null,
+          createdAt: new Date("2026-02-01T00:00:00Z"),
+          updatedAt: new Date("2026-02-01T00:00:00Z"),
+        }}
         currentUser={ADMIN_USER}
         enableMultiProviderTypes={true}
       />

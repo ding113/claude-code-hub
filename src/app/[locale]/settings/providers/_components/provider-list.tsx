@@ -1,6 +1,9 @@
 "use client";
+import { useQuery } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useMemo } from "react";
+import { getProviderVendors } from "@/actions/provider-endpoints";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -54,6 +57,16 @@ export function ProviderList({
 }: ProviderListProps) {
   const t = useTranslations("settings.providers");
 
+  const { data: vendors = [] } = useQuery({
+    queryKey: ["provider-vendors"],
+    queryFn: async () => await getProviderVendors(),
+    staleTime: 60000,
+  });
+
+  const vendorById = useMemo(() => {
+    return new Map(vendors.map((vendor) => [vendor.id, vendor]));
+  }, [vendors]);
+
   if (providers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4">
@@ -72,6 +85,7 @@ export function ProviderList({
         <ProviderRichListItem
           key={provider.id}
           provider={provider}
+          vendor={provider.providerVendorId ? vendorById.get(provider.providerVendorId) : undefined}
           currentUser={currentUser}
           healthStatus={healthStatus[provider.id]}
           endpointCircuitInfo={endpointCircuitInfo[provider.id]}

@@ -1,7 +1,6 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
 import { ServerCog } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
@@ -14,7 +13,6 @@ interface AddProviderDialogProps {
 }
 
 export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialogProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("settings.providers");
   const [open, setOpen] = useState(false);
@@ -34,8 +32,8 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
               setOpen(false);
               queryClient.invalidateQueries({ queryKey: ["providers"] });
               queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-              // 刷新页面数据以显示新添加的服务商
-              router.refresh();
+              queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+              queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
             }}
           />
         </FormErrorBoundary>
