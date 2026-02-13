@@ -62,7 +62,10 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
     }
   }
 
-  keyStringByIdCache.set(keyId, { key: keyString, expiresAt: now + KEY_STRING_BY_ID_CACHE_TTL_MS });
+  keyStringByIdCache.set(keyId, {
+    key: keyString,
+    expiresAt: Date.now() + KEY_STRING_BY_ID_CACHE_TTL_MS,
+  });
   return keyString;
 }
 
