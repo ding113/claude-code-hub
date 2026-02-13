@@ -867,7 +867,7 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
  * - bounds: 用“按时区计算的时间范围”过滤 created_at，便于命中 created_at 索引
  * - latest_call: 限制近 7 天范围，避免扫描历史数据
  */
-type ProviderStatisticsRow = {
+export type ProviderStatisticsRow = {
   id: number;
   today_cost: string;
   today_calls: number;
@@ -881,6 +881,12 @@ let providerStatisticsCache: {
   timezone: string;
   expiresAt: number;
   data: ProviderStatisticsRow[];
+} | null = null;
+
+// in-flight 去重：避免缓存过期瞬间并发触发多次相同查询（thundering herd）
+let providerStatisticsInFlight: {
+  timezone: string;
+  promise: Promise<ProviderStatisticsRow[]>;
 } | null = null;
 
 export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> {
@@ -897,90 +903,106 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       return providerStatisticsCache.data;
     }
 
-    // ⭐ 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
-    // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
-    const query = sql`
-      WITH bounds AS (
-        SELECT
-          (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
-          (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) + INTERVAL '1 day' AS tomorrow_start,
-          (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) - INTERVAL '7 days' AS last7_start
-      ),
-      provider_stats AS (
-        -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
-        SELECT
-          mr.final_provider_id,
-          COALESCE(SUM(mr.cost_usd), 0) AS today_cost,
-          COUNT(*)::integer AS today_calls
-        FROM (
+    if (providerStatisticsInFlight && providerStatisticsInFlight.timezone === timezone) {
+      return await providerStatisticsInFlight.promise;
+    }
+
+    const fetchPromise = (async (): Promise<ProviderStatisticsRow[]> => {
+      // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
+      // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
+      const query = sql`
+        WITH bounds AS (
           SELECT
-            CASE
-              WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-              ELSE (provider_chain->-1->>'id')::int
-            END AS final_provider_id,
-            cost_usd
-          FROM message_request, bounds
-          WHERE deleted_at IS NULL
-            AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-            AND created_at >= bounds.today_start
-            AND created_at < bounds.tomorrow_start
-        ) mr
-        GROUP BY mr.final_provider_id
-      ),
-      latest_call AS (
-        SELECT DISTINCT ON (final_provider_id)
-          final_provider_id,
-          created_at AS last_call_time,
-          model AS last_call_model
-        FROM (
+            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
+            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) + INTERVAL '1 day' AS tomorrow_start,
+            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) - INTERVAL '7 days' AS last7_start
+        ),
+        provider_stats AS (
+          -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
           SELECT
-            CASE
-              WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-              ELSE (provider_chain->-1->>'id')::int
-            END AS final_provider_id,
-            id,
-            created_at,
-            model
-          FROM message_request, bounds
-          WHERE deleted_at IS NULL
-            AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-            AND created_at >= bounds.last7_start
-        ) mr
-        -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
-        ORDER BY final_provider_id, created_at DESC, id DESC
-      )
-      SELECT
-        p.id,
-        COALESCE(ps.today_cost, 0) AS today_cost,
-        COALESCE(ps.today_calls, 0) AS today_calls,
-        lc.last_call_time,
-        lc.last_call_model
-      FROM providers p
-      LEFT JOIN provider_stats ps ON p.id = ps.final_provider_id
-      LEFT JOIN latest_call lc ON p.id = lc.final_provider_id
-      WHERE p.deleted_at IS NULL
-      ORDER BY p.id ASC
-    `;
+            mr.final_provider_id,
+            COALESCE(SUM(mr.cost_usd), 0) AS today_cost,
+            COUNT(*)::integer AS today_calls
+          FROM (
+            SELECT
+              CASE
+                WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
+                ELSE (provider_chain->-1->>'id')::int
+              END AS final_provider_id,
+              cost_usd
+            FROM message_request, bounds
+            WHERE deleted_at IS NULL
+              AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+              AND created_at >= bounds.today_start
+              AND created_at < bounds.tomorrow_start
+          ) mr
+          GROUP BY mr.final_provider_id
+        ),
+        latest_call AS (
+          SELECT DISTINCT ON (final_provider_id)
+            final_provider_id,
+            created_at AS last_call_time,
+            model AS last_call_model
+          FROM (
+            SELECT
+              CASE
+                WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
+                ELSE (provider_chain->-1->>'id')::int
+              END AS final_provider_id,
+              id,
+              created_at,
+              model
+            FROM message_request, bounds
+            WHERE deleted_at IS NULL
+              AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+              AND created_at >= bounds.last7_start
+          ) mr
+          -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
+          ORDER BY final_provider_id, created_at DESC, id DESC
+        )
+        SELECT
+          p.id,
+          COALESCE(ps.today_cost, 0) AS today_cost,
+          COALESCE(ps.today_calls, 0) AS today_calls,
+          lc.last_call_time,
+          lc.last_call_model
+        FROM providers p
+        LEFT JOIN provider_stats ps ON p.id = ps.final_provider_id
+        LEFT JOIN latest_call lc ON p.id = lc.final_provider_id
+        WHERE p.deleted_at IS NULL
+        ORDER BY p.id ASC
+      `;
 
-    logger.trace("getProviderStatistics:executing_query");
+      logger.trace("getProviderStatistics:executing_query");
 
-    const result = await db.execute(query);
+      const result = await db.execute(query);
+      const data = Array.from(result) as ProviderStatisticsRow[];
 
-    logger.trace("getProviderStatistics:result", {
-      count: Array.isArray(result) ? result.length : 0,
-    });
+      logger.trace("getProviderStatistics:result", {
+        count: data.length,
+      });
 
-    // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
-    // last_call_time 由数据库返回为时间戳（UTC）。
-    // 这里保持原样，交由上层进行展示格式化。
-    const data = result as unknown as ProviderStatisticsRow[];
-    providerStatisticsCache = {
-      timezone,
-      expiresAt: now + PROVIDER_STATISTICS_CACHE_TTL_MS,
-      data,
-    };
+      // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
+      // last_call_time 由数据库返回为时间戳（UTC）。
+      // 这里保持原样，交由上层进行展示格式化。
+      providerStatisticsCache = {
+        timezone,
+        expiresAt: now + PROVIDER_STATISTICS_CACHE_TTL_MS,
+        data,
+      };
 
-    return data;
+      return data;
+    })();
+
+    providerStatisticsInFlight = { timezone, promise: fetchPromise };
+
+    try {
+      return await fetchPromise;
+    } finally {
+      if (providerStatisticsInFlight?.promise === fetchPromise) {
+        providerStatisticsInFlight = null;
+      }
+    }
   } catch (error) {
     logger.trace("getProviderStatistics:error", {
       message: error instanceof Error ? error.message : String(error),
