@@ -2,7 +2,6 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -201,7 +200,6 @@ function VendorKeyRow(props: {
   const tTypes = useTranslations("settings.providers.types");
 
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   const validatePriority = (raw: string) => {
     if (raw.length === 0) return tInline("priorityInvalid");
@@ -239,7 +237,6 @@ function VendorKeyRow(props: {
           toast.success(tInline("saveSuccess"));
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-          router.refresh();
           return true;
         }
         toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -278,8 +275,8 @@ function VendorKeyRow(props: {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-health"] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-      router.refresh();
     },
     onError: () => {
       toast.error(t("toggleFailed"));
@@ -293,12 +290,13 @@ function VendorKeyRow(props: {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
       setDeleteDialogOpen(false);
       toast.success(tList("deleteSuccess"), {
         description: tList("deleteSuccessDesc", { name: props.provider.name }),
       });
-      router.refresh();
     },
     onError: () => {
       toast.error(tList("deleteFailed"));
@@ -470,8 +468,9 @@ function VendorKeyRow(props: {
                       onSuccess={() => {
                         setEditOpen(false);
                         queryClient.invalidateQueries({ queryKey: ["providers"] });
+                        queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                        queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
                         queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-                        router.refresh();
                       }}
                     />
                   </FormErrorBoundary>

@@ -1,9 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
 import { getProviderEndpointProbeLogs } from "@/actions/provider-endpoints";
+import { useInViewOnce } from "@/lib/hooks/use-in-view-once";
 import { cn } from "@/lib/utils";
 
 type SparkPoint = {
@@ -42,43 +43,6 @@ function CustomTooltip({
       </div>
     </div>
   );
-}
-
-function useInViewOnce<T extends Element>(options?: IntersectionObserverInit) {
-  const ref = useRef<T | null>(null);
-  const [isInView, setIsInView] = useState(false);
-
-  useEffect(() => {
-    if (isInView) return;
-    const el = ref.current;
-    if (!el) return;
-
-    if (process.env.NODE_ENV === "test") {
-      setIsInView(true);
-      return;
-    }
-
-    if (typeof IntersectionObserver === "undefined") {
-      setIsInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const entry = entries[0];
-        if (entry?.isIntersecting) {
-          setIsInView(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "200px", ...options }
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [isInView, options]);
-
-  return { ref, isInView };
 }
 
 function normalizeProbeLogsByEndpointId(data: unknown): Record<number, ProbeLog[]> | null {
@@ -137,27 +101,41 @@ async function tryFetchBatchProbeLogsByEndpointIds(
   if (process.env.NODE_ENV === "test") return null;
 
   try {
-    const res = await fetch("/api/actions/providers/batchGetProviderEndpointProbeLogs", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      credentials: "same-origin",
-      body: JSON.stringify({ endpointIds, limit }),
-    });
-
-    if (res.status === 404) {
-      isBatchProbeLogsEndpointAvailable = false;
-      return null;
+    const MAX_ENDPOINT_IDS_PER_BATCH = 500;
+    const chunks: number[][] = [];
+    for (let index = 0; index < endpointIds.length; index += MAX_ENDPOINT_IDS_PER_BATCH) {
+      chunks.push(endpointIds.slice(index, index + MAX_ENDPOINT_IDS_PER_BATCH));
     }
 
-    if (!res.ok) return null;
-    const json = (await res.json()) as { ok?: unknown; data?: unknown };
-    if (json.ok !== true) return null;
+    const merged: Record<number, ProbeLog[]> = {};
 
-    const normalized = normalizeProbeLogsByEndpointId(json.data);
-    if (!normalized) return null;
+    for (const chunk of chunks) {
+      const res = await fetch("/api/actions/providers/batchGetProviderEndpointProbeLogs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ endpointIds: chunk, limit }),
+      });
+
+      if (res.status === 404) {
+        isBatchProbeLogsEndpointAvailable = false;
+        return null;
+      }
+
+      if (!res.ok) return null;
+      const json = (await res.json()) as { ok?: unknown; data?: unknown };
+      if (json.ok !== true) return null;
+
+      const normalized = normalizeProbeLogsByEndpointId(json.data);
+      if (!normalized) return null;
+
+      for (const [endpointId, logs] of Object.entries(normalized)) {
+        merged[Number(endpointId)] = logs;
+      }
+    }
 
     isBatchProbeLogsEndpointAvailable = true;
-    return normalized;
+    return merged;
   } catch {
     return null;
   }

@@ -209,7 +209,7 @@ function VendorCard({
         />
 
         {enableMultiProviderTypes && vendorId > 0 && (
-          <ProviderEndpointsSection vendorId={vendorId} />
+          <ProviderEndpointsSection vendorId={vendorId} deferUntilInView />
         )}
       </CardContent>
     </Card>
