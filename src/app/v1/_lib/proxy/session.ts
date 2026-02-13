@@ -474,6 +474,7 @@ export class ProxySession {
       endpointUrl?: string;
       // 修复：添加新字段
       statusCode?: number; // 成功时的状态码
+      statusCodeInferred?: boolean; // statusCode 是否为响应体推断
       circuitFailureCount?: number; // 熔断失败计数
       circuitFailureThreshold?: number; // 熔断阈值
       errorDetails?: ProviderChainItem["errorDetails"]; // 结构化错误详情
@@ -502,6 +503,7 @@ export class ProxySession {
       errorMessage: metadata?.errorMessage, // 记录错误信息
       // 修复：记录新字段
       statusCode: metadata?.statusCode,
+      statusCodeInferred: metadata?.statusCodeInferred,
       circuitFailureCount: metadata?.circuitFailureCount,
       circuitFailureThreshold: metadata?.circuitFailureThreshold,
       errorDetails: metadata?.errorDetails, // 结构化错误详情

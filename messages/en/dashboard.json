@@ -244,6 +244,18 @@
       },
       "errorMessage": "Error Message",
       "fake200ForwardedNotice": "Note: For streaming requests, this failure may be detected only after the stream ends; the response content may already have been forwarded to the client.",
+      "fake200DetectedReason": "Detected reason: {reason}",
+      "fake200Reasons": {
+        "emptyBody": "Empty response body",
+        "htmlBody": "HTML document returned (likely an error page)",
+        "jsonErrorNonEmpty": "JSON has a non-empty `error` field",
+        "jsonErrorMessageNonEmpty": "JSON has a non-empty `error.message`",
+        "jsonMessageKeywordMatch": "JSON `message` contains the word \"error\" (heuristic)",
+        "unknown": "Response body indicates an error"
+      },
+      "statusCodeInferredBadge": "Inferred",
+      "statusCodeInferredTooltip": "This status code is inferred from response body content (e.g., fake 200) and may differ from the upstream HTTP status.",
+      "statusCodeInferredSuffix": "(inferred)",
       "filteredProviders": "Filtered Providers",
       "providerChain": {
         "title": "Provider Decision Chain Timeline",

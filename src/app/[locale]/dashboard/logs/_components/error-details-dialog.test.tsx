@@ -253,6 +253,15 @@ const messages = {
         },
         errorMessage: "Error message",
         fake200ForwardedNotice: "Note: detected after stream end; payload may have been forwarded",
+        fake200DetectedReason: "Detected reason: {reason}",
+        fake200Reasons: {
+          emptyBody: "Empty response body",
+          htmlBody: "HTML document returned",
+          jsonErrorNonEmpty: "JSON has non-empty error field",
+          jsonErrorMessageNonEmpty: "JSON has non-empty error.message",
+          jsonMessageKeywordMatch: 'JSON message contains "error"',
+          unknown: "Response body indicates an error",
+        },
         viewDetails: "View details",
         filteredProviders: "Filtered providers",
         providerChain: {

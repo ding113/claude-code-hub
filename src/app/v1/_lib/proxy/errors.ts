@@ -18,11 +18,41 @@ export class ProxyError extends Error {
     message: string,
     public readonly statusCode: number,
     public readonly upstreamError?: {
-      body: string; // 原始响应体（智能截断）
+      /**
+       * 上游响应体（智能截断）。
+       *
+       * 注意：该字段会进入 getDetailedErrorMessage()，并被记录到数据库中，
+       * 因此不要在这里放入“大段原文”或未脱敏的敏感内容。
+       */
+      body: string;
       parsed?: unknown; // 解析后的 JSON（如果有）
       providerId?: number;
       providerName?: string;
       requestId?: string; // 上游请求 ID（用于覆写响应时注入）
+
+      /**
+       * 上游响应体原文（通常为前缀片段）。
+       *
+       * 设计目标：
+       * - 仅用于“本次错误响应”返回给客户端（受系统设置控制）；
+       * - 不参与规则匹配与持久化（避免污染数据库/日志）。
+       *
+       * 目前主要用于“假 200”检测：HTTP 状态码为 2xx，但 body 实际为错误页/错误 JSON。
+       */
+      rawBody?: string;
+      rawBodyTruncated?: boolean;
+
+      /**
+       * 标记该 ProxyError 的 statusCode 是否由“响应体内容”推断得出（而非上游真实 HTTP 状态码）。
+       *
+       * 典型场景：上游返回 HTTP 200，但 body 为错误页/错误 JSON（假 200）。此时 CCH 会根据响应体内容推断更贴近语义的 4xx/5xx，
+       * 以便让故障转移/熔断/会话绑定逻辑与“真实上游错误状态码”保持一致。
+       */
+      statusCodeInferred?: boolean;
+      /**
+       * 命中的推断规则 id（仅用于内部调试/审计，不应用于用户展示文案）。
+       */
+      statusCodeInferenceMatcherId?: string;
     }
   ) {
     super(message);
@@ -447,6 +477,58 @@ export class ProxyError extends Error {
    * - getClientSafeMessage(): 不包含供应商名称，用于返回给客户端
    */
   getClientSafeMessage(): string {
+    // 注意：一些内部检测/统计用的“错误码”（例如 FAKE_200_*）不适合直接暴露给客户端。
+    // 这里做最小映射：当 message 为 FAKE_200_* 时返回“可读原因说明”，并附带安全的上游片段（若有）。
+    if (this.message.startsWith("FAKE_200_")) {
+      // 说明：这些 code 都来自内部的“假 200”检测，代表：上游返回 HTTP 200，但响应体内容更像错误页/错误 JSON。
+      // 我们需要：
+      // 1) 给用户清晰的错误原因（避免只看到一个内部 code）；
+      // 2) 不泄露内部错误码/供应商名称；
+      // 3) 在有 detail 时附带一小段“脱敏 + 截断”的上游片段，帮助排查。
+      const reason = (() => {
+        switch (this.message) {
+          case "FAKE_200_EMPTY_BODY":
+            return "Upstream returned HTTP 200, but the response body was empty.";
+          case "FAKE_200_HTML_BODY":
+            return "Upstream returned HTTP 200, but the response body looks like an HTML document (likely an error page).";
+          case "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY":
+            return "Upstream returned HTTP 200, but the JSON body contains a non-empty `error.message`.";
+          case "FAKE_200_JSON_ERROR_NON_EMPTY":
+            return "Upstream returned HTTP 200, but the JSON body contains a non-empty `error` field.";
+          case "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH":
+            return "Upstream returned HTTP 200, but the JSON `message` suggests an error (heuristic).";
+          default:
+            return "Upstream returned HTTP 200, but the response body indicates an error.";
+        }
+      })();
+
+      const inferredNote = this.upstreamError?.statusCodeInferred
+        ? ` Inferred HTTP status: ${this.statusCode}.`
+        : "";
+
+      const detail = this.upstreamError?.body?.trim();
+      if (detail) {
+        // 注意：对 FAKE_200_* 路径，我们期望 upstreamError.body 来自内部检测得到的“脱敏 + 截断片段”（详见 upstream-error-detection.ts）。
+        //
+        // 但为避免未来调用方误把“未脱敏的大段原文”塞进 upstreamError.body 导致泄露，
+        // 这里再做一次防御性处理：
+        // - whitespace 归一化（避免多行污染客户端日志）
+        // - 二次截断（上限 200 字符）
+        // - 轻量脱敏（避免明显的 token/key 泄露）
+        const normalized = detail.replace(/\s+/g, " ").trim();
+        const maxChars = 200;
+        const clipped =
+          normalized.length > maxChars ? `${normalized.slice(0, maxChars)}…` : normalized;
+        const safe = clipped
+          .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
+          .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b/giu, "[REDACTED_KEY]")
+          .replace(/\bAIza[0-9A-Za-z_-]{16,}\b/g, "[REDACTED_KEY]");
+        return `${reason}${inferredNote} Upstream detail: ${safe}`;
+      }
+
+      return `${reason}${inferredNote}`;
+    }
+
     return this.message;
   }
 }

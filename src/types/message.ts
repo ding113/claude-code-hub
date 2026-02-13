@@ -71,6 +71,15 @@ export interface ProviderChainItem {
 
   // 修复：新增成功时的状态码
   statusCode?: number;
+  /**
+   * 标记 statusCode 是否为“基于响应体内容推断”的结果（而非上游真实返回的 HTTP 状态码）。
+   *
+   * 典型场景：上游返回 HTTP 200，但 body 为错误页/错误 JSON（假 200）。
+   * 此时为了让熔断/故障转移/会话绑定与“真实错误语义”保持一致，CCH 会推断更合理的 4xx/5xx。
+   *
+   * 该字段用于在决策链 / 技术时间线 / UI 中显著提示“此状态码为推断”，避免误读。
+   */
+  statusCodeInferred?: boolean;
 
   // 模型重定向信息（在供应商级别记录）
   modelRedirect?: {

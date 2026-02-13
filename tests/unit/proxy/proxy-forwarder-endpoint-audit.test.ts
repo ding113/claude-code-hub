@@ -562,6 +562,59 @@ describe("ProxyForwarder - endpoint audit", () => {
     expect(exhaustedItem!.errorMessage).toBeUndefined();
   });
 
+  test("endpoint_pool_exhausted should not be deduped away when initial_selection already recorded", async () => {
+    const requestPath = "/v1/messages";
+    const session = createSession(new URL(`https://example.com${requestPath}`));
+    const provider = createProvider({
+      providerType: "claude",
+      providerVendorId: 123,
+      url: "https://provider.example.com/v1/messages",
+    });
+    session.setProvider(provider);
+
+    // Simulate ProviderSelector already recorded initial_selection for the same provider
+    session.addProviderToChain(provider, { reason: "initial_selection" });
+
+    mocks.getPreferredProviderEndpoints.mockResolvedValueOnce([]);
+    mocks.getEndpointFilterStats.mockResolvedValueOnce({
+      total: 0,
+      enabled: 0,
+      circuitOpen: 0,
+      available: 0,
+    });
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+
+    await expect(ProxyForwarder.send(session)).rejects.toThrow();
+
+    expect(doForward).not.toHaveBeenCalled();
+
+    const chain = session.getProviderChain();
+    expect(chain.some((item) => item.reason === "initial_selection")).toBe(true);
+
+    const exhaustedItems = chain.filter((item) => item.reason === "endpoint_pool_exhausted");
+    expect(exhaustedItems).toHaveLength(1);
+
+    expect(exhaustedItems[0]).toEqual(
+      expect.objectContaining({
+        id: provider.id,
+        name: provider.name,
+        reason: "endpoint_pool_exhausted",
+        strictBlockCause: "no_endpoint_candidates",
+        attemptNumber: 1,
+        endpointFilterStats: {
+          total: 0,
+          enabled: 0,
+          circuitOpen: 0,
+          available: 0,
+        },
+      })
+    );
+  });
+
   test("endpoint pool exhausted (selector_error) should record endpoint_pool_exhausted with selectorError in decisionContext", async () => {
     const requestPath = "/v1/responses";
     const session = createSession(new URL(`https://example.com${requestPath}`));
