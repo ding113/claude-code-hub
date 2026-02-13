@@ -515,6 +515,46 @@ const { route: getProviderEndpointProbeLogsRoute, handler: getProviderEndpointPr
   );
 app.openapi(getProviderEndpointProbeLogsRoute, getProviderEndpointProbeLogsHandler);
 
+const {
+  route: batchGetProviderEndpointProbeLogsRoute,
+  handler: batchGetProviderEndpointProbeLogsHandler,
+} = createActionRoute(
+  "providers",
+  "batchGetProviderEndpointProbeLogs",
+  providerEndpointActions.batchGetProviderEndpointProbeLogs,
+  {
+    requestSchema: z.object({
+      endpointIds: z.array(z.number().int().positive()).max(500),
+      limit: z.number().int().min(1).max(200).optional(),
+    }),
+    description: "批量读取多个端点的测活历史（每端点取最近 N 条） (管理员)",
+    summary: "批量读取测活历史",
+    tags: ["供应商管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(batchGetProviderEndpointProbeLogsRoute, batchGetProviderEndpointProbeLogsHandler);
+
+const {
+  route: batchGetVendorTypeEndpointStatsRoute,
+  handler: batchGetVendorTypeEndpointStatsHandler,
+} = createActionRoute(
+  "providers",
+  "batchGetVendorTypeEndpointStats",
+  providerEndpointActions.batchGetVendorTypeEndpointStats,
+  {
+    requestSchema: z.object({
+      vendorIds: z.array(z.number().int().positive()).max(500),
+      providerType: ProviderTypeSchema,
+    }),
+    description: "批量统计 vendor+type 维度端点数量与健康分布 (管理员)",
+    summary: "批量端点统计",
+    tags: ["供应商管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(batchGetVendorTypeEndpointStatsRoute, batchGetVendorTypeEndpointStatsHandler);
+
 const { route: getEndpointCircuitInfoRoute, handler: getEndpointCircuitInfoHandler } =
   createActionRoute(
     "providers",

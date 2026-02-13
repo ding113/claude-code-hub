@@ -228,7 +228,8 @@ function EndpointRow({
     onMutate: () => setIsProbing(true),
     onSettled: () => setIsProbing(false),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
+      queryClient.invalidateQueries({ queryKey: ["endpoint-probe-logs", endpoint.id] });
       if (data?.result.ok) {
         toast.success(t("probeSuccess"));
       } else {
@@ -251,7 +252,7 @@ function EndpointRow({
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
       toast.success(t("endpointDeleteSuccess"));
     },
@@ -272,7 +273,7 @@ function EndpointRow({
     onMutate: () => setIsToggling(true),
     onSettled: () => setIsToggling(false),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
       toast.success(t("endpointUpdateSuccess"));
     },
     onError: () => {
@@ -298,7 +299,7 @@ function EndpointRow({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["endpoint-circuit-info"] });
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
       toast.success(tStatus("resetCircuitSuccess"));
     },
     onError: () => {
@@ -684,7 +685,9 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
       if (res.ok) {
         toast.success(t("endpointUpdateSuccess"));
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] }).catch(() => undefined);
+        queryClient
+          .invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] })
+          .catch(() => undefined);
         return;
       }
 

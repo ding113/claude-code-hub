@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
+  getAllEndpointHealthStatusAsync,
   getEndpointHealthInfo,
   resetEndpointCircuit as resetEndpointCircuitState,
 } from "@/lib/endpoint-circuit-breaker";
@@ -31,6 +32,10 @@ import {
   updateProviderEndpoint,
   updateProviderVendor,
 } from "@/repository";
+import {
+  findProviderEndpointProbeLogsBatch,
+  findVendorTypeEndpointStatsBatch,
+} from "@/repository/provider-endpoints-batch";
 import type {
   ProviderEndpoint,
   ProviderEndpointProbeLog,
@@ -127,6 +132,16 @@ const BatchGetEndpointCircuitInfoSchema = z.object({
   endpointIds: z.array(EndpointIdSchema).max(500),
 });
 
+const BatchGetVendorTypeEndpointStatsSchema = z.object({
+  vendorIds: z.array(VendorIdSchema).max(500),
+  providerType: ProviderTypeSchema,
+});
+
+const BatchGetProviderEndpointProbeLogsBatchSchema = z.object({
+  endpointIds: z.array(EndpointIdSchema).max(500),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
 async function getAdminSession() {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
@@ -167,6 +182,34 @@ function isDirectEndpointEditConflictError(error: unknown): boolean {
   return (
     typeof candidate.cause?.message === "string" &&
     candidate.cause.message.includes("duplicate key value")
+  );
+}
+
+function isForeignKeyViolationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    cause?: { code?: string; message?: string };
+  };
+
+  if (candidate.code === "23503" || candidate.cause?.code === "23503") {
+    return true;
+  }
+
+  if (
+    typeof candidate.message === "string" &&
+    candidate.message.includes("foreign key constraint")
+  ) {
+    return true;
+  }
+
+  return (
+    typeof candidate.cause?.message === "string" &&
+    candidate.cause.message.includes("foreign key constraint")
   );
 }
 
@@ -281,9 +324,35 @@ export async function addProviderEndpoint(
       isEnabled: parsed.data.isEnabled ?? true,
     });
 
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("addProviderEndpoint:cache_invalidation_failed", {
+        vendorId: parsed.data.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     return { ok: true, data: { endpoint } };
   } catch (error) {
     logger.error("addProviderEndpoint:error", error);
+
+    if (isDirectEndpointEditConflictError(error)) {
+      return {
+        ok: false,
+        error: "端点 URL 与同供应商类型下的其他端点冲突",
+        errorCode: ERROR_CODES.CONFLICT,
+      };
+    }
+
+    if (isForeignKeyViolationError(error)) {
+      return {
+        ok: false,
+        error: ERROR_CODES.NOT_FOUND,
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
     const message = error instanceof Error ? error.message : "创建端点失败";
     return { ok: false, error: message, errorCode: ERROR_CODES.CREATE_FAILED };
   }
@@ -324,6 +393,16 @@ export async function editProviderEndpoint(
         error: "端点不存在",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("editProviderEndpoint:cache_invalidation_failed", {
+        endpointId: parsed.data.endpointId,
+        vendorId: endpoint.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return { ok: true, data: { endpoint } };
@@ -385,6 +464,16 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
       await tryDeleteProviderVendorIfEmpty(endpoint.vendorId);
     } catch (error) {
       logger.warn("removeProviderEndpoint:vendor_cleanup_failed", {
+        endpointId: parsed.data.endpointId,
+        vendorId: endpoint.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("removeProviderEndpoint:cache_invalidation_failed", {
         endpointId: parsed.data.endpointId,
         vendorId: endpoint.vendorId,
         error: error instanceof Error ? error.message : String(error),
@@ -498,6 +587,125 @@ export async function getProviderEndpointProbeLogs(
   }
 }
 
+export async function batchGetProviderEndpointProbeLogs(
+  input: unknown
+): Promise<ActionResult<Array<{ endpointId: number; logs: ProviderEndpointProbeLog[] }>>> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const parsed = BatchGetProviderEndpointProbeLogsBatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: formatZodError(parsed.error),
+        errorCode: extractZodErrorCode(parsed.error),
+      };
+    }
+
+    const endpointIds = Array.from(new Set(parsed.data.endpointIds));
+    if (endpointIds.length === 0) {
+      return { ok: true, data: [] };
+    }
+
+    const limitPerEndpoint = parsed.data.limit ?? 12;
+    const logsByEndpointId = await findProviderEndpointProbeLogsBatch({
+      endpointIds,
+      limitPerEndpoint,
+    });
+
+    return {
+      ok: true,
+      data: endpointIds.map((endpointId) => ({
+        endpointId,
+        logs: logsByEndpointId.get(endpointId) ?? [],
+      })),
+    };
+  } catch (error) {
+    logger.error("batchGetProviderEndpointProbeLogs:error", error);
+    return {
+      ok: false,
+      error: ERROR_CODES.OPERATION_FAILED,
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
+
+export async function batchGetVendorTypeEndpointStats(input: unknown): Promise<
+  ActionResult<
+    Array<{
+      vendorId: number;
+      providerType: ProviderType;
+      total: number;
+      enabled: number;
+      healthy: number;
+      unhealthy: number;
+      unknown: number;
+    }>
+  >
+> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const parsed = BatchGetVendorTypeEndpointStatsSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: formatZodError(parsed.error),
+        errorCode: extractZodErrorCode(parsed.error),
+      };
+    }
+
+    const vendorIds = Array.from(new Set(parsed.data.vendorIds));
+    if (vendorIds.length === 0) {
+      return { ok: true, data: [] };
+    }
+
+    const rows = await findVendorTypeEndpointStatsBatch({
+      vendorIds,
+      providerType: parsed.data.providerType as ProviderTypeInput,
+    });
+
+    const statsByVendorId = new Map(rows.map((row) => [row.vendorId, row]));
+
+    return {
+      ok: true,
+      data: vendorIds.map((vendorId) => {
+        const stats = statsByVendorId.get(vendorId);
+        return {
+          vendorId,
+          providerType: parsed.data.providerType,
+          total: stats?.total ?? 0,
+          enabled: stats?.enabled ?? 0,
+          healthy: stats?.healthy ?? 0,
+          unhealthy: stats?.unhealthy ?? 0,
+          unknown: stats?.unknown ?? 0,
+        };
+      }),
+    };
+  } catch (error) {
+    logger.error("batchGetVendorTypeEndpointStats:error", error);
+    return {
+      ok: false,
+      error: ERROR_CODES.OPERATION_FAILED,
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
+
 export async function getEndpointCircuitInfo(input: unknown): Promise<
   ActionResult<{
     endpointId: number;
@@ -584,17 +792,22 @@ export async function batchGetEndpointCircuitInfo(input: unknown): Promise<
       return { ok: true, data: [] };
     }
 
-    const results = await Promise.all(
-      parsed.data.endpointIds.map(async (endpointId) => {
-        const { health } = await getEndpointHealthInfo(endpointId);
-        return {
-          endpointId,
-          circuitState: health.circuitState,
-          failureCount: health.failureCount,
-          circuitOpenUntil: health.circuitOpenUntil,
-        };
-      })
-    );
+    const endpointIds = parsed.data.endpointIds;
+    const uniqueEndpointIds = Array.from(new Set(endpointIds));
+    const healthStatus = await getAllEndpointHealthStatusAsync(uniqueEndpointIds, {
+      forceRefresh: true,
+    });
+
+    const results = endpointIds.map((endpointId) => {
+      const info = healthStatus[endpointId];
+
+      return {
+        endpointId,
+        circuitState: info?.circuitState ?? "closed",
+        failureCount: info?.failureCount ?? 0,
+        circuitOpenUntil: info?.circuitOpenUntil ?? null,
+      };
+    });
 
     return { ok: true, data: results };
   } catch (error) {
@@ -793,6 +1006,15 @@ export async function editProviderVendor(
         error: "Vendor not found",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("editProviderVendor:cache_invalidation_failed", {
+        vendorId: parsed.data.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return { ok: true, data: { vendor } };

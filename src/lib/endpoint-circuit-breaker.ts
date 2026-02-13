@@ -6,6 +6,7 @@ import {
   type EndpointCircuitBreakerState,
   type EndpointCircuitState,
   loadEndpointCircuitState,
+  loadEndpointCircuitStates,
   saveEndpointCircuitState,
 } from "@/lib/redis/endpoint-circuit-breaker-state";
 
@@ -111,6 +112,89 @@ export async function getEndpointHealthInfo(
 ): Promise<{ health: EndpointHealth; config: EndpointCircuitBreakerConfig }> {
   const health = await getOrCreateHealth(endpointId);
   return { health, config: DEFAULT_ENDPOINT_CIRCUIT_BREAKER_CONFIG };
+}
+
+export async function getAllEndpointHealthStatusAsync(
+  endpointIds: number[],
+  options?: { forceRefresh?: boolean }
+): Promise<Record<number, EndpointHealth>> {
+  const { forceRefresh = false } = options || {};
+
+  if (endpointIds.length === 0) {
+    return {};
+  }
+
+  const uniqueEndpointIds = Array.from(new Set(endpointIds));
+
+  if (forceRefresh) {
+    for (const endpointId of uniqueEndpointIds) {
+      loadedFromRedis.delete(endpointId);
+    }
+  }
+
+  const needsRefresh = uniqueEndpointIds.filter((endpointId) => {
+    if (!loadedFromRedis.has(endpointId)) return true;
+    const memoryState = healthMap.get(endpointId);
+    return memoryState && memoryState.circuitState !== "closed";
+  });
+
+  if (needsRefresh.length > 0) {
+    try {
+      const redisStates = await loadEndpointCircuitStates(needsRefresh);
+
+      for (const endpointId of needsRefresh) {
+        loadedFromRedis.add(endpointId);
+
+        const redisState = redisStates.get(endpointId) ?? null;
+        if (redisState) {
+          const existingHealth = healthMap.get(endpointId);
+          if (!existingHealth || redisState.circuitState !== existingHealth.circuitState) {
+            healthMap.set(endpointId, {
+              failureCount: redisState.failureCount,
+              lastFailureTime: redisState.lastFailureTime,
+              circuitState: redisState.circuitState,
+              circuitOpenUntil: redisState.circuitOpenUntil,
+              halfOpenSuccessCount: redisState.halfOpenSuccessCount,
+            });
+          }
+          continue;
+        }
+
+        const existingHealth = healthMap.get(endpointId);
+        if (existingHealth && existingHealth.circuitState !== "closed") {
+          existingHealth.circuitState = "closed";
+          existingHealth.failureCount = 0;
+          existingHealth.lastFailureTime = null;
+          existingHealth.circuitOpenUntil = null;
+          existingHealth.halfOpenSuccessCount = 0;
+        }
+      }
+    } catch (error) {
+      logger.warn("[EndpointCircuitBreaker] Failed to batch sync state from Redis", {
+        count: needsRefresh.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const now = Date.now();
+  const status: Record<number, EndpointHealth> = {};
+
+  for (const endpointId of uniqueEndpointIds) {
+    const health = getOrCreateHealthSync(endpointId);
+
+    if (health.circuitState === "open") {
+      if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
+        health.circuitState = "half-open";
+        health.halfOpenSuccessCount = 0;
+        persistStateToRedis(endpointId, health);
+      }
+    }
+
+    status[endpointId] = { ...health };
+  }
+
+  return status;
 }
 
 export async function isEndpointCircuitOpen(endpointId: number): Promise<boolean> {
