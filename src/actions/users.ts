@@ -38,6 +38,9 @@ import {
 import type { User, UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
 
+/**
+ * 批量获取用户列表的查询参数（用于用户管理列表页）。
+ */
 export interface GetUsersBatchParams {
   cursor?: number;
   limit?: number;
@@ -58,18 +61,27 @@ export interface GetUsersBatchParams {
   sortOrder?: "asc" | "desc";
 }
 
+/**
+ * 批量获取用户列表的返回结果。
+ */
 export interface GetUsersBatchResult {
   users: UserDisplay[];
   nextCursor: number | null;
   hasMore: boolean;
 }
 
+/**
+ * 批量更新的结果统计（便于前端展示成功/失败数量）。
+ */
 export interface BatchUpdateResult {
   requestedCount: number;
   updatedCount: number;
   updatedIds: number[];
 }
 
+/**
+ * 批量更新用户的请求参数。
+ */
 export interface BatchUpdateUsersParams {
   userIds: number[];
   updates: {
