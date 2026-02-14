@@ -26,6 +26,9 @@ import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
 
+const EMPTY_PROVIDERS: ProviderDisplay[] = [];
+const EMPTY_KEYS: Key[] = [];
+
 interface UsageLogsViewVirtualizedProps {
   isAdmin: boolean;
   userId: number;
@@ -132,11 +135,13 @@ function UsageLogsViewContent({
   const resolvedBillingModelSource =
     billingModelSource ?? systemSettings?.billingModelSource ?? "original";
 
-  const { data: providersData = [], isLoading: isProvidersLoading } = useQuery<ProviderDisplay[]>({
+  const { data: providersData = EMPTY_PROVIDERS, isLoading: isProvidersLoading } = useQuery<
+    ProviderDisplay[]
+  >({
     queryKey: ["usage-log-providers"],
     queryFn: getProviders,
     enabled: isAdmin && providers === undefined,
-    placeholderData: [],
+    placeholderData: EMPTY_PROVIDERS,
   });
 
   const { data: keysResult, isLoading: isKeysLoading } = useQuery({
@@ -146,7 +151,8 @@ function UsageLogsViewContent({
   });
 
   const resolvedProviders = providers ?? providersData;
-  const resolvedKeys = initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
+  const resolvedKeys =
+    initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : EMPTY_KEYS);
 
   // Use useSearchParams hook for client-side URL reactivity
   // Note: searchParams props from server don't update on client-side navigation
