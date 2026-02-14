@@ -1,7 +1,8 @@
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
-import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
+import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
 import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
+import { SessionManager } from "@/lib/session-manager";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
 import { RateLimitError } from "./errors";
 import type { ProxySession } from "./session";
@@ -29,15 +30,20 @@ function parseLimitInfo(reason: string): { currentUsage: number; limitValue: num
   return { currentUsage: 0, limitValue: 0 };
 }
 
+/**
+ * 限流守卫：集中执行 Key/User 各维度限额校验（含并发 Session / RPM 等资源保护）。
+ *
+ * 调用时机：`ProxySessionGuard` 分配 sessionId 之后、转发到上游之前。
+ */
 export class ProxyRateLimitGuard {
   /**
    * 检查限流（Key 层 + User 层）
    *
    * 检查顺序（基于 Codex 专业分析）：
    * 1-2. 永久硬限制：Key 总限额 → User 总限额
-   * 3-5. 资源/频率保护：Key 并发 → User 并发 → User RPM
-   * 6-9. 短期周期限额：Key 5h → User 5h → Key 每日 → User 每日
-   * 10-13. 中长期周期限额：Key 周 → User 周 → Key 月 → User 月
+   * 3-4. 资源/频率保护：Key/User 并发 → User RPM
+   * 5-8. 短期周期限额：Key 5h → User 5h → Key 每日 → User 每日
+   * 9-12. 中长期周期限额：Key 周 → User 周 → Key 月 → User 月
    *
    * 设计原则：
    * - 硬上限优先于周期上限
@@ -120,20 +126,48 @@ export class ProxyRateLimitGuard {
 
     // 3. Key 并发 Session（避免创建上游连接）
     // Key 未设置时，继承 User 并发上限（避免 UI/心智模型不一致：User 设置了并发，但 Key 仍显示“无限制”）
-    const effectiveKeyConcurrentLimit = resolveKeyConcurrentSessionLimit(
+    const {
+      effectiveKeyLimit: effectiveKeyConcurrentLimit,
+      normalizedUserLimit: normalizedUserConcurrentLimit,
+    } = resolveKeyUserConcurrentSessionLimits(
       key.limitConcurrentSessions ?? 0,
       user.limitConcurrentSessions
     );
-    const sessionCheck = await RateLimitService.checkSessionLimit(
+
+    // 注意：并发 Session 限制必须“原子性检查 + 追踪”，否则会被并发击穿（尤其是多 Key 同时使用时）
+    // 理论上 session guard 一定会分配 sessionId；这里兜底生成，避免降级回非原子路径
+    const ensuredSessionId = session.sessionId || SessionManager.generateSessionId();
+    if (!session.sessionId) {
+      logger.warn(
+        `[RateLimit] SessionId missing in rate-limit-guard, using fallback: key=${key.id}, user=${user.id} (potential atomicity gap)`
+      );
+      session.setSessionId(ensuredSessionId);
+    }
+
+    const concurrentCheck = await RateLimitService.checkAndTrackKeyUserSession(
       key.id,
-      "key",
-      effectiveKeyConcurrentLimit
+      user.id,
+      ensuredSessionId,
+      effectiveKeyConcurrentLimit,
+      normalizedUserConcurrentLimit
     );
 
-    if (!sessionCheck.allowed) {
-      logger.warn(`[RateLimit] Key session limit exceeded: key=${key.id}, ${sessionCheck.reason}`);
+    if (!concurrentCheck.allowed) {
+      const rejectedBy = concurrentCheck.rejectedBy ?? "key";
+      const fallbackCurrentUsage =
+        rejectedBy === "user" ? concurrentCheck.userCount : concurrentCheck.keyCount;
+      const fallbackLimitValue =
+        rejectedBy === "user" ? normalizedUserConcurrentLimit : effectiveKeyConcurrentLimit;
+      const currentUsage = Number(concurrentCheck.reasonParams?.current);
+      const limitValue = Number(concurrentCheck.reasonParams?.limit);
+      const resolvedCurrentUsage = Number.isFinite(currentUsage)
+        ? currentUsage
+        : fallbackCurrentUsage;
+      const resolvedLimitValue = Number.isFinite(limitValue) ? limitValue : fallbackLimitValue;
 
-      const { currentUsage, limitValue } = parseLimitInfo(sessionCheck.reason!);
+      logger.warn(
+        `[RateLimit] ${rejectedBy === "user" ? "User" : "Key"} session limit exceeded: key=${key.id}, user=${user.id}, current=${resolvedCurrentUsage}, limit=${resolvedLimitValue}`
+      );
 
       const resetTime = new Date().toISOString();
 
@@ -141,10 +175,10 @@ export class ProxyRateLimitGuard {
       const locale = await getLocale();
       const message = await getErrorMessageServer(
         locale,
-        ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
+        concurrentCheck.reasonCode ?? ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
         {
-          current: String(currentUsage),
-          limit: String(limitValue),
+          current: String(resolvedCurrentUsage),
+          limit: String(resolvedLimitValue),
         }
       );
 
@@ -152,54 +186,14 @@ export class ProxyRateLimitGuard {
         "rate_limit_error",
         message,
         "concurrent_sessions",
-        currentUsage,
-        limitValue,
+        resolvedCurrentUsage,
+        resolvedLimitValue,
         resetTime,
         null
       );
     }
 
-    // 4. User 并发 Session（账号级并发保护）
-    if (user.limitConcurrentSessions != null && user.limitConcurrentSessions > 0) {
-      const userSessionCheck = await RateLimitService.checkSessionLimit(
-        user.id,
-        "user",
-        user.limitConcurrentSessions
-      );
-
-      if (!userSessionCheck.allowed) {
-        logger.warn(
-          `[RateLimit] User session limit exceeded: user=${user.id}, ${userSessionCheck.reason}`
-        );
-
-        const { currentUsage, limitValue } = parseLimitInfo(userSessionCheck.reason!);
-
-        const resetTime = new Date().toISOString();
-
-        const { getLocale } = await import("next-intl/server");
-        const locale = await getLocale();
-        const message = await getErrorMessageServer(
-          locale,
-          ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
-          {
-            current: String(currentUsage),
-            limit: String(limitValue),
-          }
-        );
-
-        throw new RateLimitError(
-          "rate_limit_error",
-          message,
-          "concurrent_sessions",
-          currentUsage,
-          limitValue,
-          resetTime,
-          null
-        );
-      }
-    }
-
-    // 5. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制
+    // 4. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制
     if (user.rpm != null && user.rpm > 0) {
       const rpmCheck = await RateLimitService.checkRpmLimit(user.id, "user", user.rpm);
       if (!rpmCheck.allowed) {

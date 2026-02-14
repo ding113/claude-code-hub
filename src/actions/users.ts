@@ -38,6 +38,9 @@ import {
 import type { User, UserDisplay } from "@/types/user";
 import type { ActionResult } from "./types";
 
+/**
+ * 批量获取用户列表的查询参数（用于用户管理列表页）。
+ */
 export interface GetUsersBatchParams {
   cursor?: number;
   limit?: number;
@@ -58,18 +61,27 @@ export interface GetUsersBatchParams {
   sortOrder?: "asc" | "desc";
 }
 
+/**
+ * 批量获取用户列表的返回结果。
+ */
 export interface GetUsersBatchResult {
   users: UserDisplay[];
   nextCursor: number | null;
   hasMore: boolean;
 }
 
+/**
+ * 批量更新的结果统计（便于前端展示成功/失败数量）。
+ */
 export interface BatchUpdateResult {
   requestedCount: number;
   updatedCount: number;
   updatedIds: number[];
 }
 
+/**
+ * 批量更新用户的请求参数。
+ */
 export interface BatchUpdateUsersParams {
   userIds: number[];
   updates: {
@@ -83,6 +95,9 @@ export interface BatchUpdateUsersParams {
   };
 }
 
+/**
+ * 批量更新用户时的结构化错误（携带 errorCode 便于前端区分提示）。
+ */
 class BatchUpdateError extends Error {
   readonly errorCode: string;
 
@@ -1560,6 +1575,9 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     // 2. Clear Redis cache
     const { getRedisClient } = await import("@/lib/redis");
     const { scanPattern } = await import("@/lib/redis/scan-helper");
+    const { getKeyActiveSessionsKey, getUserActiveSessionsKey } = await import(
+      "@/lib/redis/active-session-keys"
+    );
     const redis = getRedisClient();
 
     if (redis && redis.status === "ready") {
@@ -1587,8 +1605,9 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
 
         // Active sessions
         for (const keyId of keyIds) {
-          pipeline.del(`key:${keyId}:active_sessions`);
+          pipeline.del(getKeyActiveSessionsKey(keyId));
         }
+        pipeline.del(getUserActiveSessionsKey(userId));
 
         // Cost keys
         for (const key of allCostKeys) {
@@ -1611,7 +1630,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
           userId,
           keyCount: keyIds.length,
           costKeysDeleted: allCostKeys.length,
-          activeSessionsDeleted: keyIds.length,
+          activeSessionsDeleted: keyIds.length + 1,
           durationMs: duration,
         });
       } catch (error) {

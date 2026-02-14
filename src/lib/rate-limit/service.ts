@@ -68,6 +68,12 @@
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
 import {
+  getGlobalActiveSessionsKey,
+  getKeyActiveSessionsKey,
+  getUserActiveSessionsKey,
+} from "@/lib/redis/active-session-keys";
+import {
+  CHECK_AND_TRACK_KEY_USER_SESSION,
   CHECK_AND_TRACK_SESSION,
   GET_COST_5H_ROLLING_WINDOW,
   GET_COST_DAILY_ROLLING_WINDOW,
@@ -75,6 +81,7 @@ import {
   TRACK_COST_DAILY_ROLLING_WINDOW,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import {
   sumKeyTotalCost,
   sumProviderTotalCost,
@@ -105,6 +112,12 @@ interface CostLimit {
   resetMode?: DailyResetMode; // 日限额重置模式（仅 daily 使用）
 }
 
+/**
+ * 限流/配额服务：统一封装 Redis + DB 的限额检查与消费追踪。
+ *
+ * 设计约束：
+ * - Redis 不可用时默认 Fail Open，避免误伤正常请求（仍会在日志中记录）。
+ */
 export class RateLimitService {
   // 使用 getter 实现懒加载，避免模块加载时立即连接 Redis（构建阶段触发）
   private static get redis() {
@@ -541,6 +554,93 @@ export class RateLimitService {
     } catch (error) {
       logger.error("[RateLimit] Session check failed:", error);
       return { allowed: true }; // Fail Open
+    }
+  }
+
+  /**
+   * 原子性检查并追踪 Key/User 并发 Session（解决竞态条件）
+   *
+   * 与 checkSessionLimit 的区别：
+   * - checkSessionLimit：只读检查（可能被并发击穿），且无法区分“新 session”与“已存在 session”
+   * - 本方法：使用 Lua 脚本原子性完成“检查 + 追踪”，并允许已存在的 session 在达到上限时继续请求
+   *
+   * 注意：
+   * - keyLimit/userLimit 均 <=0 时表示无限制，直接放行且不追踪（由 SessionTracker.refreshSession 等路径负责观测）
+   * - Redis 不可用时 Fail Open
+   */
+  static async checkAndTrackKeyUserSession(
+    keyId: number,
+    userId: number,
+    sessionId: string,
+    keyLimit: number,
+    userLimit: number
+  ): Promise<{
+    allowed: boolean;
+    keyCount: number;
+    userCount: number;
+    trackedKey: boolean;
+    trackedUser: boolean;
+    rejectedBy?: "key" | "user";
+    reasonCode?: string;
+    reasonParams?: Record<string, string | number>;
+  }> {
+    if (keyLimit <= 0 && userLimit <= 0) {
+      return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
+    }
+
+    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
+      logger.warn("[RateLimit] Redis not ready, Fail Open");
+      return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
+    }
+
+    try {
+      const globalKey = getGlobalActiveSessionsKey();
+      const keyKey = getKeyActiveSessionsKey(keyId);
+      const userKey = getUserActiveSessionsKey(userId);
+      const now = Date.now();
+
+      const result = (await RateLimitService.redis.eval(
+        CHECK_AND_TRACK_KEY_USER_SESSION,
+        3, // KEYS count
+        globalKey, // KEYS[1]
+        keyKey, // KEYS[2]
+        userKey, // KEYS[3]
+        sessionId, // ARGV[1]
+        keyLimit.toString(), // ARGV[2]
+        userLimit.toString(), // ARGV[3]
+        now.toString(), // ARGV[4]
+        SESSION_TTL_MS.toString() // ARGV[5]
+      )) as [number, number, number, number, number, number];
+
+      const [allowed, rejectedBy, keyCount, keyTracked, userCount, userTracked] = result;
+
+      if (allowed === 0) {
+        const rejectTarget: "key" | "user" = rejectedBy === 1 ? "key" : "user";
+        const limit = rejectTarget === "key" ? keyLimit : userLimit;
+        const count = rejectTarget === "key" ? keyCount : userCount;
+
+        return {
+          allowed: false,
+          keyCount,
+          userCount,
+          trackedKey: false,
+          trackedUser: false,
+          rejectedBy: rejectTarget,
+          reasonCode: ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
+          reasonParams: { current: count, limit, target: rejectTarget },
+        };
+      }
+
+      return {
+        allowed: true,
+        keyCount,
+        userCount,
+        trackedKey: keyTracked === 1,
+        trackedUser: userTracked === 1,
+      };
+    } catch (error) {
+      logger.error("[RateLimit] Key/User session check+track failed:", error);
+      return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
     }
   }
 

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getGlobalActiveSessionsKey } from "@/lib/redis/active-session-keys";
 
 /**
  * Tests for SESSION_TTL environment variable validation
@@ -99,7 +100,7 @@ describe("SESSION_TTL environment variable validation", () => {
       // Default: 300 seconds = 300000 ms
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        getGlobalActiveSessionsKey(),
         "-inf",
         expectedCutoff
       );
@@ -113,7 +114,7 @@ describe("SESSION_TTL environment variable validation", () => {
 
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        getGlobalActiveSessionsKey(),
         "-inf",
         expectedCutoff
       );
@@ -127,7 +128,7 @@ describe("SESSION_TTL environment variable validation", () => {
 
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        getGlobalActiveSessionsKey(),
         "-inf",
         expectedCutoff
       );
@@ -141,7 +142,7 @@ describe("SESSION_TTL environment variable validation", () => {
 
       const expectedCutoff = nowMs - 300 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        getGlobalActiveSessionsKey(),
         "-inf",
         expectedCutoff
       );
@@ -156,7 +157,7 @@ describe("SESSION_TTL environment variable validation", () => {
       // Custom: 600 seconds = 600000 ms
       const expectedCutoff = nowMs - 600 * 1000;
       expect(redisClientRef.zremrangebyscore).toHaveBeenCalledWith(
-        "global:active_sessions",
+        getGlobalActiveSessionsKey(),
         "-inf",
         expectedCutoff
       );
