@@ -1925,6 +1925,11 @@ export class ProxyForwarder {
       // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
       proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
 
+      // Host header must match actual request target for undici TLS cert validation
+      // When provider has multiple endpoints, provider.url and proxyUrl hosts may differ
+      const actualHost = HeaderProcessor.extractHost(proxyUrl);
+      processedHeaders.set("host", actualHost);
+
       logger.debug("ProxyForwarder: Final proxy URL", {
         url: proxyUrl,
         originalPath: session.requestUrl.pathname,
