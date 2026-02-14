@@ -440,11 +440,7 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
   const limit = props.limit ?? 12;
   const { ref, isInView } = useInViewOnce<HTMLDivElement>();
 
-  const {
-    data: points = [],
-    isLoading,
-    isFetching,
-  } = useQuery({
+  const { data: points = [], isLoading } = useQuery({
     queryKey: ["endpoint-probe-logs", props.endpointId, limit],
     queryFn: async ({ signal }): Promise<SparkPoint[]> => {
       const logs = await probeLogsBatcher.load(props.endpointId, limit, { signal });
@@ -484,7 +480,7 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
     return sum / recentPoints.length;
   }, [points]);
 
-  const showSkeleton = !isInView || isLoading || isFetching;
+  const showSkeleton = !isInView || isLoading;
 
   if (showSkeleton) {
     return (

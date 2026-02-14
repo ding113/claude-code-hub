@@ -332,12 +332,10 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
       and(
         eq(providerEndpoints.isEnabled, true),
         isNull(providerEndpoints.deletedAt),
-        sql`EXISTS (
-          SELECT 1
+        sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}) IN (
+          SELECT p.provider_vendor_id, p.provider_type
           FROM providers p
-          WHERE p.provider_vendor_id = ${providerEndpoints.vendorId}
-            AND p.provider_type = ${providerEndpoints.providerType}
-            AND p.is_enabled = true
+          WHERE p.is_enabled = true
             AND p.deleted_at IS NULL
         )`
       )
