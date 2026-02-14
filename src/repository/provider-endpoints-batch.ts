@@ -101,12 +101,12 @@ export async function findProviderEndpointProbeLogsBatch(input: {
         error_type,
         error_message,
         created_at,
-        ROW_NUMBER() OVER (PARTITION BY endpoint_id ORDER BY created_at DESC) AS row_num
+        ROW_NUMBER() OVER (PARTITION BY endpoint_id ORDER BY created_at DESC, id DESC) AS row_num
       FROM provider_endpoint_probe_logs
       WHERE ${endpointIdCondition}
     ) ranked
     WHERE ranked.row_num <= ${limitPerEndpoint}
-    ORDER BY ranked.endpoint_id ASC, ranked.created_at DESC
+    ORDER BY ranked.endpoint_id ASC, ranked.created_at DESC, ranked.id DESC
   `;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -1074,7 +1074,8 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
               SELECT
                 CASE
                   WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-                  ELSE (provider_chain->-1->>'id')::int
+                  WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
+                  ELSE provider_id
                 END AS final_provider_id,
                 cost_usd
               FROM message_request CROSS JOIN bounds
@@ -1094,7 +1095,8 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
               SELECT
                 CASE
                   WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-                  ELSE (provider_chain->-1->>'id')::int
+                  WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
+                  ELSE provider_id
                 END AS final_provider_id,
                 id,
                 created_at,
