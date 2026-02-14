@@ -64,7 +64,8 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
     item.reason === "client_error_non_retryable" ||
-    item.reason === "endpoint_pool_exhausted"
+    item.reason === "endpoint_pool_exhausted" ||
+    item.reason === "vendor_type_all_timeout"
   ) {
     return "✗";
   }
@@ -92,7 +93,8 @@ function isActualRequest(item: ProviderChainItem): boolean {
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
     item.reason === "client_error_non_retryable" ||
-    item.reason === "endpoint_pool_exhausted"
+    item.reason === "endpoint_pool_exhausted" ||
+    item.reason === "vendor_type_all_timeout"
   ) {
     return true;
   }
@@ -313,6 +315,8 @@ export function formatProviderDescription(
         desc += ` ${t("description.clientError")}`;
       } else if (item.reason === "endpoint_pool_exhausted") {
         desc += ` ${t("description.endpointPoolExhausted")}`;
+      } else if (item.reason === "vendor_type_all_timeout") {
+        desc += ` ${t("description.vendorTypeAllTimeout")}`;
       }
 
       desc += "\n";
@@ -408,7 +412,12 @@ export function formatProviderTimeline(
         timeline += `\n${t("timeline.filtered")}:\n`;
         for (const f of ctx.filteredProviders) {
           const icon = f.reason === "circuit_open" ? "⚡" : "💰";
-          timeline += `  ${icon} ${f.name} (${f.details || f.reason})\n`;
+          const detailsText = f.details
+            ? t(`filterDetails.${f.details}`) !== `filterDetails.${f.details}`
+              ? t(`filterDetails.${f.details}`)
+              : f.details
+            : f.reason;
+          timeline += `  ${icon} ${f.name} (${detailsText})\n`;
         }
       }
 
@@ -739,6 +748,47 @@ export function formatProviderTimeline(
         }
       }
 
+      continue;
+    }
+
+    // === 供应商类型全端点超时（524） ===
+    if (item.reason === "vendor_type_all_timeout") {
+      timeline += `${t("timeline.vendorTypeAllTimeout")}\n\n`;
+
+      if (item.errorDetails?.provider) {
+        const p = item.errorDetails.provider;
+        timeline += `${t("timeline.provider", { provider: p.name })}\n`;
+        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${t("timeline.error", { error: p.statusText })}\n`;
+
+        if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
+          const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);
+          timeline += `${t("timeline.requestDuration", { duration })}\n`;
+        }
+
+        if (p.upstreamParsed) {
+          timeline += `\n${t("timeline.errorDetails")}:\n`;
+          timeline += JSON.stringify(p.upstreamParsed, null, 2);
+        } else if (p.upstreamBody) {
+          timeline += `\n${t("timeline.errorDetails")}:\n${p.upstreamBody}`;
+        }
+
+        if (item.errorDetails?.request) {
+          timeline += formatRequestDetails(item.errorDetails.request, t);
+        }
+      } else {
+        timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+        if (item.statusCode) {
+          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+        }
+        timeline += `${t("timeline.error", { error: item.errorMessage || t("timeline.unknown") })}\n`;
+
+        if (item.errorDetails?.request) {
+          timeline += formatRequestDetails(item.errorDetails.request, t);
+        }
+      }
+
+      timeline += `\n${t("timeline.vendorTypeAllTimeoutNote")}`;
       continue;
     }
 

@@ -31,7 +31,7 @@ function makeAsciiKey(rng: () => number, len: number): string {
 
 function freshSameContent(s: string): string {
   // 让 V8 很难复用同一个 string 实例（模拟“请求头解析后每次都是新字符串对象”）
-  return (" " + s).slice(1);
+  return ` ${s}`.slice(1);
 }
 
 function median(values: number[]): number {

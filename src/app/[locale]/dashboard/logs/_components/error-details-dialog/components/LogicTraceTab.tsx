@@ -353,7 +353,13 @@ export function LogicTraceTab({
                         {tChain(`filterReasons.${p.reason}`)}
                       </span>
                       {p.details && (
-                        <span className="text-muted-foreground break-all">({p.details})</span>
+                        <span className="text-muted-foreground break-all">
+                          (
+                          {tChain.has(`filterDetails.${p.details}`)
+                            ? tChain(`filterDetails.${p.details}`)
+                            : p.details}
+                          )
+                        </span>
                       )}
                     </div>
                   ))}

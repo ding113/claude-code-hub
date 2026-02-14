@@ -4,5 +4,12 @@
   "leaveEmpty": "（留空不更改）",
   "placeholder": "输入 API 密钥",
   "leaveEmptyDesc": "留空则不更改密钥",
-  "currentKey": "当前密钥: {key}"
+  "currentKey": "当前密钥: {key}",
+  "warnings": {
+    "looks_like_auth_header": "看起来像粘贴了请求头（如 Bearer/Authorization/x-api-key）。请仅填写 Key 本身。",
+    "wrapped_in_quotes": "检测到首尾引号，通常不需要引号。",
+    "contains_non_ascii": "包含非 ASCII 字符（如中文），通常不是常见 API Key。",
+    "contains_whitespace": "包含空白字符（空格/换行），通常不是常见 API Key。",
+    "contains_uncommon_ascii": "包含不常见符号，通常不是常见 API Key。"
+  }
 }

@@ -4,5 +4,12 @@
   "labelEdit": "API 金鑰（留空不變更）",
   "leaveEmpty": "（留空不變更）",
   "leaveEmptyDesc": "留空則不變更金鑰",
-  "placeholder": "輸入 API 金鑰"
+  "placeholder": "輸入 API 金鑰",
+  "warnings": {
+    "looks_like_auth_header": "看起來像貼上了請求標頭（例如 Bearer/Authorization/x-api-key）。請只填入 Key 本身。",
+    "wrapped_in_quotes": "偵測到首尾引號，通常不需要引號。",
+    "contains_non_ascii": "包含非 ASCII 字元（例如中文），通常不是常見 API Key。",
+    "contains_whitespace": "包含空白字元（空格/換行），通常不是常見 API Key。",
+    "contains_uncommon_ascii": "包含不常見符號，通常不是常見 API Key。"
+  }
 }

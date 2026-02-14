@@ -770,8 +770,8 @@ export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365)
   const validMaxAgeDays =
     Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - validMaxAgeDays);
+  // Use timestamp calculation to avoid Date.setDate() overflow with large day values
+  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
 
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
@@ -799,8 +799,8 @@ export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365)
   const validMaxAgeDays =
     Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - validMaxAgeDays);
+  // Use timestamp calculation to avoid Date.setDate() overflow with large day values
+  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
 
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })

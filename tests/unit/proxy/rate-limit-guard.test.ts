@@ -284,6 +284,20 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     });
   });
 
+  it("当 Key 并发未设置（0）且 User 并发已设置时，Key 并发检查应继承 User 并发上限", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    const session = createSession({
+      user: { limitConcurrentSessions: 15 },
+      key: { limitConcurrentSessions: 0 },
+    });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+
+    expect(rateLimitServiceMock.checkSessionLimit).toHaveBeenNthCalledWith(1, 2, "key", 15);
+    expect(rateLimitServiceMock.checkSessionLimit).toHaveBeenNthCalledWith(2, 1, "user", 15);
+  });
+
   it("User RPM 超限应拦截（rpm）", async () => {
     const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
 

@@ -5,15 +5,17 @@ import { and, count, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
-import { keys as keysTable } from "@/drizzle/schema";
+import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { KeyFormSchema } from "@/lib/validation/schemas";
+import { toKey } from "@/repository/_shared/transformers";
 import type { KeyStatistics } from "@/repository/key";
 import {
   countActiveKeysByUser,
@@ -696,10 +698,21 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       return { ok: false, error: "未登录" };
     }
 
-    const key = await findKeyById(keyId);
-    if (!key) {
+    const [result] = await db
+      .select({
+        key: keysTable,
+        userLimitConcurrentSessions: usersTable.limitConcurrentSessions,
+      })
+      .from(keysTable)
+      .leftJoin(usersTable, and(eq(keysTable.userId, usersTable.id), isNull(usersTable.deletedAt)))
+      .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
+      .limit(1);
+
+    if (!result) {
       return { ok: false, error: "密钥不存在" };
     }
+
+    const key = toKey(result.key);
 
     // 权限检查
     if (session.user.role !== "admin" && session.user.id !== key.userId) {
@@ -715,6 +728,10 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
     const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
+    const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
+      key.limitConcurrentSessions,
+      result.userLimitConcurrentSessions ?? null
+    );
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
@@ -778,7 +795,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         },
         concurrentSessions: {
           current: concurrentSessions,
-          limit: key.limitConcurrentSessions || 0,
+          limit: effectiveConcurrentLimit,
         },
       },
     };
