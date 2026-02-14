@@ -72,6 +72,7 @@ export function VirtualizedLogsTable({
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const shouldPoll = autoRefreshEnabled && !showScrollToTop;
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
@@ -121,7 +122,7 @@ export function VirtualizedLogsTable({
       initialPageParam: undefined as { createdAt: string; id: number } | undefined,
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
-      refetchInterval: autoRefreshEnabled ? autoRefreshIntervalMs : false,
+      refetchInterval: shouldPoll ? autoRefreshIntervalMs : false,
     });
 
   // Flatten all pages into a single array

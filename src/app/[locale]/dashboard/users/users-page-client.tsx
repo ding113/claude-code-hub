@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  QueryClient,
-  QueryClientProvider,
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -31,15 +25,6 @@ import { CreateUserDialog } from "../_components/user/create-user-dialog";
 import { clearUsageCache } from "../_components/user/user-limit-badge";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 30000,
-    },
-  },
-});
-
 /**
  * Split comma-separated tags into an array of trimmed, non-empty strings.
  * This matches the server-side providerGroup handling in provider-selector.ts
@@ -57,11 +42,7 @@ interface UsersPageClientProps {
 }
 
 export function UsersPageClient(props: UsersPageClientProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <UsersPageContent {...props} />
-    </QueryClientProvider>
-  );
+  return <UsersPageContent {...props} />;
 }
 
 function UsersPageContent({ currentUser }: UsersPageClientProps) {
