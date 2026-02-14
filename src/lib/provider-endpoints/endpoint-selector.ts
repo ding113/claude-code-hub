@@ -42,7 +42,7 @@ export async function getPreferredProviderEndpoints(input: {
     input.vendorId,
     input.providerType
   );
-  const filtered = endpoints.filter((e) => e.isEnabled && !e.deletedAt && !excludeSet.has(e.id));
+  const filtered = endpoints.filter((e) => !excludeSet.has(e.id));
 
   if (filtered.length === 0) {
     return [];
