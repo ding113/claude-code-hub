@@ -43,6 +43,7 @@ export function EndpointTab() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [probing, setProbing] = useState(false);
 
+  const vendorsRequestIdRef = useRef(0);
   const endpointsRequestIdRef = useRef(0);
   const probeLogsRequestIdRef = useRef(0);
   const latestSelectionRef = useRef<{
@@ -54,6 +55,75 @@ export function EndpointTab() {
   latestSelectionRef.current.vendorId = selectedVendorId;
   latestSelectionRef.current.providerType = selectedType;
   latestSelectionRef.current.endpointId = selectedEndpoint?.id ?? null;
+
+  const refreshVendors = useCallback(async (options?: { silent?: boolean }) => {
+    const requestId = ++vendorsRequestIdRef.current;
+    if (!options?.silent) {
+      setLoadingVendors(true);
+    }
+
+    try {
+      const currentVendorId = latestSelectionRef.current.vendorId;
+      const currentType = latestSelectionRef.current.providerType;
+      const nextVendors = await getDashboardProviderVendors();
+
+      if (requestId !== vendorsRequestIdRef.current) {
+        return null;
+      }
+
+      setVendors(nextVendors);
+
+      if (nextVendors.length === 0) {
+        setSelectedVendorId(null);
+        setSelectedType(null);
+        return {
+          selectionChanged: currentVendorId != null || currentType != null,
+          vendorId: null,
+          providerType: null,
+        };
+      }
+
+      const vendor =
+        (currentVendorId ? nextVendors.find((v) => v.id === currentVendorId) : null) ??
+        nextVendors[0] ??
+        null;
+
+      if (!vendor) {
+        setSelectedVendorId(null);
+        setSelectedType(null);
+        return {
+          selectionChanged: currentVendorId != null || currentType != null,
+          vendorId: null,
+          providerType: null,
+        };
+      }
+
+      const nextVendorId = vendor.id;
+      const nextProviderType =
+        currentType && vendor.providerTypes.includes(currentType)
+          ? currentType
+          : (vendor.providerTypes[0] ?? null);
+
+      setSelectedVendorId(nextVendorId);
+      setSelectedType(nextProviderType);
+
+      return {
+        selectionChanged: nextVendorId !== currentVendorId || nextProviderType !== currentType,
+        vendorId: nextVendorId,
+        providerType: nextProviderType,
+      };
+    } catch (error) {
+      if (requestId !== vendorsRequestIdRef.current) {
+        return null;
+      }
+      console.error("Failed to fetch vendors:", error);
+      return null;
+    } finally {
+      if (!options?.silent && requestId === vendorsRequestIdRef.current) {
+        setLoadingVendors(false);
+      }
+    }
+  }, []);
 
   const refreshEndpoints = useCallback(
     async (params: {
@@ -135,22 +205,8 @@ export function EndpointTab() {
 
   // Fetch vendors on mount
   useEffect(() => {
-    const fetchVendors = async () => {
-      try {
-        const vendors = await getDashboardProviderVendors();
-        setVendors(vendors);
-        if (vendors.length > 0) {
-          setSelectedVendorId(vendors[0].id);
-          setSelectedType(vendors[0].providerTypes[0] ?? null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch vendors:", error);
-      } finally {
-        setLoadingVendors(false);
-      }
-    };
-    fetchVendors();
-  }, []);
+    void refreshVendors();
+  }, [refreshVendors]);
 
   // Fetch endpoints when vendor or type changes
   useEffect(() => {
@@ -187,6 +243,46 @@ export function EndpointTab() {
     }, 10000);
     return () => clearInterval(timer);
   }, [selectedEndpoint?.id, refreshProbeLogs]);
+
+  // 当用户从“设置页”修改/删除端点后返回本页，自动做一次轻量刷新，避免看到陈旧列表（#781）。
+  useEffect(() => {
+    const refresh = async () => {
+      const vendorResult = await refreshVendors({ silent: true });
+
+      const vendorId = vendorResult?.vendorId ?? latestSelectionRef.current.vendorId;
+      const providerType = vendorResult?.providerType ?? latestSelectionRef.current.providerType;
+      const endpointId = latestSelectionRef.current.endpointId;
+
+      if (!vendorResult?.selectionChanged && vendorId && providerType) {
+        void refreshEndpoints({
+          vendorId,
+          providerType,
+          keepSelectedEndpointId: endpointId,
+        });
+      }
+
+      if (!vendorResult?.selectionChanged && endpointId) {
+        void refreshProbeLogs(endpointId);
+      }
+    };
+
+    const onFocus = () => {
+      void refresh();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshEndpoints, refreshProbeLogs, refreshVendors]);
 
   // Handle manual probe
   const handleProbe = async () => {

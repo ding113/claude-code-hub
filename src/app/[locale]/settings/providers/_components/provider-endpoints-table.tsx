@@ -477,14 +477,11 @@ export interface AddEndpointButtonProps {
   vendorId: number;
   /** If provided, locks the type selector to this value */
   providerType?: ProviderType;
-  /** Custom query key suffix for cache invalidation */
-  queryKeySuffix?: string;
 }
 
 export function AddEndpointButton({
   vendorId,
   providerType: fixedProviderType,
-  queryKeySuffix,
 }: AddEndpointButtonProps) {
   const t = useTranslations("settings.providers");
   const tErrors = useTranslations("errors");
@@ -534,20 +531,11 @@ export function AddEndpointButton({
       if (res.ok) {
         toast.success(t("endpointAddSuccess"));
         setOpen(false);
-        // Invalidate both specific and general queries
-        // Explicitly suppress rejections to avoid double toast
+        // 仅失效 vendor 维度即可：前缀匹配会覆盖 providerType 等变体，避免重复 invalidation。
+        // 显式吞掉 rejections，避免错误状态下二次 toast。
         queryClient
           .invalidateQueries({ queryKey: ["provider-endpoints", vendorId] })
           .catch(() => undefined);
-        if (fixedProviderType) {
-          queryClient
-            .invalidateQueries({
-              queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
-                (value) => value != null
-              ),
-            })
-            .catch(() => undefined);
-        }
         return;
       }
 
@@ -820,13 +808,7 @@ export function ProviderEndpointsSection({
     <div ref={ref}>
       <div className="px-6 py-3 bg-muted/10 border-b font-medium text-sm text-muted-foreground flex items-center justify-between">
         <span>{t("endpoints")}</span>
-        {!readOnly && (
-          <AddEndpointButton
-            vendorId={vendorId}
-            providerType={providerType}
-            queryKeySuffix={queryKeySuffix}
-          />
-        )}
+        {!readOnly && <AddEndpointButton vendorId={vendorId} providerType={providerType} />}
       </div>
 
       <div className="p-6">

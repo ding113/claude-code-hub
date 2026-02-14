@@ -429,11 +429,35 @@ export async function getOrCreateProviderVendorIdFromUrls(
   }
 
   const existing = await executor
-    .select({ id: providerVendors.id })
+    .select({
+      id: providerVendors.id,
+      displayName: providerVendors.displayName,
+      websiteUrl: providerVendors.websiteUrl,
+      faviconUrl: providerVendors.faviconUrl,
+    })
     .from(providerVendors)
     .where(eq(providerVendors.websiteDomain, websiteDomain))
     .limit(1);
   if (existing[0]) {
+    const updates: Partial<typeof providerVendors.$inferInsert> = {};
+
+    const current = existing[0];
+    const nextDisplayName = input.displayName?.trim() || null;
+    if ((current.displayName == null || current.displayName.trim() === "") && nextDisplayName) {
+      updates.displayName = nextDisplayName;
+    }
+    if (current.websiteUrl == null && input.websiteUrl) {
+      updates.websiteUrl = input.websiteUrl;
+    }
+    if (current.faviconUrl == null && input.faviconUrl) {
+      updates.faviconUrl = input.faviconUrl;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = new Date();
+      await executor.update(providerVendors).set(updates).where(eq(providerVendors.id, current.id));
+    }
+
     return existing[0].id;
   }
 
@@ -673,6 +697,43 @@ export async function findEnabledProviderVendorTypePairs(): Promise<
     .filter(
       (row) => Number.isFinite(row.vendorId) && row.vendorId > 0 && Boolean(row.providerType)
     );
+}
+
+/**
+ * 判断某个 (vendor/type/url) 是否仍被启用的 provider 引用。
+ *
+ * 用于：端点删除/同步时的“引用检查”，避免出现“删了端点但启动回填/启用 provider 又复活”的困惑（#781）。
+ */
+export async function hasEnabledProviderReferenceForVendorTypeUrl(input: {
+  vendorId: number;
+  providerType: ProviderType;
+  url: string;
+  excludeProviderId?: number;
+}): Promise<boolean> {
+  const trimmedUrl = input.url.trim();
+  if (!trimmedUrl) {
+    return false;
+  }
+
+  const whereClauses = [
+    eq(providers.providerVendorId, input.vendorId),
+    eq(providers.providerType, input.providerType),
+    eq(providers.url, trimmedUrl),
+    eq(providers.isEnabled, true),
+    isNull(providers.deletedAt),
+  ];
+
+  if (input.excludeProviderId != null) {
+    whereClauses.push(ne(providers.id, input.excludeProviderId));
+  }
+
+  const [row] = await db
+    .select({ id: providers.id })
+    .from(providers)
+    .where(and(...whereClauses))
+    .limit(1);
+
+  return Boolean(row);
 }
 
 export async function findProviderVendorById(vendorId: number): Promise<ProviderVendor | null> {
@@ -2047,7 +2108,10 @@ export async function findProviderEndpointProbeLogs(
     })
     .from(providerEndpointProbeLogs)
     .where(eq(providerEndpointProbeLogs.endpointId, endpointId))
-    .orderBy(desc(providerEndpointProbeLogs.createdAt))
+    .orderBy(
+      sql`${providerEndpointProbeLogs.createdAt} DESC NULLS LAST`,
+      desc(providerEndpointProbeLogs.id)
+    )
     .limit(limit)
     .offset(offset);
 

@@ -492,6 +492,19 @@ export const messageRequest = pgTable('message_request', {
     table.createdAt.desc(),
     table.id.desc()
   ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：my-usage 下拉筛选 DISTINCT model / endpoint（Key 维度热路径）
+  messageRequestKeyModelActiveIdx: index('idx_message_request_key_model_active').on(
+    table.key,
+    table.model
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
+  messageRequestKeyEndpointActiveIdx: index('idx_message_request_key_endpoint_active').on(
+    table.key,
+    table.endpoint
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.endpoint} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
   // #779：全局 usage logs keyset 分页热路径（按 created_at + id 倒序）
   messageRequestCreatedAtIdActiveIdx: index('idx_message_request_created_at_id_active').on(
     table.createdAt.desc(),

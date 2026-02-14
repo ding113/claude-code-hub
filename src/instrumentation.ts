@@ -252,7 +252,9 @@ export async function register() {
 
     // 生产环境: 执行完整初始化(迁移 + 价格表 + 清理任务 + 通知任务)
     if (process.env.NODE_ENV === "production") {
-      const { checkDatabaseConnection, runMigrations } = await import("@/lib/migrate");
+      const { checkDatabaseConnection, runMigrations, withAdvisoryLock } = await import(
+        "@/lib/migrate"
+      );
 
       logger.info("Initializing Claude Code Hub");
 
@@ -264,42 +266,66 @@ export async function register() {
       }
 
       // 执行迁移（可通过 AUTO_MIGRATE=false 跳过）
-      if (process.env.AUTO_MIGRATE !== "false") {
+      const autoMigrateRaw = process.env.AUTO_MIGRATE?.trim().toLowerCase();
+      const autoMigrateDisabled =
+        autoMigrateRaw === "false" ||
+        autoMigrateRaw === "0" ||
+        autoMigrateRaw === "no" ||
+        autoMigrateRaw === "off";
+
+      if (!autoMigrateDisabled) {
         await runMigrations();
       } else {
-        logger.info("[Instrumentation] AUTO_MIGRATE=false: skipping migrations");
+        logger.info("[Instrumentation] AUTO_MIGRATE disabled: skipping migrations", {
+          value: process.env.AUTO_MIGRATE,
+        });
       }
 
       warmupApiKeyVacuumFilter();
 
-      // 回填 provider_vendors（按域名自动聚合旧 providers）
-      try {
-        const { backfillProviderVendorsFromProviders } = await import(
-          "@/repository/provider-endpoints"
-        );
-        const vendorResult = await backfillProviderVendorsFromProviders();
-        logger.info("[Instrumentation] Provider vendors backfill completed", {
-          processed: vendorResult.processed,
-          providersUpdated: vendorResult.providersUpdated,
-          vendorsCreatedCount: vendorResult.vendorsCreated.size,
-          skippedInvalidUrl: vendorResult.skippedInvalidUrl,
-        });
-      } catch (error) {
-        logger.warn("[Instrumentation] Failed to backfill provider vendors", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+      // 回填 provider_vendors/provider_endpoints（幂等）
+      // 多实例启动时仅允许一个实例执行，避免重复扫描/写入导致的启动抖动（#779/#781）。
+      const backfillLockName = "claude-code-hub:backfill:providers";
+      const backfill = await withAdvisoryLock(
+        backfillLockName,
+        async () => {
+          // 回填 provider_vendors（按域名自动聚合旧 providers）
+          try {
+            const { backfillProviderVendorsFromProviders } = await import(
+              "@/repository/provider-endpoints"
+            );
+            const vendorResult = await backfillProviderVendorsFromProviders();
+            logger.info("[Instrumentation] Provider vendors backfill completed", {
+              processed: vendorResult.processed,
+              providersUpdated: vendorResult.providersUpdated,
+              vendorsCreatedCount: vendorResult.vendorsCreated.size,
+              skippedInvalidUrl: vendorResult.skippedInvalidUrl,
+            });
+          } catch (error) {
+            logger.warn("[Instrumentation] Failed to backfill provider vendors", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
 
-      // 回填 provider_endpoints（从 providers.url/类型 生成端点池，幂等）
-      try {
-        const { backfillProviderEndpointsFromProviders } = await import(
-          "@/repository/provider-endpoints"
-        );
-        const result = await backfillProviderEndpointsFromProviders();
-        logger.info("[Instrumentation] Provider endpoints backfill completed", result);
-      } catch (error) {
-        logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
-          error: error instanceof Error ? error.message : String(error),
+          // 回填 provider_endpoints（从 providers.url/类型 生成端点池，幂等）
+          try {
+            const { backfillProviderEndpointsFromProviders } = await import(
+              "@/repository/provider-endpoints"
+            );
+            const result = await backfillProviderEndpointsFromProviders();
+            logger.info("[Instrumentation] Provider endpoints backfill completed", result);
+          } catch (error) {
+            logger.warn("[Instrumentation] Failed to backfill provider endpoints", {
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        },
+        { skipIfLocked: true }
+      );
+
+      if (!backfill.ran) {
+        logger.info("[Instrumentation] Provider backfill skipped (lock not acquired)", {
+          lockName: backfillLockName,
         });
       }
 

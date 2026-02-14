@@ -33,7 +33,10 @@ import {
   updateProviderEndpoint,
   updateProviderVendor,
 } from "@/repository";
-import { findEnabledProviderVendorTypePairs } from "@/repository/provider-endpoints";
+import {
+  findEnabledProviderVendorTypePairs,
+  hasEnabledProviderReferenceForVendorTypeUrl,
+} from "@/repository/provider-endpoints";
 import {
   findProviderEndpointProbeLogsBatch,
   findVendorTypeEndpointStatsBatch,
@@ -516,6 +519,21 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
         ok: false,
         error: "端点不存在",
         errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    // 若该端点仍被启用 provider 引用，则不允许删除：否则会导致运行时 endpoint pool 变空/回填复活，
+    // 产生“删了但还在/仍被探测”的困惑（#781）。
+    const referencedByEnabledProvider = await hasEnabledProviderReferenceForVendorTypeUrl({
+      vendorId: endpoint.vendorId,
+      providerType: endpoint.providerType,
+      url: endpoint.url,
+    });
+    if (referencedByEnabledProvider) {
+      return {
+        ok: false,
+        error: "该端点仍被启用的供应商引用，请先修改或禁用相关供应商的 URL 后再删除",
+        errorCode: ERROR_CODES.CONFLICT,
       };
     }
 

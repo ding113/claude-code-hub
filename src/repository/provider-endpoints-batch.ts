@@ -77,20 +77,30 @@ export async function findProviderEndpointProbeLogsBatch(input: {
   }
 
   const limitPerEndpoint = Math.max(1, input.limitPerEndpoint);
-  const endpointIdCondition = inArray(providerEndpointProbeLogs.endpointId, endpointIds);
+
+  // 性能：避免 `ROW_NUMBER() OVER (PARTITION BY ...)` 在单个端点 logs 很多时退化为更重的扫描/排序。
+  // 改为 LATERAL + LIMIT：每个 endpoint_id 仅取最新 N 条，能更好利用 (endpoint_id, created_at desc) 索引。
+  const endpointValues = sql.join(
+    endpointIds.map((id) => sql`(${id})`),
+    sql`, `
+  );
 
   const query = sql`
+    WITH endpoint_ids(endpoint_id) AS (
+      VALUES ${endpointValues}
+    )
     SELECT
-      id,
-      endpoint_id as "endpointId",
-      source,
-      ok,
-      status_code as "statusCode",
-      latency_ms as "latencyMs",
-      error_type as "errorType",
-      error_message as "errorMessage",
-      created_at as "createdAt"
-    FROM (
+      l.id,
+      l.endpoint_id as "endpointId",
+      l.source,
+      l.ok,
+      l.status_code as "statusCode",
+      l.latency_ms as "latencyMs",
+      l.error_type as "errorType",
+      l.error_message as "errorMessage",
+      l.created_at as "createdAt"
+    FROM endpoint_ids e
+    CROSS JOIN LATERAL (
       SELECT
         id,
         endpoint_id,
@@ -100,13 +110,13 @@ export async function findProviderEndpointProbeLogsBatch(input: {
         latency_ms,
         error_type,
         error_message,
-        created_at,
-        ROW_NUMBER() OVER (PARTITION BY endpoint_id ORDER BY created_at DESC, id DESC) AS row_num
+        created_at
       FROM ${providerEndpointProbeLogs}
-      WHERE ${endpointIdCondition}
-    ) ranked
-    WHERE ranked.row_num <= ${limitPerEndpoint}
-    ORDER BY ranked.endpoint_id ASC, ranked.created_at DESC, ranked.id DESC
+      WHERE endpoint_id = e.endpoint_id
+      ORDER BY created_at DESC NULLS LAST, id DESC
+      LIMIT ${limitPerEndpoint}
+    ) l
+    ORDER BY l.endpoint_id ASC, l.created_at DESC NULLS LAST, l.id DESC
   `;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

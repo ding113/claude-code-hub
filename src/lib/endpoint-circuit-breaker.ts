@@ -32,7 +32,7 @@ export interface EndpointHealth {
 
 const healthMap = new Map<number, EndpointHealth>();
 const loadedFromRedisAt = new Map<number, number>();
-const CLOSED_CIRCUIT_REDIS_SYNC_TTL_MS = 1_000;
+const REDIS_SYNC_TTL_MS = 1_000;
 
 function getOrCreateHealthSync(endpointId: number): EndpointHealth {
   let health = healthMap.get(endpointId);
@@ -54,9 +54,7 @@ async function getOrCreateHealth(endpointId: number): Promise<EndpointHealth> {
   const loadedAt = loadedFromRedisAt.get(endpointId);
   const now = Date.now();
   const needsRedisCheck =
-    loadedAt === undefined ||
-    (health && health.circuitState !== "closed") ||
-    (loadedAt !== undefined && now - loadedAt > CLOSED_CIRCUIT_REDIS_SYNC_TTL_MS);
+    loadedAt === undefined || (loadedAt !== undefined && now - loadedAt > REDIS_SYNC_TTL_MS);
 
   if (needsRedisCheck) {
     loadedFromRedisAt.set(endpointId, now);
@@ -153,9 +151,7 @@ export async function getAllEndpointHealthStatusAsync(
 
     const loadedAt = loadedFromRedisAt.get(endpointId);
     if (loadedAt === undefined) return true;
-    if (refreshNow - loadedAt > CLOSED_CIRCUIT_REDIS_SYNC_TTL_MS) return true;
-
-    return memoryState.circuitState !== "closed";
+    return refreshNow - loadedAt > REDIS_SYNC_TTL_MS;
   });
 
   if (needsRefresh.length > 0) {

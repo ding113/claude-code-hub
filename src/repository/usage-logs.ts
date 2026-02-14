@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
@@ -152,12 +152,12 @@ export async function findUsageLogsBatch(
 
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+    conditions.push(gte(messageRequest.createdAt, startDate));
   }
 
   if (endTime !== undefined) {
     const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+    conditions.push(lt(messageRequest.createdAt, endDate));
   }
 
   if (statusCode !== undefined) {
@@ -351,12 +351,12 @@ export async function findUsageLogsForKeySlim(
 
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+    conditions.push(gte(messageRequest.createdAt, startDate));
   }
 
   if (endTime !== undefined) {
     const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+    conditions.push(lt(messageRequest.createdAt, endDate));
   }
 
   if (statusCode !== undefined) {
@@ -581,12 +581,12 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   // PostgreSQL 会自动处理时区转换
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+    conditions.push(gte(messageRequest.createdAt, startDate));
   }
 
   if (endTime !== undefined) {
     const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+    conditions.push(lt(messageRequest.createdAt, endDate));
   }
 
   if (statusCode !== undefined) {
@@ -902,12 +902,12 @@ export async function findUsageLogsStats(
 
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+    conditions.push(gte(messageRequest.createdAt, startDate));
   }
 
   if (endTime !== undefined) {
     const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+    conditions.push(lt(messageRequest.createdAt, endDate));
   }
 
   if (statusCode !== undefined) {

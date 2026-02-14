@@ -12,6 +12,7 @@ const tryDeleteProviderVendorIfEmptyMock = vi.fn();
 const updateProviderEndpointMock = vi.fn();
 const findProviderEndpointProbeLogsBatchMock = vi.fn();
 const findVendorTypeEndpointStatsBatchMock = vi.fn();
+const hasEnabledProviderReferenceForVendorTypeUrlMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -59,6 +60,11 @@ vi.mock("@/repository/provider-endpoints-batch", () => ({
   findVendorTypeEndpointStatsBatch: findVendorTypeEndpointStatsBatchMock,
 }));
 
+vi.mock("@/repository/provider-endpoints", () => ({
+  findEnabledProviderVendorTypePairs: vi.fn(async () => []),
+  hasEnabledProviderReferenceForVendorTypeUrl: hasEnabledProviderReferenceForVendorTypeUrlMock,
+}));
+
 vi.mock("@/repository", () => ({
   createProviderEndpoint: vi.fn(async () => ({})),
   deleteProviderVendor: deleteProviderVendorMock,
@@ -76,6 +82,7 @@ vi.mock("@/repository", () => ({
 describe("provider-endpoints actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
   });
 
   it("editProviderVendor: requires admin", async () => {
@@ -281,6 +288,7 @@ describe("provider-endpoints actions", () => {
     });
     softDeleteProviderEndpointMock.mockResolvedValue(true);
     tryDeleteProviderVendorIfEmptyMock.mockResolvedValue(true);
+    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
 
     const { removeProviderEndpoint } = await import("@/actions/provider-endpoints");
     const res = await removeProviderEndpoint({ endpointId: 99 });

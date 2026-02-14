@@ -594,71 +594,58 @@ export async function getMyStatsSummary(
     const startDate = startTime ? new Date(startTime) : undefined;
     const endDate = endTime ? new Date(endTime) : undefined;
 
-    const [keyBreakdown, userBreakdown] = await Promise.all([
-      // 当前 Key 的 model breakdown（同时用于构造汇总统计）
-      db
-        .select({
-          model: messageRequest.model,
-          requests: sql<number>`count(*)::int`,
-          cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-          inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-          outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-          cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-          cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-          cacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
-          cacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
-        })
-        .from(messageRequest)
-        .where(
-          and(
-            eq(messageRequest.key, session.key.key),
-            isNull(messageRequest.deletedAt),
-            EXCLUDE_WARMUP_CONDITION,
-            startDate ? gte(messageRequest.createdAt, startDate) : undefined,
-            endDate ? lt(messageRequest.createdAt, endDate) : undefined
-          )
-        )
-        .groupBy(messageRequest.model)
-        .orderBy(sql`sum(${messageRequest.costUsd}) DESC`),
-      // 用户维度的 model breakdown（跨所有 Key）；5m/1h 缓存细分暂未在 ModelBreakdownItem 对外暴露，所以此处不聚合
-      db
-        .select({
-          model: messageRequest.model,
-          requests: sql<number>`count(*)::int`,
-          cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-          inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-          outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-          cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-          cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-          // 仅用于保持与 keyBreakdown 一致（便于后续扩展）；当前 UI/接口不展示这两个细分字段
-          cacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
-          cacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
-        })
-        .from(messageRequest)
-        .where(
-          and(
-            eq(messageRequest.userId, session.user.id),
-            isNull(messageRequest.deletedAt),
-            EXCLUDE_WARMUP_CONDITION,
-            startDate ? gte(messageRequest.createdAt, startDate) : undefined,
-            endDate ? lt(messageRequest.createdAt, endDate) : undefined
-          )
-        )
-        .groupBy(messageRequest.model)
-        .orderBy(sql`sum(${messageRequest.costUsd}) DESC`),
-    ]);
+    const userId = session.user.id;
+    const keyString = session.key.key;
 
-    const summaryAcc = keyBreakdown.reduce(
+    // Key 维度是 User 维度的子集：用一条聚合 SQL 扫描 userId 范围即可同时算出两套 breakdown。
+    const modelBreakdown = await db
+      .select({
+        model: messageRequest.model,
+        // User breakdown（跨所有 Key）
+        userRequests: sql<number>`count(*)::int`,
+        userCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+        userInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+        userOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+        userCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+        userCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+        userCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
+        userCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
+        // Key breakdown（FILTER 聚合）
+        keyRequests: sql<number>`count(*) FILTER (WHERE ${messageRequest.key} = ${keyString})::int`,
+        keyCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)`,
+        keyInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+        keyOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+        keyCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+        keyCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${messageRequest.key} = ${keyString}), 0)::double precision`,
+      })
+      .from(messageRequest)
+      .where(
+        and(
+          eq(messageRequest.userId, userId),
+          isNull(messageRequest.deletedAt),
+          EXCLUDE_WARMUP_CONDITION,
+          startDate ? gte(messageRequest.createdAt, startDate) : undefined,
+          endDate ? lt(messageRequest.createdAt, endDate) : undefined
+        )
+      )
+      .groupBy(messageRequest.model)
+      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+
+    const keyOnlyBreakdown = modelBreakdown.filter((row) => (row.keyRequests ?? 0) > 0);
+
+    const summaryAcc = keyOnlyBreakdown.reduce(
       (acc, row) => {
-        const cost = Number(row.cost ?? 0);
-        acc.totalRequests += row.requests ?? 0;
+        const cost = Number(row.keyCost ?? 0);
+        acc.totalRequests += row.keyRequests ?? 0;
         acc.totalCost += Number.isFinite(cost) ? cost : 0;
-        acc.totalInputTokens += row.inputTokens ?? 0;
-        acc.totalOutputTokens += row.outputTokens ?? 0;
-        acc.totalCacheCreationTokens += row.cacheCreationTokens ?? 0;
-        acc.totalCacheReadTokens += row.cacheReadTokens ?? 0;
-        acc.totalCacheCreation5mTokens += row.cacheCreation5mTokens ?? 0;
-        acc.totalCacheCreation1hTokens += row.cacheCreation1hTokens ?? 0;
+        acc.totalInputTokens += row.keyInputTokens ?? 0;
+        acc.totalOutputTokens += row.keyOutputTokens ?? 0;
+        acc.totalCacheCreationTokens += row.keyCacheCreationTokens ?? 0;
+        acc.totalCacheReadTokens += row.keyCacheReadTokens ?? 0;
+        acc.totalCacheCreation5mTokens += row.keyCacheCreation5mTokens ?? 0;
+        acc.totalCacheCreation1hTokens += row.keyCacheCreation1hTokens ?? 0;
         return acc;
       },
       {
@@ -693,23 +680,25 @@ export async function getMyStatsSummary(
 
     const result: MyStatsSummary = {
       ...stats,
-      keyModelBreakdown: keyBreakdown.map((row) => ({
+      keyModelBreakdown: keyOnlyBreakdown
+        .map((row) => ({
+          model: row.model,
+          requests: row.keyRequests,
+          cost: Number(row.keyCost ?? 0),
+          inputTokens: row.keyInputTokens,
+          outputTokens: row.keyOutputTokens,
+          cacheCreationTokens: row.keyCacheCreationTokens,
+          cacheReadTokens: row.keyCacheReadTokens,
+        }))
+        .sort((a, b) => b.cost - a.cost),
+      userModelBreakdown: modelBreakdown.map((row) => ({
         model: row.model,
-        requests: row.requests,
-        cost: Number(row.cost ?? 0),
-        inputTokens: row.inputTokens,
-        outputTokens: row.outputTokens,
-        cacheCreationTokens: row.cacheCreationTokens,
-        cacheReadTokens: row.cacheReadTokens,
-      })),
-      userModelBreakdown: userBreakdown.map((row) => ({
-        model: row.model,
-        requests: row.requests,
-        cost: Number(row.cost ?? 0),
-        inputTokens: row.inputTokens,
-        outputTokens: row.outputTokens,
-        cacheCreationTokens: row.cacheCreationTokens,
-        cacheReadTokens: row.cacheReadTokens,
+        requests: row.userRequests,
+        cost: Number(row.userCost ?? 0),
+        inputTokens: row.userInputTokens,
+        outputTokens: row.userOutputTokens,
+        cacheCreationTokens: row.userCacheCreationTokens,
+        cacheReadTokens: row.userCacheReadTokens,
       })),
       currencyCode,
     };

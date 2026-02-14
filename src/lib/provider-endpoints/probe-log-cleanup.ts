@@ -3,6 +3,7 @@ import {
   acquireLeaderLock,
   type LeaderLock,
   releaseLeaderLock,
+  renewLeaderLock,
 } from "@/lib/provider-endpoints/leader-lock";
 import { deleteProviderEndpointProbeLogsBeforeDateBatch } from "@/repository";
 
@@ -31,6 +32,55 @@ const cleanupState = globalThis as unknown as {
   __CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__?: boolean;
 };
 
+function startLeaderLockKeepAlive(onLost: () => void): () => void {
+  let stopped = false;
+  let renewing = false;
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (intervalId) clearInterval(intervalId);
+  };
+
+  const tick = async () => {
+    if (stopped || renewing) return;
+
+    const current = cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__;
+    if (!current) {
+      stop();
+      onLost();
+      return;
+    }
+
+    renewing = true;
+    try {
+      const ok = await renewLeaderLock(current, LOCK_TTL_MS);
+      if (!ok) {
+        cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__ = undefined;
+        stop();
+        onLost();
+        logger.warn("[EndpointProbeLogCleanup] Lost leader lock during cleanup", {
+          key: current.key,
+          lockType: current.lockType,
+        });
+      }
+    } finally {
+      renewing = false;
+    }
+  };
+
+  const intervalMs = Math.max(1000, Math.floor(LOCK_TTL_MS / 2));
+  intervalId = setInterval(() => {
+    void tick();
+  }, intervalMs);
+
+  const timer = intervalId as unknown as { unref?: () => void };
+  timer.unref?.();
+
+  return stop;
+}
+
 async function runCleanupOnce(): Promise<void> {
   if (cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__) {
     return;
@@ -39,6 +89,8 @@ async function runCleanupOnce(): Promise<void> {
   cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__ = true;
 
   let lock: LeaderLock | null = null;
+  let leadershipLost = false;
+  let stopKeepAlive: (() => void) | undefined;
 
   try {
     lock = await acquireLeaderLock(LOCK_KEY, LOCK_TTL_MS);
@@ -48,12 +100,20 @@ async function runCleanupOnce(): Promise<void> {
 
     cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_LOCK__ = lock;
 
+    stopKeepAlive = startLeaderLockKeepAlive(() => {
+      leadershipLost = true;
+    });
+
     const now = Date.now();
     const retentionMs = Math.max(0, RETENTION_DAYS) * 24 * 60 * 60 * 1000;
     const beforeDate = new Date(now - retentionMs);
 
     let totalDeleted = 0;
     while (true) {
+      if (leadershipLost) {
+        return;
+      }
+
       const deleted = await deleteProviderEndpointProbeLogsBeforeDateBatch({
         beforeDate,
         batchSize: CLEANUP_BATCH_SIZE,
@@ -81,6 +141,7 @@ async function runCleanupOnce(): Promise<void> {
       error: error instanceof Error ? error.message : String(error),
     });
   } finally {
+    stopKeepAlive?.();
     cleanupState.__CCH_ENDPOINT_PROBE_LOG_CLEANUP_RUNNING__ = false;
 
     if (lock) {
