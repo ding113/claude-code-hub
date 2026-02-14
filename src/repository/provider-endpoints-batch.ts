@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providerEndpoints } from "@/drizzle/schema";
+import { providerEndpointProbeLogs, providerEndpoints } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 import type { ProviderEndpointProbeLog, ProviderType } from "@/types/provider";
 
@@ -77,10 +77,7 @@ export async function findProviderEndpointProbeLogsBatch(input: {
   }
 
   const limitPerEndpoint = Math.max(1, input.limitPerEndpoint);
-  const idList = sql.join(
-    endpointIds.map((endpointId) => sql`${endpointId}`),
-    sql`, `
-  );
+  const endpointIdCondition = inArray(providerEndpointProbeLogs.endpointId, endpointIds);
 
   const query = sql`
     SELECT
@@ -106,7 +103,7 @@ export async function findProviderEndpointProbeLogsBatch(input: {
         created_at,
         ROW_NUMBER() OVER (PARTITION BY endpoint_id ORDER BY created_at DESC) AS row_num
       FROM provider_endpoint_probe_logs
-      WHERE endpoint_id IN (${idList})
+      WHERE ${endpointIdCondition}
     ) ranked
     WHERE ranked.row_num <= ${limitPerEndpoint}
     ORDER BY ranked.endpoint_id ASC, ranked.created_at DESC

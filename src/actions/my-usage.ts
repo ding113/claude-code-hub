@@ -625,7 +625,7 @@ export async function getMyStatsSummary(
         )
         .groupBy(messageRequest.model)
         .orderBy(sql`sum(${messageRequest.costUsd}) DESC`),
-      // 用户维度的 model breakdown（跨所有 Key）
+      // 用户维度的 model breakdown（跨所有 Key）；5m/1h 缓存细分暂未在 ModelBreakdownItem 对外暴露，所以此处不聚合
       db
         .select({
           model: messageRequest.model,

@@ -147,8 +147,16 @@ export async function getAllEndpointHealthStatusAsync(
 
         const redisState = redisStates.get(endpointId) ?? null;
         if (redisState) {
+          // 从 Redis 同步到内存时，不能只在 circuitState 变化时才更新：
+          // failureCount / halfOpenSuccessCount 等字段在 forceRefresh 下也应保持一致。
           const existingHealth = healthMap.get(endpointId);
-          if (!existingHealth || redisState.circuitState !== existingHealth.circuitState) {
+          if (existingHealth) {
+            existingHealth.failureCount = redisState.failureCount;
+            existingHealth.lastFailureTime = redisState.lastFailureTime;
+            existingHealth.circuitState = redisState.circuitState;
+            existingHealth.circuitOpenUntil = redisState.circuitOpenUntil;
+            existingHealth.halfOpenSuccessCount = redisState.halfOpenSuccessCount;
+          } else {
             healthMap.set(endpointId, {
               failureCount: redisState.failureCount,
               lastFailureTime: redisState.lastFailureTime,

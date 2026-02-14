@@ -151,6 +151,74 @@ describe("endpoint-circuit-breaker", () => {
     expect(lastState.failureCount).toBe(0);
   });
 
+  test("getAllEndpointHealthStatusAsync: forceRefresh 时应同步 Redis 中的计数（即使 circuitState 未变化）", async () => {
+    vi.resetModules();
+
+    const endpointId = 42;
+
+    const redisStates = new Map<number, SavedEndpointCircuitState>();
+    const loadManyMock = vi.fn(async (endpointIds: number[]) => {
+      const result = new Map<number, SavedEndpointCircuitState>();
+      for (const id of endpointIds) {
+        const state = redisStates.get(id);
+        if (state) {
+          result.set(id, state);
+        }
+      }
+      return result;
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => null),
+      loadEndpointCircuitStates: loadManyMock,
+      saveEndpointCircuitState: vi.fn(async () => {}),
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const t0 = Date.now();
+
+    redisStates.set(endpointId, {
+      failureCount: 1,
+      lastFailureTime: t0 - 1000,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    const { getAllEndpointHealthStatusAsync } = await import("@/lib/endpoint-circuit-breaker");
+
+    const first = await getAllEndpointHealthStatusAsync([endpointId], { forceRefresh: true });
+    expect(first[endpointId]).toMatchObject({
+      failureCount: 1,
+      lastFailureTime: t0 - 1000,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    redisStates.set(endpointId, {
+      failureCount: 2,
+      lastFailureTime: t0 + 123,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    const second = await getAllEndpointHealthStatusAsync([endpointId], { forceRefresh: true });
+    expect(second[endpointId]).toMatchObject({
+      failureCount: 2,
+      lastFailureTime: t0 + 123,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    expect(loadManyMock).toHaveBeenCalledTimes(2);
+  });
+
   test("triggerEndpointCircuitBreakerAlert should call sendCircuitBreakerAlert", async () => {
     vi.resetModules();
 
