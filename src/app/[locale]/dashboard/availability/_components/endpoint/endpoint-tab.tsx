@@ -2,12 +2,13 @@
 
 import { Radio } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  type DashboardProviderVendor,
+  getDashboardProviderVendors,
   getProviderEndpointProbeLogs,
   getProviderEndpoints,
-  getProviderVendors,
   probeProviderEndpoint,
 } from "@/actions/provider-endpoints";
 import { Button } from "@/components/ui/button";
@@ -20,33 +21,16 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderVendor } from "@/types/provider";
+import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderType } from "@/types/provider";
 import { LatencyCurve } from "./latency-curve";
 import { ProbeGrid } from "./probe-grid";
 import { ProbeTerminal } from "./probe-terminal";
-
-type ProviderType =
-  | "claude"
-  | "claude-auth"
-  | "codex"
-  | "gemini"
-  | "gemini-cli"
-  | "openai-compatible";
-
-const PROVIDER_TYPES: ProviderType[] = [
-  "claude",
-  "claude-auth",
-  "codex",
-  "gemini",
-  "gemini-cli",
-  "openai-compatible",
-];
 
 export function EndpointTab() {
   const t = useTranslations("dashboard.availability");
 
   // State
-  const [vendors, setVendors] = useState<ProviderVendor[]>([]);
+  const [vendors, setVendors] = useState<DashboardProviderVendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
   const [selectedType, setSelectedType] = useState<ProviderType | null>(null);
   const [endpoints, setEndpoints] = useState<ProviderEndpoint[]>([]);
@@ -59,14 +43,105 @@ export function EndpointTab() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [probing, setProbing] = useState(false);
 
+  const endpointsRequestIdRef = useRef(0);
+  const probeLogsRequestIdRef = useRef(0);
+  const latestSelectionRef = useRef<{
+    vendorId: number | null;
+    providerType: ProviderType | null;
+    endpointId: number | null;
+  }>({ vendorId: null, providerType: null, endpointId: null });
+
+  latestSelectionRef.current.vendorId = selectedVendorId;
+  latestSelectionRef.current.providerType = selectedType;
+  latestSelectionRef.current.endpointId = selectedEndpoint?.id ?? null;
+
+  const refreshEndpoints = useCallback(
+    async (params: {
+      vendorId: number;
+      providerType: ProviderType;
+      keepSelectedEndpointId?: number | null;
+    }) => {
+      const requestId = ++endpointsRequestIdRef.current;
+      setLoadingEndpoints(true);
+
+      try {
+        const nextEndpoints = await getProviderEndpoints({
+          vendorId: params.vendorId,
+          providerType: params.providerType,
+        });
+
+        if (requestId !== endpointsRequestIdRef.current) {
+          return;
+        }
+
+        setEndpoints(nextEndpoints);
+
+        const keepId = params.keepSelectedEndpointId ?? null;
+        if (keepId) {
+          const kept = nextEndpoints.find((e) => e.id === keepId) ?? null;
+          setSelectedEndpoint(kept ?? nextEndpoints[0] ?? null);
+          return;
+        }
+
+        setSelectedEndpoint(nextEndpoints[0] ?? null);
+      } catch (error) {
+        if (requestId !== endpointsRequestIdRef.current) {
+          return;
+        }
+        console.error("Failed to fetch endpoints:", error);
+        setEndpoints([]);
+        setSelectedEndpoint(null);
+      } finally {
+        if (requestId === endpointsRequestIdRef.current) {
+          setLoadingEndpoints(false);
+        }
+      }
+    },
+    []
+  );
+
+  const refreshProbeLogs = useCallback(async (endpointId: number) => {
+    const requestId = ++probeLogsRequestIdRef.current;
+    setLoadingLogs(true);
+
+    try {
+      const result = await getProviderEndpointProbeLogs({
+        endpointId,
+        limit: 100,
+      });
+
+      if (requestId !== probeLogsRequestIdRef.current) {
+        return;
+      }
+
+      if (latestSelectionRef.current.endpointId !== endpointId) {
+        return;
+      }
+
+      if (result.ok && result.data) {
+        setProbeLogs(result.data.logs);
+      }
+    } catch (error) {
+      if (requestId !== probeLogsRequestIdRef.current) {
+        return;
+      }
+      console.error("Failed to fetch probe logs:", error);
+    } finally {
+      if (requestId === probeLogsRequestIdRef.current) {
+        setLoadingLogs(false);
+      }
+    }
+  }, []);
+
   // Fetch vendors on mount
   useEffect(() => {
     const fetchVendors = async () => {
       try {
-        const vendors = await getProviderVendors();
+        const vendors = await getDashboardProviderVendors();
         setVendors(vendors);
         if (vendors.length > 0) {
           setSelectedVendorId(vendors[0].id);
+          setSelectedType(vendors[0].providerTypes[0] ?? null);
         }
       } catch (error) {
         console.error("Failed to fetch vendors:", error);
@@ -80,88 +155,70 @@ export function EndpointTab() {
   // Fetch endpoints when vendor or type changes
   useEffect(() => {
     if (!selectedVendorId || !selectedType) {
+      endpointsRequestIdRef.current += 1;
       setEndpoints([]);
+      setSelectedEndpoint(null);
+      setLoadingEndpoints(false);
       return;
     }
 
-    const fetchEndpoints = async () => {
-      setLoadingEndpoints(true);
-      try {
-        const endpoints = await getProviderEndpoints({
-          vendorId: selectedVendorId,
-          providerType: selectedType,
-        });
-        setEndpoints(endpoints);
-        if (endpoints.length > 0) {
-          setSelectedEndpoint(endpoints[0]);
-        } else {
-          setSelectedEndpoint(null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch endpoints:", error);
-      } finally {
-        setLoadingEndpoints(false);
-      }
-    };
-    fetchEndpoints();
-  }, [selectedVendorId, selectedType]);
+    void refreshEndpoints({ vendorId: selectedVendorId, providerType: selectedType });
+  }, [selectedVendorId, selectedType, refreshEndpoints]);
 
   // Fetch probe logs when endpoint changes
-  const fetchProbeLogs = useCallback(async () => {
-    if (!selectedEndpoint) {
+  useEffect(() => {
+    const endpointId = selectedEndpoint?.id ?? null;
+    if (!endpointId) {
+      probeLogsRequestIdRef.current += 1;
       setProbeLogs([]);
+      setLoadingLogs(false);
       return;
     }
 
-    setLoadingLogs(true);
-    try {
-      const result = await getProviderEndpointProbeLogs({
-        endpointId: selectedEndpoint.id,
-        limit: 100,
-      });
-      if (result.ok && result.data) {
-        setProbeLogs(result.data.logs);
-      }
-    } catch (error) {
-      console.error("Failed to fetch probe logs:", error);
-    } finally {
-      setLoadingLogs(false);
-    }
-  }, [selectedEndpoint]);
-
-  useEffect(() => {
-    fetchProbeLogs();
-  }, [fetchProbeLogs]);
+    void refreshProbeLogs(endpointId);
+  }, [selectedEndpoint?.id, refreshProbeLogs]);
 
   // Auto-refresh logs every 10 seconds
   useEffect(() => {
-    if (!selectedEndpoint) return;
-    const timer = setInterval(fetchProbeLogs, 10000);
+    const endpointId = selectedEndpoint?.id;
+    if (!endpointId) return;
+    const timer = setInterval(() => {
+      void refreshProbeLogs(endpointId);
+    }, 10000);
     return () => clearInterval(timer);
-  }, [selectedEndpoint, fetchProbeLogs]);
+  }, [selectedEndpoint?.id, refreshProbeLogs]);
 
   // Handle manual probe
   const handleProbe = async () => {
-    if (!selectedEndpoint) return;
+    const endpoint = selectedEndpoint;
+    const vendorId = selectedVendorId;
+    const providerType = selectedType;
+    if (!endpoint || !vendorId || !providerType) return;
 
     setProbing(true);
     try {
       const result = await probeProviderEndpoint({
-        endpointId: selectedEndpoint.id,
+        endpointId: endpoint.id,
       });
       if (result.ok) {
         toast.success(t("actions.probeSuccess"));
-        // Refresh logs and endpoints
-        fetchProbeLogs();
-        if (selectedVendorId && selectedType) {
-          const endpoints = await getProviderEndpoints({
-            vendorId: selectedVendorId,
-            providerType: selectedType,
+
+        // 避免 probe 完成后覆盖用户在 probe 期间切换的 vendor/type/endpoint。
+        const stillSameVendorType =
+          latestSelectionRef.current.vendorId === vendorId &&
+          latestSelectionRef.current.providerType === providerType;
+        const stillSameEndpoint = latestSelectionRef.current.endpointId === endpoint.id;
+
+        if (stillSameEndpoint) {
+          void refreshProbeLogs(endpoint.id);
+        }
+
+        if (stillSameVendorType) {
+          await refreshEndpoints({
+            vendorId,
+            providerType,
+            keepSelectedEndpointId: latestSelectionRef.current.endpointId,
           });
-          setEndpoints(endpoints);
-          // Update selected endpoint with new data
-          const updated = endpoints.find((e) => e.id === selectedEndpoint.id);
-          if (updated) setSelectedEndpoint(updated);
         }
       } else {
         toast.error(result.error || t("actions.probeFailed"));
@@ -190,6 +247,9 @@ export function EndpointTab() {
     );
   }
 
+  const selectedVendor = vendors.find((vendor) => vendor.id === selectedVendorId) ?? null;
+  const providerTypes = selectedVendor?.providerTypes ?? [];
+
   return (
     <div className="space-y-6">
       {/* Filters */}
@@ -199,8 +259,10 @@ export function EndpointTab() {
           <Select
             value={selectedVendorId?.toString() || ""}
             onValueChange={(v) => {
-              setSelectedVendorId(Number(v));
-              setSelectedType(null);
+              const vendorId = Number(v);
+              setSelectedVendorId(vendorId);
+              const nextVendor = vendors.find((vendor) => vendor.id === vendorId);
+              setSelectedType(nextVendor?.providerTypes[0] ?? null);
               setSelectedEndpoint(null);
             }}
           >
@@ -229,7 +291,7 @@ export function EndpointTab() {
               <SelectValue placeholder={t("endpoint.selectType")} />
             </SelectTrigger>
             <SelectContent>
-              {PROVIDER_TYPES.map((type) => (
+              {providerTypes.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>

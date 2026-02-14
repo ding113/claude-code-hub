@@ -6,7 +6,8 @@ function createTxMock(selectResults: SelectRow[][]) {
   const queue = [...selectResults];
 
   const selectLimitMock = vi.fn(async () => queue.shift() ?? []);
-  const selectWhereMock = vi.fn(() => ({ limit: selectLimitMock }));
+  const selectOrderByMock = vi.fn(() => ({ limit: selectLimitMock }));
+  const selectWhereMock = vi.fn(() => ({ orderBy: selectOrderByMock, limit: selectLimitMock }));
   const selectFromMock = vi.fn(() => ({ where: selectWhereMock }));
   const selectMock = vi.fn(() => ({ from: selectFromMock }));
 
@@ -221,7 +222,7 @@ describe("syncProviderEndpointOnProviderEdit", () => {
     expect(resetEndpointCircuitMock).not.toHaveBeenCalled();
   });
 
-  test("in-place move unique conflict should fallback to conservative keep-previous behavior", async () => {
+  test("in-place move unique conflict should soft-delete previous endpoint when unreferenced", async () => {
     const oldUrl = "https://old.example.com/v1/messages";
     const newUrl = "https://new.example.com/v1/messages";
     const { syncProviderEndpointOnProviderEdit, updatePayloads, mocks, resetEndpointCircuitMock } =
@@ -250,18 +251,24 @@ describe("syncProviderEndpointOnProviderEdit", () => {
       keepPreviousWhenReferenced: true,
     });
 
-    expect(result).toEqual({ action: "kept-previous-and-kept-next" });
+    expect(result).toEqual({ action: "soft-deleted-previous-and-kept-next" });
     expect(mocks.insertMock).toHaveBeenCalledTimes(1);
-    expect(mocks.updateMock).toHaveBeenCalledTimes(1);
+    expect(mocks.updateMock).toHaveBeenCalledTimes(2);
     expect(updatePayloads[0]).toEqual(
       expect.objectContaining({
         url: newUrl,
       })
     );
+    expect(updatePayloads[1]).toEqual(
+      expect.objectContaining({
+        deletedAt: expect.any(Date),
+        isEnabled: false,
+      })
+    );
     expect(resetEndpointCircuitMock).not.toHaveBeenCalled();
   });
 
-  test("when next endpoint already exists, should keep previous endpoint under conservative policy", async () => {
+  test("when next endpoint already exists, should soft-delete previous endpoint when unreferenced", async () => {
     const oldUrl = "https://old.example.com/v1/messages";
     const newUrl = "https://new.example.com/v1/messages";
     const { syncProviderEndpointOnProviderEdit, mocks, resetEndpointCircuitMock } =
@@ -283,8 +290,8 @@ describe("syncProviderEndpointOnProviderEdit", () => {
       keepPreviousWhenReferenced: true,
     });
 
-    expect(result).toEqual({ action: "kept-previous-and-kept-next" });
-    expect(mocks.updateMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ action: "soft-deleted-previous-and-kept-next" });
+    expect(mocks.updateMock).toHaveBeenCalledTimes(1);
     expect(mocks.insertMock).not.toHaveBeenCalled();
     expect(resetEndpointCircuitMock).not.toHaveBeenCalled();
   });

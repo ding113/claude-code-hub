@@ -1,8 +1,8 @@
-"use server";
+import "server-only";
 
 import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providers } from "@/drizzle/schema";
+import { providerEndpoints, providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
@@ -499,12 +499,16 @@ export async function updateProvider(
 
   const shouldRefreshVendor =
     providerData.url !== undefined || providerData.website_url !== undefined;
-  const shouldSyncEndpoint = shouldRefreshVendor || providerData.provider_type !== undefined;
+  const shouldSyncEndpoint =
+    shouldRefreshVendor ||
+    providerData.provider_type !== undefined ||
+    providerData.is_enabled === true;
 
   const updateResult = await db.transaction(async (tx) => {
     let previousVendorId: number | null = null;
     let previousUrl: string | null = null;
     let previousProviderType: Provider["providerType"] | null = null;
+    let previousIsEnabled: boolean | null = null;
     let endpointCircuitResetId: number | null = null;
 
     if (shouldSyncEndpoint) {
@@ -516,6 +520,7 @@ export async function updateProvider(
           name: providers.name,
           providerVendorId: providers.providerVendorId,
           providerType: providers.providerType,
+          isEnabled: providers.isEnabled,
         })
         .from(providers)
         .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
@@ -525,6 +530,7 @@ export async function updateProvider(
         previousVendorId = current.providerVendorId;
         previousUrl = current.url;
         previousProviderType = current.providerType;
+        previousIsEnabled = current.isEnabled;
 
         if (shouldRefreshVendor) {
           const providerVendorId = await getOrCreateProviderVendorIdFromUrls(
@@ -606,7 +612,13 @@ export async function updateProvider(
     const transformed = toProvider(provider);
 
     if (shouldSyncEndpoint && transformed.providerVendorId) {
-      if (previousUrl && previousProviderType) {
+      if (
+        previousUrl &&
+        previousProviderType &&
+        (previousUrl !== transformed.url ||
+          previousProviderType !== transformed.providerType ||
+          (previousVendorId != null && previousVendorId !== transformed.providerVendorId))
+      ) {
         const syncResult = await syncProviderEndpointOnProviderEdit(
           {
             providerId: transformed.id,
@@ -622,7 +634,7 @@ export async function updateProvider(
         );
 
         endpointCircuitResetId = syncResult.resetCircuitEndpointId ?? null;
-      } else {
+      } else if (previousIsEnabled === false && transformed.isEnabled === true) {
         await ensureProviderEndpointExistsForUrl(
           {
             vendorId: transformed.providerVendorId,
@@ -713,13 +725,71 @@ export async function updateProviderPrioritiesBatch(
 }
 
 export async function deleteProvider(id: number): Promise<boolean> {
-  const result = await db
-    .update(providers)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
-    .returning({ id: providers.id });
+  const now = new Date();
 
-  return result.length > 0;
+  const deleted = await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      })
+      .from(providers)
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .limit(1);
+
+    if (!current) {
+      return false;
+    }
+
+    const result = await tx
+      .update(providers)
+      .set({ deletedAt: now })
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .returning({ id: providers.id });
+
+    if (result.length === 0) {
+      return false;
+    }
+
+    if (current.providerVendorId != null && current.url) {
+      const [activeReference] = await tx
+        .select({ id: providers.id })
+        .from(providers)
+        .where(
+          and(
+            eq(providers.providerVendorId, current.providerVendorId),
+            eq(providers.providerType, current.providerType),
+            eq(providers.url, current.url),
+            eq(providers.isEnabled, true),
+            isNull(providers.deletedAt)
+          )
+        )
+        .limit(1);
+
+      if (!activeReference) {
+        await tx
+          .update(providerEndpoints)
+          .set({
+            deletedAt: now,
+            isEnabled: false,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(providerEndpoints.vendorId, current.providerVendorId),
+              eq(providerEndpoints.providerType, current.providerType),
+              eq(providerEndpoints.url, current.url),
+              isNull(providerEndpoints.deletedAt)
+            )
+          );
+      }
+    }
+
+    return true;
+  });
+
+  return deleted;
 }
 
 export interface BatchProviderUpdates {
@@ -787,23 +857,133 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
   }
 
   const uniqueIds = [...new Set(ids)];
+  const now = new Date();
   const idList = sql.join(
     uniqueIds.map((id) => sql`${id}`),
     sql`, `
   );
 
-  const result = await db
-    .update(providers)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
-    .returning({ id: providers.id });
+  const deletedCount = await db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      })
+      .from(providers)
+      .where(sql`id IN (${idList}) AND deleted_at IS NULL`);
+
+    const result = await tx
+      .update(providers)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
+      .returning({ id: providers.id });
+
+    if (result.length === 0) {
+      return 0;
+    }
+
+    const endpointKeys = new Map<
+      string,
+      { vendorId: number; providerType: Provider["providerType"]; url: string }
+    >();
+
+    for (const candidate of candidates) {
+      if (candidate.providerVendorId == null || !candidate.url) {
+        continue;
+      }
+
+      const key = `${candidate.providerVendorId}::${candidate.providerType}::${candidate.url}`;
+      if (endpointKeys.has(key)) {
+        continue;
+      }
+
+      endpointKeys.set(key, {
+        vendorId: candidate.providerVendorId,
+        providerType: candidate.providerType,
+        url: candidate.url,
+      });
+    }
+
+    const endpoints = Array.from(endpointKeys.values());
+    if (endpoints.length === 0) {
+      return result.length;
+    }
+
+    const chunkSize = 200;
+    const activeEndpointKeys = new Set<string>();
+
+    for (let i = 0; i < endpoints.length; i += chunkSize) {
+      const chunk = endpoints.slice(i, i + chunkSize);
+      const tupleList = sql.join(
+        chunk.map(
+          (endpoint) => sql`(${endpoint.vendorId}, ${endpoint.providerType}, ${endpoint.url})`
+        ),
+        sql`, `
+      );
+
+      const activeReferences = await tx
+        .select({
+          vendorId: providers.providerVendorId,
+          providerType: providers.providerType,
+          url: providers.url,
+        })
+        .from(providers)
+        .where(
+          and(
+            eq(providers.isEnabled, true),
+            isNull(providers.deletedAt),
+            sql`(${providers.providerVendorId}, ${providers.providerType}, ${providers.url}) IN (${tupleList})`
+          )
+        );
+
+      for (const row of activeReferences) {
+        if (row.vendorId == null || !row.url) {
+          continue;
+        }
+
+        activeEndpointKeys.add(`${row.vendorId}::${row.providerType}::${row.url}`);
+      }
+    }
+
+    const orphanEndpoints = endpoints.filter(
+      (endpoint) =>
+        !activeEndpointKeys.has(`${endpoint.vendorId}::${endpoint.providerType}::${endpoint.url}`)
+    );
+
+    for (let i = 0; i < orphanEndpoints.length; i += chunkSize) {
+      const chunk = orphanEndpoints.slice(i, i + chunkSize);
+      const tupleList = sql.join(
+        chunk.map(
+          (endpoint) => sql`(${endpoint.vendorId}, ${endpoint.providerType}, ${endpoint.url})`
+        ),
+        sql`, `
+      );
+
+      await tx
+        .update(providerEndpoints)
+        .set({
+          deletedAt: now,
+          isEnabled: false,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            isNull(providerEndpoints.deletedAt),
+            sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}, ${providerEndpoints.url}) IN (${tupleList})`
+          )
+        );
+    }
+
+    return result.length;
+  });
 
   logger.debug("deleteProvidersBatch:completed", {
     requestedIds: uniqueIds.length,
-    deletedCount: result.length,
+    deletedCount,
   });
 
-  return result.length;
+  return deletedCount;
 }
 
 /**
@@ -863,105 +1043,164 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
  * 包括：今天的总金额、今天的调用次数、最近一次调用时间和模型
  *
  * 性能优化：
- * - provider_stats CTE: LEFT JOIN 添加日期过滤，仅扫描今日数据（避免全表扫描）
- * - latest_call CTE: 添加 7 天时间范围限制（避免扫描历史数据）
+ * - provider_stats: 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × message_request 的笛卡尔积
+ * - bounds: 用“按时区计算的时间范围”过滤 created_at，便于命中 created_at 索引
+ * - latest_call: 限制近 7 天范围，避免扫描历史数据
  */
-export async function getProviderStatistics(): Promise<
-  Array<{
-    id: number;
-    today_cost: string;
-    today_calls: number;
-    last_call_time: Date | null;
-    last_call_model: string | null;
-  }>
-> {
+export type ProviderStatisticsRow = {
+  id: number;
+  today_cost: string;
+  today_calls: number;
+  last_call_time: Date | null;
+  last_call_model: string | null;
+};
+
+// 轻量内存缓存：降低后台轮询/重复加载导致的重复扫描
+const PROVIDER_STATISTICS_CACHE_TTL_MS = 10 * 1000; // 10 秒
+let providerStatisticsCache: {
+  timezone: string;
+  expiresAt: number;
+  data: ProviderStatisticsRow[];
+} | null = null;
+
+// in-flight 去重：避免缓存过期瞬间并发触发多次相同查询（thundering herd）
+let providerStatisticsInFlight: {
+  timezone: string;
+  promise: Promise<ProviderStatisticsRow[]>;
+} | null = null;
+
+export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> {
   try {
     // 统一的时区处理：使用 PostgreSQL AT TIME ZONE + 系统时区配置
     // 参考 getUserStatisticsFromDB 的实现，避免 Node.js Date 带来的时区偏移
     const timezone = await resolveSystemTimezone();
+    const now = Date.now();
+    if (
+      providerStatisticsCache &&
+      providerStatisticsCache.expiresAt > now &&
+      providerStatisticsCache.timezone === timezone
+    ) {
+      return providerStatisticsCache.data;
+    }
 
-    // ⭐ 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
-    // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
-    const query = sql`
-      WITH provider_stats AS (
-        SELECT
-          p.id,
-          COALESCE(
-            SUM(CASE
-              WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-                AND (
-                  -- 情况1：无重试（provider_chain 为 NULL 或空数组），使用 provider_id
-                  (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
-                  OR
-                  -- 情况2：有重试，使用 providerChain 最后一项的 id
-                  (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
-                   AND (mr.provider_chain->-1->>'id')::int = p.id)
-                )
-              THEN mr.cost_usd ELSE 0 END),
-            0
-          ) AS today_cost,
-          COUNT(CASE
-            WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-              AND (
-                (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
-                OR
-                (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
-                 AND (mr.provider_chain->-1->>'id')::int = p.id)
-              )
-            THEN 1 END)::integer AS today_calls
-        FROM providers p
-        -- 性能优化：添加日期过滤条件，仅扫描今日数据（避免全表扫描）
-        LEFT JOIN message_request mr ON mr.deleted_at IS NULL
-          AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          AND mr.created_at >= (CURRENT_DATE AT TIME ZONE ${timezone})
-        WHERE p.deleted_at IS NULL
-        GROUP BY p.id
-      ),
-      latest_call AS (
-        SELECT DISTINCT ON (final_provider_id)
-          -- 计算最终供应商ID：优先使用 providerChain 最后一项的 id
-          CASE
-            WHEN provider_chain IS NULL OR jsonb_array_length(provider_chain) = 0 THEN provider_id
-            ELSE (provider_chain->-1->>'id')::int
-          END AS final_provider_id,
-          created_at AS last_call_time,
-          model AS last_call_model
-        FROM message_request
-        -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
-        WHERE deleted_at IS NULL
-          AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-          AND created_at >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '7 days')
-        ORDER BY final_provider_id, created_at DESC
-      )
-      SELECT
-        ps.id,
-        ps.today_cost,
-        ps.today_calls,
-        lc.last_call_time,
-        lc.last_call_model
-      FROM provider_stats ps
-      LEFT JOIN latest_call lc ON ps.id = lc.final_provider_id
-      ORDER BY ps.id ASC
-    `;
+    if (providerStatisticsInFlight && providerStatisticsInFlight.timezone === timezone) {
+      return await providerStatisticsInFlight.promise;
+    }
 
-    logger.trace("getProviderStatistics:executing_query");
+    const deferred = (() => {
+      let resolve!: (value: ProviderStatisticsRow[]) => void;
+      let reject!: (reason: unknown) => void;
 
-    const result = await db.execute(query);
+      const promise = new Promise<ProviderStatisticsRow[]>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
 
-    logger.trace("getProviderStatistics:result", {
-      count: Array.isArray(result) ? result.length : 0,
-    });
+      return { promise, resolve, reject };
+    })();
 
-    // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
-    // last_call_time 由数据库返回为时间戳（UTC）。
-    // 这里保持原样，交由上层进行展示格式化。
-    return result as unknown as Array<{
-      id: number;
-      today_cost: string;
-      today_calls: number;
-      last_call_time: Date | null;
-      last_call_model: string | null;
-    }>;
+    providerStatisticsInFlight = { timezone, promise: deferred.promise };
+
+    void (async () => {
+      try {
+        // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
+        // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
+        const query = sql`
+          WITH bounds AS (
+            SELECT
+              (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
+              (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) + INTERVAL '1 day' AS tomorrow_start,
+              (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) - INTERVAL '7 days' AS last7_start
+          ),
+          provider_stats AS (
+            -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
+            SELECT
+              mr.final_provider_id,
+              COALESCE(SUM(mr.cost_usd), 0) AS today_cost,
+              COUNT(*)::integer AS today_calls
+            FROM (
+              SELECT
+                CASE
+                  WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
+                  WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
+                  ELSE provider_id
+                END AS final_provider_id,
+                cost_usd
+              FROM message_request CROSS JOIN bounds
+              WHERE deleted_at IS NULL
+                AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+                AND created_at >= bounds.today_start
+                AND created_at < bounds.tomorrow_start
+            ) mr
+            GROUP BY mr.final_provider_id
+          ),
+          latest_call AS (
+            SELECT DISTINCT ON (final_provider_id)
+              final_provider_id,
+              created_at AS last_call_time,
+              model AS last_call_model
+            FROM (
+              SELECT
+                CASE
+                  WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
+                  WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
+                  ELSE provider_id
+                END AS final_provider_id,
+                id,
+                created_at,
+                model
+              FROM message_request CROSS JOIN bounds
+              WHERE deleted_at IS NULL
+                AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+                AND created_at >= bounds.last7_start
+            ) mr
+            -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
+            ORDER BY final_provider_id, created_at DESC, id DESC
+          )
+          SELECT
+            p.id,
+            COALESCE(ps.today_cost, 0) AS today_cost,
+            COALESCE(ps.today_calls, 0) AS today_calls,
+            lc.last_call_time,
+            lc.last_call_model
+          FROM providers p
+          LEFT JOIN provider_stats ps ON p.id = ps.final_provider_id
+          LEFT JOIN latest_call lc ON p.id = lc.final_provider_id
+          WHERE p.deleted_at IS NULL
+          ORDER BY p.id ASC
+        `;
+
+        logger.trace("getProviderStatistics:executing_query");
+
+        const result = await db.execute(query);
+        const data = Array.from(result) as ProviderStatisticsRow[];
+
+        logger.trace("getProviderStatistics:result", {
+          count: data.length,
+        });
+
+        // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
+        // last_call_time 由数据库返回为时间戳（UTC）。
+        // 这里保持原样，交由上层进行展示格式化。
+        providerStatisticsCache = {
+          timezone,
+          expiresAt: Date.now() + PROVIDER_STATISTICS_CACHE_TTL_MS,
+          data,
+        };
+
+        deferred.resolve(data);
+      } catch (error) {
+        deferred.reject(error);
+      }
+    })();
+
+    try {
+      return await deferred.promise;
+    } finally {
+      if (providerStatisticsInFlight?.promise === deferred.promise) {
+        providerStatisticsInFlight = null;
+      }
+    }
   } catch (error) {
     logger.trace("getProviderStatistics:error", {
       message: error instanceof Error ? error.message : String(error),

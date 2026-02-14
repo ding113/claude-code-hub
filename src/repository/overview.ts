@@ -1,6 +1,6 @@
 "use server";
 
-import { and, avg, count, eq, gte, isNull, sql, sum } from "drizzle-orm";
+import { and, avg, count, eq, gte, isNull, lt, lte, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
@@ -42,6 +42,10 @@ export interface OverviewMetricsWithComparison extends OverviewMetrics {
  */
 export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   const timezone = await resolveSystemTimezone();
+  const nowLocal = sql`CURRENT_TIMESTAMP AT TIME ZONE ${timezone}`;
+  const todayStartLocal = sql`DATE_TRUNC('day', ${nowLocal})`;
+  const todayStart = sql`(${todayStartLocal} AT TIME ZONE ${timezone})`;
+  const tomorrowStart = sql`((${todayStartLocal} + INTERVAL '1 day') AT TIME ZONE ${timezone})`;
 
   const [result] = await db
     .select({
@@ -55,7 +59,8 @@ export async function getOverviewMetrics(): Promise<OverviewMetrics> {
       and(
         isNull(messageRequest.deletedAt),
         EXCLUDE_WARMUP_CONDITION,
-        sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
+        gte(messageRequest.createdAt, todayStart),
+        lt(messageRequest.createdAt, tomorrowStart)
       )
     );
 
@@ -89,6 +94,14 @@ export async function getOverviewMetricsWithComparison(
   userId?: number
 ): Promise<OverviewMetricsWithComparison> {
   const timezone = await resolveSystemTimezone();
+  const nowLocal = sql`CURRENT_TIMESTAMP AT TIME ZONE ${timezone}`;
+  const todayStartLocal = sql`DATE_TRUNC('day', ${nowLocal})`;
+  const todayStart = sql`(${todayStartLocal} AT TIME ZONE ${timezone})`;
+  const tomorrowStart = sql`((${todayStartLocal} + INTERVAL '1 day') AT TIME ZONE ${timezone})`;
+  const yesterdayStartLocal = sql`${todayStartLocal} - INTERVAL '1 day'`;
+  const yesterdayStart = sql`(${yesterdayStartLocal} AT TIME ZONE ${timezone})`;
+  const yesterdayEndLocal = sql`${yesterdayStartLocal} + (${nowLocal} - ${todayStartLocal})`;
+  const yesterdayEnd = sql`(${yesterdayEndLocal} AT TIME ZONE ${timezone})`;
 
   // 用户过滤条件
   const userCondition = userId ? eq(messageRequest.userId, userId) : undefined;
@@ -109,7 +122,8 @@ export async function getOverviewMetricsWithComparison(
           isNull(messageRequest.deletedAt),
           EXCLUDE_WARMUP_CONDITION,
           userCondition,
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
+          gte(messageRequest.createdAt, todayStart),
+          lt(messageRequest.createdAt, tomorrowStart)
         )
       ),
 
@@ -126,10 +140,8 @@ export async function getOverviewMetricsWithComparison(
           isNull(messageRequest.deletedAt),
           EXCLUDE_WARMUP_CONDITION,
           userCondition,
-          // 昨日同一天
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = ((CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '1 day')::date`,
-          // 且时间不超过昨日的当前时刻
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::time <= (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::time`
+          gte(messageRequest.createdAt, yesterdayStart),
+          lte(messageRequest.createdAt, yesterdayEnd)
         )
       ),
 

@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
@@ -311,7 +311,7 @@ function toProviderEndpointProbeLog(row: any): ProviderEndpointProbeLog {
 
 export type ProviderEndpointProbeTarget = Pick<
   ProviderEndpoint,
-  "id" | "url" | "vendorId" | "lastProbedAt" | "lastProbeOk" | "lastProbeErrorType"
+  "id" | "url" | "vendorId" | "providerType" | "lastProbedAt" | "lastProbeOk" | "lastProbeErrorType"
 >;
 
 export async function findEnabledProviderEndpointsForProbing(): Promise<
@@ -322,18 +322,31 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
       id: providerEndpoints.id,
       url: providerEndpoints.url,
       vendorId: providerEndpoints.vendorId,
+      providerType: providerEndpoints.providerType,
       lastProbedAt: providerEndpoints.lastProbedAt,
       lastProbeOk: providerEndpoints.lastProbeOk,
       lastProbeErrorType: providerEndpoints.lastProbeErrorType,
     })
     .from(providerEndpoints)
-    .where(and(eq(providerEndpoints.isEnabled, true), isNull(providerEndpoints.deletedAt)))
+    .where(
+      and(
+        eq(providerEndpoints.isEnabled, true),
+        isNull(providerEndpoints.deletedAt),
+        sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}) IN (
+          SELECT p.provider_vendor_id, p.provider_type
+          FROM providers p
+          WHERE p.is_enabled = true
+            AND p.deleted_at IS NULL
+        )`
+      )
+    )
     .orderBy(asc(providerEndpoints.id));
 
   return rows.map((row) => ({
     id: row.id,
     url: row.url,
     vendorId: row.vendorId,
+    providerType: row.providerType,
     lastProbedAt: toNullableDate(row.lastProbedAt),
     lastProbeOk: row.lastProbeOk ?? null,
     lastProbeErrorType: row.lastProbeErrorType ?? null,
@@ -600,6 +613,64 @@ export async function findProviderVendors(
   return rows.map(toProviderVendor);
 }
 
+export async function findProviderVendorsByIds(vendorIds: number[]): Promise<ProviderVendor[]> {
+  const ids = Array.from(new Set(vendorIds)).filter((id) => Number.isInteger(id) && id > 0);
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({
+      id: providerVendors.id,
+      websiteDomain: providerVendors.websiteDomain,
+      displayName: providerVendors.displayName,
+      websiteUrl: providerVendors.websiteUrl,
+      faviconUrl: providerVendors.faviconUrl,
+      createdAt: providerVendors.createdAt,
+      updatedAt: providerVendors.updatedAt,
+    })
+    .from(providerVendors)
+    .where(inArray(providerVendors.id, ids))
+    .orderBy(desc(providerVendors.createdAt));
+
+  return rows.map(toProviderVendor);
+}
+
+/**
+ * Dashboard/Endpoint Health 用：推导 vendor/type 筛选项（仅基于启用的 provider）。
+ *
+ * 相比 `findAllProvidersFresh` 读取全量 provider 字段，这里只取 vendorId/providerType，并做 DISTINCT 去重，
+ * 可显著减少数据传输与反序列化开销（#779/#781）。
+ */
+export async function findEnabledProviderVendorTypePairs(): Promise<
+  Array<{ vendorId: number; providerType: ProviderType }>
+> {
+  const rows = await db
+    .selectDistinct({
+      vendorId: providers.providerVendorId,
+      providerType: providers.providerType,
+    })
+    .from(providers)
+    .where(
+      and(
+        isNull(providers.deletedAt),
+        eq(providers.isEnabled, true),
+        isNotNull(providers.providerVendorId),
+        gt(providers.providerVendorId, 0)
+      )
+    )
+    .orderBy(asc(providers.providerVendorId), asc(providers.providerType));
+
+  return rows
+    .map((row) => ({
+      vendorId: row.vendorId as number,
+      providerType: row.providerType as ProviderType,
+    }))
+    .filter(
+      (row) => Number.isFinite(row.vendorId) && row.vendorId > 0 && Boolean(row.providerType)
+    );
+}
+
 export async function findProviderVendorById(vendorId: number): Promise<ProviderVendor | null> {
   const rows = await db
     .select({
@@ -790,6 +861,31 @@ export async function findProviderEndpointsByVendorAndType(
   return rows.map(toProviderEndpoint);
 }
 
+/**
+ * 仅返回启用的端点（运行时热路径），用于减少不必要的数据传输与排序开销。
+ *
+ * #779：配合索引 `idx_provider_endpoints_pick_enabled`，可按 vendor/type 有序扫描。
+ */
+export async function findEnabledProviderEndpointsByVendorAndType(
+  vendorId: number,
+  providerType: ProviderType
+): Promise<ProviderEndpoint[]> {
+  const rows = await db
+    .select(providerEndpointSelectFields)
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, vendorId),
+        eq(providerEndpoints.providerType, providerType),
+        eq(providerEndpoints.isEnabled, true),
+        isNull(providerEndpoints.deletedAt)
+      )
+    )
+    .orderBy(asc(providerEndpoints.sortOrder), asc(providerEndpoints.id));
+
+  return rows.map(toProviderEndpoint);
+}
+
 export async function findProviderEndpointsByVendor(vendorId: number): Promise<ProviderEndpoint[]> {
   const rows = await db
     .select({
@@ -972,6 +1068,9 @@ export async function syncProviderEndpointOnProviderEdit(
             eq(providerEndpoints.url, args.url)
           )
         )
+        // 兼容历史/并发导致的脏数据：同一 (vendor/type/url) 下可能同时存在 active 行与软删除历史行。
+        // partial unique 只约束 deleted_at IS NULL，因此这里必须稳定地优先选择 active 行，避免误选历史行后 revive 触发 23505。
+        .orderBy(desc(providerEndpoints.deletedAt), desc(providerEndpoints.id))
         .limit(1);
 
       return row
@@ -992,6 +1091,7 @@ export async function syncProviderEndpointOnProviderEdit(
             eq(providers.providerVendorId, previousVendorId),
             eq(providers.providerType, previousProviderType),
             eq(providers.url, previousUrl),
+            eq(providers.isEnabled, true),
             isNull(providers.deletedAt),
             ne(providers.id, input.providerId)
           )
@@ -1042,14 +1142,45 @@ export async function syncProviderEndpointOnProviderEdit(
         }
 
         if (concurrentEndpoint.deletedAt !== null) {
-          await tx
-            .update(providerEndpoints)
-            .set({
-              deletedAt: null,
-              isEnabled: true,
-              updatedAt: now,
-            })
-            .where(eq(providerEndpoints.id, concurrentEndpoint.id));
+          try {
+            await tx
+              .update(providerEndpoints)
+              .set({
+                deletedAt: null,
+                isEnabled: true,
+                updatedAt: now,
+              })
+              .where(eq(providerEndpoints.id, concurrentEndpoint.id));
+          } catch (error) {
+            if (!isUniqueViolationError(error)) {
+              throw error;
+            }
+
+            const activeEndpoint = await loadEndpoint({
+              vendorId: input.vendorId,
+              providerType: input.providerType,
+              url: nextUrl,
+            });
+
+            if (!activeEndpoint) {
+              throw new Error(
+                "[ProviderEndpointSync] failed to load next endpoint after revive conflict"
+              );
+            }
+
+            if (reactivateDisabled && !activeEndpoint.isEnabled) {
+              await tx
+                .update(providerEndpoints)
+                .set({
+                  isEnabled: true,
+                  updatedAt: now,
+                })
+                .where(eq(providerEndpoints.id, activeEndpoint.id));
+              return "revived-next";
+            }
+
+            return "noop";
+          }
 
           return "revived-next";
         }
@@ -1070,14 +1201,45 @@ export async function syncProviderEndpointOnProviderEdit(
       }
 
       if (nextEndpoint.deletedAt !== null) {
-        await tx
-          .update(providerEndpoints)
-          .set({
-            deletedAt: null,
-            isEnabled: true,
-            updatedAt: now,
-          })
-          .where(eq(providerEndpoints.id, nextEndpoint.id));
+        try {
+          await tx
+            .update(providerEndpoints)
+            .set({
+              deletedAt: null,
+              isEnabled: true,
+              updatedAt: now,
+            })
+            .where(eq(providerEndpoints.id, nextEndpoint.id));
+        } catch (error) {
+          if (!isUniqueViolationError(error)) {
+            throw error;
+          }
+
+          const activeEndpoint = await loadEndpoint({
+            vendorId: input.vendorId,
+            providerType: input.providerType,
+            url: nextUrl,
+          });
+
+          if (!activeEndpoint) {
+            throw new Error(
+              "[ProviderEndpointSync] failed to load next endpoint after revive conflict"
+            );
+          }
+
+          if (reactivateDisabled && !activeEndpoint.isEnabled) {
+            await tx
+              .update(providerEndpoints)
+              .set({
+                isEnabled: true,
+                updatedAt: now,
+              })
+              .where(eq(providerEndpoints.id, activeEndpoint.id));
+            return "revived-next";
+          }
+
+          return "noop";
+        }
 
         return "revived-next";
       }
@@ -1188,12 +1350,6 @@ export async function syncProviderEndpointOnProviderEdit(
 
         const ensureResult = await ensureNextEndpointActive();
 
-        if (keepPreviousWhenReferenced) {
-          return {
-            action: mapEnsureResultToKeptAction(ensureResult),
-          };
-        }
-
         await tx
           .update(providerEndpoints)
           .set({
@@ -1231,12 +1387,6 @@ export async function syncProviderEndpointOnProviderEdit(
         keepPreviousWhenReferenced && (await hasActiveReferencesOnPreviousUrl());
 
       if (!previousIsReferenced) {
-        if (keepPreviousWhenReferenced) {
-          return {
-            action: mapEnsureResultToKeptAction(ensureResult),
-          };
-        }
-
         await tx
           .update(providerEndpoints)
           .set({
@@ -1422,7 +1572,11 @@ export async function backfillProviderEndpointsFromProviders(
   const invalidSamples: BackfillProviderEndpointSample[] = [];
 
   while (true) {
-    const whereClauses = [isNull(providers.deletedAt), gt(providers.id, lastProviderId)];
+    const whereClauses = [
+      isNull(providers.deletedAt),
+      eq(providers.isEnabled, true),
+      gt(providers.id, lastProviderId),
+    ];
     if (scopedVendorIds.length > 0) {
       whereClauses.push(inArray(providers.providerVendorId, scopedVendorIds));
     }
@@ -1628,6 +1782,7 @@ export async function backfillProviderEndpointsFromProviders(
   const deterministicSamples: BackfillProviderEndpointSample[] = [];
   const reportOnlyHistoricalSamples: BackfillProviderEndpointSample[] = [];
   const deterministicCandidates: BackfillProviderEndpointCandidate[] = [];
+  const historicalCandidates: BackfillProviderEndpointCandidate[] = [];
   let reportOnlyHistoricalCandidates = 0;
 
   for (const candidate of missingCandidates) {
@@ -1646,6 +1801,9 @@ export async function backfillProviderEndpointsFromProviders(
         },
         sampleLimit
       );
+      // 兼容升级：即使存在历史 soft-deleted 行，也需要为当前活跃 provider 确保存在 active endpoint，
+      // 否则 strict endpoint pool 策略可能在端点池为空时阻断请求。
+      historicalCandidates.push(candidate);
       continue;
     }
 
@@ -1666,7 +1824,8 @@ export async function backfillProviderEndpointsFromProviders(
   }
 
   let repaired = 0;
-  if (mode === "apply" && deterministicCandidates.length > 0) {
+  const candidatesToInsert = [...deterministicCandidates, ...historicalCandidates];
+  if (mode === "apply" && candidatesToInsert.length > 0) {
     const pending: Array<{ vendorId: number; providerType: ProviderType; url: string }> = [];
     const flush = async (): Promise<void> => {
       if (pending.length === 0) {
@@ -1686,7 +1845,7 @@ export async function backfillProviderEndpointsFromProviders(
       pending.length = 0;
     };
 
-    for (const candidate of deterministicCandidates) {
+    for (const candidate of candidatesToInsert) {
       pending.push({
         vendorId: candidate.vendorId,
         providerType: candidate.providerType,
@@ -1832,18 +1991,7 @@ export async function recordProviderEndpointProbeResult(input: {
   const probedAt = input.probedAt ?? new Date();
 
   await db.transaction(async (tx) => {
-    await tx.insert(providerEndpointProbeLogs).values({
-      endpointId: input.endpointId,
-      source: input.source,
-      ok: input.ok,
-      statusCode: input.statusCode ?? null,
-      latencyMs: input.latencyMs ?? null,
-      errorType: input.errorType ?? null,
-      errorMessage: input.errorMessage ?? null,
-      createdAt: probedAt,
-    });
-
-    await tx
+    const updated = await tx
       .update(providerEndpoints)
       .set({
         lastProbedAt: probedAt,
@@ -1854,7 +2002,25 @@ export async function recordProviderEndpointProbeResult(input: {
         lastProbeErrorMessage: input.ok ? null : (input.errorMessage ?? null),
         updatedAt: new Date(),
       })
-      .where(and(eq(providerEndpoints.id, input.endpointId), isNull(providerEndpoints.deletedAt)));
+      .where(and(eq(providerEndpoints.id, input.endpointId), isNull(providerEndpoints.deletedAt)))
+      .returning({ id: providerEndpoints.id });
+
+    // 端点可能在探测过程中被删除（vendor cascade / 管理后台操作）。
+    // 这类情况属于“已不存在的端点”，应直接忽略，避免 probe scheduler 因 FK 失败而中断。
+    if (updated.length === 0) {
+      return;
+    }
+
+    await tx.insert(providerEndpointProbeLogs).values({
+      endpointId: input.endpointId,
+      source: input.source,
+      ok: input.ok,
+      statusCode: input.statusCode ?? null,
+      latencyMs: input.latencyMs ?? null,
+      errorType: input.errorType ?? null,
+      errorMessage: input.errorMessage ?? null,
+      createdAt: probedAt,
+    });
   });
 }
 

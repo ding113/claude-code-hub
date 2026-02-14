@@ -3,7 +3,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +72,7 @@ export function VirtualizedLogsTable({
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const shouldPoll = autoRefreshEnabled && !showScrollToTop;
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
@@ -121,11 +122,12 @@ export function VirtualizedLogsTable({
       initialPageParam: undefined as { createdAt: string; id: number } | undefined,
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
-      refetchInterval: autoRefreshEnabled ? autoRefreshIntervalMs : false,
+      refetchInterval: shouldPoll ? autoRefreshIntervalMs : false,
     });
 
   // Flatten all pages into a single array
-  const allLogs = data?.pages.flatMap((page) => page.logs) ?? [];
+  const pages = data?.pages;
+  const allLogs = useMemo(() => pages?.flatMap((page) => page.logs) ?? [], [pages]);
 
   // Virtual list setup
   const rowVirtualizer = useVirtualizer({

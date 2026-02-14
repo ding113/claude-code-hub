@@ -3,7 +3,7 @@
 import { fromZonedTime } from "date-fns-tz";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys as keysTable, messageRequest } from "@/drizzle/schema";
+import { messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
@@ -14,11 +14,9 @@ import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
-  findUsageLogsStats,
-  findUsageLogsWithDetails,
+  findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
-  type UsageLogFilters,
   type UsageLogSummary,
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
@@ -179,27 +177,6 @@ export interface MyUsageLogsResult {
 // Infinity means "all time" - no date filter applied to the query
 const ALL_TIME_MAX_AGE_DAYS = Infinity;
 
-/**
- * 查询用户在指定周期内的消费
- * 使用与 Key 层级和限额检查相同的时间范围计算逻辑
- *
- * @deprecated 此函数已被重构为使用统一的时间范围计算逻辑
- */
-async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" | "total") {
-  // 动态导入避免循环依赖
-  const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
-  const { getTimeRangeForPeriod } = await import("@/lib/rate-limit/time-utils");
-
-  // 总消费：使用专用函数，传递 ALL_TIME_MAX_AGE_DAYS 实现全时间语义
-  if (period === "total") {
-    return await sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS);
-  }
-
-  // 其他周期：使用统一的时间范围计算
-  const { startTime, endTime } = await getTimeRangeForPeriod(period);
-  return await sumUserCostInTimeRange(userId, startTime, endTime);
-}
-
 export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata>> {
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
@@ -242,9 +219,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
       "@/lib/rate-limit/time-utils"
     );
-    const { sumUserCostInTimeRange, sumKeyCostInTimeRange, sumKeyTotalCostById } = await import(
-      "@/repository/statistics"
-    );
+    const { sumKeyQuotaCostsById, sumUserQuotaCosts } = await import("@/repository/statistics");
 
     // 计算各周期的时间范围
     // Key 使用 Key 的 dailyResetTime/dailyResetMode 配置
@@ -271,35 +246,47 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       user.limitConcurrentSessions ?? null
     );
 
-    const [
-      keyCost5h,
-      keyCostDaily,
-      keyCostWeekly,
-      keyCostMonthly,
-      keyTotalCost,
-      keyConcurrent,
-      userCost5h,
-      userCostDaily,
-      userCostWeekly,
-      userCostMonthly,
-      userTotalCost,
-      userKeyConcurrent,
-    ] = await Promise.all([
+    const [keyCosts, keyConcurrent, userCosts, userKeyConcurrent] = await Promise.all([
       // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
-      sumKeyCostInTimeRange(key.id, range5h.startTime, range5h.endTime),
-      sumKeyCostInTimeRange(key.id, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
-      sumKeyCostInTimeRange(key.id, rangeWeekly.startTime, rangeWeekly.endTime),
-      sumKeyCostInTimeRange(key.id, rangeMonthly.startTime, rangeMonthly.endTime),
-      sumKeyTotalCostById(key.id, ALL_TIME_MAX_AGE_DAYS),
+      sumKeyQuotaCostsById(
+        key.id,
+        {
+          range5h,
+          rangeDaily: keyDailyTimeRange,
+          rangeWeekly,
+          rangeMonthly,
+        },
+        ALL_TIME_MAX_AGE_DAYS
+      ),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
-      sumUserCost(user.id, "5h"),
-      sumUserCostInTimeRange(user.id, userDailyTimeRange.startTime, userDailyTimeRange.endTime),
-      sumUserCost(user.id, "weekly"),
-      sumUserCost(user.id, "monthly"),
-      sumUserCost(user.id, "total"),
+      sumUserQuotaCosts(
+        user.id,
+        {
+          range5h,
+          rangeDaily: userDailyTimeRange,
+          rangeWeekly,
+          rangeMonthly,
+        },
+        ALL_TIME_MAX_AGE_DAYS
+      ),
       getUserConcurrentSessions(user.id),
     ]);
+
+    const {
+      cost5h: keyCost5h,
+      costDaily: keyCostDaily,
+      costWeekly: keyCostWeekly,
+      costMonthly: keyCostMonthly,
+      costTotal: keyTotalCost,
+    } = keyCosts;
+    const {
+      cost5h: userCost5h,
+      costDaily: userCostDaily,
+      costWeekly: userCostWeekly,
+      costMonthly: userCostMonthly,
+      costTotal: userTotalCost,
+    } = userCosts;
 
     const quota: MyUsageQuota = {
       keyLimit5hUsd: key.limit5hUsd ?? null,
@@ -370,24 +357,6 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
       (session.key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
     );
 
-    const [aggregate] = await db
-      .select({
-        calls: sql<number>`count(*)::int`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        costUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-      })
-      .from(messageRequest)
-      .where(
-        and(
-          eq(messageRequest.key, session.key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          gte(messageRequest.createdAt, timeRange.startTime),
-          lt(messageRequest.createdAt, timeRange.endTime)
-        )
-      );
-
     const breakdown = await db
       .select({
         model: messageRequest.model,
@@ -409,23 +378,36 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
       )
       .groupBy(messageRequest.model, messageRequest.originalModel);
 
+    let totalCalls = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalCostUsd = 0;
+
     const modelBreakdown = breakdown.map((row) => {
       const billingModel = billingModelSource === "original" ? row.originalModel : row.model;
+      const rawCostUsd = Number(row.costUsd ?? 0);
+      const costUsd = Number.isFinite(rawCostUsd) ? rawCostUsd : 0;
+
+      totalCalls += row.calls ?? 0;
+      totalInputTokens += row.inputTokens ?? 0;
+      totalOutputTokens += row.outputTokens ?? 0;
+      totalCostUsd += costUsd;
+
       return {
         model: row.model,
         billingModel,
         calls: row.calls,
-        costUsd: Number(row.costUsd ?? 0),
+        costUsd,
         inputTokens: row.inputTokens,
         outputTokens: row.outputTokens,
       };
     });
 
     const stats: MyTodayStats = {
-      calls: aggregate?.calls ?? 0,
-      inputTokens: aggregate?.inputTokens ?? 0,
-      outputTokens: aggregate?.outputTokens ?? 0,
-      costUsd: Number(aggregate?.costUsd ?? 0),
+      calls: totalCalls,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      costUsd: totalCostUsd,
       modelBreakdown,
       currencyCode,
       billingModelSource,
@@ -441,6 +423,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
 export interface MyUsageLogsFilters {
   startDate?: string;
   endDate?: string;
+  /** Session ID（精确匹配；空字符串/空白视为不筛选） */
+  sessionId?: string;
   model?: string;
   statusCode?: number;
   excludeStatusCode200?: boolean;
@@ -469,9 +453,9 @@ export async function getMyUsageLogs(
       filters.endDate,
       timezone
     );
-
-    const usageFilters: UsageLogFilters = {
-      keyId: session.key.id,
+    const result = await findUsageLogsForKeySlim({
+      keyString: session.key.key,
+      sessionId: filters.sessionId,
       startTime,
       endTime,
       model: filters.model,
@@ -481,9 +465,7 @@ export async function getMyUsageLogs(
       minRetryCount: filters.minRetryCount,
       page,
       pageSize,
-    };
-
-    const result = await findUsageLogsWithDetails(usageFilters);
+    });
 
     const logs: MyUsageLogEntry[] = result.logs.map((log) => {
       const modelRedirect =
@@ -559,13 +541,8 @@ export async function getMyAvailableEndpoints(): Promise<ActionResult<string[]>>
 
 async function getUserConcurrentSessions(userId: number): Promise<number> {
   try {
-    const keys = await db
-      .select({ id: keysTable.id })
-      .from(keysTable)
-      .where(and(eq(keysTable.userId, userId), isNull(keysTable.deletedAt)));
-
-    const counts = await Promise.all(keys.map((k) => SessionTracker.getKeySessionCount(k.id)));
-    return counts.reduce((sum, value) => sum + value, 0);
+    // 直接使用 user 维度的活跃 session 集合，避免 keys × Redis 查询的 N+1
+    return await SessionTracker.getUserSessionCount(userId);
   } catch (error) {
     logger.error("[my-usage] getUserConcurrentSessions failed", error);
     return 0;
@@ -595,7 +572,7 @@ export interface MyStatsSummary extends UsageLogSummary {
 
 /**
  * Get aggregated statistics for a date range
- * Uses findUsageLogsStats for efficient aggregation
+ * 通过 model breakdown 聚合，避免额外的 summary 聚合查询
  */
 export async function getMyStatsSummary(
   filters: MyStatsSummaryFilters = {}
@@ -614,60 +591,102 @@ export async function getMyStatsSummary(
       timezone
     );
 
-    // Get aggregated stats using existing repository function
-    const stats = await findUsageLogsStats({
-      keyId: session.key.id,
-      startTime,
-      endTime,
-    });
+    const startDate = startTime ? new Date(startTime) : undefined;
+    const endDate = endTime ? new Date(endTime) : undefined;
 
-    // Get model breakdown for current key
-    const keyBreakdown = await db
-      .select({
-        model: messageRequest.model,
-        requests: sql<number>`count(*)::int`,
-        cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-      })
-      .from(messageRequest)
-      .where(
-        and(
-          eq(messageRequest.key, session.key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          startTime ? gte(messageRequest.createdAt, new Date(startTime)) : undefined,
-          endTime ? lt(messageRequest.createdAt, new Date(endTime)) : undefined
+    const [keyBreakdown, userBreakdown] = await Promise.all([
+      // 当前 Key 的 model breakdown（同时用于构造汇总统计）
+      db
+        .select({
+          model: messageRequest.model,
+          requests: sql<number>`count(*)::int`,
+          cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+          inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+          outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+          cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+          cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+          cacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
+          cacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
+        })
+        .from(messageRequest)
+        .where(
+          and(
+            eq(messageRequest.key, session.key.key),
+            isNull(messageRequest.deletedAt),
+            EXCLUDE_WARMUP_CONDITION,
+            startDate ? gte(messageRequest.createdAt, startDate) : undefined,
+            endDate ? lt(messageRequest.createdAt, endDate) : undefined
+          )
         )
-      )
-      .groupBy(messageRequest.model)
-      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+        .groupBy(messageRequest.model)
+        .orderBy(sql`sum(${messageRequest.costUsd}) DESC`),
+      // 用户维度的 model breakdown（跨所有 Key）；5m/1h 缓存细分暂未在 ModelBreakdownItem 对外暴露，所以此处不聚合
+      db
+        .select({
+          model: messageRequest.model,
+          requests: sql<number>`count(*)::int`,
+          cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+          inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+          outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+          cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+          cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+        })
+        .from(messageRequest)
+        .where(
+          and(
+            eq(messageRequest.userId, session.user.id),
+            isNull(messageRequest.deletedAt),
+            EXCLUDE_WARMUP_CONDITION,
+            startDate ? gte(messageRequest.createdAt, startDate) : undefined,
+            endDate ? lt(messageRequest.createdAt, endDate) : undefined
+          )
+        )
+        .groupBy(messageRequest.model)
+        .orderBy(sql`sum(${messageRequest.costUsd}) DESC`),
+    ]);
 
-    // Get model breakdown for user (all keys)
-    const userBreakdown = await db
-      .select({
-        model: messageRequest.model,
-        requests: sql<number>`count(*)::int`,
-        cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-      })
-      .from(messageRequest)
-      .where(
-        and(
-          eq(messageRequest.userId, session.user.id),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          startTime ? gte(messageRequest.createdAt, new Date(startTime)) : undefined,
-          endTime ? lt(messageRequest.createdAt, new Date(endTime)) : undefined
-        )
-      )
-      .groupBy(messageRequest.model)
-      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+    const summaryAcc = keyBreakdown.reduce(
+      (acc, row) => {
+        const cost = Number(row.cost ?? 0);
+        acc.totalRequests += row.requests ?? 0;
+        acc.totalCost += Number.isFinite(cost) ? cost : 0;
+        acc.totalInputTokens += row.inputTokens ?? 0;
+        acc.totalOutputTokens += row.outputTokens ?? 0;
+        acc.totalCacheCreationTokens += row.cacheCreationTokens ?? 0;
+        acc.totalCacheReadTokens += row.cacheReadTokens ?? 0;
+        acc.totalCacheCreation5mTokens += row.cacheCreation5mTokens ?? 0;
+        acc.totalCacheCreation1hTokens += row.cacheCreation1hTokens ?? 0;
+        return acc;
+      },
+      {
+        totalRequests: 0,
+        totalCost: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCacheCreationTokens: 0,
+        totalCacheReadTokens: 0,
+        totalCacheCreation5mTokens: 0,
+        totalCacheCreation1hTokens: 0,
+      }
+    );
+
+    const totalTokens =
+      summaryAcc.totalInputTokens +
+      summaryAcc.totalOutputTokens +
+      summaryAcc.totalCacheCreationTokens +
+      summaryAcc.totalCacheReadTokens;
+
+    const stats: UsageLogSummary = {
+      totalRequests: summaryAcc.totalRequests,
+      totalCost: summaryAcc.totalCost,
+      totalTokens,
+      totalInputTokens: summaryAcc.totalInputTokens,
+      totalOutputTokens: summaryAcc.totalOutputTokens,
+      totalCacheCreationTokens: summaryAcc.totalCacheCreationTokens,
+      totalCacheReadTokens: summaryAcc.totalCacheReadTokens,
+      totalCacheCreation5mTokens: summaryAcc.totalCacheCreation5mTokens,
+      totalCacheCreation1hTokens: summaryAcc.totalCacheCreation1hTokens,
+    };
 
     const result: MyStatsSummary = {
       ...stats,
