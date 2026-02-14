@@ -42,8 +42,8 @@ export async function getPreferredProviderEndpoints(input: {
     input.vendorId,
     input.providerType
   );
-  const filtered = endpoints.filter((e) => !excludeSet.has(e.id));
-  const circuitCandidates = filtered.filter((e) => e.isEnabled && !e.deletedAt);
+  // `findEnabledProviderEndpointsByVendorAndType` 已保证 isEnabled=true 且 deletedAt IS NULL
+  const circuitCandidates = endpoints.filter((e) => !excludeSet.has(e.id));
 
   if (circuitCandidates.length === 0) {
     return [];

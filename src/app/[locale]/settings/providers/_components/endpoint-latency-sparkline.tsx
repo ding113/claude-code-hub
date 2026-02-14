@@ -176,10 +176,16 @@ async function tryFetchBatchProbeLogsByEndpointIds(
       });
 
       if (res.status === 404) {
-        isBatchProbeLogsEndpointAvailable = false;
-        batchProbeLogsEndpointDisabledAt = Date.now();
         didAnyChunkFail = true;
         stopBatching = true;
+
+        // 404 通常意味着路由不存在（旧版本/未部署）。但在滚动发布场景下，少数节点可能短暂缺少该路由，
+        // 而其它节点已可用；此时不应全局禁用 batch（否则会退化到更多单点请求）。
+        if (!didAnyChunkSucceed) {
+          isBatchProbeLogsEndpointAvailable = false;
+          batchProbeLogsEndpointDisabledAt = Date.now();
+        }
+
         for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
         continue;
       }
@@ -224,8 +230,10 @@ async function tryFetchBatchProbeLogsByEndpointIds(
 
   if (!didAnyChunkSucceed) return null;
 
+  // 至少有一个 chunk 成功，说明 batch 路由可用（允许部分失败并按需降级）。
+  isBatchProbeLogsEndpointAvailable = true;
+
   if (!didAnyChunkFail) {
-    isBatchProbeLogsEndpointAvailable = true;
     return merged;
   }
 

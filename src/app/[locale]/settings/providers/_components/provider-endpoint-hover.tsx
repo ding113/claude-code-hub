@@ -107,22 +107,30 @@ async function flushVendorTypeEndpointStats() {
         const deferredMap =
           deferredByProviderTypeVendorId.get(providerType) ??
           new Map<number, VendorStatsDeferred[]>();
-        const deferredEntries = chunk.map((vendorId) => ({
-          vendorId,
-          deferred: deferredMap.get(vendorId) ?? [],
-        }));
+        const deferredEntries = chunk
+          .map((vendorId) => ({
+            vendorId,
+            deferred: deferredMap.get(vendorId) ?? [],
+          }))
+          .filter(({ deferred }) => deferred.length > 0);
 
-        chunk.forEach((vendorId) => deferredMap.delete(vendorId));
+        const vendorIdsToFetch = deferredEntries.map(({ vendorId }) => vendorId);
+        vendorIdsToFetch.forEach((vendorId) => deferredMap.delete(vendorId));
         if (deferredMap.size === 0) {
           deferredByProviderTypeVendorId.delete(providerType);
         }
 
+        if (vendorIdsToFetch.length === 0) continue;
+
         try {
-          const res = await batchGetVendorTypeEndpointStats({ vendorIds: chunk, providerType });
+          const res = await batchGetVendorTypeEndpointStats({
+            vendorIds: vendorIdsToFetch,
+            providerType,
+          });
           const items = res.ok && res.data ? res.data : [];
 
           const statsByVendorId = new Map<number, VendorTypeEndpointStats>();
-          chunk.forEach((vendorId) =>
+          vendorIdsToFetch.forEach((vendorId) =>
             statsByVendorId.set(vendorId, {
               vendorId,
               total: 0,

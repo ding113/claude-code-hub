@@ -499,12 +499,16 @@ export async function updateProvider(
 
   const shouldRefreshVendor =
     providerData.url !== undefined || providerData.website_url !== undefined;
-  const shouldSyncEndpoint = shouldRefreshVendor || providerData.provider_type !== undefined;
+  const shouldSyncEndpoint =
+    shouldRefreshVendor ||
+    providerData.provider_type !== undefined ||
+    providerData.is_enabled === true;
 
   const updateResult = await db.transaction(async (tx) => {
     let previousVendorId: number | null = null;
     let previousUrl: string | null = null;
     let previousProviderType: Provider["providerType"] | null = null;
+    let previousIsEnabled: boolean | null = null;
     let endpointCircuitResetId: number | null = null;
 
     if (shouldSyncEndpoint) {
@@ -516,6 +520,7 @@ export async function updateProvider(
           name: providers.name,
           providerVendorId: providers.providerVendorId,
           providerType: providers.providerType,
+          isEnabled: providers.isEnabled,
         })
         .from(providers)
         .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
@@ -525,6 +530,7 @@ export async function updateProvider(
         previousVendorId = current.providerVendorId;
         previousUrl = current.url;
         previousProviderType = current.providerType;
+        previousIsEnabled = current.isEnabled;
 
         if (shouldRefreshVendor) {
           const providerVendorId = await getOrCreateProviderVendorIdFromUrls(
@@ -606,7 +612,13 @@ export async function updateProvider(
     const transformed = toProvider(provider);
 
     if (shouldSyncEndpoint && transformed.providerVendorId) {
-      if (previousUrl && previousProviderType) {
+      if (
+        previousUrl &&
+        previousProviderType &&
+        (previousUrl !== transformed.url ||
+          previousProviderType !== transformed.providerType ||
+          (previousVendorId != null && previousVendorId !== transformed.providerVendorId))
+      ) {
         const syncResult = await syncProviderEndpointOnProviderEdit(
           {
             providerId: transformed.id,
@@ -622,7 +634,7 @@ export async function updateProvider(
         );
 
         endpointCircuitResetId = syncResult.resetCircuitEndpointId ?? null;
-      } else {
+      } else if (previousIsEnabled === false && transformed.isEnabled === true) {
         await ensureProviderEndpointExistsForUrl(
           {
             vendorId: transformed.providerVendorId,
@@ -749,6 +761,7 @@ export async function deleteProvider(id: number): Promise<boolean> {
             eq(providers.providerVendorId, current.providerVendorId),
             eq(providers.providerType, current.providerType),
             eq(providers.url, current.url),
+            eq(providers.isEnabled, true),
             isNull(providers.deletedAt)
           )
         )
@@ -918,6 +931,7 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
         .from(providers)
         .where(
           and(
+            eq(providers.isEnabled, true),
             isNull(providers.deletedAt),
             sql`(${providers.providerVendorId}, ${providers.providerType}, ${providers.url}) IN (${tupleList})`
           )

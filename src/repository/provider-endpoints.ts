@@ -1056,6 +1056,7 @@ export async function syncProviderEndpointOnProviderEdit(
             eq(providers.providerVendorId, previousVendorId),
             eq(providers.providerType, previousProviderType),
             eq(providers.url, previousUrl),
+            eq(providers.isEnabled, true),
             isNull(providers.deletedAt),
             ne(providers.id, input.providerId)
           )
@@ -1536,7 +1537,11 @@ export async function backfillProviderEndpointsFromProviders(
   const invalidSamples: BackfillProviderEndpointSample[] = [];
 
   while (true) {
-    const whereClauses = [isNull(providers.deletedAt), gt(providers.id, lastProviderId)];
+    const whereClauses = [
+      isNull(providers.deletedAt),
+      eq(providers.isEnabled, true),
+      gt(providers.id, lastProviderId),
+    ];
     if (scopedVendorIds.length > 0) {
       whereClauses.push(inArray(providers.providerVendorId, scopedVendorIds));
     }
