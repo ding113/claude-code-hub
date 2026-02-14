@@ -800,24 +800,7 @@ export async function findEnabledProviderEndpointsByVendorAndType(
   providerType: ProviderType
 ): Promise<ProviderEndpoint[]> {
   const rows = await db
-    .select({
-      id: providerEndpoints.id,
-      vendorId: providerEndpoints.vendorId,
-      providerType: providerEndpoints.providerType,
-      url: providerEndpoints.url,
-      label: providerEndpoints.label,
-      sortOrder: providerEndpoints.sortOrder,
-      isEnabled: providerEndpoints.isEnabled,
-      lastProbedAt: providerEndpoints.lastProbedAt,
-      lastProbeOk: providerEndpoints.lastProbeOk,
-      lastProbeStatusCode: providerEndpoints.lastProbeStatusCode,
-      lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
-      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
-      lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
-      createdAt: providerEndpoints.createdAt,
-      updatedAt: providerEndpoints.updatedAt,
-      deletedAt: providerEndpoints.deletedAt,
-    })
+    .select(providerEndpointSelectFields)
     .from(providerEndpoints)
     .where(
       and(
