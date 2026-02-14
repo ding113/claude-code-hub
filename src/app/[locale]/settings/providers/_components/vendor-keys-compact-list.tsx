@@ -41,7 +41,12 @@ import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
-import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
+import type {
+  ProviderDisplay,
+  ProviderEndpoint,
+  ProviderStatisticsMap,
+  ProviderType,
+} from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { InlineEditPopover } from "./inline-edit-popover";
@@ -111,19 +116,26 @@ export function VendorKeysCompactList(props: {
                   }}
                   urlResolver={async (type) => {
                     if (props.vendorId <= 0) return null;
-                    const endpoints = await getProviderEndpoints({
-                      vendorId: props.vendorId,
-                      providerType: type,
-                    });
+
+                    const queryKey = ["provider-endpoints", props.vendorId, type] as const;
+                    const cached = queryClient.getQueryData<ProviderEndpoint[]>(queryKey);
+                    const endpoints =
+                      cached ??
+                      (await queryClient.fetchQuery<ProviderEndpoint[]>({
+                        queryKey,
+                        queryFn: async () =>
+                          await getProviderEndpoints({
+                            vendorId: props.vendorId,
+                            providerType: type,
+                          }),
+                        staleTime: 30_000,
+                      })) ??
+                      [];
                     const enabled = endpoints.find((e) => e.isEnabled);
                     return (enabled ?? endpoints[0])?.url ?? null;
                   }}
                   onSuccess={() => {
                     setCreateOpen(false);
-                    queryClient.invalidateQueries({ queryKey: ["providers"] });
-                    queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                    queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-                    queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
                   }}
                 />
               </FormErrorBoundary>
@@ -469,10 +481,6 @@ function VendorKeyRow(props: {
                       }
                       onSuccess={() => {
                         setEditOpen(false);
-                        queryClient.invalidateQueries({ queryKey: ["providers"] });
-                        queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                        queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-                        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
                       }}
                     />
                   </FormErrorBoundary>

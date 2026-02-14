@@ -954,8 +954,6 @@ export function ProviderRichListItem({
               provider={provider}
               onSuccess={() => {
                 setOpenEdit(false);
-                queryClient.invalidateQueries({ queryKey: ["providers"] });
-                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}
             />
@@ -972,8 +970,6 @@ export function ProviderRichListItem({
               cloneProvider={provider}
               onSuccess={() => {
                 setOpenClone(false);
-                queryClient.invalidateQueries({ queryKey: ["providers"] });
-                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}
             />

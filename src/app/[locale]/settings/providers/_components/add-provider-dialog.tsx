@@ -1,5 +1,4 @@
 "use client";
-import { useQueryClient } from "@tanstack/react-query";
 import { ServerCog } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -13,7 +12,6 @@ interface AddProviderDialogProps {
 }
 
 export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialogProps) {
-  const queryClient = useQueryClient();
   const t = useTranslations("settings.providers");
   const [open, setOpen] = useState(false);
   return (
@@ -30,10 +28,6 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
             enableMultiProviderTypes={enableMultiProviderTypes}
             onSuccess={() => {
               setOpen(false);
-              queryClient.invalidateQueries({ queryKey: ["providers"] });
-              queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-              queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-              queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
             }}
           />
         </FormErrorBoundary>

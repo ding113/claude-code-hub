@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
-import { getEndpointStatusModel } from "./endpoint-status";
+import { type EndpointCircuitState, getEndpointStatusModel } from "./endpoint-status";
 
 interface ProviderEndpointHoverProps {
   vendorId: number;
@@ -280,9 +280,12 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
       .join(",");
   }, [endpointIds]);
 
-  const { data: circuitInfo = [] } = useQuery({
-    queryKey: ["endpoint-circuit-batch", vendorId, providerType, endpointIdsKey],
+  const { data: circuitInfoMap = {} } = useQuery({
+    queryKey: ["endpoint-circuit-info", endpointIdsKey],
     queryFn: async () => {
+      if (endpointIds.length === 0) return {};
+
+      const map: Record<number, EndpointCircuitState> = {};
       const sortedEndpointIds = endpointIds.slice().sort((a, b) => a - b);
       const MAX_ENDPOINT_IDS_PER_BATCH = 500;
       const chunks: number[][] = [];
@@ -293,11 +296,15 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
       const results = await Promise.all(
         chunks.map(async (chunk) => {
           const res = await batchGetEndpointCircuitInfo({ endpointIds: chunk });
-          return res.ok ? (res.data ?? []) : [];
+          return res.ok && res.data ? res.data : [];
         })
       );
 
-      return results.flat();
+      for (const item of results.flat()) {
+        map[item.endpointId] = item.circuitState as EndpointCircuitState;
+      }
+
+      return map;
     },
     enabled: isOpen && endpointIds.length > 0,
     staleTime: 1000 * 10,
@@ -305,12 +312,14 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
   });
 
   const circuitStateByEndpointId = useMemo(() => {
-    const map = new Map<number, "closed" | "open" | "half-open">();
-    circuitInfo.forEach((item) => {
-      map.set(item.endpointId, item.circuitState);
-    });
+    const map = new Map<number, EndpointCircuitState>();
+    for (const [rawId, circuitState] of Object.entries(circuitInfoMap)) {
+      const endpointId = Number(rawId);
+      if (!Number.isFinite(endpointId)) continue;
+      map.set(endpointId, circuitState);
+    }
     return map;
-  }, [circuitInfo]);
+  }, [circuitInfoMap]);
 
   return (
     <TooltipProvider>
