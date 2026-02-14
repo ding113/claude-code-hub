@@ -15,8 +15,8 @@ import { UsersQuotaClient } from "./_components/users-quota-client";
 // Force dynamic rendering (this page needs real-time data and auth)
 export const dynamic = "force-dynamic";
 
-// Max age for "all time" total usage query (100 years in days)
-const ALL_TIME_MAX_AGE_DAYS = 36500;
+// Infinity means "all time" - no date filter applied to the query
+const ALL_TIME_MAX_AGE_DAYS = Infinity;
 
 async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   const users = await getUsers();

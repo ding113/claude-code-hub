@@ -1472,8 +1472,8 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     limitTotal: { usage: number; limit: number | null };
   }>
 > {
-  // All-time max age for total usage queries (~100 years in days)
-  const ALL_TIME_MAX_AGE_DAYS = 36500;
+  // Infinity means "all time" - no date filter applied to the query
+  const ALL_TIME_MAX_AGE_DAYS = Infinity;
 
   try {
     const tError = await getTranslations("errors");

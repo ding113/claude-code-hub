@@ -1,12 +1,12 @@
 /**
  * total-usage-semantics tests
  *
- * Verify that total usage reads in display paths use ALL_TIME_MAX_AGE_DAYS (36500)
- * instead of the default 365 days.
+ * Verify that total usage reads in display paths use ALL_TIME_MAX_AGE_DAYS (Infinity)
+ * to skip the date filter entirely, querying all-time data.
  *
  * Key insight: The functions sumKeyTotalCostById and sumUserTotalCost have a default
  * maxAgeDays of 365. For display purposes (showing "total" usage), we want all-time
- * semantics, which means passing 36500 days (~100 years).
+ * semantics, which means passing Infinity to skip the date filter.
  *
  * IMPORTANT: This test only covers DISPLAY paths. Enforcement paths (RateLimitService)
  * are intentionally NOT modified.
@@ -14,8 +14,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// All-time max age constant (100 years in days)
-const ALL_TIME_MAX_AGE_DAYS = 36500;
+// All-time max age constant - Infinity means no date filter
+const ALL_TIME_MAX_AGE_DAYS = Infinity;
 
 // Mock functions
 const getSessionMock = vi.fn();
@@ -131,8 +131,8 @@ describe("total-usage-semantics", () => {
       const { getMyQuota } = await import("@/actions/my-usage");
       await getMyQuota();
 
-      // Verify sumKeyTotalCostById was called with ALL_TIME_MAX_AGE_DAYS
-      expect(sumKeyTotalCostByIdMock).toHaveBeenCalledWith(1, ALL_TIME_MAX_AGE_DAYS);
+      // Verify sumKeyTotalCostById was called with Infinity (all-time)
+      expect(sumKeyTotalCostByIdMock).toHaveBeenCalledWith(1, Infinity);
     });
 
     it.skip("should call sumUserTotalCost with ALL_TIME_MAX_AGE_DAYS for user total cost (via sumUserCost)", async () => {
@@ -182,10 +182,8 @@ describe("total-usage-semantics", () => {
       const { getMyQuota } = await import("@/actions/my-usage");
       await getMyQuota();
 
-      // Verify sumUserTotalCost was called with ALL_TIME_MAX_AGE_DAYS
-      // Note: getMyQuota calls sumUserCost(user.id, "total") which internally calls sumUserTotalCost
-      // The dynamic import in sumUserCost should use our mocked module
-      expect(sumUserTotalCostMock).toHaveBeenCalledWith(1, ALL_TIME_MAX_AGE_DAYS);
+      // Verify sumUserTotalCost was called with Infinity (all-time)
+      expect(sumUserTotalCostMock).toHaveBeenCalledWith(1, Infinity);
     });
   });
 
@@ -216,36 +214,27 @@ describe("total-usage-semantics", () => {
       const { getUserAllLimitUsage } = await import("@/actions/users");
       await getUserAllLimitUsage(1);
 
-      // Verify sumUserTotalCost was called with ALL_TIME_MAX_AGE_DAYS
-      expect(sumUserTotalCostMock).toHaveBeenCalledWith(1, ALL_TIME_MAX_AGE_DAYS);
+      // Verify sumUserTotalCost was called with Infinity (all-time)
+      expect(sumUserTotalCostMock).toHaveBeenCalledWith(1, Infinity);
     });
   });
 
   describe("ALL_TIME_MAX_AGE_DAYS constant value", () => {
-    it("should be 36500 days (~100 years)", () => {
-      // This ensures the constant is correctly defined as 100 years
-      expect(ALL_TIME_MAX_AGE_DAYS).toBe(36500);
-
-      // Verify it represents approximately 100 years
-      const yearsApprox = ALL_TIME_MAX_AGE_DAYS / 365;
-      expect(yearsApprox).toBe(100);
+    it("should be Infinity for all-time semantics", () => {
+      expect(ALL_TIME_MAX_AGE_DAYS).toBe(Infinity);
     });
   });
 
   describe("source code verification", () => {
     it("should verify sumUserCost passes ALL_TIME_MAX_AGE_DAYS when period is total", async () => {
-      // This test verifies the implementation by reading the source code pattern
-      // The sumUserCost function should call sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS)
-      // when period === "total"
-
       const fs = await import("node:fs/promises");
       const path = await import("node:path");
 
       const myUsagePath = path.join(process.cwd(), "src/actions/my-usage.ts");
       const content = await fs.readFile(myUsagePath, "utf-8");
 
-      // Verify the constant is defined
-      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = 36500");
+      // Verify the constant is defined as Infinity
+      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
 
       // Verify sumUserTotalCost is called with the constant when period is total
       expect(content).toContain("sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS)");
@@ -255,16 +244,14 @@ describe("total-usage-semantics", () => {
     });
 
     it("should verify getUserAllLimitUsage passes ALL_TIME_MAX_AGE_DAYS", async () => {
-      // This test verifies the implementation by reading the source code pattern
-
       const fs = await import("node:fs/promises");
       const path = await import("node:path");
 
       const usersPath = path.join(process.cwd(), "src/actions/users.ts");
       const content = await fs.readFile(usersPath, "utf-8");
 
-      // Verify the constant is defined in getUserAllLimitUsage
-      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = 36500");
+      // Verify the constant is defined as Infinity
+      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
 
       // Verify sumUserTotalCost is called with the constant
       expect(content).toContain("sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS)");

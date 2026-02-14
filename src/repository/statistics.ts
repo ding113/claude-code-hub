@@ -760,59 +760,53 @@ export async function sumKeyTotalCostById(
 }
 
 /**
- * 查询 Key 历史总消费（带时间边界优化）
- * 用于总消费限额检查
- * @param keyHash - API Key 的哈希值
- * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
+ * Query Key total cost (with optional time boundary)
+ * @param keyHash - API Key hash
+ * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365): Promise<number> {
-  // Validate maxAgeDays - use default 365 for invalid values
-  const validMaxAgeDays =
-    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+  const conditions = [
+    eq(messageRequest.key, keyHash),
+    isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
 
-  // Use timestamp calculation to avoid Date.setDate() overflow with large day values
-  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
+  // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+  }
 
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
     .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.key, keyHash),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, cutoffDate)
-      )
-    );
+    .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
 }
 
 /**
- * 查询用户历史总消费（所有 Key 累计，带时间边界优化）
- * 用于总消费限额检查
- * @param userId - 用户 ID
- * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
+ * Query user total cost across all keys (with optional time boundary)
+ * @param userId - User ID
+ * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365): Promise<number> {
-  // Validate maxAgeDays - use default 365 for invalid values
-  const validMaxAgeDays =
-    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+  const conditions = [
+    eq(messageRequest.userId, userId),
+    isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
 
-  // Use timestamp calculation to avoid Date.setDate() overflow with large day values
-  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
+  // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+  }
 
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
     .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.userId, userId),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, cutoffDate)
-      )
-    );
+    .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
 }
