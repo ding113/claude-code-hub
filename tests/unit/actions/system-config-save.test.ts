@@ -65,7 +65,10 @@ describe("saveSystemSettings", () => {
       enableHttp2: false,
       interceptAnthropicWarmupRequests: false,
       enableThinkingSignatureRectifier: false,
+      enableThinkingBudgetRectifier: false,
+      enableBillingHeaderRectifier: true,
       enableCodexSessionIdCompletion: false,
+      enableClaudeMetadataUserIdInjection: false,
       enableResponseFixer: false,
       responseFixerConfig: {
         fixEncoding: false,
@@ -186,7 +189,10 @@ describe("saveSystemSettings", () => {
       enableHttp2: true,
       interceptAnthropicWarmupRequests: false,
       enableThinkingSignatureRectifier: false,
+      enableThinkingBudgetRectifier: false,
+      enableBillingHeaderRectifier: true,
       enableCodexSessionIdCompletion: false,
+      enableClaudeMetadataUserIdInjection: false,
       enableResponseFixer: false,
       responseFixerConfig: {
         fixEncoding: false,

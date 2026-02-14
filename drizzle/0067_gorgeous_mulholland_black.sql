@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_billing_header_rectifier" boolean DEFAULT true NOT NULL;

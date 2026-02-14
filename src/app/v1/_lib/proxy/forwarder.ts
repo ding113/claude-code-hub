@@ -38,6 +38,7 @@ import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
+import { rectifyBillingHeader } from "./billing-header-rectifier";
 import {
   buildRequestDetails,
   categorizeErrorAsync,
@@ -51,7 +52,6 @@ import {
   ProxyError,
   sanitizeUrl,
 } from "./errors";
-
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
 import type { ProxySession } from "./session";
@@ -1766,6 +1766,32 @@ export class ProxyForwarder {
       // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
       // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
       if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+        // Billing header rectifier: proactively strip x-anthropic-billing-header from system prompt
+        {
+          const settings = await getCachedSystemSettings();
+          const billingRectifierEnabled = settings.enableBillingHeaderRectifier ?? true;
+          if (billingRectifierEnabled) {
+            const billingResult = rectifyBillingHeader(
+              session.request.message as Record<string, unknown>
+            );
+            if (billingResult.applied) {
+              session.addSpecialSetting({
+                type: "billing_header_rectifier",
+                scope: "request",
+                hit: true,
+                removedCount: billingResult.removedCount,
+                extractedValues: billingResult.extractedValues,
+              });
+              logger.info("ProxyForwarder: Billing header rectifier applied", {
+                providerId: provider.id,
+                providerName: provider.name,
+                removedCount: billingResult.removedCount,
+              });
+              await persistSpecialSettings(session);
+            }
+          }
+        }
+
         const { request: anthropicOverridden, audit: anthropicAudit } =
           applyAnthropicProviderOverridesWithAudit(
             provider,

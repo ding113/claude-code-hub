@@ -40,7 +40,10 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
+    enableThinkingBudgetRectifier: true,
+    enableBillingHeaderRectifier: true,
     enableCodexSessionIdCompletion: true,
+    enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
     responseFixerConfig: {
       fixTruncatedJson: true,

@@ -620,6 +620,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // billing header 整流器（默认开启）
+  // 开启后：主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块
+  enableBillingHeaderRectifier: boolean('enable_billing_header_rectifier')
+    .notNull()
+    .default(true),
+
   // Codex Session ID 补全（默认开启）
   // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')

@@ -864,6 +864,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableThinkingSignatureRectifier: z.boolean().optional(),
   // thinking budget 整流器（可选）
   enableThinkingBudgetRectifier: z.boolean().optional(),
+  // billing header 整流器（可选）
+  enableBillingHeaderRectifier: z.boolean().optional(),
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion: z.boolean().optional(),
   // Claude metadata.user_id 注入（可选）

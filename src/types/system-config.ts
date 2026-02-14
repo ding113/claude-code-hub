@@ -53,6 +53,11 @@ export interface SystemSettings {
   // 目标：当 Anthropic 类型供应商出现 budget_tokens < 1024 错误时，自动整流并重试一次
   enableThinkingBudgetRectifier: boolean;
 
+  // billing header 整流器（默认开启）
+  // 目标：主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块，
+  // 防止 Amazon Bedrock 等非原生 Anthropic 上游返回 400 错误
+  enableBillingHeaderRectifier: boolean;
+
   // Codex Session ID 补全（默认开启）
   // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean;
@@ -114,6 +119,9 @@ export interface UpdateSystemSettingsInput {
 
   // thinking budget 整流器（可选）
   enableThinkingBudgetRectifier?: boolean;
+
+  // billing header 整流器（可选）
+  enableBillingHeaderRectifier?: boolean;
 
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion?: boolean;
