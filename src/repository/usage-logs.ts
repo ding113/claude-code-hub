@@ -884,8 +884,7 @@ export async function findUsageLogsStats(
 
   const statsConditions = [...conditions, EXCLUDE_WARMUP_CONDITION];
 
-  // 执行聚合查询（添加 innerJoin keysTable 以支持 keyId 过滤）
-  const [summaryResult] = await db
+  const baseQuery = db
     .select({
       totalRequests: sql<number>`count(*)::double precision`,
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
@@ -896,9 +895,14 @@ export async function findUsageLogsStats(
       totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
       totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...statsConditions));
+    .from(messageRequest);
+
+  const query =
+    keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      : baseQuery;
+
+  const [summaryResult] = await query.where(and(...statsConditions));
 
   const totalRequests = summaryResult?.totalRequests ?? 0;
   const totalCost = parseFloat(summaryResult?.totalCost ?? "0");

@@ -1010,6 +1010,147 @@ export async function sumKeyCostInTimeRange(
   return Number(result[0]?.total || 0);
 }
 
+export interface QuotaCostRanges {
+  range5h: { startTime: Date; endTime: Date };
+  rangeDaily: { startTime: Date; endTime: Date };
+  rangeWeekly: { startTime: Date; endTime: Date };
+  rangeMonthly: { startTime: Date; endTime: Date };
+}
+
+export interface QuotaCostSummary {
+  cost5h: number;
+  costDaily: number;
+  costWeekly: number;
+  costMonthly: number;
+  costTotal: number;
+}
+
+/**
+ * 合并查询：一次 SQL 返回用户各周期消费与总消费
+ *
+ * 说明：
+ * - 通过 FILTER 子句避免多次往返/重复扫描
+ * - scanStart/scanEnd 仅用于缩小扫描范围（不改变语义）
+ * - total 使用 maxAgeDays 做时间截断（与 sumUserTotalCost 语义一致）
+ */
+export async function sumUserQuotaCosts(
+  userId: number,
+  ranges: QuotaCostRanges,
+  maxAgeDays: number = 365
+): Promise<QuotaCostSummary> {
+  const validMaxAgeDays =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
+
+  const scanStart = new Date(
+    Math.min(
+      ranges.range5h.startTime.getTime(),
+      ranges.rangeDaily.startTime.getTime(),
+      ranges.rangeWeekly.startTime.getTime(),
+      ranges.rangeMonthly.startTime.getTime(),
+      cutoffDate.getTime()
+    )
+  );
+  const scanEnd = new Date(
+    Math.max(
+      ranges.range5h.endTime.getTime(),
+      ranges.rangeDaily.endTime.getTime(),
+      ranges.rangeWeekly.endTime.getTime(),
+      ranges.rangeMonthly.endTime.getTime()
+    )
+  );
+
+  const [row] = await db
+    .select({
+      cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      costTotal: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.userId, userId),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        gte(messageRequest.createdAt, scanStart),
+        lt(messageRequest.createdAt, scanEnd)
+      )
+    );
+
+  return {
+    cost5h: Number(row?.cost5h ?? 0),
+    costDaily: Number(row?.costDaily ?? 0),
+    costWeekly: Number(row?.costWeekly ?? 0),
+    costMonthly: Number(row?.costMonthly ?? 0),
+    costTotal: Number(row?.costTotal ?? 0),
+  };
+}
+
+/**
+ * 合并查询：一次 SQL 返回 Key 各周期消费与总消费（通过 keyId）
+ */
+export async function sumKeyQuotaCostsById(
+  keyId: number,
+  ranges: QuotaCostRanges,
+  maxAgeDays: number = 365
+): Promise<QuotaCostSummary> {
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) {
+    return { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0, costTotal: 0 };
+  }
+
+  const validMaxAgeDays =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
+
+  const scanStart = new Date(
+    Math.min(
+      ranges.range5h.startTime.getTime(),
+      ranges.rangeDaily.startTime.getTime(),
+      ranges.rangeWeekly.startTime.getTime(),
+      ranges.rangeMonthly.startTime.getTime(),
+      cutoffDate.getTime()
+    )
+  );
+  const scanEnd = new Date(
+    Math.max(
+      ranges.range5h.endTime.getTime(),
+      ranges.rangeDaily.endTime.getTime(),
+      ranges.rangeWeekly.endTime.getTime(),
+      ranges.rangeMonthly.endTime.getTime()
+    )
+  );
+
+  const [row] = await db
+    .select({
+      cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      costTotal: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.key, keyString),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        gte(messageRequest.createdAt, scanStart),
+        lt(messageRequest.createdAt, scanEnd)
+      )
+    );
+
+  return {
+    cost5h: Number(row?.cost5h ?? 0),
+    costDaily: Number(row?.costDaily ?? 0),
+    costWeekly: Number(row?.costWeekly ?? 0),
+    costMonthly: Number(row?.costMonthly ?? 0),
+    costTotal: Number(row?.costTotal ?? 0),
+  };
+}
+
 export interface CostEntryInTimeRange {
   id: number;
   createdAt: Date;
