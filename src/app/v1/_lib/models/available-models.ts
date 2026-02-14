@@ -12,6 +12,7 @@ import type { Provider } from "@/types/provider";
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
 import type { ClientFormat } from "../proxy/format-mapper";
 import { ProxyProviderResolver } from "../proxy/provider-selector";
+import { providerSupportsModel } from "../proxy/provider-supports-model";
 
 type ResponseFormat = "openai" | "anthropic" | "gemini" | "codex";
 
@@ -236,34 +237,62 @@ async function fetchModelsWithConfig(
  * 2. 否则根据 providerType 查询上游
  */
 async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel[]> {
+  let models: FetchedModel[] = [];
+
   if (provider.allowedModels && provider.allowedModels.length > 0) {
     logger.debug(`[AvailableModels] Using configured allowedModels for ${provider.name}`, {
       modelCount: provider.allowedModels.length,
     });
-    return provider.allowedModels.map((id) => ({ id }));
+    models = provider.allowedModels.map((id) => ({ id }));
+  } else {
+    const configMap: Record<Provider["providerType"], UpstreamFetchConfig> = {
+      claude: UPSTREAM_CONFIGS.claude,
+      "claude-auth": UPSTREAM_CONFIGS.claude,
+      "openai-compatible": UPSTREAM_CONFIGS.openai,
+      codex: UPSTREAM_CONFIGS.openai,
+      gemini: UPSTREAM_CONFIGS.gemini,
+      "gemini-cli": UPSTREAM_CONFIGS.gemini,
+    };
+
+    const config = configMap[provider.providerType];
+    if (!config) {
+      logger.warn(`[AvailableModels] Unknown provider type: ${provider.providerType}`);
+      return [];
+    }
+
+    try {
+      models = await fetchModelsWithConfig(provider, config);
+    } catch (error) {
+      logger.warn(`[AvailableModels] Failed to fetch from ${provider.name}:`, error);
+      return [];
+    }
   }
 
-  const configMap: Record<Provider["providerType"], UpstreamFetchConfig> = {
-    claude: UPSTREAM_CONFIGS.claude,
-    "claude-auth": UPSTREAM_CONFIGS.claude,
-    "openai-compatible": UPSTREAM_CONFIGS.openai,
-    codex: UPSTREAM_CONFIGS.openai,
-    gemini: UPSTREAM_CONFIGS.gemini,
-    "gemini-cli": UPSTREAM_CONFIGS.gemini,
-  };
-
-  const config = configMap[provider.providerType];
-  if (!config) {
-    logger.warn(`[AvailableModels] Unknown provider type: ${provider.providerType}`);
-    return [];
+  const redirectKeys = Object.keys(provider.modelRedirects ?? {});
+  if (redirectKeys.length === 0) {
+    return models;
   }
 
-  try {
-    return await fetchModelsWithConfig(provider, config);
-  } catch (error) {
-    logger.warn(`[AvailableModels] Failed to fetch from ${provider.name}:`, error);
-    return [];
+  const seenIds = new Set(models.map((m) => m.id));
+  let addedCount = 0;
+
+  for (const modelId of redirectKeys) {
+    // 只暴露与当前 provider 类型/语义一致的可请求别名，避免 /v1/models 与调度规则不一致
+    if (!providerSupportsModel(provider, modelId)) continue;
+    if (seenIds.has(modelId)) continue;
+
+    seenIds.add(modelId);
+    models.push({ id: modelId });
+    addedCount += 1;
   }
+
+  if (addedCount > 0) {
+    logger.debug(`[AvailableModels] Added modelRedirects keys for ${provider.name}`, {
+      addedCount,
+    });
+  }
+
+  return models;
 }
 
 /**
