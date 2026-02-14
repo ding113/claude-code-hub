@@ -327,7 +327,19 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
       lastProbeErrorType: providerEndpoints.lastProbeErrorType,
     })
     .from(providerEndpoints)
-    .where(and(eq(providerEndpoints.isEnabled, true), isNull(providerEndpoints.deletedAt)))
+    .where(
+      and(
+        eq(providerEndpoints.isEnabled, true),
+        isNull(providerEndpoints.deletedAt),
+        sql`EXISTS (
+          SELECT 1
+          FROM providers p
+          WHERE p.provider_vendor_id = ${providerEndpoints.vendorId}
+            AND p.provider_type = ${providerEndpoints.providerType}
+            AND p.deleted_at IS NULL
+        )`
+      )
+    )
     .orderBy(asc(providerEndpoints.id));
 
   return rows.map((row) => ({
@@ -596,6 +608,29 @@ export async function findProviderVendors(
     .orderBy(desc(providerVendors.createdAt))
     .limit(limit)
     .offset(offset);
+
+  return rows.map(toProviderVendor);
+}
+
+export async function findProviderVendorsByIds(vendorIds: number[]): Promise<ProviderVendor[]> {
+  const ids = Array.from(new Set(vendorIds)).filter((id) => Number.isInteger(id) && id > 0);
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({
+      id: providerVendors.id,
+      websiteDomain: providerVendors.websiteDomain,
+      displayName: providerVendors.displayName,
+      websiteUrl: providerVendors.websiteUrl,
+      faviconUrl: providerVendors.faviconUrl,
+      createdAt: providerVendors.createdAt,
+      updatedAt: providerVendors.updatedAt,
+    })
+    .from(providerVendors)
+    .where(inArray(providerVendors.id, ids))
+    .orderBy(desc(providerVendors.createdAt));
 
   return rows.map(toProviderVendor);
 }
@@ -1213,12 +1248,6 @@ export async function syncProviderEndpointOnProviderEdit(
 
         const ensureResult = await ensureNextEndpointActive();
 
-        if (keepPreviousWhenReferenced) {
-          return {
-            action: mapEnsureResultToKeptAction(ensureResult),
-          };
-        }
-
         await tx
           .update(providerEndpoints)
           .set({
@@ -1256,12 +1285,6 @@ export async function syncProviderEndpointOnProviderEdit(
         keepPreviousWhenReferenced && (await hasActiveReferencesOnPreviousUrl());
 
       if (!previousIsReferenced) {
-        if (keepPreviousWhenReferenced) {
-          return {
-            action: mapEnsureResultToKeptAction(ensureResult),
-          };
-        }
-
         await tx
           .update(providerEndpoints)
           .set({

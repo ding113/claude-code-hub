@@ -27,11 +27,13 @@ import {
   findProviderEndpointsByVendorAndType,
   findProviderVendorById,
   findProviderVendors,
+  findProviderVendorsByIds,
   softDeleteProviderEndpoint,
   tryDeleteProviderVendorIfEmpty,
   updateProviderEndpoint,
   updateProviderVendor,
 } from "@/repository";
+import { findAllProvidersFresh } from "@/repository/provider";
 import {
   findProviderEndpointProbeLogsBatch,
   findVendorTypeEndpointStatsBatch,
@@ -223,6 +225,53 @@ export async function getProviderVendors(): Promise<ProviderVendor[]> {
     return await findProviderVendors(200, 0);
   } catch (error) {
     logger.error("getProviderVendors:error", error);
+    return [];
+  }
+}
+
+export type DashboardProviderVendor = ProviderVendor & { providerTypes: ProviderType[] };
+
+export async function getDashboardProviderVendors(): Promise<DashboardProviderVendor[]> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return [];
+    }
+
+    const typeOrder = new Map<string, number>(
+      ProviderTypeSchema.options.map((value, index) => [value, index])
+    );
+
+    const providers = await findAllProvidersFresh();
+    const typesByVendorId = new Map<number, Set<ProviderType>>();
+    for (const provider of providers) {
+      const vendorId = provider.providerVendorId;
+      if (!vendorId || vendorId <= 0) {
+        continue;
+      }
+
+      const existing = typesByVendorId.get(vendorId) ?? new Set<ProviderType>();
+      existing.add(provider.providerType);
+      typesByVendorId.set(vendorId, existing);
+    }
+
+    const vendorIds = [...typesByVendorId.keys()];
+    if (vendorIds.length === 0) {
+      return [];
+    }
+
+    const vendors = await findProviderVendorsByIds(vendorIds);
+
+    return vendors
+      .map((vendor) => {
+        const types = Array.from(typesByVendorId.get(vendor.id) ?? []).sort(
+          (left, right) => (typeOrder.get(left) ?? 999) - (typeOrder.get(right) ?? 999)
+        );
+        return { ...vendor, providerTypes: types };
+      })
+      .filter((vendor) => vendor.providerTypes.length > 0);
+  } catch (error) {
+    logger.error("getDashboardProviderVendors:error", error);
     return [];
   }
 }

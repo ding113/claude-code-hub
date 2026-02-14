@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providers } from "@/drizzle/schema";
+import { providerEndpoints, providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
@@ -713,13 +713,70 @@ export async function updateProviderPrioritiesBatch(
 }
 
 export async function deleteProvider(id: number): Promise<boolean> {
-  const result = await db
-    .update(providers)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
-    .returning({ id: providers.id });
+  const now = new Date();
 
-  return result.length > 0;
+  const deleted = await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      })
+      .from(providers)
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .limit(1);
+
+    if (!current) {
+      return false;
+    }
+
+    const result = await tx
+      .update(providers)
+      .set({ deletedAt: now })
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .returning({ id: providers.id });
+
+    if (result.length === 0) {
+      return false;
+    }
+
+    if (current.providerVendorId != null && current.url) {
+      const [activeReference] = await tx
+        .select({ id: providers.id })
+        .from(providers)
+        .where(
+          and(
+            eq(providers.providerVendorId, current.providerVendorId),
+            eq(providers.providerType, current.providerType),
+            eq(providers.url, current.url),
+            isNull(providers.deletedAt)
+          )
+        )
+        .limit(1);
+
+      if (!activeReference) {
+        await tx
+          .update(providerEndpoints)
+          .set({
+            deletedAt: now,
+            isEnabled: false,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(providerEndpoints.vendorId, current.providerVendorId),
+              eq(providerEndpoints.providerType, current.providerType),
+              eq(providerEndpoints.url, current.url),
+              isNull(providerEndpoints.deletedAt)
+            )
+          );
+      }
+    }
+
+    return true;
+  });
+
+  return deleted;
 }
 
 export interface BatchProviderUpdates {
@@ -787,23 +844,98 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
   }
 
   const uniqueIds = [...new Set(ids)];
+  const now = new Date();
   const idList = sql.join(
     uniqueIds.map((id) => sql`${id}`),
     sql`, `
   );
 
-  const result = await db
-    .update(providers)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
-    .returning({ id: providers.id });
+  const deletedCount = await db.transaction(async (tx) => {
+    const candidates = await tx
+      .select({
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      })
+      .from(providers)
+      .where(sql`id IN (${idList}) AND deleted_at IS NULL`);
+
+    const result = await tx
+      .update(providers)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
+      .returning({ id: providers.id });
+
+    if (result.length === 0) {
+      return 0;
+    }
+
+    const endpointKeys = new Map<
+      string,
+      { vendorId: number; providerType: Provider["providerType"]; url: string }
+    >();
+
+    for (const candidate of candidates) {
+      if (candidate.providerVendorId == null || !candidate.url) {
+        continue;
+      }
+
+      const key = `${candidate.providerVendorId}::${candidate.providerType}::${candidate.url}`;
+      if (endpointKeys.has(key)) {
+        continue;
+      }
+
+      endpointKeys.set(key, {
+        vendorId: candidate.providerVendorId,
+        providerType: candidate.providerType,
+        url: candidate.url,
+      });
+    }
+
+    for (const endpoint of endpointKeys.values()) {
+      const [activeReference] = await tx
+        .select({ id: providers.id })
+        .from(providers)
+        .where(
+          and(
+            eq(providers.providerVendorId, endpoint.vendorId),
+            eq(providers.providerType, endpoint.providerType),
+            eq(providers.url, endpoint.url),
+            isNull(providers.deletedAt)
+          )
+        )
+        .limit(1);
+
+      if (activeReference) {
+        continue;
+      }
+
+      await tx
+        .update(providerEndpoints)
+        .set({
+          deletedAt: now,
+          isEnabled: false,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(providerEndpoints.vendorId, endpoint.vendorId),
+            eq(providerEndpoints.providerType, endpoint.providerType),
+            eq(providerEndpoints.url, endpoint.url),
+            isNull(providerEndpoints.deletedAt)
+          )
+        );
+    }
+
+    return result.length;
+  });
 
   logger.debug("deleteProvidersBatch:completed", {
     requestedIds: uniqueIds.length,
-    deletedCount: result.length,
+    deletedCount,
   });
 
-  return result.length;
+  return deletedCount;
 }
 
 /**
