@@ -57,6 +57,7 @@ export {
   findProviderEndpointsByVendorAndType,
   findProviderVendorById,
   findProviderVendors,
+  findProviderVendorsByIds,
   recordProviderEndpointProbeResult,
   softDeleteProviderEndpoint,
   tryDeleteProviderVendorIfEmpty,

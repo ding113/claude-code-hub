@@ -5,9 +5,10 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
+  type DashboardProviderVendor,
+  getDashboardProviderVendors,
   getProviderEndpointProbeLogs,
   getProviderEndpoints,
-  getProviderVendors,
   probeProviderEndpoint,
 } from "@/actions/provider-endpoints";
 import { Button } from "@/components/ui/button";
@@ -20,33 +21,16 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderVendor } from "@/types/provider";
+import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderType } from "@/types/provider";
 import { LatencyCurve } from "./latency-curve";
 import { ProbeGrid } from "./probe-grid";
 import { ProbeTerminal } from "./probe-terminal";
-
-type ProviderType =
-  | "claude"
-  | "claude-auth"
-  | "codex"
-  | "gemini"
-  | "gemini-cli"
-  | "openai-compatible";
-
-const PROVIDER_TYPES: ProviderType[] = [
-  "claude",
-  "claude-auth",
-  "codex",
-  "gemini",
-  "gemini-cli",
-  "openai-compatible",
-];
 
 export function EndpointTab() {
   const t = useTranslations("dashboard.availability");
 
   // State
-  const [vendors, setVendors] = useState<ProviderVendor[]>([]);
+  const [vendors, setVendors] = useState<DashboardProviderVendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
   const [selectedType, setSelectedType] = useState<ProviderType | null>(null);
   const [endpoints, setEndpoints] = useState<ProviderEndpoint[]>([]);
@@ -63,10 +47,11 @@ export function EndpointTab() {
   useEffect(() => {
     const fetchVendors = async () => {
       try {
-        const vendors = await getProviderVendors();
+        const vendors = await getDashboardProviderVendors();
         setVendors(vendors);
         if (vendors.length > 0) {
           setSelectedVendorId(vendors[0].id);
+          setSelectedType(vendors[0].providerTypes[0] ?? null);
         }
       } catch (error) {
         console.error("Failed to fetch vendors:", error);
@@ -190,6 +175,9 @@ export function EndpointTab() {
     );
   }
 
+  const selectedVendor = vendors.find((vendor) => vendor.id === selectedVendorId) ?? null;
+  const providerTypes = selectedVendor?.providerTypes ?? [];
+
   return (
     <div className="space-y-6">
       {/* Filters */}
@@ -199,8 +187,10 @@ export function EndpointTab() {
           <Select
             value={selectedVendorId?.toString() || ""}
             onValueChange={(v) => {
-              setSelectedVendorId(Number(v));
-              setSelectedType(null);
+              const vendorId = Number(v);
+              setSelectedVendorId(vendorId);
+              const nextVendor = vendors.find((vendor) => vendor.id === vendorId);
+              setSelectedType(nextVendor?.providerTypes[0] ?? null);
               setSelectedEndpoint(null);
             }}
           >
@@ -229,7 +219,7 @@ export function EndpointTab() {
               <SelectValue placeholder={t("endpoint.selectType")} />
             </SelectTrigger>
             <SelectContent>
-              {PROVIDER_TYPES.map((type) => (
+              {providerTypes.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>
