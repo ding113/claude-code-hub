@@ -1032,6 +1032,9 @@ export async function syncProviderEndpointOnProviderEdit(
             eq(providerEndpoints.url, args.url)
           )
         )
+        // 兼容历史/并发导致的脏数据：同一 (vendor/type/url) 下可能同时存在 active 行与软删除历史行。
+        // partial unique 只约束 deleted_at IS NULL，因此这里必须稳定地优先选择 active 行，避免误选历史行后 revive 触发 23505。
+        .orderBy(desc(providerEndpoints.deletedAt), desc(providerEndpoints.id))
         .limit(1);
 
       return row
@@ -1102,14 +1105,45 @@ export async function syncProviderEndpointOnProviderEdit(
         }
 
         if (concurrentEndpoint.deletedAt !== null) {
-          await tx
-            .update(providerEndpoints)
-            .set({
-              deletedAt: null,
-              isEnabled: true,
-              updatedAt: now,
-            })
-            .where(eq(providerEndpoints.id, concurrentEndpoint.id));
+          try {
+            await tx
+              .update(providerEndpoints)
+              .set({
+                deletedAt: null,
+                isEnabled: true,
+                updatedAt: now,
+              })
+              .where(eq(providerEndpoints.id, concurrentEndpoint.id));
+          } catch (error) {
+            if (!isUniqueViolationError(error)) {
+              throw error;
+            }
+
+            const activeEndpoint = await loadEndpoint({
+              vendorId: input.vendorId,
+              providerType: input.providerType,
+              url: nextUrl,
+            });
+
+            if (!activeEndpoint) {
+              throw new Error(
+                "[ProviderEndpointSync] failed to load next endpoint after revive conflict"
+              );
+            }
+
+            if (reactivateDisabled && !activeEndpoint.isEnabled) {
+              await tx
+                .update(providerEndpoints)
+                .set({
+                  isEnabled: true,
+                  updatedAt: now,
+                })
+                .where(eq(providerEndpoints.id, activeEndpoint.id));
+              return "revived-next";
+            }
+
+            return "noop";
+          }
 
           return "revived-next";
         }
@@ -1130,14 +1164,45 @@ export async function syncProviderEndpointOnProviderEdit(
       }
 
       if (nextEndpoint.deletedAt !== null) {
-        await tx
-          .update(providerEndpoints)
-          .set({
-            deletedAt: null,
-            isEnabled: true,
-            updatedAt: now,
-          })
-          .where(eq(providerEndpoints.id, nextEndpoint.id));
+        try {
+          await tx
+            .update(providerEndpoints)
+            .set({
+              deletedAt: null,
+              isEnabled: true,
+              updatedAt: now,
+            })
+            .where(eq(providerEndpoints.id, nextEndpoint.id));
+        } catch (error) {
+          if (!isUniqueViolationError(error)) {
+            throw error;
+          }
+
+          const activeEndpoint = await loadEndpoint({
+            vendorId: input.vendorId,
+            providerType: input.providerType,
+            url: nextUrl,
+          });
+
+          if (!activeEndpoint) {
+            throw new Error(
+              "[ProviderEndpointSync] failed to load next endpoint after revive conflict"
+            );
+          }
+
+          if (reactivateDisabled && !activeEndpoint.isEnabled) {
+            await tx
+              .update(providerEndpoints)
+              .set({
+                isEnabled: true,
+                updatedAt: now,
+              })
+              .where(eq(providerEndpoints.id, activeEndpoint.id));
+            return "revived-next";
+          }
+
+          return "noop";
+        }
 
         return "revived-next";
       }

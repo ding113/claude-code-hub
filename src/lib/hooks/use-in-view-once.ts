@@ -70,7 +70,9 @@ export function useInViewOnce<T extends Element>(options?: IntersectionObserverI
 
     if (!element) return;
 
+    let disposed = false;
     const observer = new IntersectionObserver((entries) => {
+      if (disposed) return;
       const entry = entries[0];
       if (entry?.isIntersecting) {
         setIsInView(true);
@@ -79,7 +81,10 @@ export function useInViewOnce<T extends Element>(options?: IntersectionObserverI
     }, stableOptions);
 
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => {
+      disposed = true;
+      observer.disconnect();
+    };
   }, [element, isInView, stableOptions]);
 
   return { ref, isInView };

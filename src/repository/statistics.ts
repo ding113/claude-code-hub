@@ -34,7 +34,12 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
   const now = Date.now();
   const cached = keyStringByIdCache.get(keyId);
   if (cached && cached.expiresAt > now) {
-    return cached.key;
+    // LRU-like bump：Map 的迭代顺序基于插入顺序；delete+set 可将热点 key 移动到末尾，
+    // 从而使“淘汰最早的 10%”更接近“淘汰最少使用”的语义。
+    const refreshed = { key: cached.key, expiresAt: now + KEY_STRING_BY_ID_CACHE_TTL_MS };
+    keyStringByIdCache.delete(keyId);
+    keyStringByIdCache.set(keyId, refreshed);
+    return refreshed.key;
   }
 
   const keyRecord = await db
@@ -49,7 +54,7 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
     return null;
   }
 
-  // Size 控制：先清理过期；仍超限则按 FIFO 淘汰一小部分，避免一次性清空导致缓存击穿
+  // Size 控制：先清理过期；仍超限则淘汰最早的一小部分，避免一次性清空导致缓存击穿
   if (keyStringByIdCache.size >= KEY_STRING_BY_ID_CACHE_MAX_SIZE) {
     for (const [id, value] of keyStringByIdCache) {
       if (value.expiresAt <= now) {

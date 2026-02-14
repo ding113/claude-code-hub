@@ -532,6 +532,9 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     pageSize = 50,
   } = filters;
 
+  const safePage = page > 0 ? page : 1;
+  const safePageSize = Math.min(200, Math.max(1, pageSize));
+
   // 构建查询条件
   const conditions = [isNull(messageRequest.deletedAt)];
 
@@ -589,24 +592,42 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     );
   }
 
-  // 查询总数和统计数据（添加 innerJoin keysTable 以支持 keyId 过滤）
-  const [summaryResult] = await db
-    .select({
-      // total：用于分页/审计，必须包含 warmup
-      totalRows: sql<number>`count(*)::double precision`,
-      // summary：所有统计字段必须排除 warmup（不计入任何统计）
-      totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
-      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-    })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...conditions));
+  // 查询总数和统计数据（仅在需要 keyId 过滤时才 join keysTable，避免无效 join）
+  const [summaryResult] =
+    keyId === undefined
+      ? await db
+          .select({
+            // total：用于分页/审计，必须包含 warmup
+            totalRows: sql<number>`count(*)::double precision`,
+            // summary：所有统计字段必须排除 warmup（不计入任何统计）
+            totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
+            totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
+            totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+          })
+          .from(messageRequest)
+          .where(and(...conditions))
+      : await db
+          .select({
+            // total：用于分页/审计，必须包含 warmup
+            totalRows: sql<number>`count(*)::double precision`,
+            // summary：所有统计字段必须排除 warmup（不计入任何统计）
+            totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
+            totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
+            totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+          })
+          .from(messageRequest)
+          .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+          .where(and(...conditions));
 
   const total = summaryResult?.totalRows ?? 0;
   const totalRequests = summaryResult?.totalRequests ?? 0;
@@ -618,7 +639,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     (summaryResult?.totalCacheReadTokens ?? 0);
 
   // 查询分页数据（使用 LEFT JOIN 以包含被拦截的请求）
-  const offset = (page - 1) * pageSize;
+  const offset = (safePage - 1) * safePageSize;
   const results = await db
     .select({
       id: messageRequest.id,
@@ -657,8 +678,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .leftJoin(providers, eq(messageRequest.providerId, providers.id)) // 改为 leftJoin
     .where(and(...conditions))
-    .orderBy(desc(messageRequest.createdAt))
-    .limit(pageSize)
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(safePageSize)
     .offset(offset);
 
   const logs: UsageLogRow[] = results.map((row) => {
