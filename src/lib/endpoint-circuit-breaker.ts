@@ -31,7 +31,8 @@ export interface EndpointHealth {
 }
 
 const healthMap = new Map<number, EndpointHealth>();
-const loadedFromRedis = new Set<number>();
+const loadedFromRedisAt = new Map<number, number>();
+const CLOSED_CIRCUIT_REDIS_SYNC_TTL_MS = 1_000;
 
 function getOrCreateHealthSync(endpointId: number): EndpointHealth {
   let health = healthMap.get(endpointId);
@@ -50,11 +51,15 @@ function getOrCreateHealthSync(endpointId: number): EndpointHealth {
 
 async function getOrCreateHealth(endpointId: number): Promise<EndpointHealth> {
   let health = healthMap.get(endpointId);
+  const loadedAt = loadedFromRedisAt.get(endpointId);
+  const now = Date.now();
   const needsRedisCheck =
-    (!health && !loadedFromRedis.has(endpointId)) || (health && health.circuitState !== "closed");
+    loadedAt === undefined ||
+    (health && health.circuitState !== "closed") ||
+    (loadedAt !== undefined && now - loadedAt > CLOSED_CIRCUIT_REDIS_SYNC_TTL_MS);
 
   if (needsRedisCheck) {
-    loadedFromRedis.add(endpointId);
+    loadedFromRedisAt.set(endpointId, now);
 
     try {
       const redisState = await loadEndpointCircuitState(endpointId);
@@ -128,14 +133,20 @@ export async function getAllEndpointHealthStatusAsync(
 
   if (forceRefresh) {
     for (const endpointId of uniqueEndpointIds) {
-      loadedFromRedis.delete(endpointId);
+      loadedFromRedisAt.delete(endpointId);
     }
   }
 
+  const refreshNow = Date.now();
   const needsRefresh = uniqueEndpointIds.filter((endpointId) => {
-    if (!loadedFromRedis.has(endpointId)) return true;
     const memoryState = healthMap.get(endpointId);
-    return memoryState && memoryState.circuitState !== "closed";
+    if (!memoryState) return true;
+
+    const loadedAt = loadedFromRedisAt.get(endpointId);
+    if (loadedAt === undefined) return true;
+    if (refreshNow - loadedAt > CLOSED_CIRCUIT_REDIS_SYNC_TTL_MS) return true;
+
+    return memoryState.circuitState !== "closed";
   });
 
   if (needsRefresh.length > 0) {
@@ -143,7 +154,7 @@ export async function getAllEndpointHealthStatusAsync(
       const redisStates = await loadEndpointCircuitStates(needsRefresh);
 
       for (const endpointId of needsRefresh) {
-        loadedFromRedis.add(endpointId);
+        loadedFromRedisAt.set(endpointId, refreshNow);
 
         const redisState = redisStates.get(endpointId) ?? null;
         if (redisState) {
@@ -407,7 +418,7 @@ export async function initEndpointCircuitBreaker(): Promise<void> {
   }
 
   healthMap.clear();
-  loadedFromRedis.clear();
+  loadedFromRedisAt.clear();
 
   try {
     const { getRedisClient } = await import("@/lib/redis/client");

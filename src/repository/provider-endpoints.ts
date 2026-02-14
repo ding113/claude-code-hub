@@ -1741,6 +1741,7 @@ export async function backfillProviderEndpointsFromProviders(
   const deterministicSamples: BackfillProviderEndpointSample[] = [];
   const reportOnlyHistoricalSamples: BackfillProviderEndpointSample[] = [];
   const deterministicCandidates: BackfillProviderEndpointCandidate[] = [];
+  const historicalCandidates: BackfillProviderEndpointCandidate[] = [];
   let reportOnlyHistoricalCandidates = 0;
 
   for (const candidate of missingCandidates) {
@@ -1759,6 +1760,9 @@ export async function backfillProviderEndpointsFromProviders(
         },
         sampleLimit
       );
+      // 兼容升级：即使存在历史 soft-deleted 行，也需要为当前活跃 provider 确保存在 active endpoint，
+      // 否则 strict endpoint pool 策略可能在端点池为空时阻断请求。
+      historicalCandidates.push(candidate);
       continue;
     }
 
@@ -1779,7 +1783,8 @@ export async function backfillProviderEndpointsFromProviders(
   }
 
   let repaired = 0;
-  if (mode === "apply" && deterministicCandidates.length > 0) {
+  const candidatesToInsert = [...deterministicCandidates, ...historicalCandidates];
+  if (mode === "apply" && candidatesToInsert.length > 0) {
     const pending: Array<{ vendorId: number; providerType: ProviderType; url: string }> = [];
     const flush = async (): Promise<void> => {
       if (pending.length === 0) {
@@ -1799,7 +1804,7 @@ export async function backfillProviderEndpointsFromProviders(
       pending.length = 0;
     };
 
-    for (const candidate of deterministicCandidates) {
+    for (const candidate of candidatesToInsert) {
       pending.push({
         vendorId: candidate.vendorId,
         providerType: candidate.providerType,
