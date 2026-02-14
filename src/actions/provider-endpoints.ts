@@ -570,18 +570,6 @@ export async function probeProviderEndpoint(input: unknown): Promise<
       timeoutMs: parsed.data.timeoutMs,
     });
 
-    if (result.ok) {
-      try {
-        await resetEndpointCircuitState(endpoint.id);
-      } catch (error) {
-        logger.warn("probeProviderEndpoint:reset_circuit_failed", {
-          endpointId: endpoint.id,
-          vendorId: endpoint.vendorId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
     return { ok: true, data: { endpoint, result } };
   } catch (error) {
     logger.error("probeProviderEndpoint:error", error);
