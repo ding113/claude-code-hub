@@ -359,6 +359,11 @@ function ProviderFormContent({
             return;
           }
           toast.success(t("success.updated"));
+
+          void queryClient.invalidateQueries({ queryKey: ["providers"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+          void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         } else {
           // For create: key is required
           const createFormData = { ...baseFormData, key: trimmedKey };
@@ -368,6 +373,9 @@ function ProviderFormContent({
             return;
           }
 
+          void queryClient.invalidateQueries({ queryKey: ["providers"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
           void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
 
           toast.success(t("success.created"));
