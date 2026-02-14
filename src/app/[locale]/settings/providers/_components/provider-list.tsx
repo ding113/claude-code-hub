@@ -59,8 +59,9 @@ export function ProviderList({
 
   const { data: vendors = [] } = useQuery({
     queryKey: ["provider-vendors"],
-    queryFn: async () => await getProviderVendors(),
-    staleTime: 60000,
+    queryFn: getProviderVendors,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const vendorById = useMemo(() => {
