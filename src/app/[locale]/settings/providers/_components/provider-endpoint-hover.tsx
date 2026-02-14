@@ -264,14 +264,22 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
   }, [allEndpoints, providerType]);
 
   const endpointIds = useMemo(() => endpoints.map((ep) => ep.id), [endpoints]);
+  const endpointIdsKey = useMemo(() => {
+    if (endpointIds.length === 0) return "";
+    return endpointIds
+      .slice()
+      .sort((a, b) => a - b)
+      .join(",");
+  }, [endpointIds]);
 
   const { data: circuitInfo = [] } = useQuery({
-    queryKey: ["endpoint-circuit-batch", vendorId, providerType, endpointIds],
+    queryKey: ["endpoint-circuit-batch", vendorId, providerType, endpointIdsKey],
     queryFn: async () => {
+      const sortedEndpointIds = endpointIds.slice().sort((a, b) => a - b);
       const MAX_ENDPOINT_IDS_PER_BATCH = 500;
       const chunks: number[][] = [];
-      for (let index = 0; index < endpointIds.length; index += MAX_ENDPOINT_IDS_PER_BATCH) {
-        chunks.push(endpointIds.slice(index, index + MAX_ENDPOINT_IDS_PER_BATCH));
+      for (let index = 0; index < sortedEndpointIds.length; index += MAX_ENDPOINT_IDS_PER_BATCH) {
+        chunks.push(sortedEndpointIds.slice(index, index + MAX_ENDPOINT_IDS_PER_BATCH));
       }
 
       const results = await Promise.all(

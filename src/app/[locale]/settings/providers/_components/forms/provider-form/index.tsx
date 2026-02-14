@@ -97,6 +97,8 @@ function ProviderFormContent({
   const { data: vendors = [] } = useQuery<ProviderVendor[]>({
     queryKey: ["provider-vendors"],
     queryFn: getProviderVendors,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const websiteDomain = useMemo(
@@ -136,6 +138,8 @@ function ProviderFormContent({
         providerType: state.routing.providerType,
       });
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const enabledEndpointPoolEndpoints = useMemo(
