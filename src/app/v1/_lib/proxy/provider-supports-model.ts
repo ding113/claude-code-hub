@@ -13,48 +13,32 @@ export function providerSupportsModel(provider: Provider, requestedModel: string
   const isClaudeProvider =
     provider.providerType === "claude" || provider.providerType === "claude-auth";
 
-  // Case 1: Claude 模型请求
-  if (isClaudeModel) {
-    // 1a. Anthropic 提供商
-    if (isClaudeProvider) {
-      // 未设置 allowedModels 或为空数组：允许所有 claude 模型
-      if (!provider.allowedModels || provider.allowedModels.length === 0) {
-        return true;
-      }
-
-      // Fix #786：当存在 modelRedirects 映射时，映射前模型名（key）也应视为可请求模型
-      return (
-        provider.allowedModels.includes(requestedModel) ||
-        !!provider.modelRedirects?.[requestedModel]
-      );
-    }
-
-    // 1b. 非 Anthropic 提供商不支持 Claude 模型调度
-    return false;
-  }
-
-  // Case 2: 非 Claude 模型请求（gpt-*, gemini-*, 或其他任意模型）
-  // 2a. 优先检查显式声明（支持跨类型别名）
+  // 1) 显式声明优先：allowedModels / modelRedirects
+  // - 允许跨类型别名（例如 Claude provider 显式声明支持某个非 Claude 模型）
+  // - 但保持安全语义：claude-* 仍只允许由 Claude provider 处理
   const explicitlyDeclared = !!(
     provider.allowedModels?.includes(requestedModel) || provider.modelRedirects?.[requestedModel]
   );
 
-  if (explicitlyDeclared) {
-    return true; // 显式声明优先级最高，允许跨类型别名
+  if (explicitlyDeclared && (!isClaudeModel || isClaudeProvider)) {
+    return true;
   }
 
-  // 2b. Anthropic 提供商不支持非声明的非 Claude 模型
-  // 保护机制：防止将非 Claude 模型误路由到 Anthropic API
+  // 2) 隐式规则：按模型类型与 provider 类型决定
+
+  // 2a. Claude 模型请求：仅 Claude provider 可处理
+  if (isClaudeModel) {
+    if (!isClaudeProvider) return false;
+
+    // Claude provider 未设置 allowedModels：默认支持所有 claude-*
+    return !provider.allowedModels || provider.allowedModels.length === 0;
+  }
+
+  // 2b. 非 Claude 模型：Claude provider 仅支持显式声明（上面已处理）
   if (isClaudeProvider) {
     return false;
   }
 
-  // 2c. 非 Anthropic 提供商（codex, gemini, gemini-cli, openai-compatible）
-  // 未设置 allowedModels 或为空数组：接受任意模型（由上游提供商判断）
-  if (!provider.allowedModels || provider.allowedModels.length === 0) {
-    return true;
-  }
-
-  // 不在声明列表中且无重定向配置（前面已检查 explicitlyDeclared）
-  return false;
+  // 2c. 非 Claude provider：未设置 allowedModels 时接受任意非 Claude 模型（由上游判断）
+  return !provider.allowedModels || provider.allowedModels.length === 0;
 }
