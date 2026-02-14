@@ -43,18 +43,19 @@ export async function getPreferredProviderEndpoints(input: {
     input.providerType
   );
   const filtered = endpoints.filter((e) => !excludeSet.has(e.id));
+  const circuitCandidates = filtered.filter((e) => e.isEnabled && !e.deletedAt);
 
-  if (filtered.length === 0) {
+  if (circuitCandidates.length === 0) {
     return [];
   }
 
   // When endpoint circuit breaker is disabled, skip circuit check entirely
   if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
-    return rankProviderEndpoints(filtered);
+    return rankProviderEndpoints(circuitCandidates);
   }
 
-  const healthStatus = await getAllEndpointHealthStatusAsync(filtered.map((e) => e.id));
-  const candidates = filtered.filter(
+  const healthStatus = await getAllEndpointHealthStatusAsync(circuitCandidates.map((e) => e.id));
+  const candidates = circuitCandidates.filter(
     (endpoint) => healthStatus[endpoint.id]?.circuitState !== "open"
   );
 
