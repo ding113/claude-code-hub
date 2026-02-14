@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
@@ -634,6 +634,41 @@ export async function findProviderVendorsByIds(vendorIds: number[]): Promise<Pro
     .orderBy(desc(providerVendors.createdAt));
 
   return rows.map(toProviderVendor);
+}
+
+/**
+ * Dashboard/Endpoint Health 用：推导 vendor/type 筛选项（仅基于启用的 provider）。
+ *
+ * 相比 `findAllProvidersFresh` 读取全量 provider 字段，这里只取 vendorId/providerType，并做 DISTINCT 去重，
+ * 可显著减少数据传输与反序列化开销（#779/#781）。
+ */
+export async function findEnabledProviderVendorTypePairs(): Promise<
+  Array<{ vendorId: number; providerType: ProviderType }>
+> {
+  const rows = await db
+    .selectDistinct({
+      vendorId: providers.providerVendorId,
+      providerType: providers.providerType,
+    })
+    .from(providers)
+    .where(
+      and(
+        isNull(providers.deletedAt),
+        eq(providers.isEnabled, true),
+        isNotNull(providers.providerVendorId),
+        gt(providers.providerVendorId, 0)
+      )
+    )
+    .orderBy(asc(providers.providerVendorId), asc(providers.providerType));
+
+  return rows
+    .map((row) => ({
+      vendorId: row.vendorId as number,
+      providerType: row.providerType as ProviderType,
+    }))
+    .filter(
+      (row) => Number.isFinite(row.vendorId) && row.vendorId > 0 && Boolean(row.providerType)
+    );
 }
 
 export async function findProviderVendorById(vendorId: number): Promise<ProviderVendor | null> {

@@ -281,7 +281,7 @@ export async function findUsageLogsBatch(
   return { logs, nextCursor, hasMore };
 }
 
-interface UsageLogSlimFilters {
+export interface UsageLogSlimFilters {
   keyString: string;
   /** Session ID（精确匹配；空字符串/空白视为不筛选） */
   sessionId?: string;
@@ -300,7 +300,7 @@ interface UsageLogSlimFilters {
   pageSize?: number;
 }
 
-interface UsageLogSlimRow {
+export interface UsageLogSlimRow {
   id: number;
   createdAt: Date | null;
   model: string | null;
@@ -381,37 +381,38 @@ export async function findUsageLogsForKeySlim(
     );
   }
 
-  const [countResult] = await db
-    .select({ totalRows: sql<number>`count(*)::double precision` })
-    .from(messageRequest)
-    .where(and(...conditions));
-
-  const total = countResult?.totalRows ?? 0;
-
   const offset = (safePage - 1) * safePageSize;
-  const results = await db
-    .select({
-      id: messageRequest.id,
-      createdAt: messageRequest.createdAt,
-      model: messageRequest.model,
-      originalModel: messageRequest.originalModel,
-      endpoint: messageRequest.endpoint,
-      statusCode: messageRequest.statusCode,
-      inputTokens: messageRequest.inputTokens,
-      outputTokens: messageRequest.outputTokens,
-      costUsd: messageRequest.costUsd,
-      durationMs: messageRequest.durationMs,
-      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
-      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
-      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
-      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
-      cacheTtlApplied: messageRequest.cacheTtlApplied,
-    })
-    .from(messageRequest)
-    .where(and(...conditions))
-    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
-    .limit(safePageSize)
-    .offset(offset);
+  const [countResults, results] = await Promise.all([
+    db
+      .select({ totalRows: sql<number>`count(*)::double precision` })
+      .from(messageRequest)
+      .where(and(...conditions)),
+    db
+      .select({
+        id: messageRequest.id,
+        createdAt: messageRequest.createdAt,
+        model: messageRequest.model,
+        originalModel: messageRequest.originalModel,
+        endpoint: messageRequest.endpoint,
+        statusCode: messageRequest.statusCode,
+        inputTokens: messageRequest.inputTokens,
+        outputTokens: messageRequest.outputTokens,
+        costUsd: messageRequest.costUsd,
+        durationMs: messageRequest.durationMs,
+        cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+        cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+        cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+        cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+        cacheTtlApplied: messageRequest.cacheTtlApplied,
+      })
+      .from(messageRequest)
+      .where(and(...conditions))
+      .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+      .limit(safePageSize)
+      .offset(offset),
+  ]);
+
+  const total = countResults[0]?.totalRows ?? 0;
 
   const logs: UsageLogSlimRow[] = results.map((row) => ({
     ...row,
@@ -430,9 +431,9 @@ const distinctEndpointsByKeyCache = new Map<string, { data: string[]; expiresAt:
 function setDistinctKeyOptionsCache(
   cache: Map<string, { data: string[]; expiresAt: number }>,
   key: string,
-  data: string[],
-  now: number
+  data: string[]
 ): void {
+  const now = Date.now();
   if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
     for (const [k, v] of cache) {
       if (v.expiresAt <= now) {
@@ -441,7 +442,14 @@ function setDistinctKeyOptionsCache(
     }
 
     if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
-      cache.clear();
+      const evictCount = Math.max(1, Math.ceil(DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE * 0.1));
+      let remaining = evictCount;
+
+      for (const k of cache.keys()) {
+        cache.delete(k);
+        remaining -= 1;
+        if (remaining <= 0) break;
+      }
     }
   }
 
@@ -483,7 +491,7 @@ export async function getDistinctModelsForKey(keyString: string): Promise<string
     .map((row) => (row as { model?: string }).model)
     .filter((model): model is string => !!model && model.trim().length > 0);
 
-  setDistinctKeyOptionsCache(distinctModelsByKeyCache, keyString, models, now);
+  setDistinctKeyOptionsCache(distinctModelsByKeyCache, keyString, models);
   return models;
 }
 
@@ -507,7 +515,7 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
     .map((row) => (row as { endpoint?: string }).endpoint)
     .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
 
-  setDistinctKeyOptionsCache(distinctEndpointsByKeyCache, keyString, endpoints, now);
+  setDistinctKeyOptionsCache(distinctEndpointsByKeyCache, keyString, endpoints);
   return endpoints;
 }
 
@@ -592,10 +600,12 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     );
   }
 
+  const offset = (safePage - 1) * safePageSize;
+
   // 查询总数和统计数据（仅在需要 keyId 过滤时才 join keysTable，避免无效 join）
-  const [summaryResult] =
+  const summaryQuery =
     keyId === undefined
-      ? await db
+      ? db
           .select({
             // total：用于分页/审计，必须包含 warmup
             totalRows: sql<number>`count(*)::double precision`,
@@ -611,7 +621,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
           })
           .from(messageRequest)
           .where(and(...conditions))
-      : await db
+      : db
           .select({
             // total：用于分页/审计，必须包含 warmup
             totalRows: sql<number>`count(*)::double precision`,
@@ -629,18 +639,8 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
           .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
           .where(and(...conditions));
 
-  const total = summaryResult?.totalRows ?? 0;
-  const totalRequests = summaryResult?.totalRequests ?? 0;
-  const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
-  const totalTokens =
-    (summaryResult?.totalInputTokens ?? 0) +
-    (summaryResult?.totalOutputTokens ?? 0) +
-    (summaryResult?.totalCacheCreationTokens ?? 0) +
-    (summaryResult?.totalCacheReadTokens ?? 0);
-
   // 查询分页数据（使用 LEFT JOIN 以包含被拦截的请求）
-  const offset = (safePage - 1) * safePageSize;
-  const results = await db
+  const logsQuery = db
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
@@ -681,6 +681,18 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
     .limit(safePageSize)
     .offset(offset);
+
+  const [summaryRows, results] = await Promise.all([summaryQuery, logsQuery]);
+  const summaryResult = summaryRows[0];
+
+  const total = summaryResult?.totalRows ?? 0;
+  const totalRequests = summaryResult?.totalRequests ?? 0;
+  const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
+  const totalTokens =
+    (summaryResult?.totalInputTokens ?? 0) +
+    (summaryResult?.totalOutputTokens ?? 0) +
+    (summaryResult?.totalCacheCreationTokens ?? 0) +
+    (summaryResult?.totalCacheReadTokens ?? 0);
 
   const logs: UsageLogRow[] = results.map((row) => {
     const totalRowTokens =
