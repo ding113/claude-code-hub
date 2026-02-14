@@ -428,6 +428,8 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
 export interface MyUsageLogsFilters {
   startDate?: string;
   endDate?: string;
+  /** Session ID（精确匹配；空字符串/空白视为不筛选） */
+  sessionId?: string;
   model?: string;
   statusCode?: number;
   excludeStatusCode200?: boolean;
@@ -458,6 +460,7 @@ export async function getMyUsageLogs(
     );
     const result = await findUsageLogsForKeySlim({
       keyString: session.key.key,
+      sessionId: filters.sessionId,
       startTime,
       endTime,
       model: filters.model,

@@ -338,7 +338,11 @@ export async function findUsageLogsForKeySlim(
   const safePage = page > 0 ? page : 1;
   const safePageSize = Math.min(100, Math.max(1, pageSize));
 
-  const conditions = [isNull(messageRequest.deletedAt), eq(messageRequest.key, keyString)];
+  const conditions = [
+    isNull(messageRequest.deletedAt),
+    eq(messageRequest.key, keyString),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
 
   const trimmedSessionId = sessionId?.trim();
   if (trimmedSessionId) {

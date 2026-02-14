@@ -69,7 +69,9 @@ export async function findProviderEndpointProbeLogsBatch(input: {
   endpointIds: number[];
   limitPerEndpoint: number;
 }): Promise<Map<number, ProviderEndpointProbeLog[]>> {
-  const endpointIds = Array.from(new Set(input.endpointIds));
+  const endpointIds = Array.from(new Set(input.endpointIds)).filter((id) =>
+    Number.isSafeInteger(id)
+  );
   if (endpointIds.length === 0) {
     return new Map();
   }
