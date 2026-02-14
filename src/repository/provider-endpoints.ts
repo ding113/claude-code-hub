@@ -311,7 +311,7 @@ function toProviderEndpointProbeLog(row: any): ProviderEndpointProbeLog {
 
 export type ProviderEndpointProbeTarget = Pick<
   ProviderEndpoint,
-  "id" | "url" | "vendorId" | "lastProbedAt" | "lastProbeOk" | "lastProbeErrorType"
+  "id" | "url" | "vendorId" | "providerType" | "lastProbedAt" | "lastProbeOk" | "lastProbeErrorType"
 >;
 
 export async function findEnabledProviderEndpointsForProbing(): Promise<
@@ -322,6 +322,7 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
       id: providerEndpoints.id,
       url: providerEndpoints.url,
       vendorId: providerEndpoints.vendorId,
+      providerType: providerEndpoints.providerType,
       lastProbedAt: providerEndpoints.lastProbedAt,
       lastProbeOk: providerEndpoints.lastProbeOk,
       lastProbeErrorType: providerEndpoints.lastProbeErrorType,
@@ -347,6 +348,7 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
     id: row.id,
     url: row.url,
     vendorId: row.vendorId,
+    providerType: row.providerType,
     lastProbedAt: toNullableDate(row.lastProbedAt),
     lastProbeOk: row.lastProbeOk ?? null,
     lastProbeErrorType: row.lastProbeErrorType ?? null,

@@ -73,7 +73,7 @@ export function buildRedisOptionsForUrl(redisUrl: string) {
   return { isTLS, options: { ...baseOptions, ...tlsOptions } };
 }
 
-export function getRedisClient(): Redis | null {
+export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean }): Redis | null {
   // Skip Redis connection during CI/build phase (avoid connection attempts)
   if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
     return null;
@@ -82,8 +82,9 @@ export function getRedisClient(): Redis | null {
   const redisUrl = process.env.REDIS_URL;
   const rateLimitRaw = process.env.ENABLE_RATE_LIMIT?.trim();
   const isEnabled = rateLimitRaw !== "false" && rateLimitRaw !== "0";
+  const allowWhenRateLimitDisabled = input?.allowWhenRateLimitDisabled === true;
 
-  if (!isEnabled || !redisUrl) {
+  if ((!isEnabled && !allowWhenRateLimitDisabled) || !redisUrl) {
     logger.warn("[Redis] Rate limiting disabled or REDIS_URL not configured");
     return null;
   }

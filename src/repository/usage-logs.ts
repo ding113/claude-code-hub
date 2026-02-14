@@ -382,39 +382,41 @@ export async function findUsageLogsForKeySlim(
   }
 
   const offset = (safePage - 1) * safePageSize;
-  const [countResults, results] = await Promise.all([
-    db
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      endpoint: messageRequest.endpoint,
+      statusCode: messageRequest.statusCode,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      costUsd: messageRequest.costUsd,
+      durationMs: messageRequest.durationMs,
+      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+      totalRows: sql<number>`count(*) OVER()::double precision`,
+    })
+    .from(messageRequest)
+    .where(and(...conditions))
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(safePageSize)
+    .offset(offset);
+
+  let total = results[0]?.totalRows ?? 0;
+  if (results.length === 0 && offset > 0) {
+    const countResults = await db
       .select({ totalRows: sql<number>`count(*)::double precision` })
       .from(messageRequest)
-      .where(and(...conditions)),
-    db
-      .select({
-        id: messageRequest.id,
-        createdAt: messageRequest.createdAt,
-        model: messageRequest.model,
-        originalModel: messageRequest.originalModel,
-        endpoint: messageRequest.endpoint,
-        statusCode: messageRequest.statusCode,
-        inputTokens: messageRequest.inputTokens,
-        outputTokens: messageRequest.outputTokens,
-        costUsd: messageRequest.costUsd,
-        durationMs: messageRequest.durationMs,
-        cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
-        cacheReadInputTokens: messageRequest.cacheReadInputTokens,
-        cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
-        cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
-        cacheTtlApplied: messageRequest.cacheTtlApplied,
-      })
-      .from(messageRequest)
-      .where(and(...conditions))
-      .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
-      .limit(safePageSize)
-      .offset(offset),
-  ]);
+      .where(and(...conditions));
+    total = countResults[0]?.totalRows ?? 0;
+  }
 
-  const total = countResults[0]?.totalRows ?? 0;
-
-  const logs: UsageLogSlimRow[] = results.map((row) => ({
+  const logs: UsageLogSlimRow[] = results.map(({ totalRows: _totalRows, ...row }) => ({
     ...row,
     costUsd: row.costUsd?.toString() ?? null,
   }));

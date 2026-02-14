@@ -65,12 +65,13 @@ function shuffleInPlace<T>(arr: T[]): void {
 }
 
 /**
- * Count enabled endpoints per vendor
+ * Count enabled endpoints per vendor/type
  */
-function countEndpointsByVendor(endpoints: ProviderEndpointProbeTarget[]): Map<number, number> {
-  const counts = new Map<number, number>();
+function countEndpointsByVendorType(endpoints: ProviderEndpointProbeTarget[]): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const ep of endpoints) {
-    counts.set(ep.vendorId, (counts.get(ep.vendorId) ?? 0) + 1);
+    const key = `${ep.vendorId}:${ep.providerType}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
 }
@@ -85,7 +86,7 @@ function countEndpointsByVendor(endpoints: ProviderEndpointProbeTarget[]): Map<n
  */
 function getEffectiveIntervalMs(
   endpoint: ProviderEndpointProbeTarget,
-  vendorEndpointCounts: Map<number, number>
+  vendorEndpointCounts: Map<string, number>
 ): number {
   // Timeout override takes highest priority
   const hasTimeoutError =
@@ -95,7 +96,8 @@ function getEffectiveIntervalMs(
   }
 
   // Single-vendor interval
-  const vendorCount = vendorEndpointCounts.get(endpoint.vendorId) ?? 0;
+  const vendorCount =
+    vendorEndpointCounts.get(`${endpoint.vendorId}:${endpoint.providerType}`) ?? 0;
   if (vendorCount === 1) {
     return SINGLE_VENDOR_INTERVAL_MS;
   }
@@ -109,7 +111,7 @@ function getEffectiveIntervalMs(
  */
 function filterDueEndpoints(
   endpoints: ProviderEndpointProbeTarget[],
-  vendorEndpointCounts: Map<number, number>,
+  vendorEndpointCounts: Map<string, number>,
   now: Date
 ): ProviderEndpointProbeTarget[] {
   const nowMs = now.getTime();
@@ -232,7 +234,7 @@ async function runProbeCycle(): Promise<void> {
     }
 
     // Calculate vendor endpoint counts for interval decisions
-    const vendorEndpointCounts = countEndpointsByVendor(allEndpoints);
+    const vendorEndpointCounts = countEndpointsByVendorType(allEndpoints);
 
     // Filter to only endpoints that are due for probing
     const now = new Date();
