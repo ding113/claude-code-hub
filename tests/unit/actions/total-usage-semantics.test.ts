@@ -227,6 +227,8 @@ describe("total-usage-semantics", () => {
 
   describe("source code verification", () => {
     it("should verify sumUserCost passes ALL_TIME_MAX_AGE_DAYS when period is total", async () => {
+      // This test verifies the implementation by reading the source code pattern
+      // Ensure we call sumUserTotalCost(..., ALL_TIME_MAX_AGE_DAYS) for all-time usage.
       const fs = await import("node:fs/promises");
       const path = await import("node:path");
 
@@ -236,8 +238,8 @@ describe("total-usage-semantics", () => {
       // Verify the constant is defined as Infinity
       expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
 
-      // Verify sumUserTotalCost is called with the constant when period is total
-      expect(content).toContain("sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS)");
+      // Verify sumUserTotalCost is called with the constant for all-time usage
+      expect(content).toMatch(/sumUserTotalCost\([^)]*ALL_TIME_MAX_AGE_DAYS\)/);
 
       // Verify sumKeyTotalCostById is called with the constant
       expect(content).toContain("sumKeyTotalCostById(key.id, ALL_TIME_MAX_AGE_DAYS)");

@@ -281,6 +281,169 @@ export async function findUsageLogsBatch(
   return { logs, nextCursor, hasMore };
 }
 
+interface UsageLogSlimFilters {
+  keyString: string;
+  /** Session ID（精确匹配；空字符串/空白视为不筛选） */
+  sessionId?: string;
+  /** 开始时间戳（毫秒），用于 >= 比较 */
+  startTime?: number;
+  /** 结束时间戳（毫秒），用于 < 比较 */
+  endTime?: number;
+  statusCode?: number;
+  /** 排除 200 状态码（筛选所有非 200 的请求，包括 NULL） */
+  excludeStatusCode200?: boolean;
+  model?: string;
+  endpoint?: string;
+  /** 最低重试次数（provider_chain 长度 - 1） */
+  minRetryCount?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+interface UsageLogSlimRow {
+  id: number;
+  createdAt: Date | null;
+  model: string | null;
+  originalModel: string | null;
+  endpoint: string | null;
+  statusCode: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: string | null;
+  durationMs: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
+}
+
+export async function findUsageLogsForKeySlim(
+  filters: UsageLogSlimFilters
+): Promise<{ logs: UsageLogSlimRow[]; total: number }> {
+  const {
+    keyString,
+    sessionId,
+    startTime,
+    endTime,
+    statusCode,
+    excludeStatusCode200,
+    model,
+    endpoint,
+    minRetryCount,
+    page = 1,
+    pageSize = 50,
+  } = filters;
+
+  const safePage = page > 0 ? page : 1;
+  const safePageSize = Math.min(100, Math.max(1, pageSize));
+
+  const conditions = [isNull(messageRequest.deletedAt), eq(messageRequest.key, keyString)];
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
+  }
+
+  if (startTime !== undefined) {
+    const startDate = new Date(startTime);
+    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+  }
+
+  if (endTime !== undefined) {
+    const endDate = new Date(endTime);
+    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+  }
+
+  if (statusCode !== undefined) {
+    conditions.push(eq(messageRequest.statusCode, statusCode));
+  } else if (excludeStatusCode200) {
+    conditions.push(
+      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
+    );
+  }
+
+  if (model) {
+    conditions.push(eq(messageRequest.model, model));
+  }
+
+  if (endpoint) {
+    conditions.push(eq(messageRequest.endpoint, endpoint));
+  }
+
+  if (minRetryCount !== undefined) {
+    conditions.push(
+      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
+    );
+  }
+
+  const [countResult] = await db
+    .select({ totalRows: sql<number>`count(*)::double precision` })
+    .from(messageRequest)
+    .where(and(...conditions));
+
+  const total = countResult?.totalRows ?? 0;
+
+  const offset = (safePage - 1) * safePageSize;
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      endpoint: messageRequest.endpoint,
+      statusCode: messageRequest.statusCode,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      costUsd: messageRequest.costUsd,
+      durationMs: messageRequest.durationMs,
+      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+    })
+    .from(messageRequest)
+    .where(and(...conditions))
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(safePageSize)
+    .offset(offset);
+
+  const logs: UsageLogSlimRow[] = results.map((row) => ({
+    ...row,
+    costUsd: row.costUsd?.toString() ?? null,
+  }));
+
+  return { logs, total };
+}
+
+const DISTINCT_KEY_OPTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+const DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE = 200;
+
+const distinctModelsByKeyCache = new Map<string, { data: string[]; expiresAt: number }>();
+const distinctEndpointsByKeyCache = new Map<string, { data: string[]; expiresAt: number }>();
+
+function setDistinctKeyOptionsCache(
+  cache: Map<string, { data: string[]; expiresAt: number }>,
+  key: string,
+  data: string[],
+  now: number
+): void {
+  if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
+    for (const [k, v] of cache) {
+      if (v.expiresAt <= now) {
+        cache.delete(k);
+      }
+    }
+
+    if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
+      cache.clear();
+    }
+  }
+
+  cache.set(key, { data, expiresAt: now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS });
+}
+
 export async function getTotalUsageForKey(keyString: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
@@ -297,6 +460,12 @@ export async function getTotalUsageForKey(keyString: string): Promise<number> {
 }
 
 export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
+  const now = Date.now();
+  const cached = distinctModelsByKeyCache.get(keyString);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   const result = await db.execute(
     sql`select distinct ${messageRequest.model} as model
         from ${messageRequest}
@@ -306,12 +475,21 @@ export async function getDistinctModelsForKey(keyString: string): Promise<string
         order by model asc`
   );
 
-  return Array.from(result)
+  const models = Array.from(result)
     .map((row) => (row as { model?: string }).model)
     .filter((model): model is string => !!model && model.trim().length > 0);
+
+  setDistinctKeyOptionsCache(distinctModelsByKeyCache, keyString, models, now);
+  return models;
 }
 
 export async function getDistinctEndpointsForKey(keyString: string): Promise<string[]> {
+  const now = Date.now();
+  const cached = distinctEndpointsByKeyCache.get(keyString);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
   const result = await db.execute(
     sql`select distinct ${messageRequest.endpoint} as endpoint
         from ${messageRequest}
@@ -321,9 +499,12 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
         order by endpoint asc`
   );
 
-  return Array.from(result)
+  const endpoints = Array.from(result)
     .map((row) => (row as { endpoint?: string }).endpoint)
     .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
+
+  setDistinctKeyOptionsCache(distinctEndpointsByKeyCache, keyString, endpoints, now);
+  return endpoints;
 }
 
 /**
