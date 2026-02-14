@@ -53,6 +53,8 @@
     "enableThinkingSignatureRectifierDesc": "Anthropic プロバイダーで thinking 署名の不整合や不正なリクエストエラーが発生した場合、thinking 関連ブロックを削除して同一プロバイダーへ1回だけ再試行します（既定で有効）。",
     "enableThinkingBudgetRectifier": "thinking 予算整流を有効化",
     "enableThinkingBudgetRectifierDesc": "Anthropic プロバイダーで budget_tokens < 1024 エラーが発生した場合、thinking 予算を最大値（32000）に設定し、必要に応じて max_tokens を 64000 に設定して1回だけ再試行します（既定で有効）。",
+    "enableBillingHeaderRectifier": "課金ヘッダー整流を有効化",
+    "enableBillingHeaderRectifierDesc": "Claude Code クライアントが system プロンプトに注入する x-anthropic-billing-header テキストブロックを事前に削除し、Amazon Bedrock などの非ネイティブ Anthropic 上流による 400 エラーを防止します（既定で有効）。",
     "enableCodexSessionIdCompletion": "Codex セッションID補完を有効化",
     "enableCodexSessionIdCompletionDesc": "Codex リクエストで session_id（ヘッダー）または prompt_cache_key（ボディ）のどちらか一方しか提供されない場合に、欠けている方を自動補完します。両方ない場合は UUID v7 のセッションIDを生成し、同一対話内で安定して再利用します。",
     "enableClaudeMetadataUserIdInjection": "Claude metadata.user_id 注入を有効化",

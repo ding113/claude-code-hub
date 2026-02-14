@@ -470,6 +470,13 @@
       "when": 1770728835628,
       "tag": "0066_hot_mauler",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1771045274665,
+      "tag": "0067_gorgeous_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

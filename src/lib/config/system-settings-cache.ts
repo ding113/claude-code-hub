@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS: Pick<
   | "interceptAnthropicWarmupRequests"
   | "enableThinkingSignatureRectifier"
   | "enableThinkingBudgetRectifier"
+  | "enableBillingHeaderRectifier"
   | "enableCodexSessionIdCompletion"
   | "enableClaudeMetadataUserIdInjection"
   | "enableResponseFixer"
@@ -39,6 +40,7 @@ const DEFAULT_SETTINGS: Pick<
   interceptAnthropicWarmupRequests: false,
   enableThinkingSignatureRectifier: true,
   enableThinkingBudgetRectifier: true,
+  enableBillingHeaderRectifier: true,
   enableCodexSessionIdCompletion: true,
   enableClaudeMetadataUserIdInjection: true,
   enableResponseFixer: true,
@@ -111,6 +113,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
+      enableBillingHeaderRectifier: DEFAULT_SETTINGS.enableBillingHeaderRectifier,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: DEFAULT_SETTINGS.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
