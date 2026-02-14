@@ -64,6 +64,20 @@ Register via this link to get started → <a href="https://co.yes.vg/register?re
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://www.sssaicode.com/register?ref=NQMO05">
+<img src="public/readme/sssaicode.jpg" alt="SSSAiCode Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://www.sssaicode.com/register?ref=NQMO05">SSSAiCode</a> is a stable and reliable API relay service, dedicated to providing stable, reliable, and affordable Claude and CodeX model services.<br/>
+SSSAiCode offers a special bonus for users of this software. Register via this link to enjoy a $10 purchase bonus every time → <a href="https://www.sssaicode.com/register?ref=NQMO05">Visit Now</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.

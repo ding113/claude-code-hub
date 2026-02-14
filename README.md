@@ -64,6 +64,20 @@ PackyCode 为本软件的用户提供了特别优惠，使用此链接注册并�
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://www.sssaicode.com/register?ref=NQMO05">
+<img src="public/readme/sssaicode.jpg" alt="SSSAiCode Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 特别优惠</b>：<a href="https://www.sssaicode.com/register?ref=NQMO05">SSSAiCode</a> 是一家稳定可靠的 API 中转站，致力于提供稳定、可靠、平价的 Claude、CodeX 模型服务。<br/>
+SSSAiCode 为本软件的用户提供特别优惠，使用此链接注册可长期享受每次 10$ 的购买奖励 → <a href="https://www.sssaicode.com/register?ref=NQMO05">立即访问</a>
+</td>
+</tr>
+</table>
+
 ## ✨ 核心功能 Highlights
 
 - 🤖 **智能负载均衡**：权重 + 优先级 + 分组调度，内置熔断保护与最多 3 次故障转移，保障请求稳定。
