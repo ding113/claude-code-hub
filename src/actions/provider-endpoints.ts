@@ -33,7 +33,7 @@ import {
   updateProviderEndpoint,
   updateProviderVendor,
 } from "@/repository";
-import { findAllProvidersFresh } from "@/repository/provider";
+import { findEnabledProviderVendorTypePairs } from "@/repository/provider-endpoints";
 import {
   findProviderEndpointProbeLogsBatch,
   findVendorTypeEndpointStatsBatch,
@@ -242,22 +242,11 @@ export async function getDashboardProviderVendors(): Promise<DashboardProviderVe
       ProviderTypeSchema.options.map((value, index) => [value, index])
     );
 
-    const providers = await findAllProvidersFresh();
     const typesByVendorId = new Map<number, Set<ProviderType>>();
-    for (const provider of providers) {
-      // Dashboard/Endpoint Health 侧尽量与 probe/backfill 语义对齐：只基于“启用”的 provider 推导 vendor/type。
-      // 否则 disabled provider 的历史类型会导致旧类型/旧端点仍然出现在筛选项中。
-      if (!provider.isEnabled) {
-        continue;
-      }
-
-      const vendorId = provider.providerVendorId;
-      if (!vendorId || vendorId <= 0) {
-        continue;
-      }
-
+    const enabledVendorTypePairs = await findEnabledProviderVendorTypePairs();
+    for (const { vendorId, providerType } of enabledVendorTypePairs) {
       const existing = typesByVendorId.get(vendorId) ?? new Set<ProviderType>();
-      existing.add(provider.providerType);
+      existing.add(providerType);
       typesByVendorId.set(vendorId, existing);
     }
 
