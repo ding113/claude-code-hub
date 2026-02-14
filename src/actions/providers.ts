@@ -50,7 +50,7 @@ import {
 import {
   backfillProviderEndpointsFromProviders,
   computeVendorKey,
-  findProviderVendorById,
+  findProviderVendorsByIds,
   getOrCreateProviderVendorIdFromUrls,
   tryDeleteProviderVendorIfEmpty,
 } from "@/repository/provider-endpoints";
@@ -3663,10 +3663,8 @@ export async function reclusterProviderVendors(args: {
           .filter((id): id is number => id !== null && id !== undefined && id > 0)
       ),
     ];
-    const vendors = await Promise.all(uniqueVendorIds.map((id) => findProviderVendorById(id)));
-    const vendorMap = new Map(
-      vendors.filter((v): v is NonNullable<typeof v> => v !== null).map((v) => [v.id, v])
-    );
+    const vendors = await findProviderVendorsByIds(uniqueVendorIds);
+    const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
 
     // Build provider map for quick lookup in transaction
     const providerMap = new Map(allProviders.map((p) => [p.id, p]));

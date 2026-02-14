@@ -399,16 +399,25 @@ export async function findUsageLogsForKeySlim(
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
       cacheTtlApplied: messageRequest.cacheTtlApplied,
-      totalRows: sql<number>`count(*) OVER()::double precision`,
     })
     .from(messageRequest)
     .where(and(...conditions))
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
-    .limit(safePageSize)
+    .limit(safePageSize + 1)
     .offset(offset);
 
-  let total = results[0]?.totalRows ?? 0;
-  if (results.length === 0 && offset > 0) {
+  const hasMore = results.length > safePageSize;
+  const pageRows = hasMore ? results.slice(0, safePageSize) : results;
+
+  let total = offset + pageRows.length;
+
+  if (pageRows.length === 0 && offset > 0) {
+    const countResults = await db
+      .select({ totalRows: sql<number>`count(*)::double precision` })
+      .from(messageRequest)
+      .where(and(...conditions));
+    total = countResults[0]?.totalRows ?? 0;
+  } else if (hasMore) {
     const countResults = await db
       .select({ totalRows: sql<number>`count(*)::double precision` })
       .from(messageRequest)
@@ -416,7 +425,7 @@ export async function findUsageLogsForKeySlim(
     total = countResults[0]?.totalRows ?? 0;
   }
 
-  const logs: UsageLogSlimRow[] = results.map(({ totalRows: _totalRows, ...row }) => ({
+  const logs: UsageLogSlimRow[] = pageRows.map((row) => ({
     ...row,
     costUsd: row.costUsd?.toString() ?? null,
   }));
@@ -485,6 +494,7 @@ export async function getDistinctModelsForKey(keyString: string): Promise<string
         from ${messageRequest}
         where ${messageRequest.key} = ${keyString}
           and ${messageRequest.deletedAt} is null
+          and (${EXCLUDE_WARMUP_CONDITION})
           and ${messageRequest.model} is not null
         order by model asc`
   );
@@ -509,6 +519,7 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
         from ${messageRequest}
         where ${messageRequest.key} = ${keyString}
           and ${messageRequest.deletedAt} is null
+          and (${EXCLUDE_WARMUP_CONDITION})
           and ${messageRequest.endpoint} is not null
         order by endpoint asc`
   );

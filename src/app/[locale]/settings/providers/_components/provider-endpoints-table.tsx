@@ -313,18 +313,19 @@ function EndpointRow({
       return res;
     },
     onMutate: () => {
-      // Optimistic update: immediately set circuit state to closed
+      // 乐观更新：仅更新包含该 endpointId 的 circuit-info 查询，避免污染其它 cache；
+      // 同时避免在成功后做过宽 invalidation 引发“刷新放大/请求风暴”（#779/#781 相关）。
       queryClient.setQueriesData<Record<number, EndpointCircuitState>>(
         { queryKey: ["endpoint-circuit-info"] },
         (old) => {
           if (!old) return old;
+          if (!Object.hasOwn(old, endpoint.id)) return old;
+          if (old[endpoint.id] === "closed") return old;
           return { ...old, [endpoint.id]: "closed" as EndpointCircuitState };
         }
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["endpoint-circuit-info"] });
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
       toast.success(tStatus("resetCircuitSuccess"));
     },
     onError: () => {

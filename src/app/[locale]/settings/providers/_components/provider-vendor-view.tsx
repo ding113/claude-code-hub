@@ -56,6 +56,10 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
     refetchOnWindowFocus: false,
   });
 
+  const vendorById = useMemo(() => {
+    return new Map(vendors.map((vendor) => [vendor.id, vendor]));
+  }, [vendors]);
+
   const providersByVendor = useMemo(() => {
     const grouped: Record<number, ProviderDisplay[]> = {};
     const orphaned: ProviderDisplay[] = [];
@@ -96,7 +100,7 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
   return (
     <div className="space-y-8">
       {allVendorIds.map((vendorId) => {
-        const vendor = vendors.find((v) => v.id === vendorId);
+        const vendor = vendorId > 0 ? vendorById.get(vendorId) : undefined;
         const vendorProviders = providersByVendor[vendorId] || [];
 
         if (vendorProviders.length === 0) return null;
