@@ -80,14 +80,14 @@ export async function getEndpointFilterStats(input: {
 }): Promise<EndpointFilterStats> {
   const endpoints = await findProviderEndpointsByVendorAndType(input.vendorId, input.providerType);
   const total = endpoints.length;
-  const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt).length;
+  const enabledEndpoints = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
+  const enabled = enabledEndpoints.length;
 
   // When endpoint circuit breaker is disabled, no endpoints can be circuit-open
   if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
     return { total, enabled, circuitOpen: 0, available: enabled };
   }
 
-  const enabledEndpoints = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
   if (enabledEndpoints.length === 0) {
     return { total, enabled: 0, circuitOpen: 0, available: 0 };
   }

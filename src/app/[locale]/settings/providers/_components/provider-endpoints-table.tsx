@@ -133,8 +133,12 @@ export function ProviderEndpointsTable({
 
   // Fetch circuit breaker states for all endpoints in batch
   const endpointIds = useMemo(() => endpoints.map((ep) => ep.id), [endpoints]);
+  const endpointIdsQueryKey = useMemo(
+    () => endpointIds.slice().sort((a, b) => a - b).join(","),
+    [endpointIds]
+  );
   const { data: circuitInfoMap = {} } = useQuery({
-    queryKey: ["endpoint-circuit-info", endpointIds.toSorted((a, b) => a - b).join(",")],
+    queryKey: ["endpoint-circuit-info", endpointIdsQueryKey],
     queryFn: async () => {
       if (endpointIds.length === 0) return {};
       const map: Record<number, EndpointCircuitState> = {};

@@ -1045,19 +1045,22 @@ export async function sumUserQuotaCosts(
   ranges: QuotaCostRanges,
   maxAgeDays: number = 365
 ): Promise<QuotaCostSummary> {
-  const validMaxAgeDays =
-    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
-  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
+  const cutoffDate =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
 
-  const scanStart = new Date(
-    Math.min(
-      ranges.range5h.startTime.getTime(),
-      ranges.rangeDaily.startTime.getTime(),
-      ranges.rangeWeekly.startTime.getTime(),
-      ranges.rangeMonthly.startTime.getTime(),
-      cutoffDate.getTime()
-    )
-  );
+  const scanStart = cutoffDate
+    ? new Date(
+        Math.min(
+          ranges.range5h.startTime.getTime(),
+          ranges.rangeDaily.startTime.getTime(),
+          ranges.rangeWeekly.startTime.getTime(),
+          ranges.rangeMonthly.startTime.getTime(),
+          cutoffDate.getTime()
+        )
+      )
+    : null;
   const scanEnd = new Date(
     Math.max(
       ranges.range5h.endTime.getTime(),
@@ -1068,13 +1071,17 @@ export async function sumUserQuotaCosts(
     )
   );
 
+  const costTotal = cutoffDate
+    ? sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`
+    : sql<string>`COALESCE(SUM(${messageRequest.costUsd}), 0)`;
+
   const [row] = await db
     .select({
       cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
       costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
       costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
       costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
-      costTotal: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`,
+      costTotal,
     })
     .from(messageRequest)
     .where(
@@ -1082,7 +1089,7 @@ export async function sumUserQuotaCosts(
         eq(messageRequest.userId, userId),
         isNull(messageRequest.deletedAt),
         EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, scanStart),
+        ...(scanStart ? [gte(messageRequest.createdAt, scanStart)] : []),
         lt(messageRequest.createdAt, scanEnd)
       )
     );
@@ -1109,19 +1116,22 @@ export async function sumKeyQuotaCostsById(
     return { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0, costTotal: 0 };
   }
 
-  const validMaxAgeDays =
-    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
-  const cutoffDate = new Date(Date.now() - validMaxAgeDays * 24 * 60 * 60 * 1000);
+  const cutoffDate =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
 
-  const scanStart = new Date(
-    Math.min(
-      ranges.range5h.startTime.getTime(),
-      ranges.rangeDaily.startTime.getTime(),
-      ranges.rangeWeekly.startTime.getTime(),
-      ranges.rangeMonthly.startTime.getTime(),
-      cutoffDate.getTime()
-    )
-  );
+  const scanStart = cutoffDate
+    ? new Date(
+        Math.min(
+          ranges.range5h.startTime.getTime(),
+          ranges.rangeDaily.startTime.getTime(),
+          ranges.rangeWeekly.startTime.getTime(),
+          ranges.rangeMonthly.startTime.getTime(),
+          cutoffDate.getTime()
+        )
+      )
+    : null;
   const scanEnd = new Date(
     Math.max(
       ranges.range5h.endTime.getTime(),
@@ -1132,13 +1142,17 @@ export async function sumKeyQuotaCostsById(
     )
   );
 
+  const costTotal = cutoffDate
+    ? sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`
+    : sql<string>`COALESCE(SUM(${messageRequest.costUsd}), 0)`;
+
   const [row] = await db
     .select({
       cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
       costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
       costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
       costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
-      costTotal: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`,
+      costTotal,
     })
     .from(messageRequest)
     .where(
@@ -1146,7 +1160,7 @@ export async function sumKeyQuotaCostsById(
         eq(messageRequest.key, keyString),
         isNull(messageRequest.deletedAt),
         EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, scanStart),
+        ...(scanStart ? [gte(messageRequest.createdAt, scanStart)] : []),
         lt(messageRequest.createdAt, scanEnd)
       )
     );
