@@ -630,6 +630,9 @@ export async function getMyStatsSummary(
           outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
           cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
           cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+          // 仅用于保持与 keyBreakdown 一致（便于后续扩展）；当前 UI/接口不展示这两个细分字段
+          cacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
+          cacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
         })
         .from(messageRequest)
         .where(

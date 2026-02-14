@@ -864,20 +864,16 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
   );
 
   const deletedCount = await db.transaction(async (tx) => {
-    const candidates = await tx
-      .select({
-        providerVendorId: providers.providerVendorId,
-        providerType: providers.providerType,
-        url: providers.url,
-      })
-      .from(providers)
-      .where(sql`id IN (${idList}) AND deleted_at IS NULL`);
-
     const result = await tx
       .update(providers)
       .set({ deletedAt: now, updatedAt: now })
       .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
-      .returning({ id: providers.id });
+      .returning({
+        id: providers.id,
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      });
 
     if (result.length === 0) {
       return 0;
@@ -888,7 +884,7 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
       { vendorId: number; providerType: Provider["providerType"]; url: string }
     >();
 
-    for (const candidate of candidates) {
+    for (const candidate of result) {
       if (candidate.providerVendorId == null || !candidate.url) {
         continue;
       }
@@ -911,48 +907,9 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
     }
 
     const chunkSize = 200;
-    const activeEndpointKeys = new Set<string>();
 
     for (let i = 0; i < endpoints.length; i += chunkSize) {
       const chunk = endpoints.slice(i, i + chunkSize);
-      const tupleList = sql.join(
-        chunk.map(
-          (endpoint) => sql`(${endpoint.vendorId}, ${endpoint.providerType}, ${endpoint.url})`
-        ),
-        sql`, `
-      );
-
-      const activeReferences = await tx
-        .select({
-          vendorId: providers.providerVendorId,
-          providerType: providers.providerType,
-          url: providers.url,
-        })
-        .from(providers)
-        .where(
-          and(
-            eq(providers.isEnabled, true),
-            isNull(providers.deletedAt),
-            sql`(${providers.providerVendorId}, ${providers.providerType}, ${providers.url}) IN (${tupleList})`
-          )
-        );
-
-      for (const row of activeReferences) {
-        if (row.vendorId == null || !row.url) {
-          continue;
-        }
-
-        activeEndpointKeys.add(`${row.vendorId}::${row.providerType}::${row.url}`);
-      }
-    }
-
-    const orphanEndpoints = endpoints.filter(
-      (endpoint) =>
-        !activeEndpointKeys.has(`${endpoint.vendorId}::${endpoint.providerType}::${endpoint.url}`)
-    );
-
-    for (let i = 0; i < orphanEndpoints.length; i += chunkSize) {
-      const chunk = orphanEndpoints.slice(i, i + chunkSize);
       const tupleList = sql.join(
         chunk.map(
           (endpoint) => sql`(${endpoint.vendorId}, ${endpoint.providerType}, ${endpoint.url})`
@@ -970,7 +927,16 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
         .where(
           and(
             isNull(providerEndpoints.deletedAt),
-            sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}, ${providerEndpoints.url}) IN (${tupleList})`
+            sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}, ${providerEndpoints.url}) IN (${tupleList})`,
+            sql`NOT EXISTS (
+              SELECT 1
+              FROM providers p
+              WHERE p.is_enabled = true
+                AND p.deleted_at IS NULL
+                AND p.provider_vendor_id = ${providerEndpoints.vendorId}
+                AND p.provider_type = ${providerEndpoints.providerType}
+                AND p.url = ${providerEndpoints.url}
+            )`
           )
         );
     }
@@ -1087,117 +1053,101 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       return await providerStatisticsInFlight.promise;
     }
 
-    const deferred = (() => {
-      let resolve!: (value: ProviderStatisticsRow[]) => void;
-      let reject!: (reason: unknown) => void;
+    const promise = Promise.resolve().then(async () => {
+      // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
+      // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
+      const query = sql`
+        WITH bounds AS (
+          SELECT
+            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
+            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) + INTERVAL '1 day' AS tomorrow_start,
+            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) - INTERVAL '7 days' AS last7_start
+        ),
+        provider_stats AS (
+          -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
+          SELECT
+            mr.final_provider_id,
+            COALESCE(SUM(mr.cost_usd), 0) AS today_cost,
+            COUNT(*)::integer AS today_calls
+          FROM (
+            SELECT
+              CASE
+                WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
+                WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
+                ELSE provider_id
+              END AS final_provider_id,
+              cost_usd
+            FROM message_request
+            WHERE deleted_at IS NULL
+              AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+              AND created_at >= (SELECT today_start FROM bounds)
+              AND created_at < (SELECT tomorrow_start FROM bounds)
+          ) mr
+          GROUP BY mr.final_provider_id
+        ),
+        latest_call AS (
+          SELECT DISTINCT ON (final_provider_id)
+            final_provider_id,
+            created_at AS last_call_time,
+            model AS last_call_model
+          FROM (
+            SELECT
+              CASE
+                WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
+                WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
+                ELSE provider_id
+              END AS final_provider_id,
+              id,
+              created_at,
+              model
+            FROM message_request
+            WHERE deleted_at IS NULL
+              AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+              AND created_at >= (SELECT last7_start FROM bounds)
+          ) mr
+          -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
+          ORDER BY final_provider_id, created_at DESC, id DESC
+        )
+        SELECT
+          p.id,
+          COALESCE(ps.today_cost, 0) AS today_cost,
+          COALESCE(ps.today_calls, 0) AS today_calls,
+          lc.last_call_time,
+          lc.last_call_model
+        FROM providers p
+        LEFT JOIN provider_stats ps ON p.id = ps.final_provider_id
+        LEFT JOIN latest_call lc ON p.id = lc.final_provider_id
+        WHERE p.deleted_at IS NULL
+        ORDER BY p.id ASC
+      `;
 
-      const promise = new Promise<ProviderStatisticsRow[]>((res, rej) => {
-        resolve = res;
-        reject = rej;
+      logger.trace("getProviderStatistics:executing_query");
+
+      const result = await db.execute(query);
+      const data = Array.from(result) as ProviderStatisticsRow[];
+
+      logger.trace("getProviderStatistics:result", {
+        count: data.length,
       });
 
-      return { promise, resolve, reject };
-    })();
+      // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
+      // last_call_time 由数据库返回为时间戳（UTC）。
+      // 这里保持原样，交由上层进行展示格式化。
+      providerStatisticsCache = {
+        timezone,
+        expiresAt: Date.now() + PROVIDER_STATISTICS_CACHE_TTL_MS,
+        data,
+      };
 
-    providerStatisticsInFlight = { timezone, promise: deferred.promise };
+      return data;
+    });
 
-    void (async () => {
-      try {
-        // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
-        // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
-        const query = sql`
-          WITH bounds AS (
-            SELECT
-              (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
-              (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) + INTERVAL '1 day' AS tomorrow_start,
-              (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) - INTERVAL '7 days' AS last7_start
-          ),
-          provider_stats AS (
-            -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
-            SELECT
-              mr.final_provider_id,
-              COALESCE(SUM(mr.cost_usd), 0) AS today_cost,
-              COUNT(*)::integer AS today_calls
-            FROM (
-              SELECT
-                CASE
-                  WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-                  WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
-                  ELSE provider_id
-                END AS final_provider_id,
-                cost_usd
-              FROM message_request CROSS JOIN bounds
-              WHERE deleted_at IS NULL
-                AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-                AND created_at >= bounds.today_start
-                AND created_at < bounds.tomorrow_start
-            ) mr
-            GROUP BY mr.final_provider_id
-          ),
-          latest_call AS (
-            SELECT DISTINCT ON (final_provider_id)
-              final_provider_id,
-              created_at AS last_call_time,
-              model AS last_call_model
-            FROM (
-              SELECT
-                CASE
-                  WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-                  WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
-                  ELSE provider_id
-                END AS final_provider_id,
-                id,
-                created_at,
-                model
-              FROM message_request CROSS JOIN bounds
-              WHERE deleted_at IS NULL
-                AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-                AND created_at >= bounds.last7_start
-            ) mr
-            -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
-            ORDER BY final_provider_id, created_at DESC, id DESC
-          )
-          SELECT
-            p.id,
-            COALESCE(ps.today_cost, 0) AS today_cost,
-            COALESCE(ps.today_calls, 0) AS today_calls,
-            lc.last_call_time,
-            lc.last_call_model
-          FROM providers p
-          LEFT JOIN provider_stats ps ON p.id = ps.final_provider_id
-          LEFT JOIN latest_call lc ON p.id = lc.final_provider_id
-          WHERE p.deleted_at IS NULL
-          ORDER BY p.id ASC
-        `;
-
-        logger.trace("getProviderStatistics:executing_query");
-
-        const result = await db.execute(query);
-        const data = Array.from(result) as ProviderStatisticsRow[];
-
-        logger.trace("getProviderStatistics:result", {
-          count: data.length,
-        });
-
-        // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
-        // last_call_time 由数据库返回为时间戳（UTC）。
-        // 这里保持原样，交由上层进行展示格式化。
-        providerStatisticsCache = {
-          timezone,
-          expiresAt: Date.now() + PROVIDER_STATISTICS_CACHE_TTL_MS,
-          data,
-        };
-
-        deferred.resolve(data);
-      } catch (error) {
-        deferred.reject(error);
-      }
-    })();
+    providerStatisticsInFlight = { timezone, promise };
 
     try {
-      return await deferred.promise;
+      return await promise;
     } finally {
-      if (providerStatisticsInFlight?.promise === deferred.promise) {
+      if (providerStatisticsInFlight?.promise === promise) {
         providerStatisticsInFlight = null;
       }
     }

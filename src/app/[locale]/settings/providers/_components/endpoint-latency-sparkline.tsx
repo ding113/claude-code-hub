@@ -130,7 +130,11 @@ const BATCH_PROBE_LOGS_RETRY_INTERVAL_MS = 5 * 60 * 1000;
 
 function isBatchProbeLogsDisabled(): boolean {
   if (isBatchProbeLogsEndpointAvailable !== false) return false;
-  if (batchProbeLogsEndpointDisabledAt === null) return true;
+  if (batchProbeLogsEndpointDisabledAt === null) {
+    // Defensive：避免异常态（disabledAt 丢失）导致永久禁用 batch 路由
+    isBatchProbeLogsEndpointAvailable = undefined;
+    return false;
+  }
   if (Date.now() - batchProbeLogsEndpointDisabledAt > BATCH_PROBE_LOGS_RETRY_INTERVAL_MS) {
     isBatchProbeLogsEndpointAvailable = undefined;
     batchProbeLogsEndpointDisabledAt = null;
@@ -232,6 +236,7 @@ async function tryFetchBatchProbeLogsByEndpointIds(
 
   // 至少有一个 chunk 成功，说明 batch 路由可用（允许部分失败并按需降级）。
   isBatchProbeLogsEndpointAvailable = true;
+  batchProbeLogsEndpointDisabledAt = null;
 
   if (!didAnyChunkFail) {
     return merged;

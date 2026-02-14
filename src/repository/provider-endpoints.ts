@@ -317,39 +317,43 @@ export type ProviderEndpointProbeTarget = Pick<
 export async function findEnabledProviderEndpointsForProbing(): Promise<
   ProviderEndpointProbeTarget[]
 > {
-  const rows = await db
-    .select({
-      id: providerEndpoints.id,
-      url: providerEndpoints.url,
-      vendorId: providerEndpoints.vendorId,
-      providerType: providerEndpoints.providerType,
-      lastProbedAt: providerEndpoints.lastProbedAt,
-      lastProbeOk: providerEndpoints.lastProbeOk,
-      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
-    })
-    .from(providerEndpoints)
-    .where(
-      and(
-        eq(providerEndpoints.isEnabled, true),
-        isNull(providerEndpoints.deletedAt),
-        sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}) IN (
-          SELECT p.provider_vendor_id, p.provider_type
-          FROM providers p
-          WHERE p.is_enabled = true
-            AND p.deleted_at IS NULL
-        )`
-      )
+  // #779/#781：probe scheduler 热路径，显式 INNER JOIN + DISTINCT vendor/type，避免 planner 在大表上走低效 semi-join。
+  const query = sql`
+    WITH enabled_vendor_types AS (
+      SELECT DISTINCT p.provider_vendor_id AS vendor_id, p.provider_type
+      FROM ${providers} p
+      WHERE p.is_enabled = true
+        AND p.deleted_at IS NULL
     )
-    .orderBy(asc(providerEndpoints.id));
+    SELECT
+      e.id,
+      e.url,
+      e.vendor_id AS "vendorId",
+      e.provider_type AS "providerType",
+      e.last_probed_at AS "lastProbedAt",
+      e.last_probe_ok AS "lastProbeOk",
+      e.last_probe_error_type AS "lastProbeErrorType"
+    FROM ${providerEndpoints} e
+    INNER JOIN enabled_vendor_types vt
+      ON vt.vendor_id = e.vendor_id
+     AND vt.provider_type = e.provider_type
+    WHERE e.is_enabled = true
+      AND e.deleted_at IS NULL
+    ORDER BY e.id ASC
+  `;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = (await db.execute(query)) as any;
+  const rows = Array.from(result) as Array<Record<string, unknown>>;
 
   return rows.map((row) => ({
-    id: row.id,
-    url: row.url,
-    vendorId: row.vendorId,
-    providerType: row.providerType,
+    id: Number(row.id),
+    url: String(row.url),
+    vendorId: Number(row.vendorId),
+    providerType: row.providerType as ProviderType,
     lastProbedAt: toNullableDate(row.lastProbedAt),
-    lastProbeOk: row.lastProbeOk ?? null,
-    lastProbeErrorType: row.lastProbeErrorType ?? null,
+    lastProbeOk: (row.lastProbeOk as boolean | null) ?? null,
+    lastProbeErrorType: (row.lastProbeErrorType as string | null) ?? null,
   }));
 }
 

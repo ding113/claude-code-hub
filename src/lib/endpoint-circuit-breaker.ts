@@ -64,16 +64,25 @@ async function getOrCreateHealth(endpointId: number): Promise<EndpointHealth> {
     try {
       const redisState = await loadEndpointCircuitState(endpointId);
       if (redisState) {
-        if (!health || redisState.circuitState !== health.circuitState) {
-          health = {
-            failureCount: redisState.failureCount,
-            lastFailureTime: redisState.lastFailureTime,
-            circuitState: redisState.circuitState,
-            circuitOpenUntil: redisState.circuitOpenUntil,
-            halfOpenSuccessCount: redisState.halfOpenSuccessCount,
-          };
-          healthMap.set(endpointId, health);
+        // 从 Redis 同步到内存时，不能只在 circuitState 变化时才更新：
+        // failureCount / halfOpenSuccessCount 等字段也可能在其它实例中发生变化。
+        if (health) {
+          health.failureCount = redisState.failureCount;
+          health.lastFailureTime = redisState.lastFailureTime;
+          health.circuitState = redisState.circuitState;
+          health.circuitOpenUntil = redisState.circuitOpenUntil;
+          health.halfOpenSuccessCount = redisState.halfOpenSuccessCount;
+          return health;
         }
+
+        health = {
+          failureCount: redisState.failureCount,
+          lastFailureTime: redisState.lastFailureTime,
+          circuitState: redisState.circuitState,
+          circuitOpenUntil: redisState.circuitOpenUntil,
+          halfOpenSuccessCount: redisState.halfOpenSuccessCount,
+        };
+        healthMap.set(endpointId, health);
         return health;
       }
 

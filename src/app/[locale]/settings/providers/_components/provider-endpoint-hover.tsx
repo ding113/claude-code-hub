@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Server } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
@@ -36,200 +36,290 @@ type VendorStatsDeferred = {
   reject: (reason: unknown) => void;
 };
 
-const pendingVendorIdsByProviderType = new Map<ProviderType, Set<number>>();
-const deferredByProviderTypeVendorId = new Map<ProviderType, Map<number, VendorStatsDeferred[]>>();
-let vendorStatsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+function createAbortError(signal?: AbortSignal): unknown {
+  if (!signal) return new Error("Aborted");
+  if (signal.reason) return signal.reason;
 
-function requestVendorTypeEndpointStatsBatched(
-  vendorId: number,
-  providerType: ProviderType
-): Promise<VendorTypeEndpointStats> {
-  if (!Number.isFinite(vendorId) || vendorId <= 0) {
-    return Promise.resolve({
-      vendorId,
-      total: 0,
-      enabled: 0,
-      healthy: 0,
-      unhealthy: 0,
-      unknown: 0,
+  try {
+    return new DOMException("Aborted", "AbortError");
+  } catch {
+    return new Error("Aborted");
+  }
+}
+
+class VendorTypeEndpointStatsBatcher {
+  private readonly pendingVendorIdsByProviderType = new Map<ProviderType, Set<number>>();
+  private readonly deferredByProviderTypeVendorId = new Map<
+    ProviderType,
+    Map<number, VendorStatsDeferred[]>
+  >();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  load(
+    vendorId: number,
+    providerType: ProviderType,
+    options?: { signal?: AbortSignal }
+  ): Promise<VendorTypeEndpointStats> {
+    if (!Number.isFinite(vendorId) || vendorId <= 0) {
+      return Promise.resolve({
+        vendorId,
+        total: 0,
+        enabled: 0,
+        healthy: 0,
+        unhealthy: 0,
+        unknown: 0,
+      });
+    }
+
+    return new Promise<VendorTypeEndpointStats>((resolve, reject) => {
+      const signal = options?.signal;
+      if (signal?.aborted) {
+        reject(createAbortError(signal));
+        return;
+      }
+
+      let settled = false;
+      let deferred: VendorStatsDeferred;
+
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        this.removePendingRequest(providerType, vendorId, deferred);
+        this.maybeCancelFlushTimer();
+        reject(createAbortError(signal));
+      };
+
+      deferred = {
+        resolve: (value) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          resolve(value);
+        },
+        reject: (reason) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          reject(reason);
+        },
+      };
+
+      if (signal) {
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      const pending = this.pendingVendorIdsByProviderType.get(providerType) ?? new Set<number>();
+      pending.add(vendorId);
+      this.pendingVendorIdsByProviderType.set(providerType, pending);
+
+      const deferredByVendorId =
+        this.deferredByProviderTypeVendorId.get(providerType) ??
+        new Map<number, VendorStatsDeferred[]>();
+      const list = deferredByVendorId.get(vendorId) ?? [];
+      list.push(deferred);
+      deferredByVendorId.set(vendorId, list);
+      this.deferredByProviderTypeVendorId.set(providerType, deferredByVendorId);
+
+      if (this.flushTimer) return;
+
+      this.flushTimer = setTimeout(() => {
+        this.flushTimer = null;
+        void this.flush().catch(() => {});
+      }, 0);
     });
   }
 
-  return new Promise<VendorTypeEndpointStats>((resolve, reject) => {
-    const pending = pendingVendorIdsByProviderType.get(providerType);
-    if (pending) {
-      pending.add(vendorId);
-    } else {
-      pendingVendorIdsByProviderType.set(providerType, new Set([vendorId]));
-    }
+  private maybeCancelFlushTimer() {
+    if (!this.flushTimer) return;
+    if (this.pendingVendorIdsByProviderType.size > 0) return;
+    clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+  }
 
-    const deferredByVendorId = deferredByProviderTypeVendorId.get(providerType);
-    if (deferredByVendorId) {
-      const list = deferredByVendorId.get(vendorId);
-      if (list) {
-        list.push({ resolve, reject });
-      } else {
-        deferredByVendorId.set(vendorId, [{ resolve, reject }]);
-      }
-    } else {
-      deferredByProviderTypeVendorId.set(
-        providerType,
-        new Map([[vendorId, [{ resolve, reject }]]])
-      );
-    }
+  private removePendingRequest(
+    providerType: ProviderType,
+    vendorId: number,
+    deferred: VendorStatsDeferred
+  ) {
+    const deferredByVendorId = this.deferredByProviderTypeVendorId.get(providerType);
+    if (!deferredByVendorId) return;
+    const list = deferredByVendorId.get(vendorId);
+    if (!list) return;
 
-    if (vendorStatsFlushTimer) {
+    const next = list.filter((item) => item !== deferred);
+    if (next.length > 0) {
+      deferredByVendorId.set(vendorId, next);
       return;
     }
 
-    vendorStatsFlushTimer = setTimeout(() => {
-      vendorStatsFlushTimer = null;
-      void flushVendorTypeEndpointStats().catch(() => {});
-    }, 0);
-  });
-}
+    deferredByVendorId.delete(vendorId);
+    if (deferredByVendorId.size === 0) {
+      this.deferredByProviderTypeVendorId.delete(providerType);
+    }
 
-async function flushVendorTypeEndpointStats() {
-  const entries = Array.from(pendingVendorIdsByProviderType.entries());
-  pendingVendorIdsByProviderType.clear();
-
-  if (entries.length === 0) {
-    return;
+    const pending = this.pendingVendorIdsByProviderType.get(providerType);
+    if (!pending) return;
+    pending.delete(vendorId);
+    if (pending.size === 0) {
+      this.pendingVendorIdsByProviderType.delete(providerType);
+    }
   }
 
-  await Promise.all(
-    entries.map(async ([providerType, vendorIdSet]) => {
-      const vendorIds = Array.from(vendorIdSet);
-      vendorIds.sort((a, b) => a - b);
+  private async flush() {
+    const entries = Array.from(this.pendingVendorIdsByProviderType.entries());
+    this.pendingVendorIdsByProviderType.clear();
 
-      for (let index = 0; index < vendorIds.length; index += MAX_VENDOR_IDS_PER_BATCH) {
-        const chunk = vendorIds.slice(index, index + MAX_VENDOR_IDS_PER_BATCH);
-        const deferredMap =
-          deferredByProviderTypeVendorId.get(providerType) ??
-          new Map<number, VendorStatsDeferred[]>();
-        const deferredEntries = chunk
-          .map((vendorId) => ({
-            vendorId,
-            deferred: deferredMap.get(vendorId) ?? [],
-          }))
-          .filter(({ deferred }) => deferred.length > 0);
+    if (entries.length === 0) {
+      return;
+    }
 
-        const vendorIdsToFetch = deferredEntries.map(({ vendorId }) => vendorId);
-        vendorIdsToFetch.forEach((vendorId) => deferredMap.delete(vendorId));
-        if (deferredMap.size === 0) {
-          deferredByProviderTypeVendorId.delete(providerType);
-        }
+    await Promise.all(
+      entries.map(async ([providerType, vendorIdSet]) => {
+        const vendorIds = Array.from(vendorIdSet);
+        vendorIds.sort((a, b) => a - b);
 
-        if (vendorIdsToFetch.length === 0) continue;
+        for (let index = 0; index < vendorIds.length; index += MAX_VENDOR_IDS_PER_BATCH) {
+          const chunk = vendorIds.slice(index, index + MAX_VENDOR_IDS_PER_BATCH);
+          const deferredMap = this.deferredByProviderTypeVendorId.get(providerType);
+          if (!deferredMap) continue;
 
-        try {
-          const res = await batchGetVendorTypeEndpointStats({
-            vendorIds: vendorIdsToFetch,
-            providerType,
-          });
-          const items = res.ok && res.data ? res.data : [];
-
-          const statsByVendorId = new Map<number, VendorTypeEndpointStats>();
-          vendorIdsToFetch.forEach((vendorId) =>
-            statsByVendorId.set(vendorId, {
+          const deferredEntries = chunk
+            .map((vendorId) => ({
               vendorId,
-              total: 0,
-              enabled: 0,
-              healthy: 0,
-              unhealthy: 0,
-              unknown: 0,
-            })
-          );
+              deferred: deferredMap.get(vendorId) ?? [],
+            }))
+            .filter(({ deferred }) => deferred.length > 0);
 
-          items.forEach((item) => {
-            statsByVendorId.set(item.vendorId, {
-              vendorId: item.vendorId,
-              total: item.total,
-              enabled: item.enabled,
-              healthy: item.healthy,
-              unhealthy: item.unhealthy,
-              unknown: item.unknown,
+          const vendorIdsToFetch = deferredEntries.map(({ vendorId }) => vendorId);
+          vendorIdsToFetch.forEach((vendorId) => deferredMap.delete(vendorId));
+          if (deferredMap.size === 0) {
+            this.deferredByProviderTypeVendorId.delete(providerType);
+          }
+
+          if (vendorIdsToFetch.length === 0) continue;
+
+          try {
+            const res = await batchGetVendorTypeEndpointStats({
+              vendorIds: vendorIdsToFetch,
+              providerType,
             });
-          });
+            const items = res.ok && res.data ? res.data : [];
 
-          deferredEntries.forEach(({ vendorId, deferred }) => {
-            const value = statsByVendorId.get(vendorId);
-            if (value) {
-              deferred.forEach((d) => d.resolve(value));
-            } else {
-              deferred.forEach((d) =>
-                d.resolve({
-                  vendorId,
-                  total: 0,
-                  enabled: 0,
-                  healthy: 0,
-                  unhealthy: 0,
-                  unknown: 0,
-                })
-              );
-            }
-          });
-        } catch {
-          // 降级路径：batch action 异常时按 vendorId 逐个查询。为避免 chunk 较大时触发请求风暴，这里限制并发。
-          const concurrency = 8;
-          let idx = 0;
+            const statsByVendorId = new Map<number, VendorTypeEndpointStats>();
+            vendorIdsToFetch.forEach((vendorId) =>
+              statsByVendorId.set(vendorId, {
+                vendorId,
+                total: 0,
+                enabled: 0,
+                healthy: 0,
+                unhealthy: 0,
+                unknown: 0,
+              })
+            );
 
-          const workers = Array.from(
-            { length: Math.min(concurrency, deferredEntries.length) },
-            async () => {
-              for (;;) {
-                const current = deferredEntries[idx];
-                idx += 1;
-                if (!current) return;
+            items.forEach((item) => {
+              statsByVendorId.set(item.vendorId, {
+                vendorId: item.vendorId,
+                total: item.total,
+                enabled: item.enabled,
+                healthy: item.healthy,
+                unhealthy: item.unhealthy,
+                unknown: item.unknown,
+              });
+            });
 
-                const { vendorId, deferred } = current;
-
-                try {
-                  const endpoints = await getProviderEndpointsByVendor({ vendorId });
-                  const filtered = endpoints.filter(
-                    (ep) =>
-                      ep.providerType === providerType &&
-                      ep.isEnabled === true &&
-                      ep.deletedAt === null
-                  );
-
-                  const healthy = filtered.filter((ep) => ep.lastProbeOk === true).length;
-                  const unhealthy = filtered.filter((ep) => ep.lastProbeOk === false).length;
-                  const unknown = filtered.filter((ep) => ep.lastProbeOk == null).length;
-
-                  const value: VendorTypeEndpointStats = {
+            deferredEntries.forEach(({ vendorId, deferred }) => {
+              const value = statsByVendorId.get(vendorId);
+              if (value) {
+                deferred.forEach((d) => d.resolve(value));
+              } else {
+                deferred.forEach((d) =>
+                  d.resolve({
                     vendorId,
-                    total: endpoints.filter(
-                      (ep) => ep.providerType === providerType && ep.deletedAt === null
-                    ).length,
-                    enabled: filtered.length,
-                    healthy,
-                    unhealthy,
-                    unknown,
-                  };
+                    total: 0,
+                    enabled: 0,
+                    healthy: 0,
+                    unhealthy: 0,
+                    unknown: 0,
+                  })
+                );
+              }
+            });
+          } catch {
+            // 降级路径：batch action 异常时按 vendorId 逐个查询。为避免 chunk 较大时触发请求风暴，这里限制并发。
+            const concurrency = 8;
+            let idx = 0;
 
-                  deferred.forEach((d) => d.resolve(value));
-                } catch (innerError) {
-                  deferred.forEach((d) => d.reject(innerError));
+            const workers = Array.from(
+              { length: Math.min(concurrency, deferredEntries.length) },
+              async () => {
+                for (;;) {
+                  const current = deferredEntries[idx];
+                  idx += 1;
+                  if (!current) return;
+
+                  const { vendorId, deferred } = current;
+
+                  try {
+                    const endpoints = await getProviderEndpointsByVendor({ vendorId });
+                    const filtered = endpoints.filter(
+                      (ep) =>
+                        ep.providerType === providerType &&
+                        ep.isEnabled === true &&
+                        ep.deletedAt === null
+                    );
+
+                    const healthy = filtered.filter((ep) => ep.lastProbeOk === true).length;
+                    const unhealthy = filtered.filter((ep) => ep.lastProbeOk === false).length;
+                    const unknown = filtered.filter((ep) => ep.lastProbeOk == null).length;
+
+                    const value: VendorTypeEndpointStats = {
+                      vendorId,
+                      total: endpoints.filter(
+                        (ep) => ep.providerType === providerType && ep.deletedAt === null
+                      ).length,
+                      enabled: filtered.length,
+                      healthy,
+                      unhealthy,
+                      unknown,
+                    };
+
+                    deferred.forEach((d) => d.resolve(value));
+                  } catch (innerError) {
+                    deferred.forEach((d) => d.reject(innerError));
+                  }
                 }
               }
-            }
-          );
+            );
 
-          await Promise.all(workers);
+            await Promise.all(workers);
+          }
         }
-      }
-    })
-  );
+      })
+    );
+  }
+}
+
+const vendorStatsBatcherByQueryClient = new WeakMap<QueryClient, VendorTypeEndpointStatsBatcher>();
+
+function getVendorStatsBatcher(queryClient: QueryClient): VendorTypeEndpointStatsBatcher {
+  const existing = vendorStatsBatcherByQueryClient.get(queryClient);
+  if (existing) return existing;
+
+  const batcher = new VendorTypeEndpointStatsBatcher();
+  vendorStatsBatcherByQueryClient.set(queryClient, batcher);
+  return batcher;
 }
 
 export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpointHoverProps) {
   const t = useTranslations("settings.providers");
   const [isOpen, setIsOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const statsBatcher = useMemo(() => getVendorStatsBatcher(queryClient), [queryClient]);
 
   const { data: stats } = useQuery({
     queryKey: ["provider-endpoints", vendorId, providerType, "hover-stats"],
-    queryFn: async () => requestVendorTypeEndpointStatsBatched(vendorId, providerType),
+    queryFn: ({ signal }) => statsBatcher.load(vendorId, providerType, { signal }),
     staleTime: 1000 * 30,
     refetchOnWindowFocus: false,
   });
