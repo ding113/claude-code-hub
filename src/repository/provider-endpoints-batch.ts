@@ -102,7 +102,7 @@ export async function findProviderEndpointProbeLogsBatch(input: {
         error_message,
         created_at,
         ROW_NUMBER() OVER (PARTITION BY endpoint_id ORDER BY created_at DESC, id DESC) AS row_num
-      FROM provider_endpoint_probe_logs
+      FROM ${providerEndpointProbeLogs}
       WHERE ${endpointIdCondition}
     ) ranked
     WHERE ranked.row_num <= ${limitPerEndpoint}

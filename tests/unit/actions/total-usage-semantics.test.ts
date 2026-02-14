@@ -26,6 +26,7 @@ const sumUserCostInTimeRangeMock = vi.fn();
 const getTimeRangeForPeriodMock = vi.fn();
 const getTimeRangeForPeriodWithModeMock = vi.fn();
 const getKeySessionCountMock = vi.fn();
+const getUserSessionCountMock = vi.fn();
 const findUserByIdMock = vi.fn();
 
 // Mock modules
@@ -48,6 +49,7 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
 vi.mock("@/lib/session-tracker", () => ({
   SessionTracker: {
     getKeySessionCount: (...args: unknown[]) => getKeySessionCountMock(...args),
+    getUserSessionCount: (...args: unknown[]) => getUserSessionCountMock(...args),
   },
 }));
 
@@ -83,6 +85,7 @@ describe("total-usage-semantics", () => {
     sumUserTotalCostMock.mockResolvedValue(0);
     sumUserCostInTimeRangeMock.mockResolvedValue(0);
     getKeySessionCountMock.mockResolvedValue(0);
+    getUserSessionCountMock.mockResolvedValue(0);
 
     const emptyCosts = {
       cost5h: 0,

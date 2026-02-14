@@ -293,7 +293,7 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
       const results = await Promise.all(
         chunks.map(async (chunk) => {
           const res = await batchGetEndpointCircuitInfo({ endpointIds: chunk });
-          return res.ok ? res.data : [];
+          return res.ok ? (res.data ?? []) : [];
         })
       );
 
