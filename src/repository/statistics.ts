@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest } from "@/drizzle/schema";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -812,7 +812,74 @@ export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365)
 }
 
 /**
- * 查询供应商历史总消费
+ * Batch query: all-time total cost grouped by user_id (single SQL query)
+ * @param userIds - Array of user IDs
+ * @returns Map of userId -> totalCost
+ */
+export async function sumUserTotalCostBatch(userIds: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (userIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      userId: messageRequest.userId,
+      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        inArray(messageRequest.userId, userIds),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
+      )
+    )
+    .groupBy(messageRequest.userId);
+
+  for (const id of userIds) {
+    result.set(id, 0);
+  }
+  for (const row of rows) {
+    result.set(row.userId, Number(row.total || 0));
+  }
+  return result;
+}
+
+/**
+ * Batch query: all-time total cost grouped by key_id (single SQL query via JOIN)
+ * @param keyIds - Array of key IDs
+ * @returns Map of keyId -> totalCost
+ */
+export async function sumKeyTotalCostBatchByIds(keyIds: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (keyIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      keyId: keys.id,
+      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+    })
+    .from(keys)
+    .leftJoin(
+      messageRequest,
+      and(
+        eq(messageRequest.key, keys.key),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
+      )
+    )
+    .where(inArray(keys.id, keyIds))
+    .groupBy(keys.id);
+
+  for (const id of keyIds) {
+    result.set(id, 0);
+  }
+  for (const row of rows) {
+    result.set(row.keyId, Number(row.total || 0));
+  }
+  return result;
+}
+
+/**
  * 用于供应商总消费限额检查（limit_total_usd）。
  *
  * 重要语义：
