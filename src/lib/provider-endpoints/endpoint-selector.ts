@@ -8,9 +8,7 @@ import {
 } from "@/repository";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 
-export function rankProviderEndpoints(
-  endpoints: ProviderEndpoint[]
-): ProviderEndpoint[] {
+export function rankProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEndpoint[] {
   const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
 
   const priorityRank = (endpoint: ProviderEndpoint): number => {
