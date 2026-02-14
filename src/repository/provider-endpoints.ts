@@ -336,6 +336,7 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
           FROM providers p
           WHERE p.provider_vendor_id = ${providerEndpoints.vendorId}
             AND p.provider_type = ${providerEndpoints.providerType}
+            AND p.is_enabled = true
             AND p.deleted_at IS NULL
         )`
       )
