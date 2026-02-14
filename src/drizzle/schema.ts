@@ -309,6 +309,8 @@ export const providers = pgTable('providers', {
   providersEnabledPriorityIdx: index('idx_providers_enabled_priority').on(table.isEnabled, table.priority, table.weight).where(sql`${table.deletedAt} IS NULL`),
   // 分组查询优化
   providersGroupIdx: index('idx_providers_group').on(table.groupTag).where(sql`${table.deletedAt} IS NULL`),
+  // #779：加速“旧 URL 是否仍被引用”的判断（vendor/type/url 精确匹配）
+  providersVendorTypeUrlActiveIdx: index('idx_providers_vendor_type_url_active').on(table.providerVendorId, table.providerType, table.url).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   providersCreatedAtIdx: index('idx_providers_created_at').on(table.createdAt),
   providersDeletedAtIdx: index('idx_providers_deleted_at').on(table.deletedAt),
@@ -355,6 +357,14 @@ export const providerEndpoints = pgTable('provider_endpoints', {
     table.isEnabled,
     table.vendorId,
     table.providerType
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：运行时端点选择热路径（vendor/type/enabled 定位 + sort_order 有序扫描）
+  providerEndpointsPickEnabledIdx: index('idx_provider_endpoints_pick_enabled').on(
+    table.vendorId,
+    table.providerType,
+    table.isEnabled,
+    table.sortOrder,
+    table.id
   ).where(sql`${table.deletedAt} IS NULL`),
   providerEndpointsCreatedAtIdx: index('idx_provider_endpoints_created_at').on(table.createdAt),
   providerEndpointsDeletedAtIdx: index('idx_provider_endpoints_deleted_at').on(table.deletedAt),

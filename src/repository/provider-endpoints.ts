@@ -790,6 +790,48 @@ export async function findProviderEndpointsByVendorAndType(
   return rows.map(toProviderEndpoint);
 }
 
+/**
+ * 仅返回启用的端点（运行时热路径），用于减少不必要的数据传输与排序开销。
+ *
+ * #779：配合索引 `idx_provider_endpoints_pick_enabled`，可按 vendor/type 有序扫描。
+ */
+export async function findEnabledProviderEndpointsByVendorAndType(
+  vendorId: number,
+  providerType: ProviderType
+): Promise<ProviderEndpoint[]> {
+  const rows = await db
+    .select({
+      id: providerEndpoints.id,
+      vendorId: providerEndpoints.vendorId,
+      providerType: providerEndpoints.providerType,
+      url: providerEndpoints.url,
+      label: providerEndpoints.label,
+      sortOrder: providerEndpoints.sortOrder,
+      isEnabled: providerEndpoints.isEnabled,
+      lastProbedAt: providerEndpoints.lastProbedAt,
+      lastProbeOk: providerEndpoints.lastProbeOk,
+      lastProbeStatusCode: providerEndpoints.lastProbeStatusCode,
+      lastProbeLatencyMs: providerEndpoints.lastProbeLatencyMs,
+      lastProbeErrorType: providerEndpoints.lastProbeErrorType,
+      lastProbeErrorMessage: providerEndpoints.lastProbeErrorMessage,
+      createdAt: providerEndpoints.createdAt,
+      updatedAt: providerEndpoints.updatedAt,
+      deletedAt: providerEndpoints.deletedAt,
+    })
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, vendorId),
+        eq(providerEndpoints.providerType, providerType),
+        eq(providerEndpoints.isEnabled, true),
+        isNull(providerEndpoints.deletedAt)
+      )
+    )
+    .orderBy(asc(providerEndpoints.sortOrder), asc(providerEndpoints.id));
+
+  return rows.map(toProviderEndpoint);
+}
+
 export async function findProviderEndpointsByVendor(vendorId: number): Promise<ProviderEndpoint[]> {
   const rows = await db
     .select({
@@ -1832,18 +1874,7 @@ export async function recordProviderEndpointProbeResult(input: {
   const probedAt = input.probedAt ?? new Date();
 
   await db.transaction(async (tx) => {
-    await tx.insert(providerEndpointProbeLogs).values({
-      endpointId: input.endpointId,
-      source: input.source,
-      ok: input.ok,
-      statusCode: input.statusCode ?? null,
-      latencyMs: input.latencyMs ?? null,
-      errorType: input.errorType ?? null,
-      errorMessage: input.errorMessage ?? null,
-      createdAt: probedAt,
-    });
-
-    await tx
+    const updated = await tx
       .update(providerEndpoints)
       .set({
         lastProbedAt: probedAt,
@@ -1854,7 +1885,25 @@ export async function recordProviderEndpointProbeResult(input: {
         lastProbeErrorMessage: input.ok ? null : (input.errorMessage ?? null),
         updatedAt: new Date(),
       })
-      .where(and(eq(providerEndpoints.id, input.endpointId), isNull(providerEndpoints.deletedAt)));
+      .where(and(eq(providerEndpoints.id, input.endpointId), isNull(providerEndpoints.deletedAt)))
+      .returning({ id: providerEndpoints.id });
+
+    // 端点可能在探测过程中被删除（vendor cascade / 管理后台操作）。
+    // 这类情况属于“已不存在的端点”，应直接忽略，避免 probe scheduler 因 FK 失败而中断。
+    if (updated.length === 0) {
+      return;
+    }
+
+    await tx.insert(providerEndpointProbeLogs).values({
+      endpointId: input.endpointId,
+      source: input.source,
+      ok: input.ok,
+      statusCode: input.statusCode ?? null,
+      latencyMs: input.latencyMs ?? null,
+      errorType: input.errorType ?? null,
+      errorMessage: input.errorMessage ?? null,
+      createdAt: probedAt,
+    });
   });
 }
 
