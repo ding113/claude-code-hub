@@ -129,6 +129,7 @@ export const keys = pgTable('keys', {
 }, (table) => ({
   // 基础索引（详细的复合索引通过迁移脚本管理）
   keysUserIdIdx: index('idx_keys_user_id').on(table.userId),
+  keysKeyIdx: index('idx_keys_key').on(table.key),
   keysCreatedAtIdx: index('idx_keys_created_at').on(table.createdAt),
   keysDeletedAtIdx: index('idx_keys_deleted_at').on(table.deletedAt),
 }));

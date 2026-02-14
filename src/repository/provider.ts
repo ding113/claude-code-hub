@@ -892,23 +892,59 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
       });
     }
 
-    for (const endpoint of endpointKeys.values()) {
-      const [activeReference] = await tx
-        .select({ id: providers.id })
+    const endpoints = Array.from(endpointKeys.values());
+    if (endpoints.length === 0) {
+      return result.length;
+    }
+
+    const chunkSize = 200;
+    const activeEndpointKeys = new Set<string>();
+
+    for (let i = 0; i < endpoints.length; i += chunkSize) {
+      const chunk = endpoints.slice(i, i + chunkSize);
+      const tupleList = sql.join(
+        chunk.map(
+          (endpoint) => sql`(${endpoint.vendorId}, ${endpoint.providerType}, ${endpoint.url})`
+        ),
+        sql`, `
+      );
+
+      const activeReferences = await tx
+        .select({
+          vendorId: providers.providerVendorId,
+          providerType: providers.providerType,
+          url: providers.url,
+        })
         .from(providers)
         .where(
           and(
-            eq(providers.providerVendorId, endpoint.vendorId),
-            eq(providers.providerType, endpoint.providerType),
-            eq(providers.url, endpoint.url),
-            isNull(providers.deletedAt)
+            isNull(providers.deletedAt),
+            sql`(${providers.providerVendorId}, ${providers.providerType}, ${providers.url}) IN (${tupleList})`
           )
-        )
-        .limit(1);
+        );
 
-      if (activeReference) {
-        continue;
+      for (const row of activeReferences) {
+        if (row.vendorId == null || !row.url) {
+          continue;
+        }
+
+        activeEndpointKeys.add(`${row.vendorId}::${row.providerType}::${row.url}`);
       }
+    }
+
+    const orphanEndpoints = endpoints.filter(
+      (endpoint) =>
+        !activeEndpointKeys.has(`${endpoint.vendorId}::${endpoint.providerType}::${endpoint.url}`)
+    );
+
+    for (let i = 0; i < orphanEndpoints.length; i += chunkSize) {
+      const chunk = orphanEndpoints.slice(i, i + chunkSize);
+      const tupleList = sql.join(
+        chunk.map(
+          (endpoint) => sql`(${endpoint.vendorId}, ${endpoint.providerType}, ${endpoint.url})`
+        ),
+        sql`, `
+      );
 
       await tx
         .update(providerEndpoints)
@@ -919,10 +955,8 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
         })
         .where(
           and(
-            eq(providerEndpoints.vendorId, endpoint.vendorId),
-            eq(providerEndpoints.providerType, endpoint.providerType),
-            eq(providerEndpoints.url, endpoint.url),
-            isNull(providerEndpoints.deletedAt)
+            isNull(providerEndpoints.deletedAt),
+            sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}, ${providerEndpoints.url}) IN (${tupleList})`
           )
         );
     }
