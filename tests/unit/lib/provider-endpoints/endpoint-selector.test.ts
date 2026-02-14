@@ -95,12 +95,11 @@ describe("provider-endpoints: endpoint-selector", () => {
   test("getPreferredProviderEndpoints 应排除禁用/已删除/显式 exclude/熔断 open 的端点，并返回排序结果", async () => {
     vi.resetModules();
 
+    // findEnabledProviderEndpointsByVendorAndType 语义：只返回 isEnabled=true 且 deletedAt=null 的端点
     const endpoints: ProviderEndpoint[] = [
       makeEndpoint({ id: 1, lastProbeOk: true, sortOrder: 1, lastProbeLatencyMs: 20 }),
       makeEndpoint({ id: 2, lastProbeOk: true, sortOrder: 0, lastProbeLatencyMs: 999 }),
       makeEndpoint({ id: 3, lastProbeOk: null, sortOrder: 0, lastProbeLatencyMs: 10 }),
-      makeEndpoint({ id: 4, isEnabled: false }),
-      makeEndpoint({ id: 5, deletedAt: new Date(1) }),
       makeEndpoint({ id: 6, lastProbeOk: false, sortOrder: 0, lastProbeLatencyMs: 1 }),
     ];
 
@@ -162,7 +161,7 @@ describe("provider-endpoints: endpoint-selector", () => {
   test("getPreferredProviderEndpoints 过滤后无候选时返回空数组", async () => {
     vi.resetModules();
 
-    const findMock = vi.fn(async () => [makeEndpoint({ id: 1, isEnabled: false })]);
+    const findMock = vi.fn(async () => []);
     const getAllStatusMock = vi.fn(async () => ({}));
 
     vi.doMock("@/repository", () => ({
