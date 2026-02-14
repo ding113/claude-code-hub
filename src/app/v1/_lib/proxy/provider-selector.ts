@@ -94,25 +94,6 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
 }
 
 /**
- * 检查供应商是否支持指定模型（用于调度器匹配）
- *
- * 核心逻辑：
- * 1. Claude 模型请求 (claude-*)：
- *    - Anthropic 提供商：根据 allowedModels 白名单判断
- *    - 非 Anthropic 提供商：不支持 claude-* 模型调度
- *
- * 2. 非 Claude 模型请求 (gpt-*, gemini-*, 或其他任意模型)：
- *    - Anthropic 提供商：不支持（仅支持 Claude 模型）
- *    - 非 Anthropic 提供商（codex, gemini-cli, openai-compatible）：
- *      a. 如果未设置 allowedModels（null 或空数组）：接受任意模型
- *      b. 如果设置了 allowedModels：检查模型是否在声明列表中，或有模型重定向配置
- *      注意：allowedModels 是声明性列表（用户可填写任意字符串），用于调度器匹配，不是真实模型校验
- *
- * @param provider - 供应商信息
- * @param requestedModel - 用户请求的模型名称
- * @returns 是否支持该模型（用于调度器筛选）
- */
-/**
  * 根据原始请求格式限制可选供应商类型
  *
  * 核心逻辑：确保客户端请求格式与供应商类型兼容，避免格式错配
