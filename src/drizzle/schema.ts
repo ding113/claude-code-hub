@@ -82,6 +82,10 @@ export const users = pgTable('users', {
   usersEnabledExpiresAtIdx: index('idx_users_enabled_expires_at')
     .on(table.isEnabled, table.expiresAt)
     .where(sql`${table.deletedAt} IS NULL`),
+  // Tag 筛选（@>）的 GIN 索引：加速用户管理列表页的标签过滤
+  usersTagsGinIdx: index('idx_users_tags_gin')
+    .using('gin', table.tags)
+    .where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   usersCreatedAtIdx: index('idx_users_created_at').on(table.createdAt),
   usersDeletedAtIdx: index('idx_users_deleted_at').on(table.deletedAt),
@@ -484,6 +488,11 @@ export const messageRequest = pgTable('message_request', {
   // #779：Key 维度分页/时间范围查询热路径（my-usage / usage logs）
   messageRequestKeyCreatedAtIdIdx: index('idx_message_request_key_created_at_id').on(
     table.key,
+    table.createdAt.desc(),
+    table.id.desc()
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：全局 usage logs keyset 分页热路径（按 created_at + id 倒序）
+  messageRequestCreatedAtIdActiveIdx: index('idx_message_request_created_at_id_active').on(
     table.createdAt.desc(),
     table.id.desc()
   ).where(sql`${table.deletedAt} IS NULL`),

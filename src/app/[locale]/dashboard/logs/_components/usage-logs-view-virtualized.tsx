@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Expand, Filter, ListOrdered, Minimize2, Pause, Play, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -25,15 +25,6 @@ import { ColumnVisibilityDropdown } from "./column-visibility-dropdown";
 import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 30000,
-    },
-  },
-});
 
 interface UsageLogsViewVirtualizedProps {
   isAdmin: boolean;
@@ -484,9 +475,5 @@ function UsageLogsViewContent({
 }
 
 export function UsageLogsViewVirtualized(props: UsageLogsViewVirtualizedProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <UsageLogsViewContent {...props} />
-    </QueryClientProvider>
-  );
+  return <UsageLogsViewContent {...props} />;
 }
