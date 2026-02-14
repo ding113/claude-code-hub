@@ -481,6 +481,15 @@ export const messageRequest = pgTable('message_request', {
   messageRequestProviderIdIdx: index('idx_message_request_provider_id').on(table.providerId),
   messageRequestUserIdIdx: index('idx_message_request_user_id').on(table.userId),
   messageRequestKeyIdx: index('idx_message_request_key').on(table.key),
+  // #779：Key 维度分页/时间范围查询热路径（my-usage / usage logs）
+  messageRequestKeyCreatedAtIdIdx: index('idx_message_request_key_created_at_id').on(
+    table.key,
+    table.createdAt.desc(),
+    table.id.desc()
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：筛选器 DISTINCT model / status_code 加速（admin usage logs）
+  messageRequestModelActiveIdx: index('idx_message_request_model_active').on(table.model).where(sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL`),
+  messageRequestStatusCodeActiveIdx: index('idx_message_request_status_code_active').on(table.statusCode).where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
   messageRequestCreatedAtIdx: index('idx_message_request_created_at').on(table.createdAt),
   messageRequestDeletedAtIdx: index('idx_message_request_deleted_at').on(table.deletedAt),
 }));

@@ -6,7 +6,8 @@ function createTxMock(selectResults: SelectRow[][]) {
   const queue = [...selectResults];
 
   const selectLimitMock = vi.fn(async () => queue.shift() ?? []);
-  const selectWhereMock = vi.fn(() => ({ limit: selectLimitMock }));
+  const selectOrderByMock = vi.fn(() => ({ limit: selectLimitMock }));
+  const selectWhereMock = vi.fn(() => ({ orderBy: selectOrderByMock, limit: selectLimitMock }));
   const selectFromMock = vi.fn(() => ({ where: selectWhereMock }));
   const selectMock = vi.fn(() => ({ from: selectFromMock }));
 

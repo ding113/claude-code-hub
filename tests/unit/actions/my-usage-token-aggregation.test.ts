@@ -148,11 +148,9 @@ describe("my-usage token aggregation", () => {
     const res = await getMyTodayStats();
     expect(res.ok).toBe(true);
 
-    expect(capturedSelections.length).toBeGreaterThanOrEqual(2);
+    expect(capturedSelections.length).toBeGreaterThanOrEqual(1);
     expectNoIntTokenSum(capturedSelections[0], "inputTokens");
     expectNoIntTokenSum(capturedSelections[0], "outputTokens");
-    expectNoIntTokenSum(capturedSelections[1], "inputTokens");
-    expectNoIntTokenSum(capturedSelections[1], "outputTokens");
   });
 
   test("getMyStatsSummary: token sum 不应使用 ::int", async () => {

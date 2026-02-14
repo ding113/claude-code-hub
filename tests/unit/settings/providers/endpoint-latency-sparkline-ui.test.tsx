@@ -89,7 +89,10 @@ describe("EndpointLatencySparkline", () => {
     await flushTicks(5);
 
     expect(container.querySelector('[data-testid="recharts-line"]')).toBeNull();
-    expect(container.querySelector('div[class*="bg-muted/20"]')).not.toBeNull();
+    const placeholder =
+      container.querySelector('div[class*="bg-muted/20"]') ??
+      container.querySelector('div[class*="bg-muted/10"]');
+    expect(placeholder).not.toBeNull();
 
     unmount();
   });

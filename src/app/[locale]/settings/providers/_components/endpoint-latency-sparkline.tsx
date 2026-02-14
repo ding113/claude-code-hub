@@ -299,15 +299,63 @@ type BatchRequest = {
   reject: (error: unknown) => void;
 };
 
+function createAbortError(signal?: AbortSignal): unknown {
+  if (!signal) return new Error("Aborted");
+  if (signal.reason) return signal.reason;
+
+  try {
+    return new DOMException("Aborted", "AbortError");
+  } catch {
+    return new Error("Aborted");
+  }
+}
+
 class ProbeLogsBatcher {
   private readonly pendingByLimit = new Map<number, Map<number, BatchRequest[]>>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  load(endpointId: number, limit: number): Promise<ProbeLog[]> {
+  load(endpointId: number, limit: number, options?: { signal?: AbortSignal }): Promise<ProbeLog[]> {
     return new Promise((resolve, reject) => {
+      const signal = options?.signal;
+      if (signal?.aborted) {
+        reject(createAbortError(signal));
+        return;
+      }
+
+      let settled = false;
+      let request: BatchRequest;
+
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        this.removePendingRequest(limit, endpointId, request);
+        this.maybeCancelFlushTimer();
+        reject(createAbortError(signal));
+      };
+
+      request = {
+        endpointId,
+        resolve: (logs) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          resolve(logs);
+        },
+        reject: (error) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          reject(error);
+        },
+      };
+
+      if (signal) {
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
       const group = this.pendingByLimit.get(limit) ?? new Map<number, BatchRequest[]>();
       const list = group.get(endpointId) ?? [];
-      list.push({ endpointId, resolve, reject });
+      list.push(request);
       group.set(endpointId, list);
       this.pendingByLimit.set(limit, group);
 
@@ -318,6 +366,31 @@ class ProbeLogsBatcher {
         void this.flush().catch(() => {});
       }, delayMs);
     });
+  }
+
+  private maybeCancelFlushTimer() {
+    if (!this.flushTimer) return;
+    if (this.pendingByLimit.size > 0) return;
+    clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+  }
+
+  private removePendingRequest(limit: number, endpointId: number, request: BatchRequest) {
+    const group = this.pendingByLimit.get(limit);
+    if (!group) return;
+    const list = group.get(endpointId);
+    if (!list) return;
+
+    const next = list.filter((item) => item !== request);
+    if (next.length > 0) {
+      group.set(endpointId, next);
+      return;
+    }
+
+    group.delete(endpointId);
+    if (group.size === 0) {
+      this.pendingByLimit.delete(limit);
+    }
   }
 
   private async flush() {
@@ -359,10 +432,14 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
   const limit = props.limit ?? 12;
   const { ref, isInView } = useInViewOnce<HTMLDivElement>();
 
-  const { data: points = [] } = useQuery({
+  const {
+    data: points = [],
+    isLoading,
+    isFetching,
+  } = useQuery({
     queryKey: ["endpoint-probe-logs", props.endpointId, limit],
-    queryFn: async (): Promise<SparkPoint[]> => {
-      const logs = await probeLogsBatcher.load(props.endpointId, limit);
+    queryFn: async ({ signal }): Promise<SparkPoint[]> => {
+      const logs = await probeLogsBatcher.load(props.endpointId, limit, { signal });
 
       return logs
         .slice()
@@ -398,10 +475,20 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
     return sum / recentPoints.length;
   }, [points]);
 
-  if (points.length === 0) {
+  const showSkeleton = !isInView || isLoading || isFetching;
+
+  if (showSkeleton) {
     return (
       <div ref={ref} className="flex items-center gap-2">
         <div className="h-6 w-32 rounded bg-muted/20" />
+      </div>
+    );
+  }
+
+  if (points.length === 0) {
+    return (
+      <div ref={ref} className="flex items-center gap-2">
+        <div className="h-6 w-32 rounded bg-muted/10" />
       </div>
     );
   }

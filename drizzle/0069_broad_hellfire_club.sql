@@ -1,0 +1,3 @@
+CREATE INDEX IF NOT EXISTS "idx_message_request_key_created_at_id" ON "message_request" USING btree ("key","created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_model_active" ON "message_request" USING btree ("model") WHERE "message_request"."deleted_at" IS NULL AND "message_request"."model" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_status_code_active" ON "message_request" USING btree ("status_code") WHERE "message_request"."deleted_at" IS NULL AND "message_request"."status_code" IS NOT NULL;

@@ -84,7 +84,7 @@ function requestVendorTypeEndpointStatsBatched(
 
     vendorStatsFlushTimer = setTimeout(() => {
       vendorStatsFlushTimer = null;
-      void flushVendorTypeEndpointStats();
+      void flushVendorTypeEndpointStats().catch(() => {});
     }, 0);
   });
 }
@@ -162,38 +162,53 @@ async function flushVendorTypeEndpointStats() {
             }
           });
         } catch {
-          await Promise.all(
-            deferredEntries.map(async ({ vendorId, deferred }) => {
-              try {
-                const endpoints = await getProviderEndpointsByVendor({ vendorId });
-                const filtered = endpoints.filter(
-                  (ep) =>
-                    ep.providerType === providerType &&
-                    ep.isEnabled === true &&
-                    ep.deletedAt === null
-                );
+          // 降级路径：batch action 异常时按 vendorId 逐个查询。为避免 chunk 较大时触发请求风暴，这里限制并发。
+          const concurrency = 8;
+          let idx = 0;
 
-                const healthy = filtered.filter((ep) => ep.lastProbeOk === true).length;
-                const unhealthy = filtered.filter((ep) => ep.lastProbeOk === false).length;
-                const unknown = filtered.filter((ep) => ep.lastProbeOk == null).length;
+          const workers = Array.from(
+            { length: Math.min(concurrency, deferredEntries.length) },
+            async () => {
+              for (;;) {
+                const current = deferredEntries[idx];
+                idx += 1;
+                if (!current) return;
 
-                const value: VendorTypeEndpointStats = {
-                  vendorId,
-                  total: endpoints.filter(
-                    (ep) => ep.providerType === providerType && ep.deletedAt === null
-                  ).length,
-                  enabled: filtered.length,
-                  healthy,
-                  unhealthy,
-                  unknown,
-                };
+                const { vendorId, deferred } = current;
 
-                deferred.forEach((d) => d.resolve(value));
-              } catch (innerError) {
-                deferred.forEach((d) => d.reject(innerError));
+                try {
+                  const endpoints = await getProviderEndpointsByVendor({ vendorId });
+                  const filtered = endpoints.filter(
+                    (ep) =>
+                      ep.providerType === providerType &&
+                      ep.isEnabled === true &&
+                      ep.deletedAt === null
+                  );
+
+                  const healthy = filtered.filter((ep) => ep.lastProbeOk === true).length;
+                  const unhealthy = filtered.filter((ep) => ep.lastProbeOk === false).length;
+                  const unknown = filtered.filter((ep) => ep.lastProbeOk == null).length;
+
+                  const value: VendorTypeEndpointStats = {
+                    vendorId,
+                    total: endpoints.filter(
+                      (ep) => ep.providerType === providerType && ep.deletedAt === null
+                    ).length,
+                    enabled: filtered.length,
+                    healthy,
+                    unhealthy,
+                    unknown,
+                  };
+
+                  deferred.forEach((d) => d.resolve(value));
+                } catch (innerError) {
+                  deferred.forEach((d) => d.reject(innerError));
+                }
               }
-            })
+            }
           );
+
+          await Promise.all(workers);
         }
       }
     })

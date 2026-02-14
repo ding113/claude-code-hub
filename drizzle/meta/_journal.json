@@ -484,6 +484,13 @@
       "when": 1771092279395,
       "tag": "0068_fuzzy_quasar",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1771062933912,
+      "tag": "0069_broad_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

@@ -357,24 +357,6 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
       (session.key.dailyResetMode as DailyResetMode | undefined) ?? "fixed"
     );
 
-    const [aggregate] = await db
-      .select({
-        calls: sql<number>`count(*)::int`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        costUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-      })
-      .from(messageRequest)
-      .where(
-        and(
-          eq(messageRequest.key, session.key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          gte(messageRequest.createdAt, timeRange.startTime),
-          lt(messageRequest.createdAt, timeRange.endTime)
-        )
-      );
-
     const breakdown = await db
       .select({
         model: messageRequest.model,
@@ -396,23 +378,36 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
       )
       .groupBy(messageRequest.model, messageRequest.originalModel);
 
+    let totalCalls = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalCostUsd = 0;
+
     const modelBreakdown = breakdown.map((row) => {
       const billingModel = billingModelSource === "original" ? row.originalModel : row.model;
+      const rawCostUsd = Number(row.costUsd ?? 0);
+      const costUsd = Number.isFinite(rawCostUsd) ? rawCostUsd : 0;
+
+      totalCalls += row.calls ?? 0;
+      totalInputTokens += row.inputTokens ?? 0;
+      totalOutputTokens += row.outputTokens ?? 0;
+      totalCostUsd += costUsd;
+
       return {
         model: row.model,
         billingModel,
         calls: row.calls,
-        costUsd: Number(row.costUsd ?? 0),
+        costUsd,
         inputTokens: row.inputTokens,
         outputTokens: row.outputTokens,
       };
     });
 
     const stats: MyTodayStats = {
-      calls: aggregate?.calls ?? 0,
-      inputTokens: aggregate?.inputTokens ?? 0,
-      outputTokens: aggregate?.outputTokens ?? 0,
-      costUsd: Number(aggregate?.costUsd ?? 0),
+      calls: totalCalls,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      costUsd: totalCostUsd,
       modelBreakdown,
       currencyCode,
       billingModelSource,
