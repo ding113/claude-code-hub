@@ -4,7 +4,7 @@ import { fromZonedTime } from "date-fns-tz";
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSystemSettings: vi.fn(),
-  findUsageLogsWithDetails: vi.fn(),
+  findUsageLogsForKeySlim: vi.fn(),
   resolveSystemTimezone: vi.fn(),
 }));
 
@@ -20,7 +20,7 @@ vi.mock("@/repository/usage-logs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/repository/usage-logs")>();
   return {
     ...actual,
-    findUsageLogsWithDetails: mocks.findUsageLogsWithDetails,
+    findUsageLogsForKeySlim: mocks.findUsageLogsForKeySlim,
   };
 });
 
@@ -43,15 +43,15 @@ describe("my-usage date range parsing", () => {
       billingModelSource: "original",
     });
 
-    mocks.findUsageLogsWithDetails.mockResolvedValue({ logs: [], total: 0 });
+    mocks.findUsageLogsForKeySlim.mockResolvedValue({ logs: [], total: 0 });
 
     const { getMyUsageLogs } = await import("@/actions/my-usage");
     const res = await getMyUsageLogs({ startDate: "2024-03-10", endDate: "2024-03-10" });
 
     expect(res.ok).toBe(true);
-    expect(mocks.findUsageLogsWithDetails).toHaveBeenCalledTimes(1);
+    expect(mocks.findUsageLogsForKeySlim).toHaveBeenCalledTimes(1);
 
-    const args = mocks.findUsageLogsWithDetails.mock.calls[0]?.[0];
+    const args = mocks.findUsageLogsForKeySlim.mock.calls[0]?.[0];
     expect(args.startTime).toBe(fromZonedTime("2024-03-10T00:00:00", tz).getTime());
     expect(args.endTime).toBe(fromZonedTime("2024-03-11T00:00:00", tz).getTime());
 
@@ -72,15 +72,15 @@ describe("my-usage date range parsing", () => {
       billingModelSource: "original",
     });
 
-    mocks.findUsageLogsWithDetails.mockResolvedValue({ logs: [], total: 0 });
+    mocks.findUsageLogsForKeySlim.mockResolvedValue({ logs: [], total: 0 });
 
     const { getMyUsageLogs } = await import("@/actions/my-usage");
     const res = await getMyUsageLogs({ startDate: "2024-11-03", endDate: "2024-11-03" });
 
     expect(res.ok).toBe(true);
-    expect(mocks.findUsageLogsWithDetails).toHaveBeenCalledTimes(1);
+    expect(mocks.findUsageLogsForKeySlim).toHaveBeenCalledTimes(1);
 
-    const args = mocks.findUsageLogsWithDetails.mock.calls[0]?.[0];
+    const args = mocks.findUsageLogsForKeySlim.mock.calls[0]?.[0];
     expect(args.startTime).toBe(fromZonedTime("2024-11-03T00:00:00", tz).getTime());
     expect(args.endTime).toBe(fromZonedTime("2024-11-04T00:00:00", tz).getTime());
 

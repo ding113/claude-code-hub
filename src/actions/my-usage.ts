@@ -3,7 +3,7 @@
 import { fromZonedTime } from "date-fns-tz";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys as keysTable, messageRequest } from "@/drizzle/schema";
+import { messageRequest } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
@@ -14,11 +14,10 @@ import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
+  findUsageLogsForKeySlim,
   findUsageLogsStats,
-  findUsageLogsWithDetails,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
-  type UsageLogFilters,
   type UsageLogSummary,
 } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
@@ -179,27 +178,6 @@ export interface MyUsageLogsResult {
 // Infinity means "all time" - no date filter applied to the query
 const ALL_TIME_MAX_AGE_DAYS = Infinity;
 
-/**
- * 查询用户在指定周期内的消费
- * 使用与 Key 层级和限额检查相同的时间范围计算逻辑
- *
- * @deprecated 此函数已被重构为使用统一的时间范围计算逻辑
- */
-async function sumUserCost(userId: number, period: "5h" | "weekly" | "monthly" | "total") {
-  // 动态导入避免循环依赖
-  const { sumUserCostInTimeRange, sumUserTotalCost } = await import("@/repository/statistics");
-  const { getTimeRangeForPeriod } = await import("@/lib/rate-limit/time-utils");
-
-  // 总消费：使用专用函数，传递 ALL_TIME_MAX_AGE_DAYS 实现全时间语义
-  if (period === "total") {
-    return await sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS);
-  }
-
-  // 其他周期：使用统一的时间范围计算
-  const { startTime, endTime } = await getTimeRangeForPeriod(period);
-  return await sumUserCostInTimeRange(userId, startTime, endTime);
-}
-
 export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata>> {
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
@@ -242,9 +220,8 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
       "@/lib/rate-limit/time-utils"
     );
-    const { sumUserCostInTimeRange, sumKeyCostInTimeRange, sumKeyTotalCostById } = await import(
-      "@/repository/statistics"
-    );
+    const { sumUserCostInTimeRange, sumUserTotalCost, sumKeyCostInTimeRange, sumKeyTotalCostById } =
+      await import("@/repository/statistics");
 
     // 计算各周期的时间范围
     // Key 使用 Key 的 dailyResetTime/dailyResetMode 配置
@@ -293,11 +270,11 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       sumKeyTotalCostById(key.id, ALL_TIME_MAX_AGE_DAYS),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
-      sumUserCost(user.id, "5h"),
+      sumUserCostInTimeRange(user.id, range5h.startTime, range5h.endTime),
       sumUserCostInTimeRange(user.id, userDailyTimeRange.startTime, userDailyTimeRange.endTime),
-      sumUserCost(user.id, "weekly"),
-      sumUserCost(user.id, "monthly"),
-      sumUserCost(user.id, "total"),
+      sumUserCostInTimeRange(user.id, rangeWeekly.startTime, rangeWeekly.endTime),
+      sumUserCostInTimeRange(user.id, rangeMonthly.startTime, rangeMonthly.endTime),
+      sumUserTotalCost(user.id, ALL_TIME_MAX_AGE_DAYS),
       getUserConcurrentSessions(user.id),
     ]);
 
@@ -469,9 +446,8 @@ export async function getMyUsageLogs(
       filters.endDate,
       timezone
     );
-
-    const usageFilters: UsageLogFilters = {
-      keyId: session.key.id,
+    const result = await findUsageLogsForKeySlim({
+      keyString: session.key.key,
       startTime,
       endTime,
       model: filters.model,
@@ -481,9 +457,7 @@ export async function getMyUsageLogs(
       minRetryCount: filters.minRetryCount,
       page,
       pageSize,
-    };
-
-    const result = await findUsageLogsWithDetails(usageFilters);
+    });
 
     const logs: MyUsageLogEntry[] = result.logs.map((log) => {
       const modelRedirect =
@@ -559,13 +533,8 @@ export async function getMyAvailableEndpoints(): Promise<ActionResult<string[]>>
 
 async function getUserConcurrentSessions(userId: number): Promise<number> {
   try {
-    const keys = await db
-      .select({ id: keysTable.id })
-      .from(keysTable)
-      .where(and(eq(keysTable.userId, userId), isNull(keysTable.deletedAt)));
-
-    const counts = await Promise.all(keys.map((k) => SessionTracker.getKeySessionCount(k.id)));
-    return counts.reduce((sum, value) => sum + value, 0);
+    // 直接使用 user 维度的活跃 session 集合，避免 keys × Redis 查询的 N+1
+    return await SessionTracker.getUserSessionCount(userId);
   } catch (error) {
     logger.error("[my-usage] getUserConcurrentSessions failed", error);
     return 0;
