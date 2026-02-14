@@ -15,7 +15,6 @@ import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-c
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsForKeySlim,
-  findUsageLogsStats,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
   type UsageLogSummary,
@@ -220,8 +219,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const { getTimeRangeForPeriodWithMode, getTimeRangeForPeriod } = await import(
       "@/lib/rate-limit/time-utils"
     );
-    const { sumUserCostInTimeRange, sumUserTotalCost, sumKeyCostInTimeRange, sumKeyTotalCostById } =
-      await import("@/repository/statistics");
+    const { sumKeyQuotaCostsById, sumUserQuotaCosts } = await import("@/repository/statistics");
 
     // 计算各周期的时间范围
     // Key 使用 Key 的 dailyResetTime/dailyResetMode 配置
@@ -248,35 +246,47 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       user.limitConcurrentSessions ?? null
     );
 
-    const [
-      keyCost5h,
-      keyCostDaily,
-      keyCostWeekly,
-      keyCostMonthly,
-      keyTotalCost,
-      keyConcurrent,
-      userCost5h,
-      userCostDaily,
-      userCostWeekly,
-      userCostMonthly,
-      userTotalCost,
-      userKeyConcurrent,
-    ] = await Promise.all([
+    const [keyCosts, keyConcurrent, userCosts, userKeyConcurrent] = await Promise.all([
       // Key 配额：直接查 DB（与 User 保持一致，解决数据源不一致问题）
-      sumKeyCostInTimeRange(key.id, range5h.startTime, range5h.endTime),
-      sumKeyCostInTimeRange(key.id, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
-      sumKeyCostInTimeRange(key.id, rangeWeekly.startTime, rangeWeekly.endTime),
-      sumKeyCostInTimeRange(key.id, rangeMonthly.startTime, rangeMonthly.endTime),
-      sumKeyTotalCostById(key.id, ALL_TIME_MAX_AGE_DAYS),
+      sumKeyQuotaCostsById(
+        key.id,
+        {
+          range5h,
+          rangeDaily: keyDailyTimeRange,
+          rangeWeekly,
+          rangeMonthly,
+        },
+        ALL_TIME_MAX_AGE_DAYS
+      ),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
-      sumUserCostInTimeRange(user.id, range5h.startTime, range5h.endTime),
-      sumUserCostInTimeRange(user.id, userDailyTimeRange.startTime, userDailyTimeRange.endTime),
-      sumUserCostInTimeRange(user.id, rangeWeekly.startTime, rangeWeekly.endTime),
-      sumUserCostInTimeRange(user.id, rangeMonthly.startTime, rangeMonthly.endTime),
-      sumUserTotalCost(user.id, ALL_TIME_MAX_AGE_DAYS),
+      sumUserQuotaCosts(
+        user.id,
+        {
+          range5h,
+          rangeDaily: userDailyTimeRange,
+          rangeWeekly,
+          rangeMonthly,
+        },
+        ALL_TIME_MAX_AGE_DAYS
+      ),
       getUserConcurrentSessions(user.id),
     ]);
+
+    const {
+      cost5h: keyCost5h,
+      costDaily: keyCostDaily,
+      costWeekly: keyCostWeekly,
+      costMonthly: keyCostMonthly,
+      costTotal: keyTotalCost,
+    } = keyCosts;
+    const {
+      cost5h: userCost5h,
+      costDaily: userCostDaily,
+      costWeekly: userCostWeekly,
+      costMonthly: userCostMonthly,
+      costTotal: userTotalCost,
+    } = userCosts;
 
     const quota: MyUsageQuota = {
       keyLimit5hUsd: key.limit5hUsd ?? null,
@@ -564,7 +574,7 @@ export interface MyStatsSummary extends UsageLogSummary {
 
 /**
  * Get aggregated statistics for a date range
- * Uses findUsageLogsStats for efficient aggregation
+ * 通过 model breakdown 聚合，避免额外的 summary 聚合查询
  */
 export async function getMyStatsSummary(
   filters: MyStatsSummaryFilters = {}
@@ -583,60 +593,102 @@ export async function getMyStatsSummary(
       timezone
     );
 
-    // Get aggregated stats using existing repository function
-    const stats = await findUsageLogsStats({
-      keyId: session.key.id,
-      startTime,
-      endTime,
-    });
+    const startDate = startTime ? new Date(startTime) : undefined;
+    const endDate = endTime ? new Date(endTime) : undefined;
 
-    // Get model breakdown for current key
-    const keyBreakdown = await db
-      .select({
-        model: messageRequest.model,
-        requests: sql<number>`count(*)::int`,
-        cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-      })
-      .from(messageRequest)
-      .where(
-        and(
-          eq(messageRequest.key, session.key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          startTime ? gte(messageRequest.createdAt, new Date(startTime)) : undefined,
-          endTime ? lt(messageRequest.createdAt, new Date(endTime)) : undefined
+    const [keyBreakdown, userBreakdown] = await Promise.all([
+      // 当前 Key 的 model breakdown（同时用于构造汇总统计）
+      db
+        .select({
+          model: messageRequest.model,
+          requests: sql<number>`count(*)::int`,
+          cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+          inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+          outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+          cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+          cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+          cacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}), 0)::double precision`,
+          cacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}), 0)::double precision`,
+        })
+        .from(messageRequest)
+        .where(
+          and(
+            eq(messageRequest.key, session.key.key),
+            isNull(messageRequest.deletedAt),
+            EXCLUDE_WARMUP_CONDITION,
+            startDate ? gte(messageRequest.createdAt, startDate) : undefined,
+            endDate ? lt(messageRequest.createdAt, endDate) : undefined
+          )
         )
-      )
-      .groupBy(messageRequest.model)
-      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+        .groupBy(messageRequest.model)
+        .orderBy(sql`sum(${messageRequest.costUsd}) DESC`),
+      // 用户维度的 model breakdown（跨所有 Key）
+      db
+        .select({
+          model: messageRequest.model,
+          requests: sql<number>`count(*)::int`,
+          cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
+          inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
+          outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+          cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
+          cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+        })
+        .from(messageRequest)
+        .where(
+          and(
+            eq(messageRequest.userId, session.user.id),
+            isNull(messageRequest.deletedAt),
+            EXCLUDE_WARMUP_CONDITION,
+            startDate ? gte(messageRequest.createdAt, startDate) : undefined,
+            endDate ? lt(messageRequest.createdAt, endDate) : undefined
+          )
+        )
+        .groupBy(messageRequest.model)
+        .orderBy(sql`sum(${messageRequest.costUsd}) DESC`),
+    ]);
 
-    // Get model breakdown for user (all keys)
-    const userBreakdown = await db
-      .select({
-        model: messageRequest.model,
-        requests: sql<number>`count(*)::int`,
-        cost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
-      })
-      .from(messageRequest)
-      .where(
-        and(
-          eq(messageRequest.userId, session.user.id),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          startTime ? gte(messageRequest.createdAt, new Date(startTime)) : undefined,
-          endTime ? lt(messageRequest.createdAt, new Date(endTime)) : undefined
-        )
-      )
-      .groupBy(messageRequest.model)
-      .orderBy(sql`sum(${messageRequest.costUsd}) DESC`);
+    const summaryAcc = keyBreakdown.reduce(
+      (acc, row) => {
+        const cost = Number(row.cost ?? 0);
+        acc.totalRequests += row.requests ?? 0;
+        acc.totalCost += Number.isFinite(cost) ? cost : 0;
+        acc.totalInputTokens += row.inputTokens ?? 0;
+        acc.totalOutputTokens += row.outputTokens ?? 0;
+        acc.totalCacheCreationTokens += row.cacheCreationTokens ?? 0;
+        acc.totalCacheReadTokens += row.cacheReadTokens ?? 0;
+        acc.totalCacheCreation5mTokens += row.cacheCreation5mTokens ?? 0;
+        acc.totalCacheCreation1hTokens += row.cacheCreation1hTokens ?? 0;
+        return acc;
+      },
+      {
+        totalRequests: 0,
+        totalCost: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCacheCreationTokens: 0,
+        totalCacheReadTokens: 0,
+        totalCacheCreation5mTokens: 0,
+        totalCacheCreation1hTokens: 0,
+      }
+    );
+
+    const totalTokens =
+      summaryAcc.totalInputTokens +
+      summaryAcc.totalOutputTokens +
+      summaryAcc.totalCacheCreationTokens +
+      summaryAcc.totalCacheReadTokens;
+
+    const stats: UsageLogSummary = {
+      totalRequests: summaryAcc.totalRequests,
+      totalCost: summaryAcc.totalCost,
+      totalTokens,
+      totalInputTokens: summaryAcc.totalInputTokens,
+      totalOutputTokens: summaryAcc.totalOutputTokens,
+      totalCacheCreationTokens: summaryAcc.totalCacheCreationTokens,
+      totalCacheReadTokens: summaryAcc.totalCacheReadTokens,
+      totalCacheCreation5mTokens: summaryAcc.totalCacheCreation5mTokens,
+      totalCacheCreation1hTokens: summaryAcc.totalCacheCreation1hTokens,
+    };
 
     const result: MyStatsSummary = {
       ...stats,
