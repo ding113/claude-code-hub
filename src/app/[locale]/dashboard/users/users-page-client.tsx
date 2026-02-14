@@ -77,11 +77,16 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
   // Debounce search term to avoid frequent API requests
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const debouncedPendingTagsKey = useDebounce(pendingTagFilters.slice().sort().join("|"), 300);
-  const debouncedPendingKeyGroupsKey = useDebounce(
-    pendingKeyGroupFilters.slice().sort().join("|"),
-    300
+  const pendingTagFiltersKey = useMemo(
+    () => pendingTagFilters.slice().sort().join("|"),
+    [pendingTagFilters]
   );
+  const pendingKeyGroupFiltersKey = useMemo(
+    () => pendingKeyGroupFilters.slice().sort().join("|"),
+    [pendingKeyGroupFilters]
+  );
+  const debouncedPendingTagsKey = useDebounce(pendingTagFiltersKey, 300);
+  const debouncedPendingKeyGroupsKey = useDebounce(pendingKeyGroupFiltersKey, 300);
 
   // Use debounced value for API queries, raw value for UI highlighting
   const resolvedSearchTerm = debouncedSearchTerm.trim() ? debouncedSearchTerm.trim() : undefined;

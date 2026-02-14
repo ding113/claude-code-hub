@@ -3,7 +3,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { Badge } from "@/components/ui/badge";
@@ -126,7 +126,8 @@ export function VirtualizedLogsTable({
     });
 
   // Flatten all pages into a single array
-  const allLogs = data?.pages.flatMap((page) => page.logs) ?? [];
+  const pages = data?.pages;
+  const allLogs = useMemo(() => pages?.flatMap((page) => page.logs) ?? [], [pages]);
 
   // Virtual list setup
   const rowVirtualizer = useVirtualizer({
