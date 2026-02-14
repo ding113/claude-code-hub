@@ -150,8 +150,8 @@ function UsageLogsViewContent({
 
   // Use useSearchParams hook for client-side URL reactivity
   // Note: searchParams props from server don't update on client-side navigation
-  const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(() => {
-    return parseLogsUrlFilters({
+  const filters = useMemo<VirtualizedLogsTableFilters>(() => {
+    const { page: _page, ...parsed } = parseLogsUrlFilters({
       userId: _params.get("userId") ?? undefined,
       keyId: _params.get("keyId") ?? undefined,
       providerId: _params.get("providerId") ?? undefined,
@@ -163,7 +163,9 @@ function UsageLogsViewContent({
       endpoint: _params.get("endpoint") ?? undefined,
       minRetry: _params.get("minRetry") ?? undefined,
       page: _params.get("page") ?? undefined,
-    }) as VirtualizedLogsTableFilters & { page?: number };
+    });
+
+    return parsed;
   }, [_params]);
 
   const { data: overviewData } = useQuery<OverviewData>({

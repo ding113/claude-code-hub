@@ -110,6 +110,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN hour_range hr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
@@ -146,6 +148,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
@@ -182,6 +186,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
@@ -218,6 +224,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
