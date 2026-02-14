@@ -114,6 +114,8 @@ export function ProviderEndpointsTable({
       }
       return await getProviderEndpointsByVendor({ vendorId });
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   // Sort endpoints by type order (from getAllProviderTypes) then by sortOrder
@@ -168,6 +170,7 @@ export function ProviderEndpointsTable({
     },
     enabled: endpointIds.length > 0,
     staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
   if (isLoading) {

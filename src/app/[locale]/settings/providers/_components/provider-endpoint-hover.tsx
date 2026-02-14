@@ -223,6 +223,7 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
     queryKey: ["provider-endpoints", vendorId, providerType, "hover-stats"],
     queryFn: async () => requestVendorTypeEndpointStatsBatched(vendorId, providerType),
     staleTime: 1000 * 30,
+    refetchOnWindowFocus: false,
   });
 
   const count = stats?.enabled ?? 0;
@@ -232,6 +233,7 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
     queryFn: async () => getProviderEndpointsByVendor({ vendorId }),
     enabled: isOpen || process.env.NODE_ENV === "test",
     staleTime: 1000 * 30,
+    refetchOnWindowFocus: false,
   });
 
   const endpoints = useMemo(() => {
@@ -283,6 +285,7 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
     },
     enabled: isOpen && endpointIds.length > 0,
     staleTime: 1000 * 10,
+    refetchOnWindowFocus: false,
   });
 
   const circuitStateByEndpointId = useMemo(() => {

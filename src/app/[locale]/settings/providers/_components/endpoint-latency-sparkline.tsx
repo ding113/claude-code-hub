@@ -462,6 +462,7 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
         });
     },
     staleTime: 30_000,
+    refetchOnWindowFocus: false,
     enabled: isInView,
   });
 
