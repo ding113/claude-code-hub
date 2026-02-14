@@ -25,7 +25,7 @@ function cleanupExpiredMemoryLocks(now: number): void {
 
 export async function acquireLeaderLock(key: string, ttlMs: number): Promise<LeaderLock | null> {
   const lockId = generateLockId();
-  const redis = getRedisClient();
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (redis && redis.status === "ready") {
     try {
@@ -60,7 +60,7 @@ export async function acquireLeaderLock(key: string, ttlMs: number): Promise<Lea
 }
 
 export async function renewLeaderLock(lock: LeaderLock, ttlMs: number): Promise<boolean> {
-  const redis = getRedisClient();
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
 
   if (lock.lockType === "memory") {
     // If Redis becomes available, force callers to re-acquire a distributed lock.
@@ -117,7 +117,7 @@ export async function releaseLeaderLock(lock: LeaderLock): Promise<void> {
     return;
   }
 
-  const redis = getRedisClient();
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis || redis.status !== "ready") {
     return;
   }
