@@ -1,4 +1,4 @@
-"use server";
+import "server-only";
 
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
@@ -49,7 +49,7 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
     return null;
   }
 
-  // Size 控制：先清理过期；仍超限则清空（简单且可预期）
+  // Size 控制：先清理过期；仍超限则按 FIFO 淘汰一小部分，避免一次性清空导致缓存击穿
   if (keyStringByIdCache.size >= KEY_STRING_BY_ID_CACHE_MAX_SIZE) {
     for (const [id, value] of keyStringByIdCache) {
       if (value.expiresAt <= now) {
@@ -58,13 +58,20 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
     }
 
     if (keyStringByIdCache.size >= KEY_STRING_BY_ID_CACHE_MAX_SIZE) {
-      keyStringByIdCache.clear();
+      const evictCount = Math.max(1, Math.ceil(KEY_STRING_BY_ID_CACHE_MAX_SIZE * 0.1));
+      let remaining = evictCount;
+
+      for (const id of keyStringByIdCache.keys()) {
+        keyStringByIdCache.delete(id);
+        remaining -= 1;
+        if (remaining <= 0) break;
+      }
     }
   }
 
   keyStringByIdCache.set(keyId, {
     key: keyString,
-    expiresAt: Date.now() + KEY_STRING_BY_ID_CACHE_TTL_MS,
+    expiresAt: now + KEY_STRING_BY_ID_CACHE_TTL_MS,
   });
   return keyString;
 }

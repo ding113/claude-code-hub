@@ -405,7 +405,7 @@ export async function editProviderEndpoint(
     }
 
     const shouldResetCircuit =
-      parsed.data.url !== undefined ||
+      (parsed.data.url !== undefined && parsed.data.url !== previous.url) ||
       (parsed.data.isEnabled === true && previous.isEnabled === false);
 
     if (shouldResetCircuit) {
