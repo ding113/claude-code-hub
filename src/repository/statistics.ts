@@ -1056,7 +1056,8 @@ export async function sumUserQuotaCosts(
       ranges.range5h.endTime.getTime(),
       ranges.rangeDaily.endTime.getTime(),
       ranges.rangeWeekly.endTime.getTime(),
-      ranges.rangeMonthly.endTime.getTime()
+      ranges.rangeMonthly.endTime.getTime(),
+      Date.now()
     )
   );
 
@@ -1119,7 +1120,8 @@ export async function sumKeyQuotaCostsById(
       ranges.range5h.endTime.getTime(),
       ranges.rangeDaily.endTime.getTime(),
       ranges.rangeWeekly.endTime.getTime(),
-      ranges.rangeMonthly.endTime.getTime()
+      ranges.rangeMonthly.endTime.getTime(),
+      Date.now()
     )
   );
 

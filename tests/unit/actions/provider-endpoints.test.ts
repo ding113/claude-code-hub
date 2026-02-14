@@ -292,10 +292,10 @@ describe("provider-endpoints actions", () => {
     expect(tryDeleteProviderVendorIfEmptyMock).toHaveBeenCalledWith(123);
   });
 
-  it("probeProviderEndpoint: success resets endpoint circuit (best-effort)", async () => {
+  it("probeProviderEndpoint: calls probeProviderEndpointAndRecordByEndpoint and returns result", async () => {
     getSessionMock.mockResolvedValue({ user: { role: "admin" } });
 
-    findProviderEndpointByIdMock.mockResolvedValue({
+    const endpoint = {
       id: 7,
       vendorId: 123,
       providerType: "claude",
@@ -312,71 +312,32 @@ describe("provider-endpoints actions", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       deletedAt: null,
-    });
+    };
+    findProviderEndpointByIdMock.mockResolvedValue(endpoint);
 
     const { probeProviderEndpointAndRecordByEndpoint } = await import(
       "@/lib/provider-endpoints/probe"
     );
-    vi.mocked(probeProviderEndpointAndRecordByEndpoint).mockResolvedValue({
+    const result = {
       ok: true,
       method: "HEAD",
       statusCode: 200,
       latencyMs: 10,
       errorType: null,
       errorMessage: null,
-    });
-
-    const { resetEndpointCircuit } = await import("@/lib/endpoint-circuit-breaker");
-    vi.mocked(resetEndpointCircuit).mockResolvedValue(undefined);
+    } as const;
+    vi.mocked(probeProviderEndpointAndRecordByEndpoint).mockResolvedValue(result);
 
     const { probeProviderEndpoint } = await import("@/actions/provider-endpoints");
     const res = await probeProviderEndpoint({ endpointId: 7, timeoutMs: 5000 });
 
     expect(res.ok).toBe(true);
-    expect(resetEndpointCircuit).toHaveBeenCalledWith(7);
-  });
-
-  it("probeProviderEndpoint: reset failure does not affect probe result", async () => {
-    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
-
-    findProviderEndpointByIdMock.mockResolvedValue({
-      id: 7,
-      vendorId: 123,
-      providerType: "claude",
-      url: "https://api.example.com",
-      label: null,
-      sortOrder: 0,
-      isEnabled: true,
-      lastProbedAt: null,
-      lastProbeOk: null,
-      lastProbeStatusCode: null,
-      lastProbeLatencyMs: null,
-      lastProbeErrorType: null,
-      lastProbeErrorMessage: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      deletedAt: null,
+    expect(probeProviderEndpointAndRecordByEndpoint).toHaveBeenCalledWith({
+      endpoint,
+      source: "manual",
+      timeoutMs: 5000,
     });
-
-    const { probeProviderEndpointAndRecordByEndpoint } = await import(
-      "@/lib/provider-endpoints/probe"
-    );
-    vi.mocked(probeProviderEndpointAndRecordByEndpoint).mockResolvedValue({
-      ok: true,
-      method: "HEAD",
-      statusCode: 200,
-      latencyMs: 10,
-      errorType: null,
-      errorMessage: null,
-    });
-
-    const { resetEndpointCircuit } = await import("@/lib/endpoint-circuit-breaker");
-    vi.mocked(resetEndpointCircuit).mockRejectedValue(new Error("boom"));
-
-    const { probeProviderEndpoint } = await import("@/actions/provider-endpoints");
-    const res = await probeProviderEndpoint({ endpointId: 7, timeoutMs: 5000 });
-
-    expect(res.ok).toBe(true);
+    expect(res.data?.result).toEqual(result);
   });
 
   describe("batchGetEndpointCircuitInfo", () => {
