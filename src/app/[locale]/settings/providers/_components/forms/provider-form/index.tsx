@@ -35,6 +35,8 @@ import { NetworkSection } from "./sections/network-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
 
+const TAB_ORDER: TabId[] = ["basic", "routing", "limits", "network", "testing"];
+
 function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
@@ -183,9 +185,6 @@ function ProviderFormContent({
   });
   const isScrollingToSection = useRef(false);
 
-  // Tab order for navigation
-  const tabOrder: TabId[] = ["basic", "routing", "limits", "network", "testing"];
-
   // Scroll to section when tab is clicked
   const scrollToSection = useCallback((tab: TabId) => {
     const section = sectionRefs.current[tab];
@@ -213,7 +212,7 @@ function ProviderFormContent({
     let activeSection: TabId = "basic";
     let minDistance = Infinity;
 
-    for (const tab of tabOrder) {
+    for (const tab of TAB_ORDER) {
       const section = sectionRefs.current[tab];
       if (!section) continue;
 
@@ -370,7 +369,6 @@ function ProviderFormContent({
           }
 
           void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-          void queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
 
           toast.success(t("success.created"));
           dispatch({ type: "RESET_FORM" });

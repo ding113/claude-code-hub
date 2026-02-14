@@ -10,7 +10,7 @@ import {
 } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { PROVIDER_ENDPOINT_CONFLICT_CODE } from "@/lib/provider-endpoint-error-codes";
-import { probeProviderEndpointAndRecord } from "@/lib/provider-endpoints/probe";
+import { probeProviderEndpointAndRecordByEndpoint } from "@/lib/provider-endpoints/probe";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import {
@@ -348,7 +348,7 @@ export async function addProviderEndpoint(
     if (isForeignKeyViolationError(error)) {
       return {
         ok: false,
-        error: ERROR_CODES.NOT_FOUND,
+        error: "供应商不存在",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
     }
@@ -380,6 +380,15 @@ export async function editProviderEndpoint(
       };
     }
 
+    const previous = await findProviderEndpointById(parsed.data.endpointId);
+    if (!previous || previous.deletedAt !== null) {
+      return {
+        ok: false,
+        error: "端点不存在",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
     const endpoint = await updateProviderEndpoint(parsed.data.endpointId, {
       url: parsed.data.url,
       label: parsed.data.label,
@@ -393,6 +402,22 @@ export async function editProviderEndpoint(
         error: "端点不存在",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
+    }
+
+    const shouldResetCircuit =
+      parsed.data.url !== undefined ||
+      (parsed.data.isEnabled === true && previous.isEnabled === false);
+
+    if (shouldResetCircuit) {
+      try {
+        await resetEndpointCircuitState(endpoint.id);
+      } catch (error) {
+        logger.warn("editProviderEndpoint:reset_circuit_failed", {
+          endpointId: endpoint.id,
+          vendorId: endpoint.vendorId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     try {
@@ -457,6 +482,16 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
         error: "端点不存在",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
+    }
+
+    try {
+      await resetEndpointCircuitState(endpoint.id);
+    } catch (error) {
+      logger.warn("removeProviderEndpoint:reset_circuit_failed", {
+        endpointId: parsed.data.endpointId,
+        vendorId: endpoint.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     // Auto cleanup: if the vendor has no active providers/endpoints, delete it as well.
@@ -529,18 +564,22 @@ export async function probeProviderEndpoint(input: unknown): Promise<
       };
     }
 
-    const result = await probeProviderEndpointAndRecord({
-      endpointId: endpoint.id,
+    const result = await probeProviderEndpointAndRecordByEndpoint({
+      endpoint,
       source: "manual",
       timeoutMs: parsed.data.timeoutMs,
     });
 
-    if (!result) {
-      return {
-        ok: false,
-        error: "端点不存在",
-        errorCode: ERROR_CODES.NOT_FOUND,
-      };
+    if (result.ok) {
+      try {
+        await resetEndpointCircuitState(endpoint.id);
+      } catch (error) {
+        logger.warn("probeProviderEndpoint:reset_circuit_failed", {
+          endpointId: endpoint.id,
+          vendorId: endpoint.vendorId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     return { ok: true, data: { endpoint, result } };
@@ -631,7 +670,7 @@ export async function batchGetProviderEndpointProbeLogs(
     logger.error("batchGetProviderEndpointProbeLogs:error", error);
     return {
       ok: false,
-      error: ERROR_CODES.OPERATION_FAILED,
+      error: "批量获取端点测活历史失败",
       errorCode: ERROR_CODES.OPERATION_FAILED,
     };
   }
@@ -700,7 +739,7 @@ export async function batchGetVendorTypeEndpointStats(input: unknown): Promise<
     logger.error("batchGetVendorTypeEndpointStats:error", error);
     return {
       ok: false,
-      error: ERROR_CODES.OPERATION_FAILED,
+      error: "批量获取供应商端点统计失败",
       errorCode: ERROR_CODES.OPERATION_FAILED,
     };
   }

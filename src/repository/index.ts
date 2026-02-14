@@ -49,6 +49,7 @@ export {
   createProviderEndpoint,
   deleteProviderEndpointProbeLogsBeforeDateBatch,
   deleteProviderVendor,
+  findEnabledProviderEndpointsByVendorAndType,
   findEnabledProviderEndpointsForProbing,
   findProviderEndpointById,
   findProviderEndpointProbeLogs,
