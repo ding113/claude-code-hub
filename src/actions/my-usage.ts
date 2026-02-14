@@ -176,9 +176,8 @@ export interface MyUsageLogsResult {
   billingModelSource: BillingModelSource;
 }
 
-// All-time max age for total usage queries (~100 years in days)
-// This ensures "total" displays all-time usage, not just the last 365 days
-const ALL_TIME_MAX_AGE_DAYS = 36500;
+// Infinity means "all time" - no date filter applied to the query
+const ALL_TIME_MAX_AGE_DAYS = Infinity;
 
 /**
  * 查询用户在指定周期内的消费

@@ -151,6 +151,7 @@ function createFallbackSettings(): SystemSettings {
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
+    enableBillingHeaderRectifier: true,
     enableCodexSessionIdCompletion: true,
     enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
@@ -194,6 +195,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+      enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: systemSettings.enableResponseFixer,
@@ -347,6 +349,11 @@ export async function updateSystemSettings(
     // thinking budget 整流器开关（如果提供）
     if (payload.enableThinkingBudgetRectifier !== undefined) {
       updates.enableThinkingBudgetRectifier = payload.enableThinkingBudgetRectifier;
+    }
+
+    // billing header 整流器开关（如果提供）
+    if (payload.enableBillingHeaderRectifier !== undefined) {
+      updates.enableBillingHeaderRectifier = payload.enableBillingHeaderRectifier;
     }
 
     // Codex Session ID 补全开关（如果提供）

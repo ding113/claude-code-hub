@@ -11,6 +11,7 @@ export type SpecialSetting =
   | GuardInterceptSpecialSetting
   | ThinkingSignatureRectifierSpecialSetting
   | ThinkingBudgetRectifierSpecialSetting
+  | BillingHeaderRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
@@ -150,6 +151,14 @@ export type ClaudeMetadataUserIdInjectionSpecialSetting = {
   reason: "injected" | "already_exists" | "missing_key_id" | "missing_session_id";
   keyId: number | null;
   sessionId: string | null;
+};
+
+export type BillingHeaderRectifierSpecialSetting = {
+  type: "billing_header_rectifier";
+  scope: "request";
+  hit: boolean;
+  removedCount: number;
+  extractedValues: string[];
 };
 
 export type ThinkingBudgetRectifierSpecialSetting = {

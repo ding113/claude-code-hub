@@ -1,4 +1,9 @@
 import { logger } from "@/lib/logger";
+import {
+  getGlobalActiveSessionsKey,
+  getKeyActiveSessionsKey,
+  getUserActiveSessionsKey,
+} from "@/lib/redis/active-session-keys";
 import { getRedisClient } from "./redis";
 
 /**
@@ -11,10 +16,10 @@ import { getRedisClient } from "./redis";
  * 4. 兼容旧格式（Set）实现零停机迁移
  *
  * 数据结构：
- * - global:active_sessions (ZSET): score = timestamp, member = sessionId
- * - key:${keyId}:active_sessions (ZSET): 同上
+ * - {active_sessions}:global:active_sessions (ZSET): score = timestamp, member = sessionId
+ * - {active_sessions}:key:${keyId}:active_sessions (ZSET): 同上
  * - provider:${providerId}:active_sessions (ZSET): 同上
- * - user:${userId}:active_sessions (ZSET): 同上
+ * - {active_sessions}:user:${userId}:active_sessions (ZSET): 同上
  */
 export class SessionTracker {
   private static readonly SESSION_TTL_SECONDS = (() => {
@@ -27,7 +32,7 @@ export class SessionTracker {
   /**
    * 初始化 SessionTracker，自动清理旧格式数据
    *
-   * 应在应用启动时调用一次，清理 global:active_sessions 的旧 Set 数据。
+   * 应在应用启动时调用一次，清理 {active_sessions}:global:active_sessions 的旧 Set 数据。
    * 其他 key（provider:*、key:*）在运行时自动清理。
    */
   static async initialize(): Promise<void> {
@@ -38,7 +43,7 @@ export class SessionTracker {
     }
 
     try {
-      const key = "global:active_sessions";
+      const key = getGlobalActiveSessionsKey();
       const exists = await redis.exists(key);
 
       if (exists === 1) {
@@ -75,18 +80,21 @@ export class SessionTracker {
     try {
       const now = Date.now();
       const pipeline = redis.pipeline();
+      const globalKey = getGlobalActiveSessionsKey();
+      const keyZSetKey = getKeyActiveSessionsKey(keyId);
 
       // 添加到全局集合（ZSET）
-      pipeline.zadd("global:active_sessions", now, sessionId);
-      pipeline.expire("global:active_sessions", 3600); // 1 小时兜底 TTL
+      pipeline.zadd(globalKey, now, sessionId);
+      pipeline.expire(globalKey, 3600); // 1 小时兜底 TTL
 
       // 添加到 key 级集合（ZSET）
-      pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
-      pipeline.expire(`key:${keyId}:active_sessions`, 3600);
+      pipeline.zadd(keyZSetKey, now, sessionId);
+      pipeline.expire(keyZSetKey, 3600);
 
       if (userId !== undefined) {
-        pipeline.zadd(`user:${userId}:active_sessions`, now, sessionId);
-        pipeline.expire(`user:${userId}:active_sessions`, 3600);
+        const userZSetKey = getUserActiveSessionsKey(userId);
+        pipeline.zadd(userZSetKey, now, sessionId);
+        pipeline.expire(userZSetKey, 3600);
       }
 
       const results = await pipeline.exec();
@@ -127,9 +135,10 @@ export class SessionTracker {
     try {
       const now = Date.now();
       const pipeline = redis.pipeline();
+      const globalKey = getGlobalActiveSessionsKey();
 
       // 更新全局集合时间戳
-      pipeline.zadd("global:active_sessions", now, sessionId);
+      pipeline.zadd(globalKey, now, sessionId);
 
       // 添加到 provider 级集合（ZSET）
       pipeline.zadd(`provider:${providerId}:active_sessions`, now, sessionId);
@@ -181,14 +190,16 @@ export class SessionTracker {
       const pipeline = redis.pipeline();
       const ttlSeconds = SessionTracker.SESSION_TTL_SECONDS;
       const providerZSetKey = `provider:${providerId}:active_sessions`;
+      const globalKey = getGlobalActiveSessionsKey();
+      const keyZSetKey = getKeyActiveSessionsKey(keyId);
 
-      pipeline.zadd("global:active_sessions", now, sessionId);
-      pipeline.zadd(`key:${keyId}:active_sessions`, now, sessionId);
+      pipeline.zadd(globalKey, now, sessionId);
+      pipeline.zadd(keyZSetKey, now, sessionId);
       pipeline.zadd(providerZSetKey, now, sessionId);
       // Use dynamic TTL based on session TTL (at least 1h to cover active sessions)
       pipeline.expire(providerZSetKey, Math.max(3600, ttlSeconds));
       if (userId !== undefined) {
-        pipeline.zadd(`user:${userId}:active_sessions`, now, sessionId);
+        pipeline.zadd(getUserActiveSessionsKey(userId), now, sessionId);
       }
 
       pipeline.expire(`session:${sessionId}:provider`, ttlSeconds);
@@ -232,7 +243,7 @@ export class SessionTracker {
     if (!redis || redis.status !== "ready") return 0;
 
     try {
-      const key = "global:active_sessions";
+      const key = getGlobalActiveSessionsKey();
       const exists = await redis.exists(key);
 
       if (exists === 1) {
@@ -265,7 +276,7 @@ export class SessionTracker {
     if (!redis || redis.status !== "ready") return 0;
 
     try {
-      const key = `key:${keyId}:active_sessions`;
+      const key = getKeyActiveSessionsKey(keyId);
       const exists = await redis.exists(key);
 
       if (exists === 1) {
@@ -331,7 +342,7 @@ export class SessionTracker {
     if (!redis || redis.status !== "ready") return 0;
 
     try {
-      const key = `user:${userId}:active_sessions`;
+      const key = getUserActiveSessionsKey(userId);
       const exists = await redis.exists(key);
 
       if (exists === 1) {
@@ -472,7 +483,7 @@ export class SessionTracker {
     if (!redis || redis.status !== "ready") return [];
 
     try {
-      const key = "global:active_sessions";
+      const key = getGlobalActiveSessionsKey();
       const exists = await redis.exists(key);
 
       if (exists === 1) {

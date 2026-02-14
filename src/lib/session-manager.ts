@@ -19,8 +19,16 @@ import type {
 } from "@/types/session";
 import type { SpecialSetting } from "@/types/special-settings";
 import { getRedisClient } from "./redis";
+import {
+  getGlobalActiveSessionsKey,
+  getKeyActiveSessionsKey,
+  getUserActiveSessionsKey,
+} from "./redis/active-session-keys";
 import { SessionTracker } from "./session-tracker";
 
+/**
+ * 将已脱敏的 header 文本解析为可序列化对象（用于写入 Session 元信息）。
+ */
 function headersToSanitizedObject(headers: Headers): Record<string, string> {
   const sanitizedText = sanitizeHeaders(headers);
   if (!sanitizedText || sanitizedText === "(empty)") {
@@ -46,6 +54,12 @@ function headersToSanitizedObject(headers: Headers): Record<string, string> {
   return obj;
 }
 
+/**
+ * 解析存储在 Redis 中的 header JSON 字符串。
+ *
+ * - 成功返回 `{ [name]: value }`
+ * - 解析失败/结构不合法则返回 null
+ */
 function parseHeaderRecord(value: string): Record<string, string> | null {
   try {
     const parsed: unknown = JSON.parse(value);
@@ -1930,15 +1944,22 @@ export class SessionManager {
       // 1. 先查询绑定信息（用于从 ZSET 中移除）
       let providerId: number | null = null;
       let keyId: number | null = null;
+      let userId: number | null = null;
 
       try {
-        const [providerIdStr, keyIdStr] = await Promise.all([
+        const [providerIdStr, keyIdStr, userIdStr] = await Promise.all([
           redis.get(`session:${sessionId}:provider`),
           redis.get(`session:${sessionId}:key`),
+          redis.hget(`session:${sessionId}:info`, "userId"),
         ]);
 
         providerId = providerIdStr ? parseInt(providerIdStr, 10) : null;
         keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
+        userId = userIdStr ? parseInt(userIdStr, 10) : null;
+
+        if (!Number.isFinite(userId)) {
+          userId = null;
+        }
       } catch (lookupError) {
         // Redis 查询失败不应阻止清理操作，继续执行删除
         logger.warn(
@@ -1965,14 +1986,18 @@ export class SessionManager {
       pipeline.del(`session:${sessionId}:response`);
 
       // 3. 从 ZSET 中移除（始终尝试，即使查询失败）
-      pipeline.zrem("global:active_sessions", sessionId);
+      pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);
 
       if (providerId) {
         pipeline.zrem(`provider:${providerId}:active_sessions`, sessionId);
       }
 
       if (keyId) {
-        pipeline.zrem(`key:${keyId}:active_sessions`, sessionId);
+        pipeline.zrem(getKeyActiveSessionsKey(keyId), sessionId);
+      }
+
+      if (userId) {
+        pipeline.zrem(getUserActiveSessionsKey(userId), sessionId);
       }
 
       // 4. 删除 hash 映射（如果存在）

@@ -10,7 +10,7 @@ import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { calculateRequestCost } from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
-import { parseSSEData } from "@/lib/utils/sse";
+import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
 import {
   updateMessageRequestCost,
@@ -961,53 +961,95 @@ export class ProxyResponseHandler {
 
           let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
           // 保护：避免透传 stats 任务把超大响应体无界缓存在内存中（DoS/OOM 风险）
-          // 说明：这里用于统计/结算的内容仅保留“尾部窗口”（最近 MAX_STATS_BUFFER_BYTES），用于尽可能解析 usage/假200。
-          // 若响应体极大，仍会完整 drain 上游（reader.read），但不再累计完整字符串。
+          // 说明：用于统计/结算的内容采用“头部 + 尾部窗口”：
+          // - 头部保留前 MAX_STATS_HEAD_BYTES（便于解析可能前置的 metadata）
+          // - 尾部保留最近 MAX_STATS_TAIL_BYTES（便于解析结尾 usage/假 200 等）
+          // - 中间部分会被丢弃（wasTruncated=true），统计将退化为 best-effort
           const MAX_STATS_BUFFER_BYTES = 10 * 1024 * 1024; // 10MB
-          const MAX_STATS_BUFFER_CHUNKS = 8192;
-          const chunks: string[] = [];
-          const chunkBytes: number[] = [];
-          let chunkHead = 0;
-          let bufferedBytes = 0;
+          const MAX_STATS_HEAD_BYTES = 1024 * 1024; // 1MB
+          const MAX_STATS_TAIL_BYTES = MAX_STATS_BUFFER_BYTES - MAX_STATS_HEAD_BYTES;
+          const MAX_STATS_TAIL_CHUNKS = 8192;
+
+          const headChunks: string[] = [];
+          let headBufferedBytes = 0;
+
+          const tailChunks: string[] = [];
+          const tailChunkBytes: number[] = [];
+          let tailHead = 0;
+          let tailBufferedBytes = 0;
           let wasTruncated = false;
+          let inTailMode = false;
+
+          const joinTailChunks = (): string => {
+            if (tailHead <= 0) return tailChunks.join("");
+            return tailChunks.slice(tailHead).join("");
+          };
 
           const joinChunks = (): string => {
-            if (chunkHead <= 0) return chunks.join("");
-            return chunks.slice(chunkHead).join("");
+            const headText = headChunks.join("");
+            if (!inTailMode) {
+              return headText;
+            }
+
+            const tailText = joinTailChunks();
+
+            // 用 SSE comment 标记被截断的中间段；parseSSEData 会忽略 ":" 开头的行
+            if (wasTruncated) {
+              // 插入空行强制 flush event，避免“头+尾”拼接后跨 event 误拼接数据行
+              return `${headText}\n\n: [cch_truncated]\n\n${tailText}`;
+            }
+
+            return `${headText}${tailText}`;
           };
 
           const pushChunk = (text: string, bytes: number) => {
             if (!text) return;
-            chunks.push(text);
-            chunkBytes.push(bytes);
-            bufferedBytes += bytes;
 
-            // 仅保留尾部窗口，避免内存无界增长
-            while (bufferedBytes > MAX_STATS_BUFFER_BYTES && chunkHead < chunkBytes.length) {
-              bufferedBytes -= chunkBytes[chunkHead] ?? 0;
-              chunks[chunkHead] = "";
-              chunkBytes[chunkHead] = 0;
-              chunkHead += 1;
-              wasTruncated = true;
+            const pushToTail = () => {
+              tailChunks.push(text);
+              tailChunkBytes.push(bytes);
+              tailBufferedBytes += bytes;
+
+              // 仅保留尾部窗口，避免内存无界增长
+              while (tailBufferedBytes > MAX_STATS_TAIL_BYTES && tailHead < tailChunkBytes.length) {
+                tailBufferedBytes -= tailChunkBytes[tailHead] ?? 0;
+                tailChunks[tailHead] = "";
+                tailChunkBytes[tailHead] = 0;
+                tailHead += 1;
+                wasTruncated = true;
+              }
+
+              // 定期压缩数组，避免 head 指针过大导致 slice/join 性能退化
+              if (tailHead > 4096) {
+                tailChunks.splice(0, tailHead);
+                tailChunkBytes.splice(0, tailHead);
+                tailHead = 0;
+              }
+
+              // 防御：限制 chunk 数量，避免大量超小 chunk 导致对象/数组膨胀（即使总字节数已受限）
+              const keptCount = tailChunks.length - tailHead;
+              if (keptCount > MAX_STATS_TAIL_CHUNKS) {
+                const joined = joinTailChunks();
+                tailChunks.length = 0;
+                tailChunkBytes.length = 0;
+                tailHead = 0;
+                tailChunks.push(joined);
+                tailChunkBytes.push(tailBufferedBytes);
+              }
+            };
+
+            // 优先填充 head；超过 head 上限后切到 tail（但不代表一定发生截断，只有 tail 溢出才算截断）
+            if (!inTailMode) {
+              if (headBufferedBytes + bytes <= MAX_STATS_HEAD_BYTES) {
+                headChunks.push(text);
+                headBufferedBytes += bytes;
+                return;
+              }
+
+              inTailMode = true;
             }
 
-            // 定期压缩数组，避免 head 指针过大导致 slice/join 性能退化
-            if (chunkHead > 4096) {
-              chunks.splice(0, chunkHead);
-              chunkBytes.splice(0, chunkHead);
-              chunkHead = 0;
-            }
-
-            // 防御：限制 chunk 数量，避免大量超小 chunk 导致对象/数组膨胀（即使总字节数已受限）
-            const keptCount = chunks.length - chunkHead;
-            if (keptCount > MAX_STATS_BUFFER_CHUNKS) {
-              const joined = joinChunks();
-              chunks.length = 0;
-              chunkBytes.length = 0;
-              chunkHead = 0;
-              chunks.push(joined);
-              chunkBytes.push(bufferedBytes);
-            }
+            pushToTail();
           };
           const decoder = new TextDecoder();
           let isFirstChunk = true;
@@ -1035,8 +1077,10 @@ export class ProxyResponseHandler {
                 providerId: provider.id,
                 providerName: provider.name,
                 idleTimeoutMs,
-                chunksCollected: Math.max(0, chunks.length - chunkHead),
-                bufferedBytes,
+                chunksCollected: headChunks.length + Math.max(0, tailChunks.length - tailHead),
+                headBufferedBytes,
+                tailBufferedBytes,
+                bufferedBytes: headBufferedBytes + tailBufferedBytes,
                 wasTruncated,
               });
               // 终止上游连接：让透传到客户端的连接也尽快结束，避免永久悬挂占用资源
@@ -1109,7 +1153,25 @@ export class ProxyResponseHandler {
                   session.recordTtfb();
                   clearResponseTimeoutOnce(chunkSize);
                 }
-                pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+
+                // 尽量填满 head：边界 chunk 可能跨过 head 上限，按 byte 切分以避免 head 少于 1MB
+                if (!inTailMode && headBufferedBytes < MAX_STATS_HEAD_BYTES) {
+                  const remainingHeadBytes = MAX_STATS_HEAD_BYTES - headBufferedBytes;
+                  if (remainingHeadBytes > 0 && chunkSize > remainingHeadBytes) {
+                    const headPart = value.subarray(0, remainingHeadBytes);
+                    const tailPart = value.subarray(remainingHeadBytes);
+
+                    const headText = decoder.decode(headPart, { stream: true });
+                    pushChunk(headText, remainingHeadBytes);
+
+                    const tailText = decoder.decode(tailPart, { stream: true });
+                    pushChunk(tailText, chunkSize - remainingHeadBytes);
+                  } else {
+                    pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+                  }
+                } else {
+                  pushChunk(decoder.decode(value, { stream: true }), chunkSize);
+                }
               }
 
               // 首块数据到达后才启动 idle timer（避免与首字节超时职责重叠）
@@ -2215,7 +2277,7 @@ export function parseUsageFromResponseText(
   // SSE 解析：支持两种格式
   // 1. 标准 SSE (event: + data:) - Claude/OpenAI
   // 2. 纯 data: 格式 - Gemini
-  if (!usageMetrics && responseText.includes("data:")) {
+  if (!usageMetrics && isSSEText(responseText)) {
     const events = parseSSEData(responseText);
 
     // Claude SSE 特殊处理：
