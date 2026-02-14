@@ -8,7 +8,9 @@ function concatSqlStringChunks(sqlObject: unknown): string {
   const maybeSql = sqlObject as { queryChunks?: unknown[] };
   if (!Array.isArray(maybeSql.queryChunks)) return "";
 
-  return maybeSql.queryChunks.filter((chunk): chunk is string => typeof chunk === "string").join("");
+  return maybeSql.queryChunks
+    .filter((chunk): chunk is string => typeof chunk === "string")
+    .join("");
 }
 
 function createRanges(): QuotaCostRanges {
@@ -138,4 +140,3 @@ describe("sumUserQuotaCosts & sumKeyQuotaCostsById - all-time query support", ()
     expect(concatSqlStringChunks(capturedSelectFields?.costTotal)).not.toContain("FILTER");
   });
 });
-
