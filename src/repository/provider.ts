@@ -809,7 +809,8 @@ export async function updateProvidersBatch(
   }
 
   const uniqueIds = [...new Set(ids)];
-  const setClauses: Record<string, unknown> = { updatedAt: new Date() };
+  const now = new Date();
+  const setClauses: Record<string, unknown> = { updatedAt: now };
 
   if (updates.isEnabled !== undefined) {
     setClauses.isEnabled = updates.isEnabled;
@@ -840,7 +841,90 @@ export async function updateProvidersBatch(
     .update(providers)
     .set(setClauses)
     .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
-    .returning({ id: providers.id });
+    .returning({
+      id: providers.id,
+      providerVendorId: providers.providerVendorId,
+      providerType: providers.providerType,
+      url: providers.url,
+    });
+
+  // #779/#781：批量启用供应商时，best-effort 确保 endpoint pool 中存在对应 URL（避免历史/竞态导致启用后严格端点被阻断）。
+  if (updates.isEnabled === true && result.length > 0) {
+    const endpointKeys = new Map<
+      string,
+      { vendorId: number; providerType: Provider["providerType"]; url: string }
+    >();
+
+    for (const row of result) {
+      if (row.providerVendorId == null || typeof row.url !== "string") {
+        continue;
+      }
+
+      const trimmedUrl = row.url.trim();
+      if (!trimmedUrl) {
+        continue;
+      }
+
+      try {
+        // eslint-disable-next-line no-new
+        new URL(trimmedUrl);
+      } catch {
+        logger.warn("updateProvidersBatch:skip_invalid_url", {
+          providerId: row.id,
+          vendorId: row.providerVendorId,
+          providerType: row.providerType,
+          url: trimmedUrl,
+        });
+        continue;
+      }
+
+      const key = `${row.providerVendorId}::${row.providerType}::${trimmedUrl}`;
+      if (endpointKeys.has(key)) continue;
+
+      endpointKeys.set(key, {
+        vendorId: row.providerVendorId,
+        providerType: row.providerType,
+        url: trimmedUrl,
+      });
+    }
+
+    if (endpointKeys.size > 0) {
+      try {
+        const inserted = await db
+          .insert(providerEndpoints)
+          .values(
+            Array.from(endpointKeys.values()).map((endpoint) => ({
+              vendorId: endpoint.vendorId,
+              providerType: endpoint.providerType,
+              url: endpoint.url,
+              label: null,
+              updatedAt: now,
+            }))
+          )
+          .onConflictDoNothing({
+            target: [
+              providerEndpoints.vendorId,
+              providerEndpoints.providerType,
+              providerEndpoints.url,
+            ],
+            where: sql`${providerEndpoints.deletedAt} IS NULL`,
+          })
+          .returning({ id: providerEndpoints.id });
+
+        logger.debug("updateProvidersBatch:ensured_provider_endpoints", {
+          updatedProviders: result.length,
+          candidateEndpoints: endpointKeys.size,
+          insertedEndpoints: inserted.length,
+        });
+      } catch (error) {
+        logger.warn("updateProvidersBatch:ensure_provider_endpoints_failed", {
+          updatedProviders: result.length,
+          candidateEndpoints: endpointKeys.size,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
 
   logger.debug("updateProvidersBatch:completed", {
     requestedIds: uniqueIds.length,
