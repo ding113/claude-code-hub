@@ -512,6 +512,13 @@
       "when": 1771110659983,
       "tag": "0072_absurd_gwen_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1771116859658,
+      "tag": "0073_minor_franklin_richards",
+      "breakpoints": true
     }
   ]
 }

@@ -8,16 +8,16 @@ import {
 } from "@/repository";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 
-export function rankProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEndpoint[] {
-  const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
+function priorityRank(endpoint: ProviderEndpoint): number {
+  if (endpoint.lastProbeOk === true) return 0;
+  if (endpoint.lastProbeOk === null) return 1;
+  return 2;
+}
 
-  const priorityRank = (endpoint: ProviderEndpoint): number => {
-    if (endpoint.lastProbeOk === true) return 0;
-    if (endpoint.lastProbeOk === null) return 1;
-    return 2;
-  };
+function rankActiveProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEndpoint[] {
+  if (endpoints.length <= 1) return endpoints;
 
-  return enabled.slice().sort((a, b) => {
+  endpoints.sort((a, b) => {
     const rankDiff = priorityRank(a) - priorityRank(b);
     if (rankDiff !== 0) return rankDiff;
 
@@ -29,6 +29,13 @@ export function rankProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEn
 
     return a.id - b.id;
   });
+
+  return endpoints;
+}
+
+export function rankProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEndpoint[] {
+  const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
+  return rankActiveProviderEndpoints(enabled);
 }
 
 export async function getPreferredProviderEndpoints(input: {
@@ -36,14 +43,15 @@ export async function getPreferredProviderEndpoints(input: {
   providerType: ProviderType;
   excludeEndpointIds?: number[];
 }): Promise<ProviderEndpoint[]> {
-  const excludeSet = new Set(input.excludeEndpointIds ?? []);
+  const excludeIds = input.excludeEndpointIds ?? [];
+  const excludeSet = excludeIds.length > 0 ? new Set(excludeIds) : null;
 
   const endpoints = await findEnabledProviderEndpointsByVendorAndType(
     input.vendorId,
     input.providerType
   );
   // `findEnabledProviderEndpointsByVendorAndType` 已保证 isEnabled=true 且 deletedAt IS NULL
-  const circuitCandidates = endpoints.filter((e) => !excludeSet.has(e.id));
+  const circuitCandidates = excludeSet ? endpoints.filter((e) => !excludeSet.has(e.id)) : endpoints;
 
   if (circuitCandidates.length === 0) {
     return [];

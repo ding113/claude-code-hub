@@ -34,8 +34,10 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
   const now = Date.now();
   const cached = keyStringByIdCache.get(keyId);
   if (cached && cached.expiresAt > now) {
-    // 仅刷新 TTL，不改变 Map 的插入顺序：size 超限时仍按 FIFO 淘汰最旧条目。
+    // LRU-like：刷新 TTL 并 bump 插入顺序（delete+set），让热点 key 不容易被淘汰。
     cached.expiresAt = now + KEY_STRING_BY_ID_CACHE_TTL_MS;
+    keyStringByIdCache.delete(keyId);
+    keyStringByIdCache.set(keyId, cached);
     return cached.key;
   }
 

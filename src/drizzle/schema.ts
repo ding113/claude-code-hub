@@ -320,6 +320,13 @@ export const providers = pgTable('providers', {
   providersCreatedAtIdx: index('idx_providers_created_at').on(table.createdAt),
   providersDeletedAtIdx: index('idx_providers_deleted_at').on(table.deletedAt),
   providersVendorTypeIdx: index('idx_providers_vendor_type').on(table.providerVendorId, table.providerType).where(sql`${table.deletedAt} IS NULL`),
+  // #779/#781：Dashboard/Probe scheduler 的 enabled vendor/type 去重热路径
+  providersEnabledVendorTypeIdx: index('idx_providers_enabled_vendor_type').on(
+    table.providerVendorId,
+    table.providerType
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.isEnabled} = true AND ${table.providerVendorId} IS NOT NULL AND ${table.providerVendorId} > 0`
+  ),
 }));
 
 // Provider Endpoints table - 供应商(官网域名) + 类型 维度的端点池

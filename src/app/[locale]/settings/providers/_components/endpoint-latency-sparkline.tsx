@@ -162,15 +162,9 @@ async function tryFetchBatchProbeLogsByEndpointIds(
   const missingFromSuccessfulChunks = new Set<number>();
   let didAnyChunkSucceed = false;
   let didAnyChunkFail = false;
-  let stopBatching = false;
+  let didAnyChunk404 = false;
 
   for (const chunk of chunks) {
-    if (stopBatching) {
-      didAnyChunkFail = true;
-      for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
-      continue;
-    }
-
     try {
       const res = await fetch("/api/actions/providers/batchGetProviderEndpointProbeLogs", {
         method: "POST",
@@ -181,14 +175,11 @@ async function tryFetchBatchProbeLogsByEndpointIds(
 
       if (res.status === 404) {
         didAnyChunkFail = true;
-        stopBatching = true;
+        didAnyChunk404 = true;
 
-        // 404 通常意味着路由不存在（旧版本/未部署）。但在滚动发布场景下，少数节点可能短暂缺少该路由，
-        // 而其它节点已可用；此时不应全局禁用 batch（否则会退化到更多单点请求）。
-        if (!didAnyChunkSucceed) {
-          isBatchProbeLogsEndpointAvailable = false;
-          batchProbeLogsEndpointDisabledAt = Date.now();
-        }
+        // 404 通常意味着路由不存在（旧版本/未部署）。滚动发布场景下可能出现 404 与成功并存：
+        // - 若本次请求存在任一成功 chunk，则视为 batch 路由可用，仅对 404 的 chunk 降级。
+        // - 仅当所有 chunk 都 404 且无任何成功时，才短暂禁用 batch 路由，避免持续打 404。
 
         for (const endpointId of chunk) fallbackEndpointIds.add(endpointId);
         continue;
@@ -232,7 +223,13 @@ async function tryFetchBatchProbeLogsByEndpointIds(
     }
   }
 
-  if (!didAnyChunkSucceed) return null;
+  if (!didAnyChunkSucceed) {
+    if (didAnyChunk404) {
+      isBatchProbeLogsEndpointAvailable = false;
+      batchProbeLogsEndpointDisabledAt = Date.now();
+    }
+    return null;
+  }
 
   // 至少有一个 chunk 成功，说明 batch 路由可用（允许部分失败并按需降级）。
   isBatchProbeLogsEndpointAvailable = true;
@@ -450,25 +447,25 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
     queryFn: async ({ signal }): Promise<SparkPoint[]> => {
       const logs = await probeLogsBatcher.load(props.endpointId, limit, { signal });
 
-      return logs
-        .slice()
-        .reverse()
-        .map((log, idx) => {
-          const rawTimestamp =
-            log.createdAt === undefined || log.createdAt === null
-              ? undefined
-              : new Date(log.createdAt).getTime();
+      const points: SparkPoint[] = new Array(logs.length);
+      for (let i = logs.length - 1, idx = 0; i >= 0; i -= 1, idx += 1) {
+        const log = logs[i];
+        const rawTimestamp =
+          log.createdAt === undefined || log.createdAt === null
+            ? undefined
+            : new Date(log.createdAt).getTime();
+        const timestamp =
+          rawTimestamp !== undefined && Number.isFinite(rawTimestamp) ? rawTimestamp : undefined;
 
-          return {
-            index: idx,
-            latencyMs: log.latencyMs ?? null,
-            ok: log.ok,
-            timestamp:
-              rawTimestamp !== undefined && Number.isFinite(rawTimestamp)
-                ? rawTimestamp
-                : undefined,
-          };
-        });
+        points[idx] = {
+          index: idx,
+          latencyMs: log.latencyMs ?? null,
+          ok: log.ok,
+          timestamp,
+        };
+      }
+
+      return points;
     },
     staleTime: 30_000,
     refetchOnWindowFocus: false,
@@ -477,12 +474,18 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
 
   const avgLatency = useMemo(() => {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    const recentPoints = points.filter(
-      (p) => p.latencyMs !== null && p.timestamp && p.timestamp >= fiveMinutesAgo
-    );
-    if (recentPoints.length === 0) return null;
-    const sum = recentPoints.reduce((acc, p) => acc + (p.latencyMs ?? 0), 0);
-    return sum / recentPoints.length;
+    let sum = 0;
+    let count = 0;
+
+    for (const point of points) {
+      if (point.latencyMs === null) continue;
+      const timestamp = point.timestamp;
+      if (timestamp === undefined || timestamp < fiveMinutesAgo) continue;
+      sum += point.latencyMs;
+      count += 1;
+    }
+
+    return count > 0 ? sum / count : null;
   }, [points]);
 
   const showSkeleton = !isInView || isLoading;

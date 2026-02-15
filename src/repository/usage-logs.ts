@@ -318,6 +318,55 @@ export interface UsageLogSlimRow {
   cacheTtlApplied: string | null;
 }
 
+// my-usage logs：分页需要 totalPages，COUNT(*) 在大表上仍可能较重。
+// 这里对“相同筛选条件”的 total 做短 TTL 缓存，避免用户翻页/轮询时重复 COUNT。
+const USAGE_LOG_SLIM_TOTAL_CACHE_TTL_MS = 10 * 1000; // 10 秒
+const USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE = 1000;
+const usageLogSlimTotalCache = new Map<string, { total: number; expiresAt: number }>();
+
+function getUsageLogSlimTotalFromCache(key: string): number | null {
+  const now = Date.now();
+  const cached = usageLogSlimTotalCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= now) {
+    usageLogSlimTotalCache.delete(key);
+    return null;
+  }
+
+  // LRU-like bump
+  usageLogSlimTotalCache.delete(key);
+  usageLogSlimTotalCache.set(key, cached);
+  return cached.total;
+}
+
+function setUsageLogSlimTotalToCache(key: string, total: number): void {
+  const now = Date.now();
+
+  if (usageLogSlimTotalCache.size >= USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE) {
+    for (const [k, v] of usageLogSlimTotalCache) {
+      if (v.expiresAt <= now) {
+        usageLogSlimTotalCache.delete(k);
+      }
+    }
+
+    if (usageLogSlimTotalCache.size >= USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE) {
+      const evictCount = Math.max(1, Math.ceil(USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE * 0.1));
+      let remaining = evictCount;
+
+      for (const k of usageLogSlimTotalCache.keys()) {
+        usageLogSlimTotalCache.delete(k);
+        remaining -= 1;
+        if (remaining <= 0) break;
+      }
+    }
+  }
+
+  usageLogSlimTotalCache.set(key, {
+    total,
+    expiresAt: now + USAGE_LOG_SLIM_TOTAL_CACHE_TTL_MS,
+  });
+}
+
 export async function findUsageLogsForKeySlim(
   filters: UsageLogSlimFilters
 ): Promise<{ logs: UsageLogSlimRow[]; total: number }> {
@@ -348,6 +397,18 @@ export async function findUsageLogsForKeySlim(
   if (trimmedSessionId) {
     conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
   }
+
+  const totalCacheKey = [
+    keyString,
+    trimmedSessionId ?? "",
+    startTime ?? "",
+    endTime ?? "",
+    statusCode ?? "",
+    excludeStatusCode200 ? "1" : "0",
+    model ?? "",
+    endpoint ?? "",
+    minRetryCount ?? "",
+  ].join("\u0001");
 
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
@@ -411,6 +472,15 @@ export async function findUsageLogsForKeySlim(
 
   let total = offset + pageRows.length;
 
+  const cachedTotal = getUsageLogSlimTotalFromCache(totalCacheKey);
+  if (cachedTotal !== null) {
+    total = Math.max(cachedTotal, total);
+    return {
+      logs: pageRows.map((row) => ({ ...row, costUsd: row.costUsd?.toString() ?? null })),
+      total,
+    };
+  }
+
   if (pageRows.length === 0 && offset > 0) {
     const countResults = await db
       .select({ totalRows: sql<number>`count(*)::double precision` })
@@ -430,6 +500,7 @@ export async function findUsageLogsForKeySlim(
     costUsd: row.costUsd?.toString() ?? null,
   }));
 
+  setUsageLogSlimTotalToCache(totalCacheKey, total);
   return { logs, total };
 }
 
