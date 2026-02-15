@@ -205,7 +205,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
     // Propagate trace attributes
     await propagateAttributes(
       {
-        userId: messageContext?.user?.id ? String(messageContext.user.id) : undefined,
+        userId: messageContext?.user?.name ?? undefined,
         sessionId: session.sessionId ?? undefined,
         tags,
         metadata: traceMetadata,

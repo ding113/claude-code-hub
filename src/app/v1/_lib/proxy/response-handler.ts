@@ -740,8 +740,9 @@ export class ProxyResponseHandler {
           await trackCostToRedis(session, usageMetrics);
         }
 
-        // Calculate cost (for session tracking and Langfuse tracing)
+        // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
         let costUsdStr: string | undefined;
+        let rawCostUsdStr: string | undefined;
         if (usageMetrics) {
           try {
             if (session.request.model) {
@@ -755,6 +756,20 @@ export class ProxyResponseHandler {
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
+                }
+                // Raw cost without multiplier for Langfuse
+                if (provider.costMultiplier !== 1) {
+                  const rawCost = calculateRequestCost(
+                    usageMetrics,
+                    priceData,
+                    1.0,
+                    session.getContext1mApplied()
+                  );
+                  if (rawCost.gt(0)) {
+                    rawCostUsdStr = rawCost.toString();
+                  }
+                } else {
+                  rawCostUsdStr = costUsdStr;
                 }
               }
             }
@@ -842,7 +857,7 @@ export class ProxyResponseHandler {
           responseHeaders: response.headers,
           responseText,
           usageMetrics,
-          costUsd: costUsdStr,
+          costUsd: rawCostUsdStr,
           statusCode,
           durationMs: Date.now() - session.startTime,
           isStreaming: false,
@@ -1665,8 +1680,9 @@ export class ProxyResponseHandler {
         // 追踪消费到 Redis（用于限流）
         await trackCostToRedis(session, usageForCost);
 
-        // Calculate cost (for session tracking and Langfuse tracing)
+        // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
         let costUsdStr: string | undefined;
+        let rawCostUsdStr: string | undefined;
         if (usageForCost) {
           try {
             if (session.request.model) {
@@ -1680,6 +1696,20 @@ export class ProxyResponseHandler {
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
+                }
+                // Raw cost without multiplier for Langfuse
+                if (provider.costMultiplier !== 1) {
+                  const rawCost = calculateRequestCost(
+                    usageForCost,
+                    priceData,
+                    1.0,
+                    session.getContext1mApplied()
+                  );
+                  if (rawCost.gt(0)) {
+                    rawCostUsdStr = rawCost.toString();
+                  }
+                } else {
+                  rawCostUsdStr = costUsdStr;
                 }
               }
             }
@@ -1735,7 +1765,7 @@ export class ProxyResponseHandler {
           responseHeaders: response.headers,
           responseText: allContent,
           usageMetrics: usageForCost,
-          costUsd: costUsdStr,
+          costUsd: rawCostUsdStr,
           statusCode: effectiveStatusCode,
           durationMs: duration,
           isStreaming: true,

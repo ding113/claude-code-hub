@@ -239,7 +239,7 @@ describe("traceProxyRequest", () => {
 
     expect(mockPropagateAttributes).toHaveBeenCalledWith(
       expect.objectContaining({
-        userId: "7",
+        userId: "testuser",
         sessionId: "sess_abc12345_def67890",
         tags: expect.arrayContaining([
           "claude",
