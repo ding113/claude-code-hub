@@ -70,6 +70,9 @@ export class ProxySession {
   // Timestamp when guard pipeline finished and forwarding started (epoch ms).
   forwardStartTime: number | null = null;
 
+  // Actual serialized request body sent to upstream (after all preprocessing).
+  forwardedRequestBody: string | null = null;
+
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 

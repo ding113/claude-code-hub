@@ -3,6 +3,7 @@ import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
+import type { CostBreakdown } from "@/lib/utils/cost-calculation";
 
 // Auth-sensitive header names to redact
 const REDACTED_HEADERS = new Set([
@@ -88,6 +89,8 @@ function truncateForLangfuse(data: unknown, maxChars: number = getLangfuseMaxIoS
   return data;
 }
 
+type ObservationLevel = "DEBUG" | "DEFAULT" | "WARNING" | "ERROR";
+
 export interface TraceContext {
   session: ProxySession;
   responseHeaders: Headers;
@@ -99,6 +102,7 @@ export interface TraceContext {
   errorMessage?: string;
   usageMetrics?: UsageMetrics | null;
   costUsd?: string;
+  costBreakdown?: CostBreakdown;
 }
 
 /**
@@ -138,6 +142,43 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       tokenGenerationMs: session.ttfbMs != null ? Math.max(0, durationMs - session.ttfbMs) : null,
       failedAttempts: session.getProviderChain().filter((i) => !isSuccessReason(i.reason)).length,
       providersAttempted: new Set(session.getProviderChain().map((i) => i.id)).size,
+    };
+
+    // Compute observation level for root span
+    let rootSpanLevel: ObservationLevel = "DEFAULT";
+    if (statusCode < 200 || statusCode >= 300) {
+      rootSpanLevel = "ERROR";
+    } else {
+      const failedAttempts = session
+        .getProviderChain()
+        .filter((i) => !isSuccessReason(i.reason)).length;
+      if (failedAttempts >= 1) rootSpanLevel = "WARNING";
+    }
+
+    // Actual request body (forwarded to upstream after all preprocessing)
+    const actualRequestBody = session.forwardedRequestBody
+      ? truncateForLangfuse(tryParseJsonSafe(session.forwardedRequestBody))
+      : truncateForLangfuse(session.request.message);
+
+    // Actual response body
+    const actualResponseBody = ctx.responseText
+      ? truncateForLangfuse(tryParseJsonSafe(ctx.responseText))
+      : isStreaming
+        ? { streaming: true, sseEventCount: ctx.sseEventCount }
+        : { statusCode };
+
+    // Root span metadata (former input/output summaries moved here)
+    const rootSpanMetadata: Record<string, unknown> = {
+      endpoint: session.getEndpoint(),
+      method: session.method,
+      model: session.getCurrentModel(),
+      clientFormat: session.originalFormat,
+      providerName: provider?.name,
+      statusCode,
+      durationMs,
+      hasUsage: !!ctx.usageMetrics,
+      costUsd: ctx.costUsd,
+      timingBreakdown,
     };
 
     // Build tags - include provider name and model
@@ -216,31 +257,21 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
         }
       : undefined;
 
-    // Build cost details
-    const costDetails: Record<string, number> | undefined =
-      ctx.costUsd && Number.parseFloat(ctx.costUsd) > 0
+    // Build cost details (prefer breakdown, fallback to total-only)
+    const costDetails: Record<string, number> | undefined = ctx.costBreakdown
+      ? { ...ctx.costBreakdown }
+      : ctx.costUsd && Number.parseFloat(ctx.costUsd) > 0
         ? { total: Number.parseFloat(ctx.costUsd) }
         : undefined;
 
-    // Create the root trace span
+    // Create the root trace span with actual bodies, level, and metadata
     const rootSpan = startObservation(
       "proxy-request",
       {
-        input: {
-          endpoint: session.getEndpoint(),
-          method: session.method,
-          model: session.getCurrentModel(),
-          clientFormat: session.originalFormat,
-          providerName: provider?.name,
-        },
-        output: {
-          statusCode,
-          durationMs,
-          model: session.getCurrentModel(),
-          hasUsage: !!ctx.usageMetrics,
-          costUsd: ctx.costUsd,
-          timingBreakdown,
-        },
+        input: actualRequestBody,
+        output: actualResponseBody,
+        level: rootSpanLevel,
+        metadata: rootSpanMetadata,
       },
       {
         startTime: requestStartTime,
@@ -338,20 +369,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
 
     // Explicitly set trace-level input/output (propagateAttributes does not support these)
     rootSpan.updateTrace({
-      input: {
-        endpoint: session.getEndpoint(),
-        method: session.method,
-        model: session.getCurrentModel(),
-        clientFormat: session.originalFormat,
-        providerName: provider?.name,
-      },
-      output: {
-        statusCode,
-        durationMs,
-        model: session.getCurrentModel(),
-        hasUsage: !!ctx.usageMetrics,
-        costUsd: ctx.costUsd,
-      },
+      input: actualRequestBody,
+      output: actualResponseBody,
     });
 
     rootSpan.end(requestEndTime);

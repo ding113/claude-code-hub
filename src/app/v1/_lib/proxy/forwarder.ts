@@ -1648,6 +1648,7 @@ export class ProxyForwarder {
 
         const bodyString = JSON.stringify(bodyToSerialize);
         requestBody = bodyString;
+        session.forwardedRequestBody = bodyString;
       }
 
       // 检测流式请求：Gemini 支持两种方式
@@ -1974,6 +1975,7 @@ export class ProxyForwarder {
 
         const bodyString = JSON.stringify(messageToSend);
         requestBody = bodyString;
+        session.forwardedRequestBody = bodyString;
 
         try {
           const parsed = JSON.parse(bodyString);

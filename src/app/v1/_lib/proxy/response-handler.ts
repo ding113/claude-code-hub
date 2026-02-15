@@ -8,7 +8,8 @@ import { RateLimitService } from "@/lib/rate-limit";
 import type { LeaseWindowType } from "@/lib/rate-limit/lease";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
-import { calculateRequestCost } from "@/lib/utils/cost-calculation";
+import type { CostBreakdown } from "@/lib/utils/cost-calculation";
+import { calculateRequestCost, calculateRequestCostBreakdown } from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
@@ -49,6 +50,7 @@ function emitLangfuseTrace(
     responseText: string;
     usageMetrics: UsageMetrics | null;
     costUsd: string | undefined;
+    costBreakdown?: CostBreakdown;
     statusCode: number;
     durationMs: number;
     isStreaming: boolean;
@@ -69,6 +71,7 @@ function emitLangfuseTrace(
         responseText: data.responseText,
         usageMetrics: data.usageMetrics,
         costUsd: data.costUsd,
+        costBreakdown: data.costBreakdown,
         sseEventCount: data.sseEventCount,
         errorMessage: data.errorMessage,
       });
@@ -743,6 +746,7 @@ export class ProxyResponseHandler {
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
         let costUsdStr: string | undefined;
         let rawCostUsdStr: string | undefined;
+        let costBreakdown: CostBreakdown | undefined;
         if (usageMetrics) {
           try {
             if (session.request.model) {
@@ -770,6 +774,16 @@ export class ProxyResponseHandler {
                   }
                 } else {
                   rawCostUsdStr = costUsdStr;
+                }
+                // Cost breakdown for Langfuse (raw, no multiplier)
+                try {
+                  costBreakdown = calculateRequestCostBreakdown(
+                    usageMetrics,
+                    priceData,
+                    session.getContext1mApplied()
+                  );
+                } catch {
+                  /* non-critical */
                 }
               }
             }
@@ -858,6 +872,7 @@ export class ProxyResponseHandler {
           responseText,
           usageMetrics,
           costUsd: rawCostUsdStr,
+          costBreakdown,
           statusCode,
           durationMs: Date.now() - session.startTime,
           isStreaming: false,
@@ -1683,6 +1698,7 @@ export class ProxyResponseHandler {
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
         let costUsdStr: string | undefined;
         let rawCostUsdStr: string | undefined;
+        let costBreakdown: CostBreakdown | undefined;
         if (usageForCost) {
           try {
             if (session.request.model) {
@@ -1710,6 +1726,16 @@ export class ProxyResponseHandler {
                   }
                 } else {
                   rawCostUsdStr = costUsdStr;
+                }
+                // Cost breakdown for Langfuse (raw, no multiplier)
+                try {
+                  costBreakdown = calculateRequestCostBreakdown(
+                    usageForCost,
+                    priceData,
+                    session.getContext1mApplied()
+                  );
+                } catch {
+                  /* non-critical */
                 }
               }
             }
@@ -1766,6 +1792,7 @@ export class ProxyResponseHandler {
           responseText: allContent,
           usageMetrics: usageForCost,
           costUsd: rawCostUsdStr,
+          costBreakdown,
           statusCode: effectiveStatusCode,
           durationMs: duration,
           isStreaming: true,

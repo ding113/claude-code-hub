@@ -102,6 +102,7 @@ function createMockSession(overrides: Record<string, unknown> = {}) {
     },
     ttfbMs: 200,
     forwardStartTime: startTime + 5,
+    forwardedRequestBody: null,
     getEndpoint: () => "/v1/messages",
     getRequestSequence: () => 3,
     getMessagesLength: () => 1,
@@ -146,8 +147,9 @@ describe("traceProxyRequest", () => {
     expect(mockStartObservation).not.toHaveBeenCalled();
   });
 
-  test("should trace when Langfuse is enabled", async () => {
+  test("should trace when Langfuse is enabled with actual bodies", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+    const responseBody = { content: "Hi there" };
 
     await traceProxyRequest({
       session: createMockSession(),
@@ -155,31 +157,34 @@ describe("traceProxyRequest", () => {
       durationMs: 500,
       statusCode: 200,
       isStreaming: false,
-      responseText: '{"content": "Hi there"}',
+      responseText: JSON.stringify(responseBody),
     });
 
-    expect(mockStartObservation).toHaveBeenCalledWith(
-      "proxy-request",
+    // Root span should have actual request body as input (not summary)
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[0]).toBe("proxy-request");
+    // Input should be the actual request message (since forwardedRequestBody is null)
+    expect(rootCall[1].input).toEqual(
       expect.objectContaining({
-        input: expect.objectContaining({
-          endpoint: "/v1/messages",
-          method: "POST",
-          clientFormat: "claude",
-          providerName: "anthropic-main",
-        }),
-        output: expect.objectContaining({
-          statusCode: 200,
-          durationMs: 500,
-          costUsd: undefined,
-          timingBreakdown: expect.any(Object),
-        }),
-      }),
+        model: "claude-sonnet-4-20250514",
+        messages: expect.any(Array),
+      })
+    );
+    // Output should be actual response body
+    expect(rootCall[1].output).toEqual(responseBody);
+    // Should have level
+    expect(rootCall[1].level).toBe("DEFAULT");
+    // Should have metadata with former summaries
+    expect(rootCall[1].metadata).toEqual(
       expect.objectContaining({
-        startTime: expect.any(Date),
+        endpoint: "/v1/messages",
+        method: "POST",
+        statusCode: 200,
+        durationMs: 500,
       })
     );
 
-    // Should have 3 child observations: guard-pipeline, llm-call (no failed providers in default mock)
+    // Should have child observations
     const callNames = mockRootSpan.startObservation.mock.calls.map((c: unknown[]) => c[0]);
     expect(callNames).toContain("guard-pipeline");
     expect(callNames).toContain("llm-call");
@@ -507,7 +512,7 @@ describe("traceProxyRequest", () => {
     });
   });
 
-  test("should include costUsd in root span output", async () => {
+  test("should include costUsd in root span metadata", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 
     await traceProxyRequest({
@@ -519,20 +524,17 @@ describe("traceProxyRequest", () => {
       costUsd: "0.05",
     });
 
-    expect(mockStartObservation).toHaveBeenCalledWith(
-      "proxy-request",
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].metadata).toEqual(
       expect.objectContaining({
-        output: expect.objectContaining({
-          costUsd: "0.05",
-        }),
-      }),
-      expect.objectContaining({
-        startTime: expect.any(Date),
+        costUsd: "0.05",
       })
     );
   });
-  test("should set trace-level input/output via updateTrace", async () => {
+
+  test("should set trace-level input/output via updateTrace with actual bodies", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+    const responseBody = { result: "ok" };
 
     await traceProxyRequest({
       session: createMockSession(),
@@ -540,22 +542,16 @@ describe("traceProxyRequest", () => {
       durationMs: 500,
       statusCode: 200,
       isStreaming: false,
+      responseText: JSON.stringify(responseBody),
       costUsd: "0.05",
     });
 
     expect(mockUpdateTrace).toHaveBeenCalledWith({
       input: expect.objectContaining({
-        endpoint: "/v1/messages",
-        method: "POST",
         model: "claude-sonnet-4-20250514",
-        clientFormat: "claude",
-        providerName: "anthropic-main",
+        messages: expect.any(Array),
       }),
-      output: expect.objectContaining({
-        statusCode: 200,
-        durationMs: 500,
-        costUsd: "0.05",
-      }),
+      output: responseBody,
     });
   });
 
@@ -726,7 +722,7 @@ describe("traceProxyRequest", () => {
     });
   });
 
-  test("should include timingBreakdown in trace output and generation metadata", async () => {
+  test("should include timingBreakdown in root span metadata and generation metadata", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 
     const startTime = 1700000000000;
@@ -748,23 +744,24 @@ describe("traceProxyRequest", () => {
       isStreaming: false,
     });
 
-    // Root span output should have timingBreakdown
-    const rootCall = mockStartObservation.mock.calls[0];
-    const rootOutput = rootCall[1].output;
-    expect(rootOutput.timingBreakdown).toEqual({
+    const expectedTimingBreakdown = {
       guardPipelineMs: 5,
       upstreamTotalMs: 495,
       ttfbFromForwardMs: 100, // ttfbMs(105) - guardPipelineMs(5)
       tokenGenerationMs: 395, // durationMs(500) - ttfbMs(105)
       failedAttempts: 1, // only retry_failed is non-success
       providersAttempted: 2, // 2 unique provider ids
-    });
+    };
+
+    // Root span metadata should have timingBreakdown
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].metadata.timingBreakdown).toEqual(expectedTimingBreakdown);
 
     // Generation metadata should also have timingBreakdown
     const llmCall = mockRootSpan.startObservation.mock.calls.find(
       (c: unknown[]) => c[0] === "llm-call"
     );
-    expect(llmCall[1].metadata.timingBreakdown).toEqual(rootOutput.timingBreakdown);
+    expect(llmCall[1].metadata.timingBreakdown).toEqual(expectedTimingBreakdown);
   });
 
   test("should not create provider-attempt events when all providers succeeded", async () => {
@@ -787,6 +784,178 @@ describe("traceProxyRequest", () => {
       (c: unknown[]) => c[0] === "provider-attempt"
     );
     expect(eventCalls).toHaveLength(0);
+  });
+
+  // --- New tests for input/output, level, and cost breakdown ---
+
+  test("should use forwardedRequestBody as trace input when available", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    const forwardedBody = JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      messages: [{ role: "user", content: "Preprocessed Hello" }],
+      stream: true,
+    });
+
+    await traceProxyRequest({
+      session: createMockSession({
+        forwardedRequestBody: forwardedBody,
+      }),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: false,
+      responseText: '{"ok": true}',
+    });
+
+    // Root span input should be the forwarded body (parsed JSON)
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].input).toEqual(JSON.parse(forwardedBody));
+
+    // updateTrace should also use forwarded body
+    expect(mockUpdateTrace).toHaveBeenCalledWith({
+      input: JSON.parse(forwardedBody),
+      output: { ok: true },
+    });
+  });
+
+  test("should set root span level to DEFAULT for successful request", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: false,
+    });
+
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].level).toBe("DEFAULT");
+  });
+
+  test("should set root span level to WARNING when retries occurred", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    const startTime = Date.now() - 500;
+    await traceProxyRequest({
+      session: createMockSession({
+        startTime,
+        getProviderChain: () => [
+          { id: 1, name: "p1", reason: "retry_failed", timestamp: startTime + 50 },
+          { id: 2, name: "p2", reason: "request_success", timestamp: startTime + 200 },
+        ],
+      }),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: false,
+    });
+
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].level).toBe("WARNING");
+  });
+
+  test("should set root span level to ERROR for non-200 status", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 502,
+      isStreaming: false,
+    });
+
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].level).toBe("ERROR");
+  });
+
+  test("should set root span level to ERROR for 499 client abort", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 499,
+      isStreaming: false,
+    });
+
+    const rootCall = mockStartObservation.mock.calls[0];
+    expect(rootCall[1].level).toBe("ERROR");
+  });
+
+  test("should include cost breakdown in costDetails when provided", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    const costBreakdown = {
+      input: 0.001,
+      output: 0.002,
+      cache_creation: 0.0005,
+      cache_read: 0.0001,
+      total: 0.0036,
+    };
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: false,
+      costUsd: "0.0036",
+      costBreakdown,
+    });
+
+    const llmCall = mockRootSpan.startObservation.mock.calls.find(
+      (c: unknown[]) => c[0] === "llm-call"
+    );
+    expect(llmCall[1].costDetails).toEqual(costBreakdown);
+  });
+
+  test("should fallback to total-only costDetails when no breakdown", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: false,
+      costUsd: "0.05",
+    });
+
+    const llmCall = mockRootSpan.startObservation.mock.calls.find(
+      (c: unknown[]) => c[0] === "llm-call"
+    );
+    expect(llmCall[1].costDetails).toEqual({ total: 0.05 });
+  });
+
+  test("should include former summaries in root span metadata", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: false,
+      costUsd: "0.05",
+    });
+
+    const rootCall = mockStartObservation.mock.calls[0];
+    const metadata = rootCall[1].metadata;
+    // Former input summary fields
+    expect(metadata.endpoint).toBe("/v1/messages");
+    expect(metadata.method).toBe("POST");
+    expect(metadata.model).toBe("claude-sonnet-4-20250514");
+    expect(metadata.clientFormat).toBe("claude");
+    expect(metadata.providerName).toBe("anthropic-main");
+    // Former output summary fields
+    expect(metadata.statusCode).toBe(200);
+    expect(metadata.durationMs).toBe(500);
+    expect(metadata.costUsd).toBe("0.05");
+    expect(metadata.timingBreakdown).toBeDefined();
   });
 });
 
