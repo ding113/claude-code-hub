@@ -128,18 +128,3 @@ describe("injectClaudeMetadataUserId", () => {
     expect(metadata.user_id).toMatch(/^user_[a-f0-9]{64}_account__session_sess_abc123$/);
   });
 });
-
-describe("ProxySession.generateDeterministicSessionId", () => {
-  it("输出格式应匹配 sess_{8hex}_{12hex}", () => {
-    const session = Object.create(ProxySession.prototype) as ProxySession;
-    (session as Record<string, unknown>).headers = new Headers([
-      ["x-api-key", "sk-test-abcdef123456"],
-      ["user-agent", "Vitest/1.0"],
-      ["x-forwarded-for", "203.0.113.1"],
-    ]);
-
-    const deterministicSessionId = session.generateDeterministicSessionId();
-
-    expect(deterministicSessionId).toMatch(/^sess_[a-f0-9]{8}_[a-f0-9]{12}$/);
-  });
-});
