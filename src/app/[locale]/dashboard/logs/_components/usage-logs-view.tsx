@@ -159,25 +159,27 @@ export function UsageLogsView({
     router.push(`/dashboard/logs?${query.toString()}`);
   };
 
+  const statsFilters = {
+    userId: filters.userId,
+    keyId: filters.keyId,
+    providerId: filters.providerId,
+    sessionId: filters.sessionId,
+    startTime: filters.startTime,
+    endTime: filters.endTime,
+    statusCode: filters.statusCode,
+    excludeStatusCode200: filters.excludeStatusCode200,
+    model: filters.model,
+    endpoint: filters.endpoint,
+    minRetryCount: filters.minRetryCount,
+  };
+
+  const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
+
   return (
     <div className="space-y-6">
-      {/* 可折叠统计面板 - 默认折叠，按需加载 */}
-      <UsageLogsStatsPanel
-        filters={{
-          userId: filters.userId,
-          keyId: filters.keyId,
-          providerId: filters.providerId,
-          sessionId: filters.sessionId,
-          startTime: filters.startTime,
-          endTime: filters.endTime,
-          statusCode: filters.statusCode,
-          excludeStatusCode200: filters.excludeStatusCode200,
-          model: filters.model,
-          endpoint: filters.endpoint,
-          minRetryCount: filters.minRetryCount,
-        }}
-        currencyCode={currencyCode}
-      />
+      {hasStatsFilters && (
+        <UsageLogsStatsPanel filters={statsFilters} currencyCode={currencyCode} />
+      )}
 
       {/* 筛选器 */}
       <Card>
