@@ -46,6 +46,7 @@ export function EndpointTab() {
   const vendorsRequestIdRef = useRef(0);
   const endpointsRequestIdRef = useRef(0);
   const probeLogsRequestIdRef = useRef(0);
+  const lastFocusRefreshAtRef = useRef(0);
   const latestSelectionRef = useRef<{
     vendorId: number | null;
     providerType: ProviderType | null;
@@ -276,10 +277,16 @@ export function EndpointTab() {
     };
 
     const onFocus = () => {
+      const now = Date.now();
+      if (now - lastFocusRefreshAtRef.current < 2000) return;
+      lastFocusRefreshAtRef.current = now;
       void refresh();
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
+        const now = Date.now();
+        if (now - lastFocusRefreshAtRef.current < 2000) return;
+        lastFocusRefreshAtRef.current = now;
         void refresh();
       }
     };
