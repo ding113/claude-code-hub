@@ -1,5 +1,6 @@
 "use client";
 
+import { Infinity } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import type { MyUsageQuota } from "@/actions/my-usage";
@@ -192,7 +193,10 @@ function QuotaRow({
       )}
       <span className="shrink-0 text-right font-mono text-xs text-foreground">
         {formatValue(current)}
-        <span className="text-muted-foreground"> / {limitDisplay}</span>
+        <span className="text-muted-foreground">
+          {" / "}
+          {unlimited ? <Infinity className="inline h-3.5 w-3.5" /> : limitDisplay}
+        </span>
       </span>
     </div>
   );
