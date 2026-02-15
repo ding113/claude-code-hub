@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
@@ -350,38 +349,6 @@ export class ProxySession {
 
     this.providersSnapshot = await findAllProviders();
     return this.providersSnapshot;
-  }
-
-  /**
-   * 生成基于请求指纹的确定性 Session ID
-   *
-   * 优先级与参考实现一致：
-   * - API Key 前缀（x-api-key / x-goog-api-key 的前10位）
-   * - User-Agent
-   * - 客户端 IP（x-forwarded-for / x-real-ip）
-   *
-   * 当客户端未提供 metadata.session_id 时，可用于稳定绑定会话。
-   */
-  generateDeterministicSessionId(): string | null {
-    const apiKeyHeader = this.headers.get("x-api-key") || this.headers.get("x-goog-api-key");
-    const apiKeyPrefix = apiKeyHeader ? apiKeyHeader.substring(0, 10) : null;
-
-    const userAgent = this.headers.get("user-agent");
-
-    // 取链路上的首个 IP
-    const forwardedFor = this.headers.get("x-forwarded-for");
-    const realIp = this.headers.get("x-real-ip");
-    const ip =
-      forwardedFor?.split(",").map((ip) => ip.trim())[0] || (realIp ? realIp.trim() : null);
-
-    const parts = [userAgent, ip, apiKeyPrefix].filter(Boolean);
-    if (parts.length === 0) {
-      return null;
-    }
-
-    const hash = crypto.createHash("sha256").update(parts.join(":"), "utf8").digest("hex");
-    // 格式对齐为 sess_{8位}_{12位}
-    return `sess_${hash.substring(0, 8)}_${hash.substring(8, 20)}`;
   }
 
   /**
@@ -808,7 +775,13 @@ function optimizeRequestMessage(message: Record<string, unknown>): Record<string
   return optimized;
 }
 
-function extractModelFromPath(pathname: string): string | null {
+export function extractModelFromPath(pathname: string): string | null {
+  // 匹配 Vertex AI 路径：/v1/publishers/google/models/{model}:<action>
+  const publishersMatch = pathname.match(/\/publishers\/google\/models\/([^/:]+)(?::[^/]+)?/);
+  if (publishersMatch?.[1]) {
+    return publishersMatch[1];
+  }
+
   // 匹配官方 Gemini 路径：/v1beta/models/{model}:<action>
   const geminiMatch = pathname.match(/\/v1beta\/models\/([^/:]+)(?::[^/]+)?/);
   if (geminiMatch?.[1]) {

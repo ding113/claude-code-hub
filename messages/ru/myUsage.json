@@ -92,6 +92,9 @@
     "keyStats": "Ключ",
     "userStats": "Пользователь",
     "noData": "Нет данных за выбранный период",
+    "breakdownPrevPage": "Предыдущая страница",
+    "breakdownNextPage": "Следующая страница",
+    "breakdownPageIndicator": "{current} / {total}",
     "unknownModel": "Неизвестно",
     "modal": {
       "requests": "Запросов",

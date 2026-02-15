@@ -92,6 +92,9 @@
     "keyStats": "キー",
     "userStats": "ユーザー",
     "noData": "選択期間のデータがありません",
+    "breakdownPrevPage": "前のページ",
+    "breakdownNextPage": "次のページ",
+    "breakdownPageIndicator": "{current} / {total}",
     "unknownModel": "不明",
     "modal": {
       "requests": "リクエスト",

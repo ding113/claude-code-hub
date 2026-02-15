@@ -6,6 +6,8 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
   Coins,
   Database,
   Hash,
@@ -15,7 +17,11 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getMyStatsSummary, type MyStatsSummary } from "@/actions/my-usage";
+import {
+  getMyStatsSummary,
+  type ModelBreakdownItem,
+  type MyStatsSummary,
+} from "@/actions/my-usage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -110,8 +116,26 @@ export function StatisticsSummaryCard({
     setDateRange(range);
   }, []);
 
+  const [breakdownPage, setBreakdownPage] = useState(1);
+
+  // Reset breakdown page when date range changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps used as reset trigger on date range change
+  useEffect(() => {
+    setBreakdownPage(1);
+  }, [dateRange.startDate, dateRange.endDate]);
+
   const isLoading = loading || refreshing;
   const currencyCode = stats?.currencyCode ?? "USD";
+
+  const maxBreakdownLen = Math.max(
+    stats?.keyModelBreakdown.length ?? 0,
+    stats?.userModelBreakdown.length ?? 0
+  );
+  const breakdownTotalPages = Math.ceil(maxBreakdownLen / MODEL_BREAKDOWN_PAGE_SIZE);
+  const sliceStart = (breakdownPage - 1) * MODEL_BREAKDOWN_PAGE_SIZE;
+  const sliceEnd = breakdownPage * MODEL_BREAKDOWN_PAGE_SIZE;
+  const keyPageItems = stats?.keyModelBreakdown.slice(sliceStart, sliceEnd) ?? [];
+  const userPageItems = stats?.userModelBreakdown.slice(sliceStart, sliceEnd) ?? [];
 
   return (
     <Card className={className}>
@@ -220,60 +244,71 @@ export function StatisticsSummaryCard({
             <div className="space-y-3">
               <p className="text-sm font-medium text-muted-foreground">{t("modelBreakdown")}</p>
               <div className="grid gap-4 md:grid-cols-2">
-                {/* Key Stats */}
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {t("keyStats")}
                   </p>
-                  {stats.keyModelBreakdown.length > 0 ? (
-                    <div className="space-y-2">
-                      {stats.keyModelBreakdown.map((item, index) => (
-                        <ModelBreakdownRow
-                          key={`key-${item.model ?? "unknown"}-${index}`}
-                          model={item.model}
-                          requests={item.requests}
-                          cost={item.cost}
-                          inputTokens={item.inputTokens}
-                          outputTokens={item.outputTokens}
-                          cacheCreationTokens={item.cacheCreationTokens}
-                          cacheReadTokens={item.cacheReadTokens}
-                          currencyCode={currencyCode}
-                          totalCost={stats.totalCost}
-                        />
-                      ))}
-                    </div>
+                  {keyPageItems.length > 0 ? (
+                    <ModelBreakdownColumn
+                      pageItems={keyPageItems}
+                      currencyCode={currencyCode}
+                      totalCost={stats.totalCost}
+                      keyPrefix="key"
+                      pageOffset={sliceStart}
+                    />
                   ) : (
-                    <p className="text-sm text-muted-foreground py-2">{t("noData")}</p>
+                    <p className="text-sm text-muted-foreground">{t("noData")}</p>
                   )}
                 </div>
 
-                {/* User Stats */}
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     {t("userStats")}
                   </p>
-                  {stats.userModelBreakdown.length > 0 ? (
-                    <div className="space-y-2">
-                      {stats.userModelBreakdown.map((item, index) => (
-                        <ModelBreakdownRow
-                          key={`user-${item.model ?? "unknown"}-${index}`}
-                          model={item.model}
-                          requests={item.requests}
-                          cost={item.cost}
-                          inputTokens={item.inputTokens}
-                          outputTokens={item.outputTokens}
-                          cacheCreationTokens={item.cacheCreationTokens}
-                          cacheReadTokens={item.cacheReadTokens}
-                          currencyCode={currencyCode}
-                          totalCost={stats.totalCost}
-                        />
-                      ))}
-                    </div>
+                  {userPageItems.length > 0 ? (
+                    <ModelBreakdownColumn
+                      pageItems={userPageItems}
+                      currencyCode={currencyCode}
+                      totalCost={stats.totalCost}
+                      keyPrefix="user"
+                      pageOffset={sliceStart}
+                    />
                   ) : (
-                    <p className="text-sm text-muted-foreground py-2">{t("noData")}</p>
+                    <p className="text-sm text-muted-foreground">{t("noData")}</p>
                   )}
                 </div>
               </div>
+
+              {breakdownTotalPages > 1 && (
+                <div className="flex items-center justify-between pt-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    aria-label={t("breakdownPrevPage")}
+                    disabled={breakdownPage <= 1}
+                    onClick={() => setBreakdownPage((p) => p - 1)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {t("breakdownPageIndicator", {
+                      current: breakdownPage,
+                      total: breakdownTotalPages,
+                    })}
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    aria-label={t("breakdownNextPage")}
+                    disabled={breakdownPage >= breakdownTotalPages}
+                    onClick={() => setBreakdownPage((p) => p + 1)}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           </>
         ) : (
@@ -281,6 +316,43 @@ export function StatisticsSummaryCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+const MODEL_BREAKDOWN_PAGE_SIZE = 5;
+
+interface ModelBreakdownColumnProps {
+  pageItems: ModelBreakdownItem[];
+  currencyCode: CurrencyCode;
+  totalCost: number;
+  keyPrefix: string;
+  pageOffset: number;
+}
+
+function ModelBreakdownColumn({
+  pageItems,
+  currencyCode,
+  totalCost,
+  keyPrefix,
+  pageOffset,
+}: ModelBreakdownColumnProps) {
+  return (
+    <div className="space-y-2">
+      {pageItems.map((item, index) => (
+        <ModelBreakdownRow
+          key={`${keyPrefix}-${item.model ?? "unknown"}-${pageOffset + index}`}
+          model={item.model}
+          requests={item.requests}
+          cost={item.cost}
+          inputTokens={item.inputTokens}
+          outputTokens={item.outputTokens}
+          cacheCreationTokens={item.cacheCreationTokens}
+          cacheReadTokens={item.cacheReadTokens}
+          currencyCode={currencyCode}
+          totalCost={totalCost}
+        />
+      ))}
+    </div>
   );
 }
 
