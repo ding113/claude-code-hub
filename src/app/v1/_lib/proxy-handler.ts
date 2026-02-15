@@ -82,28 +82,6 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     const handled = await ProxyResponseHandler.dispatch(session, response);
     const finalResponse = await attachSessionIdToErrorResponse(session.sessionId, handled);
 
-    // Fire Langfuse trace asynchronously (non-blocking)
-    if (process.env.LANGFUSE_PUBLIC_KEY && process.env.LANGFUSE_SECRET_KEY && session) {
-      const traceSession = session;
-      const traceStatusCode = handled.status;
-      const isSSE = (handled.headers.get("content-type") || "").includes("text/event-stream");
-      void import("@/lib/langfuse/trace-proxy-request")
-        .then(({ traceProxyRequest }) => {
-          void traceProxyRequest({
-            session: traceSession,
-            response: handled,
-            durationMs: Date.now() - traceSession.startTime,
-            statusCode: traceStatusCode,
-            isStreaming: isSSE,
-          });
-        })
-        .catch((err) => {
-          logger.warn("[ProxyHandler] Langfuse trace failed", {
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-    }
-
     return finalResponse;
   } catch (error) {
     logger.error("Proxy handler error:", error);

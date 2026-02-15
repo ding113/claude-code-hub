@@ -1,3 +1,4 @@
+import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
@@ -40,21 +41,39 @@ function getStatusCategory(statusCode: number): string {
   return `${Math.floor(statusCode / 100)}xx`;
 }
 
+const LANGFUSE_MAX_IO_SIZE = Number(process.env.LANGFUSE_MAX_IO_SIZE) || 100_000;
+
+/**
+ * Truncate data for Langfuse to avoid excessive payload sizes.
+ */
+function truncateForLangfuse(data: unknown, maxChars: number = LANGFUSE_MAX_IO_SIZE): unknown {
+  if (typeof data === "string") {
+    return data.length > maxChars ? `${data.substring(0, maxChars)}...[truncated]` : data;
+  }
+  if (data != null && typeof data === "object") {
+    const str = JSON.stringify(data);
+    if (str.length > maxChars) {
+      return {
+        _truncated: true,
+        _length: str.length,
+        _preview: str.substring(0, Math.min(maxChars, 2000)),
+      };
+    }
+    return data;
+  }
+  return data;
+}
+
 export interface TraceContext {
   session: ProxySession;
-  response: Response;
+  responseHeaders: Headers;
   durationMs: number;
   statusCode: number;
   responseText?: string;
   isStreaming: boolean;
   sseEventCount?: number;
   errorMessage?: string;
-  usageMetrics?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    cache_creation_input_tokens?: number;
-    cache_read_input_tokens?: number;
-  } | null;
+  usageMetrics?: UsageMetrics | null;
   costUsd?: string;
 }
 
@@ -70,14 +89,16 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
   try {
     const { startObservation, propagateAttributes } = await import("@langfuse/tracing");
 
-    const { session, response, durationMs, statusCode, isStreaming } = ctx;
+    const { session, durationMs, statusCode, isStreaming } = ctx;
     const provider = session.provider;
     const messageContext = session.messageContext;
 
-    // Build tags
+    // Build tags - include provider name and model
     const tags: string[] = [];
     if (provider?.providerType) tags.push(provider.providerType);
+    if (provider?.name) tags.push(provider.name);
     if (session.originalFormat) tags.push(session.originalFormat);
+    if (session.getCurrentModel()) tags.push(session.getCurrentModel()!);
     tags.push(getStatusCategory(statusCode));
 
     // Build trace-level metadata (propagateAttributes requires all values to be strings)
@@ -90,36 +111,44 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSequence: String(session.getRequestSequence()),
     };
 
-    // Build generation metadata
+    // Build generation metadata - all request detail fields
     const generationMetadata: Record<string, unknown> = {
+      // Provider
       providerId: provider?.id,
       providerName: provider?.name,
       providerType: provider?.providerType,
       providerChain: session.getProviderChain(),
-      specialSettings: session.getSpecialSettings(),
+      // Model
+      model: session.getCurrentModel(),
+      originalModel: session.getOriginalModel(),
       modelRedirected: session.isModelRedirected(),
-      originalModel: session.isModelRedirected() ? session.getOriginalModel() : undefined,
-      isStreaming,
-      statusCode,
+      // Special settings
+      specialSettings: session.getSpecialSettings(),
+      // Request context
+      endpoint: session.getEndpoint(),
+      method: session.method,
+      clientFormat: session.originalFormat,
+      userAgent: session.userAgent,
+      requestSequence: session.getRequestSequence(),
+      sessionId: session.sessionId,
+      keyName: messageContext?.key?.name,
+      // Timing
       durationMs,
       ttfbMs: session.ttfbMs,
+      // Flags
+      isStreaming,
       cacheTtlApplied: session.getCacheTtlResolved(),
       context1mApplied: session.getContext1mApplied(),
+      // Error
       errorMessage: ctx.errorMessage,
+      // Request summary (quick overview)
+      requestSummary: buildRequestBodySummary(session),
+      // SSE
+      sseEventCount: ctx.sseEventCount,
+      // Headers (sanitized)
       requestHeaders: sanitizeHeaders(session.headers),
-      responseHeaders: sanitizeHeaders(response.headers),
-      requestBodySummary: buildRequestBodySummary(session),
+      responseHeaders: sanitizeHeaders(ctx.responseHeaders),
     };
-
-    // Add response body summary
-    if (isStreaming) {
-      generationMetadata.sseEventCount = ctx.sseEventCount;
-    } else if (ctx.responseText) {
-      generationMetadata.responseBodySummary =
-        ctx.responseText.length > 2000
-          ? `${ctx.responseText.substring(0, 2000)}...[truncated]`
-          : ctx.responseText;
-    }
 
     // Build usage details for Langfuse generation
     const usageDetails: Record<string, number> | undefined = ctx.usageMetrics
@@ -147,12 +176,19 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
 
     // Create the root trace span
     const rootSpan = startObservation("proxy-request", {
-      input: traceMetadata,
+      input: {
+        endpoint: session.getEndpoint(),
+        method: session.method,
+        model: session.getCurrentModel(),
+        clientFormat: session.originalFormat,
+        providerName: provider?.name,
+      },
       output: {
         statusCode,
         durationMs,
         model: session.getCurrentModel(),
         hasUsage: !!ctx.usageMetrics,
+        costUsd: ctx.costUsd,
       },
     });
 
@@ -166,17 +202,23 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
         traceName: `${session.method} ${session.getEndpoint() ?? "/"}`,
       },
       async () => {
+        // Generation input = actual request payload
+        const generationInput = truncateForLangfuse(session.request.message);
+
+        // Generation output = actual response body
+        const generationOutput = ctx.responseText
+          ? truncateForLangfuse(tryParseJsonSafe(ctx.responseText))
+          : isStreaming
+            ? { streaming: true, sseEventCount: ctx.sseEventCount }
+            : { statusCode };
+
         // Create the LLM generation observation
         const generation = rootSpan.startObservation(
           "llm-call",
           {
             model: session.getCurrentModel() ?? undefined,
-            input: buildRequestBodySummary(session),
-            output: isStreaming
-              ? { streaming: true, sseEventCount: ctx.sseEventCount }
-              : ctx.responseText
-                ? tryParseJsonSafe(ctx.responseText)
-                : { statusCode },
+            input: generationInput,
+            output: generationOutput,
             ...(usageDetails && Object.keys(usageDetails).length > 0 ? { usageDetails } : {}),
             ...(costDetails ? { costDetails } : {}),
             metadata: generationMetadata,
@@ -205,14 +247,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
 
 function tryParseJsonSafe(text: string): unknown {
   try {
-    const parsed = JSON.parse(text);
-    // Truncate large outputs to avoid excessive data
-    const str = JSON.stringify(parsed);
-    if (str.length > 4000) {
-      return { _truncated: true, _length: str.length, _preview: str.substring(0, 2000) };
-    }
-    return parsed;
+    return JSON.parse(text);
   } catch {
-    return text.length > 2000 ? `${text.substring(0, 2000)}...[truncated]` : text;
+    return text;
   }
 }
