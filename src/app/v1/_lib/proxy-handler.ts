@@ -78,6 +78,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
       });
     }
 
+    session.recordForwardStart();
     const response = await ProxyForwarder.send(session);
     const handled = await ProxyResponseHandler.dispatch(session, response);
     const finalResponse = await attachSessionIdToErrorResponse(session.sessionId, handled);

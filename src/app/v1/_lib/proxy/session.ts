@@ -67,6 +67,9 @@ export class ProxySession {
   // Time To First Byte (ms). Streaming: first chunk. Non-stream: equals durationMs.
   ttfbMs: number | null = null;
 
+  // Timestamp when guard pipeline finished and forwarding started (epoch ms).
+  forwardStartTime: number | null = null;
+
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
@@ -311,6 +314,16 @@ export class ProxySession {
     const value = Math.max(0, Date.now() - this.startTime);
     this.ttfbMs = value;
     return value;
+  }
+
+  /**
+   * Record the timestamp when guard pipeline finished and upstream forwarding begins.
+   * Called once; subsequent calls are no-ops.
+   */
+  recordForwardStart(): void {
+    if (this.forwardStartTime === null) {
+      this.forwardStartTime = Date.now();
+    }
   }
 
   /**

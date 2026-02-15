@@ -43,6 +43,27 @@ function getStatusCategory(statusCode: number): string {
 
 const LANGFUSE_MAX_IO_SIZE = Number(process.env.LANGFUSE_MAX_IO_SIZE) || 100_000;
 
+const SUCCESS_REASONS = new Set([
+  "request_success",
+  "retry_success",
+  "initial_selection",
+  "session_reuse",
+]);
+
+function isSuccessReason(reason: string | undefined): boolean {
+  return !!reason && SUCCESS_REASONS.has(reason);
+}
+
+const ERROR_REASONS = new Set([
+  "system_error",
+  "vendor_type_all_timeout",
+  "endpoint_pool_exhausted",
+]);
+
+function isErrorReason(reason: string | undefined): boolean {
+  return !!reason && ERROR_REASONS.has(reason);
+}
+
 /**
  * Truncate data for Langfuse to avoid excessive payload sizes.
  */
@@ -97,6 +118,25 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
     const requestStartTime = new Date(session.startTime);
     const requestEndTime = new Date(session.startTime + durationMs);
 
+    // Compute timing breakdown from forwardStartTime
+    const forwardStartDate = session.forwardStartTime ? new Date(session.forwardStartTime) : null;
+    const guardPipelineMs = session.forwardStartTime
+      ? session.forwardStartTime - session.startTime
+      : null;
+
+    const timingBreakdown = {
+      guardPipelineMs,
+      upstreamTotalMs:
+        guardPipelineMs != null ? Math.max(0, durationMs - guardPipelineMs) : durationMs,
+      ttfbFromForwardMs:
+        guardPipelineMs != null && session.ttfbMs != null
+          ? Math.max(0, session.ttfbMs - guardPipelineMs)
+          : null,
+      tokenGenerationMs: session.ttfbMs != null ? Math.max(0, durationMs - session.ttfbMs) : null,
+      failedAttempts: session.getProviderChain().filter((i) => !isSuccessReason(i.reason)).length,
+      providersAttempted: new Set(session.getProviderChain().map((i) => i.id)).size,
+    };
+
     // Build tags - include provider name and model
     const tags: string[] = [];
     if (provider?.providerType) tags.push(provider.providerType);
@@ -139,6 +179,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       // Timing
       durationMs,
       ttfbMs: session.ttfbMs,
+      timingBreakdown,
       // Flags
       isStreaming,
       cacheTtlApplied: session.getCacheTtlResolved(),
@@ -195,6 +236,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
           model: session.getCurrentModel(),
           hasUsage: !!ctx.usageMetrics,
           costUsd: ctx.costUsd,
+          timingBreakdown,
         },
       },
       {
@@ -212,6 +254,49 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
         traceName: `${session.method} ${session.getEndpoint() ?? "/"}`,
       },
       async () => {
+        // 1. Guard pipeline span (if forwardStartTime was recorded)
+        if (forwardStartDate) {
+          const guardSpan = rootSpan.startObservation(
+            "guard-pipeline",
+            {
+              output: { durationMs: guardPipelineMs, passed: true },
+            },
+            { startTime: requestStartTime } as Record<string, unknown>
+          );
+          guardSpan.end(forwardStartDate);
+        }
+
+        // 2. Provider attempt events (one per failed chain item)
+        for (const item of session.getProviderChain()) {
+          if (!isSuccessReason(item.reason)) {
+            const eventObs = rootSpan.startObservation(
+              "provider-attempt",
+              {
+                level: isErrorReason(item.reason) ? "ERROR" : "WARNING",
+                input: {
+                  providerId: item.id,
+                  providerName: item.name,
+                  attempt: item.attemptNumber,
+                },
+                output: {
+                  reason: item.reason,
+                  errorMessage: item.errorMessage,
+                  statusCode: item.statusCode,
+                },
+                metadata: { ...item },
+              },
+              {
+                asType: "event",
+                startTime: new Date(item.timestamp ?? session.startTime),
+              } as { asType: "event" }
+            );
+            eventObs.end();
+          }
+        }
+
+        // 3. LLM generation (startTime = forwardStartTime when available)
+        const generationStartTime = forwardStartDate ?? requestStartTime;
+
         // Generation input = actual request payload
         const generationInput = truncateForLangfuse(session.request.message);
 
@@ -234,7 +319,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
             metadata: generationMetadata,
           },
           // SDK runtime supports startTime on child observations but types don't expose it
-          { asType: "generation", startTime: requestStartTime } as { asType: "generation" }
+          { asType: "generation", startTime: generationStartTime } as { asType: "generation" }
         );
 
         // Set TTFB as completionStartTime
