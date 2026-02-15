@@ -484,6 +484,13 @@
       "when": 1771164248361,
       "tag": "0068_flaky_swarm",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1771188568762,
+      "tag": "0069_special_squirrel_girl",
+      "breakpoints": true
     }
   ]
 }

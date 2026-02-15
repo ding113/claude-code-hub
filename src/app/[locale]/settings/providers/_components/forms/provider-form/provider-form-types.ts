@@ -47,6 +47,7 @@ export interface RoutingState {
   weight: number;
   costMultiplier: number;
   cacheTtlPreference: "inherit" | "5m" | "1h";
+  swapCacheTtlBilling: boolean;
   context1mPreference: "inherit" | "force_enable" | "disabled";
   // Codex-specific
   codexReasoningEffortPreference: CodexReasoningEffortPreference;
@@ -127,6 +128,7 @@ export type ProviderFormAction =
   | { type: "SET_WEIGHT"; payload: number }
   | { type: "SET_COST_MULTIPLIER"; payload: number }
   | { type: "SET_CACHE_TTL_PREFERENCE"; payload: "inherit" | "5m" | "1h" }
+  | { type: "SET_SWAP_CACHE_TTL_BILLING"; payload: boolean }
   | { type: "SET_CONTEXT_1M_PREFERENCE"; payload: "inherit" | "force_enable" | "disabled" }
   | { type: "SET_CODEX_REASONING_EFFORT"; payload: CodexReasoningEffortPreference }
   | { type: "SET_CODEX_REASONING_SUMMARY"; payload: CodexReasoningSummaryPreference }

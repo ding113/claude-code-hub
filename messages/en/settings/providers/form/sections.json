@@ -173,6 +173,10 @@
         "inherit": "No override (follow client)"
       }
     },
+    "swapCacheTtlBilling": {
+      "label": "Swap Cache TTL Billing",
+      "desc": "Invert cache TTL for cost calculation: 1h tokens billed as 5min rate and vice versa. Display badge remains unchanged."
+    },
     "codexOverrides": {
       "title": "Codex Parameter Overrides",
       "desc": "Override Codex (Responses API) request parameters at the provider level",

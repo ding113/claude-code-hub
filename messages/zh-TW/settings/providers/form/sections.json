@@ -174,6 +174,10 @@
         "inherit": "不覆寫（跟隨客戶端）"
       }
     },
+    "swapCacheTtlBilling": {
+      "label": "Cache TTL 計費互換",
+      "desc": "反轉快取 TTL 的計費方式：1h 令牌按 5 分鐘費率計費，反之亦然。日誌中的標記保持不變。"
+    },
     "codexOverrides": {
       "title": "Codex 參數覆寫",
       "desc": "在供應商級別覆寫 Codex (Responses API) 請求參數",

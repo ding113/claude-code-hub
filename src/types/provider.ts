@@ -131,6 +131,9 @@ export interface Provider {
   // Cache TTL override（inherit 表示不强制覆写）
   cacheTtlPreference: CacheTtlPreference | null;
 
+  // Cache TTL billing swap: invert 1h<->5m for cost calculation
+  swapCacheTtlBilling: boolean;
+
   // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
   context1mPreference: Context1mPreference | null;
 
@@ -214,6 +217,7 @@ export interface ProviderDisplay {
   websiteUrl: string | null;
   faviconUrl: string | null;
   cacheTtlPreference: CacheTtlPreference | null;
+  swapCacheTtlBilling: boolean;
   context1mPreference: Context1mPreference | null;
   codexReasoningEffortPreference: CodexReasoningEffortPreference | null;
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
@@ -305,6 +309,7 @@ export interface CreateProviderData {
   website_url?: string | null;
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
+  swap_cache_ttl_billing?: boolean;
   context_1m_preference?: Context1mPreference | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
@@ -378,6 +383,7 @@ export interface UpdateProviderData {
   website_url?: string | null;
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
+  swap_cache_ttl_billing?: boolean;
   context_1m_preference?: Context1mPreference | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;

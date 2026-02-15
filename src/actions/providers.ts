@@ -277,6 +277,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
         cacheTtlPreference: provider.cacheTtlPreference,
+        swapCacheTtlBilling: provider.swapCacheTtlBilling,
         context1mPreference: provider.context1mPreference,
         codexReasoningEffortPreference: provider.codexReasoningEffortPreference,
         codexReasoningSummaryPreference: provider.codexReasoningSummaryPreference,

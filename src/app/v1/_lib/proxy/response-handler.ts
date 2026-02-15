@@ -2831,11 +2831,17 @@ export async function finalizeRequestStats(
   const cacheTotal =
     usageMetrics.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
 
+  // Swap 5m<->1h token buckets for billing when provider option is enabled
+  // Badge (cache_ttl) stays unchanged - only cost calculation is affected
+  const swap = provider.swapCacheTtlBilling === true;
+  const billing5m = swap ? cache1h : cache5m;
+  const billing1h = swap ? cache5m : cache1h;
+
   const normalizedUsage: UsageMetrics = {
     ...usageMetrics,
     cache_ttl: resolvedCacheTtl ?? usageMetrics.cache_ttl,
-    cache_creation_5m_input_tokens: cache5m,
-    cache_creation_1h_input_tokens: cache1h,
+    cache_creation_5m_input_tokens: billing5m,
+    cache_creation_1h_input_tokens: billing1h,
     cache_creation_input_tokens: cacheTotal,
   };
 
