@@ -81,9 +81,6 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     getRequestSequence() {
       return this.requestSequence ?? 1;
     },
-    generateDeterministicSessionId() {
-      return "deterministic_session_id";
-    },
     getMessages() {
       return [];
     },
