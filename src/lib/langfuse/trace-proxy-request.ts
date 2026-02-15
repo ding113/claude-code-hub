@@ -93,6 +93,10 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
     const provider = session.provider;
     const messageContext = session.messageContext;
 
+    // Compute actual request timing from session data
+    const requestStartTime = new Date(session.startTime);
+    const requestEndTime = new Date(session.startTime + durationMs);
+
     // Build tags - include provider name and model
     const tags: string[] = [];
     if (provider?.providerType) tags.push(provider.providerType);
@@ -160,10 +164,10 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
             ? { output: ctx.usageMetrics.output_tokens }
             : {}),
           ...(ctx.usageMetrics.cache_read_input_tokens != null
-            ? { cacheRead: ctx.usageMetrics.cache_read_input_tokens }
+            ? { cache_read_input_tokens: ctx.usageMetrics.cache_read_input_tokens }
             : {}),
           ...(ctx.usageMetrics.cache_creation_input_tokens != null
-            ? { cacheCreation: ctx.usageMetrics.cache_creation_input_tokens }
+            ? { cache_creation_input_tokens: ctx.usageMetrics.cache_creation_input_tokens }
             : {}),
         }
       : undefined;
@@ -171,26 +175,32 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
     // Build cost details
     const costDetails: Record<string, number> | undefined =
       ctx.costUsd && Number.parseFloat(ctx.costUsd) > 0
-        ? { totalUsd: Number.parseFloat(ctx.costUsd) }
+        ? { total: Number.parseFloat(ctx.costUsd) }
         : undefined;
 
     // Create the root trace span
-    const rootSpan = startObservation("proxy-request", {
-      input: {
-        endpoint: session.getEndpoint(),
-        method: session.method,
-        model: session.getCurrentModel(),
-        clientFormat: session.originalFormat,
-        providerName: provider?.name,
+    const rootSpan = startObservation(
+      "proxy-request",
+      {
+        input: {
+          endpoint: session.getEndpoint(),
+          method: session.method,
+          model: session.getCurrentModel(),
+          clientFormat: session.originalFormat,
+          providerName: provider?.name,
+        },
+        output: {
+          statusCode,
+          durationMs,
+          model: session.getCurrentModel(),
+          hasUsage: !!ctx.usageMetrics,
+          costUsd: ctx.costUsd,
+        },
       },
-      output: {
-        statusCode,
-        durationMs,
-        model: session.getCurrentModel(),
-        hasUsage: !!ctx.usageMetrics,
-        costUsd: ctx.costUsd,
-      },
-    });
+      {
+        startTime: requestStartTime,
+      }
+    );
 
     // Propagate trace attributes
     await propagateAttributes(
@@ -223,7 +233,8 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
             ...(costDetails ? { costDetails } : {}),
             metadata: generationMetadata,
           },
-          { asType: "generation" }
+          // SDK runtime supports startTime on child observations but types don't expose it
+          { asType: "generation", startTime: requestStartTime } as { asType: "generation" }
         );
 
         // Set TTFB as completionStartTime
@@ -233,7 +244,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
           });
         }
 
-        generation.end();
+        generation.end(requestEndTime);
       }
     );
 
@@ -255,7 +266,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       },
     });
 
-    rootSpan.end();
+    rootSpan.end(requestEndTime);
   } catch (error) {
     logger.warn("[Langfuse] Failed to trace proxy request", {
       error: error instanceof Error ? error.message : String(error),

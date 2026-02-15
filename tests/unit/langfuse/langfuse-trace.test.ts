@@ -152,6 +152,9 @@ describe("traceProxyRequest", () => {
           durationMs: 500,
           costUsd: undefined,
         }),
+      }),
+      expect.objectContaining({
+        startTime: expect.any(Date),
       })
     );
 
@@ -160,11 +163,14 @@ describe("traceProxyRequest", () => {
       expect.objectContaining({
         model: "claude-sonnet-4-20250514",
       }),
-      { asType: "generation" }
+      expect.objectContaining({
+        asType: "generation",
+        startTime: expect.any(Date),
+      })
     );
 
-    expect(mockSpanEnd).toHaveBeenCalled();
-    expect(mockGenerationEnd).toHaveBeenCalled();
+    expect(mockSpanEnd).toHaveBeenCalledWith(expect.any(Date));
+    expect(mockGenerationEnd).toHaveBeenCalledWith(expect.any(Date));
   });
 
   test("should use actual request messages as generation input", async () => {
@@ -266,10 +272,10 @@ describe("traceProxyRequest", () => {
     expect(generationCall[1].usageDetails).toEqual({
       input: 100,
       output: 50,
-      cacheRead: 20,
+      cache_read_input_tokens: 20,
     });
     expect(generationCall[1].costDetails).toEqual({
-      totalUsd: 0.0015,
+      total: 0.0015,
     });
   });
 
@@ -351,6 +357,39 @@ describe("traceProxyRequest", () => {
     expect(mockGenerationUpdate).toHaveBeenCalledWith({
       completionStartTime: new Date(startTime + 200),
     });
+  });
+
+  test("should pass correct startTime and endTime to observations", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    const startTime = 1700000000000;
+    const durationMs = 5000;
+
+    await traceProxyRequest({
+      session: createMockSession({ startTime }),
+      responseHeaders: new Headers(),
+      durationMs,
+      statusCode: 200,
+      isStreaming: false,
+    });
+
+    const expectedStart = new Date(startTime);
+    const expectedEnd = new Date(startTime + durationMs);
+
+    // Root span gets startTime in options (3rd arg)
+    expect(mockStartObservation).toHaveBeenCalledWith("proxy-request", expect.any(Object), {
+      startTime: expectedStart,
+    });
+
+    // Generation gets startTime in options (3rd arg)
+    expect(mockRootSpan.startObservation).toHaveBeenCalledWith("llm-call", expect.any(Object), {
+      asType: "generation",
+      startTime: expectedStart,
+    });
+
+    // Both end() calls receive the computed endTime
+    expect(mockGenerationEnd).toHaveBeenCalledWith(expectedEnd);
+    expect(mockSpanEnd).toHaveBeenCalledWith(expectedEnd);
   });
 
   test("should handle errors gracefully without throwing", async () => {
@@ -450,6 +489,9 @@ describe("traceProxyRequest", () => {
         output: expect.objectContaining({
           costUsd: "0.05",
         }),
+      }),
+      expect.objectContaining({
+        startTime: expect.any(Date),
       })
     );
   });
