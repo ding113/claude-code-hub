@@ -254,11 +254,11 @@ class VendorTypeEndpointStatsBatcher {
               { length: Math.min(concurrency, deferredEntries.length) },
               async () => {
                 for (;;) {
-                  const current = deferredEntries[idx];
+                  const currentIndex = idx;
                   idx += 1;
-                  if (!current) return;
+                  if (currentIndex >= deferredEntries.length) return;
 
-                  const { vendorId, deferred } = current;
+                  const { vendorId, deferred } = deferredEntries[currentIndex];
 
                   try {
                     const endpoints = await getProviderEndpointsByVendor({ vendorId });

@@ -562,6 +562,8 @@ export interface ModelBreakdownItem {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
+  cacheCreation5mTokens: number;
+  cacheCreation1hTokens: number;
 }
 
 export interface MyStatsSummary extends UsageLogSummary {
@@ -689,6 +691,8 @@ export async function getMyStatsSummary(
           outputTokens: row.keyOutputTokens,
           cacheCreationTokens: row.keyCacheCreationTokens,
           cacheReadTokens: row.keyCacheReadTokens,
+          cacheCreation5mTokens: row.keyCacheCreation5mTokens,
+          cacheCreation1hTokens: row.keyCacheCreation1hTokens,
         }))
         .sort((a, b) => b.cost - a.cost),
       userModelBreakdown: modelBreakdown.map((row) => ({
@@ -699,6 +703,8 @@ export async function getMyStatsSummary(
         outputTokens: row.userOutputTokens,
         cacheCreationTokens: row.userCacheCreationTokens,
         cacheReadTokens: row.userCacheReadTokens,
+        cacheCreation5mTokens: row.userCacheCreation5mTokens,
+        cacheCreation1hTokens: row.userCacheCreation1hTokens,
       })),
       currencyCode,
     };

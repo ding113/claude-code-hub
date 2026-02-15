@@ -557,6 +557,10 @@ export async function getDistinctModelsForKey(keyString: string): Promise<string
   const now = Date.now();
   const cached = distinctModelsByKeyCache.get(keyString);
   if (cached && cached.expiresAt > now) {
+    // LRU-like bump + sliding TTL
+    cached.expiresAt = now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS;
+    distinctModelsByKeyCache.delete(keyString);
+    distinctModelsByKeyCache.set(keyString, cached);
     return cached.data;
   }
 
@@ -582,6 +586,10 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
   const now = Date.now();
   const cached = distinctEndpointsByKeyCache.get(keyString);
   if (cached && cached.expiresAt > now) {
+    // LRU-like bump + sliding TTL
+    cached.expiresAt = now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS;
+    distinctEndpointsByKeyCache.delete(keyString);
+    distinctEndpointsByKeyCache.set(keyString, cached);
     return cached.data;
   }
 
