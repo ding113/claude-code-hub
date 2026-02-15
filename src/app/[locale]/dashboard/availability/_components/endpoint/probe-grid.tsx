@@ -51,6 +51,9 @@ function formatLatency(ms: number | null): string {
 function formatTime(date: Date | string | null, timeZone?: string): string {
   if (!date) return "-";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (!Number.isFinite(d.getTime())) {
+    return "-";
+  }
   if (timeZone) {
     return formatInTimeZone(d, timeZone, "HH:mm:ss");
   }
@@ -59,6 +62,22 @@ function formatTime(date: Date | string | null, timeZone?: string): string {
     minute: "2-digit",
     second: "2-digit",
   });
+}
+
+function safeHostnameFromUrl(input: string): string | null {
+  const url = input.trim();
+  if (!url) return null;
+
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    // 兼容历史/手工录入：允许 host:port 或无 scheme 的写法。
+    try {
+      return new URL(`https://${url}`).hostname || null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 export function ProbeGrid({
@@ -85,6 +104,8 @@ export function ProbeGrid({
           const status = getStatusConfig(endpoint);
           const StatusIcon = status.icon;
           const isSelected = selectedEndpointId === endpoint.id;
+          const hostname = endpoint.label ? null : safeHostnameFromUrl(endpoint.url);
+          const displayName = endpoint.label || hostname || endpoint.url;
 
           return (
             <Tooltip key={endpoint.id}>
@@ -105,9 +126,7 @@ export function ProbeGrid({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <StatusIcon className={cn("h-4 w-4 shrink-0", status.color)} />
-                        <span className="text-sm font-medium truncate">
-                          {endpoint.label || new URL(endpoint.url).hostname}
-                        </span>
+                        <span className="text-sm font-medium truncate">{displayName}</span>
                       </div>
                       <p className="text-xs text-muted-foreground truncate mt-1">{endpoint.url}</p>
                     </div>

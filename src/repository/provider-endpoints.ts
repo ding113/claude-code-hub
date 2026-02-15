@@ -318,14 +318,16 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
   ProviderEndpointProbeTarget[]
 > {
   // #779/#781：probe scheduler 热路径：
-  // - 仅探测仍被「启用 provider」引用的端点（vendor/type/url 三元组）
-  // - 显式 INNER JOIN + DISTINCT，避免 planner 在大表上走低效 semi-join。
+  // - 仅探测仍存在「启用 provider」的 vendor/type 下的端点（避免全禁用/孤儿 vendor 仍被持续探测）
+  // - 仍需覆盖端点池内“手动添加”的端点（未必与 provider.url 一一对应），因此只按 vendor/type 维度 gating。
   const query = sql`
-    WITH enabled_provider_urls AS (
-      SELECT DISTINCT p.provider_vendor_id AS vendor_id, p.provider_type, p.url
+    WITH enabled_vendor_types AS (
+      SELECT DISTINCT p.provider_vendor_id AS vendor_id, p.provider_type
       FROM ${providers} p
       WHERE p.is_enabled = true
         AND p.deleted_at IS NULL
+        AND p.provider_vendor_id IS NOT NULL
+        AND p.provider_vendor_id > 0
     )
     SELECT
       e.id,
@@ -336,10 +338,9 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
       e.last_probe_ok AS "lastProbeOk",
       e.last_probe_error_type AS "lastProbeErrorType"
     FROM ${providerEndpoints} e
-    INNER JOIN enabled_provider_urls pu
-      ON pu.vendor_id = e.vendor_id
-     AND pu.provider_type = e.provider_type
-     AND pu.url = e.url
+    INNER JOIN enabled_vendor_types vt
+      ON vt.vendor_id = e.vendor_id
+     AND vt.provider_type = e.provider_type
     WHERE e.is_enabled = true
       AND e.deleted_at IS NULL
     ORDER BY e.id ASC
@@ -740,55 +741,38 @@ export async function hasEnabledProviderReferenceForVendorTypeUrl(input: {
 }
 
 /**
- * Dashboard/Endpoint Health 用：仅返回仍被启用的 provider 引用的启用端点。
+ * Dashboard/Endpoint Health 用：仅在存在启用 provider 的前提下返回该 vendor/type 的端点池。
  *
- * #781：避免“已不再被任何启用 provider 使用”的孤儿端点仍在 Dashboard 中展示。
- * 语义与 probe scheduler 保持一致：只关注 (vendor/type/url) 被启用 provider 引用且端点池启用的端点。
+ * #781：避免“没有任何启用 provider 的 vendor/type”仍在 Dashboard 中展示与被探测。
+ *
+ * 注意：端点池允许手动添加端点，未必与 `providers.url` 一一对应；这里按 vendor/type 维度 gating，
+ * 以尽量保持端点池的展示语义不变。
  */
 export async function findDashboardProviderEndpointsByVendorAndType(
   vendorId: number,
   providerType: ProviderType
 ): Promise<ProviderEndpoint[]> {
-  const query = sql`
-    WITH enabled_provider_urls AS (
-      SELECT DISTINCT p.provider_vendor_id AS vendor_id, p.provider_type, p.url
-      FROM ${providers} p
-      WHERE p.is_enabled = true
-        AND p.deleted_at IS NULL
-        AND p.provider_vendor_id = ${vendorId}
-        AND p.provider_type = ${providerType}
+  const rows = await db
+    .select(providerEndpointSelectFields)
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, vendorId),
+        eq(providerEndpoints.providerType, providerType),
+        isNull(providerEndpoints.deletedAt),
+        sql`EXISTS (
+          SELECT 1
+          FROM ${providers} p
+          WHERE p.provider_vendor_id = ${vendorId}
+            AND p.provider_type = ${providerType}
+            AND p.is_enabled = true
+            AND p.deleted_at IS NULL
+        )`
+      )
     )
-    SELECT
-      e.id,
-      e.vendor_id AS "vendorId",
-      e.provider_type AS "providerType",
-      e.url,
-      e.label,
-      e.sort_order AS "sortOrder",
-      e.is_enabled AS "isEnabled",
-      e.last_probed_at AS "lastProbedAt",
-      e.last_probe_ok AS "lastProbeOk",
-      e.last_probe_status_code AS "lastProbeStatusCode",
-      e.last_probe_latency_ms AS "lastProbeLatencyMs",
-      e.last_probe_error_type AS "lastProbeErrorType",
-      e.last_probe_error_message AS "lastProbeErrorMessage",
-      e.created_at AS "createdAt",
-      e.updated_at AS "updatedAt",
-      e.deleted_at AS "deletedAt"
-    FROM ${providerEndpoints} e
-    INNER JOIN enabled_provider_urls pu
-      ON pu.vendor_id = e.vendor_id
-     AND pu.provider_type = e.provider_type
-     AND pu.url = e.url
-    WHERE e.is_enabled = true
-      AND e.deleted_at IS NULL
-    ORDER BY e.sort_order ASC, e.id ASC
-  `;
+    .orderBy(asc(providerEndpoints.sortOrder), asc(providerEndpoints.id));
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = (await db.execute(query)) as any;
-  const rows = Array.from(result) as Array<Record<string, unknown>>;
-  return rows.map((row) => toProviderEndpoint(row));
+  return rows.map(toProviderEndpoint);
 }
 
 export async function findProviderVendorById(vendorId: number): Promise<ProviderVendor | null> {
