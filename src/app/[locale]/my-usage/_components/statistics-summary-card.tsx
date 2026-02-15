@@ -119,6 +119,7 @@ export function StatisticsSummaryCard({
   const [breakdownPage, setBreakdownPage] = useState(1);
 
   // Reset breakdown page when stats change (date range switch, refresh)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset on stats identity change
   useEffect(() => {
     setBreakdownPage(1);
   }, [stats]);
