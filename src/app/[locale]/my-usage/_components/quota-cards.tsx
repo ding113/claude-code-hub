@@ -3,11 +3,11 @@
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import type { MyUsageQuota } from "@/actions/my-usage";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CurrencyCode } from "@/lib/utils";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils/currency";
 import { calculateUsagePercent, isUnlimited } from "@/lib/utils/limit-helpers";
 
 interface QuotaCardsProps {
@@ -79,55 +79,121 @@ export function QuotaCards({ quota, loading = false, currencyCode = "USD" }: Quo
   }
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((item) => {
-          const keyPct = calculateUsagePercent(item.keyCurrent, item.keyLimit);
-          const userPct = calculateUsagePercent(item.userCurrent ?? 0, item.userLimit);
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {items.map((item) => {
+        const isCurrency = item.key !== "concurrent";
+        const currency = isCurrency ? currencyCode : undefined;
 
-          const keyTone = getTone(keyPct);
-          const userTone = getTone(userPct);
-          const hasUserData = item.userLimit !== null || item.userCurrent !== null;
+        return (
+          <QuotaBlock
+            key={item.key}
+            title={item.title}
+            keyCurrent={item.keyCurrent}
+            keyLimit={item.keyLimit}
+            userCurrent={item.userCurrent ?? 0}
+            userLimit={item.userLimit}
+            currency={currency}
+          />
+        );
+      })}
+      {items.length === 0 && !loading ? (
+        <div className="col-span-full py-6 text-center text-sm text-muted-foreground">
+          {t("empty")}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
-          return (
-            <Card key={item.key} className="border-border/70">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold text-muted-foreground">
-                  {item.title}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <QuotaColumn
-                    label={t("keyLevel")}
-                    current={item.keyCurrent}
-                    limit={item.keyLimit}
-                    percent={keyPct}
-                    tone={keyTone}
-                    currency={item.key === "concurrent" ? undefined : currencyCode}
-                  />
-                  <QuotaColumn
-                    label={t("userLevel")}
-                    current={item.userCurrent ?? 0}
-                    limit={item.userLimit}
-                    percent={userPct}
-                    tone={userTone}
-                    currency={item.key === "concurrent" ? undefined : currencyCode}
-                    muted={!hasUserData}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-        {items.length === 0 && !loading ? (
-          <Card>
-            <CardContent className="py-6 text-center text-sm text-muted-foreground">
-              {t("empty")}
-            </CardContent>
-          </Card>
-        ) : null}
-      </div>
+function QuotaBlock({
+  title,
+  keyCurrent,
+  keyLimit,
+  userCurrent,
+  userLimit,
+  currency,
+}: {
+  title: string;
+  keyCurrent: number;
+  keyLimit: number | null;
+  userCurrent: number;
+  userLimit: number | null;
+  currency?: CurrencyCode;
+}) {
+  const t = useTranslations("myUsage.quota");
+
+  const keyPct = calculateUsagePercent(keyCurrent, keyLimit);
+  const userPct = calculateUsagePercent(userCurrent, userLimit);
+
+  return (
+    <div className="space-y-2 rounded-md border bg-card/50 p-3">
+      <div className="text-xs font-semibold text-muted-foreground">{title}</div>
+      <QuotaRow
+        label={t("keyLevel")}
+        current={keyCurrent}
+        limit={keyLimit}
+        percent={keyPct}
+        currency={currency}
+      />
+      <QuotaRow
+        label={t("userLevel")}
+        current={userCurrent}
+        limit={userLimit}
+        percent={userPct}
+        currency={currency}
+      />
+    </div>
+  );
+}
+
+function QuotaRow({
+  label,
+  current,
+  limit,
+  percent,
+  currency,
+}: {
+  label: string;
+  current: number;
+  limit: number | null;
+  percent: number | null;
+  currency?: CurrencyCode;
+}) {
+  const t = useTranslations("myUsage.quota");
+  const unlimited = isUnlimited(limit);
+  const tone = getTone(percent);
+
+  const formatValue = (value: number) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return currency ? formatCurrency(0, currency) : "0";
+    return currency ? formatCurrency(num, currency) : String(num);
+  };
+
+  const limitDisplay = unlimited ? t("unlimited") : formatValue(limit as number);
+  const ariaLabel = `${label}: ${formatValue(current)}${!unlimited ? ` / ${limitDisplay}` : ""}`;
+
+  const progressClass = cn("h-1.5 flex-1", {
+    "bg-destructive/10 [&>div]:bg-destructive": tone === "danger",
+    "bg-amber-500/10 [&>div]:bg-amber-500": tone === "warn",
+  });
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-8 shrink-0 text-[11px] text-muted-foreground">{label}</span>
+      {!unlimited ? (
+        <Progress value={percent ?? 0} className={progressClass} aria-label={ariaLabel} />
+      ) : (
+        <div
+          className="h-1.5 flex-1 rounded-full bg-muted/50"
+          role="progressbar"
+          aria-label={`${label}: ${t("unlimited")}`}
+          aria-valuetext={t("unlimited")}
+        />
+      )}
+      <span className="shrink-0 text-right font-mono text-xs text-foreground">
+        {formatValue(current)}
+        <span className="text-muted-foreground"> / {limitDisplay}</span>
+      </span>
     </div>
   );
 }
@@ -135,88 +201,19 @@ export function QuotaCards({ quota, loading = false, currencyCode = "USD" }: Quo
 function QuotaCardsSkeleton({ label }: { label: string }) {
   return (
     <div className="space-y-3" aria-busy="true">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {Array.from({ length: 6 }).map((_, index) => (
-          <Card key={index} className="border-border/70">
-            <CardHeader className="pb-3">
-              <Skeleton className="h-4 w-20" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Skeleton className="h-16 w-full" />
-                <Skeleton className="h-16 w-full" />
-              </div>
-            </CardContent>
-          </Card>
+          <div key={index} className="space-y-2 rounded-md border bg-card/50 p-3">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+          </div>
         ))}
       </div>
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Skeleton className="h-3 w-3 rounded-full" />
         <span>{label}</span>
       </div>
-    </div>
-  );
-}
-
-function QuotaColumn({
-  label,
-  current,
-  limit,
-  percent,
-  tone,
-  currency,
-  muted = false,
-}: {
-  label: string;
-  current: number;
-  limit: number | null;
-  percent: number | null;
-  tone: "default" | "warn" | "danger";
-  currency?: string;
-  muted?: boolean;
-}) {
-  const t = useTranslations("myUsage.quota");
-
-  const formatValue = (value: number) => {
-    const num = Number(value);
-    if (!Number.isFinite(num)) {
-      return currency ? `${currency} 0.00` : "0";
-    }
-    return currency ? `${currency} ${num.toFixed(2)}` : String(num);
-  };
-
-  const unlimited = isUnlimited(limit);
-
-  const progressClass = cn("h-2", {
-    "bg-destructive/10 [&>div]:bg-destructive": tone === "danger",
-    "bg-amber-500/10 [&>div]:bg-amber-500": tone === "warn",
-  });
-
-  const limitDisplay = unlimited ? t("unlimited") : formatValue(limit as number);
-  const ariaLabel = `${label}: ${formatValue(current)}${!unlimited ? ` / ${limitDisplay}` : ""}`;
-
-  return (
-    <div className={cn("space-y-2 rounded-md border bg-card/50 p-3", muted && "opacity-70")}>
-      {/* Label */}
-      <div className="text-xs font-medium text-muted-foreground">{label}</div>
-
-      {/* Values - split into two lines to avoid overlap */}
-      <div className="space-y-0.5">
-        <div className="text-sm font-mono font-medium text-foreground">{formatValue(current)}</div>
-        <div className="text-xs text-muted-foreground">/ {limitDisplay}</div>
-      </div>
-
-      {/* Progress bar or placeholder */}
-      {!unlimited ? (
-        <Progress value={percent ?? 0} className={progressClass} aria-label={ariaLabel} />
-      ) : (
-        <div
-          className="h-2 rounded-full bg-muted/50"
-          role="progressbar"
-          aria-label={`${label}: ${t("unlimited")}`}
-          aria-valuetext={t("unlimited")}
-        />
-      )}
     </div>
   );
 }
