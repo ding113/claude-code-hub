@@ -244,6 +244,18 @@
       },
       "errorMessage": "エラーメッセージ",
       "fake200ForwardedNotice": "注意：ストリーミング要求では、失敗判定がストリーム終了後になる場合があります。応答内容は既にクライアントへ転送されている可能性があります。",
+      "fake200DetectedReason": "検出理由：{reason}",
+      "fake200Reasons": {
+        "emptyBody": "レスポンス本文が空です",
+        "htmlBody": "HTML ドキュメントが返されました (エラーページの可能性)",
+        "jsonErrorNonEmpty": "JSON の `error` フィールドが空ではありません",
+        "jsonErrorMessageNonEmpty": "JSON の `error.message` が空ではありません",
+        "jsonMessageKeywordMatch": "JSON の `message` に \"error\" が含まれています (ヒューリスティック)",
+        "unknown": "レスポンス本文がエラーを示しています"
+      },
+      "statusCodeInferredBadge": "推定",
+      "statusCodeInferredTooltip": "このステータスコードは応答本文の内容(例: fake 200)から推定されており、上流の HTTP ステータスと異なる場合があります。",
+      "statusCodeInferredSuffix": "(推定)",
       "filteredProviders": "フィルタされたプロバイダー",
       "providerChain": {
         "title": "プロバイダー決定チェーンタイムライン",

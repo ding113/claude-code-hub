@@ -63,6 +63,7 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "vendor_type_all_timeout"
@@ -92,6 +93,7 @@ function isActualRequest(item: ProviderChainItem): boolean {
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
     item.reason === "vendor_type_all_timeout"
@@ -125,6 +127,16 @@ function translateCircuitState(state: string | undefined, t: (key: string) => st
     default:
       return t("circuit.unknown");
   }
+}
+
+function formatTimelineStatusCode(
+  item: ProviderChainItem,
+  code: number,
+  t: (key: string, values?: Record<string, string | number>) => string
+): string {
+  return item.statusCodeInferred
+    ? t("timeline.statusCodeInferred", { code })
+    : t("timeline.statusCode", { code });
 }
 
 /**
@@ -313,6 +325,8 @@ export function formatProviderDescription(
         desc += ` ${t("description.http2Fallback")}`;
       } else if (item.reason === "client_error_non_retryable") {
         desc += ` ${t("description.clientError")}`;
+      } else if (item.reason === "resource_not_found") {
+        desc += ` ${t("description.resourceNotFound")}`;
       } else if (item.reason === "endpoint_pool_exhausted") {
         desc += ` ${t("description.endpointPoolExhausted")}`;
       } else if (item.reason === "vendor_type_all_timeout") {
@@ -445,6 +459,47 @@ export function formatProviderTimeline(
       continue;
     }
 
+    // === 资源不存在（上游 404） ===
+    if (item.reason === "resource_not_found") {
+      const attempt = actualAttemptNumber ?? item.attemptNumber ?? 0;
+      timeline += `${t("timeline.resourceNotFoundFailed", { attempt })}\n\n`;
+
+      if (item.errorDetails?.provider) {
+        const p = item.errorDetails.provider;
+        timeline += `${t("timeline.provider", { provider: p.name })}\n`;
+        timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
+        timeline += `${t("timeline.error", { error: p.statusText })}\n`;
+
+        // 计算请求耗时
+        if (i > 0 && item.timestamp && chain[i - 1]?.timestamp) {
+          const duration = item.timestamp - (chain[i - 1]?.timestamp || 0);
+          timeline += `${t("timeline.requestDuration", { duration })}\n`;
+        }
+
+        // 错误详情（格式化 JSON）
+        if (p.upstreamParsed) {
+          timeline += `\n${t("timeline.errorDetails")}:\n`;
+          timeline += JSON.stringify(p.upstreamParsed, null, 2);
+        } else if (p.upstreamBody) {
+          timeline += `\n${t("timeline.errorDetails")}:\n${p.upstreamBody}`;
+        }
+      } else {
+        timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+        if (item.statusCode) {
+          timeline += `${formatTimelineStatusCode(item, item.statusCode, t)}\n`;
+        }
+        timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
+      }
+
+      // 请求详情（用于问题排查）
+      if (item.errorDetails?.request) {
+        timeline += formatRequestDetails(item.errorDetails.request, t);
+      }
+
+      timeline += `\n${t("timeline.resourceNotFoundNote")}`;
+      continue;
+    }
+
     // === 供应商错误（请求失败） ===
     if (item.reason === "retry_failed") {
       timeline += `${t("timeline.requestFailed", { attempt: actualAttemptNumber ?? 0 })}\n\n`;
@@ -453,7 +508,7 @@ export function formatProviderTimeline(
       if (item.errorDetails?.provider) {
         const p = item.errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
-        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
 
         // 计算请求耗时
@@ -500,7 +555,7 @@ export function formatProviderTimeline(
         // 降级：使用 errorMessage
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
         if (item.statusCode) {
-          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+          timeline += `${formatTimelineStatusCode(item, item.statusCode, t)}\n`;
         }
         timeline += t("timeline.error", { error: item.errorMessage || t("timeline.unknown") });
 
@@ -588,12 +643,12 @@ export function formatProviderTimeline(
       if (item.errorDetails?.provider) {
         const p = item.errorDetails.provider;
         timeline += `${t("timeline.provider", { provider: p.name })}\n`;
-        timeline += `${t("timeline.statusCode", { code: p.statusCode })}\n`;
+        timeline += `${formatTimelineStatusCode(item, p.statusCode, t)}\n`;
         timeline += `${t("timeline.error", { error: p.statusText })}\n`;
       } else {
         timeline += `${t("timeline.provider", { provider: item.name })}\n`;
         if (item.statusCode) {
-          timeline += `${t("timeline.statusCode", { code: item.statusCode })}\n`;
+          timeline += `${formatTimelineStatusCode(item, item.statusCode, t)}\n`;
         }
         timeline += `${t("timeline.error", { error: item.errorMessage || t("timeline.unknown") })}\n`;
       }
