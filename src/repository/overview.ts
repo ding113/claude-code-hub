@@ -98,9 +98,9 @@ export async function getOverviewMetricsWithComparison(
   const todayStartLocal = sql`DATE_TRUNC('day', ${nowLocal})`;
   const todayStart = sql`(${todayStartLocal} AT TIME ZONE ${timezone})`;
   const tomorrowStart = sql`((${todayStartLocal} + INTERVAL '1 day') AT TIME ZONE ${timezone})`;
-  const yesterdayStartLocal = sql`${todayStartLocal} - INTERVAL '1 day'`;
+  const yesterdayStartLocal = sql`(${todayStartLocal} - INTERVAL '1 day')`;
   const yesterdayStart = sql`(${yesterdayStartLocal} AT TIME ZONE ${timezone})`;
-  const yesterdayEndLocal = sql`${yesterdayStartLocal} + (${nowLocal} - ${todayStartLocal})`;
+  const yesterdayEndLocal = sql`(${yesterdayStartLocal} + (${nowLocal} - ${todayStartLocal}))`;
   const yesterdayEnd = sql`(${yesterdayEndLocal} AT TIME ZONE ${timezone})`;
 
   // 用户过滤条件

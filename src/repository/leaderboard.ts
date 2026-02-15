@@ -174,7 +174,7 @@ function buildDateCondition(
       return sql`1=1`;
     case "daily": {
       const startLocal = sql`DATE_TRUNC('day', ${nowLocal})`;
-      const endExclusiveLocal = sql`${startLocal} + INTERVAL '1 day'`;
+      const endExclusiveLocal = sql`(${startLocal} + INTERVAL '1 day')`;
       const start = sql`(${startLocal} AT TIME ZONE ${timezone})`;
       const endExclusive = sql`(${endExclusiveLocal} AT TIME ZONE ${timezone})`;
       return sql`${messageRequest.createdAt} >= ${start} AND ${messageRequest.createdAt} < ${endExclusive}`;
@@ -183,14 +183,14 @@ function buildDateCondition(
       return sql`${messageRequest.createdAt} >= (CURRENT_TIMESTAMP - INTERVAL '24 hours')`;
     case "weekly": {
       const startLocal = sql`DATE_TRUNC('week', ${nowLocal})`;
-      const endExclusiveLocal = sql`${startLocal} + INTERVAL '1 week'`;
+      const endExclusiveLocal = sql`(${startLocal} + INTERVAL '1 week')`;
       const start = sql`(${startLocal} AT TIME ZONE ${timezone})`;
       const endExclusive = sql`(${endExclusiveLocal} AT TIME ZONE ${timezone})`;
       return sql`${messageRequest.createdAt} >= ${start} AND ${messageRequest.createdAt} < ${endExclusive}`;
     }
     case "monthly": {
       const startLocal = sql`DATE_TRUNC('month', ${nowLocal})`;
-      const endExclusiveLocal = sql`${startLocal} + INTERVAL '1 month'`;
+      const endExclusiveLocal = sql`(${startLocal} + INTERVAL '1 month')`;
       const start = sql`(${startLocal} AT TIME ZONE ${timezone})`;
       const endExclusive = sql`(${endExclusiveLocal} AT TIME ZONE ${timezone})`;
       return sql`${messageRequest.createdAt} >= ${start} AND ${messageRequest.createdAt} < ${endExclusive}`;
