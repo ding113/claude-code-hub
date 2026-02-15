@@ -883,9 +883,7 @@ export async function batchGetEndpointCircuitInfo(input: unknown): Promise<
 
     const endpointIds = parsed.data.endpointIds;
     const uniqueEndpointIds = Array.from(new Set(endpointIds));
-    const healthStatus = await getAllEndpointHealthStatusAsync(uniqueEndpointIds, {
-      forceRefresh: true,
-    });
+    const healthStatus = await getAllEndpointHealthStatusAsync(uniqueEndpointIds);
 
     const results = endpointIds.map((endpointId) => {
       const info = healthStatus[endpointId];

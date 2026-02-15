@@ -32,7 +32,50 @@ export interface EndpointHealth {
 
 const healthMap = new Map<number, EndpointHealth>();
 const loadedFromRedisAt = new Map<number, number>();
+const redisSyncInFlight = new Map<number, Promise<void>>();
 const REDIS_SYNC_TTL_MS = 1_000;
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
+const ENDPOINT_HEALTH_CACHE_MAX_SIZE = readPositiveIntEnv(
+  "ENDPOINT_CIRCUIT_HEALTH_CACHE_MAX_SIZE",
+  10_000
+);
+
+function bumpLRU<K, V>(map: Map<K, V>, key: K): void {
+  if (!map.has(key)) return;
+  const value = map.get(key) as V;
+  map.delete(key);
+  map.set(key, value);
+}
+
+function enforceEndpointHealthCacheMaxSize(): void {
+  if (ENDPOINT_HEALTH_CACHE_MAX_SIZE <= 0) return;
+
+  while (healthMap.size > ENDPOINT_HEALTH_CACHE_MAX_SIZE) {
+    const oldest = healthMap.keys().next().value as number | undefined;
+    if (oldest === undefined) break;
+    healthMap.delete(oldest);
+    loadedFromRedisAt.delete(oldest);
+  }
+
+  while (loadedFromRedisAt.size > ENDPOINT_HEALTH_CACHE_MAX_SIZE) {
+    const oldest = loadedFromRedisAt.keys().next().value as number | undefined;
+    if (oldest === undefined) break;
+    loadedFromRedisAt.delete(oldest);
+    healthMap.delete(oldest);
+  }
+}
 
 function getOrCreateHealthSync(endpointId: number): EndpointHealth {
   let health = healthMap.get(endpointId);
@@ -46,10 +89,19 @@ function getOrCreateHealthSync(endpointId: number): EndpointHealth {
     };
     healthMap.set(endpointId, health);
   }
+
+  bumpLRU(healthMap, endpointId);
+  bumpLRU(loadedFromRedisAt, endpointId);
+
   return health;
 }
 
 async function getOrCreateHealth(endpointId: number): Promise<EndpointHealth> {
+  const inFlight = redisSyncInFlight.get(endpointId);
+  if (inFlight) {
+    await inFlight;
+  }
+
   let health = healthMap.get(endpointId);
   const loadedAt = loadedFromRedisAt.get(endpointId);
   const now = Date.now();
@@ -99,7 +151,9 @@ async function getOrCreateHealth(endpointId: number): Promise<EndpointHealth> {
     }
   }
 
-  return getOrCreateHealthSync(endpointId);
+  const result = getOrCreateHealthSync(endpointId);
+  enforceEndpointHealthCacheMaxSize();
+  return result;
 }
 
 function persistStateToRedis(endpointId: number, health: EndpointHealth): void {
@@ -110,6 +164,23 @@ function persistStateToRedis(endpointId: number, health: EndpointHealth): void {
     circuitOpenUntil: health.circuitOpenUntil,
     halfOpenSuccessCount: health.halfOpenSuccessCount,
   };
+
+  const isDefaultClosedState =
+    state.circuitState === "closed" &&
+    state.failureCount <= 0 &&
+    state.halfOpenSuccessCount <= 0 &&
+    state.lastFailureTime == null &&
+    state.circuitOpenUntil == null;
+
+  if (isDefaultClosedState) {
+    deleteEndpointCircuitState(endpointId).catch((error) => {
+      logger.warn("[EndpointCircuitBreaker] Failed to delete default state from Redis", {
+        endpointId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+    return;
+  }
 
   saveEndpointCircuitState(endpointId, state).catch((error) => {
     logger.warn("[EndpointCircuitBreaker] Failed to persist state to Redis", {
@@ -124,6 +195,76 @@ export async function getEndpointHealthInfo(
 ): Promise<{ health: EndpointHealth; config: EndpointCircuitBreakerConfig }> {
   const health = await getOrCreateHealth(endpointId);
   return { health, config: DEFAULT_ENDPOINT_CIRCUIT_BREAKER_CONFIG };
+}
+
+async function syncHealthFromRedisBatch(endpointIds: readonly number[], refreshNow: number) {
+  const uniqueEndpointIds = Array.from(new Set(endpointIds));
+  const toLoad: number[] = [];
+  const waitPromises: Promise<void>[] = [];
+
+  for (const endpointId of uniqueEndpointIds) {
+    const inFlight = redisSyncInFlight.get(endpointId);
+    if (inFlight) {
+      waitPromises.push(inFlight);
+      continue;
+    }
+
+    toLoad.push(endpointId);
+  }
+
+  if (toLoad.length > 0) {
+    const promise = (async () => {
+      try {
+        const redisStates = await loadEndpointCircuitStates(toLoad);
+
+        for (const endpointId of toLoad) {
+          const redisState = redisStates.get(endpointId) ?? null;
+          loadedFromRedisAt.set(endpointId, refreshNow);
+
+          const health = getOrCreateHealthSync(endpointId);
+          if (redisState) {
+            // 从 Redis 同步到内存时，不能只在 circuitState 变化时才更新：
+            // failureCount / halfOpenSuccessCount 等字段在 forceRefresh 下也应保持一致。
+            health.failureCount = redisState.failureCount;
+            health.lastFailureTime = redisState.lastFailureTime;
+            health.circuitState = redisState.circuitState;
+            health.circuitOpenUntil = redisState.circuitOpenUntil;
+            health.halfOpenSuccessCount = redisState.halfOpenSuccessCount;
+            continue;
+          }
+
+          if (health.circuitState !== "closed") {
+            health.circuitState = "closed";
+            health.failureCount = 0;
+            health.lastFailureTime = null;
+            health.circuitOpenUntil = null;
+            health.halfOpenSuccessCount = 0;
+          }
+        }
+      } catch (error) {
+        logger.warn("[EndpointCircuitBreaker] Failed to batch sync state from Redis", {
+          count: toLoad.length,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })().finally(() => {
+      for (const endpointId of toLoad) {
+        if (redisSyncInFlight.get(endpointId) === promise) {
+          redisSyncInFlight.delete(endpointId);
+        }
+      }
+    });
+
+    for (const endpointId of toLoad) {
+      redisSyncInFlight.set(endpointId, promise);
+    }
+
+    waitPromises.push(promise);
+  }
+
+  if (waitPromises.length > 0) {
+    await Promise.all(waitPromises);
+  }
 }
 
 export async function getAllEndpointHealthStatusAsync(
@@ -155,50 +296,7 @@ export async function getAllEndpointHealthStatusAsync(
   });
 
   if (needsRefresh.length > 0) {
-    try {
-      const redisStates = await loadEndpointCircuitStates(needsRefresh);
-
-      for (const endpointId of needsRefresh) {
-        loadedFromRedisAt.set(endpointId, refreshNow);
-
-        const redisState = redisStates.get(endpointId) ?? null;
-        if (redisState) {
-          // 从 Redis 同步到内存时，不能只在 circuitState 变化时才更新：
-          // failureCount / halfOpenSuccessCount 等字段在 forceRefresh 下也应保持一致。
-          const existingHealth = healthMap.get(endpointId);
-          if (existingHealth) {
-            existingHealth.failureCount = redisState.failureCount;
-            existingHealth.lastFailureTime = redisState.lastFailureTime;
-            existingHealth.circuitState = redisState.circuitState;
-            existingHealth.circuitOpenUntil = redisState.circuitOpenUntil;
-            existingHealth.halfOpenSuccessCount = redisState.halfOpenSuccessCount;
-          } else {
-            healthMap.set(endpointId, {
-              failureCount: redisState.failureCount,
-              lastFailureTime: redisState.lastFailureTime,
-              circuitState: redisState.circuitState,
-              circuitOpenUntil: redisState.circuitOpenUntil,
-              halfOpenSuccessCount: redisState.halfOpenSuccessCount,
-            });
-          }
-          continue;
-        }
-
-        const existingHealth = healthMap.get(endpointId);
-        if (existingHealth && existingHealth.circuitState !== "closed") {
-          existingHealth.circuitState = "closed";
-          existingHealth.failureCount = 0;
-          existingHealth.lastFailureTime = null;
-          existingHealth.circuitOpenUntil = null;
-          existingHealth.halfOpenSuccessCount = 0;
-        }
-      }
-    } catch (error) {
-      logger.warn("[EndpointCircuitBreaker] Failed to batch sync state from Redis", {
-        count: needsRefresh.length,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    await syncHealthFromRedisBatch(needsRefresh, refreshNow);
   }
 
   const now = Date.now();
@@ -218,6 +316,7 @@ export async function getAllEndpointHealthStatusAsync(
     status[endpointId] = { ...health };
   }
 
+  enforceEndpointHealthCacheMaxSize();
   return status;
 }
 
@@ -340,6 +439,7 @@ export async function resetEndpointCircuit(endpointId: number): Promise<void> {
   health.halfOpenSuccessCount = 0;
 
   await deleteEndpointCircuitState(endpointId);
+  enforceEndpointHealthCacheMaxSize();
 }
 
 /**

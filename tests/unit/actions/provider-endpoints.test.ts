@@ -381,9 +381,7 @@ describe("provider-endpoints actions", () => {
       const res = await batchGetEndpointCircuitInfo({ endpointIds: [1, 2, 3] });
 
       expect(res.ok).toBe(true);
-      expect(getAllEndpointHealthStatusAsync).toHaveBeenCalledWith([1, 2, 3], {
-        forceRefresh: true,
-      });
+      expect(getAllEndpointHealthStatusAsync).toHaveBeenCalledWith([1, 2, 3]);
       expect(res.data).toHaveLength(3);
       expect(res.data?.[0]).toEqual({
         endpointId: 1,

@@ -177,8 +177,10 @@ export async function saveEndpointCircuitState(
   try {
     const key = getStateKey(endpointId);
     const data = serializeState(state);
-    await redis.hset(key, data);
-    await redis.expire(key, STATE_TTL_SECONDS);
+    const pipeline = redis.pipeline();
+    pipeline.hset(key, data);
+    pipeline.expire(key, STATE_TTL_SECONDS);
+    await pipeline.exec();
   } catch (error) {
     logger.warn("[EndpointCircuitState] Failed to save to Redis", {
       endpointId,

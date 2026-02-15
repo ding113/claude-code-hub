@@ -317,10 +317,12 @@ export type ProviderEndpointProbeTarget = Pick<
 export async function findEnabledProviderEndpointsForProbing(): Promise<
   ProviderEndpointProbeTarget[]
 > {
-  // #779/#781：probe scheduler 热路径，显式 INNER JOIN + DISTINCT vendor/type，避免 planner 在大表上走低效 semi-join。
+  // #779/#781：probe scheduler 热路径：
+  // - 仅探测仍被「启用 provider」引用的端点（vendor/type/url 三元组）
+  // - 显式 INNER JOIN + DISTINCT，避免 planner 在大表上走低效 semi-join。
   const query = sql`
-    WITH enabled_vendor_types AS (
-      SELECT DISTINCT p.provider_vendor_id AS vendor_id, p.provider_type
+    WITH enabled_provider_urls AS (
+      SELECT DISTINCT p.provider_vendor_id AS vendor_id, p.provider_type, p.url
       FROM ${providers} p
       WHERE p.is_enabled = true
         AND p.deleted_at IS NULL
@@ -334,9 +336,10 @@ export async function findEnabledProviderEndpointsForProbing(): Promise<
       e.last_probe_ok AS "lastProbeOk",
       e.last_probe_error_type AS "lastProbeErrorType"
     FROM ${providerEndpoints} e
-    INNER JOIN enabled_vendor_types vt
-      ON vt.vendor_id = e.vendor_id
-     AND vt.provider_type = e.provider_type
+    INNER JOIN enabled_provider_urls pu
+      ON pu.vendor_id = e.vendor_id
+     AND pu.provider_type = e.provider_type
+     AND pu.url = e.url
     WHERE e.is_enabled = true
       AND e.deleted_at IS NULL
     ORDER BY e.id ASC
