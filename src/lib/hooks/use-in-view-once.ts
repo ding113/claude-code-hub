@@ -5,6 +5,149 @@ type StableIntersectionObserverInit = IntersectionObserverInit & {
   trackVisibility?: boolean;
 };
 
+type ObserverTargetCallback = (entry: IntersectionObserverEntry) => void;
+type ObserverRootKey = Element | Document;
+
+const sharedObserversForNullRoot = new Map<string, SharedIntersectionObserver>();
+const sharedObserversByRoot = new WeakMap<
+  ObserverRootKey,
+  Map<string, SharedIntersectionObserver>
+>();
+
+function getObserverOptionsKey(options: StableIntersectionObserverInit): string {
+  const rootMargin = options.rootMargin ?? "0px";
+  const threshold = options.threshold;
+  const thresholdKey =
+    threshold === undefined
+      ? "0"
+      : Array.isArray(threshold)
+        ? threshold.join(",")
+        : String(threshold);
+  const trackVisibilityKey =
+    options.trackVisibility === undefined ? "" : options.trackVisibility ? "1" : "0";
+  const delayKey = options.delay === undefined ? "" : String(options.delay);
+  return `${rootMargin}|${thresholdKey}|${trackVisibilityKey}|${delayKey}`;
+}
+
+function releaseSharedObserver(
+  root: ObserverRootKey | null,
+  optionsKey: string,
+  observer: SharedIntersectionObserver
+): void {
+  if (root === null) {
+    if (sharedObserversForNullRoot.get(optionsKey) === observer) {
+      sharedObserversForNullRoot.delete(optionsKey);
+    }
+    return;
+  }
+
+  const pool = sharedObserversByRoot.get(root);
+  if (!pool) return;
+  if (pool.get(optionsKey) !== observer) return;
+
+  pool.delete(optionsKey);
+  if (pool.size === 0) {
+    sharedObserversByRoot.delete(root);
+  }
+}
+
+function getSharedObserver(options: StableIntersectionObserverInit): SharedIntersectionObserver {
+  const root = options.root ?? null;
+  const optionsKey = getObserverOptionsKey(options);
+
+  if (root === null) {
+    const existing = sharedObserversForNullRoot.get(optionsKey);
+    if (existing) return existing;
+
+    const observer = new SharedIntersectionObserver(root, optionsKey, options);
+    sharedObserversForNullRoot.set(optionsKey, observer);
+    return observer;
+  }
+
+  const rootKey = root as ObserverRootKey;
+  const pool = sharedObserversByRoot.get(rootKey) ?? new Map<string, SharedIntersectionObserver>();
+  if (!sharedObserversByRoot.has(rootKey)) {
+    sharedObserversByRoot.set(rootKey, pool);
+  }
+
+  const existing = pool.get(optionsKey);
+  if (existing) return existing;
+
+  const observer = new SharedIntersectionObserver(rootKey, optionsKey, options);
+  pool.set(optionsKey, observer);
+  return observer;
+}
+
+class SharedIntersectionObserver {
+  private readonly callbacksByTarget = new Map<Element, Set<ObserverTargetCallback>>();
+  private readonly observer: IntersectionObserver;
+  private disposed = false;
+
+  constructor(
+    private readonly root: ObserverRootKey | null,
+    private readonly optionsKey: string,
+    options: StableIntersectionObserverInit
+  ) {
+    this.observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const callbacks = this.callbacksByTarget.get(entry.target);
+        if (!callbacks) continue;
+
+        for (const callback of Array.from(callbacks)) {
+          callback(entry);
+        }
+      }
+    }, options);
+  }
+
+  observe(target: Element, callback: ObserverTargetCallback): () => void {
+    if (this.disposed) {
+      return () => {};
+    }
+
+    const callbacks = this.callbacksByTarget.get(target);
+    if (!callbacks) {
+      const next = new Set<ObserverTargetCallback>();
+      next.add(callback);
+      this.callbacksByTarget.set(target, next);
+      this.observer.observe(target);
+    } else {
+      callbacks.add(callback);
+    }
+
+    return () => {
+      this.unobserve(target, callback);
+    };
+  }
+
+  private unobserve(target: Element, callback: ObserverTargetCallback) {
+    const callbacks = this.callbacksByTarget.get(target);
+    if (!callbacks) return;
+
+    callbacks.delete(callback);
+    if (callbacks.size > 0) return;
+
+    this.callbacksByTarget.delete(target);
+
+    try {
+      this.observer.unobserve(target);
+    } catch {
+      // Ignore: target might already be gone/unobserved
+    }
+
+    if (this.callbacksByTarget.size === 0) {
+      this.dispose();
+    }
+  }
+
+  private dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.observer.disconnect();
+    releaseSharedObserver(this.root, this.optionsKey, this);
+  }
+}
+
 function useStableIntersectionObserverOptions(options?: IntersectionObserverInit) {
   const stableOptions = options as StableIntersectionObserverInit | undefined;
 
@@ -71,19 +214,23 @@ export function useInViewOnce<T extends Element>(options?: IntersectionObserverI
     if (!element) return;
 
     let disposed = false;
-    const observer = new IntersectionObserver((entries) => {
-      if (disposed) return;
-      const entry = entries[0];
-      if (entry?.isIntersecting) {
-        setIsInView(true);
-        observer.disconnect();
-      }
-    }, stableOptions);
+    const sharedObserver = getSharedObserver(stableOptions);
+    let unsubscribe: (() => void) | null = null;
 
-    observer.observe(element);
+    const onEntry = (entry: IntersectionObserverEntry) => {
+      if (disposed) return;
+      if (!entry.isIntersecting) return;
+
+      setIsInView(true);
+      unsubscribe?.();
+      unsubscribe = null;
+    };
+
+    unsubscribe = sharedObserver.observe(element, onEntry);
     return () => {
       disposed = true;
-      observer.disconnect();
+      unsubscribe?.();
+      unsubscribe = null;
     };
   }, [element, isInView, stableOptions]);
 
