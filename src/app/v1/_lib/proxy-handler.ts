@@ -78,9 +78,12 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
       });
     }
 
+    session.recordForwardStart();
     const response = await ProxyForwarder.send(session);
     const handled = await ProxyResponseHandler.dispatch(session, response);
-    return await attachSessionIdToErrorResponse(session.sessionId, handled);
+    const finalResponse = await attachSessionIdToErrorResponse(session.sessionId, handled);
+
+    return finalResponse;
   } catch (error) {
     logger.error("Proxy handler error:", error);
     if (session) {

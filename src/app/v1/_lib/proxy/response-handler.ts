@@ -8,7 +8,8 @@ import { RateLimitService } from "@/lib/rate-limit";
 import type { LeaseWindowType } from "@/lib/rate-limit/lease";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
-import { calculateRequestCost } from "@/lib/utils/cost-calculation";
+import type { CostBreakdown } from "@/lib/utils/cost-calculation";
+import { calculateRequestCost, calculateRequestCostBreakdown } from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
@@ -38,6 +39,49 @@ export type UsageMetrics = {
   input_image_tokens?: number;
   output_image_tokens?: number;
 };
+
+/**
+ * Fire Langfuse trace asynchronously. Non-blocking, error-tolerant.
+ */
+function emitLangfuseTrace(
+  session: ProxySession,
+  data: {
+    responseHeaders: Headers;
+    responseText: string;
+    usageMetrics: UsageMetrics | null;
+    costUsd: string | undefined;
+    costBreakdown?: CostBreakdown;
+    statusCode: number;
+    durationMs: number;
+    isStreaming: boolean;
+    sseEventCount?: number;
+    errorMessage?: string;
+  }
+): void {
+  if (!process.env.LANGFUSE_PUBLIC_KEY || !process.env.LANGFUSE_SECRET_KEY) return;
+
+  void import("@/lib/langfuse/trace-proxy-request")
+    .then(({ traceProxyRequest }) => {
+      void traceProxyRequest({
+        session,
+        responseHeaders: data.responseHeaders,
+        durationMs: data.durationMs,
+        statusCode: data.statusCode,
+        isStreaming: data.isStreaming,
+        responseText: data.responseText,
+        usageMetrics: data.usageMetrics,
+        costUsd: data.costUsd,
+        costBreakdown: data.costBreakdown,
+        sseEventCount: data.sseEventCount,
+        errorMessage: data.errorMessage,
+      });
+    })
+    .catch((err) => {
+      logger.warn("[ResponseHandler] Langfuse trace failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+}
 
 /**
  * 清理 Response headers 中的传输相关 header
@@ -520,6 +564,18 @@ export class ProxyResponseHandler {
               duration,
               errorMessageForFinalize
             );
+
+            emitLangfuseTrace(session, {
+              responseHeaders: response.headers,
+              responseText,
+              usageMetrics: parseUsageFromResponseText(responseText, provider.providerType)
+                .usageMetrics,
+              costUsd: undefined,
+              statusCode,
+              durationMs: duration,
+              isStreaming: false,
+              errorMessage: errorMessageForFinalize,
+            });
           } catch (error) {
             if (!isClientAbortError(error as Error)) {
               logger.error(
@@ -687,10 +743,11 @@ export class ProxyResponseHandler {
           await trackCostToRedis(session, usageMetrics);
         }
 
-        // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId && usageMetrics) {
-          // 计算成本（复用相同逻辑）
-          let costUsdStr: string | undefined;
+        // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
+        let costUsdStr: string | undefined;
+        let rawCostUsdStr: string | undefined;
+        let costBreakdown: CostBreakdown | undefined;
+        if (usageMetrics) {
           try {
             if (session.request.model) {
               const priceData = await session.getCachedPriceDataByBillingSource();
@@ -704,6 +761,30 @@ export class ProxyResponseHandler {
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
                 }
+                // Raw cost without multiplier for Langfuse
+                if (provider.costMultiplier !== 1) {
+                  const rawCost = calculateRequestCost(
+                    usageMetrics,
+                    priceData,
+                    1.0,
+                    session.getContext1mApplied()
+                  );
+                  if (rawCost.gt(0)) {
+                    rawCostUsdStr = rawCost.toString();
+                  }
+                } else {
+                  rawCostUsdStr = costUsdStr;
+                }
+                // Cost breakdown for Langfuse (raw, no multiplier)
+                try {
+                  costBreakdown = calculateRequestCostBreakdown(
+                    usageMetrics,
+                    priceData,
+                    session.getContext1mApplied()
+                  );
+                } catch {
+                  /* non-critical */
+                }
               }
             }
           } catch (error) {
@@ -711,7 +792,10 @@ export class ProxyResponseHandler {
               error: error instanceof Error ? error.message : String(error),
             });
           }
+        }
 
+        // 更新 session 使用量到 Redis（用于实时监控）
+        if (session.sessionId && usageMetrics) {
           void SessionManager.updateSessionUsage(session.sessionId, {
             inputTokens: usageMetrics.input_tokens,
             outputTokens: usageMetrics.output_tokens,
@@ -781,6 +865,17 @@ export class ProxyResponseHandler {
           providerId: provider.id,
           providerName: provider.name,
           statusCode,
+        });
+
+        emitLangfuseTrace(session, {
+          responseHeaders: response.headers,
+          responseText,
+          usageMetrics,
+          costUsd: rawCostUsdStr,
+          costBreakdown,
+          statusCode,
+          durationMs: Date.now() - session.startTime,
+          isStreaming: false,
         });
       } catch (error) {
         // 检测 AbortError 的来源：响应超时 vs 客户端中断
@@ -1220,6 +1315,18 @@ export class ProxyResponseHandler {
               finalized.errorMessage ?? undefined,
               finalized.providerIdForPersistence ?? undefined
             );
+
+            emitLangfuseTrace(session, {
+              responseHeaders: response.headers,
+              responseText: allContent,
+              usageMetrics: parseUsageFromResponseText(allContent, provider.providerType)
+                .usageMetrics,
+              costUsd: undefined,
+              statusCode: finalized.effectiveStatusCode,
+              durationMs: duration,
+              isStreaming: true,
+              errorMessage: finalized.errorMessage ?? undefined,
+            });
           } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error));
             const clientAborted = session.clientAbortSignal?.aborted ?? false;
@@ -1588,11 +1695,13 @@ export class ProxyResponseHandler {
         // 追踪消费到 Redis（用于限流）
         await trackCostToRedis(session, usageForCost);
 
-        // 更新 session 使用量到 Redis（用于实时监控）
-        if (session.sessionId) {
-          let costUsdStr: string | undefined;
+        // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
+        let costUsdStr: string | undefined;
+        let rawCostUsdStr: string | undefined;
+        let costBreakdown: CostBreakdown | undefined;
+        if (usageForCost) {
           try {
-            if (usageForCost && session.request.model) {
+            if (session.request.model) {
               const priceData = await session.getCachedPriceDataByBillingSource();
               if (priceData) {
                 const cost = calculateRequestCost(
@@ -1604,6 +1713,30 @@ export class ProxyResponseHandler {
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
                 }
+                // Raw cost without multiplier for Langfuse
+                if (provider.costMultiplier !== 1) {
+                  const rawCost = calculateRequestCost(
+                    usageForCost,
+                    priceData,
+                    1.0,
+                    session.getContext1mApplied()
+                  );
+                  if (rawCost.gt(0)) {
+                    rawCostUsdStr = rawCost.toString();
+                  }
+                } else {
+                  rawCostUsdStr = costUsdStr;
+                }
+                // Cost breakdown for Langfuse (raw, no multiplier)
+                try {
+                  costBreakdown = calculateRequestCostBreakdown(
+                    usageForCost,
+                    priceData,
+                    session.getContext1mApplied()
+                  );
+                } catch {
+                  /* non-critical */
+                }
               }
             }
           } catch (error) {
@@ -1611,7 +1744,10 @@ export class ProxyResponseHandler {
               error: error instanceof Error ? error.message : String(error),
             });
           }
+        }
 
+        // 更新 session 使用量到 Redis（用于实时监控）
+        if (session.sessionId) {
           const payload: SessionUsageUpdate = {
             status: effectiveStatusCode >= 200 && effectiveStatusCode < 300 ? "completed" : "error",
             statusCode: effectiveStatusCode,
@@ -1649,6 +1785,19 @@ export class ProxyResponseHandler {
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
+        });
+
+        emitLangfuseTrace(session, {
+          responseHeaders: response.headers,
+          responseText: allContent,
+          usageMetrics: usageForCost,
+          costUsd: rawCostUsdStr,
+          costBreakdown,
+          statusCode: effectiveStatusCode,
+          durationMs: duration,
+          isStreaming: true,
+          sseEventCount: chunks.length,
+          errorMessage: streamErrorMessage ?? undefined,
         });
       };
 
@@ -2919,6 +3068,18 @@ async function persistRequestFailure(options: {
       });
     }
   }
+
+  // Emit Langfuse trace for error/abort paths
+  emitLangfuseTrace(session, {
+    responseHeaders: new Headers(),
+    responseText: "",
+    usageMetrics: null,
+    costUsd: undefined,
+    statusCode,
+    durationMs: duration,
+    isStreaming: phase === "stream",
+    errorMessage,
+  });
 }
 
 /**
