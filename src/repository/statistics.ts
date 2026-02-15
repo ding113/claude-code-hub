@@ -1,8 +1,9 @@
-"use server";
+import "server-only";
 
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest } from "@/drizzle/schema";
+import { TTLMap } from "@/lib/cache/ttl-map";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
   DatabaseKey,
@@ -15,6 +16,31 @@ import type {
   TimeRange,
 } from "@/types/statistics";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
+
+/**
+ * Key ID -> key string cache
+ *
+ * Short TTL allows slight staleness (keys rarely change).
+ * Size-bounded to avoid unbounded growth in multi-tenant scenarios.
+ */
+const keyStringByIdCache = new TTLMap<number, string>({ ttlMs: 5 * 60 * 1000, maxSize: 1000 });
+
+async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
+  const cached = keyStringByIdCache.get(keyId);
+  if (cached !== undefined) return cached;
+
+  const keyRecord = await db
+    .select({ key: keys.key })
+    .from(keys)
+    .where(eq(keys.id, keyId))
+    .limit(1);
+
+  const keyString = keyRecord?.[0]?.key ?? null;
+  if (!keyString) return null;
+
+  keyStringByIdCache.set(keyId, keyString);
+  return keyString;
+}
 
 /**
  * 根据时间范围获取用户消费和API调用统计
@@ -45,6 +71,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN hour_range hr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
@@ -81,6 +109,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
@@ -117,6 +147,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
@@ -153,6 +185,8 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
           FROM users u
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON u.id = mr.user_id
+            AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           WHERE u.deleted_at IS NULL
@@ -229,6 +263,8 @@ export async function getKeyStatisticsFromDB(
           CROSS JOIN hour_range hr
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
+            AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, hr.hour
@@ -270,6 +306,8 @@ export async function getKeyStatisticsFromDB(
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
+            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
@@ -311,6 +349,8 @@ export async function getKeyStatisticsFromDB(
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
+            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
@@ -352,6 +392,8 @@ export async function getKeyStatisticsFromDB(
           CROSS JOIN date_range dr
           LEFT JOIN message_request mr ON mr.key = k.key
             AND mr.user_id = ${userId}
+            AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
+            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
           GROUP BY k.id, k.name, dr.date
@@ -423,21 +465,23 @@ export async function getMixedStatisticsFromDB(
           WHERE user_id = ${userId}
             AND deleted_at IS NULL
         ),
-        hourly_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN hour_range hr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, hr.hour
-        )
+         hourly_stats AS (
+           SELECT
+             k.id AS key_id,
+             k.name AS key_name,
+             hr.hour,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM user_keys k
+           CROSS JOIN hour_range hr
+           LEFT JOIN message_request mr ON mr.key = k.key
+             AND mr.user_id = ${userId}
+             AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY k.id, k.name, hr.hour
+         )
         SELECT
           key_id,
           key_name,
@@ -457,17 +501,19 @@ export async function getMixedStatisticsFromDB(
             '1 hour'::interval
           ) AS hour
         ),
-        hourly_stats AS (
-          SELECT
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM hour_range hr
-          LEFT JOIN message_request mr ON DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY hr.hour
-        )
+         hourly_stats AS (
+           SELECT
+             hr.hour,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM hour_range hr
+            LEFT JOIN message_request mr ON DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
+             AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND mr.user_id != ${userId}
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY hr.hour
+         )
         SELECT
           -1 AS user_id,
           '其他用户' AS user_name,
@@ -495,21 +541,23 @@ export async function getMixedStatisticsFromDB(
           WHERE user_id = ${userId}
             AND deleted_at IS NULL
         ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
+         daily_stats AS (
+           SELECT
+             k.id AS key_id,
+             k.name AS key_name,
+             dr.date,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM user_keys k
+           CROSS JOIN date_range dr
+           LEFT JOIN message_request mr ON mr.key = k.key
+             AND mr.user_id = ${userId}
+             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY k.id, k.name, dr.date
+         )
         SELECT
           key_id,
           key_name,
@@ -529,17 +577,19 @@ export async function getMixedStatisticsFromDB(
             '1 day'::interval
           )::date AS date
         ),
-        daily_stats AS (
-          SELECT
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM date_range dr
-          LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY dr.date
-        )
+         daily_stats AS (
+           SELECT
+             dr.date,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM date_range dr
+            LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND mr.user_id != ${userId}
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY dr.date
+         )
         SELECT
           -1 AS user_id,
           '其他用户' AS user_name,
@@ -567,21 +617,23 @@ export async function getMixedStatisticsFromDB(
           WHERE user_id = ${userId}
             AND deleted_at IS NULL
         ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
+         daily_stats AS (
+           SELECT
+             k.id AS key_id,
+             k.name AS key_name,
+             dr.date,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM user_keys k
+           CROSS JOIN date_range dr
+           LEFT JOIN message_request mr ON mr.key = k.key
+             AND mr.user_id = ${userId}
+             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY k.id, k.name, dr.date
+         )
         SELECT
           key_id,
           key_name,
@@ -601,17 +653,19 @@ export async function getMixedStatisticsFromDB(
             '1 day'::interval
           )::date AS date
         ),
-        daily_stats AS (
-          SELECT
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM date_range dr
-          LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY dr.date
-        )
+         daily_stats AS (
+           SELECT
+             dr.date,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM date_range dr
+            LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND mr.user_id != ${userId}
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY dr.date
+         )
         SELECT
           -1 AS user_id,
           '其他用户' AS user_name,
@@ -639,21 +693,23 @@ export async function getMixedStatisticsFromDB(
           WHERE user_id = ${userId}
             AND deleted_at IS NULL
         ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
+         daily_stats AS (
+           SELECT
+             k.id AS key_id,
+             k.name AS key_name,
+             dr.date,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM user_keys k
+           CROSS JOIN date_range dr
+           LEFT JOIN message_request mr ON mr.key = k.key
+             AND mr.user_id = ${userId}
+             AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY k.id, k.name, dr.date
+         )
         SELECT
           key_id,
           key_name,
@@ -673,17 +729,19 @@ export async function getMixedStatisticsFromDB(
             '1 day'::interval
           )::date AS date
         ),
-        daily_stats AS (
-          SELECT
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM date_range dr
-          LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY dr.date
-        )
+         daily_stats AS (
+           SELECT
+             dr.date,
+             COUNT(mr.id) AS api_calls,
+             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
+           FROM date_range dr
+            LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
+             AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
+             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
+             AND mr.user_id != ${userId}
+             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+           GROUP BY dr.date
+         )
         SELECT
           -1 AS user_id,
           '其他用户' AS user_name,
@@ -735,28 +793,6 @@ export async function sumUserCostToday(userId: number): Promise<number> {
   const result = await db.execute(query);
   const row = Array.from(result)[0] as { total_cost?: string | number } | undefined;
   return Number(row?.total_cost || 0);
-}
-
-/**
- * 查询 Key 历史总消费（通过 Key ID）
- * 用于显示 Key 的历史总消费统计
- * @param keyId - Key 的数据库 ID
- * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
- */
-export async function sumKeyTotalCostById(
-  keyId: number,
-  maxAgeDays: number = 365
-): Promise<number> {
-  // 先查询 key 字符串
-  const keyRecord = await db
-    .select({ key: keys.key })
-    .from(keys)
-    .where(eq(keys.id, keyId))
-    .limit(1);
-
-  if (!keyRecord || keyRecord.length === 0) return 0;
-
-  return sumKeyTotalCost(keyRecord[0].key, maxAgeDays);
 }
 
 /**
@@ -945,16 +981,8 @@ export async function sumKeyCostInTimeRange(
   startTime: Date,
   endTime: Date
 ): Promise<number> {
-  // 注意：message_request.key 存储的是 API key 字符串，需要先查询 keys 表获取 key 值
-  const keyRecord = await db
-    .select({ key: keys.key })
-    .from(keys)
-    .where(eq(keys.id, keyId))
-    .limit(1);
-
-  if (!keyRecord || keyRecord.length === 0) return 0;
-
-  const keyString = keyRecord[0].key;
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) return 0;
 
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
@@ -970,6 +998,163 @@ export async function sumKeyCostInTimeRange(
     );
 
   return Number(result[0]?.total || 0);
+}
+
+export interface QuotaCostRanges {
+  range5h: { startTime: Date; endTime: Date };
+  rangeDaily: { startTime: Date; endTime: Date };
+  rangeWeekly: { startTime: Date; endTime: Date };
+  rangeMonthly: { startTime: Date; endTime: Date };
+}
+
+interface QuotaCostSummary {
+  cost5h: number;
+  costDaily: number;
+  costWeekly: number;
+  costMonthly: number;
+  costTotal: number;
+}
+
+/**
+ * 合并查询：一次 SQL 返回用户各周期消费与总消费
+ *
+ * 说明：
+ * - 通过 FILTER 子句避免多次往返/重复扫描
+ * - scanStart/scanEnd 仅用于缩小扫描范围（不改变语义）
+ * - total 使用 maxAgeDays 做时间截断（与 sumUserTotalCost 语义一致）
+ */
+export async function sumUserQuotaCosts(
+  userId: number,
+  ranges: QuotaCostRanges,
+  maxAgeDays: number = 365
+): Promise<QuotaCostSummary> {
+  const cutoffDate =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+
+  const scanStart = cutoffDate
+    ? new Date(
+        Math.min(
+          ranges.range5h.startTime.getTime(),
+          ranges.rangeDaily.startTime.getTime(),
+          ranges.rangeWeekly.startTime.getTime(),
+          ranges.rangeMonthly.startTime.getTime(),
+          cutoffDate.getTime()
+        )
+      )
+    : null;
+  const scanEnd = new Date(
+    Math.max(
+      ranges.range5h.endTime.getTime(),
+      ranges.rangeDaily.endTime.getTime(),
+      ranges.rangeWeekly.endTime.getTime(),
+      ranges.rangeMonthly.endTime.getTime(),
+      Date.now()
+    )
+  );
+
+  const costTotal = cutoffDate
+    ? sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`
+    : sql<string>`COALESCE(SUM(${messageRequest.costUsd}), 0)`;
+
+  const [row] = await db
+    .select({
+      cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      costTotal,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.userId, userId),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        ...(scanStart ? [gte(messageRequest.createdAt, scanStart)] : []),
+        lt(messageRequest.createdAt, scanEnd)
+      )
+    );
+
+  return {
+    cost5h: Number(row?.cost5h ?? 0),
+    costDaily: Number(row?.costDaily ?? 0),
+    costWeekly: Number(row?.costWeekly ?? 0),
+    costMonthly: Number(row?.costMonthly ?? 0),
+    costTotal: Number(row?.costTotal ?? 0),
+  };
+}
+
+/**
+ * 合并查询：一次 SQL 返回 Key 各周期消费与总消费（通过 keyId）
+ */
+export async function sumKeyQuotaCostsById(
+  keyId: number,
+  ranges: QuotaCostRanges,
+  maxAgeDays: number = 365
+): Promise<QuotaCostSummary> {
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) {
+    return { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0, costTotal: 0 };
+  }
+
+  const cutoffDate =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+
+  const scanStart = cutoffDate
+    ? new Date(
+        Math.min(
+          ranges.range5h.startTime.getTime(),
+          ranges.rangeDaily.startTime.getTime(),
+          ranges.rangeWeekly.startTime.getTime(),
+          ranges.rangeMonthly.startTime.getTime(),
+          cutoffDate.getTime()
+        )
+      )
+    : null;
+  const scanEnd = new Date(
+    Math.max(
+      ranges.range5h.endTime.getTime(),
+      ranges.rangeDaily.endTime.getTime(),
+      ranges.rangeWeekly.endTime.getTime(),
+      ranges.rangeMonthly.endTime.getTime(),
+      Date.now()
+    )
+  );
+
+  const costTotal = cutoffDate
+    ? sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`
+    : sql<string>`COALESCE(SUM(${messageRequest.costUsd}), 0)`;
+
+  const [row] = await db
+    .select({
+      cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      costTotal,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.key, keyString),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        ...(scanStart ? [gte(messageRequest.createdAt, scanStart)] : []),
+        lt(messageRequest.createdAt, scanEnd)
+      )
+    );
+
+  return {
+    cost5h: Number(row?.cost5h ?? 0),
+    costDaily: Number(row?.costDaily ?? 0),
+    costWeekly: Number(row?.costWeekly ?? 0),
+    costMonthly: Number(row?.costMonthly ?? 0),
+    costTotal: Number(row?.costTotal ?? 0),
+  };
 }
 
 export interface CostEntryInTimeRange {
@@ -1056,16 +1241,8 @@ export async function findKeyCostEntriesInTimeRange(
   startTime: Date,
   endTime: Date
 ): Promise<CostEntryInTimeRange[]> {
-  // 注意：message_request.key 存储的是 API key 字符串，需要先查询 keys 表获取 key 值
-  const keyRecord = await db
-    .select({ key: keys.key })
-    .from(keys)
-    .where(eq(keys.id, keyId))
-    .limit(1);
-
-  if (!keyRecord || keyRecord.length === 0) return [];
-
-  const keyString = keyRecord[0].key;
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) return [];
 
   const rows = await db
     .select({
@@ -1139,14 +1316,8 @@ export async function getRateLimitEventStats(
   // Key ID 过滤需要先查询 key 字符串
   let keyString: string | null = null;
   if (key_id !== undefined) {
-    const keyRecord = await db
-      .select({ key: keys.key })
-      .from(keys)
-      .where(eq(keys.id, key_id))
-      .limit(1);
-
-    if (keyRecord && keyRecord.length > 0) {
-      keyString = keyRecord[0].key;
+    keyString = await getKeyStringByIdCached(key_id);
+    if (keyString) {
       conditions.push(`${messageRequest.key.name} = $${paramIndex++}`);
       params.push(keyString);
     } else {

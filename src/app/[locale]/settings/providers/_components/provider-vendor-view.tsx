@@ -51,9 +51,14 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
 
   const { data: vendors = [], isLoading: isVendorsLoading } = useQuery({
     queryKey: ["provider-vendors"],
-    queryFn: async () => await getProviderVendors(),
-    staleTime: 60000,
+    queryFn: getProviderVendors,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
+
+  const vendorById = useMemo(() => {
+    return new Map(vendors.map((vendor) => [vendor.id, vendor]));
+  }, [vendors]);
 
   const providersByVendor = useMemo(() => {
     const grouped: Record<number, ProviderDisplay[]> = {};
@@ -95,7 +100,7 @@ export function ProviderVendorView(props: ProviderVendorViewProps) {
   return (
     <div className="space-y-8">
       {allVendorIds.map((vendorId) => {
-        const vendor = vendors.find((v) => v.id === vendorId);
+        const vendor = vendorId > 0 ? vendorById.get(vendorId) : undefined;
         const vendorProviders = providersByVendor[vendorId] || [];
 
         if (vendorProviders.length === 0) return null;
@@ -209,7 +214,7 @@ function VendorCard({
         />
 
         {enableMultiProviderTypes && vendorId > 0 && (
-          <ProviderEndpointsSection vendorId={vendorId} />
+          <ProviderEndpointsSection vendorId={vendorId} deferUntilInView />
         )}
       </CardContent>
     </Card>

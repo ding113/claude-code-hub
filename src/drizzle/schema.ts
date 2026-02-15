@@ -82,6 +82,10 @@ export const users = pgTable('users', {
   usersEnabledExpiresAtIdx: index('idx_users_enabled_expires_at')
     .on(table.isEnabled, table.expiresAt)
     .where(sql`${table.deletedAt} IS NULL`),
+  // Tag 筛选（@>）的 GIN 索引：加速用户管理列表页的标签过滤
+  usersTagsGinIdx: index('idx_users_tags_gin')
+    .using('gin', table.tags)
+    .where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   usersCreatedAtIdx: index('idx_users_created_at').on(table.createdAt),
   usersDeletedAtIdx: index('idx_users_deleted_at').on(table.deletedAt),
@@ -125,6 +129,7 @@ export const keys = pgTable('keys', {
 }, (table) => ({
   // 基础索引（详细的复合索引通过迁移脚本管理）
   keysUserIdIdx: index('idx_keys_user_id').on(table.userId),
+  keysKeyIdx: index('idx_keys_key').on(table.key),
   keysCreatedAtIdx: index('idx_keys_created_at').on(table.createdAt),
   keysDeletedAtIdx: index('idx_keys_deleted_at').on(table.deletedAt),
 }));
@@ -309,10 +314,19 @@ export const providers = pgTable('providers', {
   providersEnabledPriorityIdx: index('idx_providers_enabled_priority').on(table.isEnabled, table.priority, table.weight).where(sql`${table.deletedAt} IS NULL`),
   // 分组查询优化
   providersGroupIdx: index('idx_providers_group').on(table.groupTag).where(sql`${table.deletedAt} IS NULL`),
+  // #779：加速“旧 URL 是否仍被引用”的判断（vendor/type/url 精确匹配）
+  providersVendorTypeUrlActiveIdx: index('idx_providers_vendor_type_url_active').on(table.providerVendorId, table.providerType, table.url).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   providersCreatedAtIdx: index('idx_providers_created_at').on(table.createdAt),
   providersDeletedAtIdx: index('idx_providers_deleted_at').on(table.deletedAt),
   providersVendorTypeIdx: index('idx_providers_vendor_type').on(table.providerVendorId, table.providerType).where(sql`${table.deletedAt} IS NULL`),
+  // #779/#781：Dashboard/Probe scheduler 的 enabled vendor/type 去重热路径
+  providersEnabledVendorTypeIdx: index('idx_providers_enabled_vendor_type').on(
+    table.providerVendorId,
+    table.providerType
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.isEnabled} = true AND ${table.providerVendorId} IS NOT NULL AND ${table.providerVendorId} > 0`
+  ),
 }));
 
 // Provider Endpoints table - 供应商(官网域名) + 类型 维度的端点池
@@ -355,6 +369,14 @@ export const providerEndpoints = pgTable('provider_endpoints', {
     table.isEnabled,
     table.vendorId,
     table.providerType
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：运行时端点选择热路径（vendor/type/enabled 定位 + sort_order 有序扫描）
+  providerEndpointsPickEnabledIdx: index('idx_provider_endpoints_pick_enabled').on(
+    table.vendorId,
+    table.providerType,
+    table.isEnabled,
+    table.sortOrder,
+    table.id
   ).where(sql`${table.deletedAt} IS NULL`),
   providerEndpointsCreatedAtIdx: index('idx_provider_endpoints_created_at').on(table.createdAt),
   providerEndpointsDeletedAtIdx: index('idx_provider_endpoints_deleted_at').on(table.deletedAt),
@@ -471,6 +493,33 @@ export const messageRequest = pgTable('message_request', {
   messageRequestProviderIdIdx: index('idx_message_request_provider_id').on(table.providerId),
   messageRequestUserIdIdx: index('idx_message_request_user_id').on(table.userId),
   messageRequestKeyIdx: index('idx_message_request_key').on(table.key),
+  // #779：Key 维度分页/时间范围查询热路径（my-usage / usage logs）
+  messageRequestKeyCreatedAtIdIdx: index('idx_message_request_key_created_at_id').on(
+    table.key,
+    table.createdAt.desc(),
+    table.id.desc()
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：my-usage 下拉筛选 DISTINCT model / endpoint（Key 维度热路径）
+  messageRequestKeyModelActiveIdx: index('idx_message_request_key_model_active').on(
+    table.key,
+    table.model
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
+  messageRequestKeyEndpointActiveIdx: index('idx_message_request_key_endpoint_active').on(
+    table.key,
+    table.endpoint
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.endpoint} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
+  // #779：全局 usage logs keyset 分页热路径（按 created_at + id 倒序）
+  messageRequestCreatedAtIdActiveIdx: index('idx_message_request_created_at_id_active').on(
+    table.createdAt.desc(),
+    table.id.desc()
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：筛选器 DISTINCT model / status_code 加速（admin usage logs）
+  messageRequestModelActiveIdx: index('idx_message_request_model_active').on(table.model).where(sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL`),
+  messageRequestStatusCodeActiveIdx: index('idx_message_request_status_code_active').on(table.statusCode).where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
   messageRequestCreatedAtIdx: index('idx_message_request_created_at').on(table.createdAt),
   messageRequestDeletedAtIdx: index('idx_message_request_deleted_at').on(table.deletedAt),
 }));

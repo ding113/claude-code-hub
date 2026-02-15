@@ -3,7 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
-import { getProviderEndpointProbeLogs } from "@/actions/provider-endpoints";
+import { useInViewOnce } from "@/lib/hooks/use-in-view-once";
+import { type ProbeLog, probeLogsBatcher } from "@/lib/provider-endpoints/probe-logs-batcher";
 import { cn } from "@/lib/utils";
 
 type SparkPoint = {
@@ -38,51 +39,81 @@ function CustomTooltip({
   );
 }
 
+function probeLogsToSparkPoints(logs: ProbeLog[]): SparkPoint[] {
+  const points: SparkPoint[] = new Array(logs.length);
+  for (let i = logs.length - 1, idx = 0; i >= 0; i -= 1, idx += 1) {
+    const log = logs[i];
+    const rawTimestamp =
+      log.createdAt === undefined || log.createdAt === null
+        ? undefined
+        : new Date(log.createdAt).getTime();
+    const timestamp =
+      rawTimestamp !== undefined && Number.isFinite(rawTimestamp) ? rawTimestamp : undefined;
+
+    points[idx] = {
+      index: idx,
+      latencyMs: log.latencyMs ?? null,
+      ok: log.ok,
+      timestamp,
+    };
+  }
+  return points;
+}
+
 export function EndpointLatencySparkline(props: { endpointId: number; limit?: number }) {
-  const { data: points = [] } = useQuery({
-    queryKey: ["endpoint-probe-logs", props.endpointId, props.limit ?? 12],
-    queryFn: async (): Promise<SparkPoint[]> => {
-      const res = await getProviderEndpointProbeLogs({
-        endpointId: props.endpointId,
-        limit: props.limit ?? 12,
-      });
+  const limit = props.limit ?? 12;
+  const { ref, isInView } = useInViewOnce<HTMLDivElement>();
 
-      if (!res.ok || !res.data) {
-        return [];
-      }
-
-      return res.data.logs
-        .slice()
-        .reverse()
-        .map((log, idx) => ({
-          index: idx,
-          latencyMs: log.latencyMs ?? null,
-          ok: log.ok,
-          timestamp: log.createdAt ? new Date(log.createdAt).getTime() : undefined,
-        }));
+  const { data: points = [], isLoading } = useQuery({
+    queryKey: ["endpoint-probe-logs", props.endpointId, limit],
+    queryFn: async ({ signal }): Promise<SparkPoint[]> => {
+      const logs = await probeLogsBatcher.load(props.endpointId, limit, { signal });
+      return probeLogsToSparkPoints(logs);
     },
     staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    enabled: isInView,
   });
 
   const avgLatency = useMemo(() => {
     const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-    const recentPoints = points.filter(
-      (p) => p.latencyMs !== null && p.timestamp && p.timestamp >= fiveMinutesAgo
-    );
-    if (recentPoints.length === 0) return null;
-    const sum = recentPoints.reduce((acc, p) => acc + (p.latencyMs ?? 0), 0);
-    return sum / recentPoints.length;
+    let sum = 0;
+    let count = 0;
+
+    for (const point of points) {
+      if (point.latencyMs === null) continue;
+      const timestamp = point.timestamp;
+      if (timestamp === undefined || timestamp < fiveMinutesAgo) continue;
+      sum += point.latencyMs;
+      count += 1;
+    }
+
+    return count > 0 ? sum / count : null;
   }, [points]);
 
+  const showSkeleton = !isInView || isLoading;
+
+  if (showSkeleton) {
+    return (
+      <div ref={ref} className="flex items-center gap-2">
+        <div className="h-6 w-32 rounded bg-muted/20" />
+      </div>
+    );
+  }
+
   if (points.length === 0) {
-    return <div className="h-6 w-32 rounded bg-muted/20" />;
+    return (
+      <div ref={ref} className="flex items-center gap-2">
+        <div className="h-6 w-32 rounded bg-muted/10" />
+      </div>
+    );
   }
 
   const lastPoint = points[points.length - 1];
   const stroke = lastPoint?.ok ? "#16a34a" : "#dc2626";
 
   return (
-    <div className="flex items-center gap-2">
+    <div ref={ref} className="flex items-center gap-2">
       <div className="h-6 w-32">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={points} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>

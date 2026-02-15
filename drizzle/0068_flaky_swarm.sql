@@ -1,0 +1,14 @@
+-- Note: message_request is a high-write table. Standard CREATE INDEX may block writes during index creation.
+-- Drizzle migrator does not support CREATE INDEX CONCURRENTLY. If write blocking is a concern,
+-- manually pre-create indexes with CONCURRENTLY before running this migration (IF NOT EXISTS prevents conflicts).
+CREATE INDEX IF NOT EXISTS "idx_keys_key" ON "keys" USING btree ("key");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_key_created_at_id" ON "message_request" USING btree ("key","created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_key_model_active" ON "message_request" USING btree ("key","model") WHERE "message_request"."deleted_at" IS NULL AND "message_request"."model" IS NOT NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_key_endpoint_active" ON "message_request" USING btree ("key","endpoint") WHERE "message_request"."deleted_at" IS NULL AND "message_request"."endpoint" IS NOT NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_created_at_id_active" ON "message_request" USING btree ("created_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_model_active" ON "message_request" USING btree ("model") WHERE "message_request"."deleted_at" IS NULL AND "message_request"."model" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_status_code_active" ON "message_request" USING btree ("status_code") WHERE "message_request"."deleted_at" IS NULL AND "message_request"."status_code" IS NOT NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_pick_enabled" ON "provider_endpoints" USING btree ("vendor_id","provider_type","is_enabled","sort_order","id") WHERE "provider_endpoints"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_providers_vendor_type_url_active" ON "providers" USING btree ("provider_vendor_id","provider_type","url") WHERE "providers"."deleted_at" IS NULL;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_providers_enabled_vendor_type" ON "providers" USING btree ("provider_vendor_id","provider_type") WHERE "providers"."deleted_at" IS NULL AND "providers"."is_enabled" = true AND "providers"."provider_vendor_id" IS NOT NULL AND "providers"."provider_vendor_id" > 0;--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_users_tags_gin" ON "users" USING gin ("tags") WHERE "users"."deleted_at" IS NULL;

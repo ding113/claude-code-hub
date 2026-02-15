@@ -1,6 +1,7 @@
 import "server-only";
 
 import net from "node:net";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import {
   getEndpointCircuitStateSync,
   recordEndpointFailure,
@@ -234,14 +235,24 @@ export async function probeProviderEndpointAndRecordByEndpoint(input: {
       : result.errorType || "probe_failed";
     await recordEndpointFailure(input.endpoint.id, new Error(message));
   } else {
-    // Probe success: reset circuit breaker if endpoint was open/half-open
-    const currentState = getEndpointCircuitStateSync(input.endpoint.id);
-    if (currentState !== "closed") {
-      await resetEndpointCircuit(input.endpoint.id);
-      logger.info("[EndpointProbe] Probe success, circuit reset", {
-        endpointId: input.endpoint.id,
-        previousState: currentState,
-      });
+    // Probe success: best-effort reset circuit breaker state (cross-instance safe).
+    // Note: do not rely on in-memory state only; Redis may contain open/half-open state from another instance.
+    if (getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
+      const previousState = getEndpointCircuitStateSync(input.endpoint.id);
+      try {
+        await resetEndpointCircuit(input.endpoint.id);
+        if (previousState !== "closed") {
+          logger.info("[EndpointProbe] Probe success, circuit reset", {
+            endpointId: input.endpoint.id,
+            previousState,
+          });
+        }
+      } catch (error) {
+        logger.warn("[EndpointProbe] Probe success but failed to reset circuit", {
+          endpointId: input.endpoint.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 

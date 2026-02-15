@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AvailabilityQueryResult } from "@/lib/availability";
 import { cn } from "@/lib/utils";
@@ -37,79 +37,166 @@ export function AvailabilityDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    try {
-      setRefreshing(true);
-      const now = new Date();
-      const timeRangeMs = TIME_RANGE_MAP[timeRange];
-      const startTime = new Date(now.getTime() - timeRangeMs);
-      const bucketSizeMinutes = calculateBucketSize(timeRangeMs);
+  const requestIdRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastFocusRefreshAtRef = useRef(0);
 
-      const params = new URLSearchParams({
-        startTime: startTime.toISOString(),
-        endTime: now.toISOString(),
-        bucketSizeMinutes: bucketSizeMinutes.toString(),
-        maxBuckets: TARGET_BUCKETS.toString(),
-      });
+  const fetchData = useCallback(
+    async (options?: { force?: boolean }) => {
+      const force = options?.force ?? false;
 
-      const res = await fetch(`/api/availability?${params}`);
-      if (!res.ok) {
-        throw new Error(t("states.fetchFailed"));
+      if (inFlightRef.current && !force) {
+        return;
       }
 
-      const result: AvailabilityQueryResult = await res.json();
-      setData(result);
-      setError(null);
-    } catch (err) {
-      console.error("Failed to fetch availability data:", err);
-      setError(err instanceof Error ? err.message : t("states.fetchFailed"));
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [timeRange, t]);
+      if (force) {
+        abortControllerRef.current?.abort();
+      }
+
+      const requestId = ++requestIdRef.current;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      inFlightRef.current = true;
+
+      try {
+        setRefreshing(true);
+        const now = new Date();
+        const timeRangeMs = TIME_RANGE_MAP[timeRange];
+        const startTime = new Date(now.getTime() - timeRangeMs);
+        const bucketSizeMinutes = calculateBucketSize(timeRangeMs);
+
+        const params = new URLSearchParams({
+          startTime: startTime.toISOString(),
+          endTime: now.toISOString(),
+          bucketSizeMinutes: bucketSizeMinutes.toString(),
+          maxBuckets: TARGET_BUCKETS.toString(),
+        });
+
+        const res = await fetch(`/api/availability?${params}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          throw new Error(t("states.fetchFailed"));
+        }
+
+        const result: AvailabilityQueryResult = await res.json();
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+        setData(result);
+        setError(null);
+      } catch (err) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+        console.error("Failed to fetch availability data:", err);
+        setError(err instanceof Error ? err.message : t("states.fetchFailed"));
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+          inFlightRef.current = false;
+        }
+      }
+    },
+    [timeRange, t]
+  );
 
   useEffect(() => {
-    fetchData();
+    void fetchData({ force: true });
   }, [fetchData]);
 
   // Auto-refresh: 30s for provider tab, 10s for endpoint tab
   useEffect(() => {
     const interval = activeTab === "provider" ? 30000 : 10000;
-    const timer = setInterval(fetchData, interval);
+    const timer = setInterval(() => {
+      if (document.visibilityState === "hidden") return;
+      void fetchData();
+    }, interval);
     return () => clearInterval(timer);
   }, [activeTab, fetchData]);
 
-  // Calculate overview metrics
-  const providers = data?.providers ?? [];
-  const overviewMetrics = {
-    systemAvailability: data?.systemAvailability ?? 0,
-    avgLatency:
-      providers.length > 0
-        ? providers.reduce((sum, p) => {
+  // 当页面从后台回到前台时，做一次节流刷新，避免看到陈旧数据；同时配合 visibility 判断减少后台请求。
+  useEffect(() => {
+    const refresh = () => {
+      const now = Date.now();
+      if (now - lastFocusRefreshAtRef.current < 2000) return;
+      lastFocusRefreshAtRef.current = now;
+      void fetchData({ force: true });
+    };
+
+    const onFocus = () => refresh();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [fetchData]);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  const overviewMetrics = useMemo(() => {
+    const providers = data?.providers ?? [];
+    const providersWithLatency = providers.filter((p) =>
+      p.timeBuckets.some((b) => b.avgLatencyMs > 0)
+    );
+
+    let activeProbes = 0;
+    let healthyCount = 0;
+    let unhealthyCount = 0;
+    for (const provider of providers) {
+      if (provider.currentStatus !== "unknown") activeProbes += 1;
+      if (provider.currentStatus === "green") healthyCount += 1;
+      if (provider.currentStatus === "red") unhealthyCount += 1;
+    }
+
+    const avgLatency =
+      providersWithLatency.length > 0
+        ? providersWithLatency.reduce((sum, p) => {
             const latencies = p.timeBuckets
               .filter((b) => b.avgLatencyMs > 0)
               .map((b) => b.avgLatencyMs);
-            return (
-              sum +
-              (latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : 0)
-            );
-          }, 0) /
-          Math.max(1, providers.filter((p) => p.timeBuckets.some((b) => b.avgLatencyMs > 0)).length)
-        : 0,
-    errorRate:
+            if (latencies.length === 0) return sum;
+            return sum + latencies.reduce((a, b) => a + b, 0) / latencies.length;
+          }, 0) / providersWithLatency.length
+        : 0;
+
+    const errorRate =
       providers.length > 0
         ? providers.reduce((sum, p) => {
             const total = p.totalRequests;
             const errors = p.timeBuckets.reduce((s, b) => s + b.redCount, 0);
             return sum + (total > 0 ? errors / total : 0);
           }, 0) / providers.length
-        : 0,
-    activeProbes: providers.filter((p) => p.currentStatus !== "unknown").length,
-    totalProbes: providers.length,
-    healthyCount: providers.filter((p) => p.currentStatus === "green").length,
-    unhealthyCount: providers.filter((p) => p.currentStatus === "red").length,
-  };
+        : 0;
+
+    return {
+      systemAvailability: data?.systemAvailability ?? 0,
+      avgLatency,
+      errorRate,
+      activeProbes,
+      totalProbes: providers.length,
+      healthyCount,
+      unhealthyCount,
+    };
+  }, [data]);
 
   return (
     <div className="space-y-6">
@@ -157,7 +244,9 @@ export function AvailabilityDashboard() {
             error={error}
             timeRange={timeRange}
             onTimeRangeChange={setTimeRange}
-            onRefresh={fetchData}
+            onRefresh={() => {
+              void fetchData({ force: true });
+            }}
           />
         </TabsContent>
 

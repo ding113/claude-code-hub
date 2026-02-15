@@ -1,13 +1,15 @@
-"use server";
+import "server-only";
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
+import { TTLMap } from "@/lib/cache/ttl-map";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
+import { buildUsageLogConditions } from "./_shared/usage-log-filters";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -114,21 +116,7 @@ export interface UsageLogBatchFilters extends Omit<UsageLogFilters, "page" | "pa
 export async function findUsageLogsBatch(
   filters: UsageLogBatchFilters
 ): Promise<UsageLogsBatchResult> {
-  const {
-    userId,
-    keyId,
-    providerId,
-    sessionId,
-    startTime,
-    endTime,
-    statusCode,
-    excludeStatusCode200,
-    model,
-    endpoint,
-    minRetryCount,
-    cursor,
-    limit = 50,
-  } = filters;
+  const { userId, keyId, providerId, cursor, limit = 50 } = filters;
 
   // Build query conditions
   const conditions = [isNull(messageRequest.deletedAt)];
@@ -145,42 +133,7 @@ export async function findUsageLogsBatch(
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  const trimmedSessionId = sessionId?.trim();
-  if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
-  }
-
-  if (startTime !== undefined) {
-    const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
-  }
-
-  if (endTime !== undefined) {
-    const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
-  }
-
-  if (statusCode !== undefined) {
-    conditions.push(eq(messageRequest.statusCode, statusCode));
-  } else if (excludeStatusCode200) {
-    conditions.push(
-      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
-    );
-  }
-
-  if (model) {
-    conditions.push(eq(messageRequest.model, model));
-  }
-
-  if (endpoint) {
-    conditions.push(eq(messageRequest.endpoint, endpoint));
-  }
-
-  if (minRetryCount !== undefined) {
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
-    );
-  }
+  conditions.push(...buildUsageLogConditions(filters));
 
   // Cursor-based pagination: WHERE (created_at, id) < (cursor_created_at, cursor_id)
   // Using row value comparison for efficient keyset pagination
@@ -281,6 +234,145 @@ export async function findUsageLogsBatch(
   return { logs, nextCursor, hasMore };
 }
 
+interface UsageLogSlimFilters {
+  keyString: string;
+  /** Session ID（精确匹配；空字符串/空白视为不筛选） */
+  sessionId?: string;
+  /** 开始时间戳（毫秒），用于 >= 比较 */
+  startTime?: number;
+  /** 结束时间戳（毫秒），用于 < 比较 */
+  endTime?: number;
+  statusCode?: number;
+  /** 排除 200 状态码（筛选所有非 200 的请求，包括 NULL） */
+  excludeStatusCode200?: boolean;
+  model?: string;
+  endpoint?: string;
+  /** 最低重试次数（provider_chain 长度 - 1） */
+  minRetryCount?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+interface UsageLogSlimRow {
+  id: number;
+  createdAt: Date | null;
+  model: string | null;
+  originalModel: string | null;
+  endpoint: string | null;
+  statusCode: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: string | null;
+  durationMs: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
+}
+
+// my-usage logs: short TTL cache for total count to avoid repeated COUNT(*) on pagination/polling.
+const usageLogSlimTotalCache = new TTLMap<string, number>({ ttlMs: 10_000, maxSize: 1000 });
+
+export async function findUsageLogsForKeySlim(
+  filters: UsageLogSlimFilters
+): Promise<{ logs: UsageLogSlimRow[]; total: number }> {
+  const { keyString, page = 1, pageSize = 50 } = filters;
+
+  const safePage = page > 0 ? page : 1;
+  const safePageSize = Math.min(100, Math.max(1, pageSize));
+
+  const conditions = [
+    isNull(messageRequest.deletedAt),
+    eq(messageRequest.key, keyString),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
+
+  const totalCacheKey = [
+    keyString,
+    filters.sessionId?.trim() ?? "",
+    filters.startTime ?? "",
+    filters.endTime ?? "",
+    filters.statusCode ?? "",
+    filters.excludeStatusCode200 ? "1" : "0",
+    filters.model ?? "",
+    filters.endpoint ?? "",
+    filters.minRetryCount ?? "",
+  ].join("\u0001");
+
+  conditions.push(...buildUsageLogConditions(filters));
+
+  const offset = (safePage - 1) * safePageSize;
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      endpoint: messageRequest.endpoint,
+      statusCode: messageRequest.statusCode,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      costUsd: messageRequest.costUsd,
+      durationMs: messageRequest.durationMs,
+      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+    })
+    .from(messageRequest)
+    .where(and(...conditions))
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(safePageSize + 1)
+    .offset(offset);
+
+  const hasMore = results.length > safePageSize;
+  const pageRows = hasMore ? results.slice(0, safePageSize) : results;
+
+  let total = offset + pageRows.length;
+
+  const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
+  if (cachedTotal !== undefined) {
+    total = Math.max(cachedTotal, total);
+    return {
+      logs: pageRows.map((row) => ({ ...row, costUsd: row.costUsd?.toString() ?? null })),
+      total,
+    };
+  }
+
+  if (pageRows.length === 0 && offset > 0) {
+    const countResults = await db
+      .select({ totalRows: sql<number>`count(*)::double precision` })
+      .from(messageRequest)
+      .where(and(...conditions));
+    total = countResults[0]?.totalRows ?? 0;
+  } else if (hasMore) {
+    const countResults = await db
+      .select({ totalRows: sql<number>`count(*)::double precision` })
+      .from(messageRequest)
+      .where(and(...conditions));
+    total = countResults[0]?.totalRows ?? 0;
+  }
+
+  const logs: UsageLogSlimRow[] = pageRows.map((row) => ({
+    ...row,
+    costUsd: row.costUsd?.toString() ?? null,
+  }));
+
+  usageLogSlimTotalCache.set(totalCacheKey, total);
+  return { logs, total };
+}
+
+const distinctModelsByKeyCache = new TTLMap<string, string[]>({
+  ttlMs: 5 * 60 * 1000,
+  maxSize: 200,
+});
+const distinctEndpointsByKeyCache = new TTLMap<string, string[]>({
+  ttlMs: 5 * 60 * 1000,
+  maxSize: 200,
+});
+
 export async function getTotalUsageForKey(keyString: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
@@ -297,33 +389,47 @@ export async function getTotalUsageForKey(keyString: string): Promise<number> {
 }
 
 export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
+  const cached = distinctModelsByKeyCache.get(keyString);
+  if (cached !== undefined) return cached;
+
   const result = await db.execute(
     sql`select distinct ${messageRequest.model} as model
         from ${messageRequest}
         where ${messageRequest.key} = ${keyString}
           and ${messageRequest.deletedAt} is null
+          and (${EXCLUDE_WARMUP_CONDITION})
           and ${messageRequest.model} is not null
         order by model asc`
   );
 
-  return Array.from(result)
+  const models = Array.from(result)
     .map((row) => (row as { model?: string }).model)
     .filter((model): model is string => !!model && model.trim().length > 0);
+
+  distinctModelsByKeyCache.set(keyString, models);
+  return models;
 }
 
 export async function getDistinctEndpointsForKey(keyString: string): Promise<string[]> {
+  const cached = distinctEndpointsByKeyCache.get(keyString);
+  if (cached !== undefined) return cached;
+
   const result = await db.execute(
     sql`select distinct ${messageRequest.endpoint} as endpoint
         from ${messageRequest}
         where ${messageRequest.key} = ${keyString}
           and ${messageRequest.deletedAt} is null
+          and (${EXCLUDE_WARMUP_CONDITION})
           and ${messageRequest.endpoint} is not null
         order by endpoint asc`
   );
 
-  return Array.from(result)
+  const endpoints = Array.from(result)
     .map((row) => (row as { endpoint?: string }).endpoint)
     .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
+
+  distinctEndpointsByKeyCache.set(keyString, endpoints);
+  return endpoints;
 }
 
 /**
@@ -331,23 +437,11 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
  */
 
 export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promise<UsageLogsResult> {
-  const {
-    userId,
-    keyId,
-    providerId,
-    sessionId,
-    startTime,
-    endTime,
-    statusCode,
-    excludeStatusCode200,
-    model,
-    endpoint,
-    minRetryCount,
-    page = 1,
-    pageSize = 50,
-  } = filters;
+  const { userId, keyId, providerId, page = 1, pageSize = 50 } = filters;
 
-  // 构建查询条件
+  const safePage = page > 0 ? page : 1;
+  const safePageSize = Math.min(200, Math.max(1, pageSize));
+
   const conditions = [isNull(messageRequest.deletedAt)];
 
   if (userId !== undefined) {
@@ -362,79 +456,49 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  const trimmedSessionId = sessionId?.trim();
-  if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
-  }
+  conditions.push(...buildUsageLogConditions(filters));
 
-  // 使用毫秒时间戳进行时间比较
-  // 前端传递的是浏览器本地时区的毫秒时间戳，直接与数据库的 timestamptz 比较
-  // PostgreSQL 会自动处理时区转换
-  if (startTime !== undefined) {
-    const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
-  }
+  const offset = (safePage - 1) * safePageSize;
 
-  if (endTime !== undefined) {
-    const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
-  }
-
-  if (statusCode !== undefined) {
-    conditions.push(eq(messageRequest.statusCode, statusCode));
-  } else if (excludeStatusCode200) {
-    // 包含 status_code 为空或非 200 的请求
-    conditions.push(
-      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
-    );
-  }
-
-  if (model) {
-    conditions.push(eq(messageRequest.model, model));
-  }
-
-  if (endpoint) {
-    conditions.push(eq(messageRequest.endpoint, endpoint));
-  }
-
-  if (minRetryCount !== undefined) {
-    // 重试次数 = provider_chain 长度 - 1（最小为 0）
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
-    );
-  }
-
-  // 查询总数和统计数据（添加 innerJoin keysTable 以支持 keyId 过滤）
-  const [summaryResult] = await db
-    .select({
-      // total：用于分页/审计，必须包含 warmup
-      totalRows: sql<number>`count(*)::double precision`,
-      // summary：所有统计字段必须排除 warmup（不计入任何统计）
-      totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
-      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-    })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...conditions));
-
-  const total = summaryResult?.totalRows ?? 0;
-  const totalRequests = summaryResult?.totalRequests ?? 0;
-  const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
-  const totalTokens =
-    (summaryResult?.totalInputTokens ?? 0) +
-    (summaryResult?.totalOutputTokens ?? 0) +
-    (summaryResult?.totalCacheCreationTokens ?? 0) +
-    (summaryResult?.totalCacheReadTokens ?? 0);
+  // 查询总数和统计数据（仅在需要 keyId 过滤时才 join keysTable，避免无效 join）
+  const summaryQuery =
+    keyId === undefined
+      ? db
+          .select({
+            // total：用于分页/审计，必须包含 warmup
+            totalRows: sql<number>`count(*)::double precision`,
+            // summary：所有统计字段必须排除 warmup（不计入任何统计）
+            totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
+            totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
+            totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+          })
+          .from(messageRequest)
+          .where(and(...conditions))
+      : db
+          .select({
+            // total：用于分页/审计，必须包含 warmup
+            totalRows: sql<number>`count(*)::double precision`,
+            // summary：所有统计字段必须排除 warmup（不计入任何统计）
+            totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
+            totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
+            totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+          })
+          .from(messageRequest)
+          .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+          .where(and(...conditions));
 
   // 查询分页数据（使用 LEFT JOIN 以包含被拦截的请求）
-  const offset = (page - 1) * pageSize;
-  const results = await db
+  const logsQuery = db
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
@@ -472,9 +536,21 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .leftJoin(providers, eq(messageRequest.providerId, providers.id)) // 改为 leftJoin
     .where(and(...conditions))
-    .orderBy(desc(messageRequest.createdAt))
-    .limit(pageSize)
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(safePageSize)
     .offset(offset);
+
+  const [summaryRows, results] = await Promise.all([summaryQuery, logsQuery]);
+  const summaryResult = summaryRows[0];
+
+  const total = summaryResult?.totalRows ?? 0;
+  const totalRequests = summaryResult?.totalRequests ?? 0;
+  const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
+  const totalTokens =
+    (summaryResult?.totalInputTokens ?? 0) +
+    (summaryResult?.totalOutputTokens ?? 0) +
+    (summaryResult?.totalCacheCreationTokens ?? 0) +
+    (summaryResult?.totalCacheReadTokens ?? 0);
 
   const logs: UsageLogRow[] = results.map((row) => {
     const totalRowTokens =
@@ -635,21 +711,8 @@ export async function findUsageLogSessionIdSuggestions(
 export async function findUsageLogsStats(
   filters: Omit<UsageLogFilters, "page" | "pageSize">
 ): Promise<UsageLogSummary> {
-  const {
-    userId,
-    keyId,
-    providerId,
-    sessionId,
-    startTime,
-    endTime,
-    statusCode,
-    excludeStatusCode200,
-    model,
-    endpoint,
-    minRetryCount,
-  } = filters;
+  const { userId, keyId, providerId } = filters;
 
-  // 构建查询条件（与 findUsageLogsWithDetails 相同）
   const conditions = [isNull(messageRequest.deletedAt)];
 
   if (userId !== undefined) {
@@ -664,47 +727,11 @@ export async function findUsageLogsStats(
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  const trimmedSessionId = sessionId?.trim();
-  if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
-  }
-
-  if (startTime !== undefined) {
-    const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
-  }
-
-  if (endTime !== undefined) {
-    const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
-  }
-
-  if (statusCode !== undefined) {
-    conditions.push(eq(messageRequest.statusCode, statusCode));
-  } else if (excludeStatusCode200) {
-    conditions.push(
-      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
-    );
-  }
-
-  if (model) {
-    conditions.push(eq(messageRequest.model, model));
-  }
-
-  if (endpoint) {
-    conditions.push(eq(messageRequest.endpoint, endpoint));
-  }
-
-  if (minRetryCount !== undefined) {
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
-    );
-  }
+  conditions.push(...buildUsageLogConditions(filters));
 
   const statsConditions = [...conditions, EXCLUDE_WARMUP_CONDITION];
 
-  // 执行聚合查询（添加 innerJoin keysTable 以支持 keyId 过滤）
-  const [summaryResult] = await db
+  const baseQuery = db
     .select({
       totalRequests: sql<number>`count(*)::double precision`,
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
@@ -715,9 +742,14 @@ export async function findUsageLogsStats(
       totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
       totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...statsConditions));
+    .from(messageRequest);
+
+  const query =
+    keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      : baseQuery;
+
+  const [summaryResult] = await query.where(and(...statsConditions));
 
   const totalRequests = summaryResult?.totalRequests ?? 0;
   const totalCost = parseFloat(summaryResult?.totalCost ?? "0");

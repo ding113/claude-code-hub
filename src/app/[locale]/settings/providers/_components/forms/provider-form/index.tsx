@@ -35,6 +35,8 @@ import { NetworkSection } from "./sections/network-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
 
+const TAB_ORDER: TabId[] = ["basic", "routing", "limits", "network", "testing"];
+
 function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
@@ -95,6 +97,8 @@ function ProviderFormContent({
   const { data: vendors = [] } = useQuery<ProviderVendor[]>({
     queryKey: ["provider-vendors"],
     queryFn: getProviderVendors,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const websiteDomain = useMemo(
@@ -134,6 +138,8 @@ function ProviderFormContent({
         providerType: state.routing.providerType,
       });
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const enabledEndpointPoolEndpoints = useMemo(
@@ -183,9 +189,6 @@ function ProviderFormContent({
   });
   const isScrollingToSection = useRef(false);
 
-  // Tab order for navigation
-  const tabOrder: TabId[] = ["basic", "routing", "limits", "network", "testing"];
-
   // Scroll to section when tab is clicked
   const scrollToSection = useCallback((tab: TabId) => {
     const section = sectionRefs.current[tab];
@@ -213,7 +216,7 @@ function ProviderFormContent({
     let activeSection: TabId = "basic";
     let minDistance = Infinity;
 
-    for (const tab of tabOrder) {
+    for (const tab of TAB_ORDER) {
       const section = sectionRefs.current[tab];
       if (!section) continue;
 
@@ -360,6 +363,11 @@ function ProviderFormContent({
             return;
           }
           toast.success(t("success.updated"));
+
+          void queryClient.invalidateQueries({ queryKey: ["providers"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+          void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         } else {
           // For create: key is required
           const createFormData = { ...baseFormData, key: trimmedKey };
@@ -369,8 +377,10 @@ function ProviderFormContent({
             return;
           }
 
+          void queryClient.invalidateQueries({ queryKey: ["providers"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
           void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-          void queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
 
           toast.success(t("success.created"));
           dispatch({ type: "RESET_FORM" });

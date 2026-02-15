@@ -1,19 +1,23 @@
 import "server-only";
 
-import { isEndpointCircuitOpen } from "@/lib/endpoint-circuit-breaker";
-import { findProviderEndpointsByVendorAndType } from "@/repository";
+import { getEnvConfig } from "@/lib/config/env.schema";
+import { getAllEndpointHealthStatusAsync } from "@/lib/endpoint-circuit-breaker";
+import {
+  findEnabledProviderEndpointsByVendorAndType,
+  findProviderEndpointsByVendorAndType,
+} from "@/repository";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 
-export function rankProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEndpoint[] {
-  const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
+function priorityRank(endpoint: ProviderEndpoint): number {
+  if (endpoint.lastProbeOk === true) return 0;
+  if (endpoint.lastProbeOk === null) return 1;
+  return 2;
+}
 
-  const priorityRank = (endpoint: ProviderEndpoint): number => {
-    if (endpoint.lastProbeOk === true) return 0;
-    if (endpoint.lastProbeOk === null) return 1;
-    return 2;
-  };
+function rankActiveProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEndpoint[] {
+  if (endpoints.length <= 1) return endpoints;
 
-  return enabled.slice().sort((a, b) => {
+  endpoints.sort((a, b) => {
     const rankDiff = priorityRank(a) - priorityRank(b);
     if (rankDiff !== 0) return rankDiff;
 
@@ -25,6 +29,13 @@ export function rankProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEn
 
     return a.id - b.id;
   });
+
+  return endpoints;
+}
+
+export function rankProviderEndpoints(endpoints: ProviderEndpoint[]): ProviderEndpoint[] {
+  const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
+  return rankActiveProviderEndpoints(enabled);
 }
 
 export async function getPreferredProviderEndpoints(input: {
@@ -32,29 +43,29 @@ export async function getPreferredProviderEndpoints(input: {
   providerType: ProviderType;
   excludeEndpointIds?: number[];
 }): Promise<ProviderEndpoint[]> {
-  const excludeSet = new Set(input.excludeEndpointIds ?? []);
+  const excludeIds = input.excludeEndpointIds ?? [];
+  const excludeSet = excludeIds.length > 0 ? new Set(excludeIds) : null;
 
-  const endpoints = await findProviderEndpointsByVendorAndType(input.vendorId, input.providerType);
-  const filtered = endpoints.filter((e) => e.isEnabled && !e.deletedAt && !excludeSet.has(e.id));
+  const endpoints = await findEnabledProviderEndpointsByVendorAndType(
+    input.vendorId,
+    input.providerType
+  );
+  // `findEnabledProviderEndpointsByVendorAndType` 已保证 isEnabled=true 且 deletedAt IS NULL
+  const circuitCandidates = excludeSet ? endpoints.filter((e) => !excludeSet.has(e.id)) : endpoints;
 
-  if (filtered.length === 0) {
+  if (circuitCandidates.length === 0) {
     return [];
   }
 
   // When endpoint circuit breaker is disabled, skip circuit check entirely
-  const { getEnvConfig } = await import("@/lib/config/env.schema");
   if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
-    return rankProviderEndpoints(filtered);
+    return rankProviderEndpoints(circuitCandidates);
   }
 
-  const circuitResults = await Promise.all(
-    filtered.map(async (endpoint) => ({
-      endpoint,
-      isOpen: await isEndpointCircuitOpen(endpoint.id),
-    }))
+  const healthStatus = await getAllEndpointHealthStatusAsync(circuitCandidates.map((e) => e.id));
+  const candidates = circuitCandidates.filter(
+    (endpoint) => healthStatus[endpoint.id]?.circuitState !== "open"
   );
-
-  const candidates = circuitResults.filter(({ isOpen }) => !isOpen).map(({ endpoint }) => endpoint);
 
   return rankProviderEndpoints(candidates);
 }
@@ -78,20 +89,22 @@ export async function getEndpointFilterStats(input: {
 }): Promise<EndpointFilterStats> {
   const endpoints = await findProviderEndpointsByVendorAndType(input.vendorId, input.providerType);
   const total = endpoints.length;
-  const enabled = endpoints.filter((e) => e.isEnabled && !e.deletedAt).length;
+  const enabledEndpoints = endpoints.filter((e) => e.isEnabled && !e.deletedAt);
+  const enabled = enabledEndpoints.length;
 
   // When endpoint circuit breaker is disabled, no endpoints can be circuit-open
-  const { getEnvConfig } = await import("@/lib/config/env.schema");
   if (!getEnvConfig().ENABLE_ENDPOINT_CIRCUIT_BREAKER) {
     return { total, enabled, circuitOpen: 0, available: enabled };
   }
 
-  const circuitResults = await Promise.all(
-    endpoints
-      .filter((e) => e.isEnabled && !e.deletedAt)
-      .map(async (e) => isEndpointCircuitOpen(e.id))
-  );
-  const circuitOpen = circuitResults.filter(Boolean).length;
+  if (enabledEndpoints.length === 0) {
+    return { total, enabled: 0, circuitOpen: 0, available: 0 };
+  }
+
+  const healthStatus = await getAllEndpointHealthStatusAsync(enabledEndpoints.map((e) => e.id));
+  const circuitOpen = enabledEndpoints.filter(
+    (e) => healthStatus[e.id]?.circuitState === "open"
+  ).length;
   const available = enabled - circuitOpen;
 
   return { total, enabled, circuitOpen, available };

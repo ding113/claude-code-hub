@@ -52,6 +52,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useInViewOnce } from "@/lib/hooks/use-in-view-once";
 import {
   getAllProviderTypes,
   getProviderTypeConfig,
@@ -113,6 +114,8 @@ export function ProviderEndpointsTable({
       }
       return await getProviderEndpointsByVendor({ vendorId });
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   // Sort endpoints by type order (from getAllProviderTypes) then by sortOrder
@@ -132,20 +135,42 @@ export function ProviderEndpointsTable({
 
   // Fetch circuit breaker states for all endpoints in batch
   const endpointIds = useMemo(() => endpoints.map((ep) => ep.id), [endpoints]);
+  const endpointIdsQueryKey = useMemo(
+    () =>
+      endpointIds
+        .slice()
+        .sort((a, b) => a - b)
+        .join(","),
+    [endpointIds]
+  );
   const { data: circuitInfoMap = {} } = useQuery({
-    queryKey: ["endpoint-circuit-info", endpointIds.toSorted((a, b) => a - b).join(",")],
+    queryKey: ["endpoint-circuit-info", endpointIdsQueryKey],
     queryFn: async () => {
       if (endpointIds.length === 0) return {};
-      const res = await batchGetEndpointCircuitInfo({ endpointIds });
-      if (!res.ok || !res.data) return {};
       const map: Record<number, EndpointCircuitState> = {};
-      for (const item of res.data) {
+
+      const MAX_ENDPOINT_IDS_PER_BATCH = 500;
+      const chunks: number[][] = [];
+      for (let index = 0; index < endpointIds.length; index += MAX_ENDPOINT_IDS_PER_BATCH) {
+        chunks.push(endpointIds.slice(index, index + MAX_ENDPOINT_IDS_PER_BATCH));
+      }
+
+      const results = await Promise.all(
+        chunks.map(async (chunk) => {
+          const res = await batchGetEndpointCircuitInfo({ endpointIds: chunk });
+          return res.ok && res.data ? res.data : [];
+        })
+      );
+
+      for (const item of results.flat()) {
         map[item.endpointId] = item.circuitState as EndpointCircuitState;
       }
+
       return map;
     },
     enabled: endpointIds.length > 0,
     staleTime: 15_000,
+    refetchOnWindowFocus: false,
   });
 
   if (isLoading) {
@@ -228,7 +253,8 @@ function EndpointRow({
     onMutate: () => setIsProbing(true),
     onSettled: () => setIsProbing(false),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
+      queryClient.invalidateQueries({ queryKey: ["endpoint-probe-logs", endpoint.id] });
       if (data?.result.ok) {
         toast.success(t("probeSuccess"));
       } else {
@@ -251,7 +277,7 @@ function EndpointRow({
       return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
       toast.success(t("endpointDeleteSuccess"));
     },
@@ -272,7 +298,7 @@ function EndpointRow({
     onMutate: () => setIsToggling(true),
     onSettled: () => setIsToggling(false),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
+      queryClient.invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] });
       toast.success(t("endpointUpdateSuccess"));
     },
     onError: () => {
@@ -287,18 +313,19 @@ function EndpointRow({
       return res;
     },
     onMutate: () => {
-      // Optimistic update: immediately set circuit state to closed
+      // 乐观更新：仅更新包含该 endpointId 的 circuit-info 查询，避免污染其它 cache；
+      // 同时避免在成功后做过宽 invalidation 引发“刷新放大/请求风暴”（#779/#781 相关）。
       queryClient.setQueriesData<Record<number, EndpointCircuitState>>(
         { queryKey: ["endpoint-circuit-info"] },
         (old) => {
           if (!old) return old;
+          if (!Object.hasOwn(old, endpoint.id)) return old;
+          if (old[endpoint.id] === "closed") return old;
           return { ...old, [endpoint.id]: "closed" as EndpointCircuitState };
         }
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["endpoint-circuit-info"] });
-      queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
       toast.success(tStatus("resetCircuitSuccess"));
     },
     onError: () => {
@@ -450,14 +477,11 @@ export interface AddEndpointButtonProps {
   vendorId: number;
   /** If provided, locks the type selector to this value */
   providerType?: ProviderType;
-  /** Custom query key suffix for cache invalidation */
-  queryKeySuffix?: string;
 }
 
 export function AddEndpointButton({
   vendorId,
   providerType: fixedProviderType,
-  queryKeySuffix,
 }: AddEndpointButtonProps) {
   const t = useTranslations("settings.providers");
   const tErrors = useTranslations("errors");
@@ -507,20 +531,11 @@ export function AddEndpointButton({
       if (res.ok) {
         toast.success(t("endpointAddSuccess"));
         setOpen(false);
-        // Invalidate both specific and general queries
-        // Explicitly suppress rejections to avoid double toast
+        // 仅失效 vendor 维度即可：前缀匹配会覆盖 providerType 等变体，避免重复 invalidation。
+        // 显式吞掉 rejections，避免错误状态下二次 toast。
         queryClient
           .invalidateQueries({ queryKey: ["provider-endpoints", vendorId] })
           .catch(() => undefined);
-        if (fixedProviderType) {
-          queryClient
-            .invalidateQueries({
-              queryKey: ["provider-endpoints", vendorId, fixedProviderType, queryKeySuffix].filter(
-                (value) => value != null
-              ),
-            })
-            .catch(() => undefined);
-        }
         return;
       }
 
@@ -684,7 +699,9 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
       if (res.ok) {
         toast.success(t("endpointUpdateSuccess"));
         setOpen(false);
-        queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] }).catch(() => undefined);
+        queryClient
+          .invalidateQueries({ queryKey: ["provider-endpoints", endpoint.vendorId] })
+          .catch(() => undefined);
         return;
       }
 
@@ -768,6 +785,7 @@ export interface ProviderEndpointsSectionProps {
   readOnly?: boolean;
   hideTypeColumn?: boolean;
   queryKeySuffix?: string;
+  deferUntilInView?: boolean;
 }
 
 /**
@@ -780,30 +798,31 @@ export function ProviderEndpointsSection({
   readOnly = false,
   hideTypeColumn = false,
   queryKeySuffix,
+  deferUntilInView = false,
 }: ProviderEndpointsSectionProps) {
   const t = useTranslations("settings.providers");
+  const { ref, isInView } = useInViewOnce<HTMLDivElement>();
+  const shouldLoad = !deferUntilInView || isInView;
 
   return (
-    <div>
+    <div ref={ref}>
       <div className="px-6 py-3 bg-muted/10 border-b font-medium text-sm text-muted-foreground flex items-center justify-between">
         <span>{t("endpoints")}</span>
-        {!readOnly && (
-          <AddEndpointButton
-            vendorId={vendorId}
-            providerType={providerType}
-            queryKeySuffix={queryKeySuffix}
-          />
-        )}
+        {!readOnly && <AddEndpointButton vendorId={vendorId} providerType={providerType} />}
       </div>
 
       <div className="p-6">
-        <ProviderEndpointsTable
-          vendorId={vendorId}
-          providerType={providerType}
-          readOnly={readOnly}
-          hideTypeColumn={hideTypeColumn}
-          queryKeySuffix={queryKeySuffix}
-        />
+        {shouldLoad ? (
+          <ProviderEndpointsTable
+            vendorId={vendorId}
+            providerType={providerType}
+            readOnly={readOnly}
+            hideTypeColumn={hideTypeColumn}
+            queryKeySuffix={queryKeySuffix}
+          />
+        ) : (
+          <div className="h-24 rounded-md bg-muted/20" />
+        )}
       </div>
     </div>
   );
