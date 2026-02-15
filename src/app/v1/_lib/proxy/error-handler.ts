@@ -250,38 +250,47 @@ export class ProxyErrorHandler {
       isEmptyResponseError(error);
 
     if (shouldAttachVerboseDetails) {
-      const settings = await getCachedSystemSettings();
-      if (settings.verboseProviderError) {
-        if (error instanceof ProxyError) {
-          upstreamRequestId = error.upstreamError?.requestId;
-          const rawBody =
-            typeof error.upstreamError?.rawBody === "string" && error.upstreamError.rawBody
-              ? sanitizeErrorTextForDetail(error.upstreamError.rawBody)
-              : error.upstreamError?.rawBody;
-          details = {
-            upstreamError: {
-              kind: "fake_200",
-              code: error.message,
-              statusCode: error.statusCode,
-              statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
-              statusCodeInferenceMatcherId:
-                error.upstreamError?.statusCodeInferenceMatcherId ?? null,
-              clientSafeMessage: error.getClientSafeMessage(),
-              rawBody,
-              rawBodyTruncated: error.upstreamError?.rawBodyTruncated ?? false,
-            },
-          };
-        } else if (isEmptyResponseError(error)) {
-          details = {
-            upstreamError: {
-              kind: "empty_response",
-              reason: error.reason,
-              clientSafeMessage: error.getClientSafeMessage(),
-              rawBody: "",
-              rawBodyTruncated: false,
-            },
-          };
+      try {
+        const settings = await getCachedSystemSettings();
+        if (settings.verboseProviderError) {
+          if (error instanceof ProxyError) {
+            upstreamRequestId = error.upstreamError?.requestId;
+            const rawBodySrc = error.upstreamError?.rawBody;
+            const rawBody =
+              typeof rawBodySrc === "string" && rawBodySrc
+                ? sanitizeErrorTextForDetail(
+                    rawBodySrc.length > 4096 ? rawBodySrc.slice(0, 4096) : rawBodySrc
+                  )
+                : rawBodySrc;
+            details = {
+              upstreamError: {
+                kind: "fake_200",
+                code: error.message,
+                statusCode: error.statusCode,
+                statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+                statusCodeInferenceMatcherId:
+                  error.upstreamError?.statusCodeInferenceMatcherId ?? null,
+                clientSafeMessage: error.getClientSafeMessage(),
+                rawBody,
+                rawBodyTruncated: error.upstreamError?.rawBodyTruncated ?? false,
+              },
+            };
+          } else if (isEmptyResponseError(error)) {
+            details = {
+              upstreamError: {
+                kind: "empty_response",
+                reason: error.reason,
+                clientSafeMessage: error.getClientSafeMessage(),
+                rawBody: "",
+                rawBodyTruncated: false,
+              },
+            };
+          }
         }
+      } catch (verboseError) {
+        logger.warn("ProxyErrorHandler: failed to gather verbose details, skipping", {
+          error: verboseError instanceof Error ? verboseError.message : String(verboseError),
+        });
       }
     }
 

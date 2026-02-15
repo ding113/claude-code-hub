@@ -327,6 +327,7 @@
         "prioritySelection": "Priority Selection",
         "attemptProvider": "Attempt: {provider}",
         "retryAttempt": "Retry #{number}",
+        "httpStatus": "HTTP {code}{inferredSuffix}",
         "sessionReuse": "Session Reuse",
         "sessionReuseDesc": "Reusing provider from session cache",
         "sessionReuseTitle": "Session Binding",

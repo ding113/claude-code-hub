@@ -327,6 +327,7 @@
         "prioritySelection": "優先度選択",
         "attemptProvider": "試行: {provider}",
         "retryAttempt": "再試行 #{number}",
+        "httpStatus": "HTTP {code}{inferredSuffix}",
         "sessionReuse": "セッション再利用",
         "sessionReuseDesc": "セッションキャッシュからプロバイダーを再利用",
         "sessionReuseTitle": "セッションバインディング",

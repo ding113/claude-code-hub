@@ -327,6 +327,7 @@
         "prioritySelection": "Выбор по приоритету",
         "attemptProvider": "Попытка: {provider}",
         "retryAttempt": "Повтор #{number}",
+        "httpStatus": "HTTP {code}{inferredSuffix}",
         "sessionReuse": "Повторное использование сессии",
         "sessionReuseDesc": "Провайдер из кэша сессии",
         "sessionReuseTitle": "Привязка сессии",

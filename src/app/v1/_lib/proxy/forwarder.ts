@@ -148,15 +148,15 @@ async function readResponseTextUpTo(
     if (truncated) {
       try {
         await reader.cancel();
-      } catch {
-        // ignore
+      } catch (cancelErr) {
+        logger.debug("readResponseTextUpTo: failed to cancel reader", { error: cancelErr });
       }
     }
 
     try {
       reader.releaseLock();
-    } catch {
-      // ignore
+    } catch (releaseErr) {
+      logger.debug("readResponseTextUpTo: failed to release reader lock", { error: releaseErr });
     }
   }
 

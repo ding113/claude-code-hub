@@ -327,6 +327,7 @@
         "prioritySelection": "优先级选择",
         "attemptProvider": "尝试: {provider}",
         "retryAttempt": "重试 #{number}",
+        "httpStatus": "HTTP {code}{inferredSuffix}",
         "sessionReuse": "会话复用",
         "sessionReuseDesc": "从会话缓存复用供应商",
         "sessionReuseTitle": "会话绑定",

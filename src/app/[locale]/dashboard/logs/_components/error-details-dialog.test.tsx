@@ -245,6 +245,7 @@ const messages = {
           prioritySelection: "Priority Selection",
           attemptProvider: "Attempt: {provider}",
           retryAttempt: "Retry #{number}",
+          httpStatus: "HTTP {code}{inferredSuffix}",
         },
         noError: {
           processing: "No error (processing)",
@@ -348,6 +349,7 @@ describe("error-details-dialog layout", () => {
 
     expect(html).toContain("FAKE_200_EMPTY_BODY");
     expect(html).toContain("Note: detected after stream end; payload may have been forwarded");
+    expect(html).toContain("Detected reason: Empty response body");
   });
 
   test("renders special settings section when specialSettings exists", () => {

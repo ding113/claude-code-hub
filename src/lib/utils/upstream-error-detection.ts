@@ -115,7 +115,7 @@ const ERROR_STATUS_MATCHERS: Array<{ statusCode: number; matcherId: string; re: 
   {
     statusCode: 404,
     matcherId: "not_found",
-    re: /(?:\bHTTP\/\d(?:\.\d)?\s+404\b|\bnot\s+found\b|\b(?:model|deployment|endpoint|resource)\s+not\s+found\b|\bunknown\s+model\b|\bdoes\s+not\s+exist\b|\bNOT_FOUND\b|\bResourceNotFoundException\b|未找到|不存在|模型不存在)/iu,
+    re: /(?:\bHTTP\/\d(?:\.\d)?\s+404\b|\b(?:model|deployment|endpoint|resource|route|path|api|service|url)\s+not\s+found\b|\bunknown\s+model\b|\bdoes\s+not\s+exist\b|\bNOT_FOUND\b|\bResourceNotFoundException\b|未找到|不存在|模型不存在)/iu,
   },
   {
     statusCode: 413,
