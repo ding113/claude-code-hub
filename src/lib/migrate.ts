@@ -48,7 +48,14 @@ export async function withAdvisoryLock<T>(
       }
     }
 
-    await client.end();
+    try {
+      await client.end();
+    } catch (endError) {
+      logger.error("Failed to close advisory lock client", {
+        lockName,
+        error: endError instanceof Error ? endError.message : String(endError),
+      });
+    }
   }
 }
 

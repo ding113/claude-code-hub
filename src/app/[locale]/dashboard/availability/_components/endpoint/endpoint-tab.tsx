@@ -130,7 +130,7 @@ export function EndpointTab() {
       console.error("Failed to fetch vendors:", error);
       return null;
     } finally {
-      if (!options?.silent && requestId === vendorsRequestIdRef.current) {
+      if (requestId === vendorsRequestIdRef.current) {
         setLoadingVendors(false);
       }
     }
