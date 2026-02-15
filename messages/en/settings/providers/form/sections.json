@@ -175,7 +175,7 @@
     },
     "swapCacheTtlBilling": {
       "label": "Swap Cache TTL Billing",
-      "desc": "Invert cache TTL for cost calculation: 1h tokens billed as 5min rate and vice versa. Display badge remains unchanged."
+      "desc": "Invert cache TTL for incoming data: 1h tokens treated as 5min and vice versa. Affects badge, cost, and all stored metrics."
     },
     "codexOverrides": {
       "title": "Codex Parameter Overrides",

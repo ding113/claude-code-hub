@@ -2821,7 +2821,24 @@ export async function finalizeRequestStats(
   }
 
   // 4. 更新成本
-  const resolvedCacheTtl = usageMetrics.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
+  // Invert cache TTL at data entry when provider option is enabled
+  // All downstream (badge, cost, DB, logs) will see inverted values
+  if (provider.swapCacheTtlBilling) {
+    const orig5m = usageMetrics.cache_creation_5m_input_tokens;
+    usageMetrics.cache_creation_5m_input_tokens = usageMetrics.cache_creation_1h_input_tokens;
+    usageMetrics.cache_creation_1h_input_tokens = orig5m;
+    if (usageMetrics.cache_ttl === "5m") usageMetrics.cache_ttl = "1h";
+    else if (usageMetrics.cache_ttl === "1h") usageMetrics.cache_ttl = "5m";
+  }
+
+  let resolvedCacheTtl = usageMetrics.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
+
+  // When usageMetrics.cache_ttl is absent, session fallback wasn't swapped - handle it
+  if (provider.swapCacheTtlBilling && !usageMetrics.cache_ttl) {
+    if (resolvedCacheTtl === "5m") resolvedCacheTtl = "1h";
+    else if (resolvedCacheTtl === "1h") resolvedCacheTtl = "5m";
+  }
+
   const cache5m =
     usageMetrics.cache_creation_5m_input_tokens ??
     (resolvedCacheTtl === "1h" ? undefined : usageMetrics.cache_creation_input_tokens);
@@ -2831,17 +2848,11 @@ export async function finalizeRequestStats(
   const cacheTotal =
     usageMetrics.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
 
-  // Swap 5m<->1h token buckets for billing when provider option is enabled
-  // Badge (cache_ttl) stays unchanged - only cost calculation is affected
-  const swap = provider.swapCacheTtlBilling === true;
-  const billing5m = swap ? cache1h : cache5m;
-  const billing1h = swap ? cache5m : cache1h;
-
   const normalizedUsage: UsageMetrics = {
     ...usageMetrics,
     cache_ttl: resolvedCacheTtl ?? usageMetrics.cache_ttl,
-    cache_creation_5m_input_tokens: billing5m,
-    cache_creation_1h_input_tokens: billing1h,
+    cache_creation_5m_input_tokens: cache5m,
+    cache_creation_1h_input_tokens: cache1h,
     cache_creation_input_tokens: cacheTotal,
   };
 

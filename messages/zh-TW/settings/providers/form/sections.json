@@ -176,7 +176,7 @@
     },
     "swapCacheTtlBilling": {
       "label": "Cache TTL 計費互換",
-      "desc": "反轉快取 TTL 的計費方式：1h 令牌按 5 分鐘費率計費，反之亦然。日誌中的標記保持不變。"
+      "desc": "反轉傳入資料的快取 TTL：1h 令牌視為 5 分鐘，反之亦然。影響標記、成本及所有儲存指標。"
     },
     "codexOverrides": {
       "title": "Codex 參數覆寫",

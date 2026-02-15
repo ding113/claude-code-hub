@@ -89,7 +89,7 @@
     },
     "swapCacheTtlBilling": {
       "label": "Cache TTL 计费互换",
-      "desc": "反转缓存 TTL 的计费方式：1h 令牌按 5 分钟费率计费，反之亦然。日志中的标记保持不变。"
+      "desc": "反转传入数据的缓存 TTL：1h 令牌视为 5 分钟，反之亦然。影响标记、成本及所有存储指标。"
     },
     "context1m": {
       "label": "1M 上下文窗口",
