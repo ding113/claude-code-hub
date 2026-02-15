@@ -612,6 +612,9 @@ export async function updateProvider(
     const transformed = toProvider(provider);
 
     if (shouldSyncEndpoint && transformed.providerVendorId) {
+      // 注意：即使 provider 当前处于禁用态，只要 vendor/type/url 发生变化也同步 endpoint pool：
+      // - 避免旧 URL 残留为 orphan endpoints（#781）
+      // - 保证后续启用/其它同 vendor/type 的 provider 能直接复用端点池
       if (
         previousUrl &&
         previousProviderType &&
@@ -1128,7 +1131,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       return await providerStatisticsInFlight.promise;
     }
 
-    const promise = Promise.resolve().then(async () => {
+    const promise = (async () => {
       // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
       // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
       const query = sql`
@@ -1215,7 +1218,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       };
 
       return data;
-    });
+    })();
 
     providerStatisticsInFlight = { timezone, promise };
 

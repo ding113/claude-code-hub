@@ -80,6 +80,7 @@ export async function findProviderEndpointProbeLogsBatch(input: {
 
   // 性能：避免 `ROW_NUMBER() OVER (PARTITION BY ...)` 在单个端点 logs 很多时退化为更重的扫描/排序。
   // 改为 LATERAL + LIMIT：每个 endpoint_id 仅取最新 N 条，能更好利用 (endpoint_id, created_at desc) 索引。
+  // 安全：VALUES 列表使用 drizzle sql 参数化占位符拼接（不会把 endpointId 作为 raw 字符串注入）。
   const endpointValues = sql.join(
     endpointIds.map((id) => sql`(${id})`),
     sql`, `

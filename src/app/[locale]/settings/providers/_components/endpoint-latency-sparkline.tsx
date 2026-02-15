@@ -273,8 +273,7 @@ async function fetchProbeLogsByEndpointIdsIndividually(
 
   const workers = Array.from({ length: Math.min(concurrency, endpointIds.length) }, async () => {
     for (;;) {
-      const currentIndex = idx;
-      idx += 1;
+      const currentIndex = idx++;
       if (currentIndex >= endpointIds.length) return;
       const endpointId = endpointIds[currentIndex];
 
@@ -488,6 +487,7 @@ export function EndpointLatencySparkline(props: { endpointId: number; limit?: nu
     return count > 0 ? sum / count : null;
   }, [points]);
 
+  // useInViewOnce 保证 isInView 只会 false -> true，不会反复切回，因此不会因 refetch 闪烁骨架屏。
   const showSkeleton = !isInView || isLoading;
 
   if (showSkeleton) {

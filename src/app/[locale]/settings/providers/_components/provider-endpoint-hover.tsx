@@ -254,8 +254,7 @@ class VendorTypeEndpointStatsBatcher {
               { length: Math.min(concurrency, deferredEntries.length) },
               async () => {
                 for (;;) {
-                  const currentIndex = idx;
-                  idx += 1;
+                  const currentIndex = idx++;
                   if (currentIndex >= deferredEntries.length) return;
 
                   const { vendorId, deferred } = deferredEntries[currentIndex];
