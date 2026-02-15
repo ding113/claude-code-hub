@@ -194,6 +194,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
+    enableBillingHeaderRectifier: dbSettings?.enableBillingHeaderRectifier ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
     enableClaudeMetadataUserIdInjection: dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,

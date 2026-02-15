@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
+import {
+  normalizeConcurrentSessionLimit,
+  resolveKeyConcurrentSessionLimit,
+  resolveKeyUserConcurrentSessionLimits,
+} from "@/lib/rate-limit/concurrent-session-limit";
 
 describe("resolveKeyConcurrentSessionLimit", () => {
   const cases: Array<{
@@ -49,4 +53,41 @@ describe("resolveKeyConcurrentSessionLimit", () => {
       );
     });
   }
+});
+
+describe("normalizeConcurrentSessionLimit", () => {
+  const cases: Array<{ title: string; input: number | null | undefined; expected: number }> = [
+    { title: "null 应归一化为 0", input: null, expected: 0 },
+    { title: "undefined 应归一化为 0", input: undefined, expected: 0 },
+    { title: "0 应归一化为 0", input: 0, expected: 0 },
+    { title: "负数应归一化为 0", input: -1, expected: 0 },
+    { title: "NaN 应归一化为 0", input: Number.NaN, expected: 0 },
+    { title: "Infinity 应归一化为 0", input: Number.POSITIVE_INFINITY, expected: 0 },
+    { title: "正整数应保持不变", input: 15, expected: 15 },
+    { title: "小数应向下取整", input: 7.9, expected: 7 },
+    { title: "小数 < 1 应向下取整为 0", input: 0.9, expected: 0 },
+  ];
+
+  for (const testCase of cases) {
+    it(testCase.title, () => {
+      expect(normalizeConcurrentSessionLimit(testCase.input)).toBe(testCase.expected);
+    });
+  }
+});
+
+describe("resolveKeyUserConcurrentSessionLimits", () => {
+  it("Key 未设置且 User 已设置时：effectiveKeyLimit 应继承 User，且 enabled=true", () => {
+    const result = resolveKeyUserConcurrentSessionLimits(0, 15);
+    expect(result).toEqual({ effectiveKeyLimit: 15, normalizedUserLimit: 15, enabled: true });
+  });
+
+  it("Key 已设置且 User 已设置时：Key 优先，User 保留为 normalizedUserLimit", () => {
+    const result = resolveKeyUserConcurrentSessionLimits(10, 15);
+    expect(result).toEqual({ effectiveKeyLimit: 10, normalizedUserLimit: 15, enabled: true });
+  });
+
+  it("Key/User 均未设置时：enabled=false", () => {
+    const result = resolveKeyUserConcurrentSessionLimits(0, null);
+    expect(result).toEqual({ effectiveKeyLimit: 0, normalizedUserLimit: 0, enabled: false });
+  });
 });

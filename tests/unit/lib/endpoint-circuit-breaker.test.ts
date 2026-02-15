@@ -170,6 +170,10 @@ describe("endpoint-circuit-breaker", () => {
     await flushPromises();
     sendAlertMock.mockClear();
 
+    // Prime module cache for dynamic import() consumers
+    await import("@/lib/config/env.schema");
+    await import("@/lib/notification/notifier");
+
     const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
 
     await triggerEndpointCircuitBreakerAlert(
@@ -226,6 +230,10 @@ describe("endpoint-circuit-breaker", () => {
     // recordEndpointFailure 会 non-blocking 触发告警；先让 event-loop 跑完再清空计数，避免串台导致误判
     await flushPromises();
     sendAlertMock.mockClear();
+
+    // Prime module cache for dynamic import() consumers
+    await import("@/lib/config/env.schema");
+    await import("@/lib/notification/notifier");
 
     const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
 

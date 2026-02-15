@@ -53,6 +53,8 @@
     "enableThinkingSignatureRectifierDesc": "When Anthropic providers return thinking signature incompatibility or invalid request errors, automatically removes incompatible thinking blocks and retries once against the same provider (enabled by default).",
     "enableThinkingBudgetRectifier": "Enable Thinking Budget Rectifier",
     "enableThinkingBudgetRectifierDesc": "When Anthropic providers return budget_tokens < 1024 errors, automatically sets thinking budget to maximum (32000) and max_tokens to 64000 if needed, then retries once (enabled by default).",
+    "enableBillingHeaderRectifier": "Enable Billing Header Rectifier",
+    "enableBillingHeaderRectifierDesc": "Proactively removes x-anthropic-billing-header text blocks injected by Claude Code client into the system prompt, preventing Amazon Bedrock and other non-native Anthropic upstreams from returning 400 errors (enabled by default).",
     "enableCodexSessionIdCompletion": "Enable Codex Session ID Completion",
     "enableCodexSessionIdCompletionDesc": "When Codex requests provide only one of session_id (header) or prompt_cache_key (body), automatically completes the other. If both are missing, generates a UUID v7 session id and reuses it stably within the same conversation.",
     "enableClaudeMetadataUserIdInjection": "Enable Claude metadata.user_id Injection",

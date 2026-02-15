@@ -6,7 +6,7 @@ import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { sumKeyTotalCostById, sumUserTotalCost } from "@/repository/statistics";
+import { sumKeyTotalCostBatchByIds, sumUserTotalCostBatch } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import { UsersQuotaSkeleton } from "../_components/users-quota-skeleton";
 import type { UserKeyWithUsage, UserQuotaWithUsage } from "./_components/types";
@@ -15,71 +15,63 @@ import { UsersQuotaClient } from "./_components/users-quota-client";
 // Force dynamic rendering (this page needs real-time data and auth)
 export const dynamic = "force-dynamic";
 
-// Max age for "all time" total usage query (100 years in days)
-const ALL_TIME_MAX_AGE_DAYS = 36500;
-
 async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   const users = await getUsers();
 
-  const usersWithQuotas = await Promise.all(
-    users.map(async (user) => {
-      // Fetch quota usage and total cost in parallel
-      const [quotaResult, totalUsage] = await Promise.all([
-        getUserLimitUsage(user.id),
-        sumUserTotalCost(user.id, ALL_TIME_MAX_AGE_DAYS),
-      ]);
+  const allUserIds = users.map((u) => u.id);
+  const allKeyIds = users.flatMap((u) => u.keys.map((k) => k.id));
 
-      // Map keys with their total usage
-      const keysWithUsage: UserKeyWithUsage[] = await Promise.all(
-        user.keys.map(async (key) => {
-          const keyTotalUsage = await sumKeyTotalCostById(key.id, ALL_TIME_MAX_AGE_DAYS);
-          return {
-            id: key.id,
-            name: key.name,
-            status: key.status,
-            todayUsage: key.todayUsage,
-            totalUsage: keyTotalUsage,
-            limit5hUsd: key.limit5hUsd,
-            limitDailyUsd: key.limitDailyUsd,
-            limitWeeklyUsd: key.limitWeeklyUsd,
-            limitMonthlyUsd: key.limitMonthlyUsd,
-            limitTotalUsd: key.limitTotalUsd ?? null,
-            limitConcurrentSessions: key.limitConcurrentSessions,
-            dailyResetMode: key.dailyResetMode,
-            dailyResetTime: key.dailyResetTime,
-          };
-        })
-      );
+  // 3 queries total instead of N+M individual SUM queries
+  const [quotaResults, userCostMap, keyCostMap] = await Promise.all([
+    Promise.all(users.map((u) => getUserLimitUsage(u.id))),
+    sumUserTotalCostBatch(allUserIds),
+    sumKeyTotalCostBatchByIds(allKeyIds),
+  ]);
 
-      return {
-        id: user.id,
-        name: user.name,
-        note: user.note,
-        role: user.role,
-        isEnabled: user.isEnabled,
-        expiresAt: user.expiresAt ?? null,
-        providerGroup: user.providerGroup,
-        tags: user.tags,
-        quota: quotaResult.ok ? quotaResult.data : null,
-        limit5hUsd: user.limit5hUsd ?? null,
-        limitWeeklyUsd: user.limitWeeklyUsd ?? null,
-        limitMonthlyUsd: user.limitMonthlyUsd ?? null,
-        limitTotalUsd: user.limitTotalUsd ?? null,
-        limitConcurrentSessions: user.limitConcurrentSessions ?? null,
-        totalUsage,
-        keys: keysWithUsage,
-      };
-    })
-  );
+  return users.map((user, idx) => {
+    const quotaResult = quotaResults[idx];
 
-  return usersWithQuotas;
+    const keysWithUsage: UserKeyWithUsage[] = user.keys.map((key) => ({
+      id: key.id,
+      name: key.name,
+      status: key.status,
+      todayUsage: key.todayUsage,
+      totalUsage: keyCostMap.get(key.id) ?? 0,
+      limit5hUsd: key.limit5hUsd,
+      limitDailyUsd: key.limitDailyUsd,
+      limitWeeklyUsd: key.limitWeeklyUsd,
+      limitMonthlyUsd: key.limitMonthlyUsd,
+      limitTotalUsd: key.limitTotalUsd ?? null,
+      limitConcurrentSessions: key.limitConcurrentSessions,
+      dailyResetMode: key.dailyResetMode,
+      dailyResetTime: key.dailyResetTime,
+    }));
+
+    return {
+      id: user.id,
+      name: user.name,
+      note: user.note,
+      role: user.role,
+      isEnabled: user.isEnabled,
+      expiresAt: user.expiresAt ?? null,
+      providerGroup: user.providerGroup,
+      tags: user.tags,
+      quota: quotaResult.ok ? quotaResult.data : null,
+      limit5hUsd: user.limit5hUsd ?? null,
+      limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+      limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+      limitTotalUsd: user.limitTotalUsd ?? null,
+      limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+      totalUsage: userCostMap.get(user.id) ?? 0,
+      keys: keysWithUsage,
+    };
+  });
 }
 
 export default async function UsersQuotaPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const session = await getSession();
 
-  // 权限检查：仅 admin 用户可访问
   if (!session || session.user.role !== "admin") {
     return redirect({ href: session ? "/dashboard/my-quota" : "/login", locale });
   }

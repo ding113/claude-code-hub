@@ -97,6 +97,8 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.after.maxTokens,
         setting.after.thinkingBudgetTokens,
       ]);
+    case "billing_header_rectifier":
+      return JSON.stringify([setting.type, setting.hit, setting.removedCount]);
     case "gemini_google_search_override":
       return JSON.stringify([
         setting.type,

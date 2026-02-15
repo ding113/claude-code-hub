@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest } from "@/drizzle/schema";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -760,65 +760,126 @@ export async function sumKeyTotalCostById(
 }
 
 /**
- * 查询 Key 历史总消费（带时间边界优化）
- * 用于总消费限额检查
- * @param keyHash - API Key 的哈希值
- * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
+ * Query Key total cost (with optional time boundary)
+ * @param keyHash - API Key hash
+ * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365): Promise<number> {
-  // Validate maxAgeDays - use default 365 for invalid values
-  const validMaxAgeDays =
-    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+  const conditions = [
+    eq(messageRequest.key, keyHash),
+    isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - validMaxAgeDays);
+  // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+  }
 
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
     .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.key, keyHash),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, cutoffDate)
-      )
-    );
+    .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
 }
 
 /**
- * 查询用户历史总消费（所有 Key 累计，带时间边界优化）
- * 用于总消费限额检查
- * @param userId - 用户 ID
- * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
+ * Query user total cost across all keys (with optional time boundary)
+ * @param userId - User ID
+ * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365): Promise<number> {
-  // Validate maxAgeDays - use default 365 for invalid values
-  const validMaxAgeDays =
-    Number.isFinite(maxAgeDays) && maxAgeDays > 0 ? Math.floor(maxAgeDays) : 365;
+  const conditions = [
+    eq(messageRequest.userId, userId),
+    isNull(messageRequest.deletedAt),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - validMaxAgeDays);
+  // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+  }
 
   const result = await db
     .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
     .from(messageRequest)
-    .where(
-      and(
-        eq(messageRequest.userId, userId),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, cutoffDate)
-      )
-    );
+    .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
 }
 
 /**
- * 查询供应商历史总消费
+ * Batch query: all-time total cost grouped by user_id (single SQL query)
+ * @param userIds - Array of user IDs
+ * @returns Map of userId -> totalCost
+ */
+export async function sumUserTotalCostBatch(userIds: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (userIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      userId: messageRequest.userId,
+      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        inArray(messageRequest.userId, userIds),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
+      )
+    )
+    .groupBy(messageRequest.userId);
+
+  for (const id of userIds) {
+    result.set(id, 0);
+  }
+  for (const row of rows) {
+    result.set(row.userId, Number(row.total || 0));
+  }
+  return result;
+}
+
+/**
+ * Batch query: all-time total cost grouped by key_id (single SQL query via JOIN)
+ * @param keyIds - Array of key IDs
+ * @returns Map of keyId -> totalCost
+ */
+export async function sumKeyTotalCostBatchByIds(keyIds: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (keyIds.length === 0) return result;
+
+  const rows = await db
+    .select({
+      keyId: keys.id,
+      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+    })
+    .from(keys)
+    .leftJoin(
+      messageRequest,
+      and(
+        eq(messageRequest.key, keys.key),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION
+      )
+    )
+    .where(inArray(keys.id, keyIds))
+    .groupBy(keys.id);
+
+  for (const id of keyIds) {
+    result.set(id, 0);
+  }
+  for (const row of rows) {
+    result.set(row.keyId, Number(row.total || 0));
+  }
+  return result;
+}
+
+/**
  * 用于供应商总消费限额检查（limit_total_usd）。
  *
  * 重要语义：

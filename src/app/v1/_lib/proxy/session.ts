@@ -810,7 +810,13 @@ function optimizeRequestMessage(message: Record<string, unknown>): Record<string
   return optimized;
 }
 
-function extractModelFromPath(pathname: string): string | null {
+export function extractModelFromPath(pathname: string): string | null {
+  // 匹配 Vertex AI 路径：/v1/publishers/google/models/{model}:<action>
+  const publishersMatch = pathname.match(/\/publishers\/google\/models\/([^/:]+)(?::[^/]+)?/);
+  if (publishersMatch?.[1]) {
+    return publishersMatch[1];
+  }
+
   // 匹配官方 Gemini 路径：/v1beta/models/{model}:<action>
   const geminiMatch = pathname.match(/\/v1beta\/models\/([^/:]+)(?::[^/]+)?/);
   if (geminiMatch?.[1]) {
