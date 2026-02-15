@@ -1639,6 +1639,8 @@ export async function backfillProviderEndpointsFromProviders(
   while (true) {
     const whereClauses = [
       isNull(providers.deletedAt),
+      // 仅 backfill 启用中的 providers：disabled -> enabled 的场景由 updateProvider/updateProvidersBatch
+      // 在启用时 best-effort 确保 endpoint pool，不依赖 backfill 扫描。
       eq(providers.isEnabled, true),
       gt(providers.id, lastProviderId),
     ];

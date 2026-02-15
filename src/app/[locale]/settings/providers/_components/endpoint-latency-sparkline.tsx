@@ -271,21 +271,21 @@ async function fetchProbeLogsByEndpointIdsIndividually(
   const concurrency = 4;
   let idx = 0;
 
-  // 注意：idx 的读取/自增发生在 await 之前的同步代码段，依赖 JS 单线程语义，因此是安全的。
   const workers = Array.from({ length: Math.min(concurrency, endpointIds.length) }, async () => {
     for (;;) {
-      const current = endpointIds[idx];
+      const currentIndex = idx;
       idx += 1;
-      if (current == null) return;
+      if (currentIndex >= endpointIds.length) return;
+      const endpointId = endpointIds[currentIndex];
 
       try {
         const res = await getProviderEndpointProbeLogs({
-          endpointId: current,
+          endpointId,
           limit,
         });
-        map[current] = res.ok && res.data ? normalizeProbeLogs(res.data.logs) : [];
+        map[endpointId] = res.ok && res.data ? normalizeProbeLogs(res.data.logs) : [];
       } catch {
-        map[current] = [];
+        map[endpointId] = [];
       }
     }
   });

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providerEndpoints, providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
@@ -832,15 +832,10 @@ export async function updateProvidersBatch(
     return 0;
   }
 
-  const idList = sql.join(
-    uniqueIds.map((id) => sql`${id}`),
-    sql`, `
-  );
-
   const result = await db
     .update(providers)
     .set(setClauses)
-    .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
+    .where(and(inArray(providers.id, uniqueIds), isNull(providers.deletedAt)))
     .returning({
       id: providers.id,
       providerVendorId: providers.providerVendorId,
@@ -942,16 +937,12 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
 
   const uniqueIds = [...new Set(ids)];
   const now = new Date();
-  const idList = sql.join(
-    uniqueIds.map((id) => sql`${id}`),
-    sql`, `
-  );
 
   const deletedCount = await db.transaction(async (tx) => {
     const result = await tx
       .update(providers)
       .set({ deletedAt: now, updatedAt: now })
-      .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
+      .where(and(inArray(providers.id, uniqueIds), isNull(providers.deletedAt)))
       .returning({
         id: providers.id,
         providerVendorId: providers.providerVendorId,
