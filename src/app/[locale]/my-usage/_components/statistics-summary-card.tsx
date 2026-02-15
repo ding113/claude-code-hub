@@ -118,11 +118,11 @@ export function StatisticsSummaryCard({
 
   const [breakdownPage, setBreakdownPage] = useState(1);
 
-  // Reset breakdown page when stats change (date range switch, refresh)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional reset on stats identity change
+  // Reset breakdown page when date range changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deps used as reset trigger on date range change
   useEffect(() => {
     setBreakdownPage(1);
-  }, [stats]);
+  }, [dateRange.startDate, dateRange.endDate]);
 
   const isLoading = loading || refreshing;
   const currencyCode = stats?.currencyCode ?? "USD";
@@ -244,11 +244,11 @@ export function StatisticsSummaryCard({
             <div className="space-y-3">
               <p className="text-sm font-medium text-muted-foreground">{t("modelBreakdown")}</p>
               <div className="grid gap-4 md:grid-cols-2">
-                {keyPageItems.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      {t("keyStats")}
-                    </p>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {t("keyStats")}
+                  </p>
+                  {keyPageItems.length > 0 ? (
                     <ModelBreakdownColumn
                       pageItems={keyPageItems}
                       currencyCode={currencyCode}
@@ -256,14 +256,16 @@ export function StatisticsSummaryCard({
                       keyPrefix="key"
                       pageOffset={sliceStart}
                     />
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("noData")}</p>
+                  )}
+                </div>
 
-                {userPageItems.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      {t("userStats")}
-                    </p>
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {t("userStats")}
+                  </p>
+                  {userPageItems.length > 0 ? (
                     <ModelBreakdownColumn
                       pageItems={userPageItems}
                       currencyCode={currencyCode}
@@ -271,8 +273,10 @@ export function StatisticsSummaryCard({
                       keyPrefix="user"
                       pageOffset={sliceStart}
                     />
-                  </div>
-                )}
+                  ) : (
+                    <p className="text-sm text-muted-foreground">{t("noData")}</p>
+                  )}
+                </div>
               </div>
 
               {breakdownTotalPages > 1 && (
@@ -281,18 +285,23 @@ export function StatisticsSummaryCard({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7"
+                    aria-label={t("breakdownPrevPage")}
                     disabled={breakdownPage <= 1}
                     onClick={() => setBreakdownPage((p) => p - 1)}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <span className="text-xs text-muted-foreground">
-                    {breakdownPage} / {breakdownTotalPages}
+                    {t("breakdownPageIndicator", {
+                      current: breakdownPage,
+                      total: breakdownTotalPages,
+                    })}
                   </span>
                   <Button
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7"
+                    aria-label={t("breakdownNextPage")}
                     disabled={breakdownPage >= breakdownTotalPages}
                     onClick={() => setBreakdownPage((p) => p + 1)}
                   >

@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 function abbreviateModel(name: string): string {
-  const parts = name.split("-");
+  const parts = name.split("-").filter(Boolean);
 
   if (parts.length === 1) {
     return parts[0].length <= 4 ? parts[0].toUpperCase() : parts[0].slice(0, 2).toUpperCase();
@@ -51,7 +51,7 @@ function abbreviateModel(name: string): string {
 }
 
 function abbreviateClient(name: string): string {
-  const parts = name.split(/[-\s]+/);
+  const parts = name.split(/[-\s]+/).filter(Boolean);
   if (parts.length === 1) {
     return name.slice(0, 2).toUpperCase();
   }
@@ -133,11 +133,9 @@ export function ProviderGroupInfo({
               userAllowedModels.map((name) => (
                 <Tooltip key={name}>
                   <TooltipTrigger asChild>
-                    <span>
-                      <Badge variant="outline" className="cursor-default font-mono text-xs">
-                        {abbreviateModel(name)}
-                      </Badge>
-                    </span>
+                    <Badge variant="outline" className="cursor-default font-mono text-xs">
+                      {abbreviateModel(name)}
+                    </Badge>
                   </TooltipTrigger>
                   <TooltipContent>{name}</TooltipContent>
                 </Tooltip>
@@ -156,11 +154,9 @@ export function ProviderGroupInfo({
               userAllowedClients.map((name) => (
                 <Tooltip key={name}>
                   <TooltipTrigger asChild>
-                    <span>
-                      <Badge variant="outline" className="cursor-default font-mono text-xs">
-                        {abbreviateClient(name)}
-                      </Badge>
-                    </span>
+                    <Badge variant="outline" className="cursor-default font-mono text-xs">
+                      {abbreviateClient(name)}
+                    </Badge>
                   </TooltipTrigger>
                   <TooltipContent>{name}</TooltipContent>
                 </Tooltip>

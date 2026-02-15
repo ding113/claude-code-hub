@@ -1,6 +1,6 @@
 "use client";
 
-import { Infinity } from "lucide-react";
+import { Infinity as InfinityIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import type { MyUsageQuota } from "@/actions/my-usage";
@@ -180,7 +180,9 @@ function QuotaRow({
 
   return (
     <div className="flex items-center gap-2">
-      <span className="w-8 shrink-0 text-[11px] text-muted-foreground">{label}</span>
+      <span className="w-auto shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
+        {label}
+      </span>
       {!unlimited ? (
         <Progress value={percent ?? 0} className={progressClass} aria-label={ariaLabel} />
       ) : (
@@ -195,7 +197,7 @@ function QuotaRow({
         {formatValue(current)}
         <span className="text-muted-foreground">
           {" / "}
-          {unlimited ? <Infinity className="inline h-3.5 w-3.5" /> : limitDisplay}
+          {unlimited ? <InfinityIcon className="inline h-3.5 w-3.5" /> : limitDisplay}
         </span>
       </span>
     </div>
