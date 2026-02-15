@@ -1109,6 +1109,13 @@ export interface SyncProviderEndpointOnProviderEditInput {
   previousProviderType?: ProviderType | null;
   previousUrl: string;
   nextUrl: string;
+  /**
+   * 是否在旧 URL 仍被其它「启用 provider」引用时保留旧端点。
+   *
+   * - `true`（默认）：仅当旧 URL 仍被其它启用 provider 引用时保留旧端点；否则会尝试移动/软删除旧端点，
+   *   以避免 orphan endpoint 长期残留并造成“明明已改/删仍在被探测或展示”的困惑（#781）。
+   * - `false`：忽略引用关系，尽量清理旧端点（谨慎使用：可能影响仍在使用旧 URL 的 provider）。
+   */
   keepPreviousWhenReferenced?: boolean;
 }
 
