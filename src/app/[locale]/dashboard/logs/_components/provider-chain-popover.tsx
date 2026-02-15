@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { formatProbabilityCompact } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
+import { getFake200ReasonKey } from "./fake200-reason";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
@@ -33,7 +34,9 @@ interface ProviderChainPopoverProps {
  */
 function isActualRequest(item: ProviderChainItem): boolean {
   if (item.reason === "concurrent_limit_failed") return true;
+
   if (item.reason === "retry_failed" || item.reason === "system_error") return true;
+  if (item.reason === "resource_not_found") return true;
   if (item.reason === "endpoint_pool_exhausted") return true;
   if (item.reason === "vendor_type_all_timeout") return true;
   if (item.reason === "client_error_non_retryable") return true;
@@ -71,7 +74,13 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
     };
   }
-  if (item.reason === "retry_failed" || item.reason === "system_error") {
+  if (
+    item.reason === "retry_failed" ||
+    item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
+    item.reason === "endpoint_pool_exhausted" ||
+    item.reason === "vendor_type_all_timeout"
+  ) {
     return {
       icon: XCircle,
       color: "text-rose-600",
@@ -90,13 +99,6 @@ function getItemStatus(item: ProviderChainItem): {
       icon: AlertTriangle,
       color: "text-orange-600",
       bgColor: "bg-orange-50 dark:bg-orange-950/30",
-    };
-  }
-  if (item.reason === "endpoint_pool_exhausted" || item.reason === "vendor_type_all_timeout") {
-    return {
-      icon: XCircle,
-      color: "text-rose-600",
-      bgColor: "bg-rose-50 dark:bg-rose-950/30",
     };
   }
   return {
@@ -119,6 +121,9 @@ export function ProviderChainPopover({
   const hasFake200PostStreamFailure = chain.some(
     (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
   );
+  const fake200CodeForDisplay = chain.find(
+    (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
+  )?.errorMessage;
 
   // Calculate actual request count (excluding intermediate states)
   const requestCount = chain.filter(isActualRequest).length;
@@ -144,6 +149,7 @@ export function ProviderChainPopover({
       (item) => item.reason === "session_reuse" || item.selectionMethod === "session_reuse"
     );
     const sessionReuseContext = sessionReuseItem?.decisionContext;
+    const singleRequestItem = chain.find(isActualRequest);
 
     return (
       <div className={`${maxWidthClass} min-w-0 w-full`}>
@@ -166,12 +172,50 @@ export function ProviderChainPopover({
               <div className="space-y-2">
                 {/* Provider name */}
                 <div className="font-medium text-xs">{displayName}</div>
+                {singleRequestItem?.statusCode && (
+                  <div className="flex items-center gap-1">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] px-1 py-0",
+                        singleRequestItem.statusCode >= 200 && singleRequestItem.statusCode < 300
+                          ? "border-emerald-500 text-emerald-600"
+                          : "border-rose-500 text-rose-600"
+                      )}
+                    >
+                      {singleRequestItem.statusCode}
+                    </Badge>
+                    {singleRequestItem.statusCodeInferred && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1 py-0 border-amber-500 text-amber-700 dark:text-amber-300"
+                        title={t("logs.details.statusCodeInferredTooltip")}
+                      >
+                        {t("logs.details.statusCodeInferredBadge")}
+                      </Badge>
+                    )}
+                  </div>
+                )}
 
                 {/* 注意：假 200 检测发生在 SSE 流式结束后；此时内容已可能透传给客户端。 */}
                 {hasFake200PostStreamFailure && (
                   <div className="flex items-start gap-1.5 text-[10px] text-amber-500 dark:text-amber-400">
                     <InfoIcon className="h-3 w-3 shrink-0 mt-0.5" aria-hidden="true" />
-                    <span>{t("logs.details.fake200ForwardedNotice")}</span>
+                    <div className="space-y-0.5">
+                      {typeof fake200CodeForDisplay === "string" && (
+                        <div>
+                          {t("logs.details.fake200DetectedReason", {
+                            reason: t(
+                              getFake200ReasonKey(
+                                fake200CodeForDisplay,
+                                "logs.details.fake200Reasons"
+                              )
+                            ),
+                          })}
+                        </div>
+                      )}
+                      <div>{t("logs.details.fake200ForwardedNotice")}</div>
+                    </div>
                   </div>
                 )}
 
@@ -458,6 +502,15 @@ export function ProviderChainPopover({
                         {item.statusCode}
                       </Badge>
                     )}
+                    {item.statusCode && item.statusCodeInferred && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] px-1 py-0 border-amber-500 text-amber-700 dark:text-amber-300"
+                        title={t("logs.details.statusCodeInferredTooltip")}
+                      >
+                        {t("logs.details.statusCodeInferredBadge")}
+                      </Badge>
+                    )}
                     {item.reason && !item.statusCode && (
                       <span className="text-[10px] text-muted-foreground">
                         {tChain(`reasons.${item.reason}`)}
@@ -465,9 +518,24 @@ export function ProviderChainPopover({
                     )}
                   </div>
                   {item.errorMessage && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">
-                      {item.errorMessage}
-                    </p>
+                    <>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">
+                        {item.errorMessage}
+                      </p>
+                      {typeof item.errorMessage === "string" &&
+                        item.errorMessage.startsWith("FAKE_200_") && (
+                          <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5 line-clamp-2">
+                            {t("logs.details.fake200DetectedReason", {
+                              reason: t(
+                                getFake200ReasonKey(
+                                  item.errorMessage,
+                                  "logs.details.fake200Reasons"
+                                )
+                              ),
+                            })}
+                          </p>
+                        )}
+                    </>
                   )}
                 </div>
               </div>

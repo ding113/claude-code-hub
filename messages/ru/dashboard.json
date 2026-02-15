@@ -244,6 +244,18 @@
       },
       "errorMessage": "Сообщение об ошибке",
       "fake200ForwardedNotice": "Примечание: для потоковых запросов эта ошибка может быть обнаружена только после завершения потока; содержимое ответа могло уже быть передано клиенту.",
+      "fake200DetectedReason": "Причина обнаружения: {reason}",
+      "fake200Reasons": {
+        "emptyBody": "Пустое тело ответа",
+        "htmlBody": "Получен HTML-документ (возможно, страница ошибки)",
+        "jsonErrorNonEmpty": "В JSON непустое поле `error`",
+        "jsonErrorMessageNonEmpty": "В JSON непустое `error.message`",
+        "jsonMessageKeywordMatch": "В JSON `message` содержит слово \"error\" (эвристика)",
+        "unknown": "Тело ответа указывает на ошибку"
+      },
+      "statusCodeInferredBadge": "Предположено",
+      "statusCodeInferredTooltip": "Этот код состояния выведен по содержимому тела ответа (например, fake 200) и может отличаться от HTTP-кода апстрима.",
+      "statusCodeInferredSuffix": "(предп.)",
       "filteredProviders": "Отфильтрованные поставщики",
       "providerChain": {
         "title": "Хронология цепочки решений поставщика",
@@ -315,6 +327,7 @@
         "prioritySelection": "Выбор по приоритету",
         "attemptProvider": "Попытка: {provider}",
         "retryAttempt": "Повтор #{number}",
+        "httpStatus": "HTTP {code}{inferredSuffix}",
         "sessionReuse": "Повторное использование сессии",
         "sessionReuseDesc": "Провайдер из кэша сессии",
         "sessionReuseTitle": "Привязка сессии",

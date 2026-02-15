@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
+import { getFake200ReasonKey } from "../../fake200-reason";
 import {
   calculateOutputRate,
   isInProgressStatus,
@@ -67,6 +68,10 @@ export function SummaryTab({
     specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
+  const fake200Reason =
+    isFake200PostStreamFailure && typeof errorMessage === "string"
+      ? t(getFake200ReasonKey(errorMessage, "fake200Reasons"))
+      : null;
 
   return (
     <div className="space-y-6">
@@ -426,6 +431,11 @@ export function SummaryTab({
             <p className="text-xs text-rose-800 dark:text-rose-200 line-clamp-3 font-mono">
               {errorMessage.length > 200 ? `${errorMessage.slice(0, 200)}...` : errorMessage}
             </p>
+            {isFake200PostStreamFailure && fake200Reason && (
+              <p className="mt-2 text-[11px] text-rose-800 dark:text-rose-200">
+                {t("fake200DetectedReason", { reason: fake200Reason })}
+              </p>
+            )}
             {/* 注意：假 200 检测发生在 SSE 流式结束后；此时内容已可能透传给客户端，因此需要提示用户避免误解。 */}
             {isFake200PostStreamFailure && (
               <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">

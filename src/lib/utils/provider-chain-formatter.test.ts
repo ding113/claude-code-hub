@@ -376,6 +376,113 @@ describe("vendor_type_all_timeout", () => {
 });
 
 // =============================================================================
+// resource_not_found reason tests
+// =============================================================================
+
+describe("resource_not_found", () => {
+  const baseNotFoundItem: ProviderChainItem = {
+    id: 1,
+    name: "provider-a",
+    reason: "resource_not_found",
+    attemptNumber: 1,
+    statusCode: 404,
+    errorMessage: "Not Found",
+    timestamp: 1000,
+    errorDetails: {
+      provider: {
+        id: 1,
+        name: "provider-a",
+        statusCode: 404,
+        statusText: "Not Found",
+      },
+    },
+  };
+
+  describe("formatProviderSummary", () => {
+    test("renders resource_not_found item as failure in summary", () => {
+      const chain: ProviderChainItem[] = [baseNotFoundItem];
+      const result = formatProviderSummary(chain, mockT);
+
+      expect(result).toContain("provider-a");
+      expect(result).toContain("✗");
+    });
+
+    test("renders resource_not_found alongside a successful retry in multi-provider chain", () => {
+      const chain: ProviderChainItem[] = [
+        baseNotFoundItem,
+        {
+          id: 2,
+          name: "provider-b",
+          reason: "retry_success",
+          statusCode: 200,
+          timestamp: 2000,
+          attemptNumber: 1,
+        },
+      ];
+      const result = formatProviderSummary(chain, mockT);
+
+      expect(result).toContain("provider-a");
+      expect(result).toContain("provider-b");
+      expect(result).toMatch(/provider-a\(.*\).*provider-b\(.*\)/);
+    });
+  });
+
+  describe("formatProviderDescription", () => {
+    test("shows resource not found label in request chain", () => {
+      const chain: ProviderChainItem[] = [baseNotFoundItem];
+      const result = formatProviderDescription(chain, mockT);
+
+      expect(result).toContain("provider-a");
+      expect(result).toContain("description.resourceNotFound");
+    });
+  });
+
+  describe("formatProviderTimeline", () => {
+    test("renders resource_not_found with status code and note", () => {
+      const chain: ProviderChainItem[] = [baseNotFoundItem];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(timeline).toContain("timeline.resourceNotFoundFailed [attempt=1]");
+      expect(timeline).toContain("timeline.statusCode [code=404]");
+      expect(timeline).toContain("timeline.resourceNotFoundNote");
+    });
+
+    test("renders inferred status code label when statusCodeInferred=true", () => {
+      const chain: ProviderChainItem[] = [{ ...baseNotFoundItem, statusCodeInferred: true }];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(timeline).toContain("timeline.resourceNotFoundFailed [attempt=1]");
+      expect(timeline).toContain("timeline.statusCodeInferred [code=404]");
+      expect(timeline).toContain("timeline.resourceNotFoundNote");
+    });
+
+    test("degrades gracefully when errorDetails.provider is missing", () => {
+      const chain: ProviderChainItem[] = [
+        {
+          ...baseNotFoundItem,
+          errorDetails: {
+            request: {
+              method: "POST",
+              url: "https://example.com/v1/messages",
+              headers: "{}",
+              body: "{}",
+              bodyTruncated: false,
+            },
+          },
+        },
+      ];
+      const { timeline } = formatProviderTimeline(chain, mockT);
+
+      expect(timeline).toContain("timeline.resourceNotFoundFailed [attempt=1]");
+      expect(timeline).toContain("timeline.provider [provider=provider-a]");
+      expect(timeline).toContain("timeline.statusCode [code=404]");
+      expect(timeline).toContain("timeline.error [error=Not Found]");
+      expect(timeline).toContain("timeline.resourceNotFoundNote");
+    });
+  });
+});
+
+// =============================================================================
 // Unknown reason graceful degradation
 // =============================================================================
 
