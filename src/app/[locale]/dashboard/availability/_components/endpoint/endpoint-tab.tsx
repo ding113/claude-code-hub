@@ -46,6 +46,7 @@ export function EndpointTab() {
   const vendorsRequestIdRef = useRef(0);
   const endpointsRequestIdRef = useRef(0);
   const probeLogsRequestIdRef = useRef(0);
+  // 切换浏览器标签页时 focus + visibilitychange 可能同时触发；节流避免重复刷新造成请求放大。
   const lastFocusRefreshAtRef = useRef(0);
   const latestSelectionRef = useRef<{
     vendorId: number | null;
@@ -276,18 +277,20 @@ export function EndpointTab() {
       }
     };
 
-    const onFocus = () => {
+    // 切回前台时，focus 与 visibilitychange 往往会连发；节流避免重复触发 refresh 链路。
+    const refreshThrottled = () => {
       const now = Date.now();
       if (now - lastFocusRefreshAtRef.current < 2000) return;
       lastFocusRefreshAtRef.current = now;
       void refresh();
     };
+
+    const onFocus = () => {
+      refreshThrottled();
+    };
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        const now = Date.now();
-        if (now - lastFocusRefreshAtRef.current < 2000) return;
-        lastFocusRefreshAtRef.current = now;
-        void refresh();
+        refreshThrottled();
       }
     };
 
