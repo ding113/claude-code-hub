@@ -24,6 +24,17 @@ function getStatusCategory(statusCode: number): string {
   return `${Math.floor(statusCode / 100)}xx`;
 }
 
+/**
+ * Convert Headers to a plain record.
+ *
+ * Security note: session.headers are the CLIENT's original request headers
+ * (user -> CCH), which may include the user's own CCH auth key. These are
+ * safe to log -- the user already knows their own credentials.
+ *
+ * The upstream PROVIDER API key (outboundKey) is injected by ProxyForwarder
+ * into a separate Headers object and is NEVER present in session.headers or
+ * ctx.responseHeaders, so no redaction is needed here.
+ */
 function headersToRecord(headers: Headers): Record<string, string> {
   const result: Record<string, string> = {};
   headers.forEach((value, key) => {
