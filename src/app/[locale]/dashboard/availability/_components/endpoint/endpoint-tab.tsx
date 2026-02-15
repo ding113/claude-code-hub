@@ -76,6 +76,7 @@ export function EndpointTab() {
       if (nextVendors.length === 0) {
         setSelectedVendorId(null);
         setSelectedType(null);
+        setSelectedEndpoint(null);
         return {
           selectionChanged: currentVendorId != null || currentType != null,
           vendorId: null,
@@ -91,6 +92,7 @@ export function EndpointTab() {
       if (!vendor) {
         setSelectedVendorId(null);
         setSelectedType(null);
+        setSelectedEndpoint(null);
         return {
           selectionChanged: currentVendorId != null || currentType != null,
           vendorId: null,
@@ -104,11 +106,18 @@ export function EndpointTab() {
           ? currentType
           : (vendor.providerTypes[0] ?? null);
 
+      const selectionChanged = nextVendorId !== currentVendorId || nextProviderType !== currentType;
+
+      if (selectionChanged) {
+        // 避免 selection 自动切换期间仍能对旧 endpoint 发起探测请求（#781）。
+        setSelectedEndpoint(null);
+      }
+
       setSelectedVendorId(nextVendorId);
       setSelectedType(nextProviderType);
 
       return {
-        selectionChanged: nextVendorId !== currentVendorId || nextProviderType !== currentType,
+        selectionChanged,
         vendorId: nextVendorId,
         providerType: nextProviderType,
       };
