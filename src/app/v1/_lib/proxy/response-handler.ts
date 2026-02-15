@@ -12,7 +12,10 @@ import type { CostBreakdown } from "@/lib/utils/cost-calculation";
 import { calculateRequestCost, calculateRequestCostBreakdown } from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
-import { detectUpstreamErrorFromSseOrJsonText } from "@/lib/utils/upstream-error-detection";
+import {
+  detectUpstreamErrorFromSseOrJsonText,
+  inferUpstreamErrorStatusCodeFromText,
+} from "@/lib/utils/upstream-error-detection";
 import {
   updateMessageRequestCost,
   updateMessageRequestDetails,
