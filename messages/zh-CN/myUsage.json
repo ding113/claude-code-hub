@@ -92,6 +92,9 @@
     "keyStats": "密钥",
     "userStats": "用户",
     "noData": "所选时段无数据",
+    "breakdownPrevPage": "上一页",
+    "breakdownNextPage": "下一页",
+    "breakdownPageIndicator": "{current} / {total}",
     "unknownModel": "未知",
     "modal": {
       "requests": "请求",

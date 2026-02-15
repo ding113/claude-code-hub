@@ -92,6 +92,9 @@
     "keyStats": "Key",
     "userStats": "User",
     "noData": "No data for selected period",
+    "breakdownPrevPage": "Previous page",
+    "breakdownNextPage": "Next page",
+    "breakdownPageIndicator": "{current} / {total}",
     "unknownModel": "Unknown",
     "modal": {
       "requests": "Requests",

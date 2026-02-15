@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronDown, Infinity, PieChart } from "lucide-react";
+import { AlertTriangle, ChevronDown, Infinity as InfinityIcon, PieChart } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import type { MyUsageQuota } from "@/actions/my-usage";
@@ -94,7 +94,7 @@ export function CollapsibleQuotaCard({
                 <div className="flex items-center gap-1.5">
                   <span className="text-muted-foreground">{t("daily")}:</span>
                   {dailyPct === null ? (
-                    <Infinity className="h-4 w-4 text-muted-foreground" />
+                    <InfinityIcon className="h-4 w-4 text-muted-foreground" />
                   ) : (
                     <>
                       <span className={cn("font-semibold", getPercentColor(dailyPct))}>
@@ -108,7 +108,7 @@ export function CollapsibleQuotaCard({
                 <div className="flex items-center gap-1.5">
                   <span className="text-muted-foreground">{t("monthly")}:</span>
                   {monthlyPct === null ? (
-                    <Infinity className="h-4 w-4 text-muted-foreground" />
+                    <InfinityIcon className="h-4 w-4 text-muted-foreground" />
                   ) : (
                     <>
                       <span className={cn("font-semibold", getPercentColor(monthlyPct))}>
@@ -122,7 +122,7 @@ export function CollapsibleQuotaCard({
                 <div className="flex items-center gap-1.5">
                   <span className="text-muted-foreground">{t("total")}:</span>
                   {totalPct === null ? (
-                    <Infinity className="h-4 w-4 text-muted-foreground" />
+                    <InfinityIcon className="h-4 w-4 text-muted-foreground" />
                   ) : (
                     <>
                       <span className={cn("font-semibold", getPercentColor(totalPct))}>

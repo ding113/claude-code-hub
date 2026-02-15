@@ -92,6 +92,9 @@
     "keyStats": "金鑰",
     "userStats": "使用者",
     "noData": "所選時段無資料",
+    "breakdownPrevPage": "上一頁",
+    "breakdownNextPage": "下一頁",
+    "breakdownPageIndicator": "{current} / {total}",
     "unknownModel": "不明",
     "modal": {
       "requests": "請求",
