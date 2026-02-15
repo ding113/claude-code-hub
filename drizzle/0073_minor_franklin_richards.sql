@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "idx_providers_enabled_vendor_type" ON "providers" USING btree ("provider_vendor_id","provider_type") WHERE "providers"."deleted_at" IS NULL AND "providers"."is_enabled" = true AND "providers"."provider_vendor_id" IS NOT NULL AND "providers"."provider_vendor_id" > 0;

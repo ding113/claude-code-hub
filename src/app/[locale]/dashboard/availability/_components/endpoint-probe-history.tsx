@@ -5,7 +5,12 @@ import { Activity, CheckCircle2, Play, RefreshCw, XCircle } from "lucide-react";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getProviderVendors, probeProviderEndpoint } from "@/actions/provider-endpoints";
+import {
+  type DashboardProviderVendor,
+  getDashboardProviderEndpoints,
+  getDashboardProviderVendors,
+  probeProviderEndpoint,
+} from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,33 +31,19 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { getErrorMessage } from "@/lib/utils/error-messages";
-import type {
-  ProviderEndpoint,
-  ProviderEndpointProbeLog,
-  ProviderType,
-  ProviderVendor,
-} from "@/types/provider";
-
-const PROVIDER_TYPES: ProviderType[] = [
-  "claude",
-  "claude-auth",
-  "codex",
-  "gemini-cli",
-  "gemini",
-  "openai-compatible",
-];
+import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderType } from "@/types/provider";
 
 export function EndpointProbeHistory() {
   const t = useTranslations("dashboard.availability");
   const tErrors = useTranslations("errors");
   const timeZone = useTimeZone() ?? "UTC";
 
-  const [vendors, setVendors] = useState<ProviderVendor[]>([]);
-  const [selectedVendorId, setSelectedVendorId] = useState<string>("");
-  const [selectedType, setSelectedType] = useState<ProviderType | "">("");
+  const [vendors, setVendors] = useState<DashboardProviderVendor[]>([]);
+  const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
+  const [selectedType, setSelectedType] = useState<ProviderType | null>(null);
 
   const [endpoints, setEndpoints] = useState<ProviderEndpoint[]>([]);
-  const [selectedEndpointId, setSelectedEndpointId] = useState<string>("");
+  const [selectedEndpointId, setSelectedEndpointId] = useState<number | null>(null);
   const [loadingEndpoints, setLoadingEndpoints] = useState(false);
 
   const [logs, setLogs] = useState<ProviderEndpointProbeLog[]>([]);
@@ -61,33 +52,35 @@ export function EndpointProbeHistory() {
   const [probing, setProbing] = useState(false);
 
   useEffect(() => {
-    getProviderVendors().then(setVendors).catch(console.error);
+    getDashboardProviderVendors()
+      .then((vendors) => {
+        setVendors(vendors);
+        if (vendors.length > 0) {
+          setSelectedVendorId(vendors[0].id);
+          setSelectedType(vendors[0].providerTypes[0] ?? null);
+        }
+      })
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
     if (!selectedVendorId || !selectedType) {
       setEndpoints([]);
-      setSelectedEndpointId("");
+      setSelectedEndpointId(null);
       return;
     }
 
     setLoadingEndpoints(true);
-    const params = new URLSearchParams({
-      vendorId: selectedVendorId,
-      providerType: selectedType,
-    });
 
-    fetch(`/api/availability/endpoints?${params.toString()}`)
-      .then((res) => res.json())
+    getDashboardProviderEndpoints({ vendorId: selectedVendorId, providerType: selectedType })
       .then((data) => {
-        if (data.endpoints) {
-          setEndpoints(data.endpoints);
-          setSelectedEndpointId((prev) =>
-            prev && !data.endpoints.some((e: ProviderEndpoint) => e.id.toString() === prev)
-              ? ""
-              : prev
-          );
-        }
+        setEndpoints(data);
+        setSelectedEndpointId((prev) => {
+          if (!prev) {
+            return data[0]?.id ?? null;
+          }
+          return data.some((endpoint) => endpoint.id === prev) ? prev : (data[0]?.id ?? null);
+        });
       })
       .catch(console.error)
       .finally(() => setLoadingEndpoints(false));
@@ -102,7 +95,7 @@ export function EndpointProbeHistory() {
     setLoadingLogs(true);
     try {
       const params = new URLSearchParams({
-        endpointId: selectedEndpointId,
+        endpointId: selectedEndpointId.toString(),
         limit: "50",
       });
       const res = await fetch(`/api/availability/endpoints/probe-logs?${params.toString()}`);
@@ -127,7 +120,7 @@ export function EndpointProbeHistory() {
     setProbing(true);
     try {
       const result = await probeProviderEndpoint({
-        endpointId: Number.parseInt(selectedEndpointId, 10),
+        endpointId: selectedEndpointId,
         timeoutMs: 10000,
       });
 
@@ -163,7 +156,19 @@ export function EndpointProbeHistory() {
             <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
               {t("probeHistory.selectVendor")}
             </label>
-            <Select value={selectedVendorId} onValueChange={setSelectedVendorId}>
+            <Select
+              value={selectedVendorId?.toString() || ""}
+              onValueChange={(value) => {
+                const vendorId = Number.parseInt(value, 10);
+                if (!Number.isFinite(vendorId)) {
+                  return;
+                }
+                setSelectedVendorId(vendorId);
+                const vendor = vendors.find((v) => v.id === vendorId);
+                setSelectedType(vendor?.providerTypes[0] ?? null);
+                setSelectedEndpointId(null);
+              }}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={t("probeHistory.selectVendor")} />
               </SelectTrigger>
@@ -181,16 +186,25 @@ export function EndpointProbeHistory() {
             <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
               {t("probeHistory.selectType")}
             </label>
-            <Select value={selectedType} onValueChange={(v) => setSelectedType(v as ProviderType)}>
+            <Select
+              value={selectedType || ""}
+              onValueChange={(v) => {
+                setSelectedType(v as ProviderType);
+                setSelectedEndpointId(null);
+              }}
+              disabled={!selectedVendorId}
+            >
               <SelectTrigger>
                 <SelectValue placeholder={t("probeHistory.selectType")} />
               </SelectTrigger>
               <SelectContent>
-                {PROVIDER_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
+                {(vendors.find((v) => v.id === selectedVendorId)?.providerTypes ?? []).map(
+                  (type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  )
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -200,8 +214,14 @@ export function EndpointProbeHistory() {
               {t("probeHistory.selectEndpoint")}
             </label>
             <Select
-              value={selectedEndpointId}
-              onValueChange={setSelectedEndpointId}
+              value={selectedEndpointId?.toString() || ""}
+              onValueChange={(value) => {
+                const endpointId = Number.parseInt(value, 10);
+                if (!Number.isFinite(endpointId)) {
+                  return;
+                }
+                setSelectedEndpointId(endpointId);
+              }}
               disabled={loadingEndpoints || endpoints.length === 0}
             >
               <SelectTrigger>

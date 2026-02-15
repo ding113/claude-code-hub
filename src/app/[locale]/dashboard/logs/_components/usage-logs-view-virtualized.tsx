@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Expand, Filter, ListOrdered, Minimize2, Pause, Play, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -26,14 +26,8 @@ import { UsageLogsFilters } from "./usage-logs-filters";
 import { UsageLogsStatsPanel } from "./usage-logs-stats-panel";
 import { VirtualizedLogsTable, type VirtualizedLogsTableFilters } from "./virtualized-logs-table";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 30000,
-    },
-  },
-});
+const EMPTY_PROVIDERS: ProviderDisplay[] = [];
+const EMPTY_KEYS: Key[] = [];
 
 interface UsageLogsViewVirtualizedProps {
   isAdmin: boolean;
@@ -141,11 +135,13 @@ function UsageLogsViewContent({
   const resolvedBillingModelSource =
     billingModelSource ?? systemSettings?.billingModelSource ?? "original";
 
-  const { data: providersData = [], isLoading: isProvidersLoading } = useQuery<ProviderDisplay[]>({
+  const { data: providersData = EMPTY_PROVIDERS, isLoading: isProvidersLoading } = useQuery<
+    ProviderDisplay[]
+  >({
     queryKey: ["usage-log-providers"],
     queryFn: getProviders,
     enabled: isAdmin && providers === undefined,
-    placeholderData: [],
+    placeholderData: EMPTY_PROVIDERS,
   });
 
   const { data: keysResult, isLoading: isKeysLoading } = useQuery({
@@ -155,12 +151,13 @@ function UsageLogsViewContent({
   });
 
   const resolvedProviders = providers ?? providersData;
-  const resolvedKeys = initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : []);
+  const resolvedKeys =
+    initialKeys ?? (keysResult?.ok && keysResult.data ? keysResult.data : EMPTY_KEYS);
 
   // Use useSearchParams hook for client-side URL reactivity
   // Note: searchParams props from server don't update on client-side navigation
-  const filters = useMemo<VirtualizedLogsTableFilters & { page?: number }>(() => {
-    return parseLogsUrlFilters({
+  const filters = useMemo<VirtualizedLogsTableFilters>(() => {
+    const { page: _page, ...parsed } = parseLogsUrlFilters({
       userId: _params.get("userId") ?? undefined,
       keyId: _params.get("keyId") ?? undefined,
       providerId: _params.get("providerId") ?? undefined,
@@ -172,7 +169,9 @@ function UsageLogsViewContent({
       endpoint: _params.get("endpoint") ?? undefined,
       minRetry: _params.get("minRetry") ?? undefined,
       page: _params.get("page") ?? undefined,
-    }) as VirtualizedLogsTableFilters & { page?: number };
+    });
+
+    return parsed;
   }, [_params]);
 
   const { data: overviewData } = useQuery<OverviewData>({
@@ -487,9 +486,5 @@ function UsageLogsViewContent({
 }
 
 export function UsageLogsViewVirtualized(props: UsageLogsViewVirtualizedProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <UsageLogsViewContent {...props} />
-    </QueryClientProvider>
-  );
+  return <UsageLogsViewContent {...props} />;
 }

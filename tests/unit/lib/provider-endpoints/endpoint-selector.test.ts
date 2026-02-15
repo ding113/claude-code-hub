@@ -27,10 +27,14 @@ describe("provider-endpoints: endpoint-selector", () => {
   test("rankProviderEndpoints 应过滤 disabled/deleted，并按 lastProbeOk/sortOrder/latency/id 排序", async () => {
     vi.resetModules();
     vi.doMock("@/repository", () => ({
+      findEnabledProviderEndpointsByVendorAndType: vi.fn(),
       findProviderEndpointsByVendorAndType: vi.fn(),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: vi.fn(),
+      getAllEndpointHealthStatusAsync: vi.fn(),
+    }));
+    vi.doMock("@/lib/config/env.schema", () => ({
+      getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
     }));
 
     const { rankProviderEndpoints } = await import("@/lib/provider-endpoints/endpoint-selector");
@@ -91,23 +95,46 @@ describe("provider-endpoints: endpoint-selector", () => {
   test("getPreferredProviderEndpoints 应排除禁用/已删除/显式 exclude/熔断 open 的端点，并返回排序结果", async () => {
     vi.resetModules();
 
+    // findEnabledProviderEndpointsByVendorAndType 语义：只返回 isEnabled=true 且 deletedAt=null 的端点
     const endpoints: ProviderEndpoint[] = [
       makeEndpoint({ id: 1, lastProbeOk: true, sortOrder: 1, lastProbeLatencyMs: 20 }),
       makeEndpoint({ id: 2, lastProbeOk: true, sortOrder: 0, lastProbeLatencyMs: 999 }),
       makeEndpoint({ id: 3, lastProbeOk: null, sortOrder: 0, lastProbeLatencyMs: 10 }),
-      makeEndpoint({ id: 4, isEnabled: false }),
-      makeEndpoint({ id: 5, deletedAt: new Date(1) }),
       makeEndpoint({ id: 6, lastProbeOk: false, sortOrder: 0, lastProbeLatencyMs: 1 }),
     ];
 
     const findMock = vi.fn(async () => endpoints);
-    const isOpenMock = vi.fn(async (endpointId: number) => endpointId === 2);
+    const getAllStatusMock = vi.fn(async (endpointIds: number[]) => {
+      const status: Record<
+        number,
+        {
+          failureCount: number;
+          lastFailureTime: number | null;
+          circuitState: "closed" | "open" | "half-open";
+          circuitOpenUntil: number | null;
+          halfOpenSuccessCount: number;
+        }
+      > = {};
+
+      for (const endpointId of endpointIds) {
+        status[endpointId] = {
+          failureCount: 0,
+          lastFailureTime: null,
+          circuitState: endpointId === 2 ? "open" : "closed",
+          circuitOpenUntil: endpointId === 2 ? Date.now() + 60_000 : null,
+          halfOpenSuccessCount: 0,
+        };
+      }
+
+      return status;
+    });
 
     vi.doMock("@/repository", () => ({
-      findProviderEndpointsByVendorAndType: findMock,
+      findEnabledProviderEndpointsByVendorAndType: findMock,
+      findProviderEndpointsByVendorAndType: vi.fn(async () => []),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: isOpenMock,
+      getAllEndpointHealthStatusAsync: getAllStatusMock,
     }));
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
@@ -124,7 +151,7 @@ describe("provider-endpoints: endpoint-selector", () => {
     });
 
     expect(findMock).toHaveBeenCalledWith(123, "claude");
-    expect(isOpenMock.mock.calls.map((c) => c[0])).toEqual([1, 2, 3]);
+    expect(getAllStatusMock).toHaveBeenCalledWith([1, 2, 3]);
     expect(result.map((e) => e.id)).toEqual([1, 3]);
 
     const best = await pickBestProviderEndpoint({ vendorId: 123, providerType: "claude" });
@@ -134,14 +161,15 @@ describe("provider-endpoints: endpoint-selector", () => {
   test("getPreferredProviderEndpoints 过滤后无候选时返回空数组", async () => {
     vi.resetModules();
 
-    const findMock = vi.fn(async () => [makeEndpoint({ id: 1, isEnabled: false })]);
-    const isOpenMock = vi.fn(async () => false);
+    const findMock = vi.fn(async () => []);
+    const getAllStatusMock = vi.fn(async () => ({}));
 
     vi.doMock("@/repository", () => ({
-      findProviderEndpointsByVendorAndType: findMock,
+      findEnabledProviderEndpointsByVendorAndType: findMock,
+      findProviderEndpointsByVendorAndType: vi.fn(async () => []),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: isOpenMock,
+      getAllEndpointHealthStatusAsync: getAllStatusMock,
     }));
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
@@ -157,7 +185,7 @@ describe("provider-endpoints: endpoint-selector", () => {
     const best = await pickBestProviderEndpoint({ vendorId: 1, providerType: "claude" });
     expect(best).toBeNull();
 
-    expect(isOpenMock).not.toHaveBeenCalled();
+    expect(getAllStatusMock).not.toHaveBeenCalled();
   });
 });
 
@@ -174,14 +202,36 @@ describe("getEndpointFilterStats", () => {
     ];
 
     const findMock = vi.fn(async () => endpoints);
-    // id=2 is circuit open
-    const isOpenMock = vi.fn(async (endpointId: number) => endpointId === 2);
+    const getAllStatusMock = vi.fn(async (endpointIds: number[]) => {
+      const status: Record<
+        number,
+        {
+          failureCount: number;
+          lastFailureTime: number | null;
+          circuitState: "closed" | "open" | "half-open";
+          circuitOpenUntil: number | null;
+          halfOpenSuccessCount: number;
+        }
+      > = {};
+
+      for (const endpointId of endpointIds) {
+        status[endpointId] = {
+          failureCount: 0,
+          lastFailureTime: null,
+          circuitState: endpointId === 2 ? "open" : "closed",
+          circuitOpenUntil: endpointId === 2 ? Date.now() + 60_000 : null,
+          halfOpenSuccessCount: 0,
+        };
+      }
+
+      return status;
+    });
 
     vi.doMock("@/repository", () => ({
       findProviderEndpointsByVendorAndType: findMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: isOpenMock,
+      getAllEndpointHealthStatusAsync: getAllStatusMock,
     }));
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
@@ -191,6 +241,7 @@ describe("getEndpointFilterStats", () => {
     const stats = await getEndpointFilterStats({ vendorId: 10, providerType: "claude" });
 
     expect(findMock).toHaveBeenCalledWith(10, "claude");
+    expect(getAllStatusMock).toHaveBeenCalledWith([1, 2, 3]);
     expect(stats).toEqual({
       total: 5, // all endpoints
       enabled: 3, // id=1,2,3 (isEnabled && !deletedAt)
@@ -203,13 +254,13 @@ describe("getEndpointFilterStats", () => {
     vi.resetModules();
 
     const findMock = vi.fn(async () => []);
-    const isOpenMock = vi.fn(async () => false);
+    const getAllStatusMock = vi.fn(async () => ({}));
 
     vi.doMock("@/repository", () => ({
       findProviderEndpointsByVendorAndType: findMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: isOpenMock,
+      getAllEndpointHealthStatusAsync: getAllStatusMock,
     }));
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
@@ -224,7 +275,7 @@ describe("getEndpointFilterStats", () => {
       circuitOpen: 0,
       available: 0,
     });
-    expect(isOpenMock).not.toHaveBeenCalled();
+    expect(getAllStatusMock).not.toHaveBeenCalled();
   });
 
   test("should count all enabled endpoints as circuitOpen when all are open", async () => {
@@ -236,13 +287,37 @@ describe("getEndpointFilterStats", () => {
     ];
 
     const findMock = vi.fn(async () => endpoints);
-    const isOpenMock = vi.fn(async () => true);
+    const getAllStatusMock = vi.fn(async (endpointIds: number[]) => {
+      const status: Record<
+        number,
+        {
+          failureCount: number;
+          lastFailureTime: number | null;
+          circuitState: "closed" | "open" | "half-open";
+          circuitOpenUntil: number | null;
+          halfOpenSuccessCount: number;
+        }
+      > = {};
+
+      for (const endpointId of endpointIds) {
+        status[endpointId] = {
+          failureCount: 0,
+          lastFailureTime: null,
+          circuitState: "open",
+          circuitOpenUntil: Date.now() + 60_000,
+          halfOpenSuccessCount: 0,
+        };
+      }
+
+      return status;
+    });
 
     vi.doMock("@/repository", () => ({
+      findEnabledProviderEndpointsByVendorAndType: vi.fn(async () => []),
       findProviderEndpointsByVendorAndType: findMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: isOpenMock,
+      getAllEndpointHealthStatusAsync: getAllStatusMock,
     }));
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
@@ -251,6 +326,7 @@ describe("getEndpointFilterStats", () => {
     const { getEndpointFilterStats } = await import("@/lib/provider-endpoints/endpoint-selector");
     const stats = await getEndpointFilterStats({ vendorId: 1, providerType: "openai-compatible" });
 
+    expect(getAllStatusMock).toHaveBeenCalledWith([1, 2]);
     expect(stats).toEqual({
       total: 2,
       enabled: 2,
@@ -273,13 +349,14 @@ describe("ENABLE_ENDPOINT_CIRCUIT_BREAKER disabled", () => {
     ];
 
     const findMock = vi.fn(async () => endpoints);
-    const isOpenMock = vi.fn(async () => true);
+    const getAllStatusMock = vi.fn(async () => ({}));
 
     vi.doMock("@/repository", () => ({
-      findProviderEndpointsByVendorAndType: findMock,
+      findEnabledProviderEndpointsByVendorAndType: findMock,
+      findProviderEndpointsByVendorAndType: vi.fn(async () => []),
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: isOpenMock,
+      getAllEndpointHealthStatusAsync: getAllStatusMock,
     }));
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: false }),
@@ -294,7 +371,7 @@ describe("ENABLE_ENDPOINT_CIRCUIT_BREAKER disabled", () => {
       providerType: "claude",
     });
 
-    expect(isOpenMock).not.toHaveBeenCalled();
+    expect(getAllStatusMock).not.toHaveBeenCalled();
     // All enabled, non-deleted endpoints returned (id=1,2,3), ranked by sortOrder/health
     expect(result.map((e) => e.id)).toEqual([1, 2, 3]);
   });
@@ -310,13 +387,13 @@ describe("ENABLE_ENDPOINT_CIRCUIT_BREAKER disabled", () => {
     ];
 
     const findMock = vi.fn(async () => endpoints);
-    const isOpenMock = vi.fn(async () => true);
+    const getAllStatusMock = vi.fn(async () => ({}));
 
     vi.doMock("@/repository", () => ({
       findProviderEndpointsByVendorAndType: findMock,
     }));
     vi.doMock("@/lib/endpoint-circuit-breaker", () => ({
-      isEndpointCircuitOpen: isOpenMock,
+      getAllEndpointHealthStatusAsync: getAllStatusMock,
     }));
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: false }),
@@ -325,7 +402,7 @@ describe("ENABLE_ENDPOINT_CIRCUIT_BREAKER disabled", () => {
     const { getEndpointFilterStats } = await import("@/lib/provider-endpoints/endpoint-selector");
     const stats = await getEndpointFilterStats({ vendorId: 10, providerType: "claude" });
 
-    expect(isOpenMock).not.toHaveBeenCalled();
+    expect(getAllStatusMock).not.toHaveBeenCalled();
     expect(stats).toEqual({
       total: 4,
       enabled: 2, // id=1,2 (isEnabled && !deletedAt)

@@ -148,11 +148,9 @@ describe("my-usage token aggregation", () => {
     const res = await getMyTodayStats();
     expect(res.ok).toBe(true);
 
-    expect(capturedSelections.length).toBeGreaterThanOrEqual(2);
+    expect(capturedSelections.length).toBeGreaterThanOrEqual(1);
     expectNoIntTokenSum(capturedSelections[0], "inputTokens");
     expectNoIntTokenSum(capturedSelections[0], "outputTokens");
-    expectNoIntTokenSum(capturedSelections[1], "inputTokens");
-    expectNoIntTokenSum(capturedSelections[1], "outputTokens");
   });
 
   test("getMyStatsSummary: token sum 不应使用 ::int", async () => {
@@ -160,7 +158,6 @@ describe("my-usage token aggregation", () => {
 
     const capturedSelections: Array<Record<string, unknown>> = [];
     const selectQueue: any[] = [];
-    selectQueue.push(createThenableQuery([]));
     selectQueue.push(createThenableQuery([]));
 
     mocks.select.mockImplementation((selection: unknown) => {
@@ -196,13 +193,26 @@ describe("my-usage token aggregation", () => {
     const res = await getMyStatsSummary({ startDate: "2024-01-01", endDate: "2024-01-01" });
     expect(res.ok).toBe(true);
 
-    expect(capturedSelections).toHaveLength(2);
+    expect(capturedSelections).toHaveLength(1);
 
-    for (const selection of capturedSelections) {
-      expectNoIntTokenSum(selection, "inputTokens");
-      expectNoIntTokenSum(selection, "outputTokens");
-      expectNoIntTokenSum(selection, "cacheCreationTokens");
-      expectNoIntTokenSum(selection, "cacheReadTokens");
+    const selection = capturedSelections[0];
+    const tokenFields = [
+      "userInputTokens",
+      "userOutputTokens",
+      "userCacheCreationTokens",
+      "userCacheReadTokens",
+      "userCacheCreation5mTokens",
+      "userCacheCreation1hTokens",
+      "keyInputTokens",
+      "keyOutputTokens",
+      "keyCacheCreationTokens",
+      "keyCacheReadTokens",
+      "keyCacheCreation5mTokens",
+      "keyCacheCreation1hTokens",
+    ];
+
+    for (const field of tokenFields) {
+      expectNoIntTokenSum(selection, field);
     }
   });
 });

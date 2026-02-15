@@ -477,6 +477,48 @@
       "when": 1771045274665,
       "tag": "0067_gorgeous_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1771062933911,
+      "tag": "0068_fuzzy_quasar",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1771062933912,
+      "tag": "0069_broad_hellfire_club",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1771073914978,
+      "tag": "0070_warm_lilandra",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1771075313248,
+      "tag": "0071_motionless_wind_dancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1771110659983,
+      "tag": "0072_absurd_gwen_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1771116859658,
+      "tag": "0073_minor_franklin_richards",
+      "breakpoints": true
     }
   ]
 }

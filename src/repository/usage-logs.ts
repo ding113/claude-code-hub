@@ -1,6 +1,6 @@
-"use server";
+import "server-only";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
@@ -152,12 +152,12 @@ export async function findUsageLogsBatch(
 
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+    conditions.push(gte(messageRequest.createdAt, startDate));
   }
 
   if (endTime !== undefined) {
     const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+    conditions.push(lt(messageRequest.createdAt, endDate));
   }
 
   if (statusCode !== undefined) {
@@ -281,6 +281,263 @@ export async function findUsageLogsBatch(
   return { logs, nextCursor, hasMore };
 }
 
+export interface UsageLogSlimFilters {
+  keyString: string;
+  /** Session ID（精确匹配；空字符串/空白视为不筛选） */
+  sessionId?: string;
+  /** 开始时间戳（毫秒），用于 >= 比较 */
+  startTime?: number;
+  /** 结束时间戳（毫秒），用于 < 比较 */
+  endTime?: number;
+  statusCode?: number;
+  /** 排除 200 状态码（筛选所有非 200 的请求，包括 NULL） */
+  excludeStatusCode200?: boolean;
+  model?: string;
+  endpoint?: string;
+  /** 最低重试次数（provider_chain 长度 - 1） */
+  minRetryCount?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface UsageLogSlimRow {
+  id: number;
+  createdAt: Date | null;
+  model: string | null;
+  originalModel: string | null;
+  endpoint: string | null;
+  statusCode: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: string | null;
+  durationMs: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
+}
+
+// my-usage logs：分页需要 totalPages，COUNT(*) 在大表上仍可能较重。
+// 这里对“相同筛选条件”的 total 做短 TTL 缓存，避免用户翻页/轮询时重复 COUNT。
+const USAGE_LOG_SLIM_TOTAL_CACHE_TTL_MS = 10 * 1000; // 10 秒
+const USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE = 1000;
+const usageLogSlimTotalCache = new Map<string, { total: number; expiresAt: number }>();
+
+function getUsageLogSlimTotalFromCache(key: string): number | null {
+  const now = Date.now();
+  const cached = usageLogSlimTotalCache.get(key);
+  if (!cached) return null;
+  if (cached.expiresAt <= now) {
+    usageLogSlimTotalCache.delete(key);
+    return null;
+  }
+
+  // LRU-like bump
+  usageLogSlimTotalCache.delete(key);
+  usageLogSlimTotalCache.set(key, cached);
+  return cached.total;
+}
+
+function setUsageLogSlimTotalToCache(key: string, total: number): void {
+  const now = Date.now();
+
+  if (usageLogSlimTotalCache.size >= USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE) {
+    for (const [k, v] of usageLogSlimTotalCache) {
+      if (v.expiresAt <= now) {
+        usageLogSlimTotalCache.delete(k);
+      }
+    }
+
+    if (usageLogSlimTotalCache.size >= USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE) {
+      const evictCount = Math.max(1, Math.ceil(USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE * 0.1));
+      let remaining = evictCount;
+
+      for (const k of usageLogSlimTotalCache.keys()) {
+        usageLogSlimTotalCache.delete(k);
+        remaining -= 1;
+        if (remaining <= 0) break;
+      }
+    }
+  }
+
+  usageLogSlimTotalCache.set(key, {
+    total,
+    expiresAt: now + USAGE_LOG_SLIM_TOTAL_CACHE_TTL_MS,
+  });
+}
+
+export async function findUsageLogsForKeySlim(
+  filters: UsageLogSlimFilters
+): Promise<{ logs: UsageLogSlimRow[]; total: number }> {
+  const {
+    keyString,
+    sessionId,
+    startTime,
+    endTime,
+    statusCode,
+    excludeStatusCode200,
+    model,
+    endpoint,
+    minRetryCount,
+    page = 1,
+    pageSize = 50,
+  } = filters;
+
+  const safePage = page > 0 ? page : 1;
+  const safePageSize = Math.min(100, Math.max(1, pageSize));
+
+  const conditions = [
+    isNull(messageRequest.deletedAt),
+    eq(messageRequest.key, keyString),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
+
+  const trimmedSessionId = sessionId?.trim();
+  if (trimmedSessionId) {
+    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
+  }
+
+  const totalCacheKey = [
+    keyString,
+    trimmedSessionId ?? "",
+    startTime ?? "",
+    endTime ?? "",
+    statusCode ?? "",
+    excludeStatusCode200 ? "1" : "0",
+    model ?? "",
+    endpoint ?? "",
+    minRetryCount ?? "",
+  ].join("\u0001");
+
+  if (startTime !== undefined) {
+    const startDate = new Date(startTime);
+    conditions.push(gte(messageRequest.createdAt, startDate));
+  }
+
+  if (endTime !== undefined) {
+    const endDate = new Date(endTime);
+    conditions.push(lt(messageRequest.createdAt, endDate));
+  }
+
+  if (statusCode !== undefined) {
+    conditions.push(eq(messageRequest.statusCode, statusCode));
+  } else if (excludeStatusCode200) {
+    conditions.push(
+      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
+    );
+  }
+
+  if (model) {
+    conditions.push(eq(messageRequest.model, model));
+  }
+
+  if (endpoint) {
+    conditions.push(eq(messageRequest.endpoint, endpoint));
+  }
+
+  if (minRetryCount !== undefined) {
+    conditions.push(
+      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
+    );
+  }
+
+  const offset = (safePage - 1) * safePageSize;
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      endpoint: messageRequest.endpoint,
+      statusCode: messageRequest.statusCode,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      costUsd: messageRequest.costUsd,
+      durationMs: messageRequest.durationMs,
+      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+    })
+    .from(messageRequest)
+    .where(and(...conditions))
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(safePageSize + 1)
+    .offset(offset);
+
+  const hasMore = results.length > safePageSize;
+  const pageRows = hasMore ? results.slice(0, safePageSize) : results;
+
+  let total = offset + pageRows.length;
+
+  const cachedTotal = getUsageLogSlimTotalFromCache(totalCacheKey);
+  if (cachedTotal !== null) {
+    total = Math.max(cachedTotal, total);
+    return {
+      logs: pageRows.map((row) => ({ ...row, costUsd: row.costUsd?.toString() ?? null })),
+      total,
+    };
+  }
+
+  if (pageRows.length === 0 && offset > 0) {
+    const countResults = await db
+      .select({ totalRows: sql<number>`count(*)::double precision` })
+      .from(messageRequest)
+      .where(and(...conditions));
+    total = countResults[0]?.totalRows ?? 0;
+  } else if (hasMore) {
+    const countResults = await db
+      .select({ totalRows: sql<number>`count(*)::double precision` })
+      .from(messageRequest)
+      .where(and(...conditions));
+    total = countResults[0]?.totalRows ?? 0;
+  }
+
+  const logs: UsageLogSlimRow[] = pageRows.map((row) => ({
+    ...row,
+    costUsd: row.costUsd?.toString() ?? null,
+  }));
+
+  setUsageLogSlimTotalToCache(totalCacheKey, total);
+  return { logs, total };
+}
+
+const DISTINCT_KEY_OPTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
+const DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE = 200;
+
+const distinctModelsByKeyCache = new Map<string, { data: string[]; expiresAt: number }>();
+const distinctEndpointsByKeyCache = new Map<string, { data: string[]; expiresAt: number }>();
+
+function setDistinctKeyOptionsCache(
+  cache: Map<string, { data: string[]; expiresAt: number }>,
+  key: string,
+  data: string[]
+): void {
+  const now = Date.now();
+  if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
+    for (const [k, v] of cache) {
+      if (v.expiresAt <= now) {
+        cache.delete(k);
+      }
+    }
+
+    if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
+      const evictCount = Math.max(1, Math.ceil(DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE * 0.1));
+      let remaining = evictCount;
+
+      for (const k of cache.keys()) {
+        cache.delete(k);
+        remaining -= 1;
+        if (remaining <= 0) break;
+      }
+    }
+  }
+
+  cache.set(key, { data, expiresAt: now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS });
+}
+
 export async function getTotalUsageForKey(keyString: string): Promise<number> {
   const [row] = await db
     .select({ total: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)` })
@@ -297,33 +554,61 @@ export async function getTotalUsageForKey(keyString: string): Promise<number> {
 }
 
 export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
+  const now = Date.now();
+  const cached = distinctModelsByKeyCache.get(keyString);
+  if (cached && cached.expiresAt > now) {
+    // LRU-like bump + sliding TTL
+    cached.expiresAt = now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS;
+    distinctModelsByKeyCache.delete(keyString);
+    distinctModelsByKeyCache.set(keyString, cached);
+    return cached.data;
+  }
+
   const result = await db.execute(
     sql`select distinct ${messageRequest.model} as model
         from ${messageRequest}
         where ${messageRequest.key} = ${keyString}
           and ${messageRequest.deletedAt} is null
+          and (${EXCLUDE_WARMUP_CONDITION})
           and ${messageRequest.model} is not null
         order by model asc`
   );
 
-  return Array.from(result)
+  const models = Array.from(result)
     .map((row) => (row as { model?: string }).model)
     .filter((model): model is string => !!model && model.trim().length > 0);
+
+  setDistinctKeyOptionsCache(distinctModelsByKeyCache, keyString, models);
+  return models;
 }
 
 export async function getDistinctEndpointsForKey(keyString: string): Promise<string[]> {
+  const now = Date.now();
+  const cached = distinctEndpointsByKeyCache.get(keyString);
+  if (cached && cached.expiresAt > now) {
+    // LRU-like bump + sliding TTL
+    cached.expiresAt = now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS;
+    distinctEndpointsByKeyCache.delete(keyString);
+    distinctEndpointsByKeyCache.set(keyString, cached);
+    return cached.data;
+  }
+
   const result = await db.execute(
     sql`select distinct ${messageRequest.endpoint} as endpoint
         from ${messageRequest}
         where ${messageRequest.key} = ${keyString}
           and ${messageRequest.deletedAt} is null
+          and (${EXCLUDE_WARMUP_CONDITION})
           and ${messageRequest.endpoint} is not null
         order by endpoint asc`
   );
 
-  return Array.from(result)
+  const endpoints = Array.from(result)
     .map((row) => (row as { endpoint?: string }).endpoint)
     .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
+
+  setDistinctKeyOptionsCache(distinctEndpointsByKeyCache, keyString, endpoints);
+  return endpoints;
 }
 
 /**
@@ -346,6 +631,9 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     page = 1,
     pageSize = 50,
   } = filters;
+
+  const safePage = page > 0 ? page : 1;
+  const safePageSize = Math.min(200, Math.max(1, pageSize));
 
   // 构建查询条件
   const conditions = [isNull(messageRequest.deletedAt)];
@@ -372,12 +660,12 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
   // PostgreSQL 会自动处理时区转换
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+    conditions.push(gte(messageRequest.createdAt, startDate));
   }
 
   if (endTime !== undefined) {
     const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+    conditions.push(lt(messageRequest.createdAt, endDate));
   }
 
   if (statusCode !== undefined) {
@@ -404,37 +692,47 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     );
   }
 
-  // 查询总数和统计数据（添加 innerJoin keysTable 以支持 keyId 过滤）
-  const [summaryResult] = await db
-    .select({
-      // total：用于分页/审计，必须包含 warmup
-      totalRows: sql<number>`count(*)::double precision`,
-      // summary：所有统计字段必须排除 warmup（不计入任何统计）
-      totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
-      totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
-      totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-      totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
-    })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...conditions));
+  const offset = (safePage - 1) * safePageSize;
 
-  const total = summaryResult?.totalRows ?? 0;
-  const totalRequests = summaryResult?.totalRequests ?? 0;
-  const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
-  const totalTokens =
-    (summaryResult?.totalInputTokens ?? 0) +
-    (summaryResult?.totalOutputTokens ?? 0) +
-    (summaryResult?.totalCacheCreationTokens ?? 0) +
-    (summaryResult?.totalCacheReadTokens ?? 0);
+  // 查询总数和统计数据（仅在需要 keyId 过滤时才 join keysTable，避免无效 join）
+  const summaryQuery =
+    keyId === undefined
+      ? db
+          .select({
+            // total：用于分页/审计，必须包含 warmup
+            totalRows: sql<number>`count(*)::double precision`,
+            // summary：所有统计字段必须排除 warmup（不计入任何统计）
+            totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
+            totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
+            totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+          })
+          .from(messageRequest)
+          .where(and(...conditions))
+      : db
+          .select({
+            // total：用于分页/审计，必须包含 warmup
+            totalRows: sql<number>`count(*)::double precision`,
+            // summary：所有统计字段必须排除 warmup（不计入任何统计）
+            totalRequests: sql<number>`count(*) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision`,
+            totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION}), 0)`,
+            totalInputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalOutputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+            totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens}) FILTER (WHERE ${EXCLUDE_WARMUP_CONDITION})::double precision, 0::double precision)`,
+          })
+          .from(messageRequest)
+          .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+          .where(and(...conditions));
 
   // 查询分页数据（使用 LEFT JOIN 以包含被拦截的请求）
-  const offset = (page - 1) * pageSize;
-  const results = await db
+  const logsQuery = db
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
@@ -472,9 +770,21 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
     .leftJoin(providers, eq(messageRequest.providerId, providers.id)) // 改为 leftJoin
     .where(and(...conditions))
-    .orderBy(desc(messageRequest.createdAt))
-    .limit(pageSize)
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(safePageSize)
     .offset(offset);
+
+  const [summaryRows, results] = await Promise.all([summaryQuery, logsQuery]);
+  const summaryResult = summaryRows[0];
+
+  const total = summaryResult?.totalRows ?? 0;
+  const totalRequests = summaryResult?.totalRequests ?? 0;
+  const totalCost = parseFloat(summaryResult?.totalCost ?? "0");
+  const totalTokens =
+    (summaryResult?.totalInputTokens ?? 0) +
+    (summaryResult?.totalOutputTokens ?? 0) +
+    (summaryResult?.totalCacheCreationTokens ?? 0) +
+    (summaryResult?.totalCacheReadTokens ?? 0);
 
   const logs: UsageLogRow[] = results.map((row) => {
     const totalRowTokens =
@@ -671,12 +981,12 @@ export async function findUsageLogsStats(
 
   if (startTime !== undefined) {
     const startDate = new Date(startTime);
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate.toISOString()}::timestamptz`);
+    conditions.push(gte(messageRequest.createdAt, startDate));
   }
 
   if (endTime !== undefined) {
     const endDate = new Date(endTime);
-    conditions.push(sql`${messageRequest.createdAt} < ${endDate.toISOString()}::timestamptz`);
+    conditions.push(lt(messageRequest.createdAt, endDate));
   }
 
   if (statusCode !== undefined) {
@@ -703,8 +1013,7 @@ export async function findUsageLogsStats(
 
   const statsConditions = [...conditions, EXCLUDE_WARMUP_CONDITION];
 
-  // 执行聚合查询（添加 innerJoin keysTable 以支持 keyId 过滤）
-  const [summaryResult] = await db
+  const baseQuery = db
     .select({
       totalRequests: sql<number>`count(*)::double precision`,
       totalCost: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
@@ -715,9 +1024,14 @@ export async function findUsageLogsStats(
       totalCacheCreation5mTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation5mInputTokens})::double precision, 0::double precision)`,
       totalCacheCreation1hTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreation1hInputTokens})::double precision, 0::double precision)`,
     })
-    .from(messageRequest)
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(...statsConditions));
+    .from(messageRequest);
+
+  const query =
+    keyId !== undefined
+      ? baseQuery.innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
+      : baseQuery;
+
+  const [summaryResult] = await query.where(and(...statsConditions));
 
   const totalRequests = summaryResult?.totalRequests ?? 0;
   const totalCost = parseFloat(summaryResult?.totalCost ?? "0");

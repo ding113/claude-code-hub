@@ -27,6 +27,7 @@ async function flushPromises(rounds = 2): Promise<void> {
 
 afterEach(() => {
   vi.useRealTimers();
+  delete process.env.ENDPOINT_CIRCUIT_HEALTH_CACHE_MAX_SIZE;
 });
 
 describe("endpoint-circuit-breaker", () => {
@@ -61,6 +62,7 @@ describe("endpoint-circuit-breaker", () => {
 
     const {
       isEndpointCircuitOpen,
+      getEndpointHealthInfo,
       recordEndpointFailure,
       recordEndpointSuccess,
       resetEndpointCircuit,
@@ -92,19 +94,20 @@ describe("endpoint-circuit-breaker", () => {
     expect(halfOpenState.circuitState).toBe("half-open");
 
     await recordEndpointSuccess(1);
-    const closedState = saveMock.mock.calls[
-      saveMock.mock.calls.length - 1
-    ]?.[1] as SavedEndpointCircuitState;
-    expect(closedState.circuitState).toBe("closed");
-    expect(closedState.failureCount).toBe(0);
-    expect(closedState.circuitOpenUntil).toBeNull();
-    expect(closedState.lastFailureTime).toBeNull();
-    expect(closedState.halfOpenSuccessCount).toBe(0);
+    expect(deleteMock).toHaveBeenCalledWith(1);
+
+    const { health: afterSuccess } = await getEndpointHealthInfo(1);
+    expect(afterSuccess.circuitState).toBe("closed");
+    expect(afterSuccess.failureCount).toBe(0);
+    expect(afterSuccess.circuitOpenUntil).toBeNull();
+    expect(afterSuccess.lastFailureTime).toBeNull();
+    expect(afterSuccess.halfOpenSuccessCount).toBe(0);
 
     expect(await isEndpointCircuitOpen(1)).toBe(false);
 
+    const deleteCallsAfterSuccess = deleteMock.mock.calls.length;
     await resetEndpointCircuit(1);
-    expect(deleteMock).toHaveBeenCalledWith(1);
+    expect(deleteMock.mock.calls.length).toBeGreaterThan(deleteCallsAfterSuccess);
 
     // 说明：recordEndpointFailure 在达到阈值后会触发异步告警（dynamic import + await）。
     // 在 CI/bun 环境下，告警 Promise 可能在下一个测试开始后才完成，从而“借用”后续用例的 module mock，
@@ -120,6 +123,7 @@ describe("endpoint-circuit-breaker", () => {
     vi.resetModules();
 
     const saveMock = vi.fn(async () => {});
+    const deleteMock = vi.fn(async () => {});
 
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
@@ -131,7 +135,7 @@ describe("endpoint-circuit-breaker", () => {
     vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
       loadEndpointCircuitState: vi.fn(async () => null),
       saveEndpointCircuitState: saveMock,
-      deleteEndpointCircuitState: vi.fn(async () => {}),
+      deleteEndpointCircuitState: deleteMock,
     }));
 
     const { recordEndpointFailure, recordEndpointSuccess, getEndpointHealthInfo } = await import(
@@ -145,10 +149,170 @@ describe("endpoint-circuit-breaker", () => {
     expect(health.failureCount).toBe(0);
     expect(health.circuitState).toBe("closed");
 
-    const lastState = saveMock.mock.calls[
-      saveMock.mock.calls.length - 1
-    ]?.[1] as SavedEndpointCircuitState;
-    expect(lastState.failureCount).toBe(0);
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(deleteMock).toHaveBeenCalledWith(2);
+  });
+
+  test("getAllEndpointHealthStatusAsync: forceRefresh 时应同步 Redis 中的计数（即使 circuitState 未变化）", async () => {
+    vi.resetModules();
+
+    const endpointId = 42;
+
+    const redisStates = new Map<number, SavedEndpointCircuitState>();
+    const loadManyMock = vi.fn(async (endpointIds: number[]) => {
+      const result = new Map<number, SavedEndpointCircuitState>();
+      for (const id of endpointIds) {
+        const state = redisStates.get(id);
+        if (state) {
+          result.set(id, state);
+        }
+      }
+      return result;
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => null),
+      loadEndpointCircuitStates: loadManyMock,
+      saveEndpointCircuitState: vi.fn(async () => {}),
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const t0 = Date.now();
+
+    redisStates.set(endpointId, {
+      failureCount: 1,
+      lastFailureTime: t0 - 1000,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    const { getAllEndpointHealthStatusAsync } = await import("@/lib/endpoint-circuit-breaker");
+
+    const first = await getAllEndpointHealthStatusAsync([endpointId], { forceRefresh: true });
+    expect(first[endpointId]).toMatchObject({
+      failureCount: 1,
+      lastFailureTime: t0 - 1000,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    redisStates.set(endpointId, {
+      failureCount: 2,
+      lastFailureTime: t0 + 123,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    const second = await getAllEndpointHealthStatusAsync([endpointId], { forceRefresh: true });
+    expect(second[endpointId]).toMatchObject({
+      failureCount: 2,
+      lastFailureTime: t0 + 123,
+      circuitState: "closed",
+      circuitOpenUntil: null,
+      halfOpenSuccessCount: 0,
+    });
+
+    expect(loadManyMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("getAllEndpointHealthStatusAsync: 并发请求应复用 in-flight Redis 批量加载", async () => {
+    vi.resetModules();
+
+    const loadManyMock = vi.fn(async (_endpointIds: number[]) => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const result = new Map<number, SavedEndpointCircuitState>();
+      result.set(1, {
+        failureCount: 0,
+        lastFailureTime: null,
+        circuitState: "closed",
+        circuitOpenUntil: null,
+        halfOpenSuccessCount: 0,
+      });
+      result.set(2, {
+        failureCount: 0,
+        lastFailureTime: null,
+        circuitState: "closed",
+        circuitOpenUntil: null,
+        halfOpenSuccessCount: 0,
+      });
+      result.set(3, {
+        failureCount: 0,
+        lastFailureTime: null,
+        circuitState: "closed",
+        circuitOpenUntil: null,
+        halfOpenSuccessCount: 0,
+      });
+      return result;
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => null),
+      loadEndpointCircuitStates: loadManyMock,
+      saveEndpointCircuitState: vi.fn(async () => {}),
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { getAllEndpointHealthStatusAsync } = await import("@/lib/endpoint-circuit-breaker");
+
+    const p1 = getAllEndpointHealthStatusAsync([1, 2, 3], { forceRefresh: true });
+    const p2 = getAllEndpointHealthStatusAsync([1, 2, 3], { forceRefresh: true });
+
+    vi.advanceTimersByTime(20);
+    await Promise.all([p1, p2]);
+    expect(loadManyMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("getAllEndpointHealthStatusAsync: cache 超限时应淘汰最早的健康状态，避免内存无限增长", async () => {
+    vi.resetModules();
+
+    process.env.ENDPOINT_CIRCUIT_HEALTH_CACHE_MAX_SIZE = "3";
+
+    const loadManyMock = vi.fn(async (endpointIds: number[]) => {
+      const result = new Map<number, SavedEndpointCircuitState>();
+      for (const endpointId of endpointIds) {
+        result.set(endpointId, {
+          failureCount: 0,
+          lastFailureTime: null,
+          circuitState: "closed",
+          circuitOpenUntil: null,
+          halfOpenSuccessCount: 0,
+        });
+      }
+      return result;
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
+      loadEndpointCircuitState: vi.fn(async () => null),
+      loadEndpointCircuitStates: loadManyMock,
+      saveEndpointCircuitState: vi.fn(async () => {}),
+      deleteEndpointCircuitState: vi.fn(async () => {}),
+    }));
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const { getAllEndpointHealthStatusAsync } = await import("@/lib/endpoint-circuit-breaker");
+
+    await getAllEndpointHealthStatusAsync([1, 2, 3], { forceRefresh: true });
+    expect(loadManyMock).toHaveBeenCalledTimes(1);
+
+    await getAllEndpointHealthStatusAsync([4], { forceRefresh: true });
+    expect(loadManyMock).toHaveBeenCalledTimes(2);
+
+    // 1 应已被淘汰；再次访问会触发一次新的 Redis 批量读取
+    await getAllEndpointHealthStatusAsync([1]);
+    expect(loadManyMock).toHaveBeenCalledTimes(3);
   });
 
   test("triggerEndpointCircuitBreakerAlert should call sendCircuitBreakerAlert", async () => {

@@ -26,6 +26,10 @@ vi.mock("@/repository/provider", () => ({
 vi.mock("@/repository/provider-endpoints", () => ({
   computeVendorKey: computeVendorKeyMock,
   findProviderVendorById: findProviderVendorByIdMock,
+  findProviderVendorsByIds: vi.fn(async (vendorIds: number[]) => {
+    const vendors = await Promise.all(vendorIds.map((id) => findProviderVendorByIdMock(id)));
+    return vendors.filter((vendor): vendor is NonNullable<typeof vendor> => vendor !== null);
+  }),
   getOrCreateProviderVendorIdFromUrls: getOrCreateProviderVendorIdFromUrlsMock,
   backfillProviderEndpointsFromProviders: backfillProviderEndpointsFromProvidersMock,
   tryDeleteProviderVendorIfEmpty: tryDeleteProviderVendorIfEmptyMock,

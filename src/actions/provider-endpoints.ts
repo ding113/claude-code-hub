@@ -4,12 +4,13 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
+  getAllEndpointHealthStatusAsync,
   getEndpointHealthInfo,
   resetEndpointCircuit as resetEndpointCircuitState,
 } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { PROVIDER_ENDPOINT_CONFLICT_CODE } from "@/lib/provider-endpoint-error-codes";
-import { probeProviderEndpointAndRecord } from "@/lib/provider-endpoints/probe";
+import { probeProviderEndpointAndRecordByEndpoint } from "@/lib/provider-endpoints/probe";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import {
@@ -26,11 +27,21 @@ import {
   findProviderEndpointsByVendorAndType,
   findProviderVendorById,
   findProviderVendors,
+  findProviderVendorsByIds,
   softDeleteProviderEndpoint,
   tryDeleteProviderVendorIfEmpty,
   updateProviderEndpoint,
   updateProviderVendor,
 } from "@/repository";
+import {
+  findDashboardProviderEndpointsByVendorAndType,
+  findEnabledProviderVendorTypePairs,
+  hasEnabledProviderReferenceForVendorTypeUrl,
+} from "@/repository/provider-endpoints";
+import {
+  findProviderEndpointProbeLogsBatch,
+  findVendorTypeEndpointStatsBatch,
+} from "@/repository/provider-endpoints-batch";
 import type {
   ProviderEndpoint,
   ProviderEndpointProbeLog,
@@ -127,6 +138,16 @@ const BatchGetEndpointCircuitInfoSchema = z.object({
   endpointIds: z.array(EndpointIdSchema).max(500),
 });
 
+const BatchGetVendorTypeEndpointStatsSchema = z.object({
+  vendorIds: z.array(VendorIdSchema).max(500),
+  providerType: ProviderTypeSchema,
+});
+
+const BatchGetProviderEndpointProbeLogsBatchSchema = z.object({
+  endpointIds: z.array(EndpointIdSchema).max(500),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
 async function getAdminSession() {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
@@ -170,6 +191,34 @@ function isDirectEndpointEditConflictError(error: unknown): boolean {
   );
 }
 
+function isForeignKeyViolationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    cause?: { code?: string; message?: string };
+  };
+
+  if (candidate.code === "23503" || candidate.cause?.code === "23503") {
+    return true;
+  }
+
+  if (
+    typeof candidate.message === "string" &&
+    candidate.message.includes("foreign key constraint")
+  ) {
+    return true;
+  }
+
+  return (
+    typeof candidate.cause?.message === "string" &&
+    candidate.cause.message.includes("foreign key constraint")
+  );
+}
+
 export async function getProviderVendors(): Promise<ProviderVendor[]> {
   try {
     const session = await getAdminSession();
@@ -180,6 +229,48 @@ export async function getProviderVendors(): Promise<ProviderVendor[]> {
     return await findProviderVendors(200, 0);
   } catch (error) {
     logger.error("getProviderVendors:error", error);
+    return [];
+  }
+}
+
+export type DashboardProviderVendor = ProviderVendor & { providerTypes: ProviderType[] };
+
+export async function getDashboardProviderVendors(): Promise<DashboardProviderVendor[]> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return [];
+    }
+
+    const typeOrder = new Map<string, number>(
+      ProviderTypeSchema.options.map((value, index) => [value, index])
+    );
+
+    const typesByVendorId = new Map<number, Set<ProviderType>>();
+    const enabledVendorTypePairs = await findEnabledProviderVendorTypePairs();
+    for (const { vendorId, providerType } of enabledVendorTypePairs) {
+      const existing = typesByVendorId.get(vendorId) ?? new Set<ProviderType>();
+      existing.add(providerType);
+      typesByVendorId.set(vendorId, existing);
+    }
+
+    const vendorIds = [...typesByVendorId.keys()];
+    if (vendorIds.length === 0) {
+      return [];
+    }
+
+    const vendors = await findProviderVendorsByIds(vendorIds);
+
+    return vendors
+      .map((vendor) => {
+        const types = Array.from(typesByVendorId.get(vendor.id) ?? []).sort(
+          (left, right) => (typeOrder.get(left) ?? 999) - (typeOrder.get(right) ?? 999)
+        );
+        return { ...vendor, providerTypes: types };
+      })
+      .filter((vendor) => vendor.providerTypes.length > 0);
+  } catch (error) {
+    logger.error("getDashboardProviderVendors:error", error);
     return [];
   }
 }
@@ -222,6 +313,34 @@ export async function getProviderEndpoints(input: {
     );
   } catch (error) {
     logger.error("getProviderEndpoints:error", error);
+    return [];
+  }
+}
+
+export async function getDashboardProviderEndpoints(input: {
+  vendorId: number;
+  providerType: ProviderType;
+}): Promise<ProviderEndpoint[]> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return [];
+    }
+
+    const parsed = GetProviderEndpointsSchema.safeParse(input);
+    if (!parsed.success) {
+      logger.debug("getDashboardProviderEndpoints:invalid_input", {
+        error: parsed.error,
+      });
+      return [];
+    }
+
+    return await findDashboardProviderEndpointsByVendorAndType(
+      parsed.data.vendorId,
+      parsed.data.providerType as ProviderTypeInput
+    );
+  } catch (error) {
+    logger.error("getDashboardProviderEndpoints:error", error);
     return [];
   }
 }
@@ -281,9 +400,35 @@ export async function addProviderEndpoint(
       isEnabled: parsed.data.isEnabled ?? true,
     });
 
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("addProviderEndpoint:cache_invalidation_failed", {
+        vendorId: parsed.data.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     return { ok: true, data: { endpoint } };
   } catch (error) {
     logger.error("addProviderEndpoint:error", error);
+
+    if (isDirectEndpointEditConflictError(error)) {
+      return {
+        ok: false,
+        error: "端点 URL 与同供应商类型下的其他端点冲突",
+        errorCode: ERROR_CODES.CONFLICT,
+      };
+    }
+
+    if (isForeignKeyViolationError(error)) {
+      return {
+        ok: false,
+        error: "供应商不存在",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
     const message = error instanceof Error ? error.message : "创建端点失败";
     return { ok: false, error: message, errorCode: ERROR_CODES.CREATE_FAILED };
   }
@@ -311,6 +456,15 @@ export async function editProviderEndpoint(
       };
     }
 
+    const previous = await findProviderEndpointById(parsed.data.endpointId);
+    if (!previous || previous.deletedAt !== null) {
+      return {
+        ok: false,
+        error: "端点不存在",
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
     const endpoint = await updateProviderEndpoint(parsed.data.endpointId, {
       url: parsed.data.url,
       label: parsed.data.label,
@@ -324,6 +478,32 @@ export async function editProviderEndpoint(
         error: "端点不存在",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
+    }
+
+    const shouldResetCircuit =
+      (parsed.data.url !== undefined && parsed.data.url !== previous.url) ||
+      (parsed.data.isEnabled === true && previous.isEnabled === false);
+
+    if (shouldResetCircuit) {
+      try {
+        await resetEndpointCircuitState(endpoint.id);
+      } catch (error) {
+        logger.warn("editProviderEndpoint:reset_circuit_failed", {
+          endpointId: endpoint.id,
+          vendorId: endpoint.vendorId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("editProviderEndpoint:cache_invalidation_failed", {
+        endpointId: parsed.data.endpointId,
+        vendorId: endpoint.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return { ok: true, data: { endpoint } };
@@ -371,6 +551,21 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
       };
     }
 
+    // 若该端点仍被启用 provider 引用，则不允许删除：否则会导致运行时 endpoint pool 变空/回填复活，
+    // 产生“删了但还在/仍被探测”的困惑（#781）。
+    const referencedByEnabledProvider = await hasEnabledProviderReferenceForVendorTypeUrl({
+      vendorId: endpoint.vendorId,
+      providerType: endpoint.providerType,
+      url: endpoint.url,
+    });
+    if (referencedByEnabledProvider) {
+      return {
+        ok: false,
+        error: "该端点仍被启用的供应商引用，请先修改或禁用相关供应商的 URL 后再删除",
+        errorCode: ERROR_CODES.CONFLICT,
+      };
+    }
+
     const ok = await softDeleteProviderEndpoint(parsed.data.endpointId);
     if (!ok) {
       return {
@@ -380,11 +575,31 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
       };
     }
 
+    try {
+      await resetEndpointCircuitState(endpoint.id);
+    } catch (error) {
+      logger.warn("removeProviderEndpoint:reset_circuit_failed", {
+        endpointId: parsed.data.endpointId,
+        vendorId: endpoint.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     // Auto cleanup: if the vendor has no active providers/endpoints, delete it as well.
     try {
       await tryDeleteProviderVendorIfEmpty(endpoint.vendorId);
     } catch (error) {
       logger.warn("removeProviderEndpoint:vendor_cleanup_failed", {
+        endpointId: parsed.data.endpointId,
+        vendorId: endpoint.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("removeProviderEndpoint:cache_invalidation_failed", {
         endpointId: parsed.data.endpointId,
         vendorId: endpoint.vendorId,
         error: error instanceof Error ? error.message : String(error),
@@ -440,19 +655,11 @@ export async function probeProviderEndpoint(input: unknown): Promise<
       };
     }
 
-    const result = await probeProviderEndpointAndRecord({
-      endpointId: endpoint.id,
+    const result = await probeProviderEndpointAndRecordByEndpoint({
+      endpoint,
       source: "manual",
       timeoutMs: parsed.data.timeoutMs,
     });
-
-    if (!result) {
-      return {
-        ok: false,
-        error: "端点不存在",
-        errorCode: ERROR_CODES.NOT_FOUND,
-      };
-    }
 
     return { ok: true, data: { endpoint, result } };
   } catch (error) {
@@ -495,6 +702,125 @@ export async function getProviderEndpointProbeLogs(
     logger.error("getProviderEndpointProbeLogs:error", error);
     const message = error instanceof Error ? error.message : "获取端点测活历史失败";
     return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}
+
+export async function batchGetProviderEndpointProbeLogs(
+  input: unknown
+): Promise<ActionResult<Array<{ endpointId: number; logs: ProviderEndpointProbeLog[] }>>> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const parsed = BatchGetProviderEndpointProbeLogsBatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: formatZodError(parsed.error),
+        errorCode: extractZodErrorCode(parsed.error),
+      };
+    }
+
+    const endpointIds = Array.from(new Set(parsed.data.endpointIds));
+    if (endpointIds.length === 0) {
+      return { ok: true, data: [] };
+    }
+
+    const limitPerEndpoint = parsed.data.limit ?? 12;
+    const logsByEndpointId = await findProviderEndpointProbeLogsBatch({
+      endpointIds,
+      limitPerEndpoint,
+    });
+
+    return {
+      ok: true,
+      data: endpointIds.map((endpointId) => ({
+        endpointId,
+        logs: logsByEndpointId.get(endpointId) ?? [],
+      })),
+    };
+  } catch (error) {
+    logger.error("batchGetProviderEndpointProbeLogs:error", error);
+    return {
+      ok: false,
+      error: "批量获取端点测活历史失败",
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
+
+export async function batchGetVendorTypeEndpointStats(input: unknown): Promise<
+  ActionResult<
+    Array<{
+      vendorId: number;
+      providerType: ProviderType;
+      total: number;
+      enabled: number;
+      healthy: number;
+      unhealthy: number;
+      unknown: number;
+    }>
+  >
+> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: "无权限执行此操作",
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const parsed = BatchGetVendorTypeEndpointStatsSchema.safeParse(input);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error: formatZodError(parsed.error),
+        errorCode: extractZodErrorCode(parsed.error),
+      };
+    }
+
+    const vendorIds = Array.from(new Set(parsed.data.vendorIds));
+    if (vendorIds.length === 0) {
+      return { ok: true, data: [] };
+    }
+
+    const rows = await findVendorTypeEndpointStatsBatch({
+      vendorIds,
+      providerType: parsed.data.providerType as ProviderTypeInput,
+    });
+
+    const statsByVendorId = new Map(rows.map((row) => [row.vendorId, row]));
+
+    return {
+      ok: true,
+      data: vendorIds.map((vendorId) => {
+        const stats = statsByVendorId.get(vendorId);
+        return {
+          vendorId,
+          providerType: parsed.data.providerType,
+          total: stats?.total ?? 0,
+          enabled: stats?.enabled ?? 0,
+          healthy: stats?.healthy ?? 0,
+          unhealthy: stats?.unhealthy ?? 0,
+          unknown: stats?.unknown ?? 0,
+        };
+      }),
+    };
+  } catch (error) {
+    logger.error("batchGetVendorTypeEndpointStats:error", error);
+    return {
+      ok: false,
+      error: "批量获取供应商端点统计失败",
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
@@ -584,17 +910,20 @@ export async function batchGetEndpointCircuitInfo(input: unknown): Promise<
       return { ok: true, data: [] };
     }
 
-    const results = await Promise.all(
-      parsed.data.endpointIds.map(async (endpointId) => {
-        const { health } = await getEndpointHealthInfo(endpointId);
-        return {
-          endpointId,
-          circuitState: health.circuitState,
-          failureCount: health.failureCount,
-          circuitOpenUntil: health.circuitOpenUntil,
-        };
-      })
-    );
+    const endpointIds = parsed.data.endpointIds;
+    const uniqueEndpointIds = Array.from(new Set(endpointIds));
+    const healthStatus = await getAllEndpointHealthStatusAsync(uniqueEndpointIds);
+
+    const results = endpointIds.map((endpointId) => {
+      const info = healthStatus[endpointId];
+
+      return {
+        endpointId,
+        circuitState: info?.circuitState ?? "closed",
+        failureCount: info?.failureCount ?? 0,
+        circuitOpenUntil: info?.circuitOpenUntil ?? null,
+      };
+    });
 
     return { ok: true, data: results };
   } catch (error) {
@@ -793,6 +1122,15 @@ export async function editProviderVendor(
         error: "Vendor not found",
         errorCode: ERROR_CODES.NOT_FOUND,
       };
+    }
+
+    try {
+      await publishProviderCacheInvalidation();
+    } catch (error) {
+      logger.warn("editProviderVendor:cache_invalidation_failed", {
+        vendorId: parsed.data.vendorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return { ok: true, data: { vendor } };

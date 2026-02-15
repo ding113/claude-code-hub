@@ -1,29 +1,336 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Server } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import { getEndpointCircuitInfo, getProviderEndpointsByVendor } from "@/actions/provider-endpoints";
+import {
+  batchGetEndpointCircuitInfo,
+  batchGetVendorTypeEndpointStats,
+  getProviderEndpointsByVendor,
+} from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
-import { getEndpointStatusModel } from "./endpoint-status";
+import { type EndpointCircuitState, getEndpointStatusModel } from "./endpoint-status";
 
 interface ProviderEndpointHoverProps {
   vendorId: number;
   providerType: ProviderType;
 }
 
+const MAX_VENDOR_IDS_PER_BATCH = 500;
+
+type VendorTypeEndpointStats = {
+  vendorId: number;
+  total: number;
+  enabled: number;
+  healthy: number;
+  unhealthy: number;
+  unknown: number;
+};
+
+type VendorStatsDeferred = {
+  resolve: (value: VendorTypeEndpointStats) => void;
+  reject: (reason: unknown) => void;
+};
+
+function createAbortError(signal?: AbortSignal): unknown {
+  if (!signal) return new Error("Aborted");
+  if (signal.reason) return signal.reason;
+
+  try {
+    return new DOMException("Aborted", "AbortError");
+  } catch {
+    return new Error("Aborted");
+  }
+}
+
+class VendorTypeEndpointStatsBatcher {
+  private readonly pendingVendorIdsByProviderType = new Map<ProviderType, Set<number>>();
+  private readonly deferredByProviderTypeVendorId = new Map<
+    ProviderType,
+    Map<number, VendorStatsDeferred[]>
+  >();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  load(
+    vendorId: number,
+    providerType: ProviderType,
+    options?: { signal?: AbortSignal }
+  ): Promise<VendorTypeEndpointStats> {
+    if (!Number.isFinite(vendorId) || vendorId <= 0) {
+      return Promise.resolve({
+        vendorId,
+        total: 0,
+        enabled: 0,
+        healthy: 0,
+        unhealthy: 0,
+        unknown: 0,
+      });
+    }
+
+    return new Promise<VendorTypeEndpointStats>((resolve, reject) => {
+      const signal = options?.signal;
+      if (signal?.aborted) {
+        reject(createAbortError(signal));
+        return;
+      }
+
+      let settled = false;
+      let deferred: VendorStatsDeferred;
+
+      const onAbort = () => {
+        if (settled) return;
+        settled = true;
+        this.removePendingRequest(providerType, vendorId, deferred);
+        this.maybeCancelFlushTimer();
+        reject(createAbortError(signal));
+      };
+
+      deferred = {
+        resolve: (value) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          resolve(value);
+        },
+        reject: (reason) => {
+          if (settled) return;
+          settled = true;
+          signal?.removeEventListener("abort", onAbort);
+          reject(reason);
+        },
+      };
+
+      if (signal) {
+        signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      const pending = this.pendingVendorIdsByProviderType.get(providerType) ?? new Set<number>();
+      pending.add(vendorId);
+      this.pendingVendorIdsByProviderType.set(providerType, pending);
+
+      const deferredByVendorId =
+        this.deferredByProviderTypeVendorId.get(providerType) ??
+        new Map<number, VendorStatsDeferred[]>();
+      const list = deferredByVendorId.get(vendorId) ?? [];
+      list.push(deferred);
+      deferredByVendorId.set(vendorId, list);
+      this.deferredByProviderTypeVendorId.set(providerType, deferredByVendorId);
+
+      if (this.flushTimer) return;
+
+      this.flushTimer = setTimeout(() => {
+        this.flushTimer = null;
+        void this.flush().catch(() => {});
+      }, 0);
+    });
+  }
+
+  private maybeCancelFlushTimer() {
+    if (!this.flushTimer) return;
+    if (this.pendingVendorIdsByProviderType.size > 0) return;
+    clearTimeout(this.flushTimer);
+    this.flushTimer = null;
+  }
+
+  private removePendingRequest(
+    providerType: ProviderType,
+    vendorId: number,
+    deferred: VendorStatsDeferred
+  ) {
+    const deferredByVendorId = this.deferredByProviderTypeVendorId.get(providerType);
+    if (!deferredByVendorId) return;
+    const list = deferredByVendorId.get(vendorId);
+    if (!list) return;
+
+    const next = list.filter((item) => item !== deferred);
+    if (next.length > 0) {
+      deferredByVendorId.set(vendorId, next);
+      return;
+    }
+
+    deferredByVendorId.delete(vendorId);
+    if (deferredByVendorId.size === 0) {
+      this.deferredByProviderTypeVendorId.delete(providerType);
+    }
+
+    const pending = this.pendingVendorIdsByProviderType.get(providerType);
+    if (!pending) return;
+    pending.delete(vendorId);
+    if (pending.size === 0) {
+      this.pendingVendorIdsByProviderType.delete(providerType);
+    }
+  }
+
+  private async flush() {
+    const entries = Array.from(this.pendingVendorIdsByProviderType.entries());
+    this.pendingVendorIdsByProviderType.clear();
+
+    if (entries.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      entries.map(async ([providerType, vendorIdSet]) => {
+        const vendorIds = Array.from(vendorIdSet);
+        vendorIds.sort((a, b) => a - b);
+
+        for (let index = 0; index < vendorIds.length; index += MAX_VENDOR_IDS_PER_BATCH) {
+          const chunk = vendorIds.slice(index, index + MAX_VENDOR_IDS_PER_BATCH);
+          const deferredMap = this.deferredByProviderTypeVendorId.get(providerType);
+          if (!deferredMap) continue;
+
+          const deferredEntries = chunk
+            .map((vendorId) => ({
+              vendorId,
+              deferred: deferredMap.get(vendorId) ?? [],
+            }))
+            .filter(({ deferred }) => deferred.length > 0);
+
+          const vendorIdsToFetch = deferredEntries.map(({ vendorId }) => vendorId);
+          vendorIdsToFetch.forEach((vendorId) => deferredMap.delete(vendorId));
+          if (deferredMap.size === 0) {
+            this.deferredByProviderTypeVendorId.delete(providerType);
+          }
+
+          if (vendorIdsToFetch.length === 0) continue;
+
+          try {
+            const res = await batchGetVendorTypeEndpointStats({
+              vendorIds: vendorIdsToFetch,
+              providerType,
+            });
+            const items = res.ok && res.data ? res.data : [];
+
+            const statsByVendorId = new Map<number, VendorTypeEndpointStats>();
+            vendorIdsToFetch.forEach((vendorId) =>
+              statsByVendorId.set(vendorId, {
+                vendorId,
+                total: 0,
+                enabled: 0,
+                healthy: 0,
+                unhealthy: 0,
+                unknown: 0,
+              })
+            );
+
+            items.forEach((item) => {
+              statsByVendorId.set(item.vendorId, {
+                vendorId: item.vendorId,
+                total: item.total,
+                enabled: item.enabled,
+                healthy: item.healthy,
+                unhealthy: item.unhealthy,
+                unknown: item.unknown,
+              });
+            });
+
+            deferredEntries.forEach(({ vendorId, deferred }) => {
+              const value = statsByVendorId.get(vendorId);
+              if (value) {
+                deferred.forEach((d) => d.resolve(value));
+              } else {
+                deferred.forEach((d) =>
+                  d.resolve({
+                    vendorId,
+                    total: 0,
+                    enabled: 0,
+                    healthy: 0,
+                    unhealthy: 0,
+                    unknown: 0,
+                  })
+                );
+              }
+            });
+          } catch {
+            // 降级路径：batch action 异常时按 vendorId 逐个查询。为避免 chunk 较大时触发请求风暴，这里限制并发。
+            const concurrency = 8;
+            let idx = 0;
+
+            const workers = Array.from(
+              { length: Math.min(concurrency, deferredEntries.length) },
+              async () => {
+                for (;;) {
+                  const currentIndex = idx++;
+                  if (currentIndex >= deferredEntries.length) return;
+
+                  const { vendorId, deferred } = deferredEntries[currentIndex];
+
+                  try {
+                    const endpoints = await getProviderEndpointsByVendor({ vendorId });
+                    const filtered = endpoints.filter(
+                      (ep) =>
+                        ep.providerType === providerType &&
+                        ep.isEnabled === true &&
+                        ep.deletedAt === null
+                    );
+
+                    const healthy = filtered.filter((ep) => ep.lastProbeOk === true).length;
+                    const unhealthy = filtered.filter((ep) => ep.lastProbeOk === false).length;
+                    const unknown = filtered.filter((ep) => ep.lastProbeOk == null).length;
+
+                    const value: VendorTypeEndpointStats = {
+                      vendorId,
+                      total: endpoints.filter(
+                        (ep) => ep.providerType === providerType && ep.deletedAt === null
+                      ).length,
+                      enabled: filtered.length,
+                      healthy,
+                      unhealthy,
+                      unknown,
+                    };
+
+                    deferred.forEach((d) => d.resolve(value));
+                  } catch (innerError) {
+                    deferred.forEach((d) => d.reject(innerError));
+                  }
+                }
+              }
+            );
+
+            await Promise.all(workers);
+          }
+        }
+      })
+    );
+  }
+}
+
+const vendorStatsBatcherByQueryClient = new WeakMap<QueryClient, VendorTypeEndpointStatsBatcher>();
+
+function getVendorStatsBatcher(queryClient: QueryClient): VendorTypeEndpointStatsBatcher {
+  const existing = vendorStatsBatcherByQueryClient.get(queryClient);
+  if (existing) return existing;
+
+  const batcher = new VendorTypeEndpointStatsBatcher();
+  vendorStatsBatcherByQueryClient.set(queryClient, batcher);
+  return batcher;
+}
+
 export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpointHoverProps) {
   const t = useTranslations("settings.providers");
   const [isOpen, setIsOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const statsBatcher = useMemo(() => getVendorStatsBatcher(queryClient), [queryClient]);
 
-  const { data: allEndpoints = [] } = useQuery({
+  const { data: stats } = useQuery({
+    queryKey: ["provider-endpoints", vendorId, providerType, "hover-stats"],
+    queryFn: ({ signal }) => statsBatcher.load(vendorId, providerType, { signal }),
+    staleTime: 1000 * 30,
+    refetchOnWindowFocus: false,
+  });
+
+  const count = stats?.enabled ?? 0;
+
+  const { data: allEndpoints = [], isLoading: endpointsLoading } = useQuery({
     queryKey: ["provider-endpoints", vendorId],
     queryFn: async () => getProviderEndpointsByVendor({ vendorId }),
+    enabled: isOpen || process.env.NODE_ENV === "test",
     staleTime: 1000 * 30,
+    refetchOnWindowFocus: false,
   });
 
   const endpoints = useMemo(() => {
@@ -53,7 +360,55 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
       });
   }, [allEndpoints, providerType]);
 
-  const count = endpoints.length;
+  const endpointIds = useMemo(() => endpoints.map((ep) => ep.id), [endpoints]);
+  const endpointIdsKey = useMemo(() => {
+    if (endpointIds.length === 0) return "";
+    return endpointIds
+      .slice()
+      .sort((a, b) => a - b)
+      .join(",");
+  }, [endpointIds]);
+
+  const { data: circuitInfoMap = {} } = useQuery({
+    queryKey: ["endpoint-circuit-info", endpointIdsKey],
+    queryFn: async () => {
+      if (endpointIds.length === 0) return {};
+
+      const map: Record<number, EndpointCircuitState> = {};
+      const sortedEndpointIds = endpointIds.slice().sort((a, b) => a - b);
+      const MAX_ENDPOINT_IDS_PER_BATCH = 500;
+      const chunks: number[][] = [];
+      for (let index = 0; index < sortedEndpointIds.length; index += MAX_ENDPOINT_IDS_PER_BATCH) {
+        chunks.push(sortedEndpointIds.slice(index, index + MAX_ENDPOINT_IDS_PER_BATCH));
+      }
+
+      const results = await Promise.all(
+        chunks.map(async (chunk) => {
+          const res = await batchGetEndpointCircuitInfo({ endpointIds: chunk });
+          return res.ok && res.data ? res.data : [];
+        })
+      );
+
+      for (const item of results.flat()) {
+        map[item.endpointId] = item.circuitState as EndpointCircuitState;
+      }
+
+      return map;
+    },
+    enabled: isOpen && endpointIds.length > 0,
+    staleTime: 1000 * 10,
+    refetchOnWindowFocus: false,
+  });
+
+  const circuitStateByEndpointId = useMemo(() => {
+    const map = new Map<number, EndpointCircuitState>();
+    for (const [rawId, circuitState] of Object.entries(circuitInfoMap)) {
+      const endpointId = Number(rawId);
+      if (!Number.isFinite(endpointId)) continue;
+      map.set(endpointId, circuitState);
+    }
+    return map;
+  }, [circuitInfoMap]);
 
   return (
     <TooltipProvider>
@@ -80,14 +435,22 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
             </h4>
           </div>
           <div className="max-h-[300px] overflow-y-auto py-1">
-            {count === 0 ? (
+            {endpointsLoading ? (
+              <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                {t("keyLoading")}
+              </div>
+            ) : count === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-muted-foreground">
                 {t("endpointStatus.noEndpoints")}
               </div>
             ) : (
               <div className="flex flex-col gap-0.5">
                 {endpoints.map((endpoint) => (
-                  <EndpointRow key={endpoint.id} endpoint={endpoint} isOpen={isOpen} />
+                  <EndpointRow
+                    key={endpoint.id}
+                    endpoint={endpoint}
+                    circuitState={circuitStateByEndpointId.get(endpoint.id)}
+                  />
                 ))}
               </div>
             )}
@@ -98,18 +461,14 @@ export function ProviderEndpointHover({ vendorId, providerType }: ProviderEndpoi
   );
 }
 
-function EndpointRow({ endpoint, isOpen }: { endpoint: ProviderEndpoint; isOpen: boolean }) {
+function EndpointRow({
+  endpoint,
+  circuitState,
+}: {
+  endpoint: ProviderEndpoint;
+  circuitState?: "closed" | "open" | "half-open";
+}) {
   const t = useTranslations("settings.providers");
-
-  const { data: circuitResult } = useQuery({
-    queryKey: ["endpoint-circuit", endpoint.id],
-    queryFn: async () => getEndpointCircuitInfo({ endpointId: endpoint.id }),
-    enabled: isOpen,
-    staleTime: 1000 * 10,
-  });
-
-  const circuitState =
-    circuitResult?.ok && circuitResult.data ? circuitResult.data.health.circuitState : undefined;
 
   const statusModel = getEndpointStatusModel(endpoint, circuitState);
   const Icon = statusModel.icon;

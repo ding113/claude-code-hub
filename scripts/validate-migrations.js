@@ -133,6 +133,63 @@ function validateMigrationFile(filePath) {
 }
 
 /**
+ * 校验 Drizzle journal 的时间戳单调性
+ *
+ * Drizzle PG migrator 仅通过 `created_at(folderMillis)` 与 DB 中最新一条迁移记录做比较来决定是否执行迁移：
+ * - 若 journal 中 `when` 非严格递增，可能导致“后续迁移被永久跳过”（无感升级会漏执行）
+ */
+function validateJournalMonotonicity(journalPath) {
+  const content = fs.readFileSync(journalPath, "utf-8");
+  const journal = JSON.parse(content);
+
+  if (!journal || !Array.isArray(journal.entries)) {
+    return {
+      fileName: path.basename(journalPath),
+      issues: [
+        {
+          type: "JOURNAL",
+          line: 0,
+          statement: "Invalid journal format: entries[] is missing",
+          suggestion: "Ensure drizzle/meta/_journal.json contains a valid { entries: [...] }",
+        },
+      ],
+    };
+  }
+
+  const issues = [];
+  let previousWhen = Number.NEGATIVE_INFINITY;
+  let previousTag = "";
+
+  for (const entry of journal.entries) {
+    const tag = typeof entry?.tag === "string" ? entry.tag : "(unknown)";
+    const when = entry?.when;
+    if (typeof when !== "number" || !Number.isFinite(when)) {
+      issues.push({
+        type: "JOURNAL",
+        line: 0,
+        statement: `Invalid journal entry 'when' for tag=${tag}`,
+        suggestion: "Ensure each journal entry has a numeric 'when' (folderMillis).",
+      });
+      continue;
+    }
+
+    if (when <= previousWhen) {
+      issues.push({
+        type: "JOURNAL",
+        line: 0,
+        statement: `Non-monotonic journal 'when': ${tag}(${when}) <= ${previousTag}(${previousWhen})`,
+        suggestion: "Ensure journal entries' 'when' are strictly increasing in execution order.",
+      });
+    }
+
+    previousWhen = when;
+    previousTag = tag;
+  }
+
+  return { fileName: path.basename(journalPath), issues };
+}
+
+/**
  * 主函数
  */
 function main() {
@@ -154,6 +211,25 @@ function main() {
 
   let totalIssues = 0;
   const filesWithIssues = [];
+
+  // 校验 meta/_journal.json 的单调性（避免漏迁移）
+  const journalPath = path.join(MIGRATIONS_DIR, "meta/_journal.json");
+  if (fs.existsSync(journalPath)) {
+    const journalResult = validateJournalMonotonicity(journalPath);
+    if (journalResult.issues.length > 0) {
+      totalIssues += journalResult.issues.length;
+      filesWithIssues.push(journalResult);
+      error(`${journalResult.fileName} - 发现 ${journalResult.issues.length} 个问题:`);
+      journalResult.issues.forEach((issue, index) => {
+        console.log(`\n  ${index + 1}. ${issue.type}`);
+        console.log(`     ${colors.red}✗${colors.reset} ${issue.statement}`);
+        console.log(`     ${colors.green}✓${colors.reset} ${issue.suggestion}`);
+      });
+      console.log("");
+    }
+  } else {
+    warn("未找到 meta/_journal.json，无法校验迁移顺序与时间戳单调性");
+  }
 
   // 检查每个文件
   files.forEach((filePath) => {
