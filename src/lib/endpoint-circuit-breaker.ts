@@ -35,22 +35,7 @@ const loadedFromRedisAt = new Map<number, number>();
 const redisSyncInFlight = new Map<number, Promise<void>>();
 const REDIS_SYNC_TTL_MS = 1_000;
 
-function readPositiveIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (!raw) return fallback;
-
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-
-  return parsed;
-}
-
-const ENDPOINT_HEALTH_CACHE_MAX_SIZE = readPositiveIntEnv(
-  "ENDPOINT_CIRCUIT_HEALTH_CACHE_MAX_SIZE",
-  10_000
-);
+const ENDPOINT_HEALTH_CACHE_MAX_SIZE = 10_000;
 
 function bumpLRU<K, V>(map: Map<K, V>, key: K): void {
   if (!map.has(key)) return;

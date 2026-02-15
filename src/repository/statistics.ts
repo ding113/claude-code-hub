@@ -3,6 +3,7 @@ import "server-only";
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest } from "@/drizzle/schema";
+import { TTLMap } from "@/lib/cache/ttl-map";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
   DatabaseKey,
@@ -17,29 +18,16 @@ import type {
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 /**
- * Key ID -> key 字符串缓存
+ * Key ID -> key string cache
  *
- * 背景：message_request.key 存储的是 key 字符串，但上层多以 keyId 传参；
- * 在配额检查/Redis 降级等高频路径中，重复查询 keys 表会放大 DB 压力。
- *
- * 说明：
- * - 短 TTL 允许轻微陈旧（key 一般不变）
- * - 简单 size 控制，避免在多租户场景无限增长
+ * Short TTL allows slight staleness (keys rarely change).
+ * Size-bounded to avoid unbounded growth in multi-tenant scenarios.
  */
-const KEY_STRING_BY_ID_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
-const KEY_STRING_BY_ID_CACHE_MAX_SIZE = 1000;
-const keyStringByIdCache = new Map<number, { key: string; expiresAt: number }>();
+const keyStringByIdCache = new TTLMap<number, string>({ ttlMs: 5 * 60 * 1000, maxSize: 1000 });
 
 async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
-  const now = Date.now();
   const cached = keyStringByIdCache.get(keyId);
-  if (cached && cached.expiresAt > now) {
-    // LRU-like：刷新 TTL 并 bump 插入顺序（delete+set），让热点 key 不容易被淘汰。
-    cached.expiresAt = now + KEY_STRING_BY_ID_CACHE_TTL_MS;
-    keyStringByIdCache.delete(keyId);
-    keyStringByIdCache.set(keyId, cached);
-    return cached.key;
-  }
+  if (cached !== undefined) return cached;
 
   const keyRecord = await db
     .select({ key: keys.key })
@@ -48,35 +36,9 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
     .limit(1);
 
   const keyString = keyRecord?.[0]?.key ?? null;
-  if (!keyString) {
-    keyStringByIdCache.delete(keyId);
-    return null;
-  }
+  if (!keyString) return null;
 
-  // Size 控制：先清理过期；仍超限则淘汰最早的一小部分，避免一次性清空导致缓存击穿
-  if (keyStringByIdCache.size >= KEY_STRING_BY_ID_CACHE_MAX_SIZE) {
-    for (const [id, value] of keyStringByIdCache) {
-      if (value.expiresAt <= now) {
-        keyStringByIdCache.delete(id);
-      }
-    }
-
-    if (keyStringByIdCache.size >= KEY_STRING_BY_ID_CACHE_MAX_SIZE) {
-      const evictCount = Math.max(1, Math.ceil(KEY_STRING_BY_ID_CACHE_MAX_SIZE * 0.1));
-      let remaining = evictCount;
-
-      for (const id of keyStringByIdCache.keys()) {
-        keyStringByIdCache.delete(id);
-        remaining -= 1;
-        if (remaining <= 0) break;
-      }
-    }
-  }
-
-  keyStringByIdCache.set(keyId, {
-    key: keyString,
-    expiresAt: now + KEY_STRING_BY_ID_CACHE_TTL_MS,
-  });
+  keyStringByIdCache.set(keyId, keyString);
   return keyString;
 }
 
@@ -834,21 +796,6 @@ export async function sumUserCostToday(userId: number): Promise<number> {
 }
 
 /**
- * 查询 Key 历史总消费（通过 Key ID）
- * 用于显示 Key 的历史总消费统计
- * @param keyId - Key 的数据库 ID
- * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
- */
-export async function sumKeyTotalCostById(
-  keyId: number,
-  maxAgeDays: number = 365
-): Promise<number> {
-  const keyString = await getKeyStringByIdCached(keyId);
-  if (!keyString) return 0;
-  return sumKeyTotalCost(keyString, maxAgeDays);
-}
-
-/**
  * Query Key total cost (with optional time boundary)
  * @param keyHash - API Key hash
  * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
@@ -1060,7 +1007,7 @@ export interface QuotaCostRanges {
   rangeMonthly: { startTime: Date; endTime: Date };
 }
 
-export interface QuotaCostSummary {
+interface QuotaCostSummary {
   cost5h: number;
   costDaily: number;
   costWeekly: number;

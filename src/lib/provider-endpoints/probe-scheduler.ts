@@ -4,6 +4,7 @@ import {
   type LeaderLock,
   releaseLeaderLock,
   renewLeaderLock,
+  startLeaderLockKeepAlive,
 } from "@/lib/provider-endpoints/leader-lock";
 import { probeProviderEndpointAndRecordByEndpoint } from "@/lib/provider-endpoints/probe";
 import {
@@ -29,15 +30,8 @@ const SINGLE_VENDOR_INTERVAL_MS = 600_000;
 const TIMEOUT_OVERRIDE_INTERVAL_MS = 10_000;
 // Scheduler tick interval - use shortest possible interval to support timeout override
 const TICK_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, TIMEOUT_OVERRIDE_INTERVAL_MS);
-// Max idle DB polling interval (default 30s, bounded by base interval)
-const DEFAULT_IDLE_DB_POLL_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, 30_000);
-const IDLE_DB_POLL_INTERVAL_MS = Math.max(
-  1,
-  parseIntWithDefault(
-    process.env.ENDPOINT_PROBE_IDLE_DB_POLL_INTERVAL_MS,
-    DEFAULT_IDLE_DB_POLL_INTERVAL_MS
-  )
-);
+// Max idle DB polling interval (bounded by base interval)
+const IDLE_DB_POLL_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, 30_000);
 const TIMEOUT_MS = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_TIMEOUT_MS, 5_000));
 const CONCURRENCY = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_CONCURRENCY, 10));
 const CYCLE_JITTER_MS = Math.max(
@@ -191,55 +185,6 @@ async function ensureLeaderLock(): Promise<boolean> {
   return true;
 }
 
-function startLeaderLockKeepAlive(onLost: () => void): () => void {
-  let stopped = false;
-  let renewing = false;
-  let intervalId: ReturnType<typeof setInterval> | undefined;
-
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    if (intervalId) clearInterval(intervalId);
-  };
-
-  const tick = async () => {
-    if (stopped || renewing) return;
-
-    const current = schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__;
-    if (!current) {
-      stop();
-      onLost();
-      return;
-    }
-
-    renewing = true;
-    try {
-      const ok = await renewLeaderLock(current, LOCK_TTL_MS);
-      if (!ok) {
-        schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__ = undefined;
-        stop();
-        onLost();
-        logger.warn("[EndpointProbeScheduler] Lost leader lock during probe cycle", {
-          key: current.key,
-          lockType: current.lockType,
-        });
-      }
-    } finally {
-      renewing = false;
-    }
-  };
-
-  const intervalMs = Math.max(1000, Math.floor(LOCK_TTL_MS / 2));
-  intervalId = setInterval(() => {
-    void tick();
-  }, intervalMs);
-
-  const timer = intervalId as unknown as { unref?: () => void };
-  timer.unref?.();
-
-  return stop;
-}
-
 async function runProbeCycle(): Promise<void> {
   if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_RUNNING__) {
     return;
@@ -271,10 +216,18 @@ async function runProbeCycle(): Promise<void> {
       }
     }
 
-    stopKeepAlive = startLeaderLockKeepAlive(() => {
-      leadershipLost = true;
-      clearNextWorkHints();
-    });
+    stopKeepAlive = startLeaderLockKeepAlive({
+      getLock: () => schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__,
+      clearLock: () => {
+        schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__ = undefined;
+      },
+      ttlMs: LOCK_TTL_MS,
+      logTag: "EndpointProbeScheduler",
+      onLost: () => {
+        leadershipLost = true;
+        clearNextWorkHints();
+      },
+    }).stop;
 
     const jitter = CYCLE_JITTER_MS > 0 ? Math.floor(Math.random() * CYCLE_JITTER_MS) : 0;
     await sleep(jitter);

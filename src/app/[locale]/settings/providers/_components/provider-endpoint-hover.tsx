@@ -11,6 +11,7 @@ import {
 } from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { createAbortError } from "@/lib/abort-utils";
 import { cn } from "@/lib/utils";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
 import { type EndpointCircuitState, getEndpointStatusModel } from "./endpoint-status";
@@ -35,17 +36,6 @@ type VendorStatsDeferred = {
   resolve: (value: VendorTypeEndpointStats) => void;
   reject: (reason: unknown) => void;
 };
-
-function createAbortError(signal?: AbortSignal): unknown {
-  if (!signal) return new Error("Aborted");
-  if (signal.reason) return signal.reason;
-
-  try {
-    return new DOMException("Aborted", "AbortError");
-  } catch {
-    return new Error("Aborted");
-  }
-}
 
 class VendorTypeEndpointStatsBatcher {
   private readonly pendingVendorIdsByProviderType = new Map<ProviderType, Set<number>>();
@@ -124,7 +114,11 @@ class VendorTypeEndpointStatsBatcher {
 
       this.flushTimer = setTimeout(() => {
         this.flushTimer = null;
-        void this.flush().catch(() => {});
+        void this.flush().catch((error) => {
+          if (process.env.NODE_ENV !== "test") {
+            console.error("[VendorTypeEndpointStatsBatcher] flush failed", error);
+          }
+        });
       }, 0);
     });
   }

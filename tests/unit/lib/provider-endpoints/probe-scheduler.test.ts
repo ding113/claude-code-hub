@@ -54,6 +54,7 @@ vi.mock("@/lib/provider-endpoints/leader-lock", () => ({
   acquireLeaderLock: (...args: unknown[]) => acquireLeaderLockMock(...args),
   renewLeaderLock: (...args: unknown[]) => renewLeaderLockMock(...args),
   releaseLeaderLock: (...args: unknown[]) => releaseLeaderLockMock(...args),
+  startLeaderLockKeepAlive: () => ({ stop: () => {} }),
 }));
 
 vi.mock("@/repository", () => ({

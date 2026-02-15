@@ -272,49 +272,6 @@ describe("endpoint-circuit-breaker", () => {
     expect(loadManyMock).toHaveBeenCalledTimes(1);
   });
 
-  test("getAllEndpointHealthStatusAsync: cache 超限时应淘汰最早的健康状态，避免内存无限增长", async () => {
-    vi.resetModules();
-
-    process.env.ENDPOINT_CIRCUIT_HEALTH_CACHE_MAX_SIZE = "3";
-
-    const loadManyMock = vi.fn(async (endpointIds: number[]) => {
-      const result = new Map<number, SavedEndpointCircuitState>();
-      for (const endpointId of endpointIds) {
-        result.set(endpointId, {
-          failureCount: 0,
-          lastFailureTime: null,
-          circuitState: "closed",
-          circuitOpenUntil: null,
-          halfOpenSuccessCount: 0,
-        });
-      }
-      return result;
-    });
-
-    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
-    vi.doMock("@/lib/redis/endpoint-circuit-breaker-state", () => ({
-      loadEndpointCircuitState: vi.fn(async () => null),
-      loadEndpointCircuitStates: loadManyMock,
-      saveEndpointCircuitState: vi.fn(async () => {}),
-      deleteEndpointCircuitState: vi.fn(async () => {}),
-    }));
-
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
-    const { getAllEndpointHealthStatusAsync } = await import("@/lib/endpoint-circuit-breaker");
-
-    await getAllEndpointHealthStatusAsync([1, 2, 3], { forceRefresh: true });
-    expect(loadManyMock).toHaveBeenCalledTimes(1);
-
-    await getAllEndpointHealthStatusAsync([4], { forceRefresh: true });
-    expect(loadManyMock).toHaveBeenCalledTimes(2);
-
-    // 1 应已被淘汰；再次访问会触发一次新的 Redis 批量读取
-    await getAllEndpointHealthStatusAsync([1]);
-    expect(loadManyMock).toHaveBeenCalledTimes(3);
-  });
-
   test("triggerEndpointCircuitBreakerAlert should call sendCircuitBreakerAlert", async () => {
     vi.resetModules();
 

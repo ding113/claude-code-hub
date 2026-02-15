@@ -1,13 +1,15 @@
 import "server-only";
 
-import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
+import { TTLMap } from "@/lib/cache/ttl-map";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
+import { buildUsageLogConditions } from "./_shared/usage-log-filters";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -114,21 +116,7 @@ export interface UsageLogBatchFilters extends Omit<UsageLogFilters, "page" | "pa
 export async function findUsageLogsBatch(
   filters: UsageLogBatchFilters
 ): Promise<UsageLogsBatchResult> {
-  const {
-    userId,
-    keyId,
-    providerId,
-    sessionId,
-    startTime,
-    endTime,
-    statusCode,
-    excludeStatusCode200,
-    model,
-    endpoint,
-    minRetryCount,
-    cursor,
-    limit = 50,
-  } = filters;
+  const { userId, keyId, providerId, cursor, limit = 50 } = filters;
 
   // Build query conditions
   const conditions = [isNull(messageRequest.deletedAt)];
@@ -145,42 +133,7 @@ export async function findUsageLogsBatch(
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  const trimmedSessionId = sessionId?.trim();
-  if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
-  }
-
-  if (startTime !== undefined) {
-    const startDate = new Date(startTime);
-    conditions.push(gte(messageRequest.createdAt, startDate));
-  }
-
-  if (endTime !== undefined) {
-    const endDate = new Date(endTime);
-    conditions.push(lt(messageRequest.createdAt, endDate));
-  }
-
-  if (statusCode !== undefined) {
-    conditions.push(eq(messageRequest.statusCode, statusCode));
-  } else if (excludeStatusCode200) {
-    conditions.push(
-      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
-    );
-  }
-
-  if (model) {
-    conditions.push(eq(messageRequest.model, model));
-  }
-
-  if (endpoint) {
-    conditions.push(eq(messageRequest.endpoint, endpoint));
-  }
-
-  if (minRetryCount !== undefined) {
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
-    );
-  }
+  conditions.push(...buildUsageLogConditions(filters));
 
   // Cursor-based pagination: WHERE (created_at, id) < (cursor_created_at, cursor_id)
   // Using row value comparison for efficient keyset pagination
@@ -281,7 +234,7 @@ export async function findUsageLogsBatch(
   return { logs, nextCursor, hasMore };
 }
 
-export interface UsageLogSlimFilters {
+interface UsageLogSlimFilters {
   keyString: string;
   /** Session ID（精确匹配；空字符串/空白视为不筛选） */
   sessionId?: string;
@@ -300,7 +253,7 @@ export interface UsageLogSlimFilters {
   pageSize?: number;
 }
 
-export interface UsageLogSlimRow {
+interface UsageLogSlimRow {
   id: number;
   createdAt: Date | null;
   model: string | null;
@@ -318,71 +271,13 @@ export interface UsageLogSlimRow {
   cacheTtlApplied: string | null;
 }
 
-// my-usage logs：分页需要 totalPages，COUNT(*) 在大表上仍可能较重。
-// 这里对“相同筛选条件”的 total 做短 TTL 缓存，避免用户翻页/轮询时重复 COUNT。
-const USAGE_LOG_SLIM_TOTAL_CACHE_TTL_MS = 10 * 1000; // 10 秒
-const USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE = 1000;
-const usageLogSlimTotalCache = new Map<string, { total: number; expiresAt: number }>();
-
-function getUsageLogSlimTotalFromCache(key: string): number | null {
-  const now = Date.now();
-  const cached = usageLogSlimTotalCache.get(key);
-  if (!cached) return null;
-  if (cached.expiresAt <= now) {
-    usageLogSlimTotalCache.delete(key);
-    return null;
-  }
-
-  // LRU-like bump
-  usageLogSlimTotalCache.delete(key);
-  usageLogSlimTotalCache.set(key, cached);
-  return cached.total;
-}
-
-function setUsageLogSlimTotalToCache(key: string, total: number): void {
-  const now = Date.now();
-
-  if (usageLogSlimTotalCache.size >= USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE) {
-    for (const [k, v] of usageLogSlimTotalCache) {
-      if (v.expiresAt <= now) {
-        usageLogSlimTotalCache.delete(k);
-      }
-    }
-
-    if (usageLogSlimTotalCache.size >= USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE) {
-      const evictCount = Math.max(1, Math.ceil(USAGE_LOG_SLIM_TOTAL_CACHE_MAX_SIZE * 0.1));
-      let remaining = evictCount;
-
-      for (const k of usageLogSlimTotalCache.keys()) {
-        usageLogSlimTotalCache.delete(k);
-        remaining -= 1;
-        if (remaining <= 0) break;
-      }
-    }
-  }
-
-  usageLogSlimTotalCache.set(key, {
-    total,
-    expiresAt: now + USAGE_LOG_SLIM_TOTAL_CACHE_TTL_MS,
-  });
-}
+// my-usage logs: short TTL cache for total count to avoid repeated COUNT(*) on pagination/polling.
+const usageLogSlimTotalCache = new TTLMap<string, number>({ ttlMs: 10_000, maxSize: 1000 });
 
 export async function findUsageLogsForKeySlim(
   filters: UsageLogSlimFilters
 ): Promise<{ logs: UsageLogSlimRow[]; total: number }> {
-  const {
-    keyString,
-    sessionId,
-    startTime,
-    endTime,
-    statusCode,
-    excludeStatusCode200,
-    model,
-    endpoint,
-    minRetryCount,
-    page = 1,
-    pageSize = 50,
-  } = filters;
+  const { keyString, page = 1, pageSize = 50 } = filters;
 
   const safePage = page > 0 ? page : 1;
   const safePageSize = Math.min(100, Math.max(1, pageSize));
@@ -393,54 +288,19 @@ export async function findUsageLogsForKeySlim(
     EXCLUDE_WARMUP_CONDITION,
   ];
 
-  const trimmedSessionId = sessionId?.trim();
-  if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
-  }
-
   const totalCacheKey = [
     keyString,
-    trimmedSessionId ?? "",
-    startTime ?? "",
-    endTime ?? "",
-    statusCode ?? "",
-    excludeStatusCode200 ? "1" : "0",
-    model ?? "",
-    endpoint ?? "",
-    minRetryCount ?? "",
+    filters.sessionId?.trim() ?? "",
+    filters.startTime ?? "",
+    filters.endTime ?? "",
+    filters.statusCode ?? "",
+    filters.excludeStatusCode200 ? "1" : "0",
+    filters.model ?? "",
+    filters.endpoint ?? "",
+    filters.minRetryCount ?? "",
   ].join("\u0001");
 
-  if (startTime !== undefined) {
-    const startDate = new Date(startTime);
-    conditions.push(gte(messageRequest.createdAt, startDate));
-  }
-
-  if (endTime !== undefined) {
-    const endDate = new Date(endTime);
-    conditions.push(lt(messageRequest.createdAt, endDate));
-  }
-
-  if (statusCode !== undefined) {
-    conditions.push(eq(messageRequest.statusCode, statusCode));
-  } else if (excludeStatusCode200) {
-    conditions.push(
-      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
-    );
-  }
-
-  if (model) {
-    conditions.push(eq(messageRequest.model, model));
-  }
-
-  if (endpoint) {
-    conditions.push(eq(messageRequest.endpoint, endpoint));
-  }
-
-  if (minRetryCount !== undefined) {
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
-    );
-  }
+  conditions.push(...buildUsageLogConditions(filters));
 
   const offset = (safePage - 1) * safePageSize;
   const results = await db
@@ -472,8 +332,8 @@ export async function findUsageLogsForKeySlim(
 
   let total = offset + pageRows.length;
 
-  const cachedTotal = getUsageLogSlimTotalFromCache(totalCacheKey);
-  if (cachedTotal !== null) {
+  const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
+  if (cachedTotal !== undefined) {
     total = Math.max(cachedTotal, total);
     return {
       logs: pageRows.map((row) => ({ ...row, costUsd: row.costUsd?.toString() ?? null })),
@@ -500,43 +360,18 @@ export async function findUsageLogsForKeySlim(
     costUsd: row.costUsd?.toString() ?? null,
   }));
 
-  setUsageLogSlimTotalToCache(totalCacheKey, total);
+  usageLogSlimTotalCache.set(totalCacheKey, total);
   return { logs, total };
 }
 
-const DISTINCT_KEY_OPTIONS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 分钟
-const DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE = 200;
-
-const distinctModelsByKeyCache = new Map<string, { data: string[]; expiresAt: number }>();
-const distinctEndpointsByKeyCache = new Map<string, { data: string[]; expiresAt: number }>();
-
-function setDistinctKeyOptionsCache(
-  cache: Map<string, { data: string[]; expiresAt: number }>,
-  key: string,
-  data: string[]
-): void {
-  const now = Date.now();
-  if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
-    for (const [k, v] of cache) {
-      if (v.expiresAt <= now) {
-        cache.delete(k);
-      }
-    }
-
-    if (cache.size >= DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE) {
-      const evictCount = Math.max(1, Math.ceil(DISTINCT_KEY_OPTIONS_CACHE_MAX_SIZE * 0.1));
-      let remaining = evictCount;
-
-      for (const k of cache.keys()) {
-        cache.delete(k);
-        remaining -= 1;
-        if (remaining <= 0) break;
-      }
-    }
-  }
-
-  cache.set(key, { data, expiresAt: now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS });
-}
+const distinctModelsByKeyCache = new TTLMap<string, string[]>({
+  ttlMs: 5 * 60 * 1000,
+  maxSize: 200,
+});
+const distinctEndpointsByKeyCache = new TTLMap<string, string[]>({
+  ttlMs: 5 * 60 * 1000,
+  maxSize: 200,
+});
 
 export async function getTotalUsageForKey(keyString: string): Promise<number> {
   const [row] = await db
@@ -554,15 +389,8 @@ export async function getTotalUsageForKey(keyString: string): Promise<number> {
 }
 
 export async function getDistinctModelsForKey(keyString: string): Promise<string[]> {
-  const now = Date.now();
   const cached = distinctModelsByKeyCache.get(keyString);
-  if (cached && cached.expiresAt > now) {
-    // LRU-like bump + sliding TTL
-    cached.expiresAt = now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS;
-    distinctModelsByKeyCache.delete(keyString);
-    distinctModelsByKeyCache.set(keyString, cached);
-    return cached.data;
-  }
+  if (cached !== undefined) return cached;
 
   const result = await db.execute(
     sql`select distinct ${messageRequest.model} as model
@@ -578,20 +406,13 @@ export async function getDistinctModelsForKey(keyString: string): Promise<string
     .map((row) => (row as { model?: string }).model)
     .filter((model): model is string => !!model && model.trim().length > 0);
 
-  setDistinctKeyOptionsCache(distinctModelsByKeyCache, keyString, models);
+  distinctModelsByKeyCache.set(keyString, models);
   return models;
 }
 
 export async function getDistinctEndpointsForKey(keyString: string): Promise<string[]> {
-  const now = Date.now();
   const cached = distinctEndpointsByKeyCache.get(keyString);
-  if (cached && cached.expiresAt > now) {
-    // LRU-like bump + sliding TTL
-    cached.expiresAt = now + DISTINCT_KEY_OPTIONS_CACHE_TTL_MS;
-    distinctEndpointsByKeyCache.delete(keyString);
-    distinctEndpointsByKeyCache.set(keyString, cached);
-    return cached.data;
-  }
+  if (cached !== undefined) return cached;
 
   const result = await db.execute(
     sql`select distinct ${messageRequest.endpoint} as endpoint
@@ -607,7 +428,7 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
     .map((row) => (row as { endpoint?: string }).endpoint)
     .filter((endpoint): endpoint is string => !!endpoint && endpoint.trim().length > 0);
 
-  setDistinctKeyOptionsCache(distinctEndpointsByKeyCache, keyString, endpoints);
+  distinctEndpointsByKeyCache.set(keyString, endpoints);
   return endpoints;
 }
 
@@ -616,26 +437,11 @@ export async function getDistinctEndpointsForKey(keyString: string): Promise<str
  */
 
 export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promise<UsageLogsResult> {
-  const {
-    userId,
-    keyId,
-    providerId,
-    sessionId,
-    startTime,
-    endTime,
-    statusCode,
-    excludeStatusCode200,
-    model,
-    endpoint,
-    minRetryCount,
-    page = 1,
-    pageSize = 50,
-  } = filters;
+  const { userId, keyId, providerId, page = 1, pageSize = 50 } = filters;
 
   const safePage = page > 0 ? page : 1;
   const safePageSize = Math.min(200, Math.max(1, pageSize));
 
-  // 构建查询条件
   const conditions = [isNull(messageRequest.deletedAt)];
 
   if (userId !== undefined) {
@@ -650,47 +456,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  const trimmedSessionId = sessionId?.trim();
-  if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
-  }
-
-  // 使用毫秒时间戳进行时间比较
-  // 前端传递的是浏览器本地时区的毫秒时间戳，直接与数据库的 timestamptz 比较
-  // PostgreSQL 会自动处理时区转换
-  if (startTime !== undefined) {
-    const startDate = new Date(startTime);
-    conditions.push(gte(messageRequest.createdAt, startDate));
-  }
-
-  if (endTime !== undefined) {
-    const endDate = new Date(endTime);
-    conditions.push(lt(messageRequest.createdAt, endDate));
-  }
-
-  if (statusCode !== undefined) {
-    conditions.push(eq(messageRequest.statusCode, statusCode));
-  } else if (excludeStatusCode200) {
-    // 包含 status_code 为空或非 200 的请求
-    conditions.push(
-      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
-    );
-  }
-
-  if (model) {
-    conditions.push(eq(messageRequest.model, model));
-  }
-
-  if (endpoint) {
-    conditions.push(eq(messageRequest.endpoint, endpoint));
-  }
-
-  if (minRetryCount !== undefined) {
-    // 重试次数 = provider_chain 长度 - 1（最小为 0）
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
-    );
-  }
+  conditions.push(...buildUsageLogConditions(filters));
 
   const offset = (safePage - 1) * safePageSize;
 
@@ -945,21 +711,8 @@ export async function findUsageLogSessionIdSuggestions(
 export async function findUsageLogsStats(
   filters: Omit<UsageLogFilters, "page" | "pageSize">
 ): Promise<UsageLogSummary> {
-  const {
-    userId,
-    keyId,
-    providerId,
-    sessionId,
-    startTime,
-    endTime,
-    statusCode,
-    excludeStatusCode200,
-    model,
-    endpoint,
-    minRetryCount,
-  } = filters;
+  const { userId, keyId, providerId } = filters;
 
-  // 构建查询条件（与 findUsageLogsWithDetails 相同）
   const conditions = [isNull(messageRequest.deletedAt)];
 
   if (userId !== undefined) {
@@ -974,42 +727,7 @@ export async function findUsageLogsStats(
     conditions.push(eq(messageRequest.providerId, providerId));
   }
 
-  const trimmedSessionId = sessionId?.trim();
-  if (trimmedSessionId) {
-    conditions.push(eq(messageRequest.sessionId, trimmedSessionId));
-  }
-
-  if (startTime !== undefined) {
-    const startDate = new Date(startTime);
-    conditions.push(gte(messageRequest.createdAt, startDate));
-  }
-
-  if (endTime !== undefined) {
-    const endDate = new Date(endTime);
-    conditions.push(lt(messageRequest.createdAt, endDate));
-  }
-
-  if (statusCode !== undefined) {
-    conditions.push(eq(messageRequest.statusCode, statusCode));
-  } else if (excludeStatusCode200) {
-    conditions.push(
-      sql`(${messageRequest.statusCode} IS NULL OR ${messageRequest.statusCode} <> 200)`
-    );
-  }
-
-  if (model) {
-    conditions.push(eq(messageRequest.model, model));
-  }
-
-  if (endpoint) {
-    conditions.push(eq(messageRequest.endpoint, endpoint));
-  }
-
-  if (minRetryCount !== undefined) {
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${minRetryCount}`
-    );
-  }
+  conditions.push(...buildUsageLogConditions(filters));
 
   const statsConditions = [...conditions, EXCLUDE_WARMUP_CONDITION];
 

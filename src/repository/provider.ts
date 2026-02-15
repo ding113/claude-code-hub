@@ -747,7 +747,7 @@ export async function deleteProvider(id: number): Promise<boolean> {
 
     const result = await tx
       .update(providers)
-      .set({ deletedAt: now })
+      .set({ deletedAt: now, updatedAt: now })
       .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
       .returning({ id: providers.id });
 
@@ -1132,7 +1132,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       return await providerStatisticsInFlight.promise;
     }
 
-    const promise = (async () => {
+    const promise: Promise<ProviderStatisticsRow[]> = (async () => {
       // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
       // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
       const query = sql`
@@ -1221,6 +1221,7 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       return data;
     })();
 
+    // Set in-flight BEFORE awaiting to prevent concurrent callers from starting duplicate queries
     providerStatisticsInFlight = { timezone, promise };
 
     try {

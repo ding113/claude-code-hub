@@ -1,2 +1,0 @@
-CREATE INDEX IF NOT EXISTS "idx_provider_endpoints_pick_enabled" ON "provider_endpoints" USING btree ("vendor_id","provider_type","is_enabled","sort_order","id") WHERE "provider_endpoints"."deleted_at" IS NULL;--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idx_providers_vendor_type_url_active" ON "providers" USING btree ("provider_vendor_id","provider_type","url") WHERE "providers"."deleted_at" IS NULL;

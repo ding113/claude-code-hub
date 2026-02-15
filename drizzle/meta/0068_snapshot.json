@@ -1,5 +1,5 @@
 {
-  "id": "e6503137-9fe6-450f-9918-f2c5a7315001",
+  "id": "81847b3d-5ce4-4fb0-bad1-9e4570f3c5fb",
   "prevId": "c4820501-71eb-4492-b9cb-dd19c5def277",
   "version": "7",
   "dialect": "postgresql",
@@ -302,6 +302,21 @@
           "columns": [
             {
               "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_keys_key": {
+          "name": "idx_keys_key",
+          "columns": [
+            {
+              "expression": "key",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -748,6 +763,132 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_message_request_key_created_at_id": {
+          "name": "idx_message_request_key_created_at_id",
+          "columns": [
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_message_request_key_model_active": {
+          "name": "idx_message_request_key_model_active",
+          "columns": [
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "model",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL AND \"message_request\".\"model\" IS NOT NULL AND (\"message_request\".\"blocked_by\" IS NULL OR \"message_request\".\"blocked_by\" <> 'warmup')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_message_request_key_endpoint_active": {
+          "name": "idx_message_request_key_endpoint_active",
+          "columns": [
+            {
+              "expression": "key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "endpoint",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL AND \"message_request\".\"endpoint\" IS NOT NULL AND (\"message_request\".\"blocked_by\" IS NULL OR \"message_request\".\"blocked_by\" <> 'warmup')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_message_request_created_at_id_active": {
+          "name": "idx_message_request_created_at_id_active",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_message_request_model_active": {
+          "name": "idx_message_request_model_active",
+          "columns": [
+            {
+              "expression": "model",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL AND \"message_request\".\"model\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_message_request_status_code_active": {
+          "name": "idx_message_request_status_code_active",
+          "columns": [
+            {
+              "expression": "status_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"message_request\".\"deleted_at\" IS NULL AND \"message_request\".\"status_code\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2071,6 +2212,34 @@
           "method": "btree",
           "with": {}
         },
+        "idx_providers_vendor_type_url_active": {
+          "name": "idx_providers_vendor_type_url_active",
+          "columns": [
+            {
+              "expression": "provider_vendor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "url",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"providers\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "idx_providers_created_at": {
           "name": "idx_providers_created_at",
           "columns": [
@@ -2123,8 +2292,8 @@
           "method": "btree",
           "with": {}
         },
-        "idx_providers_vendor_type_url_active": {
-          "name": "idx_providers_vendor_type_url_active",
+        "idx_providers_enabled_vendor_type": {
+          "name": "idx_providers_enabled_vendor_type",
           "columns": [
             {
               "expression": "provider_vendor_id",
@@ -2137,16 +2306,10 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
-            {
-              "expression": "url",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
             }
           ],
           "isUnique": false,
-          "where": "\"providers\".\"deleted_at\" IS NULL",
+          "where": "\"providers\".\"deleted_at\" IS NULL AND \"providers\".\"is_enabled\" = true AND \"providers\".\"provider_vendor_id\" IS NOT NULL AND \"providers\".\"provider_vendor_id\" > 0",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -2860,6 +3023,22 @@
           "where": "\"users\".\"deleted_at\" IS NULL",
           "concurrently": false,
           "method": "btree",
+          "with": {}
+        },
+        "idx_users_tags_gin": {
+          "name": "idx_users_tags_gin",
+          "columns": [
+            {
+              "expression": "tags",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"users\".\"deleted_at\" IS NULL",
+          "concurrently": false,
+          "method": "gin",
           "with": {}
         },
         "idx_users_created_at": {

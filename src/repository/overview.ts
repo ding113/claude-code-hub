@@ -1,6 +1,6 @@
 "use server";
 
-import { and, avg, count, eq, gte, isNull, lt, lte, sql, sum } from "drizzle-orm";
+import { and, avg, count, eq, gte, isNull, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
@@ -141,7 +141,7 @@ export async function getOverviewMetricsWithComparison(
           EXCLUDE_WARMUP_CONDITION,
           userCondition,
           gte(messageRequest.createdAt, yesterdayStart),
-          lte(messageRequest.createdAt, yesterdayEnd)
+          lt(messageRequest.createdAt, yesterdayEnd)
         )
       ),
 

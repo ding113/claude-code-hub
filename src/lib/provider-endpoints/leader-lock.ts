@@ -139,3 +139,58 @@ export async function releaseLeaderLock(lock: LeaderLock): Promise<void> {
     });
   }
 }
+
+export function startLeaderLockKeepAlive(opts: {
+  getLock: () => LeaderLock | undefined;
+  clearLock: () => void;
+  ttlMs: number;
+  logTag: string;
+  onLost: () => void;
+}): { stop: () => void } {
+  let stopped = false;
+  let renewing = false;
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (intervalId) clearInterval(intervalId);
+  };
+
+  const tick = async () => {
+    if (stopped || renewing) return;
+
+    const current = opts.getLock();
+    if (!current) {
+      stop();
+      opts.onLost();
+      return;
+    }
+
+    renewing = true;
+    try {
+      const ok = await renewLeaderLock(current, opts.ttlMs);
+      if (!ok) {
+        opts.clearLock();
+        stop();
+        opts.onLost();
+        logger.warn(`[${opts.logTag}] Lost leader lock during operation`, {
+          key: current.key,
+          lockType: current.lockType,
+        });
+      }
+    } finally {
+      renewing = false;
+    }
+  };
+
+  const intervalMs = Math.max(1000, Math.floor(opts.ttlMs / 2));
+  intervalId = setInterval(() => {
+    void tick();
+  }, intervalMs);
+
+  const timer = intervalId as unknown as { unref?: () => void };
+  timer.unref?.();
+
+  return { stop };
+}

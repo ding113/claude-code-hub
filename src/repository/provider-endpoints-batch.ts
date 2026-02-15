@@ -76,7 +76,8 @@ export async function findProviderEndpointProbeLogsBatch(input: {
     return new Map();
   }
 
-  const limitPerEndpoint = Math.max(1, input.limitPerEndpoint);
+  const rawLimit = Number(input.limitPerEndpoint);
+  const limitPerEndpoint = Number.isFinite(rawLimit) ? Math.max(1, Math.trunc(rawLimit)) : 1;
 
   // 性能：避免 `ROW_NUMBER() OVER (PARTITION BY ...)` 在单个端点 logs 很多时退化为更重的扫描/排序。
   // 改为 LATERAL + LIMIT：每个 endpoint_id 仅取最新 N 条，能更好利用 (endpoint_id, created_at desc) 索引。

@@ -36,7 +36,6 @@ const statisticsMock = {
     costTotal: 0,
   })),
   sumKeyCostInTimeRange: vi.fn(async () => 0),
-  sumKeyTotalCostById: vi.fn(async () => 0),
   sumKeyQuotaCostsById: vi.fn(async () => ({
     cost5h: 0,
     costDaily: 0,

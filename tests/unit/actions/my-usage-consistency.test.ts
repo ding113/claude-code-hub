@@ -93,24 +93,21 @@ describe("my-usage getMyQuota data source consistency", () => {
 
     // Mock the statistics module
     const sumKeyCostInTimeRangeMock = vi.fn(async () => 10.5);
-    const sumKeyTotalCostByIdMock = vi.fn(async () => 100.25);
     const sumUserCostInTimeRangeMock = vi.fn(async () => 10.5);
     const sumUserTotalCostMock = vi.fn(async () => 100.25);
 
     vi.doMock("@/repository/statistics", () => ({
       sumKeyCostInTimeRange: sumKeyCostInTimeRangeMock,
-      sumKeyTotalCostById: sumKeyTotalCostByIdMock,
       sumUserCostInTimeRange: sumUserCostInTimeRangeMock,
       sumUserTotalCost: sumUserTotalCostMock,
     }));
 
     // Verify the function signatures match
     expect(typeof sumKeyCostInTimeRangeMock).toBe("function");
-    expect(typeof sumKeyTotalCostByIdMock).toBe("function");
 
     // The test validates that:
     // 1. Key 5h/daily/weekly/monthly uses sumKeyCostInTimeRange (DB direct)
-    // 2. Key total uses sumKeyTotalCostById (DB direct)
+    // 2. Key total uses sumKeyQuotaCostsById (DB direct)
     // 3. User 5h/weekly/monthly uses sumUserCost (which calls sumUserCostInTimeRange)
     // 4. User daily uses sumUserCostInTimeRange
     // 5. User total uses sumUserTotalCost
@@ -125,7 +122,7 @@ describe("my-usage getMyQuota data source consistency", () => {
     // Result: Inconsistent values when Redis cache differs from DB
 
     // After fix:
-    // - Key: sumKeyCostInTimeRange / sumKeyTotalCostById (DB direct)
+    // - Key: sumKeyCostInTimeRange / sumKeyQuotaCostsById (DB direct)
     // - User: sumUserCost / sumUserCostInTimeRange (DB direct)
     // Result: Consistent values from same data source
 
