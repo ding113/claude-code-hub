@@ -140,6 +140,15 @@ function warmupApiKeyVacuumFilter(): void {
 export async function register() {
   // 仅在服务器端执行
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    // Initialize Langfuse observability (no-op if env vars not set)
+    try {
+      const { initLangfuse } = await import("@/lib/langfuse");
+      await initLangfuse();
+    } catch (error) {
+      logger.warn("[Instrumentation] Langfuse initialization failed (non-critical)", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
     // Skip initialization in CI environment (no DB connection needed)
     if (process.env.CI === "true") {
       logger.warn(
@@ -212,6 +221,16 @@ export async function register() {
           await closeRedis();
         } catch (error) {
           logger.warn("[Instrumentation] Failed to close Redis connection", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        // Flush Langfuse pending spans
+        try {
+          const { shutdownLangfuse } = await import("@/lib/langfuse");
+          await shutdownLangfuse();
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to shutdown Langfuse", {
             error: error instanceof Error ? error.message : String(error),
           });
         }

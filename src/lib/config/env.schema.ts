@@ -127,6 +127,13 @@ export const EnvSchema = z.object({
   FETCH_BODY_TIMEOUT: z.coerce.number().default(600_000), // 请求/响应体传输超时（默认 600 秒）
   FETCH_HEADERS_TIMEOUT: z.coerce.number().default(600_000), // 响应头接收超时（默认 600 秒）
   FETCH_CONNECT_TIMEOUT: z.coerce.number().default(30000), // TCP 连接建立超时（默认 30 秒）
+
+  // Langfuse Observability (optional, auto-enabled when keys are set)
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_BASE_URL: z.string().default("https://cloud.langfuse.com"),
+  LANGFUSE_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(1.0),
+  LANGFUSE_DEBUG: z.string().default("false").transform(booleanTransform),
 });
 
 /**
