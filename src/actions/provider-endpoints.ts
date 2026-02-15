@@ -34,6 +34,7 @@ import {
   updateProviderVendor,
 } from "@/repository";
 import {
+  findDashboardProviderEndpointsByVendorAndType,
   findEnabledProviderVendorTypePairs,
   hasEnabledProviderReferenceForVendorTypeUrl,
 } from "@/repository/provider-endpoints";
@@ -312,6 +313,34 @@ export async function getProviderEndpoints(input: {
     );
   } catch (error) {
     logger.error("getProviderEndpoints:error", error);
+    return [];
+  }
+}
+
+export async function getDashboardProviderEndpoints(input: {
+  vendorId: number;
+  providerType: ProviderType;
+}): Promise<ProviderEndpoint[]> {
+  try {
+    const session = await getAdminSession();
+    if (!session) {
+      return [];
+    }
+
+    const parsed = GetProviderEndpointsSchema.safeParse(input);
+    if (!parsed.success) {
+      logger.debug("getDashboardProviderEndpoints:invalid_input", {
+        error: parsed.error,
+      });
+      return [];
+    }
+
+    return await findDashboardProviderEndpointsByVendorAndType(
+      parsed.data.vendorId,
+      parsed.data.providerType as ProviderTypeInput
+    );
+  } catch (error) {
+    logger.error("getDashboardProviderEndpoints:error", error);
     return [];
   }
 }

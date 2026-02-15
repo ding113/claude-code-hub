@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { findProviderEndpointsByVendorAndType } from "@/repository";
+import { findDashboardProviderEndpointsByVendorAndType } from "@/repository/provider-endpoints";
 import type { ProviderType } from "@/types/provider";
 
 const PROVIDER_TYPES: ProviderType[] = [
@@ -36,7 +36,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const endpoints = await findProviderEndpointsByVendorAndType(vendorId, providerTypeRaw);
+    const endpoints = await findDashboardProviderEndpointsByVendorAndType(
+      vendorId,
+      providerTypeRaw
+    );
     return NextResponse.json({ vendorId, providerType: providerTypeRaw, endpoints });
   } catch (error) {
     console.error("Endpoint availability API error:", error);

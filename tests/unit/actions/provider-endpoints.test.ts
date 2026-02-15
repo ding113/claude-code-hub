@@ -13,6 +13,7 @@ const updateProviderEndpointMock = vi.fn();
 const findProviderEndpointProbeLogsBatchMock = vi.fn();
 const findVendorTypeEndpointStatsBatchMock = vi.fn();
 const hasEnabledProviderReferenceForVendorTypeUrlMock = vi.fn();
+const findDashboardProviderEndpointsByVendorAndTypeMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -61,6 +62,7 @@ vi.mock("@/repository/provider-endpoints-batch", () => ({
 }));
 
 vi.mock("@/repository/provider-endpoints", () => ({
+  findDashboardProviderEndpointsByVendorAndType: findDashboardProviderEndpointsByVendorAndTypeMock,
   findEnabledProviderVendorTypePairs: vi.fn(async () => []),
   hasEnabledProviderReferenceForVendorTypeUrl: hasEnabledProviderReferenceForVendorTypeUrlMock,
 }));
@@ -83,6 +85,7 @@ describe("provider-endpoints actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
+    findDashboardProviderEndpointsByVendorAndTypeMock.mockResolvedValue([]);
   });
 
   it("editProviderVendor: requires admin", async () => {
@@ -93,6 +96,59 @@ describe("provider-endpoints actions", () => {
 
     expect(res.ok).toBe(false);
     expect(res.errorCode).toBe("PERMISSION_DENIED");
+  });
+
+  it("getDashboardProviderEndpoints: requires admin", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "user" } });
+
+    const { getDashboardProviderEndpoints } = await import("@/actions/provider-endpoints");
+    const res = await getDashboardProviderEndpoints({ vendorId: 1, providerType: "claude" });
+
+    expect(res).toEqual([]);
+    expect(findDashboardProviderEndpointsByVendorAndTypeMock).not.toHaveBeenCalled();
+  });
+
+  it("getDashboardProviderEndpoints: invalid input returns empty list", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    const { getDashboardProviderEndpoints } = await import("@/actions/provider-endpoints");
+    const res = await getDashboardProviderEndpoints({ vendorId: 0, providerType: "claude" });
+
+    expect(res).toEqual([]);
+    expect(findDashboardProviderEndpointsByVendorAndTypeMock).not.toHaveBeenCalled();
+  });
+
+  it("getDashboardProviderEndpoints: returns endpoints in use for enabled providers", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    const endpoints = [
+      {
+        id: 1,
+        vendorId: 10,
+        providerType: "claude",
+        url: "https://api.example.com",
+        label: null,
+        sortOrder: 0,
+        isEnabled: true,
+        lastProbedAt: null,
+        lastProbeOk: null,
+        lastProbeStatusCode: null,
+        lastProbeLatencyMs: null,
+        lastProbeErrorType: null,
+        lastProbeErrorMessage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      },
+    ];
+
+    findDashboardProviderEndpointsByVendorAndTypeMock.mockResolvedValue(endpoints);
+
+    const { getDashboardProviderEndpoints } = await import("@/actions/provider-endpoints");
+    const res = await getDashboardProviderEndpoints({ vendorId: 10, providerType: "claude" });
+
+    expect(res).toEqual(endpoints);
+    expect(findDashboardProviderEndpointsByVendorAndTypeMock).toHaveBeenCalledWith(10, "claude");
   });
 
   it("editProviderVendor: computes favicon", async () => {

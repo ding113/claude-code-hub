@@ -6,9 +6,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   type DashboardProviderVendor,
+  getDashboardProviderEndpoints,
   getDashboardProviderVendors,
   getProviderEndpointProbeLogs,
-  getProviderEndpoints,
   probeProviderEndpoint,
 } from "@/actions/provider-endpoints";
 import { Button } from "@/components/ui/button";
@@ -144,7 +144,7 @@ export function EndpointTab() {
       setLoadingEndpoints(true);
 
       try {
-        const nextEndpoints = await getProviderEndpoints({
+        const nextEndpoints = await getDashboardProviderEndpoints({
           vendorId: params.vendorId,
           providerType: params.providerType,
         });

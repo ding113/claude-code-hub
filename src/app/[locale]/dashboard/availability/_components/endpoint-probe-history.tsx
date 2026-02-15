@@ -7,8 +7,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   type DashboardProviderVendor,
+  getDashboardProviderEndpoints,
   getDashboardProviderVendors,
-  getProviderEndpoints,
   probeProviderEndpoint,
 } from "@/actions/provider-endpoints";
 import { Badge } from "@/components/ui/badge";
@@ -72,7 +72,7 @@ export function EndpointProbeHistory() {
 
     setLoadingEndpoints(true);
 
-    getProviderEndpoints({ vendorId: selectedVendorId, providerType: selectedType })
+    getDashboardProviderEndpoints({ vendorId: selectedVendorId, providerType: selectedType })
       .then((data) => {
         setEndpoints(data);
         setSelectedEndpointId((prev) => {

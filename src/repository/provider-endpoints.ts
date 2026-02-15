@@ -739,6 +739,58 @@ export async function hasEnabledProviderReferenceForVendorTypeUrl(input: {
   return Boolean(row);
 }
 
+/**
+ * Dashboard/Endpoint Health 用：仅返回仍被启用的 provider 引用的启用端点。
+ *
+ * #781：避免“已不再被任何启用 provider 使用”的孤儿端点仍在 Dashboard 中展示。
+ * 语义与 probe scheduler 保持一致：只关注 (vendor/type/url) 被启用 provider 引用且端点池启用的端点。
+ */
+export async function findDashboardProviderEndpointsByVendorAndType(
+  vendorId: number,
+  providerType: ProviderType
+): Promise<ProviderEndpoint[]> {
+  const query = sql`
+    WITH enabled_provider_urls AS (
+      SELECT DISTINCT p.provider_vendor_id AS vendor_id, p.provider_type, p.url
+      FROM ${providers} p
+      WHERE p.is_enabled = true
+        AND p.deleted_at IS NULL
+        AND p.provider_vendor_id = ${vendorId}
+        AND p.provider_type = ${providerType}
+    )
+    SELECT
+      e.id,
+      e.vendor_id AS "vendorId",
+      e.provider_type AS "providerType",
+      e.url,
+      e.label,
+      e.sort_order AS "sortOrder",
+      e.is_enabled AS "isEnabled",
+      e.last_probed_at AS "lastProbedAt",
+      e.last_probe_ok AS "lastProbeOk",
+      e.last_probe_status_code AS "lastProbeStatusCode",
+      e.last_probe_latency_ms AS "lastProbeLatencyMs",
+      e.last_probe_error_type AS "lastProbeErrorType",
+      e.last_probe_error_message AS "lastProbeErrorMessage",
+      e.created_at AS "createdAt",
+      e.updated_at AS "updatedAt",
+      e.deleted_at AS "deletedAt"
+    FROM ${providerEndpoints} e
+    INNER JOIN enabled_provider_urls pu
+      ON pu.vendor_id = e.vendor_id
+     AND pu.provider_type = e.provider_type
+     AND pu.url = e.url
+    WHERE e.is_enabled = true
+      AND e.deleted_at IS NULL
+    ORDER BY e.sort_order ASC, e.id ASC
+  `;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = (await db.execute(query)) as any;
+  const rows = Array.from(result) as Array<Record<string, unknown>>;
+  return rows.map((row) => toProviderEndpoint(row));
+}
+
 export async function findProviderVendorById(vendorId: number): Promise<ProviderVendor | null> {
   const rows = await db
     .select({
