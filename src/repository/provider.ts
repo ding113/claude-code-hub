@@ -1089,6 +1089,7 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
  * 性能优化：
  * - provider_stats: 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × message_request 的笛卡尔积
  * - bounds: 用“按时区计算的时间范围”过滤 created_at，便于命中 created_at 索引
+ * - DST 兼容：对“本地日界/近 7 日”先在 timestamp 上做 +interval，再 AT TIME ZONE 回到 timestamptz，避免夏令时跨日偏移
  * - latest_call: 限制近 7 天范围，避免扫描历史数据
  */
 export type ProviderStatisticsRow = {
@@ -1135,15 +1136,15 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
       // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
       // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
       const query = sql`
-        WITH bounds AS (
-          SELECT
-            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
-            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) + INTERVAL '1 day' AS tomorrow_start,
-            (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) - INTERVAL '7 days' AS last7_start
-        ),
-        provider_stats AS (
-          -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
-          SELECT
+         WITH bounds AS (
+           SELECT
+             (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
+             ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone}) AS tomorrow_start,
+             ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '7 days') AT TIME ZONE ${timezone}) AS last7_start
+         ),
+         provider_stats AS (
+           -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
+           SELECT
             mr.final_provider_id,
             COALESCE(SUM(mr.cost_usd), 0) AS today_cost,
             COUNT(*)::integer AS today_calls
