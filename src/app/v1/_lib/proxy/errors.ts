@@ -9,6 +9,7 @@
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { type ErrorDetectionResult, errorRuleDetector } from "@/lib/error-rule-detector";
 import { redactJsonString } from "@/lib/utils/message-redaction";
+import { sanitizeErrorTextForDetail } from "@/lib/utils/upstream-error-detection";
 import type { ErrorOverrideResponse } from "@/repository/error-rules";
 import type { ProviderChainItem } from "@/types/message";
 import type { ProxySession } from "./session";
@@ -519,10 +520,7 @@ export class ProxyError extends Error {
         const maxChars = 200;
         const clipped =
           normalized.length > maxChars ? `${normalized.slice(0, maxChars)}…` : normalized;
-        const safe = clipped
-          .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
-          .replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}\b/giu, "[REDACTED_KEY]")
-          .replace(/\bAIza[0-9A-Za-z_-]{16,}\b/g, "[REDACTED_KEY]");
+        const safe = sanitizeErrorTextForDetail(clipped);
         return `${reason}${inferredNote} Upstream detail: ${safe}`;
       }
 

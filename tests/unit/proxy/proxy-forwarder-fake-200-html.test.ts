@@ -534,3 +534,40 @@ describe("ProxyForwarder - fake 200 HTML body", () => {
     expect(mocks.recordSuccess).not.toHaveBeenCalledWith(1);
   });
 });
+
+describe("ProxyError.getClientSafeMessage - FAKE_200 sanitization", () => {
+  test("upstream body 包含 JWT 和 email 时应被脱敏为 [JWT] / [EMAIL]", () => {
+    const jwtToken =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+    const email = "admin@example.com";
+    const body = `Authentication failed for ${email} with token ${jwtToken}`;
+
+    const error = new ProxyError("FAKE_200_JSON_ERROR_NON_EMPTY", 502, {
+      body,
+      providerId: 1,
+      providerName: "p1",
+    });
+
+    const msg = error.getClientSafeMessage();
+    expect(msg).toContain("[JWT]");
+    expect(msg).toContain("[EMAIL]");
+    expect(msg).not.toContain(jwtToken);
+    expect(msg).not.toContain(email);
+    expect(msg).toContain("Upstream detail:");
+  });
+
+  test("upstream body 包含 password=xxx 时应被脱敏", () => {
+    const body = "Config error: password=s3cretValue in /etc/app.json";
+
+    const error = new ProxyError("FAKE_200_HTML_BODY", 502, {
+      body,
+      providerId: 1,
+      providerName: "p1",
+    });
+
+    const msg = error.getClientSafeMessage();
+    expect(msg).not.toContain("s3cretValue");
+    expect(msg).toContain("[PATH]");
+    expect(msg).toContain("Upstream detail:");
+  });
+});

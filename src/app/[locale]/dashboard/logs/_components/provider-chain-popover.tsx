@@ -18,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { formatProbabilityCompact } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
+import { getFake200ReasonKey } from "./fake200-reason";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
@@ -56,25 +57,6 @@ function parseGroupTags(groupTag?: string | null): string[] {
     groups.push(trimmed);
   }
   return groups;
-}
-
-// UI 仅用于“解释”内部的 FAKE_200_* 错误码，不参与判定逻辑。
-// 这些 code 代表：上游返回了 2xx（看起来成功），但响应体内容更像错误页/错误 JSON。
-function getFake200ReasonKey(code: string): string {
-  switch (code) {
-    case "FAKE_200_EMPTY_BODY":
-      return "logs.details.fake200Reasons.emptyBody";
-    case "FAKE_200_HTML_BODY":
-      return "logs.details.fake200Reasons.htmlBody";
-    case "FAKE_200_JSON_ERROR_NON_EMPTY":
-      return "logs.details.fake200Reasons.jsonErrorNonEmpty";
-    case "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY":
-      return "logs.details.fake200Reasons.jsonErrorMessageNonEmpty";
-    case "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH":
-      return "logs.details.fake200Reasons.jsonMessageKeywordMatch";
-    default:
-      return "logs.details.fake200Reasons.unknown";
-  }
 }
 
 /**
@@ -223,7 +205,12 @@ export function ProviderChainPopover({
                       {typeof fake200CodeForDisplay === "string" && (
                         <div>
                           {t("logs.details.fake200DetectedReason", {
-                            reason: t(getFake200ReasonKey(fake200CodeForDisplay)),
+                            reason: t(
+                              getFake200ReasonKey(
+                                fake200CodeForDisplay,
+                                "logs.details.fake200Reasons"
+                              )
+                            ),
                           })}
                         </div>
                       )}
@@ -539,7 +526,12 @@ export function ProviderChainPopover({
                         item.errorMessage.startsWith("FAKE_200_") && (
                           <p className="text-[10px] text-amber-700 dark:text-amber-300 mt-0.5 line-clamp-2">
                             {t("logs.details.fake200DetectedReason", {
-                              reason: t(getFake200ReasonKey(item.errorMessage)),
+                              reason: t(
+                                getFake200ReasonKey(
+                                  item.errorMessage,
+                                  "logs.details.fake200Reasons"
+                                )
+                              ),
                             })}
                           </p>
                         )}

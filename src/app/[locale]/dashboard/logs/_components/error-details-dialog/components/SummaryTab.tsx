@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
+import { getFake200ReasonKey } from "../../fake200-reason";
 import {
   calculateOutputRate,
   isInProgressStatus,
@@ -27,25 +28,6 @@ import {
   type SummaryTabProps,
   shouldHideOutputRate,
 } from "../types";
-
-// UI 仅用于“解释”内部的 FAKE_200_* 错误码，不参与判定逻辑。
-// 这些 code 代表：上游返回了 2xx（看起来成功），但响应体内容更像错误页/错误 JSON。
-function getFake200ReasonKey(code: string): string {
-  switch (code) {
-    case "FAKE_200_EMPTY_BODY":
-      return "fake200Reasons.emptyBody";
-    case "FAKE_200_HTML_BODY":
-      return "fake200Reasons.htmlBody";
-    case "FAKE_200_JSON_ERROR_NON_EMPTY":
-      return "fake200Reasons.jsonErrorNonEmpty";
-    case "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY":
-      return "fake200Reasons.jsonErrorMessageNonEmpty";
-    case "FAKE_200_JSON_MESSAGE_KEYWORD_MATCH":
-      return "fake200Reasons.jsonMessageKeywordMatch";
-    default:
-      return "fake200Reasons.unknown";
-  }
-}
 
 export function SummaryTab({
   statusCode,
@@ -88,7 +70,7 @@ export function SummaryTab({
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
   const fake200Reason =
     isFake200PostStreamFailure && typeof errorMessage === "string"
-      ? t(getFake200ReasonKey(errorMessage))
+      ? t(getFake200ReasonKey(errorMessage, "fake200Reasons"))
       : null;
 
   return (
