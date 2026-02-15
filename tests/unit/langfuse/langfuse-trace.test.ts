@@ -15,8 +15,11 @@ const mockGeneration: any = {
   end: mockGenerationEnd,
 };
 
+const mockUpdateTrace = vi.fn();
+
 const mockRootSpan = {
   startObservation: vi.fn().mockReturnValue(mockGeneration),
+  updateTrace: mockUpdateTrace,
   end: mockSpanEnd,
 };
 
@@ -449,6 +452,33 @@ describe("traceProxyRequest", () => {
         }),
       })
     );
+  });
+  test("should set trace-level input/output via updateTrace", async () => {
+    const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
+
+    await traceProxyRequest({
+      session: createMockSession(),
+      responseHeaders: new Headers(),
+      durationMs: 500,
+      statusCode: 200,
+      isStreaming: false,
+      costUsd: "0.05",
+    });
+
+    expect(mockUpdateTrace).toHaveBeenCalledWith({
+      input: expect.objectContaining({
+        endpoint: "/v1/messages",
+        method: "POST",
+        model: "claude-sonnet-4-20250514",
+        clientFormat: "claude",
+        providerName: "anthropic-main",
+      }),
+      output: expect.objectContaining({
+        statusCode: 200,
+        durationMs: 500,
+        costUsd: "0.05",
+      }),
+    });
   });
 });
 

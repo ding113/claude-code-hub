@@ -237,6 +237,24 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       }
     );
 
+    // Explicitly set trace-level input/output (propagateAttributes does not support these)
+    rootSpan.updateTrace({
+      input: {
+        endpoint: session.getEndpoint(),
+        method: session.method,
+        model: session.getCurrentModel(),
+        clientFormat: session.originalFormat,
+        providerName: provider?.name,
+      },
+      output: {
+        statusCode,
+        durationMs,
+        model: session.getCurrentModel(),
+        hasUsage: !!ctx.usageMetrics,
+        costUsd: ctx.costUsd,
+      },
+    });
+
     rootSpan.end();
   } catch (error) {
     logger.warn("[Langfuse] Failed to trace proxy request", {
