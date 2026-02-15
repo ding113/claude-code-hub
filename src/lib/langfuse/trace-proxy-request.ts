@@ -1,5 +1,6 @@
 import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
 
@@ -41,7 +42,9 @@ function getStatusCategory(statusCode: number): string {
   return `${Math.floor(statusCode / 100)}xx`;
 }
 
-const LANGFUSE_MAX_IO_SIZE = Number(process.env.LANGFUSE_MAX_IO_SIZE) || 100_000;
+function getLangfuseMaxIoSize(): number {
+  return getEnvConfig().LANGFUSE_MAX_IO_SIZE;
+}
 
 const SUCCESS_REASONS = new Set([
   "request_success",
@@ -67,7 +70,7 @@ function isErrorReason(reason: string | undefined): boolean {
 /**
  * Truncate data for Langfuse to avoid excessive payload sizes.
  */
-function truncateForLangfuse(data: unknown, maxChars: number = LANGFUSE_MAX_IO_SIZE): unknown {
+function truncateForLangfuse(data: unknown, maxChars: number = getLangfuseMaxIoSize()): unknown {
   if (typeof data === "string") {
     return data.length > maxChars ? `${data.substring(0, maxChars)}...[truncated]` : data;
   }

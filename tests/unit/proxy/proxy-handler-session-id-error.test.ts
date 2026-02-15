@@ -13,6 +13,7 @@ const h = vi.hoisted(() => ({
     },
     isCountTokensRequest: () => false,
     setOriginalFormat: () => {},
+    recordForwardStart: () => {},
     messageContext: null,
     provider: null,
   } as any,
