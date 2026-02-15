@@ -233,7 +233,7 @@ describe("traceProxyRequest", () => {
     expect(llmCall[1].output).toEqual(responseBody);
   });
 
-  test("should redact sensitive headers", async () => {
+  test("should pass raw headers without redaction", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 
     await traceProxyRequest({
@@ -248,9 +248,9 @@ describe("traceProxyRequest", () => {
       (c: unknown[]) => c[0] === "llm-call"
     );
     const metadata = llmCall[1].metadata;
-    expect(metadata.requestHeaders["x-api-key"]).toBe("[REDACTED]");
+    expect(metadata.requestHeaders["x-api-key"]).toBe("test-mock-key-not-real");
     expect(metadata.requestHeaders["content-type"]).toBe("application/json");
-    expect(metadata.responseHeaders["x-api-key"]).toBe("[REDACTED]");
+    expect(metadata.responseHeaders["x-api-key"]).toBe("secret-mock");
   });
 
   test("should include provider name and model in tags", async () => {
@@ -467,10 +467,10 @@ describe("traceProxyRequest", () => {
     );
   });
 
-  test("should truncate large input/output for Langfuse", async () => {
+  test("should pass large input/output without truncation", async () => {
     const { traceProxyRequest } = await import("@/lib/langfuse/trace-proxy-request");
 
-    // Generate a large response text (> default 100KB limit)
+    // Generate a large response text
     const largeContent = "x".repeat(200_000);
 
     await traceProxyRequest({
@@ -486,9 +486,9 @@ describe("traceProxyRequest", () => {
       (c: unknown[]) => c[0] === "llm-call"
     );
     const output = llmCall[1].output as string;
-    // Non-JSON text should be truncated
-    expect(output.length).toBeLessThan(200_000);
-    expect(output).toContain("...[truncated]");
+    // Should be the full content, no truncation
+    expect(output).toBe(largeContent);
+    expect(output).not.toContain("...[truncated]");
   });
 
   test("should show streaming output with sseEventCount when no responseText", async () => {

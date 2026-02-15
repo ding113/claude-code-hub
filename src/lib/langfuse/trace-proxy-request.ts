@@ -1,27 +1,8 @@
 import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
-import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLangfuseEnabled } from "@/lib/langfuse/index";
 import { logger } from "@/lib/logger";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
-
-// Auth-sensitive header names to redact
-const REDACTED_HEADERS = new Set([
-  "x-api-key",
-  "authorization",
-  "x-goog-api-key",
-  "anthropic-api-key",
-  "cookie",
-  "set-cookie",
-]);
-
-function sanitizeHeaders(headers: Headers): Record<string, string> {
-  const result: Record<string, string> = {};
-  headers.forEach((value, key) => {
-    result[key] = REDACTED_HEADERS.has(key.toLowerCase()) ? "[REDACTED]" : value;
-  });
-  return result;
-}
 
 function buildRequestBodySummary(session: ProxySession): Record<string, unknown> {
   const msg = session.request.message as Record<string, unknown>;
@@ -43,8 +24,12 @@ function getStatusCategory(statusCode: number): string {
   return `${Math.floor(statusCode / 100)}xx`;
 }
 
-function getLangfuseMaxIoSize(): number {
-  return getEnvConfig().LANGFUSE_MAX_IO_SIZE;
+function headersToRecord(headers: Headers): Record<string, string> {
+  const result: Record<string, string> = {};
+  headers.forEach((value, key) => {
+    result[key] = value;
+  });
+  return result;
 }
 
 const SUCCESS_REASONS = new Set([
@@ -66,27 +51,6 @@ const ERROR_REASONS = new Set([
 
 function isErrorReason(reason: string | undefined): boolean {
   return !!reason && ERROR_REASONS.has(reason);
-}
-
-/**
- * Truncate data for Langfuse to avoid excessive payload sizes.
- */
-function truncateForLangfuse(data: unknown, maxChars: number = getLangfuseMaxIoSize()): unknown {
-  if (typeof data === "string") {
-    return data.length > maxChars ? `${data.substring(0, maxChars)}...[truncated]` : data;
-  }
-  if (data != null && typeof data === "object") {
-    const str = JSON.stringify(data);
-    if (str.length > maxChars) {
-      return {
-        _truncated: true,
-        _length: str.length,
-        _preview: str.substring(0, Math.min(maxChars, 2000)),
-      };
-    }
-    return data;
-  }
-  return data;
 }
 
 type ObservationLevel = "DEBUG" | "DEFAULT" | "WARNING" | "ERROR";
@@ -155,14 +119,14 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       if (failedAttempts >= 1) rootSpanLevel = "WARNING";
     }
 
-    // Actual request body (forwarded to upstream after all preprocessing)
+    // Actual request body (forwarded to upstream after all preprocessing) - no truncation
     const actualRequestBody = session.forwardedRequestBody
-      ? truncateForLangfuse(tryParseJsonSafe(session.forwardedRequestBody))
-      : truncateForLangfuse(session.request.message);
+      ? tryParseJsonSafe(session.forwardedRequestBody)
+      : session.request.message;
 
-    // Actual response body
+    // Actual response body - no truncation
     const actualResponseBody = ctx.responseText
-      ? truncateForLangfuse(tryParseJsonSafe(ctx.responseText))
+      ? tryParseJsonSafe(ctx.responseText)
       : isStreaming
         ? { streaming: true, sseEventCount: ctx.sseEventCount }
         : { statusCode };
@@ -199,7 +163,7 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSequence: String(session.getRequestSequence()),
     };
 
-    // Build generation metadata - all request detail fields
+    // Build generation metadata - all request detail fields, raw headers (no redaction)
     const generationMetadata: Record<string, unknown> = {
       // Provider
       providerId: provider?.id,
@@ -234,9 +198,9 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
       requestSummary: buildRequestBodySummary(session),
       // SSE
       sseEventCount: ctx.sseEventCount,
-      // Headers (sanitized)
-      requestHeaders: sanitizeHeaders(session.headers),
-      responseHeaders: sanitizeHeaders(ctx.responseHeaders),
+      // Headers (raw, no redaction)
+      requestHeaders: headersToRecord(session.headers),
+      responseHeaders: headersToRecord(ctx.responseHeaders),
     };
 
     // Build usage details for Langfuse generation
@@ -331,12 +295,10 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
         // 3. LLM generation (startTime = forwardStartTime when available)
         const generationStartTime = forwardStartDate ?? requestStartTime;
 
-        // Generation input = actual request payload
-        const generationInput = truncateForLangfuse(session.request.message);
-
-        // Generation output = actual response body
+        // Generation input/output = raw payload, no truncation
+        const generationInput = actualRequestBody;
         const generationOutput = ctx.responseText
-          ? truncateForLangfuse(tryParseJsonSafe(ctx.responseText))
+          ? tryParseJsonSafe(ctx.responseText)
           : isStreaming
             ? { streaming: true, sseEventCount: ctx.sseEventCount }
             : { statusCode };

@@ -134,7 +134,6 @@ export const EnvSchema = z.object({
   LANGFUSE_BASE_URL: z.string().default("https://cloud.langfuse.com"),
   LANGFUSE_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(1.0),
   LANGFUSE_DEBUG: z.string().default("false").transform(booleanTransform),
-  LANGFUSE_MAX_IO_SIZE: z.coerce.number().int().min(1).max(10_000_000).default(100_000),
 });
 
 /**
