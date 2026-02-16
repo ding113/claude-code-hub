@@ -48,6 +48,8 @@ export interface TabSharedProps {
   cacheReadInputTokens?: number | null;
   /** Cache TTL applied */
   cacheTtlApplied?: string | null;
+  /** Whether swap cache TTL billing was applied */
+  swapCacheTtlApplied?: boolean | null;
   /** Total cost in USD */
   costUsd?: string | null;
   /** Cost multiplier */

@@ -299,8 +299,22 @@ export function UsageLogsTable({
                           <TooltipTrigger asChild>
                             <div className="flex items-center gap-2 w-full cursor-help">
                               {log.cacheTtlApplied ? (
-                                <Badge variant="outline" className="text-[10px] leading-tight px-1">
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    "text-[10px] leading-tight px-1",
+                                    log.swapCacheTtlApplied
+                                      ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                                      : ""
+                                  )}
+                                  title={
+                                    log.swapCacheTtlApplied
+                                      ? t("logs.billingDetails.cacheTtlSwapped")
+                                      : undefined
+                                  }
+                                >
                                   {log.cacheTtlApplied}
+                                  {log.swapCacheTtlApplied ? " ~" : ""}
                                 </Badge>
                               ) : null}
                               <span className="ml-auto">
@@ -509,6 +523,7 @@ export function UsageLogsTable({
                         cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                         cacheReadInputTokens={log.cacheReadInputTokens}
                         cacheTtlApplied={log.cacheTtlApplied}
+                        swapCacheTtlApplied={log.swapCacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}
                         context1mApplied={log.context1mApplied}
