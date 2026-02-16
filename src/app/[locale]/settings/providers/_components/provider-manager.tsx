@@ -156,6 +156,7 @@ export function ProviderManager({
     });
 
     // Sort groups: "default" first, then alphabetically
+    groups.delete("default");
     const sortedGroups = Array.from(groups).sort();
     if (hasDefaultGroup) {
       return ["default", ...sortedGroups];
