@@ -72,8 +72,8 @@ PackyCode 为本软件的用户提供了特别优惠，使用此链接注册并�
 </a>
 </td>
 <td>
-<b>💎 特别优惠</b>：<a href="https://www.sssaicode.com/register?ref=NQMO05">SSSAiCode</a> 是一家稳定可靠的 API 中转站，致力于提供稳定、可靠、平价的 Claude、CodeX 模型服务。<br/>
-SSSAiCode 为本软件的用户提供特别优惠，使用此链接注册可长期享受每次 10$ 的购买奖励 → <a href="https://www.sssaicode.com/register?ref=NQMO05">立即访问</a>
+<b>💎 特别优惠</b>：<a href="https://www.sssaicode.com/register?ref=NQMO05">SSSAiCode</a> 是一家稳定可靠的 API 中转站，致力于提供稳定、可靠、平价的 Claude、CodeX 模型服务，<b>提供高性价比折合 0.5￥/$ 的官方 Claude 服务</b>，支持包月、Paygo 多种计费方式、支持当日快速开票。<br/>
+SSSAiCode 为本软件的用户提供特别优惠，使用此链接注册可长期享受购买月卡每次 10$ 的额外奖励 → <a href="https://www.sssaicode.com/register?ref=NQMO05">立即访问</a>
 </td>
 </tr>
 </table>
