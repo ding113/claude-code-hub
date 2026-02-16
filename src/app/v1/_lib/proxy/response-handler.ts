@@ -2668,37 +2668,37 @@ export function applySwapCacheTtlBilling(
 /**
  * Apply swap + resolve session fallback cache_ttl + normalize cache buckets.
  * Returns a new UsageMetrics object with consistent bucket routing.
- *
- * WARNING: Mutates `usageMetrics` in-place (via applySwapCacheTtlBilling)
- * before creating the normalized copy.
+ * The input object is NOT mutated -- swap is applied to an internal clone.
  */
 function normalizeUsageWithSwap(
   usageMetrics: UsageMetrics,
   session: ProxySession,
   swapCacheTtlBilling?: boolean
 ): UsageMetrics {
-  applySwapCacheTtlBilling(usageMetrics, swapCacheTtlBilling);
+  // Clone before mutating to prevent caller side-effects and double-swap risks
+  const swapped = { ...usageMetrics };
+  applySwapCacheTtlBilling(swapped, swapCacheTtlBilling);
 
-  let resolvedCacheTtl = usageMetrics.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
+  let resolvedCacheTtl = swapped.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
 
-  // When usageMetrics.cache_ttl is absent, session fallback wasn't swapped - handle it
+  // When original cache_ttl is absent, session fallback wasn't swapped - handle it
   if (swapCacheTtlBilling && !usageMetrics.cache_ttl) {
     if (resolvedCacheTtl === "5m") resolvedCacheTtl = "1h";
     else if (resolvedCacheTtl === "1h") resolvedCacheTtl = "5m";
   }
 
   const cache5m =
-    usageMetrics.cache_creation_5m_input_tokens ??
-    (resolvedCacheTtl === "1h" ? undefined : usageMetrics.cache_creation_input_tokens);
+    swapped.cache_creation_5m_input_tokens ??
+    (resolvedCacheTtl === "1h" ? undefined : swapped.cache_creation_input_tokens);
   const cache1h =
-    usageMetrics.cache_creation_1h_input_tokens ??
-    (resolvedCacheTtl === "1h" ? usageMetrics.cache_creation_input_tokens : undefined);
+    swapped.cache_creation_1h_input_tokens ??
+    (resolvedCacheTtl === "1h" ? swapped.cache_creation_input_tokens : undefined);
   const cacheTotal =
-    usageMetrics.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
+    swapped.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
 
   return {
-    ...usageMetrics,
-    cache_ttl: resolvedCacheTtl ?? usageMetrics.cache_ttl,
+    ...swapped,
+    cache_ttl: resolvedCacheTtl ?? swapped.cache_ttl,
     cache_creation_5m_input_tokens: cache5m,
     cache_creation_1h_input_tokens: cache1h,
     cache_creation_input_tokens: cacheTotal,

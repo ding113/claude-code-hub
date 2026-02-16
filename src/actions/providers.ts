@@ -638,6 +638,7 @@ export async function editProvider(
     limit_total_usd?: number | null;
     limit_concurrent_sessions?: number | null;
     cache_ttl_preference?: "inherit" | "5m" | "1h";
+    swap_cache_ttl_billing?: boolean;
     context_1m_preference?: Context1mPreference | null;
     codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
     codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;

@@ -261,6 +261,29 @@ describe("applySwapCacheTtlBilling (direct)", () => {
     expect(usage.cache_ttl).toBe("mixed");
   });
 
+  test("applySwapCacheTtlBilling does not affect a pre-cloned copy (caller isolation)", () => {
+    const original: UsageMetrics = {
+      cache_creation_5m_input_tokens: 200,
+      cache_creation_1h_input_tokens: 800,
+      cache_ttl: "5m",
+    };
+    const snapshot = { ...original };
+
+    // Clone then swap (mimics the fixed normalizeUsageWithSwap pattern)
+    const clone = { ...original };
+    applySwapCacheTtlBilling(clone, true);
+
+    // Original must be untouched
+    expect(original.cache_creation_5m_input_tokens).toBe(snapshot.cache_creation_5m_input_tokens);
+    expect(original.cache_creation_1h_input_tokens).toBe(snapshot.cache_creation_1h_input_tokens);
+    expect(original.cache_ttl).toBe(snapshot.cache_ttl);
+
+    // Clone should have swapped values
+    expect(clone.cache_creation_5m_input_tokens).toBe(800);
+    expect(clone.cache_creation_1h_input_tokens).toBe(200);
+    expect(clone.cache_ttl).toBe("1h");
+  });
+
   test("double swap returns to original values (idempotency)", () => {
     const usage: UsageMetrics = {
       input_tokens: 500,
