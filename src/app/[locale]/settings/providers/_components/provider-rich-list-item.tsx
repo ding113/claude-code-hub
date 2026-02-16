@@ -15,6 +15,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   editProvider,
   getUnmaskedProviderKey,
@@ -43,7 +44,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   DropdownMenu,
   DropdownMenuContent,

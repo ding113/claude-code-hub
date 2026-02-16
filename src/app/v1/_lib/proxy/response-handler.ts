@@ -889,7 +889,7 @@ export class ProxyResponseHandler {
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
-            swapCacheTtlApplied: provider.swapCacheTtlBilling,
+            swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
           });
 
           // 记录请求结束
@@ -1829,7 +1829,7 @@ export class ProxyResponseHandler {
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
-          swapCacheTtlApplied: provider.swapCacheTtlBilling,
+          swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
         });
 
         emitLangfuseTrace(session, {
@@ -2663,9 +2663,10 @@ function adjustUsageForProviderType(
  */
 export function applySwapCacheTtlBilling(usage: UsageMetrics, swap: boolean | undefined): void {
   if (!swap) return;
-  const orig5m = usage.cache_creation_5m_input_tokens;
-  usage.cache_creation_5m_input_tokens = usage.cache_creation_1h_input_tokens;
-  usage.cache_creation_1h_input_tokens = orig5m;
+  [usage.cache_creation_5m_input_tokens, usage.cache_creation_1h_input_tokens] = [
+    usage.cache_creation_1h_input_tokens,
+    usage.cache_creation_5m_input_tokens,
+  ];
   if (usage.cache_ttl === "5m") usage.cache_ttl = "1h";
   else if (usage.cache_ttl === "1h") usage.cache_ttl = "5m";
 }
@@ -2686,7 +2687,9 @@ function normalizeUsageWithSwap(
 
   let resolvedCacheTtl = swapped.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
 
-  // When original cache_ttl is absent, session fallback wasn't swapped - handle it
+  // When the upstream response had no cache_ttl, we fell through to the session-level
+  // getCacheTtlResolved() fallback which reflects the *original* (un-swapped) value.
+  // We must invert it here to stay consistent with the already-swapped bucket tokens.
   if (swapCacheTtlBilling && !usageMetrics.cache_ttl) {
     if (resolvedCacheTtl === "5m") resolvedCacheTtl = "1h";
     else if (resolvedCacheTtl === "1h") resolvedCacheTtl = "5m";
@@ -2886,7 +2889,7 @@ export async function finalizeRequestStats(
       model: session.getCurrentModel() ?? undefined,
       providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
-      swapCacheTtlApplied: provider.swapCacheTtlBilling,
+      swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
     });
     return null;
   }
@@ -2966,7 +2969,7 @@ export async function finalizeRequestStats(
     model: session.getCurrentModel() ?? undefined,
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
-    swapCacheTtlApplied: provider.swapCacheTtlBilling,
+    swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
   });
 
   return normalizedUsage;
