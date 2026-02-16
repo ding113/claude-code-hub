@@ -728,7 +728,11 @@ export class ProxyResponseHandler {
         usageMetrics = usageResult.usageMetrics;
 
         if (usageMetrics) {
-          usageMetrics = normalizeUsageWithSwap(usageMetrics, session, provider.swapCacheTtlBilling);
+          usageMetrics = normalizeUsageWithSwap(
+            usageMetrics,
+            session,
+            provider.swapCacheTtlBilling
+          );
         }
 
         // Codex: Extract prompt_cache_key and update session binding
@@ -1690,7 +1694,11 @@ export class ProxyResponseHandler {
         usageForCost = usageResult.usageMetrics;
 
         if (usageForCost) {
-          usageForCost = normalizeUsageWithSwap(usageForCost, session, provider.swapCacheTtlBilling);
+          usageForCost = normalizeUsageWithSwap(
+            usageForCost,
+            session,
+            provider.swapCacheTtlBilling
+          );
         }
 
         // Codex: Extract prompt_cache_key from SSE events and update session binding
@@ -2653,10 +2661,7 @@ function adjustUsageForProviderType(
  * Swap 5m/1h cache buckets and cache_ttl when provider.swapCacheTtlBilling is enabled.
  * Mutates in-place.
  */
-export function applySwapCacheTtlBilling(
-  usage: UsageMetrics,
-  swap: boolean | undefined
-): void {
+export function applySwapCacheTtlBilling(usage: UsageMetrics, swap: boolean | undefined): void {
   if (!swap) return;
   const orig5m = usage.cache_creation_5m_input_tokens;
   usage.cache_creation_5m_input_tokens = usage.cache_creation_1h_input_tokens;
@@ -2889,7 +2894,11 @@ export async function finalizeRequestStats(
   // 4. 更新成本
   // Invert cache TTL at data entry when provider option is enabled
   // All downstream (badge, cost, DB, logs) will see inverted values
-  const normalizedUsage = normalizeUsageWithSwap(usageMetrics, session, provider.swapCacheTtlBilling);
+  const normalizedUsage = normalizeUsageWithSwap(
+    usageMetrics,
+    session,
+    provider.swapCacheTtlBilling
+  );
 
   await updateRequestCostFromUsage(
     messageContext.id,

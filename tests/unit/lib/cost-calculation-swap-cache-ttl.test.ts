@@ -117,7 +117,10 @@ describe("swap cache TTL billing", () => {
   });
 
   test("swap with undefined tokens treats them as undefined (no crash)", () => {
-    const tokens = { cache_creation_5m_input_tokens: undefined, cache_creation_1h_input_tokens: 1000 };
+    const tokens = {
+      cache_creation_5m_input_tokens: undefined,
+      cache_creation_1h_input_tokens: 1000,
+    };
     const swapped = applySwap(tokens, true);
 
     expect(swapped.cache_creation_5m_input_tokens).toBe(1000);
@@ -133,8 +136,16 @@ describe("swap cache TTL billing", () => {
   });
 
   test("swap also inverts cache_ttl value", () => {
-    const usage5m = { cache_creation_5m_input_tokens: 100, cache_creation_1h_input_tokens: 0, cache_ttl: "5m" as const };
-    const usage1h = { cache_creation_5m_input_tokens: 0, cache_creation_1h_input_tokens: 100, cache_ttl: "1h" as const };
+    const usage5m = {
+      cache_creation_5m_input_tokens: 100,
+      cache_creation_1h_input_tokens: 0,
+      cache_ttl: "5m" as const,
+    };
+    const usage1h = {
+      cache_creation_5m_input_tokens: 0,
+      cache_creation_1h_input_tokens: 100,
+      cache_ttl: "1h" as const,
+    };
 
     const swapped5m = applySwap(usage5m, true);
     const swapped1h = applySwap(usage1h, true);
@@ -164,7 +175,12 @@ describe("swap cache TTL billing", () => {
     expect(cache1h).toBeUndefined();
 
     const result = calculateRequestCostBreakdown(
-      { input_tokens: 0, output_tokens: 0, cache_creation_5m_input_tokens: cache5m, cache_creation_1h_input_tokens: cache1h },
+      {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_creation_5m_input_tokens: cache5m,
+        cache_creation_1h_input_tokens: cache1h,
+      },
       makePriceData()
     );
     // 1000 * 0.00000375 (5m rate)

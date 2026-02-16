@@ -325,11 +325,7 @@ export function SummaryTab({
                         ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
                         : ""
                     )}
-                    title={
-                      swapCacheTtlApplied
-                        ? t("billingDetails.cacheTtlSwapped")
-                        : undefined
-                    }
+                    title={swapCacheTtlApplied ? t("billingDetails.cacheTtlSwapped") : undefined}
                   >
                     {cacheTtlApplied}
                     {swapCacheTtlApplied ? " ~" : ""}
