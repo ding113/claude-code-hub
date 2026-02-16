@@ -671,6 +671,7 @@ export class ProxyResponseHandler {
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
+            swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
           });
           const tracker = ProxyStatusTracker.getInstance();
           tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -727,7 +728,7 @@ export class ProxyResponseHandler {
         usageMetrics = usageResult.usageMetrics;
 
         if (usageMetrics) {
-          applySwapCacheTtlBilling(usageMetrics, provider.swapCacheTtlBilling);
+          usageMetrics = normalizeUsageWithSwap(usageMetrics, session, provider.swapCacheTtlBilling);
         }
 
         // Codex: Extract prompt_cache_key and update session binding
@@ -884,6 +885,7 @@ export class ProxyResponseHandler {
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
+            swapCacheTtlApplied: provider.swapCacheTtlBilling,
           });
 
           // 记录请求结束
@@ -1688,7 +1690,7 @@ export class ProxyResponseHandler {
         usageForCost = usageResult.usageMetrics;
 
         if (usageForCost) {
-          applySwapCacheTtlBilling(usageForCost, provider.swapCacheTtlBilling);
+          usageForCost = normalizeUsageWithSwap(usageForCost, session, provider.swapCacheTtlBilling);
         }
 
         // Codex: Extract prompt_cache_key from SSE events and update session binding
@@ -1819,6 +1821,7 @@ export class ProxyResponseHandler {
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
+          swapCacheTtlApplied: provider.swapCacheTtlBilling,
         });
 
         emitLangfuseTrace(session, {
@@ -2662,6 +2665,46 @@ export function applySwapCacheTtlBilling(
   else if (usage.cache_ttl === "1h") usage.cache_ttl = "5m";
 }
 
+/**
+ * Apply swap + resolve session fallback cache_ttl + normalize cache buckets.
+ * Returns a new UsageMetrics object with consistent bucket routing.
+ *
+ * WARNING: Mutates `usageMetrics` in-place (via applySwapCacheTtlBilling)
+ * before creating the normalized copy.
+ */
+function normalizeUsageWithSwap(
+  usageMetrics: UsageMetrics,
+  session: ProxySession,
+  swapCacheTtlBilling?: boolean
+): UsageMetrics {
+  applySwapCacheTtlBilling(usageMetrics, swapCacheTtlBilling);
+
+  let resolvedCacheTtl = usageMetrics.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
+
+  // When usageMetrics.cache_ttl is absent, session fallback wasn't swapped - handle it
+  if (swapCacheTtlBilling && !usageMetrics.cache_ttl) {
+    if (resolvedCacheTtl === "5m") resolvedCacheTtl = "1h";
+    else if (resolvedCacheTtl === "1h") resolvedCacheTtl = "5m";
+  }
+
+  const cache5m =
+    usageMetrics.cache_creation_5m_input_tokens ??
+    (resolvedCacheTtl === "1h" ? undefined : usageMetrics.cache_creation_input_tokens);
+  const cache1h =
+    usageMetrics.cache_creation_1h_input_tokens ??
+    (resolvedCacheTtl === "1h" ? usageMetrics.cache_creation_input_tokens : undefined);
+  const cacheTotal =
+    usageMetrics.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
+
+  return {
+    ...usageMetrics,
+    cache_ttl: resolvedCacheTtl ?? usageMetrics.cache_ttl,
+    cache_creation_5m_input_tokens: cache5m,
+    cache_creation_1h_input_tokens: cache1h,
+    cache_creation_input_tokens: cacheTotal,
+  };
+}
+
 async function updateRequestCostFromUsage(
   messageId: number,
   originalModel: string | null,
@@ -2838,6 +2881,7 @@ export async function finalizeRequestStats(
       model: session.getCurrentModel() ?? undefined,
       providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
+      swapCacheTtlApplied: provider.swapCacheTtlBilling,
     });
     return null;
   }
@@ -2845,32 +2889,7 @@ export async function finalizeRequestStats(
   // 4. 更新成本
   // Invert cache TTL at data entry when provider option is enabled
   // All downstream (badge, cost, DB, logs) will see inverted values
-  applySwapCacheTtlBilling(usageMetrics, provider.swapCacheTtlBilling);
-
-  let resolvedCacheTtl = usageMetrics.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
-
-  // When usageMetrics.cache_ttl is absent, session fallback wasn't swapped - handle it
-  if (provider.swapCacheTtlBilling && !usageMetrics.cache_ttl) {
-    if (resolvedCacheTtl === "5m") resolvedCacheTtl = "1h";
-    else if (resolvedCacheTtl === "1h") resolvedCacheTtl = "5m";
-  }
-
-  const cache5m =
-    usageMetrics.cache_creation_5m_input_tokens ??
-    (resolvedCacheTtl === "1h" ? undefined : usageMetrics.cache_creation_input_tokens);
-  const cache1h =
-    usageMetrics.cache_creation_1h_input_tokens ??
-    (resolvedCacheTtl === "1h" ? usageMetrics.cache_creation_input_tokens : undefined);
-  const cacheTotal =
-    usageMetrics.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
-
-  const normalizedUsage: UsageMetrics = {
-    ...usageMetrics,
-    cache_ttl: resolvedCacheTtl ?? usageMetrics.cache_ttl,
-    cache_creation_5m_input_tokens: cache5m,
-    cache_creation_1h_input_tokens: cache1h,
-    cache_creation_input_tokens: cacheTotal,
-  };
+  const normalizedUsage = normalizeUsageWithSwap(usageMetrics, session, provider.swapCacheTtlBilling);
 
   await updateRequestCostFromUsage(
     messageContext.id,
@@ -2938,6 +2957,7 @@ export async function finalizeRequestStats(
     model: session.getCurrentModel() ?? undefined,
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
+    swapCacheTtlApplied: provider.swapCacheTtlBilling,
   });
 
   return normalizedUsage;
@@ -3096,6 +3116,7 @@ async function persistRequestFailure(options: {
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
+      swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
     });
 
     const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";

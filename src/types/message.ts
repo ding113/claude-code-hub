@@ -256,7 +256,10 @@ export interface MessageRequest {
   // 1M 上下文窗口是否已应用
   context1mApplied?: boolean;
 
-  // 特殊设置（用于记录各类“特殊行为/覆写”的命中与生效情况，便于审计与展示）
+  // Swap Cache TTL Billing: whether cache TTL inversion was active for this request
+  swapCacheTtlApplied?: boolean;
+
+  // 特殊设置（用于记录各类"特殊行为/覆写"的命中与生效情况，便于审计与展示）
   specialSettings?: SpecialSetting[] | null;
 
   createdAt: Date;

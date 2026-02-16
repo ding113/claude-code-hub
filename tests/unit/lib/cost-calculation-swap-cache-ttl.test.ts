@@ -260,4 +260,32 @@ describe("applySwapCacheTtlBilling (direct)", () => {
     // "mixed" is not "5m" or "1h", so stays unchanged
     expect(usage.cache_ttl).toBe("mixed");
   });
+
+  test("double swap returns to original values (idempotency)", () => {
+    const usage: UsageMetrics = {
+      input_tokens: 500,
+      output_tokens: 250,
+      cache_creation_5m_input_tokens: 200,
+      cache_creation_1h_input_tokens: 800,
+      cache_read_input_tokens: 150,
+      cache_ttl: "5m",
+    };
+    const original = { ...usage };
+
+    applySwapCacheTtlBilling(usage, true);
+    // After first swap, values are inverted
+    expect(usage.cache_creation_5m_input_tokens).toBe(800);
+    expect(usage.cache_creation_1h_input_tokens).toBe(200);
+    expect(usage.cache_ttl).toBe("1h");
+
+    applySwapCacheTtlBilling(usage, true);
+    // After second swap, values return to original
+    expect(usage.cache_creation_5m_input_tokens).toBe(original.cache_creation_5m_input_tokens);
+    expect(usage.cache_creation_1h_input_tokens).toBe(original.cache_creation_1h_input_tokens);
+    expect(usage.cache_ttl).toBe(original.cache_ttl);
+    // Non-cache fields unchanged throughout
+    expect(usage.input_tokens).toBe(original.input_tokens);
+    expect(usage.output_tokens).toBe(original.output_tokens);
+    expect(usage.cache_read_input_tokens).toBe(original.cache_read_input_tokens);
+  });
 });

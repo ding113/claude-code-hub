@@ -456,6 +456,9 @@ export const messageRequest = pgTable('message_request', {
   // 1M Context Window 应用状态
   context1mApplied: boolean('context_1m_applied').default(false),
 
+  // Swap Cache TTL Billing: whether cache TTL inversion was active for this request
+  swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
+
   // 特殊设置（用于记录各类“特殊行为/覆写”的命中与生效情况，便于审计与展示）
   specialSettings: jsonb('special_settings').$type<SpecialSetting[]>(),
 
