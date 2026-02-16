@@ -585,7 +585,7 @@ export class ProxyResponseHandler {
 
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
-            await finalizeRequestStats(
+            const finalizedUsage = await finalizeRequestStats(
               session,
               responseText,
               statusCode,
@@ -596,8 +596,7 @@ export class ProxyResponseHandler {
             emitLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText,
-              usageMetrics: parseUsageFromResponseText(responseText, provider.providerType)
-                .usageMetrics,
+              usageMetrics: finalizedUsage,
               costUsd: undefined,
               statusCode,
               durationMs: duration,
@@ -726,6 +725,10 @@ export class ProxyResponseHandler {
         const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
         usageRecord = usageResult.usageRecord;
         usageMetrics = usageResult.usageMetrics;
+
+        if (usageMetrics) {
+          applySwapCacheTtlBilling(usageMetrics, provider.swapCacheTtlBilling);
+        }
 
         // Codex: Extract prompt_cache_key and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -1335,7 +1338,7 @@ export class ProxyResponseHandler {
               clientAborted,
               abortReason
             );
-            await finalizeRequestStats(
+            const finalizedUsage = await finalizeRequestStats(
               session,
               allContent,
               finalized.effectiveStatusCode,
@@ -1347,8 +1350,7 @@ export class ProxyResponseHandler {
             emitLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText: allContent,
-              usageMetrics: parseUsageFromResponseText(allContent, provider.providerType)
-                .usageMetrics,
+              usageMetrics: finalizedUsage,
               costUsd: undefined,
               statusCode: finalized.effectiveStatusCode,
               durationMs: duration,
@@ -1684,6 +1686,10 @@ export class ProxyResponseHandler {
 
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
         usageForCost = usageResult.usageMetrics;
+
+        if (usageForCost) {
+          applySwapCacheTtlBilling(usageForCost, provider.swapCacheTtlBilling);
+        }
 
         // Codex: Extract prompt_cache_key from SSE events and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -2640,6 +2646,22 @@ function adjustUsageForProviderType(
   };
 }
 
+/**
+ * Swap 5m/1h cache buckets and cache_ttl when provider.swapCacheTtlBilling is enabled.
+ * Mutates in-place.
+ */
+export function applySwapCacheTtlBilling(
+  usage: UsageMetrics,
+  swap: boolean | undefined
+): void {
+  if (!swap) return;
+  const orig5m = usage.cache_creation_5m_input_tokens;
+  usage.cache_creation_5m_input_tokens = usage.cache_creation_1h_input_tokens;
+  usage.cache_creation_1h_input_tokens = orig5m;
+  if (usage.cache_ttl === "5m") usage.cache_ttl = "1h";
+  else if (usage.cache_ttl === "1h") usage.cache_ttl = "5m";
+}
+
 async function updateRequestCostFromUsage(
   messageId: number,
   originalModel: string | null,
@@ -2789,10 +2811,10 @@ export async function finalizeRequestStats(
   duration: number,
   errorMessage?: string,
   providerIdOverride?: number
-): Promise<void> {
+): Promise<UsageMetrics | null> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
-    return;
+    return null;
   }
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
@@ -2817,19 +2839,13 @@ export async function finalizeRequestStats(
       providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
     });
-    return;
+    return null;
   }
 
   // 4. 更新成本
   // Invert cache TTL at data entry when provider option is enabled
   // All downstream (badge, cost, DB, logs) will see inverted values
-  if (provider.swapCacheTtlBilling) {
-    const orig5m = usageMetrics.cache_creation_5m_input_tokens;
-    usageMetrics.cache_creation_5m_input_tokens = usageMetrics.cache_creation_1h_input_tokens;
-    usageMetrics.cache_creation_1h_input_tokens = orig5m;
-    if (usageMetrics.cache_ttl === "5m") usageMetrics.cache_ttl = "1h";
-    else if (usageMetrics.cache_ttl === "1h") usageMetrics.cache_ttl = "5m";
-  }
+  applySwapCacheTtlBilling(usageMetrics, provider.swapCacheTtlBilling);
 
   let resolvedCacheTtl = usageMetrics.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
 
@@ -2923,6 +2939,8 @@ export async function finalizeRequestStats(
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
   });
+
+  return normalizedUsage;
 }
 
 /**

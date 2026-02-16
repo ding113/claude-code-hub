@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { calculateRequestCostBreakdown } from "@/lib/utils/cost-calculation";
+import { applySwapCacheTtlBilling } from "@/app/v1/_lib/proxy/response-handler";
+import type { UsageMetrics } from "@/app/v1/_lib/proxy/response-handler";
 import type { ModelPriceData } from "@/types/model-price";
 
 function makePriceData(overrides: Partial<ModelPriceData> = {}): ModelPriceData {
@@ -13,35 +15,28 @@ function makePriceData(overrides: Partial<ModelPriceData> = {}): ModelPriceData 
   };
 }
 
-describe("swap cache TTL billing", () => {
-  // Simulates the swap logic from response-handler.ts:
-  // When provider.swapCacheTtlBilling is true, bucket values AND cache_ttl
-  // are swapped at data entry so all downstream sees inverted values.
-  function applySwap(
-    usage: {
-      cache_creation_5m_input_tokens?: number;
-      cache_creation_1h_input_tokens?: number;
-      cache_ttl?: "5m" | "1h";
-    },
-    swap: boolean
-  ) {
-    if (!swap) {
-      return {
-        cache_creation_5m_input_tokens: usage.cache_creation_5m_input_tokens,
-        cache_creation_1h_input_tokens: usage.cache_creation_1h_input_tokens,
-        cache_ttl: usage.cache_ttl,
-      };
-    }
-    let swappedTtl = usage.cache_ttl;
-    if (swappedTtl === "5m") swappedTtl = "1h";
-    else if (swappedTtl === "1h") swappedTtl = "5m";
-    return {
-      cache_creation_5m_input_tokens: usage.cache_creation_1h_input_tokens,
-      cache_creation_1h_input_tokens: usage.cache_creation_5m_input_tokens,
-      cache_ttl: swappedTtl,
-    };
-  }
+/**
+ * Wrapper around the real applySwapCacheTtlBilling that returns a new object
+ * (the production function mutates in-place).
+ */
+function applySwap(
+  usage: {
+    cache_creation_5m_input_tokens?: number;
+    cache_creation_1h_input_tokens?: number;
+    cache_ttl?: "5m" | "1h";
+  },
+  swap: boolean
+) {
+  const copy = { ...usage } as UsageMetrics;
+  applySwapCacheTtlBilling(copy, swap);
+  return {
+    cache_creation_5m_input_tokens: copy.cache_creation_5m_input_tokens,
+    cache_creation_1h_input_tokens: copy.cache_creation_1h_input_tokens,
+    cache_ttl: copy.cache_ttl,
+  };
+}
 
+describe("swap cache TTL billing", () => {
   test("swap=false: normal billing (5m tokens at 5m rate, 1h tokens at 1h rate)", () => {
     const tokens = { cache_creation_5m_input_tokens: 1000, cache_creation_1h_input_tokens: 0 };
     const swapped = applySwap(tokens, false);
@@ -174,5 +169,95 @@ describe("swap cache TTL billing", () => {
     );
     // 1000 * 0.00000375 (5m rate)
     expect(result.cache_creation).toBeCloseTo(0.00375, 6);
+  });
+});
+
+describe("applySwapCacheTtlBilling (direct)", () => {
+  test("swap=false is a no-op", () => {
+    const usage: UsageMetrics = {
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_creation_5m_input_tokens: 200,
+      cache_creation_1h_input_tokens: 300,
+      cache_ttl: "5m",
+    };
+    const before = { ...usage };
+    applySwapCacheTtlBilling(usage, false);
+    expect(usage).toEqual(before);
+  });
+
+  test("swap=undefined is a no-op", () => {
+    const usage: UsageMetrics = {
+      cache_creation_5m_input_tokens: 200,
+      cache_creation_1h_input_tokens: 300,
+      cache_ttl: "1h",
+    };
+    const before = { ...usage };
+    applySwapCacheTtlBilling(usage, undefined);
+    expect(usage).toEqual(before);
+  });
+
+  test("swap=true swaps bucket values", () => {
+    const usage: UsageMetrics = {
+      cache_creation_5m_input_tokens: 200,
+      cache_creation_1h_input_tokens: 300,
+    };
+    applySwapCacheTtlBilling(usage, true);
+    expect(usage.cache_creation_5m_input_tokens).toBe(300);
+    expect(usage.cache_creation_1h_input_tokens).toBe(200);
+  });
+
+  test("swap=true inverts cache_ttl 5m->1h", () => {
+    const usage: UsageMetrics = { cache_ttl: "5m" };
+    applySwapCacheTtlBilling(usage, true);
+    expect(usage.cache_ttl).toBe("1h");
+  });
+
+  test("swap=true inverts cache_ttl 1h->5m", () => {
+    const usage: UsageMetrics = { cache_ttl: "1h" };
+    applySwapCacheTtlBilling(usage, true);
+    expect(usage.cache_ttl).toBe("5m");
+  });
+
+  test("swap=true leaves undefined cache_ttl as undefined", () => {
+    const usage: UsageMetrics = { cache_creation_5m_input_tokens: 100 };
+    applySwapCacheTtlBilling(usage, true);
+    expect(usage.cache_ttl).toBeUndefined();
+  });
+
+  test("swap=true with undefined bucket values does not crash", () => {
+    const usage: UsageMetrics = {};
+    applySwapCacheTtlBilling(usage, true);
+    expect(usage.cache_creation_5m_input_tokens).toBeUndefined();
+    expect(usage.cache_creation_1h_input_tokens).toBeUndefined();
+  });
+
+  test("swap=true preserves non-cache fields", () => {
+    const usage: UsageMetrics = {
+      input_tokens: 100,
+      output_tokens: 50,
+      cache_read_input_tokens: 75,
+      cache_creation_5m_input_tokens: 200,
+      cache_creation_1h_input_tokens: 300,
+      cache_ttl: "5m",
+    };
+    applySwapCacheTtlBilling(usage, true);
+    expect(usage.input_tokens).toBe(100);
+    expect(usage.output_tokens).toBe(50);
+    expect(usage.cache_read_input_tokens).toBe(75);
+  });
+
+  test("swap=true does not touch mixed cache_ttl", () => {
+    const usage: UsageMetrics = {
+      cache_creation_5m_input_tokens: 100,
+      cache_creation_1h_input_tokens: 200,
+      cache_ttl: "mixed",
+    };
+    applySwapCacheTtlBilling(usage, true);
+    // Buckets swap
+    expect(usage.cache_creation_5m_input_tokens).toBe(200);
+    expect(usage.cache_creation_1h_input_tokens).toBe(100);
+    // "mixed" is not "5m" or "1h", so stays unchanged
+    expect(usage.cache_ttl).toBe("mixed");
   });
 });
