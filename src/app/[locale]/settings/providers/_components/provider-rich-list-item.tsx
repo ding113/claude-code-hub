@@ -43,6 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -136,6 +137,7 @@ export function ProviderRichListItem({
   const [togglePending, startToggleTransition] = useTransition();
 
   const canEdit = currentUser?.role === "admin";
+  const t = useTranslations("settings.providers");
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
@@ -948,6 +950,9 @@ export function ProviderRichListItem({
       {/* 编辑 Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
         <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+          <VisuallyHidden>
+            <DialogTitle>{t("editProvider")}</DialogTitle>
+          </VisuallyHidden>
           <FormErrorBoundary>
             <ProviderForm
               mode="edit"
@@ -964,6 +969,9 @@ export function ProviderRichListItem({
       {/* 克隆 Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
         <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+          <VisuallyHidden>
+            <DialogTitle>{t("clone")}</DialogTitle>
+          </VisuallyHidden>
           <FormErrorBoundary>
             <ProviderForm
               mode="create"

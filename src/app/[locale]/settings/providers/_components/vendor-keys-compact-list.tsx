@@ -28,6 +28,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -99,6 +100,9 @@ export function VendorKeysCompactList(props: {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+              <VisuallyHidden>
+                <DialogTitle>{t("addVendorKey")}</DialogTitle>
+              </VisuallyHidden>
               <FormErrorBoundary>
                 <ProviderForm
                   mode="create"
@@ -467,6 +471,9 @@ function VendorKeyRow(props: {
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+                  <VisuallyHidden>
+                    <DialogTitle>{t("editProvider")}</DialogTitle>
+                  </VisuallyHidden>
                   <FormErrorBoundary>
                     <ProviderForm
                       mode="edit"
