@@ -99,7 +99,8 @@ const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 32 * 1024; // 32 KiB
  *
  * 注意：
  * - 该函数只用于启发式检测，不用于业务逻辑解析；
- * - 超过上限时会 `cancel()` reader，避免继续占用资源；
+ * - 超过上限时会 fire-and-forget `cancel()` reader，避免继续占用资源；
+ * - cancel() 不使用 await，因为对 tee 分支的 cancel 在推模式大流下可能长时间阻塞；
  * - 调用方应使用 `response.clone()`，避免消费掉原始响应体，影响后续透传/解析。
  */
 async function readResponseTextUpTo(
@@ -146,11 +147,14 @@ async function readResponseTextUpTo(
     if (flushed) chunks.push(flushed);
   } finally {
     if (truncated) {
-      try {
-        await reader.cancel();
-      } catch (cancelErr) {
+      // Fire-and-forget: do NOT await reader.cancel() here.
+      // On tee'd ReadableStreams backed by push-mode Node streams (e.g. large chunked
+      // responses via nodeStreamToWebStreamSafe), await cancel() can block indefinitely
+      // because the tee controller waits for internal queue drainage while the other
+      // branch has not started consuming yet. This deadlocks the main request path.
+      reader.cancel().catch((cancelErr) => {
         logger.debug("readResponseTextUpTo: failed to cancel reader", { error: cancelErr });
-      }
+      });
     }
 
     try {
