@@ -5,6 +5,7 @@ import { cache } from "react";
 import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { DashboardHeader } from "../dashboard/_components/dashboard-header";
+import { UsageDocAuthProvider } from "./_components/usage-doc-auth-context";
 
 type UsageDocParams = { locale: string };
 
@@ -63,10 +64,8 @@ export default async function UsageDocLayout({
         </header>
       )}
 
-      {/* 文档内容主体 */}
       <main className="mx-auto w-full max-w-7xl px-6 py-8">
-        {/* 文档容器 */}
-        {children}
+        <UsageDocAuthProvider isLoggedIn={!!session}>{children}</UsageDocAuthProvider>
       </main>
     </div>
   );

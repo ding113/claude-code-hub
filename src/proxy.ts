@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
-import { validateKey } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, validateKey } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
@@ -67,7 +67,7 @@ async function proxyHandler(request: NextRequest) {
   );
 
   // Check authentication for protected routes
-  const authToken = request.cookies.get("auth-token");
+  const authToken = request.cookies.get(AUTH_COOKIE_NAME);
 
   if (!authToken) {
     // Not authenticated, redirect to login page
@@ -89,7 +89,7 @@ async function proxyHandler(request: NextRequest) {
     url.pathname = `/${locale}/login`;
     url.searchParams.set("from", pathWithoutLocale || "/dashboard");
     const response = NextResponse.redirect(url);
-    response.cookies.delete("auth-token");
+    response.cookies.delete(AUTH_COOKIE_NAME);
     return response;
   }
 

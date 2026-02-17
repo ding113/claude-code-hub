@@ -22,6 +22,7 @@ export default function LoginPage() {
 }
 
 type LoginStatus = "idle" | "submitting" | "success" | "error";
+type LoginType = "admin" | "dashboard_user" | "readonly_user";
 
 interface LoginVersionInfo {
   current: string;
@@ -29,6 +30,18 @@ interface LoginVersionInfo {
 }
 
 const DEFAULT_SITE_TITLE = "Claude Code Hub";
+
+function parseLoginType(value: unknown): LoginType | null {
+  if (value === "admin" || value === "dashboard_user" || value === "readonly_user") {
+    return value;
+  }
+
+  return null;
+}
+
+function getLoginTypeFallbackPath(loginType: LoginType): string {
+  return loginType === "readonly_user" ? "/my-usage" : "/dashboard";
+}
 
 function formatVersionLabel(version: string): string {
   const trimmed = version.trim();
@@ -139,7 +152,9 @@ function LoginPageContent() {
 
       // 登录成功，保持 success 状态（显示遮罩），直到跳转完成
       setStatus("success");
-      const redirectTarget = resolveLoginRedirectTarget(data.redirectTo, from);
+      const loginType = parseLoginType(data.loginType);
+      const fallbackPath = loginType ? getLoginTypeFallbackPath(loginType) : from;
+      const redirectTarget = resolveLoginRedirectTarget(data.redirectTo, fallbackPath);
       router.push(redirectTarget);
       router.refresh();
     } catch {

@@ -12,7 +12,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
-import { runWithAuthSession, validateKey } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, runWithAuthSession, validateKey } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 
 function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
@@ -305,15 +305,16 @@ export function createActionRoute(
       // 0. 认证检查 (如果需要)
       if (requiresAuth) {
         const authToken =
-          getCookie(c, "auth-token") ?? getBearerTokenFromAuthHeader(c.req.header("authorization"));
+          getCookie(c, AUTH_COOKIE_NAME) ??
+          getBearerTokenFromAuthHeader(c.req.header("authorization"));
         if (!authToken) {
-          logger.warn(`[ActionAPI] ${fullPath} 认证失败: 缺少 auth-token`);
+          logger.warn(`[ActionAPI] ${fullPath} 认证失败: 缺少 ${AUTH_COOKIE_NAME}`);
           return c.json({ ok: false, error: "未认证" }, 401);
         }
 
         const session = await validateKey(authToken, { allowReadOnlyAccess });
         if (!session) {
-          logger.warn(`[ActionAPI] ${fullPath} 认证失败: 无效的 auth-token`);
+          logger.warn(`[ActionAPI] ${fullPath} 认证失败: 无效的 ${AUTH_COOKIE_NAME}`);
           return c.json({ ok: false, error: "认证无效或已过期" }, 401);
         }
         authSession = session;
