@@ -30,7 +30,7 @@ vi.mock("@/i18n/routing", () => ({
 
 const globalFetch = global.fetch;
 
-describe("LoginPage Loading State", () => {
+describe("LoginPage Accessibility", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
 
@@ -39,10 +39,7 @@ describe("LoginPage Loading State", () => {
     document.body.appendChild(container);
     root = createRoot(container);
     vi.clearAllMocks();
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    });
+    global.fetch = vi.fn();
   });
 
   afterEach(() => {
@@ -77,20 +74,11 @@ describe("LoginPage Loading State", () => {
   const getApiKeyInput = () => container.querySelector("input#apiKey") as HTMLInputElement;
   const getOverlay = () => container.querySelector('[data-testid="loading-overlay"]');
 
-  it("starts in idle state with no overlay", async () => {
-    await render();
-
-    expect(getOverlay()).toBeNull();
-    expect(getSubmitButton().disabled).toBe(true);
-    expect(getApiKeyInput().disabled).toBe(false);
-  });
-
-  it("shows fullscreen overlay during submission", async () => {
+  it("loading overlay has correct ARIA attributes", async () => {
     let resolveFetch: (value: any) => void;
     const fetchPromise = new Promise((resolve) => {
       resolveFetch = resolve;
     });
-
     (global.fetch as any).mockReturnValue(fetchPromise);
 
     await render();
@@ -107,9 +95,17 @@ describe("LoginPage Loading State", () => {
 
     const overlay = getOverlay();
     expect(overlay).not.toBeNull();
-    expect(overlay?.textContent).toContain("t:login.loggingIn");
-    expect(getSubmitButton().disabled).toBe(true);
-    expect(getApiKeyInput().disabled).toBe(true);
+
+    expect(overlay?.getAttribute("role")).toBe("dialog");
+    expect(overlay?.getAttribute("aria-modal")).toBe("true");
+    expect(overlay?.getAttribute("aria-label")).toBe("t:login.loggingIn");
+
+    const statusText = overlay?.querySelector('p[role="status"]');
+    expect(statusText).not.toBeNull();
+    expect(statusText?.getAttribute("aria-live")).toBe("polite");
+
+    const spinner = overlay?.querySelector(".animate-spin");
+    expect(spinner?.classList.contains("motion-reduce:animate-none")).toBe(true);
 
     await act(async () => {
       resolveFetch!({
@@ -119,31 +115,7 @@ describe("LoginPage Loading State", () => {
     });
   });
 
-  it("keeps overlay on success until redirect", async () => {
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      json: async () => ({ redirectTo: "/dashboard" }),
-    });
-
-    await render();
-
-    const input = getApiKeyInput();
-    await act(async () => {
-      setInputValue(input, "test-api-key");
-    });
-
-    await act(async () => {
-      getSubmitButton().click();
-    });
-
-    const overlay = getOverlay();
-    expect(overlay).not.toBeNull();
-
-    expect(mockPush).toHaveBeenCalledWith("/dashboard");
-    expect(mockRefresh).toHaveBeenCalled();
-  });
-
-  it("removes overlay and shows error on failure", async () => {
+  it("error state manages focus and announces alert", async () => {
     (global.fetch as any).mockResolvedValue({
       ok: false,
       json: async () => ({ error: "Invalid key" }),
@@ -152,6 +124,8 @@ describe("LoginPage Loading State", () => {
     await render();
 
     const input = getApiKeyInput();
+    const focusSpy = vi.spyOn(input, "focus");
+
     await act(async () => {
       setInputValue(input, "test-api-key");
     });
@@ -160,28 +134,10 @@ describe("LoginPage Loading State", () => {
       getSubmitButton().click();
     });
 
-    expect(getOverlay()).toBeNull();
-    expect(container.textContent).toContain("Invalid key");
-    expect(getSubmitButton().disabled).toBe(false);
-    expect(getApiKeyInput().disabled).toBe(false);
-  });
+    const alert = container.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.textContent).toContain("Invalid key");
 
-  it("removes overlay and shows error on network exception", async () => {
-    (global.fetch as any).mockRejectedValue(new Error("Network error"));
-
-    await render();
-
-    const input = getApiKeyInput();
-    await act(async () => {
-      setInputValue(input, "test-api-key");
-    });
-
-    await act(async () => {
-      getSubmitButton().click();
-    });
-
-    expect(getOverlay()).toBeNull();
-    expect(container.textContent).toContain("t:errors.networkError");
-    expect(getSubmitButton().disabled).toBe(false);
+    expect(focusSpy).toHaveBeenCalled();
   });
 });
