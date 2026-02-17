@@ -1,4 +1,5 @@
 "use client";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
@@ -15,7 +16,6 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import {
   editProvider,
   getUnmaskedProviderKey,
