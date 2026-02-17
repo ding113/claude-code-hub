@@ -253,7 +253,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
   if (!streamEndedNormally) {
-    if (!clientAborted) {
+    if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
         const { recordFailure } = await import("@/lib/circuit-breaker");
@@ -301,7 +301,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     // 计入熔断器：让后续请求能正确触发故障转移/熔断。
     //
     // 注意：404 语义在 forwarder 中属于 RESOURCE_NOT_FOUND，不计入熔断器（避免把“资源/模型不存在”当作供应商故障）。
-    if (effectiveStatusCode !== 404) {
+    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
         const { recordFailure } = await import("@/lib/circuit-breaker");
@@ -350,7 +350,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     // 计入熔断器：让后续请求能正确触发故障转移/熔断。
     // 注意：与 forwarder 口径保持一致：404 不计入熔断器（资源不存在不是供应商故障）。
-    if (effectiveStatusCode !== 404) {
+    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         const { recordFailure } = await import("@/lib/circuit-breaker");
         await recordFailure(meta.providerId, new Error(errorMessage));
@@ -469,19 +469,21 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
     let fixedResponse = response;
-    try {
-      fixedResponse = await ResponseFixer.process(session, response);
-    } catch (error) {
-      logger.error(
-        "[ResponseHandler] ResponseFixer failed (getCachedSystemSettings/processNonStream)",
-        {
-          error: error instanceof Error ? error.message : String(error),
-          sessionId: session.sessionId ?? null,
-          messageRequestId: session.messageContext?.id ?? null,
-          requestSequence: session.requestSequence ?? null,
-        }
-      );
-      fixedResponse = response;
+    if (!session.getEndpointPolicy().bypassResponseRectifier) {
+      try {
+        fixedResponse = await ResponseFixer.process(session, response);
+      } catch (error) {
+        logger.error(
+          "[ResponseHandler] ResponseFixer failed (getCachedSystemSettings/processNonStream)",
+          {
+            error: error instanceof Error ? error.message : String(error),
+            sessionId: session.sessionId ?? null,
+            messageRequestId: session.messageContext?.id ?? null,
+            requestSequence: session.requestSequence ?? null,
+          }
+        );
+        fixedResponse = response;
+      }
     }
 
     const contentType = fixedResponse.headers.get("content-type") || "";
@@ -561,17 +563,19 @@ export class ProxyResponseHandler {
               errorMessageForFinalize = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
               // 计入熔断器
-              try {
-                const { recordFailure } = await import("@/lib/circuit-breaker");
-                await recordFailure(provider.id, new Error(errorMessageForFinalize));
-              } catch (cbError) {
-                logger.warn(
-                  "ResponseHandler: Failed to record non-200 error in circuit breaker (passthrough)",
-                  {
-                    providerId: provider.id,
-                    error: cbError,
-                  }
-                );
+              if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+                try {
+                  const { recordFailure } = await import("@/lib/circuit-breaker");
+                  await recordFailure(provider.id, new Error(errorMessageForFinalize));
+                } catch (cbError) {
+                  logger.warn(
+                    "ResponseHandler: Failed to record non-200 error in circuit breaker (passthrough)",
+                    {
+                      providerId: provider.id,
+                      error: cbError,
+                    }
+                  );
+                }
               }
 
               // 记录到决策链
@@ -843,14 +847,16 @@ export class ProxyResponseHandler {
           const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
           // 计入熔断器
-          try {
-            const { recordFailure } = await import("@/lib/circuit-breaker");
-            await recordFailure(provider.id, new Error(errorMessageForDb));
-          } catch (cbError) {
-            logger.warn("ResponseHandler: Failed to record non-200 error in circuit breaker", {
-              providerId: provider.id,
-              error: cbError,
-            });
+          if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+            try {
+              const { recordFailure } = await import("@/lib/circuit-breaker");
+              await recordFailure(provider.id, new Error(errorMessageForDb));
+            } catch (cbError) {
+              logger.warn("ResponseHandler: Failed to record non-200 error in circuit breaker", {
+                providerId: provider.id,
+                error: cbError,
+              });
+            }
           }
 
           // 记录到决策链
@@ -929,17 +935,19 @@ export class ProxyResponseHandler {
             });
 
             // 计入熔断器（动态导入避免循环依赖）
-            try {
-              const { recordFailure } = await import("@/lib/circuit-breaker");
-              await recordFailure(provider.id, err);
-              logger.debug("ResponseHandler: Response timeout recorded in circuit breaker", {
-                providerId: provider.id,
-              });
-            } catch (cbError) {
-              logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
-                providerId: provider.id,
-                error: cbError,
-              });
+            if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+              try {
+                const { recordFailure } = await import("@/lib/circuit-breaker");
+                await recordFailure(provider.id, err);
+                logger.debug("ResponseHandler: Response timeout recorded in circuit breaker", {
+                  providerId: provider.id,
+                });
+              } catch (cbError) {
+                logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
+                  providerId: provider.id,
+                  error: cbError,
+                });
+              }
             }
 
             // 注意：无法重试，因为客户端已收到 HTTP 200

@@ -11,6 +11,8 @@ import type { ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { User } from "@/types/user";
+import { isCountTokensEndpointPath } from "./endpoint-paths";
+import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
 
@@ -83,6 +85,8 @@ export class ProxySession {
   originalFormat: ClientFormat = "claude";
   providerType: ProviderType | null = null;
 
+  private readonly endpointPolicy: EndpointPolicy;
+
   // 模型重定向追踪：保存原始模型名（重定向前）
   private originalModelName: string | null = null;
 
@@ -154,6 +158,7 @@ export class ProxySession {
     this.messageContext = null;
     this.sessionId = null;
     this.providerChain = [];
+    this.endpointPolicy = resolveSessionEndpointPolicy(init.requestUrl);
   }
 
   static async fromContext(c: Context): Promise<ProxySession> {
@@ -528,6 +533,10 @@ export class ProxySession {
     return this.request.model;
   }
 
+  getEndpointPolicy(): EndpointPolicy {
+    return this.endpointPolicy;
+  }
+
   /**
    * 获取请求的 API endpoint（来自 URL.pathname）
    * 处理边界：若 URL 不存在则返回 null
@@ -548,7 +557,7 @@ export class ProxySession {
    */
   isCountTokensRequest(): boolean {
     const endpoint = this.getEndpoint();
-    return endpoint === "/v1/messages/count_tokens";
+    return endpoint !== null && isCountTokensEndpointPath(endpoint);
   }
 
   /**
@@ -791,6 +800,17 @@ function optimizeRequestMessage(message: Record<string, unknown>): Record<string
   }
 
   return optimized;
+}
+
+function resolveSessionEndpointPolicy(requestUrl: URL): EndpointPolicy {
+  try {
+    const pathname = requestUrl.pathname;
+    if (typeof pathname === "string" && pathname.length > 0) {
+      return resolveEndpointPolicy(pathname);
+    }
+  } catch {}
+
+  return resolveEndpointPolicy("/");
 }
 
 export function extractModelFromPath(pathname: string): string | null {

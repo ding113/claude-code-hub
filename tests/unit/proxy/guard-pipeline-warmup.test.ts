@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
+import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 
 const callOrder: string[] = [];
 
@@ -204,20 +206,73 @@ describe("GuardPipeline：warmup 拦截点", () => {
     const res = await pipeline.run(session);
 
     expect(res).toBeNull();
-    expect(callOrder).toEqual([
-      "auth",
-      "client",
-      "model",
-      "version",
-      "probe",
-      "requestFilter",
-      "provider",
-      "providerRequestFilter",
-    ]);
+    expect(callOrder).toEqual(["auth", "client", "model", "version", "probe", "provider"]);
     expect(callOrder).not.toContain("session");
     expect(callOrder).not.toContain("warmup");
     expect(callOrder).not.toContain("sensitive");
     expect(callOrder).not.toContain("rateLimit");
+    expect(callOrder).not.toContain("requestFilter");
+    expect(callOrder).not.toContain("providerRequestFilter");
     expect(callOrder).not.toContain("messageContext");
+  });
+
+  test("count_tokens 和 responses/compact 应通过 endpoint policy 选择同一 raw preset", async () => {
+    const { GuardPipelineBuilder } = await import("@/app/v1/_lib/proxy/guard-pipeline");
+
+    const endpoints = [
+      V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
+      V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
+    ];
+    const orders: string[][] = [];
+
+    for (const endpoint of endpoints) {
+      callOrder.length = 0;
+      const session = {
+        getEndpointPolicy: () => resolveEndpointPolicy(endpoint),
+        isProbeRequest: () => {
+          callOrder.push("probe");
+          return false;
+        },
+      } as any;
+
+      const pipeline = GuardPipelineBuilder.fromSession(session);
+      const res = await pipeline.run(session);
+
+      expect(res).toBeNull();
+      orders.push([...callOrder]);
+    }
+
+    expect(orders[0]).toEqual(orders[1]);
+    expect(orders[0]).toEqual(["auth", "client", "model", "version", "probe", "provider"]);
+  });
+
+  test("/v1/messages 仍应通过 endpoint policy 选择现有 chat preset", async () => {
+    callOrder.length = 0;
+
+    const { GuardPipelineBuilder } = await import("@/app/v1/_lib/proxy/guard-pipeline");
+
+    const session = {
+      getEndpointPolicy: () => resolveEndpointPolicy(V1_ENDPOINT_PATHS.MESSAGES),
+      isProbeRequest: () => {
+        callOrder.push("probe");
+        return false;
+      },
+    } as any;
+
+    const pipeline = GuardPipelineBuilder.fromSession(session);
+    const res = await pipeline.run(session);
+
+    expect(res).not.toBeNull();
+    expect(res?.status).toBe(200);
+    expect(callOrder).toEqual([
+      "auth",
+      "sensitive",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "session",
+      "warmup",
+    ]);
   });
 });
