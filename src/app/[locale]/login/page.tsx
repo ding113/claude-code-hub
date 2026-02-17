@@ -20,6 +20,8 @@ export default function LoginPage() {
   );
 }
 
+type LoginStatus = "idle" | "submitting" | "success" | "error";
+
 function LoginPageContent() {
   const t = useTranslations("auth");
   const router = useRouter();
@@ -27,7 +29,7 @@ function LoginPageContent() {
   const from = searchParams.get("from") || "/dashboard";
 
   const [apiKey, setApiKey] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<LoginStatus>("idle");
   const [error, setError] = useState("");
   const [showHttpWarning, setShowHttpWarning] = useState(false);
 
@@ -44,7 +46,7 @@ function LoginPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setLoading(true);
+    setStatus("submitting");
 
     try {
       const response = await fetch("/api/auth/login", {
@@ -57,22 +59,36 @@ function LoginPageContent() {
 
       if (!response.ok) {
         setError(data.error || t("errors.loginFailed"));
+        setStatus("error");
         return;
       }
 
-      // 登录成功，按服务端返回的目标跳转，回退到原页面
+      // 登录成功，保持 success 状态（显示遮罩），直到跳转完成
+      setStatus("success");
       const redirectTarget = data.redirectTo || from;
       router.push(redirectTarget);
       router.refresh();
     } catch {
       setError(t("errors.networkError"));
-    } finally {
-      setLoading(false);
+      setStatus("error");
     }
   };
 
+  const isLoading = status === "submitting" || status === "success";
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-background via-background to-muted/40">
+      {/* Fullscreen Loading Overlay */}
+      {isLoading && (
+        <div
+          data-testid="loading-overlay"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm transition-all duration-200"
+        >
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="mt-4 text-lg font-medium text-muted-foreground">{t("login.loggingIn")}</p>
+        </div>
+      )}
+
       {/* Language Switcher - Fixed Top Right */}
       <div className="fixed top-4 right-4 z-50">
         <LanguageSwitcher size="sm" />
@@ -127,7 +143,7 @@ function LoginPageContent() {
                       onChange={(e) => setApiKey(e.target.value)}
                       className="pl-9"
                       required
-                      disabled={loading}
+                      disabled={isLoading}
                     />
                   </div>
                 </div>
@@ -143,9 +159,9 @@ function LoginPageContent() {
                 <Button
                   type="submit"
                   className="w-full max-w-full"
-                  disabled={loading || !apiKey.trim()}
+                  disabled={isLoading || !apiKey.trim()}
                 >
-                  {loading ? (
+                  {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       {t("login.loggingIn")}

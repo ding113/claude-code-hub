@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { defaultLocale, type Locale, locales } from "@/i18n/config";
 import { getLoginRedirectTarget, setAuthCookie, validateKey } from "@/lib/auth";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
 // 需要数据库连接
@@ -52,6 +53,37 @@ async function getAuthErrorTranslations(locale: Locale) {
   }
 }
 
+async function getAuthSecurityTranslations(locale: Locale) {
+  try {
+    return await getTranslations({ locale, namespace: "auth.security" });
+  } catch (error) {
+    logger.warn("Login route: failed to load auth.security translations", {
+      locale,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    try {
+      return await getTranslations({ locale: defaultLocale, namespace: "auth.security" });
+    } catch (fallbackError) {
+      logger.error("Login route: failed to load default auth.security translations", {
+        locale: defaultLocale,
+        error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
+      });
+      return null;
+    }
+  }
+}
+
+function hasSecureCookieHttpMismatch(request: NextRequest): boolean {
+  const env = getEnvConfig();
+  const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  return env.ENABLE_SECURE_COOKIES && forwardedProto === "http";
+}
+
+function shouldIncludeFailureTaxonomy(request: NextRequest): boolean {
+  return request.headers.has("x-forwarded-proto");
+}
+
 export async function POST(request: NextRequest) {
   const locale = getLocaleFromRequest(request);
   const t = await getAuthErrorTranslations(locale);
@@ -60,12 +92,40 @@ export async function POST(request: NextRequest) {
     const { key } = await request.json();
 
     if (!key) {
-      return NextResponse.json({ error: t?.("apiKeyRequired") }, { status: 400 });
+      if (!shouldIncludeFailureTaxonomy(request)) {
+        return NextResponse.json({ error: t?.("apiKeyRequired") }, { status: 400 });
+      }
+
+      return NextResponse.json(
+        { error: t?.("apiKeyRequired"), errorCode: "KEY_REQUIRED" },
+        { status: 400 }
+      );
     }
 
     const session = await validateKey(key, { allowReadOnlyAccess: true });
     if (!session) {
-      return NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 });
+      if (!shouldIncludeFailureTaxonomy(request)) {
+        return NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 });
+      }
+
+      const responseBody: {
+        error: string | undefined;
+        errorCode: "KEY_INVALID";
+        httpMismatchGuidance?: string;
+      } = {
+        error: t?.("apiKeyInvalidOrExpired"),
+        errorCode: "KEY_INVALID",
+      };
+
+      if (hasSecureCookieHttpMismatch(request)) {
+        const securityT = await getAuthSecurityTranslations(locale);
+        responseBody.httpMismatchGuidance =
+          securityT?.("cookieWarningDescription") ??
+          t?.("apiKeyInvalidOrExpired") ??
+          t?.("serverError");
+      }
+
+      return NextResponse.json(responseBody, { status: 401 });
     }
 
     // 设置认证 cookie
@@ -86,6 +146,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logger.error("Login error:", error);
 
-    return NextResponse.json({ error: t?.("serverError") }, { status: 500 });
+    if (!shouldIncludeFailureTaxonomy(request)) {
+      return NextResponse.json({ error: t?.("serverError") }, { status: 500 });
+    }
+
+    return NextResponse.json(
+      { error: t?.("serverError"), errorCode: "SERVER_ERROR" },
+      { status: 500 }
+    );
   }
 }
