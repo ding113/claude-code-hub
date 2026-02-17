@@ -178,6 +178,7 @@ describe("session cookie hardening", () => {
     beforeEach(async () => {
       vi.clearAllMocks();
       mockClearAuthCookie.mockResolvedValue(undefined);
+      mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
 
       const mod = await import("../../src/app/api/auth/logout/route");
       POST = mod.POST;

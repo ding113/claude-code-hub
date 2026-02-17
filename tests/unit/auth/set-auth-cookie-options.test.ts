@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockCookieSet = vi.hoisted(() => vi.fn());
 const mockCookies = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
+const mockIsDevelopment = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock("next/headers", () => ({
   cookies: mockCookies,
@@ -11,6 +12,7 @@ vi.mock("next/headers", () => ({
 
 vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: mockGetEnvConfig,
+  isDevelopment: mockIsDevelopment,
 }));
 
 vi.mock("@/lib/config/config", () => ({ config: { auth: { adminToken: "test" } } }));
