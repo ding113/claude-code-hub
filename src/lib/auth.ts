@@ -2,7 +2,8 @@ import { cookies, headers } from "next/headers";
 import type { NextResponse } from "next/server";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { validateApiKeyAndGetUser } from "@/repository/key";
+import { logger } from "@/lib/logger";
+import { findKeyList, validateApiKeyAndGetUser } from "@/repository/key";
 import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
 
@@ -282,6 +283,89 @@ export async function getSession(options?: {
   }
 
   return validateKey(keyString, options);
+}
+
+type SessionStoreReader = {
+  read(sessionId: string): Promise<OpaqueSessionContract | null>;
+};
+
+let sessionStorePromise: Promise<SessionStoreReader> | null = null;
+
+async function getSessionStore(): Promise<SessionStoreReader> {
+  if (!sessionStorePromise) {
+    sessionStorePromise = import("@/lib/auth-session-store/redis-session-store").then(
+      ({ RedisSessionStore }) => new RedisSessionStore()
+    );
+  }
+
+  return sessionStorePromise;
+}
+
+async function toKeyFingerprint(keyString: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyString));
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
+    ""
+  );
+  return `sha256:${hex}`;
+}
+
+function normalizeKeyFingerprint(fingerprint: string): string {
+  return fingerprint.startsWith("sha256:") ? fingerprint : `sha256:${fingerprint}`;
+}
+
+async function convertToAuthSession(
+  sessionData: OpaqueSessionContract,
+  options?: { allowReadOnlyAccess?: boolean }
+): Promise<AuthSession | null> {
+  const keyList = await findKeyList(sessionData.userId);
+  const expectedFingerprint = normalizeKeyFingerprint(sessionData.keyFingerprint);
+
+  for (const key of keyList) {
+    const keyFingerprint = await toKeyFingerprint(key.key);
+    if (keyFingerprint === expectedFingerprint) {
+      return validateKey(key.key, options);
+    }
+  }
+
+  return null;
+}
+
+export async function getSessionWithDualRead(options?: {
+  allowReadOnlyAccess?: boolean;
+}): Promise<AuthSession | null> {
+  const mode = getSessionTokenMode();
+
+  if (mode === "opaque" || mode === "dual") {
+    const sessionId = await getAuthToken();
+    if (sessionId) {
+      try {
+        const sessionStore = await getSessionStore();
+        const sessionData = await sessionStore.read(sessionId);
+        if (sessionData) {
+          const session = await convertToAuthSession(sessionData, options);
+          if (session) {
+            return session;
+          }
+        }
+      } catch (error) {
+        logger.warn("Opaque session read failed", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  if (mode === "legacy" || mode === "dual") {
+    return getSession(options);
+  }
+
+  return null;
+}
+
+export async function validateSession(options?: {
+  allowReadOnlyAccess?: boolean;
+}): Promise<AuthSession | null> {
+  return getSessionWithDualRead(options);
 }
 
 function parseBearerToken(raw: string | null | undefined): string | undefined {

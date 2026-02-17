@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const mockValidateKey = vi.hoisted(() => vi.fn());
 const mockSetAuthCookie = vi.hoisted(() => vi.fn());
+const mockGetSessionTokenMode = vi.hoisted(() => vi.fn());
 const mockGetLoginRedirectTarget = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
@@ -27,6 +28,7 @@ const realWithNoStoreHeaders = vi.hoisted(() => {
 vi.mock("@/lib/auth", () => ({
   validateKey: mockValidateKey,
   setAuthCookie: mockSetAuthCookie,
+  getSessionTokenMode: mockGetSessionTokenMode,
   clearAuthCookie: mockClearAuthCookie,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
   withNoStoreHeaders: realWithNoStoreHeaders,
@@ -60,6 +62,12 @@ function makeLoginRequest(body: unknown): NextRequest {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+}
+
+function makeLogoutRequest(): NextRequest {
+  return new NextRequest("http://localhost/api/auth/logout", {
+    method: "POST",
   });
 }
 
@@ -97,9 +105,10 @@ describe("session cookie hardening", () => {
       const mockT = vi.fn((key: string) => `translated:${key}`);
       mockGetTranslations.mockResolvedValue(mockT);
       mockSetAuthCookie.mockResolvedValue(undefined);
+      mockGetSessionTokenMode.mockReturnValue("legacy");
       mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
 
-      const mod = await import("@/app/api/auth/login/route");
+      const mod = await import("../../src/app/api/auth/login/route");
       POST = mod.POST;
     });
 
@@ -164,25 +173,25 @@ describe("session cookie hardening", () => {
   });
 
   describe("logout route no-store headers", () => {
-    let POST: () => Promise<Response>;
+    let POST: (request: NextRequest) => Promise<Response>;
 
     beforeEach(async () => {
       vi.clearAllMocks();
       mockClearAuthCookie.mockResolvedValue(undefined);
 
-      const mod = await import("@/app/api/auth/logout/route");
+      const mod = await import("../../src/app/api/auth/logout/route");
       POST = mod.POST;
     });
 
     it("response includes Cache-Control: no-store", async () => {
-      const res = await POST();
+      const res = await POST(makeLogoutRequest());
 
       expect(res.status).toBe(200);
       expect(res.headers.get("Cache-Control")).toBe(EXPECTED_CACHE_CONTROL);
     });
 
     it("response includes Pragma: no-cache", async () => {
-      const res = await POST();
+      const res = await POST(makeLogoutRequest());
 
       expect(res.headers.get("Pragma")).toBe(EXPECTED_PRAGMA);
     });

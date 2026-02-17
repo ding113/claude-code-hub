@@ -1,12 +1,31 @@
+import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { defaultLocale, type Locale, locales } from "@/i18n/config";
-import { getLoginRedirectTarget, setAuthCookie, validateKey, withNoStoreHeaders } from "@/lib/auth";
+import {
+  type AuthSession,
+  getLoginRedirectTarget,
+  getSessionTokenMode,
+  setAuthCookie,
+  validateKey,
+  withNoStoreHeaders,
+} from "@/lib/auth";
+import { RedisSessionStore } from "@/lib/auth-session-store/redis-session-store";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
+import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
 
 // 需要数据库连接
 export const runtime = "nodejs";
+
+const csrfGuard = createCsrfOriginGuard({
+  allowedOrigins: [],
+  allowSameOrigin: true,
+  enforceInDevelopment: process.env.VITEST === "true",
+});
+
+const loginPolicy = new LoginAbusePolicy();
 
 /**
  * Get locale from request (cookie or Accept-Language header)
@@ -84,9 +103,57 @@ function shouldIncludeFailureTaxonomy(request: NextRequest): boolean {
   return request.headers.has("x-forwarded-proto");
 }
 
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip")?.trim() ||
+    "unknown"
+  );
+}
+
+function buildKeyFingerprint(key: string): string {
+  return `sha256:${crypto.createHash("sha256").update(key, "utf8").digest("hex")}`;
+}
+
+async function createOpaqueSession(key: string, session: AuthSession) {
+  const store = new RedisSessionStore();
+  return store.create({
+    keyFingerprint: buildKeyFingerprint(key),
+    userId: session.user.id,
+    userRole: session.user.role,
+  });
+}
+
 export async function POST(request: NextRequest) {
+  const csrfResult = csrfGuard.check(request);
+  if (!csrfResult.allowed) {
+    return withNoStoreHeaders(
+      NextResponse.json({ error: "Forbidden", errorCode: "CSRF_REJECTED" }, { status: 403 })
+    );
+  }
+
   const locale = getLocaleFromRequest(request);
   const t = await getAuthErrorTranslations(locale);
+  const clientIp = getClientIp(request);
+
+  const decision = loginPolicy.check(clientIp);
+  if (!decision.allowed) {
+    const response = withNoStoreHeaders(
+      NextResponse.json(
+        {
+          error: t?.("loginFailed") ?? t?.("serverError"),
+          errorCode: "RATE_LIMITED",
+        },
+        { status: 429 }
+      )
+    );
+
+    if (decision.retryAfterSeconds != null) {
+      response.headers.set("Retry-After", String(decision.retryAfterSeconds));
+    }
+
+    return response;
+  }
 
   try {
     const { key } = await request.json();
@@ -108,6 +175,8 @@ export async function POST(request: NextRequest) {
 
     const session = await validateKey(key, { allowReadOnlyAccess: true });
     if (!session) {
+      loginPolicy.recordFailure(clientIp);
+
       if (!shouldIncludeFailureTaxonomy(request)) {
         return withNoStoreHeaders(
           NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 })
@@ -134,8 +203,24 @@ export async function POST(request: NextRequest) {
       return withNoStoreHeaders(NextResponse.json(responseBody, { status: 401 }));
     }
 
-    // 设置认证 cookie
-    await setAuthCookie(key);
+    const mode = getSessionTokenMode();
+    if (mode === "legacy") {
+      await setAuthCookie(key);
+    } else if (mode === "dual") {
+      await setAuthCookie(key);
+      try {
+        await createOpaqueSession(key, session);
+      } catch (error) {
+        logger.warn("Failed to create opaque session in dual mode", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else {
+      const opaqueSession = await createOpaqueSession(key, session);
+      await setAuthCookie(opaqueSession.sessionId);
+    }
+
+    loginPolicy.recordSuccess(clientIp);
 
     const redirectTo = getLoginRedirectTarget(session);
     const loginType =
