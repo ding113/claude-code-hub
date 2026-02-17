@@ -25,7 +25,7 @@ declare global {
   var __cchAuthSessionStorage: AuthSessionStorage | undefined;
 }
 
-const AUTH_COOKIE_NAME = "auth-token";
+export const AUTH_COOKIE_NAME = "auth-token";
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export interface AuthSession {

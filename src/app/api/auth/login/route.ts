@@ -132,6 +132,12 @@ export async function POST(request: NextRequest) {
     await setAuthCookie(key);
 
     const redirectTo = getLoginRedirectTarget(session);
+    const loginType =
+      session.user.role === "admin"
+        ? "admin"
+        : session.key.canLoginWebUi
+          ? "dashboard_user"
+          : "readonly_user";
 
     return NextResponse.json({
       ok: true,
@@ -142,6 +148,7 @@ export async function POST(request: NextRequest) {
         role: session.user.role,
       },
       redirectTo,
+      loginType,
     });
   } catch (error) {
     logger.error("Login error:", error);

@@ -59,6 +59,26 @@ const fakeSession = {
   key: { canLoginWebUi: true },
 };
 
+const adminSession = {
+  user: {
+    id: -1,
+    name: "Admin Token",
+    description: "Environment admin session",
+    role: "admin" as const,
+  },
+  key: { canLoginWebUi: true },
+};
+
+const readonlySession = {
+  user: {
+    id: 2,
+    name: "Readonly User",
+    description: "readonly",
+    role: "user" as const,
+  },
+  key: { canLoginWebUi: false },
+};
+
 describe("POST /api/auth/login", () => {
   let POST: (request: NextRequest) => Promise<Response>;
 
@@ -118,6 +138,7 @@ describe("POST /api/auth/login", () => {
         role: "user",
       },
       redirectTo: "/dashboard",
+      loginType: "dashboard_user",
     });
   });
 
@@ -140,6 +161,39 @@ describe("POST /api/auth/login", () => {
 
     expect(json.redirectTo).toBe("/my-usage");
     expect(mockGetLoginRedirectTarget).toHaveBeenCalledWith(fakeSession);
+  });
+
+  it("returns loginType admin for admin session", async () => {
+    mockValidateKey.mockResolvedValue(adminSession);
+    mockGetLoginRedirectTarget.mockReturnValue("/dashboard");
+
+    const res = await POST(makeRequest({ key: "admin-key" }));
+    const json = await res.json();
+
+    expect(json.loginType).toBe("admin");
+    expect(json.redirectTo).toBe("/dashboard");
+  });
+
+  it("returns loginType dashboard_user for canLoginWebUi user session", async () => {
+    mockValidateKey.mockResolvedValue(fakeSession);
+    mockGetLoginRedirectTarget.mockReturnValue("/dashboard");
+
+    const res = await POST(makeRequest({ key: "dashboard-key" }));
+    const json = await res.json();
+
+    expect(json.loginType).toBe("dashboard_user");
+    expect(json.redirectTo).toBe("/dashboard");
+  });
+
+  it("returns loginType readonly_user for readonly session", async () => {
+    mockValidateKey.mockResolvedValue(readonlySession);
+    mockGetLoginRedirectTarget.mockReturnValue("/my-usage");
+
+    const res = await POST(makeRequest({ key: "readonly-key" }));
+    const json = await res.json();
+
+    expect(json.loginType).toBe("readonly_user");
+    expect(json.redirectTo).toBe("/my-usage");
   });
 
   it("returns 500 when validateKey throws", async () => {
