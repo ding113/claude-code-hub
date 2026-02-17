@@ -93,6 +93,7 @@ export const EnvSchema = z.object({
   REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
   ENABLE_RATE_LIMIT: z.string().default("true").transform(booleanTransform),
   ENABLE_SECURE_COOKIES: z.string().default("true").transform(booleanTransform),
+  SESSION_TOKEN_MODE: z.enum(["legacy", "dual", "opaque"]).default("legacy"),
   SESSION_TTL: z.coerce.number().default(300),
   // 会话消息存储控制
   // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]

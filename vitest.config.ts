@@ -12,6 +12,7 @@ export default defineConfig({
           environment: "happy-dom",
           include: [
             "tests/unit/**/*.{test,spec}.tsx",
+            "tests/security/**/*.{test,spec}.tsx",
             "tests/api/**/*.{test,spec}.tsx",
             "src/**/*.{test,spec}.tsx",
           ],
@@ -89,6 +90,7 @@ export default defineConfig({
     // ==================== 文件匹配 ====================
     include: [
       "tests/unit/**/*.{test,spec}.ts", // 单元测试
+      "tests/security/**/*.{test,spec}.ts",
       "tests/api/**/*.{test,spec}.ts", // API 测试
       "src/**/*.{test,spec}.ts", // 支持源码中的测试
     ],

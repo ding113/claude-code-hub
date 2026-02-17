@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { defaultLocale, type Locale, locales } from "@/i18n/config";
-import { getLoginRedirectTarget, setAuthCookie, validateKey } from "@/lib/auth";
+import { getLoginRedirectTarget, setAuthCookie, validateKey, withNoStoreHeaders } from "@/lib/auth";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
@@ -93,19 +93,25 @@ export async function POST(request: NextRequest) {
 
     if (!key) {
       if (!shouldIncludeFailureTaxonomy(request)) {
-        return NextResponse.json({ error: t?.("apiKeyRequired") }, { status: 400 });
+        return withNoStoreHeaders(
+          NextResponse.json({ error: t?.("apiKeyRequired") }, { status: 400 })
+        );
       }
 
-      return NextResponse.json(
-        { error: t?.("apiKeyRequired"), errorCode: "KEY_REQUIRED" },
-        { status: 400 }
+      return withNoStoreHeaders(
+        NextResponse.json(
+          { error: t?.("apiKeyRequired"), errorCode: "KEY_REQUIRED" },
+          { status: 400 }
+        )
       );
     }
 
     const session = await validateKey(key, { allowReadOnlyAccess: true });
     if (!session) {
       if (!shouldIncludeFailureTaxonomy(request)) {
-        return NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 });
+        return withNoStoreHeaders(
+          NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 })
+        );
       }
 
       const responseBody: {
@@ -125,7 +131,7 @@ export async function POST(request: NextRequest) {
           t?.("serverError");
       }
 
-      return NextResponse.json(responseBody, { status: 401 });
+      return withNoStoreHeaders(NextResponse.json(responseBody, { status: 401 }));
     }
 
     // 设置认证 cookie
@@ -139,27 +145,28 @@ export async function POST(request: NextRequest) {
           ? "dashboard_user"
           : "readonly_user";
 
-    return NextResponse.json({
-      ok: true,
-      user: {
-        id: session.user.id,
-        name: session.user.name,
-        description: session.user.description,
-        role: session.user.role,
-      },
-      redirectTo,
-      loginType,
-    });
+    return withNoStoreHeaders(
+      NextResponse.json({
+        ok: true,
+        user: {
+          id: session.user.id,
+          name: session.user.name,
+          description: session.user.description,
+          role: session.user.role,
+        },
+        redirectTo,
+        loginType,
+      })
+    );
   } catch (error) {
     logger.error("Login error:", error);
 
     if (!shouldIncludeFailureTaxonomy(request)) {
-      return NextResponse.json({ error: t?.("serverError") }, { status: 500 });
+      return withNoStoreHeaders(NextResponse.json({ error: t?.("serverError") }, { status: 500 }));
     }
 
-    return NextResponse.json(
-      { error: t?.("serverError"), errorCode: "SERVER_ERROR" },
-      { status: 500 }
+    return withNoStoreHeaders(
+      NextResponse.json({ error: t?.("serverError"), errorCode: "SERVER_ERROR" }, { status: 500 })
     );
   }
 }
