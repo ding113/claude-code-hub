@@ -1,11 +1,11 @@
 "use client";
 
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { getProviderEndpoints } from "@/actions/provider-endpoints";
 import { editProvider, getUnmaskedProviderKey, removeProvider } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
