@@ -63,6 +63,7 @@ export interface UsageLogRow {
   userAgent: string | null; // User-Agent（客户端信息）
   messagesCount: number | null; // Messages 数量
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
+  swapCacheTtlApplied: boolean | null; // 是否启用了swap cache TTL billing
   specialSettings: SpecialSetting[] | null; // 特殊设置（审计/展示）
 }
 
@@ -178,6 +179,7 @@ export async function findUsageLogsBatch(
       userAgent: messageRequest.userAgent,
       messagesCount: messageRequest.messagesCount,
       context1mApplied: messageRequest.context1mApplied,
+      swapCacheTtlApplied: messageRequest.swapCacheTtlApplied,
       specialSettings: messageRequest.specialSettings,
     })
     .from(messageRequest)
@@ -529,6 +531,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       userAgent: messageRequest.userAgent, // User-Agent
       messagesCount: messageRequest.messagesCount, // Messages 数量
       context1mApplied: messageRequest.context1mApplied, // 1M上下文窗口
+      swapCacheTtlApplied: messageRequest.swapCacheTtlApplied, // swap cache TTL billing
       specialSettings: messageRequest.specialSettings, // 特殊设置（审计/展示）
     })
     .from(messageRequest)

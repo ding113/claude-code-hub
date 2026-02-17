@@ -319,6 +319,7 @@ function ProviderFormContent({
           cost_multiplier: state.routing.costMultiplier,
           group_tag: state.routing.groupTag.length > 0 ? state.routing.groupTag.join(",") : null,
           cache_ttl_preference: state.routing.cacheTtlPreference,
+          swap_cache_ttl_billing: state.routing.swapCacheTtlBilling,
           context_1m_preference: state.routing.context1mPreference,
           codex_reasoning_effort_preference: state.routing.codexReasoningEffortPreference,
           codex_reasoning_summary_preference: state.routing.codexReasoningSummaryPreference,

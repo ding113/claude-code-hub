@@ -42,6 +42,7 @@ export function SummaryTab({
   cacheCreation1hInputTokens,
   cacheReadInputTokens,
   cacheTtlApplied,
+  swapCacheTtlApplied,
   costUsd,
   costMultiplier,
   context1mApplied,
@@ -316,8 +317,18 @@ export function SummaryTab({
               {cacheTtlApplied && (
                 <div className="flex justify-between items-center col-span-2">
                   <span className="text-muted-foreground">{t("billingDetails.cacheTtl")}:</span>
-                  <Badge variant="outline" className="text-xs">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-xs",
+                      swapCacheTtlApplied
+                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                        : ""
+                    )}
+                    title={swapCacheTtlApplied ? t("billingDetails.cacheTtlSwapped") : undefined}
+                  >
                     {cacheTtlApplied}
+                    {swapCacheTtlApplied ? " ~" : ""}
                   </Badge>
                 </div>
               )}

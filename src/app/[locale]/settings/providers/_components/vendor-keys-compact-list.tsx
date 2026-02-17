@@ -5,6 +5,7 @@ import { CheckCircle, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { getProviderEndpoints } from "@/actions/provider-endpoints";
 import { editProvider, getUnmaskedProviderKey, removeProvider } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
@@ -99,6 +100,9 @@ export function VendorKeysCompactList(props: {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+              <VisuallyHidden>
+                <DialogTitle>{t("addVendorKey")}</DialogTitle>
+              </VisuallyHidden>
               <FormErrorBoundary>
                 <ProviderForm
                   mode="create"
@@ -467,6 +471,9 @@ function VendorKeyRow(props: {
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+                  <VisuallyHidden>
+                    <DialogTitle>{t("editProvider")}</DialogTitle>
+                  </VisuallyHidden>
                   <FormErrorBoundary>
                     <ProviderForm
                       mode="edit"

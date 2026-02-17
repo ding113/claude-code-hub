@@ -59,6 +59,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     websiteUrl: providerData.website_url ?? null,
     faviconUrl: providerData.favicon_url ?? null,
     cacheTtlPreference: providerData.cache_ttl_preference ?? null,
+    swapCacheTtlBilling: providerData.swap_cache_ttl_billing ?? false,
     context1mPreference: providerData.context_1m_preference ?? null,
     codexReasoningEffortPreference: providerData.codex_reasoning_effort_preference ?? null,
     codexReasoningSummaryPreference: providerData.codex_reasoning_summary_preference ?? null,
@@ -129,6 +130,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
         cacheTtlPreference: providers.cacheTtlPreference,
+        swapCacheTtlBilling: providers.swapCacheTtlBilling,
         context1mPreference: providers.context1mPreference,
         codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
         codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -208,6 +210,7 @@ export async function findProviderList(
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      swapCacheTtlBilling: providers.swapCacheTtlBilling,
       context1mPreference: providers.context1mPreference,
       codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -287,6 +290,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      swapCacheTtlBilling: providers.swapCacheTtlBilling,
       context1mPreference: providers.context1mPreference,
       codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -370,6 +374,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      swapCacheTtlBilling: providers.swapCacheTtlBilling,
       context1mPreference: providers.context1mPreference,
       codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -471,6 +476,8 @@ export async function updateProvider(
   if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
   if (providerData.cache_ttl_preference !== undefined)
     dbData.cacheTtlPreference = providerData.cache_ttl_preference ?? null;
+  if (providerData.swap_cache_ttl_billing !== undefined)
+    dbData.swapCacheTtlBilling = providerData.swap_cache_ttl_billing;
   if (providerData.context_1m_preference !== undefined)
     dbData.context1mPreference = providerData.context_1m_preference ?? null;
   if (providerData.codex_reasoning_effort_preference !== undefined)
@@ -590,6 +597,7 @@ export async function updateProvider(
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
         cacheTtlPreference: providers.cacheTtlPreference,
+        swapCacheTtlBilling: providers.swapCacheTtlBilling,
         context1mPreference: providers.context1mPreference,
         codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
         codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,

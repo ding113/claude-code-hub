@@ -36,6 +36,7 @@ interface ErrorDetailsDialogProps {
   cacheCreation1hInputTokens?: number | null;
   cacheReadInputTokens?: number | null;
   cacheTtlApplied?: string | null;
+  swapCacheTtlApplied?: boolean | null;
   costUsd?: string | null;
   costMultiplier?: string | null;
   context1mApplied?: boolean | null;
@@ -74,6 +75,7 @@ export function ErrorDetailsDialog({
   cacheCreation1hInputTokens,
   cacheReadInputTokens,
   cacheTtlApplied,
+  swapCacheTtlApplied,
   costUsd,
   costMultiplier,
   context1mApplied,
@@ -217,6 +219,7 @@ export function ErrorDetailsDialog({
     cacheCreation1hInputTokens,
     cacheReadInputTokens,
     cacheTtlApplied,
+    swapCacheTtlApplied,
     costUsd,
     costMultiplier,
     context1mApplied,

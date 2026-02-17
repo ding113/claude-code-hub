@@ -119,6 +119,7 @@ export function toProvider(dbProvider: any): Provider {
     websiteUrl: dbProvider?.websiteUrl ?? null,
     faviconUrl: dbProvider?.faviconUrl ?? null,
     cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,
+    swapCacheTtlBilling: dbProvider?.swapCacheTtlBilling ?? false,
     context1mPreference: dbProvider?.context1mPreference ?? null,
     codexReasoningEffortPreference: dbProvider?.codexReasoningEffortPreference ?? null,
     codexReasoningSummaryPreference: dbProvider?.codexReasoningSummaryPreference ?? null,
@@ -153,6 +154,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
     cacheCreation1hInputTokens: dbMessage?.cacheCreation1hInputTokens ?? undefined,
     cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,
     context1mApplied: dbMessage?.context1mApplied ?? false,
+    swapCacheTtlApplied: dbMessage?.swapCacheTtlApplied ?? false,
     specialSettings: dbMessage?.specialSettings ?? null,
   };
 }
