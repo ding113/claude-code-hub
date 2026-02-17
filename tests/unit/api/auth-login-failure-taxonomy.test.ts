@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 
 const mockValidateKey = vi.hoisted(() => vi.fn());
 const mockSetAuthCookie = vi.hoisted(() => vi.fn());
+const mockGetSessionTokenMode = vi.hoisted(() => vi.fn());
 const mockGetLoginRedirectTarget = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
 const mockGetEnvConfig = vi.hoisted(() => vi.fn());
@@ -16,6 +17,7 @@ const mockLogger = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({
   validateKey: mockValidateKey,
   setAuthCookie: mockSetAuthCookie,
+  getSessionTokenMode: mockGetSessionTokenMode,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
   withNoStoreHeaders: <T>(res: T): T => {
     (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -68,9 +70,10 @@ describe("POST /api/auth/login failure taxonomy", () => {
     const mockT = vi.fn((key: string) => `translated:${key}`);
     mockGetTranslations.mockResolvedValue(mockT);
     mockSetAuthCookie.mockResolvedValue(undefined);
+    mockGetSessionTokenMode.mockReturnValue("legacy");
     mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
 
-    const mod = await import("@/app/api/auth/login/route");
+    const mod = await import("../../../src/app/api/auth/login/route");
     POST = mod.POST;
   });
 
