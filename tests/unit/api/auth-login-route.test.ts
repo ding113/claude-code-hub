@@ -16,6 +16,11 @@ vi.mock("@/lib/auth", () => ({
   validateKey: mockValidateKey,
   setAuthCookie: mockSetAuthCookie,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
+  withNoStoreHeaders: <T>(res: T): T => {
+    (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    (res as any).headers.set("Pragma", "no-cache");
+    return res;
+  },
 }));
 
 vi.mock("next-intl/server", () => ({
