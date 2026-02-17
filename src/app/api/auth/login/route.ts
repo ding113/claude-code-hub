@@ -15,6 +15,7 @@ import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
+import { buildSecurityHeaders } from "@/lib/security/security-headers";
 
 // 需要数据库连接
 export const runtime = "nodejs";
@@ -26,6 +27,24 @@ const csrfGuard = createCsrfOriginGuard({
 });
 
 const loginPolicy = new LoginAbusePolicy();
+
+function applySecurityHeaders(response: NextResponse): NextResponse {
+  const env = getEnvConfig();
+  const headers = buildSecurityHeaders({
+    enableHsts: env.ENABLE_SECURE_COOKIES,
+    cspMode: "report-only",
+  });
+
+  for (const [key, value] of Object.entries(headers)) {
+    response.headers.set(key, value);
+  }
+
+  return response;
+}
+
+function withAuthResponseHeaders(response: NextResponse): NextResponse {
+  return applySecurityHeaders(withNoStoreHeaders(response));
+}
 
 /**
  * Get locale from request (cookie or Accept-Language header)
@@ -127,7 +146,7 @@ async function createOpaqueSession(key: string, session: AuthSession) {
 export async function POST(request: NextRequest) {
   const csrfResult = csrfGuard.check(request);
   if (!csrfResult.allowed) {
-    return withNoStoreHeaders(
+    return withAuthResponseHeaders(
       NextResponse.json({ error: "Forbidden", errorCode: "CSRF_REJECTED" }, { status: 403 })
     );
   }
@@ -138,7 +157,7 @@ export async function POST(request: NextRequest) {
 
   const decision = loginPolicy.check(clientIp);
   if (!decision.allowed) {
-    const response = withNoStoreHeaders(
+    const response = withAuthResponseHeaders(
       NextResponse.json(
         {
           error: t?.("loginFailed") ?? t?.("serverError"),
@@ -160,12 +179,12 @@ export async function POST(request: NextRequest) {
 
     if (!key) {
       if (!shouldIncludeFailureTaxonomy(request)) {
-        return withNoStoreHeaders(
+        return withAuthResponseHeaders(
           NextResponse.json({ error: t?.("apiKeyRequired") }, { status: 400 })
         );
       }
 
-      return withNoStoreHeaders(
+      return withAuthResponseHeaders(
         NextResponse.json(
           { error: t?.("apiKeyRequired"), errorCode: "KEY_REQUIRED" },
           { status: 400 }
@@ -178,7 +197,7 @@ export async function POST(request: NextRequest) {
       loginPolicy.recordFailure(clientIp);
 
       if (!shouldIncludeFailureTaxonomy(request)) {
-        return withNoStoreHeaders(
+        return withAuthResponseHeaders(
           NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 })
         );
       }
@@ -200,7 +219,7 @@ export async function POST(request: NextRequest) {
           t?.("serverError");
       }
 
-      return withNoStoreHeaders(NextResponse.json(responseBody, { status: 401 }));
+      return withAuthResponseHeaders(NextResponse.json(responseBody, { status: 401 }));
     }
 
     const mode = getSessionTokenMode();
@@ -230,7 +249,7 @@ export async function POST(request: NextRequest) {
           ? "dashboard_user"
           : "readonly_user";
 
-    return withNoStoreHeaders(
+    return withAuthResponseHeaders(
       NextResponse.json({
         ok: true,
         user: {
@@ -247,10 +266,12 @@ export async function POST(request: NextRequest) {
     logger.error("Login error:", error);
 
     if (!shouldIncludeFailureTaxonomy(request)) {
-      return withNoStoreHeaders(NextResponse.json({ error: t?.("serverError") }, { status: 500 }));
+      return withAuthResponseHeaders(
+        NextResponse.json({ error: t?.("serverError") }, { status: 500 })
+      );
     }
 
-    return withNoStoreHeaders(
+    return withAuthResponseHeaders(
       NextResponse.json({ error: t?.("serverError"), errorCode: "SERVER_ERROR" }, { status: 500 })
     );
   }
