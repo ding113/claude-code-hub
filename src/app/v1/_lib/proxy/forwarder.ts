@@ -1622,7 +1622,8 @@ export class ProxyForwarder {
             }
 
             // Raw passthrough endpoints: no circuit breaker, no provider switch, no retry
-            if (!session.getEndpointPolicy().allowRetry) {
+            const endpointPolicy = session.getEndpointPolicy();
+            if (!endpointPolicy.allowRetry) {
               logger.debug(
                 "ProxyForwarder: raw passthrough endpoint error, skipping circuit breaker and provider switch",
                 {
@@ -1630,7 +1631,7 @@ export class ProxyForwarder {
                   providerName: currentProvider.name,
                   statusCode,
                   error: proxyError.message,
-                  policyKind: session.getEndpointPolicy().kind,
+                  policyKind: endpointPolicy.kind,
                 }
               );
               // Throw immediately: no retry, no provider switch
@@ -1902,20 +1903,6 @@ export class ProxyForwarder {
     } else {
       // --- STANDARD HANDLING ---
       if (!session.getEndpointPolicy().bypassForwarderPreprocessing) {
-        if (
-          resolvedCacheTtl &&
-          (provider.providerType === "claude" || provider.providerType === "claude-auth")
-        ) {
-          const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
-          if (applied) {
-            logger.info("ProxyForwarder: Applied cache TTL override to request", {
-              providerId: provider.id,
-              providerName: provider.name,
-              cacheTtl: resolvedCacheTtl,
-            });
-          }
-        }
-
         // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
         if (provider.providerType === "codex") {
           const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
