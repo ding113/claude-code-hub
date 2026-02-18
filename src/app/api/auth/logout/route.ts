@@ -5,7 +5,6 @@ import {
   getSessionTokenMode,
   type SessionTokenMode,
 } from "@/lib/auth";
-import { RedisSessionStore } from "@/lib/auth-session-store/redis-session-store";
 import { logger } from "@/lib/logger";
 import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
@@ -15,6 +14,18 @@ const csrfGuard = createCsrfOriginGuard({
   allowSameOrigin: true,
   enforceInDevelopment: process.env.VITEST === "true",
 });
+
+let sessionStoreInstance:
+  | import("@/lib/auth-session-store/redis-session-store").RedisSessionStore
+  | null = null;
+
+async function getLogoutSessionStore() {
+  if (!sessionStoreInstance) {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+    sessionStoreInstance = new RedisSessionStore();
+  }
+  return sessionStoreInstance;
+}
 
 function resolveSessionTokenMode(): SessionTokenMode {
   try {
@@ -46,7 +57,7 @@ export async function POST(request: NextRequest) {
     try {
       const sessionId = await resolveAuthCookieToken();
       if (sessionId) {
-        const store = new RedisSessionStore();
+        const store = await getLogoutSessionStore();
         await store.revoke(sessionId);
       }
     } catch (error) {
