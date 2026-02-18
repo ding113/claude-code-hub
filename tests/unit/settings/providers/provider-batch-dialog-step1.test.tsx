@@ -183,12 +183,9 @@ vi.mock(
 );
 
 // Mock buildPatchDraftFromFormState
-vi.mock(
-  "@/app/[locale]/settings/providers/_components/batch-edit/build-patch-draft",
-  () => ({
-    buildPatchDraftFromFormState: vi.fn().mockReturnValue({}),
-  })
-);
+vi.mock("@/app/[locale]/settings/providers/_components/batch-edit/build-patch-draft", () => ({
+  buildPatchDraftFromFormState: vi.fn().mockReturnValue({}),
+}));
 
 // UI component mocks
 vi.mock("@/components/ui/dialog", () => ({

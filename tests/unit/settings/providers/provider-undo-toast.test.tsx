@@ -176,12 +176,9 @@ vi.mock(
 );
 
 // Mock buildPatchDraftFromFormState
-vi.mock(
-  "@/app/[locale]/settings/providers/_components/batch-edit/build-patch-draft",
-  () => ({
-    buildPatchDraftFromFormState: vi.fn().mockReturnValue({ priority: { set: 5 } }),
-  })
-);
+vi.mock("@/app/[locale]/settings/providers/_components/batch-edit/build-patch-draft", () => ({
+  buildPatchDraftFromFormState: vi.fn().mockReturnValue({ priority: { set: 5 } }),
+}));
 
 // UI component mocks
 vi.mock("@/components/ui/dialog", () => ({
