@@ -42,7 +42,7 @@ function parseSessionData(raw: string): SessionData | null {
     if (typeof obj.sessionId !== "string") return null;
     if (typeof obj.keyFingerprint !== "string") return null;
     if (typeof obj.userRole !== "string") return null;
-    if (!Number.isFinite(obj.userId) || typeof obj.userId !== "number") return null;
+    if (!Number.isInteger(obj.userId)) return null;
     if (!Number.isFinite(obj.createdAt) || typeof obj.createdAt !== "number") return null;
     if (!Number.isFinite(obj.expiresAt) || typeof obj.expiresAt !== "number") return null;
 
@@ -158,6 +158,7 @@ export class RedisSessionStore implements SessionStore {
   async revoke(sessionId: string): Promise<boolean> {
     const redis = this.getReadyRedis();
     if (!redis) {
+      logger.warn("[AuthSessionStore] Redis not ready during revoke", { sessionId });
       return false;
     }
 
@@ -198,26 +199,17 @@ export class RedisSessionStore implements SessionStore {
       return null;
     }
 
-    const persisted = await this.read(nextSession.sessionId);
-    if (!persisted) {
-      logger.error("[AuthSessionStore] Failed to persist rotated session", {
-        oldSessionId,
-        newSessionId: nextSession.sessionId,
-      });
-      return null;
-    }
-
     const revoked = await this.revoke(oldSessionId);
     if (!revoked) {
       logger.warn(
         "[AuthSessionStore] Failed to revoke old session during rotate; old session will expire naturally",
         {
           oldSessionId,
-          newSessionId: persisted.sessionId,
+          newSessionId: nextSession.sessionId,
         }
       );
     }
 
-    return persisted;
+    return nextSession;
   }
 }
