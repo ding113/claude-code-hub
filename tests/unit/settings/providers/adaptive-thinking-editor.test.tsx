@@ -1,17 +1,35 @@
-import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
+/**
+ * @vitest-environment happy-dom
+ */
+
+import { act } from "react";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
 import { AdaptiveThinkingEditor } from "@/app/[locale]/settings/providers/_components/adaptive-thinking-editor";
 import type { AnthropicAdaptiveThinkingConfig } from "@/types/provider";
 
+// Mock next-intl
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+// Mock UI components
 vi.mock("@/components/ui/select", () => ({
-  Select: ({ value, onValueChange, children, disabled }: any) => (
-    <div data-testid="select" data-value={value} data-disabled={disabled}>
-      <select 
-        value={value} 
+  Select: ({
+    children,
+    value,
+    onValueChange,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    value: string;
+    onValueChange: (val: string) => void;
+    disabled?: boolean;
+  }) => (
+    <div data-testid="select-mock">
+      <select
+        data-testid="select-trigger"
+        value={value}
         onChange={(e) => onValueChange(e.target.value)}
         disabled={disabled}
       >
@@ -19,42 +37,100 @@ vi.mock("@/components/ui/select", () => ({
       </select>
     </div>
   ),
-  SelectTrigger: ({ children }: any) => <div>{children}</div>,
+  SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   SelectValue: () => null,
-  SelectContent: ({ children }: any) => <>{children}</>,
-  SelectItem: ({ value, children }: any) => <option value={value}>{children}</option>,
+  SelectContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => (
+    <option value={value}>{children}</option>
+  ),
 }));
 
 vi.mock("@/components/ui/switch", () => ({
-  Switch: ({ checked, onCheckedChange, disabled }: any) => (
+  Switch: ({
+    checked,
+    onCheckedChange,
+    disabled,
+  }: {
+    checked: boolean;
+    onCheckedChange: (checked: boolean) => void;
+    disabled?: boolean;
+  }) => (
     <button
-      role="switch"
-      aria-checked={checked}
+      data-testid="switch"
       onClick={() => onCheckedChange(!checked)}
       disabled={disabled}
+      aria-checked={checked}
     >
-      Toggle
+      {checked ? "On" : "Off"}
     </button>
   ),
 }));
 
 vi.mock("@/components/ui/tag-input", () => ({
-  TagInput: ({ value, onChange, disabled }: any) => (
+  TagInput: ({
+    value,
+    onChange,
+    disabled,
+    placeholder,
+  }: {
+    value: string[];
+    onChange: (tags: string[]) => void;
+    disabled?: boolean;
+    placeholder?: string;
+  }) => (
     <input
       data-testid="tag-input"
       value={value.join(",")}
-      onChange={(e) => onChange(e.target.value.split(","))}
+      onChange={(e) => onChange(e.target.value.split(",").filter(Boolean))}
       disabled={disabled}
+      placeholder={placeholder}
     />
   ),
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
-  Tooltip: ({ children }: any) => <div>{children}</div>,
-  TooltipTrigger: ({ children }: any) => <div>{children}</div>,
-  TooltipContent: ({ children }: any) => <div>{children}</div>,
-  TooltipProvider: ({ children }: any) => <div>{children}</div>,
+  Tooltip: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
+
+vi.mock("./forms/provider-form/components/section-card", () => ({
+  SmartInputWrapper: ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div data-testid="smart-input-wrapper">
+      <label>{label}</label>
+      {children}
+    </div>
+  ),
+  ToggleRow: ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <div data-testid="toggle-row">
+      <label>{label}</label>
+      {children}
+    </div>
+  ),
+}));
+
+// Mock lucide-react
+vi.mock("lucide-react", () => ({
+  Info: () => <div data-testid="info-icon" />,
+}));
+
+function render(node: React.ReactNode) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(node);
+  });
+
+  return {
+    container,
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
 
 describe("AdaptiveThinkingEditor", () => {
   const defaultConfig: AnthropicAdaptiveThinkingConfig = {
@@ -63,151 +139,198 @@ describe("AdaptiveThinkingEditor", () => {
     models: [],
   };
 
-  it("renders only switch when disabled (enabled=false)", () => {
-    render(
+  const mockOnEnabledChange = vi.fn();
+  const mockOnConfigChange = vi.fn();
+
+  it("renders correctly in disabled state (switch off)", () => {
+    const { container, unmount } = render(
       <AdaptiveThinkingEditor
         enabled={false}
         config={defaultConfig}
-        onEnabledChange={vi.fn()}
-        onConfigChange={vi.fn()}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
       />
     );
-    
-    expect(screen.getByRole("switch")).toBeInTheDocument();
-    expect(screen.getByText("sections.routing.anthropicOverrides.adaptiveThinking.label")).toBeInTheDocument();
-    expect(screen.queryByText("sections.routing.anthropicOverrides.adaptiveThinking.effort.label")).not.toBeInTheDocument();
-  });
 
-  it("renders configuration fields when enabled", () => {
-    render(
-      <AdaptiveThinkingEditor
-        enabled={true}
-        config={defaultConfig}
-        onEnabledChange={vi.fn()}
-        onConfigChange={vi.fn()}
-      />
-    );
-    
-    expect(screen.getByText("sections.routing.anthropicOverrides.adaptiveThinking.effort.label")).toBeInTheDocument();
-    expect(screen.getByText("sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.label")).toBeInTheDocument();
+    const switchBtn = container.querySelector('[data-testid="switch"]');
+    expect(switchBtn).toBeTruthy();
+    expect(switchBtn?.textContent).toBe("Off");
+    expect(container.querySelector('[data-testid="select-trigger"]')).toBeNull();
+
+    unmount();
   });
 
   it("calls onEnabledChange when switch is clicked", () => {
-    const onEnabledChange = vi.fn();
-    render(
+    const { container, unmount } = render(
       <AdaptiveThinkingEditor
         enabled={false}
         config={defaultConfig}
-        onEnabledChange={onEnabledChange}
-        onConfigChange={vi.fn()}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
       />
     );
-    
-    fireEvent.click(screen.getByRole("switch"));
-    expect(onEnabledChange).toHaveBeenCalledWith(true);
+
+    const switchBtn = container.querySelector('[data-testid="switch"]') as HTMLButtonElement;
+    act(() => {
+      switchBtn.click();
+    });
+
+    expect(mockOnEnabledChange).toHaveBeenCalledWith(true);
+
+    unmount();
+  });
+
+  it("renders configuration options when enabled", () => {
+    const { container, unmount } = render(
+      <AdaptiveThinkingEditor
+        enabled={true}
+        config={defaultConfig}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
+      />
+    );
+
+    const switchBtn = container.querySelector('[data-testid="switch"]');
+    expect(switchBtn?.textContent).toBe("On");
+
+    // Should have 2 selects: effort and mode (since mode is 'all')
+    const selects = container.querySelectorAll('[data-testid="select-trigger"]');
+    expect(selects.length).toBe(2);
+
+    unmount();
   });
 
   it("calls onConfigChange when effort is changed", () => {
-    const onConfigChange = vi.fn();
-    render(
+    const { container, unmount } = render(
       <AdaptiveThinkingEditor
         enabled={true}
         config={defaultConfig}
-        onEnabledChange={vi.fn()}
-        onConfigChange={onConfigChange}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
       />
     );
-    
-    const selects = screen.getAllByTestId("select");
-    const effortSelect = selects[0].querySelector("select");
-    fireEvent.change(effortSelect!, { target: { value: "high" } });
-    
-    expect(onConfigChange).toHaveBeenCalledWith({
+
+    const selects = container.querySelectorAll("select");
+    // First select is effort
+    const effortSelect = selects[0];
+
+    act(() => {
+      effortSelect.value = "high";
+      effortSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(mockOnConfigChange).toHaveBeenCalledWith({
       ...defaultConfig,
       effort: "high",
     });
+
+    unmount();
   });
 
   it("calls onConfigChange when model match mode is changed", () => {
-    const onConfigChange = vi.fn();
-    render(
+    const { container, unmount } = render(
       <AdaptiveThinkingEditor
         enabled={true}
         config={defaultConfig}
-        onEnabledChange={vi.fn()}
-        onConfigChange={onConfigChange}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
       />
     );
-    
-    const selects = screen.getAllByTestId("select");
-    const modeSelect = selects[1].querySelector("select");
-    fireEvent.change(modeSelect!, { target: { value: "specific" } });
-    
-    expect(onConfigChange).toHaveBeenCalledWith({
+
+    const selects = container.querySelectorAll("select");
+    // Second select is model match mode
+    const modeSelect = selects[1];
+
+    act(() => {
+      modeSelect.value = "specific";
+      modeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    expect(mockOnConfigChange).toHaveBeenCalledWith({
       ...defaultConfig,
       modelMatchMode: "specific",
     });
+
+    unmount();
   });
 
-  it("renders models input only when mode is specific", () => {
+  it("renders model input when mode is specific", () => {
     const specificConfig: AnthropicAdaptiveThinkingConfig = {
       ...defaultConfig,
       modelMatchMode: "specific",
     };
-    
-    render(
+
+    const { container, unmount } = render(
       <AdaptiveThinkingEditor
         enabled={true}
         config={specificConfig}
-        onEnabledChange={vi.fn()}
-        onConfigChange={vi.fn()}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
       />
     );
-    
-    expect(screen.getByTestId("tag-input")).toBeInTheDocument();
+
+    expect(container.querySelector('[data-testid="tag-input"]')).toBeTruthy();
+
+    unmount();
   });
 
   it("calls onConfigChange when models are changed", () => {
-    const onConfigChange = vi.fn();
     const specificConfig: AnthropicAdaptiveThinkingConfig = {
       ...defaultConfig,
       modelMatchMode: "specific",
     };
-    
-    render(
+
+    const { container, unmount } = render(
       <AdaptiveThinkingEditor
         enabled={true}
         config={specificConfig}
-        onEnabledChange={vi.fn()}
-        onConfigChange={onConfigChange}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
       />
     );
-    
-    const input = screen.getByTestId("tag-input");
-    fireEvent.change(input, { target: { value: "claude-3-opus" } });
-    
-    expect(onConfigChange).toHaveBeenCalledWith({
-      ...specificConfig,
-      models: ["claude-3-opus"],
+
+    const input = container.querySelector('[data-testid="tag-input"]') as HTMLInputElement;
+
+    act(() => {
+      // Simulate typing a tag
+      // For standard HTML inputs, simply setting value and dispatching event works
+      // The Object.getOwnPropertyDescriptor trick is needed for React controlled inputs
+      // but here we are using a mocked input which might just need the event
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value"
+      )?.set;
+      nativeInputValueSetter?.call(input, "claude-3-5-sonnet");
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     });
+
+    expect(mockOnConfigChange).toHaveBeenCalledWith({
+      ...specificConfig,
+      models: ["claude-3-5-sonnet"],
+    });
+
+    unmount();
   });
 
-  it("disables all controls when disabled prop is true", () => {
-    render(
+  it("passes disabled prop to children", () => {
+    const { container, unmount } = render(
       <AdaptiveThinkingEditor
         enabled={true}
         config={defaultConfig}
-        onEnabledChange={vi.fn()}
-        onConfigChange={vi.fn()}
+        onEnabledChange={mockOnEnabledChange}
+        onConfigChange={mockOnConfigChange}
         disabled={true}
       />
     );
-    
-    expect(screen.getByRole("switch")).toBeDisabled();
-    
-    const selects = screen.getAllByTestId("select");
-    selects.forEach(select => {
-      expect(select).toHaveAttribute("data-disabled", "");
+
+    const switchBtn = container.querySelector('[data-testid="switch"]') as HTMLButtonElement;
+    expect(switchBtn.disabled).toBe(true);
+
+    const selects = container.querySelectorAll("select");
+    selects.forEach((select) => {
+      expect(select.disabled).toBe(true);
     });
+
+    unmount();
   });
 });
