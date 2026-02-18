@@ -686,6 +686,7 @@ export function ProviderManager({
         mode={batchActionMode}
         onOpenChange={setBatchDialogOpen}
         selectedProviderIds={selectedProviderIds}
+        providers={filteredProviders}
         onSuccess={handleBatchSuccess}
       />
     </div>

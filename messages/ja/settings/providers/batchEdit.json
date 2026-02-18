@@ -24,12 +24,34 @@
     "next": "次へ",
     "noFieldEnabled": "更新するフィールドを少なくとも1つ有効にしてください"
   },
+  "sections": {
+    "basic": "基本設定",
+    "routing": "グループとルーティング",
+    "anthropic": "Anthropic 設定"
+  },
   "fields": {
-    "isEnabled": "ステータス",
+    "isEnabled": {
+      "label": "ステータス",
+      "noChange": "変更なし",
+      "enable": "有効",
+      "disable": "無効"
+    },
     "priority": "優先度",
     "weight": "重み",
     "costMultiplier": "価格倍率",
-    "groupTag": "グループタグ"
+    "groupTag": {
+      "label": "グループタグ",
+      "clear": "クリア"
+    },
+    "modelRedirects": "モデルリダイレクト",
+    "allowedModels": "許可モデル",
+    "thinkingBudget": "思考バジェット",
+    "adaptiveThinking": "アダプティブ思考",
+    "comingSoon": "近日公開"
+  },
+  "affectedProviders": {
+    "title": "影響を受けるプロバイダー",
+    "more": "+{count} 件"
   },
   "confirm": {
     "title": "操作の確認",

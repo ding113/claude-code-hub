@@ -24,12 +24,34 @@
     "next": "Далее",
     "noFieldEnabled": "Пожалуйста, включите хотя бы одно поле для обновления"
   },
+  "sections": {
+    "basic": "Основные настройки",
+    "routing": "Группы и маршрутизация",
+    "anthropic": "Настройки Anthropic"
+  },
   "fields": {
-    "isEnabled": "Статус",
+    "isEnabled": {
+      "label": "Статус",
+      "noChange": "Без изменений",
+      "enable": "Включить",
+      "disable": "Отключить"
+    },
     "priority": "Приоритет",
     "weight": "Вес",
     "costMultiplier": "Множитель стоимости",
-    "groupTag": "Тег группы"
+    "groupTag": {
+      "label": "Тег группы",
+      "clear": "Очистить"
+    },
+    "modelRedirects": "Перенаправление моделей",
+    "allowedModels": "Разрешённые модели",
+    "thinkingBudget": "Бюджет мышления",
+    "adaptiveThinking": "Адаптивное мышление",
+    "comingSoon": "Скоро"
+  },
+  "affectedProviders": {
+    "title": "Затронутые поставщики",
+    "more": "+{count} ещё"
   },
   "confirm": {
     "title": "Подтвердите операцию",

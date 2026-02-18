@@ -24,12 +24,34 @@
     "next": "Next",
     "noFieldEnabled": "Please enable at least one field to update"
   },
+  "sections": {
+    "basic": "Basic Settings",
+    "routing": "Group & Routing",
+    "anthropic": "Anthropic Settings"
+  },
   "fields": {
-    "isEnabled": "Status",
+    "isEnabled": {
+      "label": "Status",
+      "noChange": "No Change",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
     "priority": "Priority",
     "weight": "Weight",
     "costMultiplier": "Cost Multiplier",
-    "groupTag": "Group Tag"
+    "groupTag": {
+      "label": "Group Tag",
+      "clear": "Clear"
+    },
+    "modelRedirects": "Model Redirects",
+    "allowedModels": "Allowed Models",
+    "thinkingBudget": "Thinking Budget",
+    "adaptiveThinking": "Adaptive Thinking",
+    "comingSoon": "Coming soon"
+  },
+  "affectedProviders": {
+    "title": "Affected Providers",
+    "more": "+{count} more"
   },
   "confirm": {
     "title": "Confirm Operation",

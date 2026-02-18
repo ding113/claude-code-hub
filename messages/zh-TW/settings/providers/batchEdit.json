@@ -24,12 +24,34 @@
     "next": "下一步",
     "noFieldEnabled": "請至少啟用一個要更新的欄位"
   },
+  "sections": {
+    "basic": "基本設定",
+    "routing": "分組與路由",
+    "anthropic": "Anthropic 設定"
+  },
   "fields": {
-    "isEnabled": "狀態",
+    "isEnabled": {
+      "label": "狀態",
+      "noChange": "不修改",
+      "enable": "啟用",
+      "disable": "停用"
+    },
     "priority": "優先級",
     "weight": "權重",
     "costMultiplier": "價格倍率",
-    "groupTag": "分組標籤"
+    "groupTag": {
+      "label": "分組標籤",
+      "clear": "清除"
+    },
+    "modelRedirects": "模型重新導向",
+    "allowedModels": "允許的模型",
+    "thinkingBudget": "思維預算",
+    "adaptiveThinking": "自適應思維",
+    "comingSoon": "即將推出"
+  },
+  "affectedProviders": {
+    "title": "受影響的供應商",
+    "more": "+{count} 更多"
   },
   "confirm": {
     "title": "確認操作",
