@@ -94,6 +94,23 @@ describe("createCsrfOriginGuard", () => {
     expect(result.reason).toBe("Cross-site request blocked: missing Origin header");
   });
 
+  it("matches allowedOrigins case-insensitively", () => {
+    const guard = createCsrfOriginGuard({
+      allowedOrigins: ["https://Example.COM"],
+      allowSameOrigin: false,
+      enforceInDevelopment: true,
+    });
+
+    const result = guard.check(
+      createRequest({
+        "sec-fetch-site": "cross-site",
+        origin: "https://example.com",
+      })
+    );
+
+    expect(result).toEqual({ allowed: true });
+  });
+
   it("bypasses guard in development when enforceInDevelopment is disabled", () => {
     process.env.NODE_ENV = "development";
 
