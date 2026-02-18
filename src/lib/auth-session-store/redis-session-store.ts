@@ -1,6 +1,5 @@
 import "server-only";
 
-import crypto from "node:crypto";
 import type Redis from "ioredis";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis";
@@ -102,7 +101,7 @@ export class RedisSessionStore implements SessionStore {
     const ttl = normalizeTtlSeconds(ttlSeconds);
     const createdAt = Date.now();
     const sessionData: SessionData = {
-      sessionId: `sid_${crypto.randomUUID()}`,
+      sessionId: `sid_${globalThis.crypto.randomUUID()}`,
       keyFingerprint: data.keyFingerprint,
       userId: data.userId,
       userRole: data.userRole,
