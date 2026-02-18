@@ -1413,6 +1413,10 @@ export interface BatchUpdateProvidersParams {
     weight?: number;
     cost_multiplier?: number;
     group_tag?: string | null;
+    model_redirects?: Record<string, string> | null;
+    allowed_models?: string[] | null;
+    anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+    anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   };
 }
 
@@ -1450,6 +1454,22 @@ export async function batchUpdateProviders(
       repositoryUpdates.costMultiplier = updates.cost_multiplier.toString();
     }
     if (updates.group_tag !== undefined) repositoryUpdates.groupTag = updates.group_tag;
+    if (updates.model_redirects !== undefined) {
+      repositoryUpdates.modelRedirects = updates.model_redirects;
+    }
+    if (updates.allowed_models !== undefined) {
+      repositoryUpdates.allowedModels =
+        Array.isArray(updates.allowed_models) && updates.allowed_models.length === 0
+          ? null
+          : updates.allowed_models;
+    }
+    if (updates.anthropic_thinking_budget_preference !== undefined) {
+      repositoryUpdates.anthropicThinkingBudgetPreference =
+        updates.anthropic_thinking_budget_preference;
+    }
+    if (updates.anthropic_adaptive_thinking !== undefined) {
+      repositoryUpdates.anthropicAdaptiveThinking = updates.anthropic_adaptive_thinking;
+    }
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
 
