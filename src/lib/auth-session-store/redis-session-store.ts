@@ -49,7 +49,7 @@ function parseSessionData(raw: string): SessionData | null {
     return {
       sessionId: obj.sessionId,
       keyFingerprint: obj.keyFingerprint,
-      userId: obj.userId,
+      userId: obj.userId as number,
       userRole: obj.userRole,
       createdAt: obj.createdAt,
       expiresAt: obj.expiresAt,
