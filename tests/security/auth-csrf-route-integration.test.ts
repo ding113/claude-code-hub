@@ -23,6 +23,7 @@ vi.mock("@/lib/auth", () => ({
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
   clearAuthCookie: mockClearAuthCookie,
   getAuthCookie: mockGetAuthCookie,
+  toKeyFingerprint: vi.fn().mockResolvedValue("sha256:mock"),
   withNoStoreHeaders: <T>(res: T): T => {
     (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     (res as any).headers.set("Pragma", "no-cache");
@@ -109,10 +110,10 @@ describe("auth route csrf guard integration", () => {
     mockGetAuthCookie.mockResolvedValue(undefined);
     mockGetSessionTokenMode.mockReturnValue("legacy");
 
-    const loginRoute = await import("../../src/app/api/auth/login/route");
+    const loginRoute = await import("@/app/api/auth/login/route");
     loginPost = loginRoute.POST;
 
-    const logoutRoute = await import("../../src/app/api/auth/logout/route");
+    const logoutRoute = await import("@/app/api/auth/logout/route");
     logoutPost = logoutRoute.POST;
   });
 
@@ -132,7 +133,7 @@ describe("auth route csrf guard integration", () => {
     const res = await loginPost(request);
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "Forbidden", errorCode: "CSRF_REJECTED" });
+    expect(await res.json()).toEqual({ errorCode: "CSRF_REJECTED" });
     expect(mockValidateKey).not.toHaveBeenCalled();
   });
 
@@ -160,7 +161,7 @@ describe("auth route csrf guard integration", () => {
     const res = await logoutPost(request);
 
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "Forbidden", errorCode: "CSRF_REJECTED" });
+    expect(await res.json()).toEqual({ errorCode: "CSRF_REJECTED" });
     expect(mockClearAuthCookie).not.toHaveBeenCalled();
   });
 

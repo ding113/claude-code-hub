@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
   const csrfResult = csrfGuard.check(request);
   if (!csrfResult.allowed) {
     return withAuthResponseHeaders(
-      NextResponse.json({ error: "Forbidden", errorCode: "CSRF_REJECTED" }, { status: 403 })
+      NextResponse.json({ errorCode: "CSRF_REJECTED" }, { status: 403 })
     );
   }
 

@@ -9,7 +9,6 @@ import {
   toKeyFingerprint,
   validateKey,
 } from "@/lib/auth";
-import { RedisSessionStore } from "@/lib/auth-session-store/redis-session-store";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
@@ -111,8 +110,19 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
+let sessionStoreInstance: import("@/lib/auth-session-store/redis-session-store").RedisSessionStore | null =
+  null;
+
+async function getLoginSessionStore() {
+  if (!sessionStoreInstance) {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+    sessionStoreInstance = new RedisSessionStore();
+  }
+  return sessionStoreInstance;
+}
+
 async function createOpaqueSession(key: string, session: AuthSession) {
-  const store = new RedisSessionStore();
+  const store = await getLoginSessionStore();
   return store.create({
     keyFingerprint: await toKeyFingerprint(key),
     userId: session.user.id,
@@ -124,7 +134,7 @@ export async function POST(request: NextRequest) {
   const csrfResult = csrfGuard.check(request);
   if (!csrfResult.allowed) {
     return withAuthResponseHeaders(
-      NextResponse.json({ error: "Forbidden", errorCode: "CSRF_REJECTED" }, { status: 403 })
+      NextResponse.json({ errorCode: "CSRF_REJECTED" }, { status: 403 })
     );
   }
 
@@ -137,7 +147,7 @@ export async function POST(request: NextRequest) {
     const response = withAuthResponseHeaders(
       NextResponse.json(
         {
-          error: t?.("loginFailed") ?? t?.("serverError"),
+          error: t?.("loginFailed") ?? t?.("serverError") ?? "Too many attempts",
           errorCode: "RATE_LIMITED",
         },
         { status: 429 }
@@ -157,13 +167,16 @@ export async function POST(request: NextRequest) {
     if (!key) {
       if (!shouldIncludeFailureTaxonomy(request)) {
         return withAuthResponseHeaders(
-          NextResponse.json({ error: t?.("apiKeyRequired") }, { status: 400 })
+          NextResponse.json(
+            { error: t?.("apiKeyRequired") ?? "API key is required" },
+            { status: 400 }
+          )
         );
       }
 
       return withAuthResponseHeaders(
         NextResponse.json(
-          { error: t?.("apiKeyRequired"), errorCode: "KEY_REQUIRED" },
+          { error: t?.("apiKeyRequired") ?? "API key is required", errorCode: "KEY_REQUIRED" },
           { status: 400 }
         )
       );
@@ -175,16 +188,19 @@ export async function POST(request: NextRequest) {
 
       if (!shouldIncludeFailureTaxonomy(request)) {
         return withAuthResponseHeaders(
-          NextResponse.json({ error: t?.("apiKeyInvalidOrExpired") }, { status: 401 })
+          NextResponse.json(
+            { error: t?.("apiKeyInvalidOrExpired") ?? "Authentication failed" },
+            { status: 401 }
+          )
         );
       }
 
       const responseBody: {
-        error: string | undefined;
+        error: string;
         errorCode: "KEY_INVALID";
         httpMismatchGuidance?: string;
       } = {
-        error: t?.("apiKeyInvalidOrExpired"),
+        error: t?.("apiKeyInvalidOrExpired") ?? "Authentication failed",
         errorCode: "KEY_INVALID",
       };
 
@@ -212,8 +228,15 @@ export async function POST(request: NextRequest) {
         });
       }
     } else {
-      const opaqueSession = await createOpaqueSession(key, session);
-      await setAuthCookie(opaqueSession.sessionId);
+      try {
+        const opaqueSession = await createOpaqueSession(key, session);
+        await setAuthCookie(opaqueSession.sessionId);
+      } catch (error) {
+        logger.error("Failed to create opaque session, falling back to legacy cookie", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        await setAuthCookie(key);
+      }
     }
 
     loginPolicy.recordSuccess(clientIp);
@@ -242,14 +265,16 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     logger.error("Login error:", error);
 
+    const serverError = t?.("serverError") ?? "Internal server error";
+
     if (!shouldIncludeFailureTaxonomy(request)) {
       return withAuthResponseHeaders(
-        NextResponse.json({ error: t?.("serverError") }, { status: 500 })
+        NextResponse.json({ error: serverError }, { status: 500 })
       );
     }
 
     return withAuthResponseHeaders(
-      NextResponse.json({ error: t?.("serverError"), errorCode: "SERVER_ERROR" }, { status: 500 })
+      NextResponse.json({ error: serverError, errorCode: "SERVER_ERROR" }, { status: 500 })
     );
   }
 }
