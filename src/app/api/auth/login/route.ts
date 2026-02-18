@@ -110,8 +110,9 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
-let sessionStoreInstance: import("@/lib/auth-session-store/redis-session-store").RedisSessionStore | null =
-  null;
+let sessionStoreInstance:
+  | import("@/lib/auth-session-store/redis-session-store").RedisSessionStore
+  | null = null;
 
 async function getLoginSessionStore() {
   if (!sessionStoreInstance) {
@@ -268,9 +269,7 @@ export async function POST(request: NextRequest) {
     const serverError = t?.("serverError") ?? "Internal server error";
 
     if (!shouldIncludeFailureTaxonomy(request)) {
-      return withAuthResponseHeaders(
-        NextResponse.json({ error: serverError }, { status: 500 })
-      );
+      return withAuthResponseHeaders(NextResponse.json({ error: serverError }, { status: 500 }));
     }
 
     return withAuthResponseHeaders(
