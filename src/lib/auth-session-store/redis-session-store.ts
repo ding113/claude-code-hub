@@ -42,7 +42,7 @@ function parseSessionData(raw: string): SessionData | null {
     if (typeof obj.sessionId !== "string") return null;
     if (typeof obj.keyFingerprint !== "string") return null;
     if (typeof obj.userRole !== "string") return null;
-    if (!Number.isInteger(obj.userId)) return null;
+    if (typeof obj.userId !== "number" || !Number.isInteger(obj.userId)) return null;
     if (!Number.isFinite(obj.createdAt) || typeof obj.createdAt !== "number") return null;
     if (!Number.isFinite(obj.expiresAt) || typeof obj.expiresAt !== "number") return null;
 
