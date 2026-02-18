@@ -77,6 +77,19 @@
     "claudeOnly": "Только Claude",
     "geminiOnly": "Только Gemini"
   },
+  "selectionHint": "Выберите нескольких поставщиков для массовых операций",
+  "undo": {
+    "button": "Отменить",
+    "success": "Операция успешно отменена",
+    "expired": "Время отмены истекло",
+    "batchDeleteSuccess": "Удалено поставщиков: {count}",
+    "batchDeleteUndone": "Восстановлено поставщиков: {count}",
+    "singleDeleteSuccess": "Поставщик удалён",
+    "singleDeleteUndone": "Поставщик восстановлен",
+    "singleEditSuccess": "Поставщик обновлён",
+    "singleEditUndone": "Изменения отменены",
+    "failed": "Ошибка отмены"
+  },
   "toast": {
     "updated": "Обновлено поставщиков: {count}",
     "deleted": "Удалено поставщиков: {count}",

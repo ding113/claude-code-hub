@@ -77,6 +77,19 @@
     "claudeOnly": "Claude のみ",
     "geminiOnly": "Gemini のみ"
   },
+  "selectionHint": "複数のプロバイダーを選択して一括操作を実行",
+  "undo": {
+    "button": "元に戻す",
+    "success": "操作が正常に元に戻されました",
+    "expired": "元に戻す期限が切れました",
+    "batchDeleteSuccess": "{count} 件のプロバイダーを削除しました",
+    "batchDeleteUndone": "{count} 件のプロバイダーを復元しました",
+    "singleDeleteSuccess": "プロバイダーを削除しました",
+    "singleDeleteUndone": "プロバイダーを復元しました",
+    "singleEditSuccess": "プロバイダーを更新しました",
+    "singleEditUndone": "変更を元に戻しました",
+    "failed": "元に戻すことに失敗しました"
+  },
   "toast": {
     "updated": "{count} 件のプロバイダーを更新しました",
     "deleted": "{count} 件のプロバイダーを削除しました",

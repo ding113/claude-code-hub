@@ -75,15 +75,22 @@ export function ProviderBatchToolbar({
 
   if (!isMultiSelectMode) {
     return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={onEnterMode}
-        disabled={totalCount === 0}
-      >
-        {t("enterMode")}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onEnterMode}
+          disabled={totalCount === 0}
+        >
+          {t("enterMode")}
+        </Button>
+        {totalCount > 0 && (
+          <span className="text-xs text-muted-foreground hidden sm:inline-block">
+            {t("selectionHint")}
+          </span>
+        )}
+      </div>
     );
   }
 

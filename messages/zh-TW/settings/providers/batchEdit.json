@@ -77,6 +77,19 @@
     "claudeOnly": "僅 Claude",
     "geminiOnly": "僅 Gemini"
   },
+  "selectionHint": "選擇多個供應商以進行批次操作",
+  "undo": {
+    "button": "復原",
+    "success": "操作已成功復原",
+    "expired": "復原時限已過期",
+    "batchDeleteSuccess": "已刪除 {count} 個供應商",
+    "batchDeleteUndone": "已還原 {count} 個供應商",
+    "singleDeleteSuccess": "供應商已刪除",
+    "singleDeleteUndone": "供應商已恢復",
+    "singleEditSuccess": "供應商已更新",
+    "singleEditUndone": "變更已還原",
+    "failed": "復原失敗"
+  },
   "toast": {
     "updated": "已更新 {count} 個供應商",
     "deleted": "已刪除 {count} 個供應商",

@@ -77,6 +77,19 @@
     "claudeOnly": "Claude only",
     "geminiOnly": "Gemini only"
   },
+  "selectionHint": "Select multiple providers for batch operations",
+  "undo": {
+    "button": "Undo",
+    "success": "Operation undone successfully",
+    "expired": "Undo expired",
+    "batchDeleteSuccess": "Deleted {count} providers",
+    "batchDeleteUndone": "Restored {count} providers",
+    "singleDeleteSuccess": "Provider deleted",
+    "singleDeleteUndone": "Provider restored",
+    "singleEditSuccess": "Provider updated",
+    "singleEditUndone": "Changes reverted",
+    "failed": "Undo failed"
+  },
   "toast": {
     "updated": "Updated {count} providers",
     "deleted": "Deleted {count} providers",

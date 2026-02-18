@@ -19,9 +19,16 @@ interface FormTabNavProps {
   onTabChange: (tab: TabId) => void;
   disabled?: boolean;
   tabStatus?: Partial<Record<TabId, "default" | "warning" | "configured">>;
+  layout?: "vertical" | "horizontal";
 }
 
-export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }: FormTabNavProps) {
+export function FormTabNav({
+  activeTab,
+  onTabChange,
+  disabled,
+  tabStatus = {},
+  layout = "vertical",
+}: FormTabNavProps) {
   const t = useTranslations("settings.providers.form");
 
   const getStatusColor = (status?: "default" | "warning" | "configured") => {
@@ -34,6 +41,62 @@ export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }:
         return null;
     }
   };
+
+  if (layout === "horizontal") {
+    return (
+      <nav className="sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md shrink-0">
+        <div className="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
+          {TAB_CONFIG.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const status = tabStatus[tab.id];
+            const statusColor = getStatusColor(status);
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                disabled={disabled}
+                className={cn(
+                  "relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all whitespace-nowrap",
+                  "hover:text-foreground focus-visible:outline-none",
+                  isActive ? "text-primary" : "text-muted-foreground",
+                  disabled && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+                    isActive ? "bg-primary/10" : "hover:bg-muted/50"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span>{t(tab.labelKey)}</span>
+                {statusColor && (
+                  <span
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      statusColor,
+                      status === "warning" && "animate-pulse"
+                    )}
+                  />
+                )}
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTabIndicatorHorizontal"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <>

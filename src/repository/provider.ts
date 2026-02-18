@@ -16,6 +16,150 @@ import {
   tryDeleteProviderVendorIfEmpty,
 } from "./provider-endpoints";
 
+type ProviderTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const PROVIDER_RESTORE_MAX_AGE_MS = 60_000;
+const ENDPOINT_RESTORE_TIME_TOLERANCE_MS = 1_000;
+
+interface ProviderRestoreCandidate {
+  id: number;
+  providerVendorId: number | null;
+  providerType: Provider["providerType"];
+  url: string;
+  deletedAt: Date | null;
+}
+
+async function restoreSoftDeletedEndpointForProvider(
+  tx: ProviderTransaction,
+  provider: ProviderRestoreCandidate,
+  now: Date
+): Promise<void> {
+  if (provider.providerVendorId == null || !provider.url || !provider.deletedAt) {
+    return;
+  }
+
+  const trimmedUrl = provider.url.trim();
+  if (!trimmedUrl) {
+    return;
+  }
+
+  const [activeReference] = await tx
+    .select({ id: providers.id })
+    .from(providers)
+    .where(
+      and(
+        eq(providers.providerVendorId, provider.providerVendorId),
+        eq(providers.providerType, provider.providerType),
+        eq(providers.url, trimmedUrl),
+        eq(providers.isEnabled, true),
+        isNull(providers.deletedAt),
+        ne(providers.id, provider.id)
+      )
+    )
+    .limit(1);
+
+  if (activeReference) {
+    return;
+  }
+
+  const [activeEndpoint] = await tx
+    .select({ id: providerEndpoints.id })
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, provider.providerVendorId),
+        eq(providerEndpoints.providerType, provider.providerType),
+        eq(providerEndpoints.url, trimmedUrl),
+        isNull(providerEndpoints.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (activeEndpoint) {
+    return;
+  }
+
+  const lowerBound = new Date(provider.deletedAt.getTime() - ENDPOINT_RESTORE_TIME_TOLERANCE_MS);
+  const upperBound = new Date(provider.deletedAt.getTime() + ENDPOINT_RESTORE_TIME_TOLERANCE_MS);
+
+  const [endpointToRestore] = await tx
+    .select({ id: providerEndpoints.id })
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, provider.providerVendorId),
+        eq(providerEndpoints.providerType, provider.providerType),
+        eq(providerEndpoints.url, trimmedUrl),
+        isNotNull(providerEndpoints.deletedAt),
+        sql`${providerEndpoints.deletedAt} >= ${lowerBound}`,
+        sql`${providerEndpoints.deletedAt} <= ${upperBound}`
+      )
+    )
+    .orderBy(desc(providerEndpoints.deletedAt), desc(providerEndpoints.id))
+    .limit(1);
+
+  if (!endpointToRestore) {
+    return;
+  }
+
+  await tx
+    .update(providerEndpoints)
+    .set({
+      deletedAt: null,
+      isEnabled: true,
+      updatedAt: now,
+    })
+    .where(
+      and(eq(providerEndpoints.id, endpointToRestore.id), isNotNull(providerEndpoints.deletedAt))
+    );
+}
+
+async function restoreProviderInTransaction(
+  tx: ProviderTransaction,
+  providerId: number,
+  now: Date
+): Promise<boolean> {
+  const [candidate] = await tx
+    .select({
+      id: providers.id,
+      providerVendorId: providers.providerVendorId,
+      providerType: providers.providerType,
+      url: providers.url,
+      deletedAt: providers.deletedAt,
+    })
+    .from(providers)
+    .where(and(eq(providers.id, providerId), isNotNull(providers.deletedAt)))
+    .limit(1);
+
+  if (!candidate?.deletedAt) {
+    return false;
+  }
+
+  if (now.getTime() - candidate.deletedAt.getTime() > PROVIDER_RESTORE_MAX_AGE_MS) {
+    return false;
+  }
+
+  const restored = await tx
+    .update(providers)
+    .set({ deletedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(providers.id, providerId),
+        isNotNull(providers.deletedAt),
+        eq(providers.deletedAt, candidate.deletedAt)
+      )
+    )
+    .returning({ id: providers.id });
+
+  if (restored.length === 0) {
+    return false;
+  }
+
+  await restoreSoftDeletedEndpointForProvider(tx, candidate, now);
+
+  return true;
+}
+
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const dbData = {
     name: providerData.name,
@@ -803,6 +947,19 @@ export async function deleteProvider(id: number): Promise<boolean> {
   return deleted;
 }
 
+/**
+ * 恢复单个软删除供应商及其关联端点。
+ *
+ * 安全策略：仅允许恢复 60 秒内删除的供应商。
+ */
+export async function restoreProvider(id: number): Promise<boolean> {
+  const now = new Date();
+
+  const restored = await db.transaction(async (tx) => restoreProviderInTransaction(tx, id, now));
+
+  return restored;
+}
+
 export interface BatchProviderUpdates {
   isEnabled?: boolean;
   priority?: number;
@@ -1183,6 +1340,39 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
   });
 
   return deletedCount;
+}
+
+/**
+ * 批量恢复软删除供应商及其关联端点（事务内逐个恢复）。
+ *
+ * 安全策略：仅允许恢复 60 秒内删除的供应商。
+ */
+export async function restoreProvidersBatch(ids: number[]): Promise<number> {
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const uniqueIds = [...new Set(ids)];
+  const now = new Date();
+
+  const restoredCount = await db.transaction(async (tx) => {
+    let restored = 0;
+
+    for (const id of uniqueIds) {
+      if (await restoreProviderInTransaction(tx, id, now)) {
+        restored += 1;
+      }
+    }
+
+    return restored;
+  });
+
+  logger.debug("restoreProvidersBatch:completed", {
+    requestedIds: uniqueIds.length,
+    restoredCount,
+  });
+
+  return restoredCount;
 }
 
 /**

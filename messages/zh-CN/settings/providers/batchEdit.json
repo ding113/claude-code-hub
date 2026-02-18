@@ -77,6 +77,19 @@
     "claudeOnly": "仅 Claude",
     "geminiOnly": "仅 Gemini"
   },
+  "selectionHint": "选择多个服务商后可进行批量操作",
+  "undo": {
+    "button": "撤销",
+    "success": "操作已成功撤销",
+    "expired": "撤销窗口已过期",
+    "batchDeleteSuccess": "已删除 {count} 个供应商",
+    "batchDeleteUndone": "已恢复 {count} 个供应商",
+    "singleDeleteSuccess": "供应商已删除",
+    "singleDeleteUndone": "供应商已恢复",
+    "singleEditSuccess": "供应商已更新",
+    "singleEditUndone": "更改已回退",
+    "failed": "撤销失败"
+  },
   "toast": {
     "updated": "已更新 {count} 个供应商",
     "deleted": "已删除 {count} 个供应商",

@@ -45,6 +45,7 @@ import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
+import { restoreProvidersBatch } from "@/repository";
 import {
   type BatchProviderUpdates,
   createProvider,
@@ -768,7 +769,9 @@ export async function editProvider(
 }
 
 // 删除服务商
-export async function removeProvider(providerId: number): Promise<ActionResult> {
+export async function removeProvider(
+  providerId: number
+): Promise<ActionResult<RemoveProviderResult>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -777,6 +780,25 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
 
     const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
+
+    const nowMs = Date.now();
+    cleanupProviderPatchStores(nowMs);
+
+    const undoToken = createProviderPatchUndoToken();
+    const operationId = createProviderPatchOperationId();
+    const undoExpiresAtMs = nowMs + PROVIDER_DELETE_UNDO_TTL_MS;
+    const cleanupTimer = setTimeout(() => {
+      providerDeleteUndoStore.delete(undoToken);
+    }, PROVIDER_DELETE_UNDO_TTL_MS);
+    cleanupTimer.unref?.();
+
+    providerDeleteUndoStore.set(undoToken, {
+      undoToken,
+      undoExpiresAt: undoExpiresAtMs,
+      operationId,
+      providerIds: [providerId],
+      cleanupTimer,
+    });
 
     // 清除内存缓存（无论 Redis 是否成功都要执行）
     clearConfigCache(providerId);
@@ -809,7 +831,13 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "remove", providerId });
 
-    return { ok: true };
+    return {
+      ok: true,
+      data: {
+        undoToken,
+        operationId,
+      },
+    };
   } catch (error) {
     logger.error("删除服务商失败:", error);
     const message = error instanceof Error ? error.message : "删除服务商失败";
@@ -1041,6 +1069,7 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
 const BATCH_OPERATION_MAX_SIZE = 500;
 const PROVIDER_BATCH_PREVIEW_TTL_MS = 60_000;
 const PROVIDER_PATCH_UNDO_TTL_MS = 10_000;
+const PROVIDER_DELETE_UNDO_TTL_MS = 60_000;
 
 const ProviderBatchPatchProviderIdsSchema = z
   .array(z.number().int().positive())
@@ -1066,6 +1095,13 @@ const ApplyProviderBatchPatchSchema = z
   .strict();
 
 const UndoProviderPatchSchema = z
+  .object({
+    undoToken: z.string().trim().min(1),
+    operationId: z.string().trim().min(1),
+  })
+  .strict();
+
+const UndoProviderDeleteSchema = z
   .object({
     undoToken: z.string().trim().min(1),
     operationId: z.string().trim().min(1),
@@ -1110,6 +1146,23 @@ export interface UndoProviderPatchResult {
   revertedCount: number;
 }
 
+export interface RemoveProviderResult {
+  undoToken: string;
+  operationId: string;
+}
+
+export interface BatchDeleteProvidersResult {
+  deletedCount: number;
+  undoToken: string;
+  operationId: string;
+}
+
+export interface UndoProviderDeleteResult {
+  operationId: string;
+  restoredAt: string;
+  restoredCount: number;
+}
+
 interface ProviderBatchPatchPreviewSnapshot {
   previewToken: string;
   previewRevision: string;
@@ -1132,8 +1185,17 @@ interface ProviderPatchUndoSnapshot {
   patch: ProviderBatchPatch;
 }
 
+interface ProviderDeleteUndoSnapshot {
+  undoToken: string;
+  undoExpiresAt: number;
+  operationId: string;
+  providerIds: number[];
+  cleanupTimer: ReturnType<typeof setTimeout>;
+}
+
 const providerBatchPatchPreviewStore = new Map<string, ProviderBatchPatchPreviewSnapshot>();
 const providerPatchUndoStore = new Map<string, ProviderPatchUndoSnapshot>();
+const providerDeleteUndoStore = new Map<string, ProviderDeleteUndoSnapshot>();
 type ProviderPatchActionError = Extract<ActionResult, { ok: false }>;
 
 function dedupeProviderIds(providerIds: number[]): number[] {
@@ -1182,6 +1244,16 @@ function createProviderPatchOperationId(): string {
   return `provider_patch_apply_${crypto.randomUUID()}`;
 }
 
+function clearProviderDeleteUndoSnapshot(undoToken: string): void {
+  const snapshot = providerDeleteUndoStore.get(undoToken);
+  if (!snapshot) {
+    return;
+  }
+
+  clearTimeout(snapshot.cleanupTimer);
+  providerDeleteUndoStore.delete(undoToken);
+}
+
 function cleanupProviderPatchStores(nowMs: number): void {
   for (const [previewToken, snapshot] of providerBatchPatchPreviewStore.entries()) {
     if (snapshot.previewExpiresAt <= nowMs) {
@@ -1192,6 +1264,13 @@ function cleanupProviderPatchStores(nowMs: number): void {
   for (const [undoToken, snapshot] of providerPatchUndoStore.entries()) {
     if (snapshot.undoExpiresAt <= nowMs) {
       providerPatchUndoStore.delete(undoToken);
+    }
+  }
+
+  for (const [undoToken, snapshot] of providerDeleteUndoStore.entries()) {
+    if (snapshot.undoExpiresAt <= nowMs) {
+      clearTimeout(snapshot.cleanupTimer);
+      providerDeleteUndoStore.delete(undoToken);
     }
   }
 }
@@ -1899,7 +1978,7 @@ export interface BatchDeleteProvidersParams {
 
 export async function batchDeleteProviders(
   params: BatchDeleteProvidersParams
-): Promise<ActionResult<{ deletedCount: number }>> {
+): Promise<ActionResult<BatchDeleteProvidersResult>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -1916,29 +1995,118 @@ export async function batchDeleteProviders(
       return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
     }
 
+    const snapshotProviderIds = dedupeProviderIds(providerIds);
+
     const { deleteProvidersBatch } = await import("@/repository/provider");
 
-    const deletedCount = await deleteProvidersBatch(providerIds);
+    const deletedCount = await deleteProvidersBatch(snapshotProviderIds);
 
-    for (const id of providerIds) {
+    const nowMs = Date.now();
+    cleanupProviderPatchStores(nowMs);
+
+    const undoToken = createProviderPatchUndoToken();
+    const operationId = createProviderPatchOperationId();
+    const undoExpiresAtMs = nowMs + PROVIDER_DELETE_UNDO_TTL_MS;
+    const cleanupTimer = setTimeout(() => {
+      providerDeleteUndoStore.delete(undoToken);
+    }, PROVIDER_DELETE_UNDO_TTL_MS);
+    cleanupTimer.unref?.();
+
+    providerDeleteUndoStore.set(undoToken, {
+      undoToken,
+      undoExpiresAt: undoExpiresAtMs,
+      operationId,
+      providerIds: snapshotProviderIds,
+      cleanupTimer,
+    });
+
+    for (const id of snapshotProviderIds) {
       clearProviderState(id);
       clearConfigCache(id);
     }
 
     await broadcastProviderCacheInvalidation({
       operation: "remove",
-      providerId: providerIds[0],
+      providerId: snapshotProviderIds[0],
     });
 
     logger.info("batchDeleteProviders:completed", {
-      requestedCount: providerIds.length,
+      requestedCount: snapshotProviderIds.length,
       deletedCount,
+      operationId,
     });
 
-    return { ok: true, data: { deletedCount } };
+    return {
+      ok: true,
+      data: {
+        deletedCount,
+        undoToken,
+        operationId,
+      },
+    };
   } catch (error) {
     logger.error("批量删除供应商失败:", error);
     const message = error instanceof Error ? error.message : "批量删除供应商失败";
+    return { ok: false, error: message };
+  }
+}
+
+export async function undoProviderDelete(
+  input: unknown
+): Promise<ActionResult<UndoProviderDeleteResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = UndoProviderDeleteSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const nowMs = Date.now();
+    cleanupProviderPatchStores(nowMs);
+
+    const snapshot = providerDeleteUndoStore.get(parsed.data.undoToken);
+    if (!snapshot || snapshot.undoExpiresAt <= nowMs) {
+      clearProviderDeleteUndoSnapshot(parsed.data.undoToken);
+      return {
+        ok: false,
+        error: "撤销窗口已过期",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+      };
+    }
+
+    if (snapshot.operationId !== parsed.data.operationId) {
+      return {
+        ok: false,
+        error: "撤销参数与操作不匹配",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+      };
+    }
+
+    const restoredCount = await restoreProvidersBatch(snapshot.providerIds);
+
+    for (const id of snapshot.providerIds) {
+      clearProviderState(id);
+      clearConfigCache(id);
+    }
+
+    await publishProviderCacheInvalidation();
+    clearProviderDeleteUndoSnapshot(parsed.data.undoToken);
+
+    return {
+      ok: true,
+      data: {
+        operationId: snapshot.operationId,
+        restoredAt: new Date(nowMs).toISOString(),
+        restoredCount,
+      },
+    };
+  } catch (error) {
+    logger.error("撤销批量删除失败:", error);
+    const message = error instanceof Error ? error.message : "撤销批量删除失败";
     return { ok: false, error: message };
   }
 }

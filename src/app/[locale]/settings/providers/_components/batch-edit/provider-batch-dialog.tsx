@@ -11,6 +11,7 @@ import {
   batchResetProviderCircuits,
   type PreviewProviderBatchPatchResult,
   previewProviderBatchPatch,
+  undoProviderDelete,
   undoProviderPatch,
 } from "@/actions/providers";
 import {
@@ -32,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import type { ProviderDisplay } from "@/types/provider";
 import { FormTabNav } from "../forms/provider-form/components/form-tab-nav";
 import {
@@ -117,7 +119,7 @@ function BatchEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
         <ProviderFormProvider
           mode="batch"
           enableMultiProviderTypes={false}
@@ -281,6 +283,7 @@ function BatchEditDialogContent({
           <FormTabNav
             activeTab={state.ui.activeTab}
             onTabChange={(tab) => dispatch({ type: "SET_ACTIVE_TAB", payload: tab })}
+            layout="horizontal"
           />
           <div className="flex-1 overflow-y-auto pr-1">
             {state.ui.activeTab === "basic" && <BasicInfoSection />}
@@ -394,7 +397,35 @@ function BatchConfirmDialog({
       if (mode === "delete") {
         const result = await batchDeleteProviders({ providerIds });
         if (result.ok) {
-          toast.success(t("toast.deleted", { count: result.data?.deletedCount ?? 0 }));
+          const deletedCount = result.data.deletedCount;
+          const undoToken = result.data.undoToken;
+          const operationId = result.data.operationId;
+
+          toast.success(t("undo.batchDeleteSuccess", { count: deletedCount }), {
+            duration: 10000,
+            action: {
+              label: t("undo.button"),
+              onClick: async () => {
+                try {
+                  const undoResult = await undoProviderDelete({ undoToken, operationId });
+                  if (undoResult.ok) {
+                    toast.success(
+                      t("undo.batchDeleteUndone", { count: undoResult.data.restoredCount })
+                    );
+                    await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                  } else if (
+                    undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
+                  ) {
+                    toast.error(t("undo.expired"));
+                  } else {
+                    toast.error(t("undo.failed"));
+                  }
+                } catch {
+                  toast.error(t("undo.failed"));
+                }
+              },
+            },
+          });
         } else {
           toast.error(t("toast.failed", { error: result.error }));
           setIsSubmitting(false);
