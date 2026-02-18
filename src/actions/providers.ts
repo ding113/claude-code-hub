@@ -71,9 +71,11 @@ import type {
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
+  Provider,
   ProviderBatchPatch,
   ProviderBatchPatchField,
   ProviderDisplay,
+  ProviderPatchOperation,
   ProviderStatisticsMap,
   ProviderType,
 } from "@/types/provider";
@@ -1065,15 +1067,27 @@ const UndoProviderPatchSchema = z
   })
   .strict();
 
+export interface ProviderBatchPreviewRow {
+  providerId: number;
+  providerName: string;
+  field: ProviderBatchPatchField;
+  status: "changed" | "skipped";
+  before: unknown;
+  after: unknown;
+  skipReason?: string;
+}
+
 export interface PreviewProviderBatchPatchResult {
   previewToken: string;
   previewRevision: string;
   previewExpiresAt: string;
   providerIds: number[];
   changedFields: ProviderBatchPatchField[];
+  rows: ProviderBatchPreviewRow[];
   summary: {
     providerCount: number;
     fieldCount: number;
+    skipCount: number;
   };
 }
 
@@ -1099,6 +1113,7 @@ interface ProviderBatchPatchPreviewSnapshot {
   patch: ProviderBatchPatch;
   patchSerialized: string;
   changedFields: ProviderBatchPatchField[];
+  rows: ProviderBatchPreviewRow[];
   applied: boolean;
   appliedResultByIdempotencyKey: Map<string, ApplyProviderBatchPatchResult>;
 }
@@ -1190,6 +1205,94 @@ function buildNoChangesError(): ProviderPatchActionError {
   };
 }
 
+const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provider> = {
+  is_enabled: "isEnabled",
+  priority: "priority",
+  weight: "weight",
+  cost_multiplier: "costMultiplier",
+  group_tag: "groupTag",
+  model_redirects: "modelRedirects",
+  allowed_models: "allowedModels",
+  anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
+  anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
+};
+
+const PATCH_FIELD_CLEAR_VALUE: Partial<Record<ProviderBatchPatchField, unknown>> = {
+  anthropic_thinking_budget_preference: "inherit",
+};
+
+const ANTHROPIC_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+  "anthropic_thinking_budget_preference",
+  "anthropic_adaptive_thinking",
+]);
+
+function isClaudeProviderType(providerType: ProviderType): boolean {
+  return providerType === "claude" || providerType === "claude-auth";
+}
+
+function computePreviewAfterValue(
+  field: ProviderBatchPatchField,
+  operation: ProviderPatchOperation<unknown>
+): unknown {
+  if (operation.mode === "set") {
+    if (
+      field === "allowed_models" &&
+      Array.isArray(operation.value) &&
+      operation.value.length === 0
+    ) {
+      return null;
+    }
+    return operation.value;
+  }
+  if (operation.mode === "clear") {
+    return PATCH_FIELD_CLEAR_VALUE[field] ?? null;
+  }
+  return undefined;
+}
+
+function generatePreviewRows(
+  providers: Provider[],
+  patch: ProviderBatchPatch,
+  changedFields: ProviderBatchPatchField[]
+): ProviderBatchPreviewRow[] {
+  const rows: ProviderBatchPreviewRow[] = [];
+
+  for (const provider of providers) {
+    for (const field of changedFields) {
+      const operation = patch[field] as ProviderPatchOperation<unknown>;
+      const providerKey = PATCH_FIELD_TO_PROVIDER_KEY[field];
+      const before = provider[providerKey];
+      const after = computePreviewAfterValue(field, operation);
+
+      const isAnthropicOnly = ANTHROPIC_ONLY_FIELDS.has(field);
+      const isCompatible = !isAnthropicOnly || isClaudeProviderType(provider.providerType);
+
+      if (isCompatible) {
+        rows.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          field,
+          status: "changed",
+          before,
+          after,
+        });
+      } else {
+        rows.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          field,
+          status: "skipped",
+          before,
+          after,
+          skipReason: `Field "${field}" is only applicable to claude/claude-auth providers`,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
 export async function previewProviderBatchPatch(
   input: unknown
 ): Promise<ActionResult<PreviewProviderBatchPatchResult>> {
@@ -1222,6 +1325,12 @@ export async function previewProviderBatchPatch(
     const nowMs = Date.now();
     cleanupProviderPatchStores(nowMs);
 
+    const allProviders = await findAllProvidersFresh();
+    const providerIdSet = new Set(providerIds);
+    const matchedProviders = allProviders.filter((p) => providerIdSet.has(p.id));
+    const rows = generatePreviewRows(matchedProviders, normalizedPatch.data, changedFields);
+    const skipCount = rows.filter((r) => r.status === "skipped").length;
+
     const previewToken = createProviderBatchPreviewToken();
     const previewRevision = `${nowMs}:${providerIds.join(",")}:${changedFields.join(",")}`;
     const previewExpiresAt = nowMs + PROVIDER_BATCH_PREVIEW_TTL_MS;
@@ -1234,6 +1343,7 @@ export async function previewProviderBatchPatch(
       patch: normalizedPatch.data,
       patchSerialized: JSON.stringify(normalizedPatch.data),
       changedFields,
+      rows,
       applied: false,
       appliedResultByIdempotencyKey: new Map(),
     });
@@ -1246,9 +1356,11 @@ export async function previewProviderBatchPatch(
         previewExpiresAt: new Date(previewExpiresAt).toISOString(),
         providerIds,
         changedFields,
+        rows,
         summary: {
           providerCount: providerIds.length,
           fieldCount: changedFields.length,
+          skipCount,
         },
       },
     };

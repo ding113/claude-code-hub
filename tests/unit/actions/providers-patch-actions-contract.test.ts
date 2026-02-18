@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 
 const getSessionMock = vi.fn();
+const findAllProvidersFreshMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
 }));
 
 vi.mock("@/repository/provider", () => ({
+  findAllProvidersFresh: findAllProvidersFreshMock,
   updateProvidersBatch: vi.fn(),
   deleteProvidersBatch: vi.fn(),
 }));
@@ -37,6 +39,7 @@ describe("Provider Batch Patch Action Contracts", () => {
     vi.clearAllMocks();
     vi.resetModules();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findAllProvidersFreshMock.mockResolvedValue([]);
   });
 
   it("previewProviderBatchPatch should require admin role", async () => {
