@@ -77,7 +77,7 @@ function makeLogoutRequest(): NextRequest {
 }
 
 async function loadLogoutPost(): Promise<(request: NextRequest) => Promise<Response>> {
-  const mod = await import("../../src/app/api/auth/logout/route");
+  const mod = await import("@/app/api/auth/logout/route");
   return mod.POST;
 }
 
@@ -91,6 +91,7 @@ async function simulatePostLoginSessionRotation(
 
 describe("session fixation rotation and logout revocation", () => {
   beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     mockRedisSessionStoreCtor.mockImplementation(function RedisSessionStoreMock() {
       return {
