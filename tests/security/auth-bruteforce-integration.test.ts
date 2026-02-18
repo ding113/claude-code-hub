@@ -6,7 +6,6 @@ const mockSetAuthCookie = vi.hoisted(() => vi.fn());
 const mockGetLoginRedirectTarget = vi.hoisted(() => vi.fn());
 const mockGetSessionTokenMode = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
-const mockGetEnvConfig = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
@@ -35,7 +34,7 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 vi.mock("@/lib/config/env.schema", () => ({
-  getEnvConfig: mockGetEnvConfig,
+  getEnvConfig: () => ({ ENABLE_SECURE_COOKIES: false, SESSION_TOKEN_MODE: "legacy" }),
 }));
 
 vi.mock("@/lib/security/auth-response-headers", () => ({
