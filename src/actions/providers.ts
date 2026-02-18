@@ -1581,6 +1581,44 @@ export async function undoProviderPatch(
       };
     }
 
+    // Group providers by identical preimage values to minimise DB round-trips
+    const preimageGroups = new Map<string, { ids: number[]; updates: BatchProviderUpdates }>();
+
+    for (const providerId of snapshot.providerIds) {
+      const providerPreimage = snapshot.preimage[providerId];
+      if (!providerPreimage || Object.keys(providerPreimage).length === 0) {
+        continue;
+      }
+
+      const updatesObj: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(providerPreimage)) {
+        if (key === "costMultiplier" && typeof value === "number") {
+          updatesObj[key] = value.toString();
+        } else {
+          updatesObj[key] = value;
+        }
+      }
+      const updates = updatesObj as BatchProviderUpdates;
+
+      const groupKey = JSON.stringify(updates);
+      const existing = preimageGroups.get(groupKey);
+      if (existing) {
+        existing.ids.push(providerId);
+      } else {
+        preimageGroups.set(groupKey, { ids: [providerId], updates });
+      }
+    }
+
+    let revertedCount = 0;
+    for (const { ids, updates } of preimageGroups.values()) {
+      const count = await updateProvidersBatch(ids, updates);
+      revertedCount += count;
+    }
+
+    if (preimageGroups.size > 0) {
+      await publishProviderCacheInvalidation();
+    }
+
     providerPatchUndoStore.delete(parsed.data.undoToken);
 
     return {
@@ -1588,7 +1626,7 @@ export async function undoProviderPatch(
       data: {
         operationId: snapshot.operationId,
         revertedAt: new Date(nowMs).toISOString(),
-        revertedCount: snapshot.providerIds.length,
+        revertedCount,
       },
     };
   } catch (error) {

@@ -3,6 +3,7 @@ import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-err
 
 const getSessionMock = vi.fn();
 const findAllProvidersFreshMock = vi.fn();
+const updateProvidersBatchMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -10,7 +11,7 @@ vi.mock("@/lib/auth", () => ({
 
 vi.mock("@/repository/provider", () => ({
   findAllProvidersFresh: findAllProvidersFreshMock,
-  updateProvidersBatch: vi.fn(),
+  updateProvidersBatch: updateProvidersBatchMock,
   deleteProvidersBatch: vi.fn(),
 }));
 
@@ -34,12 +35,74 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
+function makeProvider(id: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    name: `Provider-${id}`,
+    url: "https://api.example.com/v1",
+    key: "sk-test",
+    providerVendorId: null,
+    isEnabled: true,
+    weight: 100,
+    priority: 1,
+    groupPriorities: null,
+    costMultiplier: 1.0,
+    groupTag: null,
+    providerType: "claude",
+    preserveClientIp: false,
+    modelRedirects: null,
+    allowedModels: null,
+    mcpPassthroughType: "none",
+    mcpPassthroughUrl: null,
+    limit5hUsd: null,
+    limitDailyUsd: null,
+    dailyResetMode: "fixed",
+    dailyResetTime: "00:00",
+    limitWeeklyUsd: null,
+    limitMonthlyUsd: null,
+    limitTotalUsd: null,
+    totalCostResetAt: null,
+    limitConcurrentSessions: null,
+    maxRetryAttempts: null,
+    circuitBreakerFailureThreshold: 5,
+    circuitBreakerOpenDuration: 1800000,
+    circuitBreakerHalfOpenSuccessThreshold: 2,
+    proxyUrl: null,
+    proxyFallbackToDirect: false,
+    firstByteTimeoutStreamingMs: 30000,
+    streamingIdleTimeoutMs: 10000,
+    requestTimeoutNonStreamingMs: 600000,
+    websiteUrl: null,
+    faviconUrl: null,
+    cacheTtlPreference: null,
+    swapCacheTtlBilling: false,
+    context1mPreference: null,
+    codexReasoningEffortPreference: null,
+    codexReasoningSummaryPreference: null,
+    codexTextVerbosityPreference: null,
+    codexParallelToolCallsPreference: null,
+    anthropicMaxTokensPreference: null,
+    anthropicThinkingBudgetPreference: null,
+    anthropicAdaptiveThinking: null,
+    geminiGoogleSearchPreference: null,
+    tpm: null,
+    rpm: null,
+    rpd: null,
+    cc: null,
+    createdAt: new Date("2025-01-01"),
+    updatedAt: new Date("2025-01-01"),
+    deletedAt: null,
+    ...overrides,
+  };
+}
+
 describe("Provider Batch Patch Action Contracts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findAllProvidersFreshMock.mockResolvedValue([]);
+    updateProvidersBatchMock.mockResolvedValue(0);
   });
 
   it("previewProviderBatchPatch should require admin role", async () => {
@@ -195,6 +258,12 @@ describe("Provider Batch Patch Action Contracts", () => {
   });
 
   it("undoProviderPatch should consume token on success", async () => {
+    findAllProvidersFreshMock.mockResolvedValue([
+      makeProvider(12, { groupTag: "before-12" }),
+      makeProvider(13, { groupTag: "before-13" }),
+    ]);
+    updateProvidersBatchMock.mockResolvedValue(1);
+
     const { previewProviderBatchPatch, applyProviderBatchPatch, undoProviderPatch } = await import(
       "@/actions/providers"
     );
