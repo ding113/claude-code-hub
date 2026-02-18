@@ -19,6 +19,7 @@ import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provi
 import { logger } from "@/lib/logger";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import {
+  buildProviderBatchApplyUpdates,
   hasProviderBatchPatchChanges,
   normalizeProviderBatchPatchDraft,
   PROVIDER_PATCH_ERROR_CODES,
@@ -45,6 +46,7 @@ import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
 import {
+  type BatchProviderUpdates,
   createProvider,
   deleteProvider,
   findAllProviders,
@@ -54,6 +56,7 @@ import {
   resetProviderTotalCostResetAt,
   updateProvider,
   updateProviderPrioritiesBatch,
+  updateProvidersBatch,
 } from "@/repository/provider";
 import {
   backfillProviderEndpointsFromProviders,
@@ -72,6 +75,7 @@ import type {
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
   Provider,
+  ProviderBatchApplyUpdates,
   ProviderBatchPatch,
   ProviderBatchPatchField,
   ProviderDisplay,
@@ -1057,6 +1061,7 @@ const ApplyProviderBatchPatchSchema = z
     providerIds: ProviderBatchPatchProviderIdsSchema,
     patch: z.unknown().optional().default({}),
     idempotencyKey: z.string().trim().min(1).max(128).optional(),
+    excludeProviderIds: z.array(z.number().int().positive()).optional().default([]),
   })
   .strict();
 
@@ -1123,6 +1128,8 @@ interface ProviderPatchUndoSnapshot {
   undoExpiresAt: number;
   operationId: string;
   providerIds: number[];
+  preimage: Record<number, Record<string, unknown>>;
+  patch: ProviderBatchPatch;
 }
 
 const providerBatchPatchPreviewStore = new Map<string, ProviderBatchPatchPreviewSnapshot>();
@@ -1203,6 +1210,40 @@ function buildNoChangesError(): ProviderPatchActionError {
     error: "没有可应用的变更",
     errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
   };
+}
+
+function mapApplyUpdatesToRepositoryFormat(
+  applyUpdates: ProviderBatchApplyUpdates
+): BatchProviderUpdates {
+  const result: BatchProviderUpdates = {};
+  if (applyUpdates.is_enabled !== undefined) {
+    result.isEnabled = applyUpdates.is_enabled;
+  }
+  if (applyUpdates.priority !== undefined) {
+    result.priority = applyUpdates.priority;
+  }
+  if (applyUpdates.weight !== undefined) {
+    result.weight = applyUpdates.weight;
+  }
+  if (applyUpdates.cost_multiplier !== undefined) {
+    result.costMultiplier = applyUpdates.cost_multiplier.toString();
+  }
+  if (applyUpdates.group_tag !== undefined) {
+    result.groupTag = applyUpdates.group_tag;
+  }
+  if (applyUpdates.model_redirects !== undefined) {
+    result.modelRedirects = applyUpdates.model_redirects;
+  }
+  if (applyUpdates.allowed_models !== undefined) {
+    result.allowedModels = applyUpdates.allowed_models;
+  }
+  if (applyUpdates.anthropic_thinking_budget_preference !== undefined) {
+    result.anthropicThinkingBudgetPreference = applyUpdates.anthropic_thinking_budget_preference;
+  }
+  if (applyUpdates.anthropic_adaptive_thinking !== undefined) {
+    result.anthropicAdaptiveThinking = applyUpdates.anthropic_adaptive_thinking;
+  }
+  return result;
 }
 
 const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provider> = {
@@ -1433,6 +1474,44 @@ export async function applyProviderBatchPatch(
       };
     }
 
+    const excludeSet = new Set(parsed.data.excludeProviderIds ?? []);
+    const effectiveProviderIds = providerIds.filter((id) => !excludeSet.has(id));
+    if (effectiveProviderIds.length === 0) {
+      return {
+        ok: false,
+        error: "排除后无可应用的供应商",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
+      };
+    }
+
+    const updatesResult = buildProviderBatchApplyUpdates(normalizedPatch.data);
+    if (!updatesResult.ok) {
+      return {
+        ok: false,
+        error: updatesResult.error.message,
+        errorCode: PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE,
+      };
+    }
+
+    const allProviders = await findAllProvidersFresh();
+    const effectiveIdSet = new Set(effectiveProviderIds);
+    const matchedProviders = allProviders.filter((p) => effectiveIdSet.has(p.id));
+    const changedFields = getChangedPatchFields(normalizedPatch.data);
+    const preimage: Record<number, Record<string, unknown>> = {};
+    for (const provider of matchedProviders) {
+      const fieldValues: Record<string, unknown> = {};
+      for (const field of changedFields) {
+        const providerKey = PATCH_FIELD_TO_PROVIDER_KEY[field];
+        fieldValues[providerKey] = provider[providerKey];
+      }
+      preimage[provider.id] = fieldValues;
+    }
+
+    const repositoryUpdates = mapApplyUpdatesToRepositoryFormat(updatesResult.data);
+    const dbUpdatedCount = await updateProvidersBatch(effectiveProviderIds, repositoryUpdates);
+
+    await publishProviderCacheInvalidation();
+
     const appliedAt = new Date(nowMs).toISOString();
     const undoToken = createProviderPatchUndoToken();
     const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_MS;
@@ -1440,7 +1519,7 @@ export async function applyProviderBatchPatch(
     const applyResult: ApplyProviderBatchPatchResult = {
       operationId: createProviderPatchOperationId(),
       appliedAt,
-      updatedCount: providerIds.length,
+      updatedCount: dbUpdatedCount,
       undoToken,
       undoExpiresAt: new Date(undoExpiresAtMs).toISOString(),
     };
@@ -1454,7 +1533,9 @@ export async function applyProviderBatchPatch(
       undoToken,
       undoExpiresAt: undoExpiresAtMs,
       operationId: applyResult.operationId,
-      providerIds,
+      providerIds: effectiveProviderIds,
+      preimage,
+      patch: normalizedPatch.data,
     });
 
     return { ok: true, data: applyResult };
