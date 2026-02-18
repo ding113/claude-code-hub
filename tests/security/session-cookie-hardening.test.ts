@@ -31,6 +31,7 @@ vi.mock("@/lib/auth", () => ({
   getSessionTokenMode: mockGetSessionTokenMode,
   clearAuthCookie: mockClearAuthCookie,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
+  toKeyFingerprint: vi.fn().mockResolvedValue("sha256:mock"),
   withNoStoreHeaders: realWithNoStoreHeaders,
 }));
 

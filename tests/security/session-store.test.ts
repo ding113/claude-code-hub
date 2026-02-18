@@ -236,4 +236,27 @@ describe("RedisSessionStore", () => {
     expect(rotated?.keyFingerprint).toBe(oldSession.keyFingerprint);
     expect(loggerMock.warn).toHaveBeenCalled();
   });
+
+  it("rotate() returns null for already-expired session", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    const expiredSession = {
+      sessionId: "bbb-expired-session",
+      keyFingerprint: "fp-expired",
+      userId: 6,
+      userRole: "user",
+      createdAt: Date.now() - 120_000,
+      expiresAt: Date.now() - 1_000,
+    };
+    redis.store.set(`cch:session:${expiredSession.sessionId}`, JSON.stringify(expiredSession));
+
+    const store = new RedisSessionStore();
+    const rotated = await store.rotate(expiredSession.sessionId);
+
+    expect(rotated).toBeNull();
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "[AuthSessionStore] Cannot rotate expired session",
+      expect.objectContaining({ sessionId: expiredSession.sessionId })
+    );
+  });
 });
