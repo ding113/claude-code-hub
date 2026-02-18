@@ -298,7 +298,7 @@ describe("POST /api/auth/login", () => {
 
     expect(res.status).toBe(401);
     const json = await res.json();
-    expect(json).toEqual({ error: undefined });
+    expect(json).toEqual({ error: "Authentication failed" });
     expect(mockLogger.warn).toHaveBeenCalled();
     expect(mockLogger.error).toHaveBeenCalled();
   });
