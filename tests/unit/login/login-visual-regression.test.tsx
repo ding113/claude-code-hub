@@ -29,6 +29,10 @@ vi.mock("@/i18n/routing", () => ({
   usePathname: mockUsePathname,
 }));
 
+vi.mock("next-themes", () => ({
+  useTheme: vi.fn(() => ({ theme: "system", setTheme: vi.fn() })),
+}));
+
 describe("LoginPage Visual Regression", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
