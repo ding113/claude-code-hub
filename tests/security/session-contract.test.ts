@@ -20,7 +20,7 @@ describe("session token contract and migration flags", () => {
     delete process.env.SESSION_TOKEN_MODE;
 
     vi.resetModules();
-    const { getSessionTokenMode } = await import("../../src/lib/auth");
+    const { getSessionTokenMode } = await import("@/lib/auth");
 
     expect(getSessionTokenMode()).toBe("opaque");
   });
@@ -32,7 +32,7 @@ describe("session token contract and migration flags", () => {
       process.env.SESSION_TOKEN_MODE = mode;
 
       vi.resetModules();
-      const { getSessionTokenMode } = await import("../../src/lib/auth");
+      const { getSessionTokenMode } = await import("@/lib/auth");
 
       expect(getSessionTokenMode()).toBe(mode);
     }
@@ -40,7 +40,7 @@ describe("session token contract and migration flags", () => {
 
   it("validates OpaqueSessionContract runtime shape strictly", async () => {
     vi.resetModules();
-    const { isOpaqueSessionContract } = await import("../../src/lib/auth");
+    const { isOpaqueSessionContract } = await import("@/lib/auth");
 
     const validContract = {
       sessionId: "sid_opaque_session_123",
@@ -77,7 +77,7 @@ describe("session token contract and migration flags", () => {
 
     vi.resetModules();
     const { getSessionTokenMode, getSessionTokenMigrationFlags, isSessionTokenAccepted } =
-      await import("../../src/lib/auth");
+      await import("@/lib/auth");
 
     const mode = getSessionTokenMode();
     expect(mode).toBe("dual");
@@ -96,7 +96,7 @@ describe("session token contract and migration flags", () => {
 
     vi.resetModules();
     const { getSessionTokenMode, getSessionTokenMigrationFlags, isSessionTokenAccepted } =
-      await import("../../src/lib/auth");
+      await import("@/lib/auth");
 
     const mode = getSessionTokenMode();
     expect(mode).toBe("legacy");
