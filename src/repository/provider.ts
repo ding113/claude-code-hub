@@ -809,6 +809,10 @@ export interface BatchProviderUpdates {
   weight?: number;
   costMultiplier?: string;
   groupTag?: string | null;
+  modelRedirects?: Record<string, string> | null;
+  allowedModels?: string[] | null;
+  anthropicThinkingBudgetPreference?: string | null;
+  anthropicAdaptiveThinking?: object | null;
 }
 
 export async function updateProvidersBatch(
@@ -837,6 +841,18 @@ export async function updateProvidersBatch(
   }
   if (updates.groupTag !== undefined) {
     setClauses.groupTag = updates.groupTag;
+  }
+  if (updates.modelRedirects !== undefined) {
+    setClauses.modelRedirects = updates.modelRedirects;
+  }
+  if (updates.allowedModels !== undefined) {
+    setClauses.allowedModels = updates.allowedModels;
+  }
+  if (updates.anthropicThinkingBudgetPreference !== undefined) {
+    setClauses.anthropicThinkingBudgetPreference = updates.anthropicThinkingBudgetPreference;
+  }
+  if (updates.anthropicAdaptiveThinking !== undefined) {
+    setClauses.anthropicAdaptiveThinking = updates.anthropicAdaptiveThinking;
   }
 
   if (Object.keys(setClauses).length === 1) {
