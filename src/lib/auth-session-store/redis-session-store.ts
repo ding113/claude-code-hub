@@ -210,10 +210,13 @@ export class RedisSessionStore implements SessionStore {
 
     const revoked = await this.revoke(oldSessionId);
     if (!revoked) {
-      logger.warn("[AuthSessionStore] Failed to revoke old session during rotate; old session will expire naturally", {
-        oldSessionId,
-        newSessionId: persisted.sessionId,
-      });
+      logger.warn(
+        "[AuthSessionStore] Failed to revoke old session during rotate; old session will expire naturally",
+        {
+          oldSessionId,
+          newSessionId: persisted.sessionId,
+        }
+      );
     }
 
     return persisted;
