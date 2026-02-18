@@ -38,7 +38,7 @@ describe("auth.json locale key parity", () => {
   it("English baseline has expected top-level sections", () => {
     const topLevel = Object.keys(enAuth).sort();
     expect(topLevel).toEqual(
-      ["actions", "errors", "form", "login", "logout", "placeholders", "security"].sort()
+      ["actions", "brand", "errors", "form", "login", "logout", "placeholders", "security"].sort()
     );
   });
 

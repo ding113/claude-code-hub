@@ -28,6 +28,10 @@ vi.mock("@/i18n/routing", () => ({
   usePathname: mockUsePathname,
 }));
 
+vi.mock("next-themes", () => ({
+  useTheme: vi.fn(() => ({ theme: "system", setTheme: vi.fn() })),
+}));
+
 const globalFetch = global.fetch;
 
 describe("LoginPage Accessibility", () => {
