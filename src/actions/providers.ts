@@ -1,6 +1,7 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
@@ -16,6 +17,12 @@ import {
 } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import {
+  hasProviderBatchPatchChanges,
+  normalizeProviderBatchPatchDraft,
+  PROVIDER_PATCH_ERROR_CODES,
+} from "@/lib/provider-patch-contract";
 import {
   executeProviderTest,
   type ProviderTestConfig,
@@ -34,6 +41,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import { maskKey } from "@/lib/utils/validation";
+import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
 import {
@@ -63,6 +71,8 @@ import type {
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
+  ProviderBatchPatch,
+  ProviderBatchPatchField,
   ProviderDisplay,
   ProviderStatisticsMap,
   ProviderType,
@@ -1023,6 +1033,377 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
 }
 
 const BATCH_OPERATION_MAX_SIZE = 500;
+const PROVIDER_BATCH_PREVIEW_TTL_MS = 60_000;
+const PROVIDER_PATCH_UNDO_TTL_MS = 10_000;
+
+const ProviderBatchPatchProviderIdsSchema = z
+  .array(z.number().int().positive())
+  .min(1)
+  .max(BATCH_OPERATION_MAX_SIZE);
+
+const PreviewProviderBatchPatchSchema = z
+  .object({
+    providerIds: ProviderBatchPatchProviderIdsSchema,
+    patch: z.unknown().optional().default({}),
+  })
+  .strict();
+
+const ApplyProviderBatchPatchSchema = z
+  .object({
+    previewToken: z.string().trim().min(1),
+    previewRevision: z.string().trim().min(1),
+    providerIds: ProviderBatchPatchProviderIdsSchema,
+    patch: z.unknown().optional().default({}),
+    idempotencyKey: z.string().trim().min(1).max(128).optional(),
+  })
+  .strict();
+
+const UndoProviderPatchSchema = z
+  .object({
+    undoToken: z.string().trim().min(1),
+    operationId: z.string().trim().min(1),
+  })
+  .strict();
+
+export interface PreviewProviderBatchPatchResult {
+  previewToken: string;
+  previewRevision: string;
+  previewExpiresAt: string;
+  providerIds: number[];
+  changedFields: ProviderBatchPatchField[];
+  summary: {
+    providerCount: number;
+    fieldCount: number;
+  };
+}
+
+export interface ApplyProviderBatchPatchResult {
+  operationId: string;
+  appliedAt: string;
+  updatedCount: number;
+  undoToken: string;
+  undoExpiresAt: string;
+}
+
+export interface UndoProviderPatchResult {
+  operationId: string;
+  revertedAt: string;
+  revertedCount: number;
+}
+
+interface ProviderBatchPatchPreviewSnapshot {
+  previewToken: string;
+  previewRevision: string;
+  previewExpiresAt: number;
+  providerIds: number[];
+  patch: ProviderBatchPatch;
+  patchSerialized: string;
+  changedFields: ProviderBatchPatchField[];
+  applied: boolean;
+  appliedResultByIdempotencyKey: Map<string, ApplyProviderBatchPatchResult>;
+}
+
+interface ProviderPatchUndoSnapshot {
+  undoToken: string;
+  undoExpiresAt: number;
+  operationId: string;
+  providerIds: number[];
+}
+
+const providerBatchPatchPreviewStore = new Map<string, ProviderBatchPatchPreviewSnapshot>();
+const providerPatchUndoStore = new Map<string, ProviderPatchUndoSnapshot>();
+type ProviderPatchActionError = Extract<ActionResult, { ok: false }>;
+
+function dedupeProviderIds(providerIds: number[]): number[] {
+  return [...new Set(providerIds)].sort((a, b) => a - b);
+}
+
+function getChangedPatchFields(patch: ProviderBatchPatch): ProviderBatchPatchField[] {
+  const fieldOrder: ProviderBatchPatchField[] = [
+    "is_enabled",
+    "priority",
+    "weight",
+    "cost_multiplier",
+    "group_tag",
+    "model_redirects",
+    "allowed_models",
+    "anthropic_thinking_budget_preference",
+    "anthropic_adaptive_thinking",
+  ];
+
+  return fieldOrder.filter((field) => patch[field].mode !== "no_change");
+}
+
+function isSameProviderIdList(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function createProviderBatchPreviewToken(): string {
+  return `provider_patch_preview_${crypto.randomUUID()}`;
+}
+
+function createProviderPatchUndoToken(): string {
+  return `provider_patch_undo_${crypto.randomUUID()}`;
+}
+
+function createProviderPatchOperationId(): string {
+  return `provider_patch_apply_${crypto.randomUUID()}`;
+}
+
+function cleanupProviderPatchStores(nowMs: number): void {
+  for (const [previewToken, snapshot] of providerBatchPatchPreviewStore.entries()) {
+    if (snapshot.previewExpiresAt <= nowMs) {
+      providerBatchPatchPreviewStore.delete(previewToken);
+    }
+  }
+
+  for (const [undoToken, snapshot] of providerPatchUndoStore.entries()) {
+    if (snapshot.undoExpiresAt <= nowMs) {
+      providerPatchUndoStore.delete(undoToken);
+    }
+  }
+}
+
+function buildActionValidationError(error: z.ZodError): ProviderPatchActionError {
+  return {
+    ok: false,
+    error: formatZodError(error),
+    errorCode: extractZodErrorCode(error) || PROVIDER_BATCH_PATCH_ERROR_CODES.INVALID_INPUT,
+  };
+}
+
+function buildNoChangesError(): ProviderPatchActionError {
+  return {
+    ok: false,
+    error: "没有可应用的变更",
+    errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
+  };
+}
+
+export async function previewProviderBatchPatch(
+  input: unknown
+): Promise<ActionResult<PreviewProviderBatchPatchResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = PreviewProviderBatchPatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const normalizedPatch = normalizeProviderBatchPatchDraft(parsed.data.patch);
+    if (!normalizedPatch.ok) {
+      return {
+        ok: false,
+        error: normalizedPatch.error.message,
+        errorCode: PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE,
+      };
+    }
+
+    if (!hasProviderBatchPatchChanges(normalizedPatch.data)) {
+      return buildNoChangesError();
+    }
+
+    const providerIds = dedupeProviderIds(parsed.data.providerIds);
+    const changedFields = getChangedPatchFields(normalizedPatch.data);
+    const nowMs = Date.now();
+    cleanupProviderPatchStores(nowMs);
+
+    const previewToken = createProviderBatchPreviewToken();
+    const previewRevision = `${nowMs}:${providerIds.join(",")}:${changedFields.join(",")}`;
+    const previewExpiresAt = nowMs + PROVIDER_BATCH_PREVIEW_TTL_MS;
+
+    providerBatchPatchPreviewStore.set(previewToken, {
+      previewToken,
+      previewRevision,
+      previewExpiresAt,
+      providerIds,
+      patch: normalizedPatch.data,
+      patchSerialized: JSON.stringify(normalizedPatch.data),
+      changedFields,
+      applied: false,
+      appliedResultByIdempotencyKey: new Map(),
+    });
+
+    return {
+      ok: true,
+      data: {
+        previewToken,
+        previewRevision,
+        previewExpiresAt: new Date(previewExpiresAt).toISOString(),
+        providerIds,
+        changedFields,
+        summary: {
+          providerCount: providerIds.length,
+          fieldCount: changedFields.length,
+        },
+      },
+    };
+  } catch (error) {
+    logger.error("预览批量补丁失败:", error);
+    const message = error instanceof Error ? error.message : "预览批量补丁失败";
+    return { ok: false, error: message };
+  }
+}
+
+export async function applyProviderBatchPatch(
+  input: unknown
+): Promise<ActionResult<ApplyProviderBatchPatchResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = ApplyProviderBatchPatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const nowMs = Date.now();
+    cleanupProviderPatchStores(nowMs);
+
+    const snapshot = providerBatchPatchPreviewStore.get(parsed.data.previewToken);
+    if (!snapshot || snapshot.previewExpiresAt <= nowMs) {
+      providerBatchPatchPreviewStore.delete(parsed.data.previewToken);
+      return {
+        ok: false,
+        error: "预览已过期，请重新预览",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_EXPIRED,
+      };
+    }
+
+    const normalizedPatch = normalizeProviderBatchPatchDraft(parsed.data.patch);
+    if (!normalizedPatch.ok) {
+      return {
+        ok: false,
+        error: normalizedPatch.error.message,
+        errorCode: PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE,
+      };
+    }
+
+    if (!hasProviderBatchPatchChanges(normalizedPatch.data)) {
+      return buildNoChangesError();
+    }
+
+    const providerIds = dedupeProviderIds(parsed.data.providerIds);
+    const patchSerialized = JSON.stringify(normalizedPatch.data);
+    const isStale =
+      parsed.data.previewRevision !== snapshot.previewRevision ||
+      !isSameProviderIdList(providerIds, snapshot.providerIds) ||
+      patchSerialized !== snapshot.patchSerialized;
+
+    if (parsed.data.idempotencyKey) {
+      const existingResult = snapshot.appliedResultByIdempotencyKey.get(parsed.data.idempotencyKey);
+      if (existingResult) {
+        return { ok: true, data: existingResult };
+      }
+    }
+
+    if (isStale || snapshot.applied) {
+      return {
+        ok: false,
+        error: "预览内容已失效，请重新预览",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
+      };
+    }
+
+    const appliedAt = new Date(nowMs).toISOString();
+    const undoToken = createProviderPatchUndoToken();
+    const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_MS;
+
+    const applyResult: ApplyProviderBatchPatchResult = {
+      operationId: createProviderPatchOperationId(),
+      appliedAt,
+      updatedCount: providerIds.length,
+      undoToken,
+      undoExpiresAt: new Date(undoExpiresAtMs).toISOString(),
+    };
+
+    snapshot.applied = true;
+    if (parsed.data.idempotencyKey) {
+      snapshot.appliedResultByIdempotencyKey.set(parsed.data.idempotencyKey, applyResult);
+    }
+
+    providerPatchUndoStore.set(undoToken, {
+      undoToken,
+      undoExpiresAt: undoExpiresAtMs,
+      operationId: applyResult.operationId,
+      providerIds,
+    });
+
+    return { ok: true, data: applyResult };
+  } catch (error) {
+    logger.error("应用批量补丁失败:", error);
+    const message = error instanceof Error ? error.message : "应用批量补丁失败";
+    return { ok: false, error: message };
+  }
+}
+
+export async function undoProviderPatch(
+  input: unknown
+): Promise<ActionResult<UndoProviderPatchResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = UndoProviderPatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const nowMs = Date.now();
+    cleanupProviderPatchStores(nowMs);
+
+    const snapshot = providerPatchUndoStore.get(parsed.data.undoToken);
+    if (!snapshot || snapshot.undoExpiresAt <= nowMs) {
+      providerPatchUndoStore.delete(parsed.data.undoToken);
+      return {
+        ok: false,
+        error: "撤销窗口已过期",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+      };
+    }
+
+    if (snapshot.operationId !== parsed.data.operationId) {
+      return {
+        ok: false,
+        error: "撤销参数与操作不匹配",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+      };
+    }
+
+    providerPatchUndoStore.delete(parsed.data.undoToken);
+
+    return {
+      ok: true,
+      data: {
+        operationId: snapshot.operationId,
+        revertedAt: new Date(nowMs).toISOString(),
+        revertedCount: snapshot.providerIds.length,
+      },
+    };
+  } catch (error) {
+    logger.error("撤销批量补丁失败:", error);
+    const message = error instanceof Error ? error.message : "撤销批量补丁失败";
+    return { ok: false, error: message };
+  }
+}
 
 export interface BatchUpdateProvidersParams {
   providerIds: number[];
