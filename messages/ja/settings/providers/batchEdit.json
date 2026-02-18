@@ -5,6 +5,10 @@
   "invertSelection": "反転",
   "selectedCount": "{count} 件選択中",
   "editSelected": "選択項目を編集",
+  "selectByType": "タイプで選択",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "グループで選択",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "編集",
     "delete": "削除",

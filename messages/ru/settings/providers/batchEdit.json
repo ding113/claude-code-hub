@@ -5,6 +5,10 @@
   "invertSelection": "Инвертировать",
   "selectedCount": "Выбрано: {count}",
   "editSelected": "Редактировать выбранные",
+  "selectByType": "Выбрать по типу",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "Выбрать по группе",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "Редактировать",
     "delete": "Удалить",

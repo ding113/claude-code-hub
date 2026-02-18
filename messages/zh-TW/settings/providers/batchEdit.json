@@ -5,6 +5,10 @@
   "invertSelection": "反選",
   "selectedCount": "已選 {count} 項",
   "editSelected": "編輯選中項",
+  "selectByType": "按類型選擇",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "按分組選擇",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "編輯",
     "delete": "刪除",

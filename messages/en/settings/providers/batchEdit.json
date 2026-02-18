@@ -5,6 +5,10 @@
   "invertSelection": "Invert",
   "selectedCount": "{count} selected",
   "editSelected": "Edit Selected",
+  "selectByType": "Select by Type",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "Select by Group",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "Edit",
     "delete": "Delete",

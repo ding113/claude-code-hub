@@ -321,6 +321,41 @@ export function ProviderManager({
     setBatchDialogOpen(true);
   }, []);
 
+  const handleSelectByType = useCallback(
+    (type: ProviderType) => {
+      setSelectedProviderIds((prev) => {
+        const next = new Set(prev);
+        for (const p of filteredProviders) {
+          if (p.providerType === type) {
+            next.add(p.id);
+          }
+        }
+        return next;
+      });
+    },
+    [filteredProviders]
+  );
+
+  const handleSelectByGroup = useCallback(
+    (group: string) => {
+      setSelectedProviderIds((prev) => {
+        const next = new Set(prev);
+        for (const p of filteredProviders) {
+          const tags =
+            p.groupTag
+              ?.split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean) ?? [];
+          if (tags.includes(group)) {
+            next.add(p.id);
+          }
+        }
+        return next;
+      });
+    },
+    [filteredProviders]
+  );
+
   const handleBatchSuccess = useCallback(() => {
     setSelectedProviderIds(new Set());
     setIsMultiSelectMode(false);
@@ -342,6 +377,9 @@ export function ProviderManager({
           onSelectAll={handleSelectAll}
           onInvertSelection={handleInvertSelection}
           onOpenBatchEdit={handleOpenBatchEdit}
+          providers={filteredProviders}
+          onSelectByType={handleSelectByType}
+          onSelectByGroup={handleSelectByGroup}
         />
         {addDialogSlot ? <div className="ml-auto">{addDialogSlot}</div> : null}
       </div>
