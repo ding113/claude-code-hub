@@ -270,6 +270,13 @@ export async function validateAuthToken(
       const sessionStore = await getSessionStore();
       const sessionData = await sessionStore.read(token);
       if (sessionData) {
+        if (sessionData.expiresAt <= Date.now()) {
+          logger.warn("Opaque session expired (application-level check)", {
+            sessionId: sessionData.sessionId,
+            expiresAt: sessionData.expiresAt,
+          });
+          return null;
+        }
         return convertToAuthSession(sessionData, options);
       }
     } catch (error) {

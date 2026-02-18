@@ -233,10 +233,16 @@ export async function POST(request: NextRequest) {
         const opaqueSession = await createOpaqueSession(key, session);
         await setAuthCookie(opaqueSession.sessionId);
       } catch (error) {
-        logger.error("Failed to create opaque session, falling back to legacy cookie", {
+        logger.error("Failed to create opaque session in opaque mode", {
           error: error instanceof Error ? error.message : String(error),
         });
-        await setAuthCookie(key);
+        const serverError = t?.("serverError") ?? "Internal server error";
+        return withAuthResponseHeaders(
+          NextResponse.json(
+            { error: serverError, errorCode: "SESSION_CREATE_FAILED" },
+            { status: 503 }
+          )
+        );
       }
     }
 

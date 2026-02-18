@@ -59,12 +59,15 @@ function parseSessionData(raw: string): SessionData | null {
   }
 }
 
-function resolveRotateTtlSeconds(expiresAt: number): number {
+function resolveRotateTtlSeconds(expiresAt: number): number | null {
   if (!Number.isFinite(expiresAt) || typeof expiresAt !== "number") {
     return DEFAULT_SESSION_TTL;
   }
 
   const remainingMs = expiresAt - Date.now();
+  if (remainingMs <= 0) {
+    return null;
+  }
   return Math.max(MIN_TTL_SECONDS, Math.ceil(remainingMs / 1000));
 }
 
@@ -181,6 +184,13 @@ export class RedisSessionStore implements SessionStore {
     }
 
     const ttlSeconds = resolveRotateTtlSeconds(oldSession.expiresAt);
+    if (ttlSeconds === null) {
+      logger.warn("[AuthSessionStore] Cannot rotate expired session", {
+        sessionId: oldSessionId,
+        expiresAt: oldSession.expiresAt,
+      });
+      return null;
+    }
     let nextSession: SessionData;
     try {
       nextSession = await this.create(
