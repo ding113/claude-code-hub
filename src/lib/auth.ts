@@ -344,8 +344,18 @@ async function convertToAuthSession(
   sessionData: OpaqueSessionContract,
   options?: { allowReadOnlyAccess?: boolean }
 ): Promise<AuthSession | null> {
-  const keyList = await findKeyList(sessionData.userId);
   const expectedFingerprint = normalizeKeyFingerprint(sessionData.keyFingerprint);
+
+  // Admin token uses virtual user (id=-1) which has no DB keys;
+  // verify fingerprint against the configured admin token directly.
+  if (sessionData.userId === -1) {
+    const adminToken = config.auth.adminToken;
+    if (!adminToken) return null;
+    const adminFingerprint = await toKeyFingerprint(adminToken);
+    return adminFingerprint === expectedFingerprint ? validateKey(adminToken, options) : null;
+  }
+
+  const keyList = await findKeyList(sessionData.userId);
 
   for (const key of keyList) {
     const keyFingerprint = await toKeyFingerprint(key.key);
