@@ -27,6 +27,7 @@ vi.mock("@/lib/auth", () => ({
   setAuthCookie: mockSetAuthCookie,
   getSessionTokenMode: mockGetSessionTokenMode,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
+  toKeyFingerprint: vi.fn().mockResolvedValue("sha256:fake"),
   withNoStoreHeaders: realWithNoStoreHeaders,
 }));
 
@@ -42,6 +43,14 @@ vi.mock("next-intl/server", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: mockLogger,
+}));
+
+vi.mock("@/lib/config/env.schema", () => ({
+  getEnvConfig: vi.fn().mockReturnValue({ ENABLE_SECURE_COOKIES: false }),
+}));
+
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: realWithNoStoreHeaders,
 }));
 
 function makeRequest(body: unknown): NextRequest {

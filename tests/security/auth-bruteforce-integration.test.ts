@@ -6,6 +6,7 @@ const mockSetAuthCookie = vi.hoisted(() => vi.fn());
 const mockGetLoginRedirectTarget = vi.hoisted(() => vi.fn());
 const mockGetSessionTokenMode = vi.hoisted(() => vi.fn());
 const mockGetTranslations = vi.hoisted(() => vi.fn());
+const mockGetEnvConfig = vi.hoisted(() => vi.fn());
 const mockLogger = vi.hoisted(() => ({
   warn: vi.fn(),
   error: vi.fn(),
@@ -31,6 +32,18 @@ vi.mock("next-intl/server", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: mockLogger,
+}));
+
+vi.mock("@/lib/config/env.schema", () => ({
+  getEnvConfig: mockGetEnvConfig,
+}));
+
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: <T>(res: T): T => {
+    (res as Response).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    (res as Response).headers.set("Pragma", "no-cache");
+    return res;
+  },
 }));
 
 function makeRequest(body: unknown, ip: string): NextRequest {

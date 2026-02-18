@@ -42,6 +42,14 @@ vi.mock("@/lib/logger", () => ({
   logger: mockLogger,
 }));
 
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: <T>(res: T): T => {
+    (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    (res as any).headers.set("Pragma", "no-cache");
+    return res;
+  },
+}));
+
 type LoginPostHandler = (request: NextRequest) => Promise<Response>;
 type LogoutPostHandler = (request: NextRequest) => Promise<Response>;
 

@@ -89,13 +89,13 @@ describe("Full Security Regression Suite", () => {
   });
 
   describe("Session Contract", () => {
-    it("SESSION_TOKEN_MODE defaults to legacy", async () => {
+    it("SESSION_TOKEN_MODE defaults to opaque", async () => {
       delete process.env.SESSION_TOKEN_MODE;
 
       vi.resetModules();
       const { getSessionTokenMode } = await import("../../src/lib/auth");
 
-      expect(getSessionTokenMode()).toBe("legacy");
+      expect(getSessionTokenMode()).toBe("opaque");
     });
 
     it("OpaqueSessionContract has required fields", async () => {
@@ -135,7 +135,7 @@ describe("Full Security Regression Suite", () => {
         userRole: "user",
       });
 
-      expect(created.sessionId).toMatch(/^[0-9a-f-]{36}$/i);
+      expect(created.sessionId).toMatch(/^sid_[0-9a-f-]{36}$/i);
       expect(created.keyFingerprint).toBe("sha256:fp-1");
       expect(created.userId).toBe(101);
       expect(created.userRole).toBe("user");

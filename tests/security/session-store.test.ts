@@ -71,7 +71,7 @@ describe("RedisSessionStore", () => {
     const store = new RedisSessionStore();
     const created = await store.create({ keyFingerprint: "fp-1", userId: 101, userRole: "user" });
 
-    expect(created.sessionId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(created.sessionId).toMatch(/^sid_[0-9a-f-]{36}$/i);
     expect(created.keyFingerprint).toBe("fp-1");
     expect(created.userId).toBe(101);
     expect(created.userRole).toBe("user");
@@ -170,7 +170,30 @@ describe("RedisSessionStore", () => {
     expect(created.expiresAt - created.createdAt).toBe(120_000);
   });
 
-  it("Redis failure returns null gracefully", async () => {
+  it("create() throws when Redis setex fails", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    redis.throwOnSetex = true;
+    const store = new RedisSessionStore();
+
+    await expect(
+      store.create({ keyFingerprint: "fp-fail", userId: 3, userRole: "user" })
+    ).rejects.toThrow("redis setex failed");
+    expect(loggerMock.error).toHaveBeenCalled();
+  });
+
+  it("create() throws when Redis is not ready", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    redis.status = "end";
+    const store = new RedisSessionStore();
+
+    await expect(
+      store.create({ keyFingerprint: "fp-noredis", userId: 4, userRole: "user" })
+    ).rejects.toThrow("Redis not ready");
+  });
+
+  it("rotate() returns null when Redis setex fails during create", async () => {
     const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
 
     const oldSession = {
@@ -190,5 +213,27 @@ describe("RedisSessionStore", () => {
     expect(rotated).toBeNull();
     expect(redis.store.has(`cch:session:${oldSession.sessionId}`)).toBe(true);
     expect(loggerMock.error).toHaveBeenCalled();
+  });
+
+  it("rotate() keeps new session when old session revocation fails", async () => {
+    const { RedisSessionStore } = await import("@/lib/auth-session-store/redis-session-store");
+
+    const oldSession = {
+      sessionId: "aaa-old-session",
+      keyFingerprint: "fp-revoke-fail",
+      userId: 5,
+      userRole: "user",
+      createdAt: Date.now() - 10_000,
+      expiresAt: Date.now() + 120_000,
+    };
+    redis.store.set(`cch:session:${oldSession.sessionId}`, JSON.stringify(oldSession));
+    redis.throwOnDel = true;
+
+    const store = new RedisSessionStore();
+    const rotated = await store.rotate(oldSession.sessionId);
+
+    expect(rotated).not.toBeNull();
+    expect(rotated?.keyFingerprint).toBe(oldSession.keyFingerprint);
+    expect(loggerMock.warn).toHaveBeenCalled();
   });
 });

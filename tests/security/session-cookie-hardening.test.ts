@@ -46,6 +46,10 @@ vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: mockGetEnvConfig,
 }));
 
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: realWithNoStoreHeaders,
+}));
+
 vi.mock("@/lib/config/config", () => ({ config: { auth: { adminToken: "test" } } }));
 vi.mock("@/repository/key", () => ({ validateApiKeyAndGetUser: vi.fn() }));
 

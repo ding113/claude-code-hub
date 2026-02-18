@@ -38,6 +38,14 @@ vi.mock("@/lib/config/env.schema", () => ({
   getEnvConfig: mockGetEnvConfig,
 }));
 
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: <T>(res: T): T => {
+    (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    (res as any).headers.set("Pragma", "no-cache");
+    return res;
+  },
+}));
+
 function makeRequest(
   body: unknown,
   opts?: { locale?: string; acceptLanguage?: string; xForwardedProto?: string }

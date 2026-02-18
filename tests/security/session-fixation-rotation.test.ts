@@ -59,6 +59,14 @@ vi.mock("@/lib/logger", () => ({
   logger: mockLogger,
 }));
 
+vi.mock("@/lib/config/env.schema", () => ({
+  getEnvConfig: vi.fn().mockReturnValue({ ENABLE_SECURE_COOKIES: false }),
+}));
+
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: realWithNoStoreHeaders,
+}));
+
 function makeLogoutRequest(): NextRequest {
   return new NextRequest("http://localhost/api/auth/logout", {
     method: "POST",

@@ -12,7 +12,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
 import type { ActionResult } from "@/actions/types";
-import { AUTH_COOKIE_NAME, runWithAuthSession, validateKey } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, runWithAuthSession, validateAuthToken } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 
 function getBearerTokenFromAuthHeader(raw: string | undefined): string | undefined {
@@ -300,7 +300,7 @@ export function createActionRoute(
     const fullPath = `${module}.${actionName}`;
 
     try {
-      let authSession: Awaited<ReturnType<typeof validateKey>> | null = null;
+      let authSession: Awaited<ReturnType<typeof validateAuthToken>> | null = null;
 
       // 0. 认证检查 (如果需要)
       if (requiresAuth) {
@@ -312,7 +312,7 @@ export function createActionRoute(
           return c.json({ ok: false, error: "未认证" }, 401);
         }
 
-        const session = await validateKey(authToken, { allowReadOnlyAccess });
+        const session = await validateAuthToken(authToken, { allowReadOnlyAccess });
         if (!session) {
           logger.warn(`[ActionAPI] ${fullPath} 认证失败: 无效的 ${AUTH_COOKIE_NAME}`);
           return c.json({ ok: false, error: "认证无效或已过期" }, 401);

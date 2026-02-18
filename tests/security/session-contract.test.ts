@@ -16,13 +16,13 @@ describe("session token contract and migration flags", () => {
     vi.resetModules();
   });
 
-  it("SESSION_TOKEN_MODE defaults to legacy", async () => {
+  it("SESSION_TOKEN_MODE defaults to opaque", async () => {
     delete process.env.SESSION_TOKEN_MODE;
 
     vi.resetModules();
     const { getSessionTokenMode } = await import("../../src/lib/auth");
 
-    expect(getSessionTokenMode()).toBe("legacy");
+    expect(getSessionTokenMode()).toBe("opaque");
   });
 
   it("getSessionTokenMode returns configured mode values", async () => {
