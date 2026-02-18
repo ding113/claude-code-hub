@@ -813,6 +813,41 @@ export interface BatchProviderUpdates {
   allowedModels?: string[] | null;
   anthropicThinkingBudgetPreference?: string | null;
   anthropicAdaptiveThinking?: object | null;
+  // Routing
+  preserveClientIp?: boolean;
+  groupPriorities?: Record<string, number> | null;
+  cacheTtlPreference?: string | null;
+  swapCacheTtlBilling?: boolean;
+  context1mPreference?: string | null;
+  codexReasoningEffortPreference?: string | null;
+  codexReasoningSummaryPreference?: string | null;
+  codexTextVerbosityPreference?: string | null;
+  codexParallelToolCallsPreference?: string | null;
+  anthropicMaxTokensPreference?: string | null;
+  geminiGoogleSearchPreference?: string | null;
+  // Rate Limit
+  limit5hUsd?: string | null;
+  limitDailyUsd?: string | null;
+  dailyResetMode?: string;
+  dailyResetTime?: string;
+  limitWeeklyUsd?: string | null;
+  limitMonthlyUsd?: string | null;
+  limitTotalUsd?: string | null;
+  limitConcurrentSessions?: number;
+  // Circuit Breaker
+  circuitBreakerFailureThreshold?: number;
+  circuitBreakerOpenDuration?: number;
+  circuitBreakerHalfOpenSuccessThreshold?: number;
+  maxRetryAttempts?: number | null;
+  // Network
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  firstByteTimeoutStreamingMs?: number;
+  streamingIdleTimeoutMs?: number;
+  requestTimeoutNonStreamingMs?: number;
+  // MCP
+  mcpPassthroughType?: string;
+  mcpPassthroughUrl?: string | null;
 }
 
 export async function updateProvidersBatch(
@@ -853,6 +888,102 @@ export async function updateProvidersBatch(
   }
   if (updates.anthropicAdaptiveThinking !== undefined) {
     setClauses.anthropicAdaptiveThinking = updates.anthropicAdaptiveThinking;
+  }
+  // Routing
+  if (updates.preserveClientIp !== undefined) {
+    setClauses.preserveClientIp = updates.preserveClientIp;
+  }
+  if (updates.groupPriorities !== undefined) {
+    setClauses.groupPriorities = updates.groupPriorities;
+  }
+  if (updates.cacheTtlPreference !== undefined) {
+    setClauses.cacheTtlPreference = updates.cacheTtlPreference;
+  }
+  if (updates.swapCacheTtlBilling !== undefined) {
+    setClauses.swapCacheTtlBilling = updates.swapCacheTtlBilling;
+  }
+  if (updates.context1mPreference !== undefined) {
+    setClauses.context1mPreference = updates.context1mPreference;
+  }
+  if (updates.codexReasoningEffortPreference !== undefined) {
+    setClauses.codexReasoningEffortPreference = updates.codexReasoningEffortPreference;
+  }
+  if (updates.codexReasoningSummaryPreference !== undefined) {
+    setClauses.codexReasoningSummaryPreference = updates.codexReasoningSummaryPreference;
+  }
+  if (updates.codexTextVerbosityPreference !== undefined) {
+    setClauses.codexTextVerbosityPreference = updates.codexTextVerbosityPreference;
+  }
+  if (updates.codexParallelToolCallsPreference !== undefined) {
+    setClauses.codexParallelToolCallsPreference = updates.codexParallelToolCallsPreference;
+  }
+  if (updates.anthropicMaxTokensPreference !== undefined) {
+    setClauses.anthropicMaxTokensPreference = updates.anthropicMaxTokensPreference;
+  }
+  if (updates.geminiGoogleSearchPreference !== undefined) {
+    setClauses.geminiGoogleSearchPreference = updates.geminiGoogleSearchPreference;
+  }
+  // Rate Limit
+  if (updates.limit5hUsd !== undefined) {
+    setClauses.limit5hUsd = updates.limit5hUsd;
+  }
+  if (updates.limitDailyUsd !== undefined) {
+    setClauses.limitDailyUsd = updates.limitDailyUsd;
+  }
+  if (updates.dailyResetMode !== undefined) {
+    setClauses.dailyResetMode = updates.dailyResetMode;
+  }
+  if (updates.dailyResetTime !== undefined) {
+    setClauses.dailyResetTime = updates.dailyResetTime;
+  }
+  if (updates.limitWeeklyUsd !== undefined) {
+    setClauses.limitWeeklyUsd = updates.limitWeeklyUsd;
+  }
+  if (updates.limitMonthlyUsd !== undefined) {
+    setClauses.limitMonthlyUsd = updates.limitMonthlyUsd;
+  }
+  if (updates.limitTotalUsd !== undefined) {
+    setClauses.limitTotalUsd = updates.limitTotalUsd;
+  }
+  if (updates.limitConcurrentSessions !== undefined) {
+    setClauses.limitConcurrentSessions = updates.limitConcurrentSessions;
+  }
+  // Circuit Breaker
+  if (updates.circuitBreakerFailureThreshold !== undefined) {
+    setClauses.circuitBreakerFailureThreshold = updates.circuitBreakerFailureThreshold;
+  }
+  if (updates.circuitBreakerOpenDuration !== undefined) {
+    setClauses.circuitBreakerOpenDuration = updates.circuitBreakerOpenDuration;
+  }
+  if (updates.circuitBreakerHalfOpenSuccessThreshold !== undefined) {
+    setClauses.circuitBreakerHalfOpenSuccessThreshold =
+      updates.circuitBreakerHalfOpenSuccessThreshold;
+  }
+  if (updates.maxRetryAttempts !== undefined) {
+    setClauses.maxRetryAttempts = updates.maxRetryAttempts;
+  }
+  // Network
+  if (updates.proxyUrl !== undefined) {
+    setClauses.proxyUrl = updates.proxyUrl;
+  }
+  if (updates.proxyFallbackToDirect !== undefined) {
+    setClauses.proxyFallbackToDirect = updates.proxyFallbackToDirect;
+  }
+  if (updates.firstByteTimeoutStreamingMs !== undefined) {
+    setClauses.firstByteTimeoutStreamingMs = updates.firstByteTimeoutStreamingMs;
+  }
+  if (updates.streamingIdleTimeoutMs !== undefined) {
+    setClauses.streamingIdleTimeoutMs = updates.streamingIdleTimeoutMs;
+  }
+  if (updates.requestTimeoutNonStreamingMs !== undefined) {
+    setClauses.requestTimeoutNonStreamingMs = updates.requestTimeoutNonStreamingMs;
+  }
+  // MCP
+  if (updates.mcpPassthroughType !== undefined) {
+    setClauses.mcpPassthroughType = updates.mcpPassthroughType;
+  }
+  if (updates.mcpPassthroughUrl !== undefined) {
+    setClauses.mcpPassthroughUrl = updates.mcpPassthroughUrl;
   }
 
   if (Object.keys(setClauses).length === 1) {

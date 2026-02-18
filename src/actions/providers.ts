@@ -1243,6 +1243,102 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.anthropic_adaptive_thinking !== undefined) {
     result.anthropicAdaptiveThinking = applyUpdates.anthropic_adaptive_thinking;
   }
+  if (applyUpdates.preserve_client_ip !== undefined) {
+    result.preserveClientIp = applyUpdates.preserve_client_ip;
+  }
+  if (applyUpdates.group_priorities !== undefined) {
+    result.groupPriorities = applyUpdates.group_priorities;
+  }
+  if (applyUpdates.cache_ttl_preference !== undefined) {
+    result.cacheTtlPreference = applyUpdates.cache_ttl_preference;
+  }
+  if (applyUpdates.swap_cache_ttl_billing !== undefined) {
+    result.swapCacheTtlBilling = applyUpdates.swap_cache_ttl_billing;
+  }
+  if (applyUpdates.context_1m_preference !== undefined) {
+    result.context1mPreference = applyUpdates.context_1m_preference;
+  }
+  if (applyUpdates.codex_reasoning_effort_preference !== undefined) {
+    result.codexReasoningEffortPreference = applyUpdates.codex_reasoning_effort_preference;
+  }
+  if (applyUpdates.codex_reasoning_summary_preference !== undefined) {
+    result.codexReasoningSummaryPreference = applyUpdates.codex_reasoning_summary_preference;
+  }
+  if (applyUpdates.codex_text_verbosity_preference !== undefined) {
+    result.codexTextVerbosityPreference = applyUpdates.codex_text_verbosity_preference;
+  }
+  if (applyUpdates.codex_parallel_tool_calls_preference !== undefined) {
+    result.codexParallelToolCallsPreference = applyUpdates.codex_parallel_tool_calls_preference;
+  }
+  if (applyUpdates.anthropic_max_tokens_preference !== undefined) {
+    result.anthropicMaxTokensPreference = applyUpdates.anthropic_max_tokens_preference;
+  }
+  if (applyUpdates.gemini_google_search_preference !== undefined) {
+    result.geminiGoogleSearchPreference = applyUpdates.gemini_google_search_preference;
+  }
+  if (applyUpdates.limit_5h_usd !== undefined) {
+    result.limit5hUsd =
+      applyUpdates.limit_5h_usd != null ? applyUpdates.limit_5h_usd.toString() : null;
+  }
+  if (applyUpdates.limit_daily_usd !== undefined) {
+    result.limitDailyUsd =
+      applyUpdates.limit_daily_usd != null ? applyUpdates.limit_daily_usd.toString() : null;
+  }
+  if (applyUpdates.daily_reset_mode !== undefined) {
+    result.dailyResetMode = applyUpdates.daily_reset_mode;
+  }
+  if (applyUpdates.daily_reset_time !== undefined) {
+    result.dailyResetTime = applyUpdates.daily_reset_time;
+  }
+  if (applyUpdates.limit_weekly_usd !== undefined) {
+    result.limitWeeklyUsd =
+      applyUpdates.limit_weekly_usd != null ? applyUpdates.limit_weekly_usd.toString() : null;
+  }
+  if (applyUpdates.limit_monthly_usd !== undefined) {
+    result.limitMonthlyUsd =
+      applyUpdates.limit_monthly_usd != null ? applyUpdates.limit_monthly_usd.toString() : null;
+  }
+  if (applyUpdates.limit_total_usd !== undefined) {
+    result.limitTotalUsd =
+      applyUpdates.limit_total_usd != null ? applyUpdates.limit_total_usd.toString() : null;
+  }
+  if (applyUpdates.limit_concurrent_sessions !== undefined) {
+    result.limitConcurrentSessions = applyUpdates.limit_concurrent_sessions;
+  }
+  if (applyUpdates.circuit_breaker_failure_threshold !== undefined) {
+    result.circuitBreakerFailureThreshold = applyUpdates.circuit_breaker_failure_threshold;
+  }
+  if (applyUpdates.circuit_breaker_open_duration !== undefined) {
+    result.circuitBreakerOpenDuration = applyUpdates.circuit_breaker_open_duration;
+  }
+  if (applyUpdates.circuit_breaker_half_open_success_threshold !== undefined) {
+    result.circuitBreakerHalfOpenSuccessThreshold =
+      applyUpdates.circuit_breaker_half_open_success_threshold;
+  }
+  if (applyUpdates.max_retry_attempts !== undefined) {
+    result.maxRetryAttempts = applyUpdates.max_retry_attempts;
+  }
+  if (applyUpdates.proxy_url !== undefined) {
+    result.proxyUrl = applyUpdates.proxy_url;
+  }
+  if (applyUpdates.proxy_fallback_to_direct !== undefined) {
+    result.proxyFallbackToDirect = applyUpdates.proxy_fallback_to_direct;
+  }
+  if (applyUpdates.first_byte_timeout_streaming_ms !== undefined) {
+    result.firstByteTimeoutStreamingMs = applyUpdates.first_byte_timeout_streaming_ms;
+  }
+  if (applyUpdates.streaming_idle_timeout_ms !== undefined) {
+    result.streamingIdleTimeoutMs = applyUpdates.streaming_idle_timeout_ms;
+  }
+  if (applyUpdates.request_timeout_non_streaming_ms !== undefined) {
+    result.requestTimeoutNonStreamingMs = applyUpdates.request_timeout_non_streaming_ms;
+  }
+  if (applyUpdates.mcp_passthrough_type !== undefined) {
+    result.mcpPassthroughType = applyUpdates.mcp_passthrough_type;
+  }
+  if (applyUpdates.mcp_passthrough_url !== undefined) {
+    result.mcpPassthroughUrl = applyUpdates.mcp_passthrough_url;
+  }
   return result;
 }
 
@@ -1256,19 +1352,79 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   allowed_models: "allowedModels",
   anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
   anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
+  preserve_client_ip: "preserveClientIp",
+  group_priorities: "groupPriorities",
+  cache_ttl_preference: "cacheTtlPreference",
+  swap_cache_ttl_billing: "swapCacheTtlBilling",
+  context_1m_preference: "context1mPreference",
+  codex_reasoning_effort_preference: "codexReasoningEffortPreference",
+  codex_reasoning_summary_preference: "codexReasoningSummaryPreference",
+  codex_text_verbosity_preference: "codexTextVerbosityPreference",
+  codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
+  anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
+  gemini_google_search_preference: "geminiGoogleSearchPreference",
+  limit_5h_usd: "limit5hUsd",
+  limit_daily_usd: "limitDailyUsd",
+  daily_reset_mode: "dailyResetMode",
+  daily_reset_time: "dailyResetTime",
+  limit_weekly_usd: "limitWeeklyUsd",
+  limit_monthly_usd: "limitMonthlyUsd",
+  limit_total_usd: "limitTotalUsd",
+  limit_concurrent_sessions: "limitConcurrentSessions",
+  circuit_breaker_failure_threshold: "circuitBreakerFailureThreshold",
+  circuit_breaker_open_duration: "circuitBreakerOpenDuration",
+  circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
+  max_retry_attempts: "maxRetryAttempts",
+  proxy_url: "proxyUrl",
+  proxy_fallback_to_direct: "proxyFallbackToDirect",
+  first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
+  streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
+  request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
+  mcp_passthrough_type: "mcpPassthroughType",
+  mcp_passthrough_url: "mcpPassthroughUrl",
 };
 
 const PATCH_FIELD_CLEAR_VALUE: Partial<Record<ProviderBatchPatchField, unknown>> = {
   anthropic_thinking_budget_preference: "inherit",
+  cache_ttl_preference: "inherit",
+  context_1m_preference: "inherit",
+  codex_reasoning_effort_preference: "inherit",
+  codex_reasoning_summary_preference: "inherit",
+  codex_text_verbosity_preference: "inherit",
+  codex_parallel_tool_calls_preference: "inherit",
+  anthropic_max_tokens_preference: "inherit",
+  gemini_google_search_preference: "inherit",
+  mcp_passthrough_type: "none",
 };
 
-const ANTHROPIC_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+const CLAUDE_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
   "anthropic_thinking_budget_preference",
   "anthropic_adaptive_thinking",
+  "anthropic_max_tokens_preference",
+  "context_1m_preference",
+]);
+
+const CODEX_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+  "codex_reasoning_effort_preference",
+  "codex_reasoning_summary_preference",
+  "codex_text_verbosity_preference",
+  "codex_parallel_tool_calls_preference",
+]);
+
+const GEMINI_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+  "gemini_google_search_preference",
 ]);
 
 function isClaudeProviderType(providerType: ProviderType): boolean {
   return providerType === "claude" || providerType === "claude-auth";
+}
+
+function isCodexProviderType(providerType: ProviderType): boolean {
+  return providerType === "codex";
+}
+
+function isGeminiProviderType(providerType: ProviderType): boolean {
+  return providerType === "gemini" || providerType === "gemini-cli";
 }
 
 function computePreviewAfterValue(
@@ -1305,8 +1461,22 @@ function generatePreviewRows(
       const before = provider[providerKey];
       const after = computePreviewAfterValue(field, operation);
 
-      const isAnthropicOnly = ANTHROPIC_ONLY_FIELDS.has(field);
-      const isCompatible = !isAnthropicOnly || isClaudeProviderType(provider.providerType);
+      const isClaudeOnly = CLAUDE_ONLY_FIELDS.has(field);
+      const isCodexOnly = CODEX_ONLY_FIELDS.has(field);
+      const isGeminiOnly = GEMINI_ONLY_FIELDS.has(field);
+
+      let isCompatible = true;
+      let skipReason = "";
+      if (isClaudeOnly && !isClaudeProviderType(provider.providerType)) {
+        isCompatible = false;
+        skipReason = `Field "${field}" is only applicable to claude/claude-auth providers`;
+      } else if (isCodexOnly && !isCodexProviderType(provider.providerType)) {
+        isCompatible = false;
+        skipReason = `Field "${field}" is only applicable to codex providers`;
+      } else if (isGeminiOnly && !isGeminiProviderType(provider.providerType)) {
+        isCompatible = false;
+        skipReason = `Field "${field}" is only applicable to gemini/gemini-cli providers`;
+      }
 
       if (isCompatible) {
         rows.push({
@@ -1325,7 +1495,7 @@ function generatePreviewRows(
           status: "skipped",
           before,
           after,
-          skipReason: `Field "${field}" is only applicable to claude/claude-auth providers`,
+          skipReason,
         });
       }
     }

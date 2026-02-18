@@ -46,8 +46,7 @@
     "modelRedirects": "模型重新導向",
     "allowedModels": "允許的模型",
     "thinkingBudget": "思維預算",
-    "adaptiveThinking": "自適應思維",
-    "comingSoon": "即將推出"
+    "adaptiveThinking": "自適應思維"
   },
   "affectedProviders": {
     "title": "受影響的供應商",
@@ -60,10 +59,33 @@
     "goBack": "返回",
     "processing": "處理中..."
   },
+  "preview": {
+    "title": "預覽變更",
+    "description": "將變更應用到 {count} 個供應商前請先確認",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: 已跳過 ({reason})",
+    "excludeProvider": "排除",
+    "summary": "{providerCount} 個供應商, {fieldCount} 項變更, {skipCount} 項跳過",
+    "noChanges": "沒有可應用的變更",
+    "apply": "應用變更",
+    "back": "返回編輯",
+    "loading": "正在產生預覽..."
+  },
+  "batchNotes": {
+    "codexOnly": "僅 Codex",
+    "claudeOnly": "僅 Claude",
+    "geminiOnly": "僅 Gemini"
+  },
   "toast": {
     "updated": "已更新 {count} 個供應商",
     "deleted": "已刪除 {count} 個供應商",
     "circuitReset": "已重置 {count} 個熔斷器",
-    "failed": "操作失敗: {error}"
+    "failed": "操作失敗: {error}",
+    "undo": "復原",
+    "undoSuccess": "已還原 {count} 個供應商",
+    "undoFailed": "復原失敗: {error}",
+    "undoExpired": "復原時限已過期",
+    "previewFailed": "預覽失敗: {error}"
   }
 }

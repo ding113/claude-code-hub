@@ -3,6 +3,7 @@ import type { NextResponse } from "next/server";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { constantTimeEqual } from "@/lib/security/constant-time-compare";
 import { findKeyList, validateApiKeyAndGetUser } from "@/repository/key";
 import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
@@ -166,7 +167,7 @@ export async function validateKey(
   const allowReadOnlyAccess = options?.allowReadOnlyAccess ?? false;
 
   const adminToken = config.auth.adminToken;
-  if (adminToken && keyString === adminToken) {
+  if (adminToken && constantTimeEqual(keyString, adminToken)) {
     const now = new Date();
     const adminUser: User = {
       id: -1,
@@ -362,14 +363,16 @@ async function convertToAuthSession(
     const adminToken = config.auth.adminToken;
     if (!adminToken) return null;
     const adminFingerprint = await toKeyFingerprint(adminToken);
-    return adminFingerprint === expectedFingerprint ? validateKey(adminToken, options) : null;
+    return constantTimeEqual(adminFingerprint, expectedFingerprint)
+      ? validateKey(adminToken, options)
+      : null;
   }
 
   const keyList = await findKeyList(sessionData.userId);
 
   for (const key of keyList) {
     const keyFingerprint = await toKeyFingerprint(key.key);
-    if (keyFingerprint === expectedFingerprint) {
+    if (constantTimeEqual(keyFingerprint, expectedFingerprint)) {
       return validateKey(key.key, options);
     }
   }

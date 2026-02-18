@@ -46,8 +46,7 @@
     "modelRedirects": "Model Redirects",
     "allowedModels": "Allowed Models",
     "thinkingBudget": "Thinking Budget",
-    "adaptiveThinking": "Adaptive Thinking",
-    "comingSoon": "Coming soon"
+    "adaptiveThinking": "Adaptive Thinking"
   },
   "affectedProviders": {
     "title": "Affected Providers",
@@ -60,10 +59,33 @@
     "goBack": "Go Back",
     "processing": "Processing..."
   },
+  "preview": {
+    "title": "Preview Changes",
+    "description": "Review changes before applying to {count} providers",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: Skipped ({reason})",
+    "excludeProvider": "Exclude",
+    "summary": "{providerCount} providers, {fieldCount} changes, {skipCount} skipped",
+    "noChanges": "No changes to apply",
+    "apply": "Apply Changes",
+    "back": "Back to Edit",
+    "loading": "Generating preview..."
+  },
+  "batchNotes": {
+    "codexOnly": "Codex only",
+    "claudeOnly": "Claude only",
+    "geminiOnly": "Gemini only"
+  },
   "toast": {
     "updated": "Updated {count} providers",
     "deleted": "Deleted {count} providers",
     "circuitReset": "Reset {count} circuit breakers",
-    "failed": "Operation failed: {error}"
+    "failed": "Operation failed: {error}",
+    "undo": "Undo",
+    "undoSuccess": "Reverted {count} providers",
+    "undoFailed": "Undo failed: {error}",
+    "undoExpired": "Undo window expired",
+    "previewFailed": "Preview failed: {error}"
   }
 }

@@ -172,11 +172,25 @@ describe("security headers auth route integration", () => {
       requestHeaders: "content-type,x-api-key",
     });
 
-    expect(corsRes.headers.get("Access-Control-Allow-Origin")).toBe("https://client.example.com");
+    // Without allowCredentials, origin is NOT reflected — stays as wildcard
+    expect(corsRes.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(corsRes.headers.get("Access-Control-Allow-Credentials")).toBeNull();
     expect(corsRes.headers.get("Access-Control-Allow-Headers")).toBe("content-type,x-api-key");
     expect(corsRes.headers.get("Content-Security-Policy-Report-Only")).toContain(
       "default-src 'self'"
     );
     expect(corsRes.headers.get("X-Content-Type-Options")).toBe("nosniff");
+  });
+
+  it("CORS reflects origin only when allowCredentials is explicitly set", async () => {
+    const res = await loginPost(makeLoginRequest({ key: "valid-key" }));
+    const corsRes = applyCors(res, {
+      origin: "https://trusted.example.com",
+      requestHeaders: "content-type",
+      allowCredentials: true,
+    });
+
+    expect(corsRes.headers.get("Access-Control-Allow-Origin")).toBe("https://trusted.example.com");
+    expect(corsRes.headers.get("Access-Control-Allow-Credentials")).toBe("true");
   });
 });

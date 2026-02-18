@@ -6,10 +6,12 @@ import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  type BatchUpdateProvidersParams,
+  applyProviderBatchPatch,
   batchDeleteProviders,
   batchResetProviderCircuits,
-  batchUpdateProviders,
+  type PreviewProviderBatchPatchResult,
+  previewProviderBatchPatch,
+  undoProviderPatch,
 } from "@/actions/providers";
 import {
   AlertDialog,
@@ -30,20 +32,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import type { ProviderDisplay } from "@/types/provider";
+import { FormTabNav } from "../forms/provider-form/components/form-tab-nav";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import type { AnthropicAdaptiveThinkingConfig, ProviderDisplay } from "@/types/provider";
-import { AdaptiveThinkingEditor } from "../adaptive-thinking-editor";
-import { ThinkingBudgetEditor } from "../thinking-budget-editor";
+  ProviderFormProvider,
+  useProviderForm,
+} from "../forms/provider-form/provider-form-context";
+import { BasicInfoSection } from "../forms/provider-form/sections/basic-info-section";
+import { LimitsSection } from "../forms/provider-form/sections/limits-section";
+import { NetworkSection } from "../forms/provider-form/sections/network-section";
+import { RoutingSection } from "../forms/provider-form/sections/routing-section";
+import { TestingSection } from "../forms/provider-form/sections/testing-section";
+import { buildPatchDraftFromFormState } from "./build-patch-draft";
 import type { BatchActionMode } from "./provider-batch-actions";
+import { ProviderBatchPreviewStep } from "./provider-batch-preview-step";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -59,36 +61,6 @@ export interface ProviderBatchDialogProps {
 }
 
 // ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-
-interface BatchEditFieldState {
-  isEnabled: "no_change" | "true" | "false";
-  priority: string;
-  weight: string;
-  costMultiplier: string;
-  groupTag: string;
-  thinkingBudget: string;
-  adaptiveThinkingEnabled: "no_change" | "true" | "false";
-  adaptiveThinkingConfig: AnthropicAdaptiveThinkingConfig;
-}
-
-const INITIAL_EDIT_STATE: BatchEditFieldState = {
-  isEnabled: "no_change",
-  priority: "",
-  weight: "",
-  costMultiplier: "",
-  groupTag: "",
-  thinkingBudget: "",
-  adaptiveThinkingEnabled: "no_change",
-  adaptiveThinkingConfig: {
-    effort: "medium",
-    modelMatchMode: "all",
-    models: [],
-  },
-};
-
-// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
@@ -100,54 +72,317 @@ export function ProviderBatchDialog({
   providers,
   onSuccess,
 }: ProviderBatchDialogProps) {
-  const t = useTranslations("settings.providers.batchEdit");
-  const queryClient = useQueryClient();
+  // For edit mode: delegate to form-based dialog
+  if (mode === "edit") {
+    return (
+      <BatchEditDialog
+        open={open}
+        onOpenChange={onOpenChange}
+        selectedProviderIds={selectedProviderIds}
+        providers={providers}
+        onSuccess={onSuccess}
+      />
+    );
+  }
 
-  const [editState, setEditState] = useState<BatchEditFieldState>(INITIAL_EDIT_STATE);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // For delete/resetCircuit: use AlertDialog
+  return (
+    <BatchConfirmDialog
+      open={open}
+      mode={mode}
+      onOpenChange={onOpenChange}
+      selectedProviderIds={selectedProviderIds}
+      providers={providers}
+      onSuccess={onSuccess}
+    />
+  );
+}
 
+// ---------------------------------------------------------------------------
+// BatchEditDialog: Uses ProviderFormProvider mode="batch"
+// ---------------------------------------------------------------------------
+
+function BatchEditDialog({
+  open,
+  onOpenChange,
+  selectedProviderIds,
+  providers,
+  onSuccess,
+}: Omit<ProviderBatchDialogProps, "mode">) {
   const selectedCount = selectedProviderIds.size;
 
-  // Affected providers: filter by selectedProviderIds
   const affectedProviders = useMemo(() => {
     return providers.filter((p) => selectedProviderIds.has(p.id));
   }, [providers, selectedProviderIds]);
 
-  // Check if any field has been changed from its default
-  const hasChanges = useMemo(() => {
-    if (mode !== "edit") return true;
-    return (
-      editState.isEnabled !== "no_change" ||
-      editState.priority !== "" ||
-      editState.weight !== "" ||
-      editState.costMultiplier !== "" ||
-      editState.groupTag !== "" ||
-      editState.thinkingBudget !== "" ||
-      editState.adaptiveThinkingEnabled !== "no_change"
-    );
-  }, [mode, editState]);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+        <ProviderFormProvider
+          mode="batch"
+          enableMultiProviderTypes={false}
+          groupSuggestions={[]}
+          batchProviders={affectedProviders}
+        >
+          <BatchEditDialogContent
+            selectedProviderIds={selectedProviderIds}
+            selectedCount={selectedCount}
+            onOpenChange={onOpenChange}
+            onSuccess={onSuccess}
+          />
+        </ProviderFormProvider>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-  const resetState = useCallback(() => {
-    setEditState(INITIAL_EDIT_STATE);
-    setConfirmOpen(false);
-    setIsSubmitting(false);
+// Inner component that can use useProviderForm()
+type DialogStep = "edit" | "preview";
+
+function BatchEditDialogContent({
+  selectedProviderIds,
+  selectedCount,
+  onOpenChange,
+  onSuccess,
+}: {
+  selectedProviderIds: Set<number>;
+  selectedCount: number;
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
+}) {
+  const t = useTranslations("settings.providers.batchEdit");
+  const queryClient = useQueryClient();
+  const { state, dispatch, dirtyFields } = useProviderForm();
+
+  const [step, setStep] = useState<DialogStep>("edit");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [previewResult, setPreviewResult] = useState<PreviewProviderBatchPatchResult | null>(null);
+  const [excludedProviderIds, setExcludedProviderIds] = useState<Set<number>>(new Set());
+
+  const hasChanges = dirtyFields.size > 0;
+
+  const handleExcludeToggle = useCallback((providerId: number) => {
+    setExcludedProviderIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(providerId)) {
+        next.delete(providerId);
+      } else {
+        next.add(providerId);
+      }
+      return next;
+    });
   }, []);
 
-  const handleOpenChange = useCallback(
-    (newOpen: boolean) => {
-      if (!newOpen) {
-        resetState();
-      }
-      onOpenChange(newOpen);
-    },
-    [onOpenChange, resetState]
-  );
-
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback(async () => {
     if (!hasChanges) return;
-    setConfirmOpen(true);
-  }, [hasChanges]);
+
+    setIsLoadingPreview(true);
+    setStep("preview");
+
+    try {
+      const providerIds = Array.from(selectedProviderIds);
+      const patch = buildPatchDraftFromFormState(state, dirtyFields);
+      const result = await previewProviderBatchPatch({ providerIds, patch });
+
+      if (result.ok) {
+        setPreviewResult(result.data);
+      } else {
+        toast.error(t("toast.previewFailed", { error: result.error }));
+        setStep("edit");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      toast.error(t("toast.previewFailed", { error: message }));
+      setStep("edit");
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  }, [hasChanges, selectedProviderIds, state, dirtyFields, t]);
+
+  const handleBackToEdit = useCallback(() => {
+    setStep("edit");
+    setPreviewResult(null);
+    setExcludedProviderIds(new Set());
+  }, []);
+
+  const handleApply = useCallback(async () => {
+    if (isSubmitting || !previewResult) return;
+    setIsSubmitting(true);
+
+    try {
+      const providerIds = Array.from(selectedProviderIds);
+      const patch = buildPatchDraftFromFormState(state, dirtyFields);
+      const result = await applyProviderBatchPatch({
+        previewToken: previewResult.previewToken,
+        previewRevision: previewResult.previewRevision,
+        providerIds,
+        patch,
+        excludeProviderIds: Array.from(excludedProviderIds),
+      });
+
+      if (result.ok) {
+        await queryClient.invalidateQueries({ queryKey: ["providers"] });
+        onOpenChange(false);
+        onSuccess?.();
+
+        const undoToken = result.data.undoToken;
+        const operationId = result.data.operationId;
+        toast.success(t("toast.updated", { count: result.data.updatedCount }), {
+          duration: 10000,
+          action: {
+            label: t("toast.undo"),
+            onClick: async () => {
+              const undoResult = await undoProviderPatch({ undoToken, operationId });
+              if (undoResult.ok) {
+                toast.success(t("toast.undoSuccess", { count: undoResult.data.revertedCount }));
+                queryClient.invalidateQueries({ queryKey: ["providers"] });
+              } else {
+                toast.error(t("toast.undoFailed", { error: undoResult.error }));
+              }
+            },
+          },
+        });
+      } else {
+        toast.error(t("toast.failed", { error: result.error }));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      toast.error(t("toast.failed", { error: message }));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [
+    isSubmitting,
+    previewResult,
+    selectedProviderIds,
+    state,
+    dirtyFields,
+    excludedProviderIds,
+    queryClient,
+    onOpenChange,
+    onSuccess,
+    t,
+  ]);
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{step === "preview" ? t("preview.title") : t("dialog.editTitle")}</DialogTitle>
+        <DialogDescription>
+          {step === "preview"
+            ? t("preview.description", { count: selectedCount })
+            : t("dialog.editDesc", { count: selectedCount })}
+        </DialogDescription>
+      </DialogHeader>
+
+      {step === "edit" && (
+        <div className="flex-1 overflow-hidden flex flex-col gap-4">
+          <FormTabNav
+            activeTab={state.ui.activeTab}
+            onTabChange={(tab) => dispatch({ type: "SET_ACTIVE_TAB", payload: tab })}
+          />
+          <div className="flex-1 overflow-y-auto pr-1">
+            {state.ui.activeTab === "basic" && <BasicInfoSection />}
+            {state.ui.activeTab === "routing" && <RoutingSection />}
+            {state.ui.activeTab === "limits" && <LimitsSection />}
+            {state.ui.activeTab === "network" && <NetworkSection />}
+            {state.ui.activeTab === "testing" && <TestingSection />}
+          </div>
+        </div>
+      )}
+
+      {step === "preview" && (
+        <div className="flex-1 overflow-y-auto py-4">
+          <ProviderBatchPreviewStep
+            rows={previewResult?.rows ?? []}
+            summary={previewResult?.summary ?? { providerCount: 0, fieldCount: 0, skipCount: 0 }}
+            excludedProviderIds={excludedProviderIds}
+            onExcludeToggle={handleExcludeToggle}
+            isLoading={isLoadingPreview}
+          />
+        </div>
+      )}
+
+      <DialogFooter>
+        {step === "preview" ? (
+          <>
+            <Button variant="outline" onClick={handleBackToEdit}>
+              {t("preview.back")}
+            </Button>
+            <Button
+              onClick={handleApply}
+              disabled={
+                isSubmitting ||
+                isLoadingPreview ||
+                !previewResult ||
+                previewResult.summary.fieldCount === 0
+              }
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {t("confirm.processing")}
+                </>
+              ) : (
+                t("preview.apply")
+              )}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              {t("confirm.cancel")}
+            </Button>
+            <Button onClick={handleNext} disabled={!hasChanges}>
+              {t("dialog.next")}
+            </Button>
+          </>
+        )}
+      </DialogFooter>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BatchConfirmDialog: Delete / Reset Circuit (unchanged)
+// ---------------------------------------------------------------------------
+
+function BatchConfirmDialog({
+  open,
+  mode,
+  onOpenChange,
+  selectedProviderIds,
+  providers: _providers,
+  onSuccess,
+}: ProviderBatchDialogProps) {
+  const t = useTranslations("settings.providers.batchEdit");
+  const queryClient = useQueryClient();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const selectedCount = selectedProviderIds.size;
+
+  const dialogTitle = useMemo(() => {
+    switch (mode) {
+      case "delete":
+        return t("dialog.deleteTitle");
+      case "resetCircuit":
+        return t("dialog.resetCircuitTitle");
+      default:
+        return "";
+    }
+  }, [mode, t]);
+
+  const dialogDescription = useMemo(() => {
+    switch (mode) {
+      case "delete":
+        return t("dialog.deleteDesc", { count: selectedCount });
+      case "resetCircuit":
+        return t("dialog.resetCircuitDesc", { count: selectedCount });
+      default:
+        return "";
+    }
+  }, [mode, selectedCount, t]);
 
   const handleConfirm = useCallback(async () => {
     if (isSubmitting) return;
@@ -156,72 +391,7 @@ export function ProviderBatchDialog({
     try {
       const providerIds = Array.from(selectedProviderIds);
 
-      if (mode === "edit") {
-        const updates: BatchUpdateProvidersParams["updates"] = {};
-
-        // isEnabled
-        if (editState.isEnabled !== "no_change") {
-          updates.is_enabled = editState.isEnabled === "true";
-        }
-
-        // priority
-        if (editState.priority.trim()) {
-          const val = Number.parseInt(editState.priority, 10);
-          if (!Number.isNaN(val) && val >= 0) {
-            updates.priority = val;
-          }
-        }
-
-        // weight
-        if (editState.weight.trim()) {
-          const val = Number.parseInt(editState.weight, 10);
-          if (!Number.isNaN(val) && val >= 0) {
-            updates.weight = val;
-          }
-        }
-
-        // costMultiplier
-        if (editState.costMultiplier.trim()) {
-          const val = Number.parseFloat(editState.costMultiplier);
-          if (!Number.isNaN(val) && val >= 0) {
-            updates.cost_multiplier = val;
-          }
-        }
-
-        // groupTag
-        if (editState.groupTag !== "") {
-          if (editState.groupTag === "__clear__") {
-            updates.group_tag = null;
-          } else {
-            updates.group_tag = editState.groupTag.trim() || null;
-          }
-        }
-
-        // thinkingBudget
-        if (editState.thinkingBudget !== "") {
-          if (editState.thinkingBudget === "inherit") {
-            updates.anthropic_thinking_budget_preference = null;
-          } else {
-            updates.anthropic_thinking_budget_preference = editState.thinkingBudget;
-          }
-        }
-
-        // adaptiveThinking
-        if (editState.adaptiveThinkingEnabled === "true") {
-          updates.anthropic_adaptive_thinking = editState.adaptiveThinkingConfig;
-        } else if (editState.adaptiveThinkingEnabled === "false") {
-          updates.anthropic_adaptive_thinking = null;
-        }
-
-        const result = await batchUpdateProviders({ providerIds, updates });
-        if (result.ok) {
-          toast.success(t("toast.updated", { count: result.data?.updatedCount ?? 0 }));
-        } else {
-          toast.error(t("toast.failed", { error: result.error }));
-          setIsSubmitting(false);
-          return;
-        }
-      } else if (mode === "delete") {
+      if (mode === "delete") {
         const result = await batchDeleteProviders({ providerIds });
         if (result.ok) {
           toast.success(t("toast.deleted", { count: result.data?.deletedCount ?? 0 }));
@@ -242,7 +412,7 @@ export function ProviderBatchDialog({
       }
 
       await queryClient.invalidateQueries({ queryKey: ["providers"] });
-      handleOpenChange(false);
+      onOpenChange(false);
       onSuccess?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -250,292 +420,29 @@ export function ProviderBatchDialog({
     } finally {
       setIsSubmitting(false);
     }
-  }, [
-    isSubmitting,
-    selectedProviderIds,
-    mode,
-    editState,
-    queryClient,
-    handleOpenChange,
-    onSuccess,
-    t,
-  ]);
-
-  const dialogTitle = useMemo(() => {
-    switch (mode) {
-      case "edit":
-        return t("dialog.editTitle");
-      case "delete":
-        return t("dialog.deleteTitle");
-      case "resetCircuit":
-        return t("dialog.resetCircuitTitle");
-      default:
-        return "";
-    }
-  }, [mode, t]);
-
-  const dialogDescription = useMemo(() => {
-    switch (mode) {
-      case "edit":
-        return t("dialog.editDesc", { count: selectedCount });
-      case "delete":
-        return t("dialog.deleteDesc", { count: selectedCount });
-      case "resetCircuit":
-        return t("dialog.resetCircuitDesc", { count: selectedCount });
-      default:
-        return "";
-    }
-  }, [mode, selectedCount, t]);
+  }, [isSubmitting, selectedProviderIds, mode, queryClient, onOpenChange, onSuccess, t]);
 
   return (
-    <>
-      <Dialog open={open && !confirmOpen} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{dialogTitle}</DialogTitle>
-            <DialogDescription>{dialogDescription}</DialogDescription>
-          </DialogHeader>
-
-          {mode === "edit" && (
-            <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto">
-              {/* Affected Provider Summary */}
-              <AffectedProviderSummary providers={affectedProviders} />
-
-              {/* Section 1: Basic Settings */}
-              <SectionBlock title={t("sections.basic")} dataSection="basic">
-                {/* isEnabled - three-state select */}
-                <div className="flex items-center justify-between gap-4" data-field="isEnabled">
-                  <Label className="text-sm whitespace-nowrap">{t("fields.isEnabled.label")}</Label>
-                  <Select
-                    value={editState.isEnabled}
-                    onValueChange={(v) =>
-                      setEditState((s) => ({
-                        ...s,
-                        isEnabled: v as "no_change" | "true" | "false",
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="no_change">{t("fields.isEnabled.noChange")}</SelectItem>
-                      <SelectItem value="true">{t("fields.isEnabled.enable")}</SelectItem>
-                      <SelectItem value="false">{t("fields.isEnabled.disable")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* priority */}
-                <div className="flex items-center justify-between gap-4" data-field="priority">
-                  <Label className="text-sm whitespace-nowrap">{t("fields.priority")}</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={editState.priority}
-                    onChange={(e) => setEditState((s) => ({ ...s, priority: e.target.value }))}
-                    placeholder="0"
-                    className="w-24"
-                  />
-                </div>
-
-                {/* weight */}
-                <div className="flex items-center justify-between gap-4" data-field="weight">
-                  <Label className="text-sm whitespace-nowrap">{t("fields.weight")}</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={editState.weight}
-                    onChange={(e) => setEditState((s) => ({ ...s, weight: e.target.value }))}
-                    placeholder="1"
-                    className="w-24"
-                  />
-                </div>
-
-                {/* costMultiplier */}
-                <div
-                  className="flex items-center justify-between gap-4"
-                  data-field="costMultiplier"
-                >
-                  <Label className="text-sm whitespace-nowrap">{t("fields.costMultiplier")}</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.0001"
-                    value={editState.costMultiplier}
-                    onChange={(e) =>
-                      setEditState((s) => ({ ...s, costMultiplier: e.target.value }))
-                    }
-                    placeholder="1.0"
-                    className="w-24"
-                  />
-                </div>
-              </SectionBlock>
-
-              <Separator />
-
-              {/* Section 2: Group & Routing */}
-              <SectionBlock title={t("sections.routing")} dataSection="routing">
-                {/* groupTag */}
-                <div className="flex items-center justify-between gap-4" data-field="groupTag">
-                  <Label className="text-sm whitespace-nowrap">{t("fields.groupTag.label")}</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      value={editState.groupTag}
-                      onChange={(e) => setEditState((s) => ({ ...s, groupTag: e.target.value }))}
-                      placeholder="tag1, tag2"
-                      className="w-40"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setEditState((s) => ({ ...s, groupTag: "__clear__" }))}
-                    >
-                      {t("fields.groupTag.clear")}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* modelRedirects - coming soon */}
-                <div className="flex items-center justify-between gap-4">
-                  <Label className="text-sm whitespace-nowrap text-muted-foreground">
-                    {t("fields.modelRedirects")}
-                  </Label>
-                  <span className="text-sm text-muted-foreground">{t("fields.comingSoon")}</span>
-                </div>
-
-                {/* allowedModels - coming soon */}
-                <div className="flex items-center justify-between gap-4">
-                  <Label className="text-sm whitespace-nowrap text-muted-foreground">
-                    {t("fields.allowedModels")}
-                  </Label>
-                  <span className="text-sm text-muted-foreground">{t("fields.comingSoon")}</span>
-                </div>
-              </SectionBlock>
-
-              <Separator />
-
-              {/* Section 3: Anthropic Settings */}
-              <SectionBlock title={t("sections.anthropic")} dataSection="anthropic">
-                {/* ThinkingBudgetEditor */}
-                <div className="space-y-2" data-field="thinkingBudget">
-                  <Label className="text-sm">{t("fields.thinkingBudget")}</Label>
-                  <ThinkingBudgetEditor
-                    value={editState.thinkingBudget || "inherit"}
-                    onChange={(v) => setEditState((s) => ({ ...s, thinkingBudget: v }))}
-                  />
-                </div>
-
-                {/* AdaptiveThinkingEditor */}
-                <div className="space-y-2" data-field="adaptiveThinking">
-                  <Label className="text-sm">{t("fields.adaptiveThinking")}</Label>
-                  <AdaptiveThinkingEditor
-                    enabled={editState.adaptiveThinkingEnabled === "true"}
-                    config={editState.adaptiveThinkingConfig}
-                    onEnabledChange={(val) =>
-                      setEditState((s) => ({
-                        ...s,
-                        adaptiveThinkingEnabled: val ? "true" : "false",
-                      }))
-                    }
-                    onConfigChange={(config) =>
-                      setEditState((s) => ({ ...s, adaptiveThinkingConfig: config }))
-                    }
-                  />
-                </div>
-              </SectionBlock>
-            </div>
-          )}
-
-          {(mode === "delete" || mode === "resetCircuit") && (
-            <div className="py-4 text-sm text-muted-foreground">{dialogDescription}</div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => handleOpenChange(false)}>
-              {t("confirm.cancel")}
-            </Button>
-            <Button onClick={handleNext} disabled={!hasChanges}>
-              {t("dialog.next")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("confirm.title")}</AlertDialogTitle>
-            <AlertDialogDescription>{dialogDescription}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSubmitting}>{t("confirm.goBack")}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirm} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {t("confirm.processing")}
-                </>
-              ) : (
-                t("confirm.confirm")
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-const MAX_DISPLAYED_PROVIDERS = 5;
-
-function AffectedProviderSummary({ providers }: { providers: ProviderDisplay[] }) {
-  const t = useTranslations("settings.providers.batchEdit");
-
-  if (providers.length === 0) return null;
-
-  const displayed = providers.slice(0, MAX_DISPLAYED_PROVIDERS);
-  const remaining = providers.length - displayed.length;
-
-  return (
-    <div className="rounded-md border bg-muted/50 p-3 text-sm" data-testid="affected-summary">
-      <p className="font-medium">
-        {t("affectedProviders.title")} ({providers.length})
-      </p>
-      <div className="mt-1 space-y-0.5 text-muted-foreground">
-        {displayed.map((p) => (
-          <p key={p.id}>
-            {p.name} ({p.maskedKey})
-          </p>
-        ))}
-        {remaining > 0 && (
-          <p className="text-xs">{t("affectedProviders.more", { count: remaining })}</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SectionBlock({
-  title,
-  dataSection,
-  children,
-}: {
-  title: string;
-  dataSection: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-3" data-section={dataSection}>
-      <h4 className="text-sm font-medium">{title}</h4>
-      <div className="space-y-3 pl-1">{children}</div>
-    </div>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{dialogTitle}</AlertDialogTitle>
+          <AlertDialogDescription>{dialogDescription}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={isSubmitting}>{t("confirm.goBack")}</AlertDialogCancel>
+          <AlertDialogAction onClick={handleConfirm} disabled={isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {t("confirm.processing")}
+              </>
+            ) : (
+              t("confirm.confirm")
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

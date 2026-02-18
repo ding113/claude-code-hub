@@ -36,10 +36,13 @@ const GROUP_TAG_MAX_TOTAL_LENGTH = 50;
 
 export function RoutingSection() {
   const t = useTranslations("settings.providers.form");
+  const tBatch = useTranslations("settings.providers.batchEdit");
   const tUI = useTranslations("ui.tagInput");
   const { state, dispatch, mode, provider, enableMultiProviderTypes, groupSuggestions } =
     useProviderForm();
   const isEdit = mode === "edit";
+  const isBatch = mode === "batch";
+  const { providerType } = state.routing;
 
   const renderProviderTypeLabel = (type: ProviderType) => {
     switch (type) {
@@ -76,78 +79,81 @@ export function RoutingSection() {
         transition={{ duration: 0.2 }}
         className="space-y-6"
       >
-        {/* Provider Type & Group */}
-        <SectionCard
-          title={t("sections.routing.providerType.label")}
-          description={t("sections.routing.providerTypeDesc")}
-          icon={Route}
-          variant="highlight"
-        >
-          <div className="space-y-4">
-            <SmartInputWrapper label={t("sections.routing.providerType.label")}>
-              <Select
-                value={state.routing.providerType}
-                onValueChange={(value) =>
-                  dispatch({ type: "SET_PROVIDER_TYPE", payload: value as ProviderType })
-                }
-                disabled={state.ui.isPending}
-              >
-                <SelectTrigger id={isEdit ? "edit-provider-type" : "provider-type"}>
-                  <SelectValue placeholder={t("sections.routing.providerType.placeholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {providerTypes.map((type) => {
-                    const typeConfig = getProviderTypeConfig(type);
-                    const TypeIcon = typeConfig.icon;
-                    const label = renderProviderTypeLabel(type);
-                    return (
-                      <SelectItem key={type} value={type}>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex h-5 w-5 items-center justify-center rounded ${typeConfig.bgColor}`}
-                          >
-                            <TypeIcon className={`h-3.5 w-3.5 ${typeConfig.iconColor}`} />
-                          </span>
-                          <span>{label}</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-              {!enableMultiProviderTypes && state.routing.providerType === "openai-compatible" && (
-                <p className="text-xs text-amber-600">
-                  {t("sections.routing.providerTypeDisabledNote")}
-                </p>
-              )}
-            </SmartInputWrapper>
+        {/* Provider Type & Group - hidden in batch mode */}
+        {!isBatch && (
+          <SectionCard
+            title={t("sections.routing.providerType.label")}
+            description={t("sections.routing.providerTypeDesc")}
+            icon={Route}
+            variant="highlight"
+          >
+            <div className="space-y-4">
+              <SmartInputWrapper label={t("sections.routing.providerType.label")}>
+                <Select
+                  value={state.routing.providerType}
+                  onValueChange={(value) =>
+                    dispatch({ type: "SET_PROVIDER_TYPE", payload: value as ProviderType })
+                  }
+                  disabled={state.ui.isPending}
+                >
+                  <SelectTrigger id={isEdit ? "edit-provider-type" : "provider-type"}>
+                    <SelectValue placeholder={t("sections.routing.providerType.placeholder")} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providerTypes.map((type) => {
+                      const typeConfig = getProviderTypeConfig(type);
+                      const TypeIcon = typeConfig.icon;
+                      const label = renderProviderTypeLabel(type);
+                      return (
+                        <SelectItem key={type} value={type}>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex h-5 w-5 items-center justify-center rounded ${typeConfig.bgColor}`}
+                            >
+                              <TypeIcon className={`h-3.5 w-3.5 ${typeConfig.iconColor}`} />
+                            </span>
+                            <span>{label}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {!enableMultiProviderTypes &&
+                  state.routing.providerType === "openai-compatible" && (
+                    <p className="text-xs text-amber-600">
+                      {t("sections.routing.providerTypeDisabledNote")}
+                    </p>
+                  )}
+              </SmartInputWrapper>
 
-            <SmartInputWrapper
-              label={t("sections.routing.scheduleParams.group.label")}
-              description={t("sections.routing.scheduleParams.group.desc")}
-            >
-              <TagInput
-                id={isEdit ? "edit-group" : "group"}
-                value={state.routing.groupTag}
-                onChange={handleGroupTagChange}
-                placeholder={t("sections.routing.scheduleParams.group.placeholder")}
-                disabled={state.ui.isPending}
-                maxTagLength={GROUP_TAG_MAX_TOTAL_LENGTH}
-                suggestions={groupSuggestions}
-                onInvalidTag={(_tag, reason) => {
-                  const messages: Record<string, string> = {
-                    empty: tUI("emptyTag"),
-                    duplicate: tUI("duplicateTag"),
-                    too_long: tUI("tooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }),
-                    invalid_format: tUI("invalidFormat"),
-                    max_tags: tUI("maxTags"),
-                  };
-                  toast.error(messages[reason] || reason);
-                }}
-              />
-            </SmartInputWrapper>
-          </div>
-        </SectionCard>
+              <SmartInputWrapper
+                label={t("sections.routing.scheduleParams.group.label")}
+                description={t("sections.routing.scheduleParams.group.desc")}
+              >
+                <TagInput
+                  id={isEdit ? "edit-group" : "group"}
+                  value={state.routing.groupTag}
+                  onChange={handleGroupTagChange}
+                  placeholder={t("sections.routing.scheduleParams.group.placeholder")}
+                  disabled={state.ui.isPending}
+                  maxTagLength={GROUP_TAG_MAX_TOTAL_LENGTH}
+                  suggestions={groupSuggestions}
+                  onInvalidTag={(_tag, reason) => {
+                    const messages: Record<string, string> = {
+                      empty: tUI("emptyTag"),
+                      duplicate: tUI("duplicateTag"),
+                      too_long: tUI("tooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }),
+                      invalid_format: tUI("invalidFormat"),
+                      max_tags: tUI("maxTags"),
+                    };
+                    toast.error(messages[reason] || reason);
+                  }}
+                />
+              </SmartInputWrapper>
+            </div>
+          </SectionCard>
+        )}
 
         {/* Model Configuration */}
         <SectionCard
@@ -385,8 +391,8 @@ export function RoutingSection() {
               </Select>
             </SmartInputWrapper>
 
-            {/* 1M Context Window - Claude type only */}
-            {state.routing.providerType === "claude" && (
+            {/* 1M Context Window - Claude type only (or batch mode) */}
+            {(providerType === "claude" || isBatch) && (
               <SmartInputWrapper
                 label={t("sections.routing.context1m.label")}
                 description={t("sections.routing.context1m.desc")}
@@ -421,12 +427,17 @@ export function RoutingSection() {
           </div>
         </SectionCard>
 
-        {/* Codex Overrides - Codex type only */}
-        {state.routing.providerType === "codex" && (
+        {/* Codex Overrides - Codex type only (or batch mode) */}
+        {(providerType === "codex" || isBatch) && (
           <SectionCard
             title={t("sections.routing.codexOverrides.title")}
             description={t("sections.routing.codexOverrides.desc")}
             icon={Timer}
+            badge={
+              isBatch ? (
+                <Badge variant="outline">{tBatch("batchNotes.codexOnly")}</Badge>
+              ) : undefined
+            }
           >
             <div className="space-y-4">
               <SmartInputWrapper label={t("sections.routing.codexOverrides.reasoningEffort.label")}>
@@ -548,13 +559,17 @@ export function RoutingSection() {
           </SectionCard>
         )}
 
-        {/* Anthropic Overrides - Claude type only */}
-        {(state.routing.providerType === "claude" ||
-          state.routing.providerType === "claude-auth") && (
+        {/* Anthropic Overrides - Claude type only (or batch mode) */}
+        {(providerType === "claude" || providerType === "claude-auth" || isBatch) && (
           <SectionCard
             title={t("sections.routing.anthropicOverrides.maxTokens.label")}
             description={t("sections.routing.anthropicOverrides.maxTokens.help")}
             icon={Timer}
+            badge={
+              isBatch ? (
+                <Badge variant="outline">{tBatch("batchNotes.claudeOnly")}</Badge>
+              ) : undefined
+            }
           >
             <div className="space-y-4">
               <SmartInputWrapper label={t("sections.routing.anthropicOverrides.maxTokens.label")}>
@@ -659,13 +674,17 @@ export function RoutingSection() {
           </SectionCard>
         )}
 
-        {/* Gemini Overrides - Gemini type only */}
-        {(state.routing.providerType === "gemini" ||
-          state.routing.providerType === "gemini-cli") && (
+        {/* Gemini Overrides - Gemini type only (or batch mode) */}
+        {(providerType === "gemini" || providerType === "gemini-cli" || isBatch) && (
           <SectionCard
             title={t("sections.routing.geminiOverrides.title")}
             description={t("sections.routing.geminiOverrides.desc")}
             icon={Settings}
+            badge={
+              isBatch ? (
+                <Badge variant="outline">{tBatch("batchNotes.geminiOnly")}</Badge>
+              ) : undefined
+            }
           >
             <SmartInputWrapper label={t("sections.routing.geminiOverrides.googleSearch.label")}>
               <Select

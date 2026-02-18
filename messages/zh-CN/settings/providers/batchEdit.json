@@ -46,8 +46,7 @@
     "modelRedirects": "模型重定向",
     "allowedModels": "允许的模型",
     "thinkingBudget": "思维预算",
-    "adaptiveThinking": "自适应思维",
-    "comingSoon": "即将推出"
+    "adaptiveThinking": "自适应思维"
   },
   "affectedProviders": {
     "title": "受影响的供应商",
@@ -60,10 +59,33 @@
     "goBack": "返回",
     "processing": "处理中..."
   },
+  "preview": {
+    "title": "预览变更",
+    "description": "将变更应用到 {count} 个供应商前请先确认",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: 已跳过 ({reason})",
+    "excludeProvider": "排除",
+    "summary": "{providerCount} 个供应商, {fieldCount} 项变更, {skipCount} 项跳过",
+    "noChanges": "没有可应用的变更",
+    "apply": "应用变更",
+    "back": "返回编辑",
+    "loading": "正在生成预览..."
+  },
+  "batchNotes": {
+    "codexOnly": "仅 Codex",
+    "claudeOnly": "仅 Claude",
+    "geminiOnly": "仅 Gemini"
+  },
   "toast": {
     "updated": "已更新 {count} 个供应商",
     "deleted": "已删除 {count} 个供应商",
     "circuitReset": "已重置 {count} 个熔断器",
-    "failed": "操作失败: {error}"
+    "failed": "操作失败: {error}",
+    "undo": "撤销",
+    "undoSuccess": "已还原 {count} 个供应商",
+    "undoFailed": "撤销失败: {error}",
+    "undoExpired": "撤销窗口已过期",
+    "previewFailed": "预览失败: {error}"
   }
 }

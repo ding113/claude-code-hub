@@ -46,8 +46,7 @@
     "modelRedirects": "Перенаправление моделей",
     "allowedModels": "Разрешённые модели",
     "thinkingBudget": "Бюджет мышления",
-    "adaptiveThinking": "Адаптивное мышление",
-    "comingSoon": "Скоро"
+    "adaptiveThinking": "Адаптивное мышление"
   },
   "affectedProviders": {
     "title": "Затронутые поставщики",
@@ -60,10 +59,33 @@
     "goBack": "Назад",
     "processing": "Обработка..."
   },
+  "preview": {
+    "title": "Предпросмотр изменений",
+    "description": "Проверьте изменения перед применением к {count} поставщикам",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: Пропущено ({reason})",
+    "excludeProvider": "Исключить",
+    "summary": "{providerCount} поставщиков, {fieldCount} изменений, {skipCount} пропущено",
+    "noChanges": "Нет изменений для применения",
+    "apply": "Применить изменения",
+    "back": "Вернуться к редактированию",
+    "loading": "Генерация предпросмотра..."
+  },
+  "batchNotes": {
+    "codexOnly": "Только Codex",
+    "claudeOnly": "Только Claude",
+    "geminiOnly": "Только Gemini"
+  },
   "toast": {
     "updated": "Обновлено поставщиков: {count}",
     "deleted": "Удалено поставщиков: {count}",
     "circuitReset": "Сброшено прерывателей: {count}",
-    "failed": "Операция не удалась: {error}"
+    "failed": "Операция не удалась: {error}",
+    "undo": "Отменить",
+    "undoSuccess": "Восстановлено поставщиков: {count}",
+    "undoFailed": "Отмена не удалась: {error}",
+    "undoExpired": "Время отмены истекло",
+    "previewFailed": "Предпросмотр не удался: {error}"
   }
 }

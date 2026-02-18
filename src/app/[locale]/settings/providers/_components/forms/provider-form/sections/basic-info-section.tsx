@@ -7,12 +7,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ProviderEndpointsSection } from "@/app/[locale]/settings/providers/_components/provider-endpoints-table";
 import { InlineWarning } from "@/components/ui/inline-warning";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { detectApiKeyWarnings } from "@/lib/utils/validation/api-key-warnings";
 import type { ProviderType } from "@/types/provider";
 import { UrlPreview } from "../../url-preview";
 import { QuickPasteDialog } from "../components/quick-paste-dialog";
 import { SectionCard, SmartInputWrapper } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
+
+const MAX_DISPLAYED_PROVIDERS = 5;
 
 interface BasicInfoSectionProps {
   autoUrlPending?: boolean;
@@ -25,21 +34,95 @@ interface BasicInfoSectionProps {
 
 export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSectionProps) {
   const t = useTranslations("settings.providers.form");
+  const tBatch = useTranslations("settings.providers.batchEdit");
   const tProviders = useTranslations("settings.providers");
-  const { state, dispatch, mode, provider, hideUrl, hideWebsiteUrl } = useProviderForm();
+  const { state, dispatch, mode, provider, hideUrl, hideWebsiteUrl, batchProviders } =
+    useProviderForm();
   const isEdit = mode === "edit";
+  const isBatch = mode === "batch";
   const nameInputRef = useRef<HTMLInputElement>(null);
   const [showKey, setShowKey] = useState(false);
 
   const apiKeyWarnings = useMemo(() => detectApiKeyWarnings(state.basic.key), [state.basic.key]);
 
-  // Auto-focus name input
+  // Auto-focus name input (skip in batch mode)
   useEffect(() => {
+    if (isBatch) return;
     const timer = setTimeout(() => {
       nameInputRef.current?.focus();
     }, 100);
     return () => clearTimeout(timer);
-  }, []);
+  }, [isBatch]);
+
+  // Batch mode: only isEnabled tri-state + provider summary
+  if (isBatch) {
+    const providers = batchProviders ?? [];
+    const displayed = providers.slice(0, MAX_DISPLAYED_PROVIDERS);
+    const remaining = providers.length - displayed.length;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        transition={{ duration: 0.2 }}
+        className="space-y-6"
+      >
+        <SectionCard
+          title={t("sections.basic.identity.title")}
+          description={tBatch("dialog.editDesc", { count: providers.length })}
+          icon={User}
+          variant="highlight"
+        >
+          <div className="space-y-4">
+            <SmartInputWrapper label={tBatch("fields.isEnabled.label")}>
+              <Select
+                value={state.batch.isEnabled}
+                onValueChange={(v) =>
+                  dispatch({
+                    type: "SET_BATCH_IS_ENABLED",
+                    payload: v as "no_change" | "true" | "false",
+                  })
+                }
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no_change">{tBatch("fields.isEnabled.noChange")}</SelectItem>
+                  <SelectItem value="true">{tBatch("fields.isEnabled.enable")}</SelectItem>
+                  <SelectItem value="false">{tBatch("fields.isEnabled.disable")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </SmartInputWrapper>
+
+            {providers.length > 0 && (
+              <div
+                className="rounded-md border bg-muted/50 p-3 text-sm"
+                data-testid="affected-summary"
+              >
+                <p className="font-medium">
+                  {tBatch("affectedProviders.title")} ({providers.length})
+                </p>
+                <div className="mt-1 space-y-0.5 text-muted-foreground">
+                  {displayed.map((p) => (
+                    <p key={p.id}>
+                      {p.name} ({p.maskedKey})
+                    </p>
+                  ))}
+                  {remaining > 0 && (
+                    <p className="text-xs">
+                      {tBatch("affectedProviders.more", { count: remaining })}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div

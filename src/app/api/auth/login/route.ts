@@ -103,11 +103,33 @@ function shouldIncludeFailureTaxonomy(request: NextRequest): boolean {
 }
 
 function getClientIp(request: NextRequest): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    "unknown"
-  );
+  // 1. Next.js platform-provided IP (trusted in Vercel / managed deployments)
+  const platformIp = (request as unknown as { ip?: string }).ip;
+  if (platformIp) {
+    return platformIp;
+  }
+
+  // 2. x-real-ip is typically set by the closest trusted reverse proxy
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) {
+    return realIp;
+  }
+
+  // 3. x-forwarded-for: take the rightmost (last) entry, which is the IP
+  //    appended by the closest trusted proxy. The leftmost entry is
+  //    client-controlled and can be spoofed.
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const ips = forwarded
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (ips.length > 0) {
+      return ips[ips.length - 1];
+    }
+  }
+
+  return "unknown";
 }
 
 let sessionStoreInstance:
@@ -165,7 +187,7 @@ export async function POST(request: NextRequest) {
   try {
     const { key } = await request.json();
 
-    if (!key) {
+    if (!key || typeof key !== "string") {
       if (!shouldIncludeFailureTaxonomy(request)) {
         return withAuthResponseHeaders(
           NextResponse.json(
