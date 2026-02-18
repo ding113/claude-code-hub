@@ -45,6 +45,64 @@ export interface AnthropicAdaptiveThinkingConfig {
   models: string[];
 }
 
+export type ProviderPatchOperation<T> =
+  | { mode: "no_change" }
+  | { mode: "set"; value: T }
+  | { mode: "clear" };
+
+export type ProviderPatchDraftInput<T> =
+  | { set: T; clear?: never; no_change?: never }
+  | { clear: true; set?: never; no_change?: never }
+  | { no_change: true; set?: never; clear?: never }
+  | undefined;
+
+export type ProviderBatchPatchField =
+  | "is_enabled"
+  | "priority"
+  | "weight"
+  | "cost_multiplier"
+  | "group_tag"
+  | "model_redirects"
+  | "allowed_models"
+  | "anthropic_thinking_budget_preference"
+  | "anthropic_adaptive_thinking";
+
+export interface ProviderBatchPatchDraft {
+  is_enabled?: ProviderPatchDraftInput<boolean>;
+  priority?: ProviderPatchDraftInput<number>;
+  weight?: ProviderPatchDraftInput<number>;
+  cost_multiplier?: ProviderPatchDraftInput<number>;
+  group_tag?: ProviderPatchDraftInput<string>;
+  model_redirects?: ProviderPatchDraftInput<Record<string, string>>;
+  allowed_models?: ProviderPatchDraftInput<string[]>;
+  anthropic_thinking_budget_preference?: ProviderPatchDraftInput<AnthropicThinkingBudgetPreference>;
+  anthropic_adaptive_thinking?: ProviderPatchDraftInput<AnthropicAdaptiveThinkingConfig>;
+}
+
+export interface ProviderBatchPatch {
+  is_enabled: ProviderPatchOperation<boolean>;
+  priority: ProviderPatchOperation<number>;
+  weight: ProviderPatchOperation<number>;
+  cost_multiplier: ProviderPatchOperation<number>;
+  group_tag: ProviderPatchOperation<string>;
+  model_redirects: ProviderPatchOperation<Record<string, string>>;
+  allowed_models: ProviderPatchOperation<string[]>;
+  anthropic_thinking_budget_preference: ProviderPatchOperation<AnthropicThinkingBudgetPreference>;
+  anthropic_adaptive_thinking: ProviderPatchOperation<AnthropicAdaptiveThinkingConfig>;
+}
+
+export interface ProviderBatchApplyUpdates {
+  is_enabled?: boolean;
+  priority?: number;
+  weight?: number;
+  cost_multiplier?: number;
+  group_tag?: string | null;
+  model_redirects?: Record<string, string> | null;
+  allowed_models?: string[] | null;
+  anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
+}
+
 // Gemini (generateContent API) parameter overrides
 // - "inherit": follow client request (default)
 // - "enabled": force inject googleSearch tool
