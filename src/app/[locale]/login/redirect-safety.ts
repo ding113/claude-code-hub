@@ -30,7 +30,7 @@ export function sanitizeRedirectPath(from: string): string {
 
 export function resolveLoginRedirectTarget(redirectTo: unknown, from: string): string {
   if (typeof redirectTo === "string" && redirectTo.trim().length > 0) {
-    return redirectTo;
+    return sanitizeRedirectPath(redirectTo);
   }
 
   return sanitizeRedirectPath(from);

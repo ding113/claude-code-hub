@@ -4,13 +4,11 @@ import {
   getAuthCookie,
   getSessionTokenMode,
   type SessionTokenMode,
-  withNoStoreHeaders,
 } from "@/lib/auth";
 import { RedisSessionStore } from "@/lib/auth-session-store/redis-session-store";
-import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
-import { buildSecurityHeaders } from "@/lib/security/security-headers";
 
 const csrfGuard = createCsrfOriginGuard({
   allowedOrigins: [],
@@ -19,32 +17,19 @@ const csrfGuard = createCsrfOriginGuard({
 });
 
 function resolveSessionTokenMode(): SessionTokenMode {
-  const resolver = getSessionTokenMode as unknown as (() => SessionTokenMode) | undefined;
-  return resolver?.() ?? "legacy";
+  try {
+    return getSessionTokenMode();
+  } catch {
+    return "legacy";
+  }
 }
 
 async function resolveAuthCookieToken(): Promise<string | undefined> {
-  const reader = getAuthCookie as unknown as (() => Promise<string | undefined>) | undefined;
-  if (!reader) return undefined;
-  return reader();
-}
-
-function applySecurityHeaders(response: NextResponse): NextResponse {
-  const env = getEnvConfig();
-  const headers = buildSecurityHeaders({
-    enableHsts: env.ENABLE_SECURE_COOKIES,
-    cspMode: "report-only",
-  });
-
-  for (const [key, value] of Object.entries(headers)) {
-    response.headers.set(key, value);
+  try {
+    return await getAuthCookie();
+  } catch {
+    return undefined;
   }
-
-  return response;
-}
-
-function withAuthResponseHeaders(response: NextResponse): NextResponse {
-  return applySecurityHeaders(withNoStoreHeaders(response));
 }
 
 export async function POST(request: NextRequest) {

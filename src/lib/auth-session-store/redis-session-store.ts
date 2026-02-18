@@ -102,7 +102,7 @@ export class RedisSessionStore implements SessionStore {
     const ttl = normalizeTtlSeconds(ttlSeconds);
     const createdAt = Date.now();
     const sessionData: SessionData = {
-      sessionId: crypto.randomUUID(),
+      sessionId: `sid_${crypto.randomUUID()}`,
       keyFingerprint: data.keyFingerprint,
       userId: data.userId,
       userRole: data.userRole,
@@ -112,10 +112,7 @@ export class RedisSessionStore implements SessionStore {
 
     const redis = this.getReadyRedis();
     if (!redis) {
-      logger.warn("[AuthSessionStore] Redis not ready during create", {
-        sessionId: sessionData.sessionId,
-      });
-      return sessionData;
+      throw new Error("Redis not ready: session not persisted");
     }
 
     try {
@@ -125,6 +122,7 @@ export class RedisSessionStore implements SessionStore {
         error: toLogError(error),
         sessionId: sessionData.sessionId,
       });
+      throw error;
     }
 
     return sessionData;
@@ -183,14 +181,23 @@ export class RedisSessionStore implements SessionStore {
     }
 
     const ttlSeconds = resolveRotateTtlSeconds(oldSession.expiresAt);
-    const nextSession = await this.create(
-      {
-        keyFingerprint: oldSession.keyFingerprint,
-        userId: oldSession.userId,
-        userRole: oldSession.userRole,
-      },
-      ttlSeconds
-    );
+    let nextSession: SessionData;
+    try {
+      nextSession = await this.create(
+        {
+          keyFingerprint: oldSession.keyFingerprint,
+          userId: oldSession.userId,
+          userRole: oldSession.userRole,
+        },
+        ttlSeconds
+      );
+    } catch (error) {
+      logger.error("[AuthSessionStore] Failed to create rotated session", {
+        error: toLogError(error),
+        oldSessionId,
+      });
+      return null;
+    }
 
     const persisted = await this.read(nextSession.sessionId);
     if (!persisted) {
@@ -203,12 +210,10 @@ export class RedisSessionStore implements SessionStore {
 
     const revoked = await this.revoke(oldSessionId);
     if (!revoked) {
-      logger.error("[AuthSessionStore] Failed to revoke old session during rotate", {
+      logger.warn("[AuthSessionStore] Failed to revoke old session during rotate; old session will expire naturally", {
         oldSessionId,
         newSessionId: persisted.sessionId,
       });
-      await this.revoke(persisted.sessionId);
-      return null;
     }
 
     return persisted;

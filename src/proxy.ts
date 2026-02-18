@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
-import { AUTH_COOKIE_NAME, validateKey } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, validateAuthToken } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
@@ -80,7 +80,7 @@ async function proxyHandler(request: NextRequest) {
   }
 
   // Validate key permissions (canLoginWebUi, isEnabled, expiresAt, etc.)
-  const session = await validateKey(authToken.value, { allowReadOnlyAccess: isReadOnlyPath });
+  const session = await validateAuthToken(authToken.value, { allowReadOnlyAccess: isReadOnlyPath });
   if (!session) {
     // Invalid key or insufficient permissions, clear cookie and redirect to login
     const url = request.nextUrl.clone();

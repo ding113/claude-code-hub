@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { type NextRequest, NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { defaultLocale, type Locale, locales } from "@/i18n/config";
@@ -7,15 +6,15 @@ import {
   getLoginRedirectTarget,
   getSessionTokenMode,
   setAuthCookie,
+  toKeyFingerprint,
   validateKey,
-  withNoStoreHeaders,
 } from "@/lib/auth";
 import { RedisSessionStore } from "@/lib/auth-session-store/redis-session-store";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
+import { withAuthResponseHeaders } from "@/lib/security/auth-response-headers";
 import { createCsrfOriginGuard } from "@/lib/security/csrf-origin-guard";
 import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
-import { buildSecurityHeaders } from "@/lib/security/security-headers";
 
 // 需要数据库连接
 export const runtime = "nodejs";
@@ -27,24 +26,6 @@ const csrfGuard = createCsrfOriginGuard({
 });
 
 const loginPolicy = new LoginAbusePolicy();
-
-function applySecurityHeaders(response: NextResponse): NextResponse {
-  const env = getEnvConfig();
-  const headers = buildSecurityHeaders({
-    enableHsts: env.ENABLE_SECURE_COOKIES,
-    cspMode: "report-only",
-  });
-
-  for (const [key, value] of Object.entries(headers)) {
-    response.headers.set(key, value);
-  }
-
-  return response;
-}
-
-function withAuthResponseHeaders(response: NextResponse): NextResponse {
-  return applySecurityHeaders(withNoStoreHeaders(response));
-}
 
 /**
  * Get locale from request (cookie or Accept-Language header)
@@ -130,14 +111,10 @@ function getClientIp(request: NextRequest): string {
   );
 }
 
-function buildKeyFingerprint(key: string): string {
-  return `sha256:${crypto.createHash("sha256").update(key, "utf8").digest("hex")}`;
-}
-
 async function createOpaqueSession(key: string, session: AuthSession) {
   const store = new RedisSessionStore();
   return store.create({
-    keyFingerprint: buildKeyFingerprint(key),
+    keyFingerprint: await toKeyFingerprint(key),
     userId: session.user.id,
     userRole: session.user.role,
   });

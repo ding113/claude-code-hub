@@ -12,7 +12,7 @@ export default defineConfig({
           environment: "happy-dom",
           include: [
             "tests/unit/**/*.{test,spec}.tsx",
-            "tests/security/**/*.{test,spec}.tsx",
+            "tests/security/**/*.{test,spec}.{ts,tsx}",
             "tests/api/**/*.{test,spec}.tsx",
             "src/**/*.{test,spec}.tsx",
           ],

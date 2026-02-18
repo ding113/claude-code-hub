@@ -18,6 +18,7 @@ vi.mock("@/lib/auth", () => ({
   setAuthCookie: mockSetAuthCookie,
   getSessionTokenMode: mockGetSessionTokenMode,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
+  toKeyFingerprint: vi.fn().mockResolvedValue("sha256:fake"),
   withNoStoreHeaders: <T>(res: T): T => {
     (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     (res as any).headers.set("Pragma", "no-cache");
@@ -31,6 +32,18 @@ vi.mock("next-intl/server", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: mockLogger,
+}));
+
+vi.mock("@/lib/config/env.schema", () => ({
+  getEnvConfig: vi.fn().mockReturnValue({ ENABLE_SECURE_COOKIES: false }),
+}));
+
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: <T>(res: T): T => {
+    (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    (res as any).headers.set("Pragma", "no-cache");
+    return res;
+  },
 }));
 
 function makeRequest(
@@ -90,12 +103,13 @@ describe("POST /api/auth/login", () => {
   let POST: (request: NextRequest) => Promise<Response>;
 
   beforeEach(async () => {
+    vi.resetModules();
     const mockT = vi.fn((key: string) => `translated:${key}`);
     mockGetTranslations.mockResolvedValue(mockT);
     mockSetAuthCookie.mockResolvedValue(undefined);
     mockGetSessionTokenMode.mockReturnValue("legacy");
 
-    const mod = await import("../../../src/app/api/auth/login/route");
+    const mod = await import("@/app/api/auth/login/route");
     POST = mod.POST;
   });
 

@@ -259,6 +259,33 @@ export async function clearAuthCookie() {
   cookieStore.delete(AUTH_COOKIE_NAME);
 }
 
+export async function validateAuthToken(
+  token: string,
+  options?: { allowReadOnlyAccess?: boolean }
+): Promise<AuthSession | null> {
+  const mode = getSessionTokenMode();
+
+  if (mode !== "legacy") {
+    try {
+      const sessionStore = await getSessionStore();
+      const sessionData = await sessionStore.read(token);
+      if (sessionData) {
+        return convertToAuthSession(sessionData, options);
+      }
+    } catch (error) {
+      logger.warn("Opaque session read failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (mode === "legacy" || mode === "dual") {
+    return validateKey(token, options);
+  }
+
+  return null;
+}
+
 export async function getSession(options?: {
   /**
    * 允许仅访问只读页面（如 my-usage），跳过 canLoginWebUi 校验
@@ -282,7 +309,7 @@ export async function getSession(options?: {
     return null;
   }
 
-  return validateKey(keyString, options);
+  return validateAuthToken(keyString, options);
 }
 
 type SessionStoreReader = {
@@ -301,7 +328,7 @@ async function getSessionStore(): Promise<SessionStoreReader> {
   return sessionStorePromise;
 }
 
-async function toKeyFingerprint(keyString: string): Promise<string> {
+export async function toKeyFingerprint(keyString: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyString));
   const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
     ""
@@ -333,33 +360,7 @@ async function convertToAuthSession(
 export async function getSessionWithDualRead(options?: {
   allowReadOnlyAccess?: boolean;
 }): Promise<AuthSession | null> {
-  const mode = getSessionTokenMode();
-
-  if (mode === "opaque" || mode === "dual") {
-    const sessionId = await getAuthToken();
-    if (sessionId) {
-      try {
-        const sessionStore = await getSessionStore();
-        const sessionData = await sessionStore.read(sessionId);
-        if (sessionData) {
-          const session = await convertToAuthSession(sessionData, options);
-          if (session) {
-            return session;
-          }
-        }
-      } catch (error) {
-        logger.warn("Opaque session read failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-  }
-
-  if (mode === "legacy" || mode === "dual") {
-    return getSession(options);
-  }
-
-  return null;
+  return getSession(options);
 }
 
 export async function validateSession(options?: {

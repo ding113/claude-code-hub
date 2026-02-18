@@ -38,6 +38,14 @@ vi.mock("@/lib/logger", () => ({
   logger: mockLogger,
 }));
 
+vi.mock("@/lib/security/auth-response-headers", () => ({
+  withAuthResponseHeaders: (res: any) => {
+    (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    (res as any).headers.set("Pragma", "no-cache");
+    return res;
+  },
+}));
+
 function makeRequest(body: unknown, xForwardedProto = "https"): NextRequest {
   return new NextRequest("http://localhost/api/auth/login", {
     method: "POST",
