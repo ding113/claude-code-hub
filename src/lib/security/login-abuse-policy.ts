@@ -24,9 +24,13 @@ type AttemptRecord = {
   lockedUntil?: number;
 };
 
+const MAX_TRACKED_ENTRIES = 10_000;
+const SWEEP_INTERVAL_MS = 60_000;
+
 export class LoginAbusePolicy {
   private attempts = new Map<string, AttemptRecord>();
   private config: LoginAbuseConfig;
+  private lastSweepAt = 0;
 
   constructor(config?: Partial<LoginAbuseConfig>) {
     this.config = {
@@ -35,8 +39,36 @@ export class LoginAbusePolicy {
     };
   }
 
+  private sweepStaleEntries(now: number): void {
+    if (now - this.lastSweepAt < SWEEP_INTERVAL_MS) {
+      return;
+    }
+    this.lastSweepAt = now;
+
+    for (const [key, record] of this.attempts) {
+      if (record.lockedUntil != null) {
+        if (record.lockedUntil <= now) {
+          this.attempts.delete(key);
+        }
+      } else if (this.isWindowExpired(record, now)) {
+        this.attempts.delete(key);
+      }
+    }
+
+    if (this.attempts.size > MAX_TRACKED_ENTRIES) {
+      const excess = this.attempts.size - MAX_TRACKED_ENTRIES;
+      const iterator = this.attempts.keys();
+      for (let i = 0; i < excess; i++) {
+        const next = iterator.next();
+        if (next.done) break;
+        this.attempts.delete(next.value);
+      }
+    }
+  }
+
   check(ip: string, key?: string): LoginAbuseDecision {
     const now = Date.now();
+    this.sweepStaleEntries(now);
 
     const ipDecision = this.checkScope({
       scopeKey: this.toIpScope(ip),
