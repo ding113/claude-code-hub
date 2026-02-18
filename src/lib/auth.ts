@@ -320,9 +320,12 @@ let sessionStorePromise: Promise<SessionStoreReader> | null = null;
 
 async function getSessionStore(): Promise<SessionStoreReader> {
   if (!sessionStorePromise) {
-    sessionStorePromise = import("@/lib/auth-session-store/redis-session-store").then(
-      ({ RedisSessionStore }) => new RedisSessionStore()
-    );
+    sessionStorePromise = import("@/lib/auth-session-store/redis-session-store")
+      .then(({ RedisSessionStore }) => new RedisSessionStore())
+      .catch((error) => {
+        sessionStorePromise = null;
+        throw error;
+      });
   }
 
   return sessionStorePromise;
