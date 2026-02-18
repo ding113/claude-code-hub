@@ -69,4 +69,43 @@ describe("buildSecurityHeaders", () => {
     expect(denyHeaders["X-Frame-Options"]).toBe("DENY");
     expect(sameOriginHeaders["X-Frame-Options"]).toBe("SAMEORIGIN");
   });
+
+  test("cspReportUri with valid URL appends report-uri directive", () => {
+    const headers = buildSecurityHeaders({
+      cspMode: "report-only",
+      cspReportUri: "https://csp.example.com/report",
+    });
+
+    expect(headers["Content-Security-Policy-Report-Only"]).toContain(
+      "; report-uri https://csp.example.com/report"
+    );
+  });
+
+  test("cspReportUri with semicolons is rejected to prevent directive injection", () => {
+    const headers = buildSecurityHeaders({
+      cspMode: "enforce",
+      cspReportUri: "https://evil.com; script-src 'unsafe-eval'",
+    });
+
+    expect(headers["Content-Security-Policy"]).not.toContain("report-uri");
+    expect(headers["Content-Security-Policy"]).not.toContain("evil.com");
+  });
+
+  test("cspReportUri with non-URL value is rejected", () => {
+    const headers = buildSecurityHeaders({
+      cspMode: "enforce",
+      cspReportUri: "not a url",
+    });
+
+    expect(headers["Content-Security-Policy"]).not.toContain("report-uri");
+  });
+
+  test("cspReportUri with empty string is rejected", () => {
+    const headers = buildSecurityHeaders({
+      cspMode: "enforce",
+      cspReportUri: "",
+    });
+
+    expect(headers["Content-Security-Policy"]).not.toContain("report-uri");
+  });
 });
