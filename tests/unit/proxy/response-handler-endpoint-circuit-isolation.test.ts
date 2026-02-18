@@ -9,6 +9,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import type { ModelPriceData } from "@/types/model-price";
 
 // Track async tasks for draining
@@ -173,6 +174,7 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
+    endpointPolicy: resolveEndpointPolicy("/v1/messages"),
     isHeaderModified: () => false,
     getContext1mApplied: () => false,
     getOriginalModel: () => "test-model",

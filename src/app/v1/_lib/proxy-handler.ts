@@ -7,7 +7,7 @@ import { attachSessionIdToErrorResponse } from "./proxy/error-session-id";
 import { ProxyError } from "./proxy/errors";
 import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mapper";
 import { ProxyForwarder } from "./proxy/forwarder";
-import { GuardPipelineBuilder, RequestType } from "./proxy/guard-pipeline";
+import { GuardPipelineBuilder } from "./proxy/guard-pipeline";
 import { ProxyResponseHandler } from "./proxy/response-handler";
 import { ProxyResponses } from "./proxy/responses";
 import { ProxySession } from "./proxy/session";
@@ -49,9 +49,8 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
       }
     }
 
-    // Decide request type and build configured guard pipeline
-    const type = session.isCountTokensRequest() ? RequestType.COUNT_TOKENS : RequestType.CHAT;
-    const pipeline = GuardPipelineBuilder.fromRequestType(type);
+    // Build guard pipeline from session endpoint policy
+    const pipeline = GuardPipelineBuilder.fromSession(session);
 
     // Run guard chain; may return early Response
     const early = await pipeline.run(session);
@@ -60,7 +59,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     }
 
     // 9. 增加并发计数（在所有检查通过后，请求开始前）- 跳过 count_tokens
-    if (session.sessionId && !session.isCountTokensRequest()) {
+    if (session.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
       await SessionTracker.incrementConcurrentCount(session.sessionId);
     }
 
@@ -97,7 +96,7 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
     return ProxyResponses.buildError(500, "代理请求发生未知错误");
   } finally {
     // 11. 减少并发计数（确保无论成功失败都执行）- 跳过 count_tokens
-    if (session?.sessionId && !session.isCountTokensRequest()) {
+    if (session?.sessionId && session.getEndpointPolicy().trackConcurrentRequests) {
       await SessionTracker.decrementConcurrentCount(session.sessionId);
     }
   }

@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
+import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import type { ModelPrice, ModelPriceData } from "@/types/model-price";
 import type { SystemSettings } from "@/types/system-config";
 import type { Provider } from "@/types/provider";
@@ -100,6 +102,53 @@ function createSession({
 
   return session;
 }
+
+describe("ProxySession endpoint policy", () => {
+  it.each([
+    V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
+    "/V1/RESPONSES/COMPACT/",
+  ])("应在创建时解析 raw passthrough policy: %s", (pathname) => {
+    const session = createSession({
+      redirectedModel: null,
+      requestUrl: new URL(`http://localhost${pathname}`),
+    });
+
+    const policy = session.getEndpointPolicy();
+    expect(isRawPassthroughEndpointPolicy(policy)).toBe(true);
+    expect(policy.trackConcurrentRequests).toBe(false);
+  });
+
+  it("应在请求路径后续变更后保持创建时 policy 不变", () => {
+    const session = createSession({
+      redirectedModel: null,
+      requestUrl: new URL(`http://localhost${V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS}`),
+    });
+
+    const policyAtCreation = session.getEndpointPolicy();
+    session.requestUrl = new URL(`http://localhost${V1_ENDPOINT_PATHS.MESSAGES}`);
+
+    expect(session.getEndpointPolicy()).toBe(policyAtCreation);
+    expect(isRawPassthroughEndpointPolicy(session.getEndpointPolicy())).toBe(true);
+  });
+
+  it("应在 pathname 无法读取时回退到 default policy", () => {
+    const malformedUrl = {
+      get pathname() {
+        throw new Error("broken pathname");
+      },
+    } as unknown as URL;
+
+    const session = createSession({
+      redirectedModel: null,
+      requestUrl: malformedUrl,
+    });
+
+    const policy = session.getEndpointPolicy();
+    expect(isRawPassthroughEndpointPolicy(policy)).toBe(false);
+    expect(policy.kind).toBe("default");
+    expect(policy.trackConcurrentRequests).toBe(true);
+  });
+});
 
 describe("ProxySession.getCachedPriceDataByBillingSource", () => {
   it("配置 = original 时应优先使用原始模型", async () => {
