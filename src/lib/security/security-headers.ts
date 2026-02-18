@@ -13,6 +13,19 @@ export const DEFAULT_SECURITY_HEADERS_CONFIG: SecurityHeadersConfig = {
   frameOptions: "DENY",
 };
 
+function isValidCspReportUri(uri: string): boolean {
+  const trimmed = uri.trim();
+  if (!trimmed || trimmed.includes(";") || trimmed.includes(",") || /\s/.test(trimmed)) {
+    return false;
+  }
+  try {
+    new URL(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const DEFAULT_CSP_VALUE =
   "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' " +
   "'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self' data:; " +
@@ -39,9 +52,11 @@ export function buildSecurityHeaders(
         ? "Content-Security-Policy-Report-Only"
         : "Content-Security-Policy";
 
-    headers[headerName] = merged.cspReportUri
-      ? `${DEFAULT_CSP_VALUE}; report-uri ${merged.cspReportUri}`
-      : DEFAULT_CSP_VALUE;
+    if (merged.cspReportUri && isValidCspReportUri(merged.cspReportUri)) {
+      headers[headerName] = `${DEFAULT_CSP_VALUE}; report-uri ${merged.cspReportUri}`;
+    } else {
+      headers[headerName] = DEFAULT_CSP_VALUE;
+    }
   }
 
   return headers;
