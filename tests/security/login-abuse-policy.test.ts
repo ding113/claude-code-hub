@@ -136,4 +136,25 @@ describe("LoginAbusePolicy", () => {
 
     expect(policy.check("10.0.0.10", "other@example.com")).toEqual({ allowed: true });
   });
+
+  it("sweeps stale entries to prevent unbounded memory growth", () => {
+    const policy = new LoginAbusePolicy({
+      maxAttemptsPerIp: 2,
+      windowSeconds: 5,
+      lockoutSeconds: 10,
+    });
+
+    for (let i = 0; i < 100; i++) {
+      policy.recordFailure(`10.0.${Math.floor(i / 256)}.${i % 256}`);
+    }
+
+    vi.advanceTimersByTime(61_000);
+
+    policy.check("10.0.99.99");
+
+    for (let i = 0; i < 100; i++) {
+      const ip = `10.0.${Math.floor(i / 256)}.${i % 256}`;
+      expect(policy.check(ip)).toEqual({ allowed: true });
+    }
+  });
 });
