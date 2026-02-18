@@ -18,7 +18,6 @@ import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type {
-  AnthropicAdaptiveThinkingConfig,
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,

@@ -101,9 +101,7 @@ describe("ThinkingBudgetEditor", () => {
   });
 
   it("renders with numeric value - shows custom select, input, and max button", () => {
-    const { container, unmount } = render(
-      <ThinkingBudgetEditor {...defaultProps} value="15000" />
-    );
+    const { container, unmount } = render(<ThinkingBudgetEditor {...defaultProps} value="15000" />);
 
     const select = container.querySelector('[data-testid="select-trigger"]') as HTMLSelectElement;
     expect(select.value).toBe("custom");
