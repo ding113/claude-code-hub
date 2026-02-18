@@ -19,6 +19,7 @@ vi.mock("@/lib/auth", () => ({
   setAuthCookie: mockSetAuthCookie,
   getSessionTokenMode: mockGetSessionTokenMode,
   getLoginRedirectTarget: mockGetLoginRedirectTarget,
+  toKeyFingerprint: vi.fn().mockResolvedValue("sha256:mock"),
   withNoStoreHeaders: (res: any) => {
     (res as any).headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     (res as any).headers.set("Pragma", "no-cache");
@@ -99,7 +100,7 @@ describe("Login Regression Matrix", () => {
     mockSetAuthCookie.mockResolvedValue(undefined);
     mockGetSessionTokenMode.mockReturnValue("legacy");
 
-    const mod = await import("../../../src/app/api/auth/login/route");
+    const mod = await import("@/app/api/auth/login/route");
     POST = mod.POST;
   });
 

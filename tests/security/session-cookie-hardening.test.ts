@@ -112,7 +112,7 @@ describe("session cookie hardening", () => {
       mockGetSessionTokenMode.mockReturnValue("legacy");
       mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
 
-      const mod = await import("../../src/app/api/auth/login/route");
+      const mod = await import("@/app/api/auth/login/route");
       POST = mod.POST;
     });
 
@@ -184,7 +184,7 @@ describe("session cookie hardening", () => {
       mockClearAuthCookie.mockResolvedValue(undefined);
       mockGetEnvConfig.mockReturnValue({ ENABLE_SECURE_COOKIES: false });
 
-      const mod = await import("../../src/app/api/auth/logout/route");
+      const mod = await import("@/app/api/auth/logout/route");
       POST = mod.POST;
     });
 
