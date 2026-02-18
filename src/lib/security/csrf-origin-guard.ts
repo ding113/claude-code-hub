@@ -16,7 +16,7 @@ export interface CsrfGuardRequest {
 }
 
 function normalizeOrigin(origin: string): string {
-  return origin.trim();
+  return origin.trim().toLowerCase();
 }
 
 function isDevelopmentRuntime(): boolean {
