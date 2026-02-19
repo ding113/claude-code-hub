@@ -275,13 +275,12 @@ describe("endpoint-circuit-breaker", () => {
   test("triggerEndpointCircuitBreakerAlert should call sendCircuitBreakerAlert", async () => {
     vi.resetModules();
 
-    const sendAlertMock = vi.fn(async () => {});
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
     }));
     vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
     vi.doMock("@/lib/notification/notifier", () => ({
-      sendCircuitBreakerAlert: sendAlertMock,
+      sendCircuitBreakerAlert: vi.fn(async () => {}),
     }));
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(async () => null),
@@ -289,11 +288,14 @@ describe("endpoint-circuit-breaker", () => {
 
     // recordEndpointFailure 会 non-blocking 触发告警；先让 event-loop 跑完再清空计数，避免串台导致误判
     await flushPromises();
-    sendAlertMock.mockClear();
 
     // Prime module cache for dynamic import() consumers
     await import("@/lib/config/env.schema");
-    await import("@/lib/notification/notifier");
+    const notifierModule = await import("@/lib/notification/notifier");
+    const sendAlertSpy = vi
+      .spyOn(notifierModule, "sendCircuitBreakerAlert")
+      .mockResolvedValue(undefined);
+    sendAlertSpy.mockClear();
 
     const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
 
@@ -304,8 +306,11 @@ describe("endpoint-circuit-breaker", () => {
       "connection refused"
     );
 
-    expect(sendAlertMock).toHaveBeenCalledTimes(1);
-    expect(sendAlertMock).toHaveBeenCalledWith({
+    const endpoint5Calls = sendAlertSpy.mock.calls
+      .map((call) => call[0] as Record<string, unknown>)
+      .filter((payload) => payload.endpointId === 5);
+    expect(endpoint5Calls).toHaveLength(1);
+    expect(endpoint5Calls[0]).toEqual({
       providerId: 0,
       providerName: "endpoint:5",
       failureCount: 3,
@@ -320,12 +325,11 @@ describe("endpoint-circuit-breaker", () => {
   test("triggerEndpointCircuitBreakerAlert should include endpointUrl when available", async () => {
     vi.resetModules();
 
-    const sendAlertMock = vi.fn(async () => {});
     vi.doMock("@/lib/config/env.schema", () => ({
       getEnvConfig: () => ({ ENABLE_ENDPOINT_CIRCUIT_BREAKER: true }),
     }));
     vi.doMock("@/lib/notification/notifier", () => ({
-      sendCircuitBreakerAlert: sendAlertMock,
+      sendCircuitBreakerAlert: vi.fn(async () => {}),
     }));
     vi.doMock("@/repository", () => ({
       findProviderEndpointById: vi.fn(async () => ({
@@ -350,18 +354,24 @@ describe("endpoint-circuit-breaker", () => {
 
     // recordEndpointFailure 会 non-blocking 触发告警；先让 event-loop 跑完再清空计数，避免串台导致误判
     await flushPromises();
-    sendAlertMock.mockClear();
 
     // Prime module cache for dynamic import() consumers
     await import("@/lib/config/env.schema");
-    await import("@/lib/notification/notifier");
+    const notifierModule = await import("@/lib/notification/notifier");
+    const sendAlertSpy = vi
+      .spyOn(notifierModule, "sendCircuitBreakerAlert")
+      .mockResolvedValue(undefined);
+    sendAlertSpy.mockClear();
 
     const { triggerEndpointCircuitBreakerAlert } = await import("@/lib/endpoint-circuit-breaker");
 
     await triggerEndpointCircuitBreakerAlert(10, 3, "2026-01-01T00:05:00.000Z", "timeout");
 
-    expect(sendAlertMock).toHaveBeenCalledTimes(1);
-    expect(sendAlertMock).toHaveBeenCalledWith({
+    const endpoint10Calls = sendAlertSpy.mock.calls
+      .map((call) => call[0] as Record<string, unknown>)
+      .filter((payload) => payload.endpointId === 10);
+    expect(endpoint10Calls).toHaveLength(1);
+    expect(endpoint10Calls[0]).toEqual({
       providerId: 1,
       providerName: "Custom Endpoint",
       failureCount: 3,
