@@ -1621,18 +1621,20 @@ export class ProxyForwarder {
               break;
             }
 
-            // 🆕 count_tokens 请求特殊处理：不计入熔断，不触发供应商切换
-            if (session.isCountTokensRequest()) {
+            // Raw passthrough endpoints: no circuit breaker, no provider switch, no retry
+            const endpointPolicy = session.getEndpointPolicy();
+            if (!endpointPolicy.allowRetry) {
               logger.debug(
-                "ProxyForwarder: count_tokens request error, skipping circuit breaker and provider switch",
+                "ProxyForwarder: raw passthrough endpoint error, skipping circuit breaker and provider switch",
                 {
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
                   statusCode,
                   error: proxyError.message,
+                  policyKind: endpointPolicy.kind,
                 }
               );
-              // 直接抛出错误，不重试，不切换供应商
+              // Throw immediately: no retry, no provider switch
               throw lastError;
             }
 
@@ -1780,12 +1782,14 @@ export class ProxyForwarder {
       session.setContext1mApplied(context1mApplied);
     }
 
-    // 应用模型重定向（如果配置了）
-    const wasRedirected = ModelRedirector.apply(session, provider);
-    if (wasRedirected) {
-      logger.debug("ProxyForwarder: Model redirected", {
-        providerId: provider.id,
-      });
+    // Apply model redirect (if configured) - skip for raw passthrough endpoints
+    if (!session.getEndpointPolicy().bypassForwarderPreprocessing) {
+      const wasRedirected = ModelRedirector.apply(session, provider);
+      if (wasRedirected) {
+        logger.debug("ProxyForwarder: Model redirected", {
+          providerId: provider.id,
+        });
+      }
     }
 
     let processedHeaders: Headers;
@@ -1898,138 +1902,126 @@ export class ProxyForwarder {
       });
     } else {
       // --- STANDARD HANDLING ---
-      if (
-        resolvedCacheTtl &&
-        (provider.providerType === "claude" || provider.providerType === "claude-auth")
-      ) {
-        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
-        if (applied) {
-          logger.info("ProxyForwarder: Applied cache TTL override to request", {
-            providerId: provider.id,
-            providerName: provider.name,
-            cacheTtl: resolvedCacheTtl,
-          });
-        }
-      }
+      if (!session.getEndpointPolicy().bypassForwarderPreprocessing) {
+        // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
+        if (provider.providerType === "codex") {
+          const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
+            provider,
+            session.request.message as Record<string, unknown>
+          );
+          session.request.message = overridden;
 
-      // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
-      if (provider.providerType === "codex") {
-        const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
-          provider,
-          session.request.message as Record<string, unknown>
-        );
-        session.request.message = overridden;
+          if (audit) {
+            session.addSpecialSetting(audit);
+            const specialSettings = session.getSpecialSettings();
 
-        if (audit) {
-          session.addSpecialSetting(audit);
-          const specialSettings = session.getSpecialSettings();
-
-          if (session.sessionId) {
-            // 这里用 await：避免后续响应侧写入（ResponseFixer 等）先完成后，被本次旧快照覆写
-            await SessionManager.storeSessionSpecialSettings(
-              session.sessionId,
-              specialSettings,
-              session.requestSequence
-            ).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to store special settings", {
-                error: err,
-                sessionId: session.sessionId,
+            if (session.sessionId) {
+              // 这里用 await：避免后续响应侧写入（ResponseFixer 等）先完成后，被本次旧快照覆写
+              await SessionManager.storeSessionSpecialSettings(
+                session.sessionId,
+                specialSettings,
+                session.requestSequence
+              ).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to store special settings", {
+                  error: err,
+                  sessionId: session.sessionId,
+                });
               });
-            });
-          }
+            }
 
-          if (session.messageContext?.id) {
-            // 同上：确保 special_settings 的"旧值"不会在并发下覆盖"新值"
-            await updateMessageRequestDetails(session.messageContext.id, {
-              specialSettings,
-            }).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to persist special settings", {
-                error: err,
-                messageRequestId: session.messageContext?.id,
+            if (session.messageContext?.id) {
+              // 同上：确保 special_settings 的"旧值"不会在并发下覆盖"新值"
+              await updateMessageRequestDetails(session.messageContext.id, {
+                specialSettings,
+              }).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to persist special settings", {
+                  error: err,
+                  messageRequestId: session.messageContext?.id,
+                });
               });
-            });
-          }
-        }
-      }
-
-      // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
-      // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
-      if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
-        // Billing header rectifier: proactively strip x-anthropic-billing-header from system prompt
-        {
-          const settings = await getCachedSystemSettings();
-          const billingRectifierEnabled = settings.enableBillingHeaderRectifier ?? true;
-          if (billingRectifierEnabled) {
-            const billingResult = rectifyBillingHeader(
-              session.request.message as Record<string, unknown>
-            );
-            if (billingResult.applied) {
-              session.addSpecialSetting({
-                type: "billing_header_rectifier",
-                scope: "request",
-                hit: true,
-                removedCount: billingResult.removedCount,
-                extractedValues: billingResult.extractedValues,
-              });
-              logger.info("ProxyForwarder: Billing header rectifier applied", {
-                providerId: provider.id,
-                providerName: provider.name,
-                removedCount: billingResult.removedCount,
-              });
-              await persistSpecialSettings(session);
             }
           }
         }
 
-        const { request: anthropicOverridden, audit: anthropicAudit } =
-          applyAnthropicProviderOverridesWithAudit(
-            provider,
-            session.request.message as Record<string, unknown>
-          );
-        session.request.message = anthropicOverridden;
-
-        if (anthropicAudit) {
-          session.addSpecialSetting(anthropicAudit);
-          const specialSettings = session.getSpecialSettings();
-
-          if (session.sessionId) {
-            await SessionManager.storeSessionSpecialSettings(
-              session.sessionId,
-              specialSettings,
-              session.requestSequence
-            ).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to store Anthropic special settings", {
-                error: err,
-                sessionId: session.sessionId,
-              });
-            });
+        // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
+        // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
+        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+          // Billing header rectifier: proactively strip x-anthropic-billing-header from system prompt
+          {
+            const settings = await getCachedSystemSettings();
+            const billingRectifierEnabled = settings.enableBillingHeaderRectifier ?? true;
+            if (billingRectifierEnabled) {
+              const billingResult = rectifyBillingHeader(
+                session.request.message as Record<string, unknown>
+              );
+              if (billingResult.applied) {
+                session.addSpecialSetting({
+                  type: "billing_header_rectifier",
+                  scope: "request",
+                  hit: true,
+                  removedCount: billingResult.removedCount,
+                  extractedValues: billingResult.extractedValues,
+                });
+                logger.info("ProxyForwarder: Billing header rectifier applied", {
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  removedCount: billingResult.removedCount,
+                });
+                await persistSpecialSettings(session);
+              }
+            }
           }
 
-          if (session.messageContext?.id) {
-            await updateMessageRequestDetails(session.messageContext.id, {
-              specialSettings,
-            }).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to persist Anthropic special settings", {
-                error: err,
-                messageRequestId: session.messageContext?.id,
+          const { request: anthropicOverridden, audit: anthropicAudit } =
+            applyAnthropicProviderOverridesWithAudit(
+              provider,
+              session.request.message as Record<string, unknown>
+            );
+          session.request.message = anthropicOverridden;
+
+          if (anthropicAudit) {
+            session.addSpecialSetting(anthropicAudit);
+            const specialSettings = session.getSpecialSettings();
+
+            if (session.sessionId) {
+              await SessionManager.storeSessionSpecialSettings(
+                session.sessionId,
+                specialSettings,
+                session.requestSequence
+              ).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to store Anthropic special settings", {
+                  error: err,
+                  sessionId: session.sessionId,
+                });
               });
+            }
+
+            if (session.messageContext?.id) {
+              await updateMessageRequestDetails(session.messageContext.id, {
+                specialSettings,
+              }).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to persist Anthropic special settings", {
+                  error: err,
+                  messageRequestId: session.messageContext?.id,
+                });
+              });
+            }
+          }
+        }
+
+        if (
+          resolvedCacheTtl &&
+          (provider.providerType === "claude" || provider.providerType === "claude-auth")
+        ) {
+          const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
+          if (applied) {
+            logger.debug("ProxyForwarder: Applied cache TTL override to request", {
+              providerId: provider.id,
+              ttl: resolvedCacheTtl,
             });
           }
         }
-      }
-
-      if (
-        resolvedCacheTtl &&
-        (provider.providerType === "claude" || provider.providerType === "claude-auth")
-      ) {
-        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
-        if (applied) {
-          logger.debug("ProxyForwarder: Applied cache TTL override to request", {
-            providerId: provider.id,
-            ttl: resolvedCacheTtl,
-          });
-        }
-      }
+      } // end bypassForwarderPreprocessing gate
 
       processedHeaders = ProxyForwarder.buildHeaders(session, provider);
 

@@ -1,4 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
+import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
 import { ProxyResponses } from "@/app/v1/_lib/proxy/responses";
 import { ProxyError } from "@/app/v1/_lib/proxy/errors";
 
@@ -11,6 +13,7 @@ const h = vi.hoisted(() => ({
       model: "gpt",
       message: {},
     },
+    getEndpointPolicy: () => resolveEndpointPolicy(h.session.requestUrl.pathname),
     isCountTokensRequest: () => false,
     setOriginalFormat: () => {},
     recordForwardStart: () => {},
@@ -40,6 +43,12 @@ vi.mock("@/app/v1/_lib/proxy/session", () => ({
 vi.mock("@/app/v1/_lib/proxy/guard-pipeline", () => ({
   RequestType: { CHAT: "CHAT", COUNT_TOKENS: "COUNT_TOKENS" },
   GuardPipelineBuilder: {
+    fromSession: () => ({
+      run: async () => {
+        if (h.pipelineError) throw h.pipelineError;
+        return h.earlyResponse;
+      },
+    }),
     fromRequestType: () => ({
       run: async () => {
         if (h.pipelineError) throw h.pipelineError;
@@ -165,6 +174,41 @@ describe("handleProxyRequest - session id on errors", async () => {
     const res = await handleProxyRequest({} as any);
     expect(res.status).toBe(200);
     expect(h.trackerCalls).toEqual(["inc", "startRequest", "dec"]);
+  });
+
+  test.each([
+    {
+      pathname: V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
+      isCountTokensRequest: true,
+    },
+    {
+      pathname: V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
+      isCountTokensRequest: false,
+    },
+  ])("RED: raw endpoint $pathname 应统一跳过并发计数（Wave2 未实现前会失败）", async ({
+    pathname,
+    isCountTokensRequest,
+  }) => {
+    h.fromContextError = null;
+    h.session.originalFormat = "claude";
+    h.endpointFormat = "openai";
+    h.trackerCalls.length = 0;
+    h.pipelineError = null;
+    h.earlyResponse = null;
+    h.forwardResponse = new Response("ok", { status: 200 });
+    h.dispatchedResponse = null;
+
+    h.session.requestUrl = new URL(`http://localhost${pathname}`);
+    h.session.getEndpointPolicy = () => resolveEndpointPolicy(h.session.requestUrl.pathname);
+    h.session.sessionId = "s_123";
+    h.session.messageContext = { id: 1, user: { id: 1, name: "u" }, key: { name: "k" } };
+    h.session.provider = { id: 1, name: "p" };
+    h.session.isCountTokensRequest = () => isCountTokensRequest;
+
+    const res = await handleProxyRequest({} as any);
+
+    expect(res.status).toBe(200);
+    expect(h.trackerCalls).toEqual(["startRequest"]);
   });
 
   test("session not created and ProxyError thrown: returns buildError without session header", async () => {

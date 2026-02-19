@@ -82,6 +82,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     userAgent: null,
     messagesCount: null,
     context1mApplied: null,
+    swapCacheTtlApplied: null,
     specialSettings: null,
     ...overrides,
   };
@@ -230,6 +231,43 @@ describe("usage-logs-table multiplier badge", () => {
     expect(html).toContain("tok/s");
     // TTFB should also appear
     expect(html).toContain("TTFB");
+  });
+
+  test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[makeLog({ id: 1, cacheTtlApplied: "5m", swapCacheTtlApplied: true })]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    // Should contain the swap indicator "~"
+    expect(html).toContain("5m ~");
+    // Should contain amber styling
+    expect(html).toContain("bg-amber-50");
+  });
+
+  test("does not render swap indicator when swapCacheTtlApplied is false", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[makeLog({ id: 1, cacheTtlApplied: "5m", swapCacheTtlApplied: false })]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    // Should contain the TTL value without swap indicator
+    expect(html).toContain("5m");
+    expect(html).not.toContain("5m ~");
+    // Should not contain amber styling
+    expect(html).not.toContain("bg-amber-50");
   });
 
   test("copies sessionId on click and shows toast", async () => {

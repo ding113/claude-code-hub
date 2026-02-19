@@ -253,7 +253,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
   if (!streamEndedNormally) {
-    if (!clientAborted) {
+    if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
         const { recordFailure } = await import("@/lib/circuit-breaker");
@@ -301,7 +301,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     // 计入熔断器：让后续请求能正确触发故障转移/熔断。
     //
     // 注意：404 语义在 forwarder 中属于 RESOURCE_NOT_FOUND，不计入熔断器（避免把“资源/模型不存在”当作供应商故障）。
-    if (effectiveStatusCode !== 404) {
+    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
         const { recordFailure } = await import("@/lib/circuit-breaker");
@@ -350,7 +350,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
     // 计入熔断器：让后续请求能正确触发故障转移/熔断。
     // 注意：与 forwarder 口径保持一致：404 不计入熔断器（资源不存在不是供应商故障）。
-    if (effectiveStatusCode !== 404) {
+    if (effectiveStatusCode !== 404 && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         const { recordFailure } = await import("@/lib/circuit-breaker");
         await recordFailure(meta.providerId, new Error(errorMessage));
@@ -469,19 +469,21 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 export class ProxyResponseHandler {
   static async dispatch(session: ProxySession, response: Response): Promise<Response> {
     let fixedResponse = response;
-    try {
-      fixedResponse = await ResponseFixer.process(session, response);
-    } catch (error) {
-      logger.error(
-        "[ResponseHandler] ResponseFixer failed (getCachedSystemSettings/processNonStream)",
-        {
-          error: error instanceof Error ? error.message : String(error),
-          sessionId: session.sessionId ?? null,
-          messageRequestId: session.messageContext?.id ?? null,
-          requestSequence: session.requestSequence ?? null,
-        }
-      );
-      fixedResponse = response;
+    if (!session.getEndpointPolicy().bypassResponseRectifier) {
+      try {
+        fixedResponse = await ResponseFixer.process(session, response);
+      } catch (error) {
+        logger.error(
+          "[ResponseHandler] ResponseFixer failed (getCachedSystemSettings/processNonStream)",
+          {
+            error: error instanceof Error ? error.message : String(error),
+            sessionId: session.sessionId ?? null,
+            messageRequestId: session.messageContext?.id ?? null,
+            requestSequence: session.requestSequence ?? null,
+          }
+        );
+        fixedResponse = response;
+      }
     }
 
     const contentType = fixedResponse.headers.get("content-type") || "";
@@ -561,17 +563,19 @@ export class ProxyResponseHandler {
               errorMessageForFinalize = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
               // 计入熔断器
-              try {
-                const { recordFailure } = await import("@/lib/circuit-breaker");
-                await recordFailure(provider.id, new Error(errorMessageForFinalize));
-              } catch (cbError) {
-                logger.warn(
-                  "ResponseHandler: Failed to record non-200 error in circuit breaker (passthrough)",
-                  {
-                    providerId: provider.id,
-                    error: cbError,
-                  }
-                );
+              if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+                try {
+                  const { recordFailure } = await import("@/lib/circuit-breaker");
+                  await recordFailure(provider.id, new Error(errorMessageForFinalize));
+                } catch (cbError) {
+                  logger.warn(
+                    "ResponseHandler: Failed to record non-200 error in circuit breaker (passthrough)",
+                    {
+                      providerId: provider.id,
+                      error: cbError,
+                    }
+                  );
+                }
               }
 
               // 记录到决策链
@@ -585,7 +589,7 @@ export class ProxyResponseHandler {
 
             // 使用共享的统计处理方法
             const duration = Date.now() - session.startTime;
-            await finalizeRequestStats(
+            const finalizedUsage = await finalizeRequestStats(
               session,
               responseText,
               statusCode,
@@ -596,8 +600,7 @@ export class ProxyResponseHandler {
             emitLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText,
-              usageMetrics: parseUsageFromResponseText(responseText, provider.providerType)
-                .usageMetrics,
+              usageMetrics: finalizedUsage,
               costUsd: undefined,
               statusCode,
               durationMs: duration,
@@ -672,6 +675,7 @@ export class ProxyResponseHandler {
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
+            swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
           });
           const tracker = ProxyStatusTracker.getInstance();
           tracker.endRequest(messageContext.user.id, messageContext.id);
@@ -726,6 +730,14 @@ export class ProxyResponseHandler {
         const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
         usageRecord = usageResult.usageRecord;
         usageMetrics = usageResult.usageMetrics;
+
+        if (usageMetrics) {
+          usageMetrics = normalizeUsageWithSwap(
+            usageMetrics,
+            session,
+            provider.swapCacheTtlBilling
+          );
+        }
 
         // Codex: Extract prompt_cache_key and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -843,14 +855,16 @@ export class ProxyResponseHandler {
           const errorMessageForDb = detected.isError ? detected.code : `HTTP ${statusCode}`;
 
           // 计入熔断器
-          try {
-            const { recordFailure } = await import("@/lib/circuit-breaker");
-            await recordFailure(provider.id, new Error(errorMessageForDb));
-          } catch (cbError) {
-            logger.warn("ResponseHandler: Failed to record non-200 error in circuit breaker", {
-              providerId: provider.id,
-              error: cbError,
-            });
+          if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+            try {
+              const { recordFailure } = await import("@/lib/circuit-breaker");
+              await recordFailure(provider.id, new Error(errorMessageForDb));
+            } catch (cbError) {
+              logger.warn("ResponseHandler: Failed to record non-200 error in circuit breaker", {
+                providerId: provider.id,
+                error: cbError,
+              });
+            }
           }
 
           // 记录到决策链
@@ -881,6 +895,7 @@ export class ProxyResponseHandler {
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
             providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
             context1mApplied: session.getContext1mApplied(),
+            swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
           });
 
           // 记录请求结束
@@ -929,17 +944,19 @@ export class ProxyResponseHandler {
             });
 
             // 计入熔断器（动态导入避免循环依赖）
-            try {
-              const { recordFailure } = await import("@/lib/circuit-breaker");
-              await recordFailure(provider.id, err);
-              logger.debug("ResponseHandler: Response timeout recorded in circuit breaker", {
-                providerId: provider.id,
-              });
-            } catch (cbError) {
-              logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
-                providerId: provider.id,
-                error: cbError,
-              });
+            if (session.getEndpointPolicy().allowCircuitBreakerAccounting) {
+              try {
+                const { recordFailure } = await import("@/lib/circuit-breaker");
+                await recordFailure(provider.id, err);
+                logger.debug("ResponseHandler: Response timeout recorded in circuit breaker", {
+                  providerId: provider.id,
+                });
+              } catch (cbError) {
+                logger.warn("ResponseHandler: Failed to record timeout in circuit breaker", {
+                  providerId: provider.id,
+                  error: cbError,
+                });
+              }
             }
 
             // 注意：无法重试，因为客户端已收到 HTTP 200
@@ -1335,7 +1352,7 @@ export class ProxyResponseHandler {
               clientAborted,
               abortReason
             );
-            await finalizeRequestStats(
+            const finalizedUsage = await finalizeRequestStats(
               session,
               allContent,
               finalized.effectiveStatusCode,
@@ -1347,8 +1364,7 @@ export class ProxyResponseHandler {
             emitLangfuseTrace(session, {
               responseHeaders: response.headers,
               responseText: allContent,
-              usageMetrics: parseUsageFromResponseText(allContent, provider.providerType)
-                .usageMetrics,
+              usageMetrics: finalizedUsage,
               costUsd: undefined,
               statusCode: finalized.effectiveStatusCode,
               durationMs: duration,
@@ -1685,6 +1701,14 @@ export class ProxyResponseHandler {
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
         usageForCost = usageResult.usageMetrics;
 
+        if (usageForCost) {
+          usageForCost = normalizeUsageWithSwap(
+            usageForCost,
+            session,
+            provider.swapCacheTtlBilling
+          );
+        }
+
         // Codex: Extract prompt_cache_key from SSE events and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
           try {
@@ -1813,6 +1837,7 @@ export class ProxyResponseHandler {
           model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
           providerId: providerIdForPersistence ?? session.provider?.id, // 更新最终供应商ID（重试切换后）
           context1mApplied: session.getContext1mApplied(),
+          swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
         });
 
         emitLangfuseTrace(session, {
@@ -2640,6 +2665,62 @@ function adjustUsageForProviderType(
   };
 }
 
+/**
+ * Swap 5m/1h cache buckets and cache_ttl when provider.swapCacheTtlBilling is enabled.
+ * Mutates in-place.
+ */
+export function applySwapCacheTtlBilling(usage: UsageMetrics, swap: boolean | undefined): void {
+  if (!swap) return;
+  [usage.cache_creation_5m_input_tokens, usage.cache_creation_1h_input_tokens] = [
+    usage.cache_creation_1h_input_tokens,
+    usage.cache_creation_5m_input_tokens,
+  ];
+  if (usage.cache_ttl === "5m") usage.cache_ttl = "1h";
+  else if (usage.cache_ttl === "1h") usage.cache_ttl = "5m";
+}
+
+/**
+ * Apply swap + resolve session fallback cache_ttl + normalize cache buckets.
+ * Returns a new UsageMetrics object with consistent bucket routing.
+ * The input object is NOT mutated -- swap is applied to an internal clone.
+ */
+function normalizeUsageWithSwap(
+  usageMetrics: UsageMetrics,
+  session: ProxySession,
+  swapCacheTtlBilling?: boolean
+): UsageMetrics {
+  // Clone before mutating to prevent caller side-effects and double-swap risks
+  const swapped = { ...usageMetrics };
+  applySwapCacheTtlBilling(swapped, swapCacheTtlBilling);
+
+  let resolvedCacheTtl = swapped.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
+
+  // When the upstream response had no cache_ttl, we fell through to the session-level
+  // getCacheTtlResolved() fallback which reflects the *original* (un-swapped) value.
+  // We must invert it here to stay consistent with the already-swapped bucket tokens.
+  if (swapCacheTtlBilling && !usageMetrics.cache_ttl) {
+    if (resolvedCacheTtl === "5m") resolvedCacheTtl = "1h";
+    else if (resolvedCacheTtl === "1h") resolvedCacheTtl = "5m";
+  }
+
+  const cache5m =
+    swapped.cache_creation_5m_input_tokens ??
+    (resolvedCacheTtl === "1h" ? undefined : swapped.cache_creation_input_tokens);
+  const cache1h =
+    swapped.cache_creation_1h_input_tokens ??
+    (resolvedCacheTtl === "1h" ? swapped.cache_creation_input_tokens : undefined);
+  const cacheTotal =
+    swapped.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
+
+  return {
+    ...swapped,
+    cache_ttl: resolvedCacheTtl ?? swapped.cache_ttl,
+    cache_creation_5m_input_tokens: cache5m,
+    cache_creation_1h_input_tokens: cache1h,
+    cache_creation_input_tokens: cacheTotal,
+  };
+}
+
 async function updateRequestCostFromUsage(
   messageId: number,
   originalModel: string | null,
@@ -2789,10 +2870,10 @@ export async function finalizeRequestStats(
   duration: number,
   errorMessage?: string,
   providerIdOverride?: number
-): Promise<void> {
+): Promise<UsageMetrics | null> {
   const { messageContext, provider } = session;
   if (!provider || !messageContext) {
-    return;
+    return null;
   }
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
@@ -2816,28 +2897,19 @@ export async function finalizeRequestStats(
       model: session.getCurrentModel() ?? undefined,
       providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
+      swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
     });
-    return;
+    return null;
   }
 
   // 4. 更新成本
-  const resolvedCacheTtl = usageMetrics.cache_ttl ?? session.getCacheTtlResolved?.() ?? null;
-  const cache5m =
-    usageMetrics.cache_creation_5m_input_tokens ??
-    (resolvedCacheTtl === "1h" ? undefined : usageMetrics.cache_creation_input_tokens);
-  const cache1h =
-    usageMetrics.cache_creation_1h_input_tokens ??
-    (resolvedCacheTtl === "1h" ? usageMetrics.cache_creation_input_tokens : undefined);
-  const cacheTotal =
-    usageMetrics.cache_creation_input_tokens ?? ((cache5m ?? 0) + (cache1h ?? 0) || undefined);
-
-  const normalizedUsage: UsageMetrics = {
-    ...usageMetrics,
-    cache_ttl: resolvedCacheTtl ?? usageMetrics.cache_ttl,
-    cache_creation_5m_input_tokens: cache5m,
-    cache_creation_1h_input_tokens: cache1h,
-    cache_creation_input_tokens: cacheTotal,
-  };
+  // Invert cache TTL at data entry when provider option is enabled
+  // All downstream (badge, cost, DB, logs) will see inverted values
+  const normalizedUsage = normalizeUsageWithSwap(
+    usageMetrics,
+    session,
+    provider.swapCacheTtlBilling
+  );
 
   await updateRequestCostFromUsage(
     messageContext.id,
@@ -2905,7 +2977,10 @@ export async function finalizeRequestStats(
     model: session.getCurrentModel() ?? undefined,
     providerId: providerIdForPersistence, // 更新最终供应商ID（重试切换后）
     context1mApplied: session.getContext1mApplied(),
+    swapCacheTtlApplied: provider.swapCacheTtlBilling ?? false,
   });
+
+  return normalizedUsage;
 }
 
 /**
@@ -3061,6 +3136,7 @@ async function persistRequestFailure(options: {
       model: session.getCurrentModel() ?? undefined,
       providerId: session.provider?.id, // 更新最终供应商ID（重试切换后）
       context1mApplied: session.getContext1mApplied(),
+      swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
     });
 
     const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";

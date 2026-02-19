@@ -128,6 +128,7 @@ function makeLog(overrides: Partial<UsageLogRow>): UsageLogRow {
     userAgent: null,
     messagesCount: null,
     context1mApplied: null,
+    swapCacheTtlApplied: null,
     specialSettings: null,
     ...overrides,
   };
@@ -339,5 +340,38 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("tok/s");
     // TTFB should also appear
     expect(html).toContain("TTFB");
+  });
+
+  test("renders swap indicator on cacheTtl badge when swapCacheTtlApplied is true", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [makeLog({ id: 1, cacheTtlApplied: "5m", swapCacheTtlApplied: true })];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain("5m ~");
+    expect(html).toContain("bg-amber-50");
+  });
+
+  test("does not render swap indicator when swapCacheTtlApplied is false", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+
+    mockLogs = [makeLog({ id: 1, cacheTtlApplied: "5m", swapCacheTtlApplied: false })];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    expect(html).toContain("5m");
+    expect(html).not.toContain("5m ~");
+    expect(html).not.toContain("bg-amber-50");
   });
 });

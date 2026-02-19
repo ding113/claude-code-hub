@@ -9,6 +9,10 @@ import type { ProxySession } from "./session";
  */
 export class ProxyProviderRequestFilter {
   static async ensure(session: ProxySession): Promise<void> {
+    if (session.getEndpointPolicy().bypassRequestFilters) {
+      return;
+    }
+
     if (!session.provider) {
       logger.warn(
         "[ProxyProviderRequestFilter] No provider selected, skipping provider-specific filters"

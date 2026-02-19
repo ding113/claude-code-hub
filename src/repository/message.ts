@@ -135,6 +135,7 @@ export async function updateMessageRequestDetails(
     model?: string; // ⭐ 新增：支持更新重定向后的模型名称
     providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
     context1mApplied?: boolean; // 是否应用了1M上下文窗口
+    swapCacheTtlApplied?: boolean; // Swap Cache TTL Billing active at request time
     specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
@@ -194,6 +195,9 @@ export async function updateMessageRequestDetails(
   }
   if (details.context1mApplied !== undefined) {
     updateData.context1mApplied = details.context1mApplied;
+  }
+  if (details.swapCacheTtlApplied !== undefined) {
+    updateData.swapCacheTtlApplied = details.swapCacheTtlApplied;
   }
   if (details.specialSettings !== undefined) {
     updateData.specialSettings = details.specialSettings;
@@ -285,6 +289,7 @@ export async function findMessageRequestAuditBySessionIdAndSequence(
   blockedReason: string | null;
   cacheTtlApplied: string | null;
   context1mApplied: boolean | null;
+  swapCacheTtlApplied: boolean | null;
   specialSettings: SpecialSetting[] | null;
 } | null> {
   const [row] = await db
@@ -294,6 +299,7 @@ export async function findMessageRequestAuditBySessionIdAndSequence(
       blockedReason: messageRequest.blockedReason,
       cacheTtlApplied: messageRequest.cacheTtlApplied,
       context1mApplied: messageRequest.context1mApplied,
+      swapCacheTtlApplied: messageRequest.swapCacheTtlApplied,
       specialSettings: messageRequest.specialSettings,
     })
     .from(messageRequest)
@@ -313,6 +319,7 @@ export async function findMessageRequestAuditBySessionIdAndSequence(
     blockedReason: row.blockedReason,
     cacheTtlApplied: row.cacheTtlApplied,
     context1mApplied: row.context1mApplied,
+    swapCacheTtlApplied: row.swapCacheTtlApplied,
     specialSettings: Array.isArray(row.specialSettings)
       ? (row.specialSettings as SpecialSetting[])
       : null,

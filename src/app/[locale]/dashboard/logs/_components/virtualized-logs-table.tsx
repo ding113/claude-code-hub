@@ -562,9 +562,20 @@ export function VirtualizedLogsTable({
                                   {log.cacheTtlApplied ? (
                                     <Badge
                                       variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+                                      className={cn(
+                                        "text-[10px] leading-tight px-1",
+                                        log.swapCacheTtlApplied
+                                          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                                          : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+                                      )}
+                                      title={
+                                        log.swapCacheTtlApplied
+                                          ? t("logs.billingDetails.cacheTtlSwapped")
+                                          : undefined
+                                      }
                                     >
                                       {log.cacheTtlApplied}
+                                      {log.swapCacheTtlApplied ? " ~" : ""}
                                     </Badge>
                                   ) : null}
                                   <span className="ml-auto text-right">
@@ -739,6 +750,7 @@ export function VirtualizedLogsTable({
                         cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                         cacheReadInputTokens={log.cacheReadInputTokens}
                         cacheTtlApplied={log.cacheTtlApplied}
+                        swapCacheTtlApplied={log.swapCacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}
                         context1mApplied={log.context1mApplied}

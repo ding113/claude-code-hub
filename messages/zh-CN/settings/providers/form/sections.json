@@ -87,6 +87,10 @@
       },
       "desc": "强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。"
     },
+    "swapCacheTtlBilling": {
+      "label": "Cache TTL 计费互换",
+      "desc": "反转传入数据的缓存 TTL：1h 令牌视为 5 分钟，反之亦然。影响标记、成本及所有存储指标。"
+    },
     "context1m": {
       "label": "1M 上下文窗口",
       "options": {

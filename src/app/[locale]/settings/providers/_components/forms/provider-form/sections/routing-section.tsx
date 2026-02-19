@@ -342,6 +342,21 @@ export function RoutingSection() {
               />
             </ToggleRow>
 
+            {/* Swap Cache TTL Billing */}
+            <ToggleRow
+              label={t("sections.routing.swapCacheTtlBilling.label")}
+              description={t("sections.routing.swapCacheTtlBilling.desc")}
+            >
+              <Switch
+                id={isEdit ? "edit-swap-cache-ttl-billing" : "swap-cache-ttl-billing"}
+                checked={state.routing.swapCacheTtlBilling}
+                onCheckedChange={(checked) =>
+                  dispatch({ type: "SET_SWAP_CACHE_TTL_BILLING", payload: checked })
+                }
+                disabled={state.ui.isPending}
+              />
+            </ToggleRow>
+
             {/* Cache TTL */}
             <SmartInputWrapper
               label={t("sections.routing.cacheTtl.label")}

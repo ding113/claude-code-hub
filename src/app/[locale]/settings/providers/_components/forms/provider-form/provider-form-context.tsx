@@ -52,6 +52,7 @@ export function createInitialState(
       weight: sourceProvider?.weight ?? 1,
       costMultiplier: sourceProvider?.costMultiplier ?? 1.0,
       cacheTtlPreference: sourceProvider?.cacheTtlPreference ?? "inherit",
+      swapCacheTtlBilling: sourceProvider?.swapCacheTtlBilling ?? false,
       context1mPreference:
         (sourceProvider?.context1mPreference as "inherit" | "force_enable" | "disabled") ??
         "inherit",
@@ -152,6 +153,8 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, costMultiplier: action.payload } };
     case "SET_CACHE_TTL_PREFERENCE":
       return { ...state, routing: { ...state.routing, cacheTtlPreference: action.payload } };
+    case "SET_SWAP_CACHE_TTL_BILLING":
+      return { ...state, routing: { ...state.routing, swapCacheTtlBilling: action.payload } };
     case "SET_CONTEXT_1M_PREFERENCE":
       return { ...state, routing: { ...state.routing, context1mPreference: action.payload } };
     case "SET_CODEX_REASONING_EFFORT":

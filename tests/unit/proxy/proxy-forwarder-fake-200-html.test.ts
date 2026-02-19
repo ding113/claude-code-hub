@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 
 const mocks = vi.hoisted(() => {
   return {
@@ -185,6 +186,7 @@ function createSession(): ProxySession {
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
+    endpointPolicy: resolveEndpointPolicy("/v1/messages"),
     isHeaderModified: () => false,
   });
 

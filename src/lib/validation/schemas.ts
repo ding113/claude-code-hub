@@ -490,6 +490,7 @@ export const CreateProviderSchema = z
       .optional()
       .default(0),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
+    swap_cache_ttl_billing: z.boolean().optional().default(false),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
     codex_reasoning_effort_preference:
       CODEX_REASONING_EFFORT_PREFERENCE.optional().default("inherit"),
@@ -693,6 +694,7 @@ export const UpdateProviderSchema = z
       .max(1000, "并发Session上限不能超过1000")
       .optional(),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
+    swap_cache_ttl_billing: z.boolean().optional(),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
     codex_reasoning_effort_preference: CODEX_REASONING_EFFORT_PREFERENCE.optional(),
     codex_reasoning_summary_preference: CODEX_REASONING_SUMMARY_PREFERENCE.optional(),

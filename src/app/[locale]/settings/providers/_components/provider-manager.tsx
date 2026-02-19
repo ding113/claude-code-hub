@@ -151,7 +151,13 @@ export function ProviderManager({
       if (!tags || tags.length === 0) {
         hasDefaultGroup = true;
       } else {
-        tags.forEach((g) => groups.add(g));
+        tags.forEach((g) => {
+          if (g === "default") {
+            hasDefaultGroup = true;
+          } else {
+            groups.add(g);
+          }
+        });
       }
     });
 

@@ -4,7 +4,8 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { ProviderForm } from "./forms/provider-form";
 
 interface AddProviderDialogProps {
@@ -22,6 +23,9 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+        <VisuallyHidden>
+          <DialogTitle>{t("addProvider")}</DialogTitle>
+        </VisuallyHidden>
         <FormErrorBoundary>
           <ProviderForm
             mode="create"
