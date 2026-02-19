@@ -1437,7 +1437,7 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
  * 包括：今天的总金额、今天的调用次数、最近一次调用时间和模型
  *
  * 性能优化：
- * - provider_stats: 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × message_request 的笛卡尔积
+ * - provider_stats: 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × usage_ledger 的笛卡尔积
  * - bounds: 用“按时区计算的时间范围”过滤 created_at，便于命中 created_at 索引
  * - DST 兼容：对“本地日界/近 7 日”先在 timestamp 上做 +interval，再 AT TIME ZONE 回到 timestamptz，避免夏令时跨日偏移
  * - latest_call: 限制近 7 天范围，避免扫描历史数据
@@ -1483,8 +1483,6 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
     }
 
     const promise: Promise<ProviderStatisticsRow[]> = (async () => {
-      // 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
-      // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
       const query = sql`
          WITH bounds AS (
            SELECT
@@ -1495,45 +1493,23 @@ export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> 
          provider_stats AS (
            -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
            SELECT
-            mr.final_provider_id,
-            COALESCE(SUM(mr.cost_usd), 0) AS today_cost,
+            final_provider_id,
+            COALESCE(SUM(cost_usd), 0) AS today_cost,
             COUNT(*)::integer AS today_calls
-          FROM (
-            SELECT
-              CASE
-                WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-                WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
-                ELSE provider_id
-              END AS final_provider_id,
-              cost_usd
-            FROM message_request
-            WHERE deleted_at IS NULL
-              AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-              AND created_at >= (SELECT today_start FROM bounds)
-              AND created_at < (SELECT tomorrow_start FROM bounds)
-          ) mr
-          GROUP BY mr.final_provider_id
+          FROM usage_ledger
+          WHERE blocked_by IS NULL
+            AND created_at >= (SELECT today_start FROM bounds)
+            AND created_at < (SELECT tomorrow_start FROM bounds)
+          GROUP BY final_provider_id
         ),
         latest_call AS (
           SELECT DISTINCT ON (final_provider_id)
             final_provider_id,
             created_at AS last_call_time,
             model AS last_call_model
-          FROM (
-            SELECT
-              CASE
-                WHEN provider_chain IS NULL OR provider_chain = '[]'::jsonb THEN provider_id
-                WHEN (provider_chain->-1->>'id') ~ '^[0-9]+$' THEN (provider_chain->-1->>'id')::int
-                ELSE provider_id
-              END AS final_provider_id,
-              id,
-              created_at,
-              model
-            FROM message_request
-            WHERE deleted_at IS NULL
-              AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-              AND created_at >= (SELECT last7_start FROM bounds)
-          ) mr
+          FROM usage_ledger
+          WHERE blocked_by IS NULL
+            AND created_at >= (SELECT last7_start FROM bounds)
           -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
           ORDER BY final_provider_id, created_at DESC, id DESC
         )
