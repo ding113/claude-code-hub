@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Activity, Clock, DollarSign, TrendingUp } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { getActiveSessions } from "@/actions/active-sessions";
@@ -23,7 +24,11 @@ import { BentoGrid } from "./bento-grid";
 import { LeaderboardCard } from "./leaderboard-card";
 import { LiveSessionsPanel } from "./live-sessions-panel";
 import { BentoMetricCard } from "./metric-card";
-import { StatisticsChartCard } from "./statistics-chart-card";
+
+const StatisticsChartCard = dynamic(
+  () => import("./statistics-chart-card").then((mod) => ({ default: mod.StatisticsChartCard })),
+  { ssr: false }
+);
 
 const REFRESH_INTERVAL = 5000;
 
@@ -62,7 +67,6 @@ async function fetchStatistics(timeRange: TimeRange): Promise<UserStatisticsData
 
 async function fetchLeaderboard(scope: "user" | "provider" | "model"): Promise<LeaderboardData[]> {
   const res = await fetch(`/api/leaderboard?period=daily&scope=${scope}`, {
-    cache: "no-store",
     credentials: "include",
   });
   if (!res.ok) throw new Error("Failed to fetch leaderboard");
@@ -120,7 +124,8 @@ export function DashboardBento({
   const { data: overview } = useQuery<OverviewData>({
     queryKey: ["overview-data"],
     queryFn: fetchOverviewData,
-    refetchInterval: REFRESH_INTERVAL,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
   });
 
   // Active sessions
@@ -136,6 +141,8 @@ export function DashboardBento({
     queryKey: ["statistics", timeRange],
     queryFn: () => fetchStatistics(timeRange),
     initialData: timeRange === DEFAULT_TIME_RANGE ? initialStatistics : undefined,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
   // Leaderboards
@@ -145,6 +152,7 @@ export function DashboardBento({
     queryKey: ["leaderboard", "user"],
     queryFn: () => fetchLeaderboard("user"),
     enabled: isAdmin || allowGlobalUsageView,
+    staleTime: 60_000,
   });
 
   const { data: providerLeaderboard = [], isLoading: providerLeaderboardLoading } = useQuery<
@@ -153,6 +161,7 @@ export function DashboardBento({
     queryKey: ["leaderboard", "provider"],
     queryFn: () => fetchLeaderboard("provider"),
     enabled: isAdmin || allowGlobalUsageView,
+    staleTime: 60_000,
   });
 
   const { data: modelLeaderboard = [], isLoading: modelLeaderboardLoading } = useQuery<
@@ -161,6 +170,7 @@ export function DashboardBento({
     queryKey: ["leaderboard", "model"],
     queryFn: () => fetchLeaderboard("model"),
     enabled: isAdmin || allowGlobalUsageView,
+    staleTime: 60_000,
   });
 
   const metrics = overview || {
