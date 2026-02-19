@@ -300,6 +300,19 @@ export async function register() {
         });
       }
 
+      // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
+      import("@/lib/ledger-backfill")
+        .then(({ backfillUsageLedger }) =>
+          backfillUsageLedger().then((result) => {
+            logger.info("[Instrumentation] Ledger backfill complete", result);
+          })
+        )
+        .catch((err) => {
+          logger.warn("[Instrumentation] Ledger backfill failed (non-fatal)", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
       warmupApiKeyVacuumFilter();
 
       // 回填 provider_vendors/provider_endpoints（幂等）
@@ -426,6 +439,19 @@ export async function register() {
       const isConnected = await checkDatabaseConnection();
       if (isConnected) {
         await runMigrations();
+
+        // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
+        import("@/lib/ledger-backfill")
+          .then(({ backfillUsageLedger }) =>
+            backfillUsageLedger().then((result) => {
+              logger.info("[Instrumentation] Ledger backfill complete", result);
+            })
+          )
+          .catch((err) => {
+            logger.warn("[Instrumentation] Ledger backfill failed (non-fatal)", {
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
 
         warmupApiKeyVacuumFilter();
 

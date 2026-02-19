@@ -512,6 +512,13 @@
       "when": 1771519353657,
       "tag": "0072_dark_gwen_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1771527016184,
+      "tag": "0073_magical_manta",
+      "breakpoints": true
     }
   ]
 }
