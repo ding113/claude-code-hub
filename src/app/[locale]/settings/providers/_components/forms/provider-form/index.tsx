@@ -5,7 +5,13 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getProviderEndpoints, getProviderVendors } from "@/actions/provider-endpoints";
-import { addProvider, editProvider, removeProvider, undoProviderDelete } from "@/actions/providers";
+import {
+  addProvider,
+  editProvider,
+  removeProvider,
+  undoProviderDelete,
+  undoProviderPatch,
+} from "@/actions/providers";
 import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
   AlertDialog,
@@ -365,7 +371,36 @@ function ProviderFormContent({
             toast.error(res.error || t("errors.updateFailed"));
             return;
           }
-          toast.success(t("success.updated"));
+
+          const undoToken = res.data.undoToken;
+          const operationId = res.data.operationId;
+
+          toast.success(tBatchEdit("undo.singleEditSuccess"), {
+            duration: 10000,
+            action: {
+              label: tBatchEdit("undo.button"),
+              onClick: async () => {
+                try {
+                  const undoResult = await undoProviderPatch({ undoToken, operationId });
+                  if (undoResult.ok) {
+                    toast.success(tBatchEdit("undo.singleEditUndone"));
+                    await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+                    await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                  } else if (
+                    undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
+                  ) {
+                    toast.error(tBatchEdit("undo.expired"));
+                  } else {
+                    toast.error(tBatchEdit("undo.failed"));
+                  }
+                } catch {
+                  toast.error(tBatchEdit("undo.failed"));
+                }
+              },
+            },
+          });
 
           void queryClient.invalidateQueries({ queryKey: ["providers"] });
           void queryClient.invalidateQueries({ queryKey: ["providers-health"] });

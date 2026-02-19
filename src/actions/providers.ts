@@ -681,7 +681,7 @@ export async function editProvider(
     rpd?: number | null;
     cc?: number | null;
   }
-): Promise<ActionResult> {
+): Promise<ActionResult<EditProviderResult>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -727,6 +727,30 @@ export async function editProvider(
       ...(faviconUrl !== undefined && { favicon_url: faviconUrl }),
     };
 
+    const currentProvider = await findProviderById(providerId);
+    if (!currentProvider) {
+      return { ok: false, error: "供应商不存在" };
+    }
+
+    const preimageFields: Record<string, unknown> = {};
+    for (const [field, nextValue] of Object.entries(payload)) {
+      if (field === "key") {
+        continue;
+      }
+
+      const providerKey = SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY[field];
+      if (!providerKey) {
+        continue;
+      }
+
+      const currentValue = currentProvider[providerKey];
+      if (!hasProviderFieldChangedForUndo(currentValue, nextValue)) {
+        continue;
+      }
+
+      preimageFields[providerKey] = currentValue;
+    }
+
     const provider = await updateProvider(providerId, payload);
 
     if (!provider) {
@@ -760,7 +784,31 @@ export async function editProvider(
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "edit", providerId });
 
-    return { ok: true };
+    const nowMs = Date.now();
+    cleanupProviderPatchStores(nowMs);
+
+    const undoToken = createProviderPatchUndoToken();
+    const operationId = createProviderPatchOperationId();
+    const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_MS;
+
+    providerPatchUndoStore.set(undoToken, {
+      undoToken,
+      undoExpiresAt: undoExpiresAtMs,
+      operationId,
+      providerIds: [providerId],
+      preimage: {
+        [providerId]: preimageFields,
+      },
+      patch: EMPTY_PROVIDER_BATCH_PATCH,
+    });
+
+    return {
+      ok: true,
+      data: {
+        undoToken,
+        operationId,
+      },
+    };
   } catch (error) {
     logger.error("更新服务商失败:", error);
     const message = error instanceof Error ? error.message : "更新服务商失败";
@@ -1146,6 +1194,11 @@ export interface UndoProviderPatchResult {
   revertedCount: number;
 }
 
+export interface EditProviderResult {
+  undoToken: string;
+  operationId: string;
+}
+
 export interface RemoveProviderResult {
   undoToken: string;
   operationId: string;
@@ -1197,6 +1250,86 @@ const providerBatchPatchPreviewStore = new Map<string, ProviderBatchPatchPreview
 const providerPatchUndoStore = new Map<string, ProviderPatchUndoSnapshot>();
 const providerDeleteUndoStore = new Map<string, ProviderDeleteUndoSnapshot>();
 type ProviderPatchActionError = Extract<ActionResult, { ok: false }>;
+
+const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider> = {
+  name: "name",
+  url: "url",
+  is_enabled: "isEnabled",
+  weight: "weight",
+  priority: "priority",
+  cost_multiplier: "costMultiplier",
+  group_tag: "groupTag",
+  group_priorities: "groupPriorities",
+  provider_type: "providerType",
+  preserve_client_ip: "preserveClientIp",
+  model_redirects: "modelRedirects",
+  allowed_models: "allowedModels",
+  limit_5h_usd: "limit5hUsd",
+  limit_daily_usd: "limitDailyUsd",
+  daily_reset_mode: "dailyResetMode",
+  daily_reset_time: "dailyResetTime",
+  limit_weekly_usd: "limitWeeklyUsd",
+  limit_monthly_usd: "limitMonthlyUsd",
+  limit_total_usd: "limitTotalUsd",
+  limit_concurrent_sessions: "limitConcurrentSessions",
+  cache_ttl_preference: "cacheTtlPreference",
+  swap_cache_ttl_billing: "swapCacheTtlBilling",
+  context_1m_preference: "context1mPreference",
+  codex_reasoning_effort_preference: "codexReasoningEffortPreference",
+  codex_reasoning_summary_preference: "codexReasoningSummaryPreference",
+  codex_text_verbosity_preference: "codexTextVerbosityPreference",
+  codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
+  anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
+  anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
+  anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
+  gemini_google_search_preference: "geminiGoogleSearchPreference",
+  max_retry_attempts: "maxRetryAttempts",
+  circuit_breaker_failure_threshold: "circuitBreakerFailureThreshold",
+  circuit_breaker_open_duration: "circuitBreakerOpenDuration",
+  circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
+  proxy_url: "proxyUrl",
+  proxy_fallback_to_direct: "proxyFallbackToDirect",
+  first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
+  streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
+  request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
+  website_url: "websiteUrl",
+  favicon_url: "faviconUrl",
+  mcp_passthrough_type: "mcpPassthroughType",
+  mcp_passthrough_url: "mcpPassthroughUrl",
+  tpm: "tpm",
+  rpm: "rpm",
+  rpd: "rpd",
+  cc: "cc",
+};
+
+const EMPTY_PROVIDER_BATCH_PATCH: ProviderBatchPatch = (() => {
+  const normalized = normalizeProviderBatchPatchDraft({});
+  if (!normalized.ok) {
+    throw new Error("Failed to initialize empty provider batch patch");
+  }
+  return normalized.data;
+})();
+
+function hasProviderFieldChangedForUndo(before: unknown, after: unknown): boolean {
+  if (Object.is(before, after)) {
+    return false;
+  }
+
+  if (
+    before !== null &&
+    after !== null &&
+    typeof before === "object" &&
+    typeof after === "object"
+  ) {
+    try {
+      return JSON.stringify(before) !== JSON.stringify(after);
+    } catch {
+      return true;
+    }
+  }
+
+  return true;
+}
 
 function dedupeProviderIds(providerIds: number[]): number[] {
   return [...new Set(providerIds)].sort((a, b) => a - b);
