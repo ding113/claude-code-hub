@@ -2,14 +2,9 @@
 
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
+import { getStatisticsWithCache } from "@/lib/redis";
 import { formatCostForStorage } from "@/lib/utils/currency";
-import {
-  getActiveKeysForUserFromDB,
-  getActiveUsersFromDB,
-  getKeyStatisticsFromDB,
-  getMixedStatisticsFromDB,
-  getUserStatisticsFromDB,
-} from "@/repository/statistics";
+import { getActiveKeysForUserFromDB, getActiveUsersFromDB } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import type {
   ChartDataItem,
@@ -67,18 +62,23 @@ export async function getUserStatistics(
 
     if (mode === "users") {
       // Admin: 显示所有用户
-      const [userStats, userList] = await Promise.all([
-        getUserStatisticsFromDB(timeRange),
+      const [cachedData, userList] = await Promise.all([
+        getStatisticsWithCache(timeRange, "users"),
         getActiveUsersFromDB(),
       ]);
-      statsData = userStats;
+      statsData = cachedData as DatabaseStatRow[];
       entities = userList;
     } else if (mode === "mixed") {
       // 非 Admin + allowGlobalUsageView: 自己的密钥明细 + 其他用户汇总
-      const [ownKeysList, mixedData] = await Promise.all([
+      const [ownKeysList, cachedData] = await Promise.all([
         getActiveKeysForUserFromDB(session.user.id),
-        getMixedStatisticsFromDB(session.user.id, timeRange),
+        getStatisticsWithCache(timeRange, "mixed", session.user.id),
       ]);
+
+      const mixedData = cachedData as {
+        ownKeys: DatabaseKeyStatRow[];
+        othersAggregate: DatabaseStatRow[];
+      };
 
       // 合并数据：自己的密钥 + 其他用户的虚拟条目
       statsData = [...mixedData.ownKeys, ...mixedData.othersAggregate];
@@ -87,11 +87,11 @@ export async function getUserStatistics(
       entities = [...ownKeysList, { id: -1, name: "其他用户" }];
     } else {
       // 非 Admin + !allowGlobalUsageView: 仅显示自己的密钥
-      const [keyStats, keyList] = await Promise.all([
-        getKeyStatisticsFromDB(session.user.id, timeRange),
+      const [cachedData, keyList] = await Promise.all([
+        getStatisticsWithCache(timeRange, "keys", session.user.id),
         getActiveKeysForUserFromDB(session.user.id),
       ]);
-      statsData = keyStats;
+      statsData = cachedData as DatabaseKeyStatRow[];
       entities = keyList;
     }
 
