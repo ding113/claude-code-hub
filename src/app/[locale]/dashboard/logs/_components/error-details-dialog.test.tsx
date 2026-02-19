@@ -4,11 +4,25 @@ import { createRoot } from "react-dom/client";
 import { act } from "react";
 import { NextIntlClientProvider } from "next-intl";
 import { Window } from "happy-dom";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+const hasSessionMessagesMock = vi.fn();
 
 vi.mock("@/actions/active-sessions", () => ({
-  hasSessionMessages: vi.fn().mockResolvedValue({ ok: true, data: false }),
+  hasSessionMessages: (...args: [string, number | undefined]) => hasSessionMessagesMock(...args),
 }));
+
+const getSessionOriginChainMock = vi.fn();
+
+vi.mock("@/actions/session-origin-chain", () => ({
+  getSessionOriginChain: (...args: [string]) => getSessionOriginChainMock(...args),
+}));
+
+beforeEach(() => {
+  hasSessionMessagesMock.mockResolvedValue({ ok: true, data: false });
+  getSessionOriginChainMock.mockReset();
+  getSessionOriginChainMock.mockResolvedValue({ ok: false, error: "mock" });
+});
 
 vi.mock("@/i18n/routing", () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
@@ -246,6 +260,22 @@ const messages = {
           attemptProvider: "Attempt: {provider}",
           retryAttempt: "Retry #{number}",
           httpStatus: "HTTP {code}{inferredSuffix}",
+          sessionReuse: "Session Reuse",
+          sessionReuseSelection: "Session Reuse Selection",
+          sessionReuseSelectionDesc: "Provider selected from session cache",
+          sessionInfo: "Session Information",
+          sessionIdLabel: "Session ID",
+          requestSequence: "Request Sequence",
+          sessionAge: "Session Age",
+          reusedProvider: "Reused Provider",
+          executeRequest: "Execute Request",
+          cacheOptimizationHint:
+            "Session reuse optimizes performance by maintaining provider affinity within the same conversation, reducing selection overhead and improving cache hit rates.",
+          originDecisionTitle: "Original Selection Decision",
+          originDecisionDesc: "How this provider was initially chosen for this session",
+          originDecisionLoading: "Loading original decision...",
+          originDecisionUnavailable: "Original decision record unavailable",
+          originDecisionExpand: "View original selection",
         },
         noError: {
           processing: "No error (processing)",
@@ -333,6 +363,37 @@ function parseHtml(html: string) {
   const window = new Window();
   window.document.body.innerHTML = html;
   return window.document;
+}
+
+function renderClientWithIntl(node: ReactNode) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+
+  act(() => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        {node}
+      </NextIntlClientProvider>
+    );
+  });
+
+  return {
+    container,
+    unmount: () => {
+      act(() => root.unmount());
+      container.remove();
+    },
+  };
+}
+
+function click(element: Element | null) {
+  if (!element) return;
+  act(() => {
+    element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
 }
 
 describe("error-details-dialog layout", () => {
@@ -1026,5 +1087,89 @@ describe("error-details-dialog tabs", () => {
     expect(html).toContain("Session Info");
     expect(html).toContain("test-session-123");
     expect(html).toContain("#5");
+  });
+});
+
+describe("error-details-dialog origin decision chain", () => {
+  test("shows origin chain trigger for session reuse flow with sessionId", () => {
+    const html = renderWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={"sess-origin-1"}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "session_reuse",
+            },
+          ] as any
+        }
+      />
+    );
+
+    expect(html).toContain("View original selection");
+  });
+
+  test("keeps origin chain content collapsed by default", () => {
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={"sess-origin-2"}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "session_reuse",
+            },
+          ] as any
+        }
+      />
+    );
+
+    expect(container.textContent).not.toContain("Original decision record unavailable");
+    unmount();
+  });
+
+  test("shows unavailable text after expand when origin decision is null", async () => {
+    getSessionOriginChainMock.mockResolvedValue({ ok: true, data: null });
+
+    const { container, unmount } = renderClientWithIntl(
+      <ErrorDetailsDialog
+        externalOpen
+        statusCode={200}
+        errorMessage={null}
+        sessionId={"sess-origin-3"}
+        providerChain={
+          [
+            {
+              id: 1,
+              name: "p1",
+              reason: "session_reuse",
+            },
+          ] as any
+        }
+      />
+    );
+
+    const trigger = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("View original selection")
+    );
+
+    click(trigger ?? null);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getSessionOriginChainMock).toHaveBeenCalledWith("sess-origin-3");
+    expect(getSessionOriginChainMock).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain("Original decision record unavailable");
+    unmount();
   });
 });
