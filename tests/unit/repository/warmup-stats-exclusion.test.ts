@@ -107,7 +107,7 @@ describe("Warmup 请求：不计入任何聚合统计", () => {
     expect(firstSelect).toEqual(expect.objectContaining({ totalRequests: expect.anything() }));
   });
 
-  test("usage logs stats：WHERE 条件应包含 warmup 排除逻辑", async () => {
+  test("usage logs stats：WHERE 条件应包含 blocked_by IS NULL 过滤", async () => {
     vi.resetModules();
 
     const whereArgs: unknown[] = [];
@@ -145,10 +145,10 @@ describe("Warmup 请求：不计入任何聚合统计", () => {
 
     expect(whereArgs.length).toBeGreaterThan(0);
     const whereSql = sqlToString(whereArgs[0]);
-    expect(whereSql.toLowerCase()).toContain("warmup");
+    expect(whereSql.toLowerCase()).toContain("is null");
   });
 
-  test("provider statistics：SQL 应排除 warmup（避免计入供应商统计/最近调用）", async () => {
+  test("provider statistics：SQL 应使用 blocked_by IS NULL 计费过滤", async () => {
     vi.resetModules();
 
     const executeMock = vi.fn(async () => [
@@ -196,7 +196,7 @@ describe("Warmup 请求：不计入任何聚合统计", () => {
 
     const queryArg = executeMock.mock.calls[0]?.[0];
     const querySql = sqlToString(queryArg);
-    expect(querySql.toLowerCase()).toContain("warmup");
     expect(querySql.toLowerCase()).toContain("blocked_by");
+    expect(querySql.toLowerCase()).toContain("is null");
   });
 });

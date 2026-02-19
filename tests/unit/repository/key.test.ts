@@ -107,6 +107,9 @@ vi.mock("@/drizzle/schema", () => ({
   messageRequest: {
     blockedBy: "messageRequest.blockedBy",
   },
+  usageLedger: {
+    blockedBy: "usageLedger.blockedBy",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({

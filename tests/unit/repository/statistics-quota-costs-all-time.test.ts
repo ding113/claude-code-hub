@@ -75,7 +75,7 @@ describe("sumUserQuotaCosts & sumKeyQuotaCostsById - all-time query support", ()
     await sumUserQuotaCosts(1, ranges, Infinity);
 
     expect(capturedAndArgs).toBeDefined();
-    expect(capturedAndArgs?.length).toBe(4);
+    expect(capturedAndArgs?.length).toBe(3);
 
     expect(capturedSelectFields).toBeDefined();
     expect(concatSqlStringChunks(capturedSelectFields?.costTotal)).not.toContain("FILTER");
@@ -134,7 +134,7 @@ describe("sumUserQuotaCosts & sumKeyQuotaCostsById - all-time query support", ()
     await sumKeyQuotaCostsById(123, ranges, Infinity);
 
     expect(capturedAndArgs).toBeDefined();
-    expect(capturedAndArgs?.length).toBe(4);
+    expect(capturedAndArgs?.length).toBe(3);
 
     expect(capturedSelectFields).toBeDefined();
     expect(concatSqlStringChunks(capturedSelectFields?.costTotal)).not.toContain("FILTER");
