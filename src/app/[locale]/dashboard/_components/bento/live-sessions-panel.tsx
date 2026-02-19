@@ -165,7 +165,6 @@ export function LiveSessionsPanel({
     <BentoCard
       ref={containerRef}
       colSpan={1}
-      rowSpan={2}
       className={cn(
         "flex flex-col overflow-hidden p-0",
         // Light mode: subtle gray, Dark mode: terminal-style dark
