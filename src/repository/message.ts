@@ -5,7 +5,7 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { formatCostForStorage } from "@/lib/utils/currency";
-import type { CreateMessageRequestData, MessageRequest } from "@/types/message";
+import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
@@ -275,6 +275,29 @@ export async function findMessageRequestBySessionId(
 
   if (!result) return null;
   return toMessageRequest(result);
+}
+
+export async function findSessionOriginChain(
+  sessionId: string
+): Promise<ProviderChainItem[] | null> {
+  const [row] = await db
+    .select({
+      providerChain: messageRequest.providerChain,
+    })
+    .from(messageRequest)
+    .where(
+      and(
+        eq(messageRequest.sessionId, sessionId),
+        isNull(messageRequest.deletedAt),
+        EXCLUDE_WARMUP_CONDITION,
+        sql`${messageRequest.providerChain} IS NOT NULL`
+      )
+    )
+    .orderBy(asc(messageRequest.requestSequence))
+    .limit(1);
+
+  if (!row?.providerChain) return null;
+  return row.providerChain as ProviderChainItem[];
 }
 
 /**
