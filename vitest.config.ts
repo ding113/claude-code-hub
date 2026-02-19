@@ -1,6 +1,10 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
+const isIntegrationFileFilterRequested = process.argv.some((arg) =>
+  /tests[\\/]+integration[\\/].+\.(test|spec)\.[cm]?[jt]sx?$/.test(arg)
+);
+
 export default defineConfig({
   test: {
     // ==================== 全局配置 ====================
@@ -93,6 +97,9 @@ export default defineConfig({
       "tests/security/**/*.{test,spec}.ts",
       "tests/api/**/*.{test,spec}.ts", // API 测试
       "src/**/*.{test,spec}.ts", // 支持源码中的测试
+      ...(isIntegrationFileFilterRequested
+        ? ["tests/integration/**/*.{test,spec}.ts", "tests/integration/**/*.{test,spec}.tsx"]
+        : []),
     ],
     exclude: [
       "node_modules",
@@ -101,8 +108,7 @@ export default defineConfig({
       "build",
       "coverage",
       "**/*.d.ts",
-      // 排除需要 Next.js 完整运行时的集成测试
-      "tests/integration/**",
+      ...(isIntegrationFileFilterRequested ? [] : ["tests/integration/**"]),
       "tests/api/users-actions.test.ts",
       "tests/api/providers-actions.test.ts",
       "tests/api/keys-actions.test.ts",
