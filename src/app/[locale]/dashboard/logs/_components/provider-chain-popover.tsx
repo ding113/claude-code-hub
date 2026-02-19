@@ -258,6 +258,11 @@ export function ProviderChainPopover({
                         </div>
                       )}
                     </div>
+                    {sessionReuseItem?.selectionMethod && (
+                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-0.5">
+                        {tChain("summary.originHint", { method: sessionReuseItem.selectionMethod })}
+                      </div>
+                    )}
                   </div>
                 )}
 
