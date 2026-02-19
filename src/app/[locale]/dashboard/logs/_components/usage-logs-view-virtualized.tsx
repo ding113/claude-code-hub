@@ -262,25 +262,47 @@ function UsageLogsViewContent({
     };
   }, []);
 
-  const statsFilters = {
-    userId: filters.userId,
-    keyId: filters.keyId,
-    providerId: filters.providerId,
-    sessionId: filters.sessionId,
-    startTime: filters.startTime,
-    endTime: filters.endTime,
-    statusCode: filters.statusCode,
-    excludeStatusCode200: filters.excludeStatusCode200,
-    model: filters.model,
-    endpoint: filters.endpoint,
-    minRetryCount: filters.minRetryCount,
-  };
+  const statsFilters = useMemo(
+    () => ({
+      userId: filters.userId,
+      keyId: filters.keyId,
+      providerId: filters.providerId,
+      sessionId: filters.sessionId,
+      startTime: filters.startTime,
+      endTime: filters.endTime,
+      statusCode: filters.statusCode,
+      excludeStatusCode200: filters.excludeStatusCode200,
+      model: filters.model,
+      endpoint: filters.endpoint,
+      minRetryCount: filters.minRetryCount,
+    }),
+    [filters]
+  );
 
   const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
 
-  const activeFilterCount = Object.values(statsFilters).filter(
-    (v) => v !== undefined && v !== false
-  ).length;
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.userId !== undefined) count++;
+    if (filters.keyId !== undefined) count++;
+    if (filters.providerId !== undefined) count++;
+    if (filters.sessionId) count++;
+    if (filters.startTime && filters.endTime) count++;
+    if (filters.statusCode !== undefined || filters.excludeStatusCode200) count++;
+    if (filters.model) count++;
+    if (filters.endpoint) count++;
+    if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) count++;
+    return count;
+  }, [filters]);
+
+  // Auto-expand filter panel when URL-based filters are present on initial load
+  const filterAutoExpandRef = useRef(true);
+  useEffect(() => {
+    if (filterAutoExpandRef.current && activeFilterCount > 0) {
+      setIsFiltersOpen(true);
+    }
+    filterAutoExpandRef.current = false;
+  }, [activeFilterCount]);
 
   return (
     <>
