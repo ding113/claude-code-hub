@@ -37,6 +37,7 @@ interface DashboardBentoProps {
   currencyCode: CurrencyCode;
   allowGlobalUsageView: boolean;
   initialStatistics?: UserStatisticsData;
+  initialOverview?: OverviewData;
 }
 
 interface LeaderboardData {
@@ -114,6 +115,7 @@ export function DashboardBento({
   currencyCode,
   allowGlobalUsageView,
   initialStatistics,
+  initialOverview,
 }: DashboardBentoProps) {
   const t = useTranslations("customs");
   const tl = useTranslations("dashboard.leaderboard");
@@ -126,6 +128,7 @@ export function DashboardBento({
     queryFn: fetchOverviewData,
     refetchInterval: 15_000,
     staleTime: 10_000,
+    initialData: initialOverview,
   });
 
   // Active sessions
