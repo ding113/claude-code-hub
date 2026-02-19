@@ -828,6 +828,64 @@ export const notificationTargetBindings = pgTable(
   })
 );
 
+// Usage Ledger table - immutable audit log, no FK constraints, no deletedAt/updatedAt
+export const usageLedger = pgTable('usage_ledger', {
+  id: serial('id').primaryKey(),
+  requestId: integer('request_id').notNull(),
+  userId: integer('user_id').notNull(),
+  key: varchar('key').notNull(),
+  providerId: integer('provider_id').notNull(),
+  finalProviderId: integer('final_provider_id').notNull(),
+  model: varchar('model', { length: 128 }),
+  originalModel: varchar('original_model', { length: 128 }),
+  endpoint: varchar('endpoint', { length: 256 }),
+  apiType: varchar('api_type', { length: 20 }),
+  sessionId: varchar('session_id', { length: 64 }),
+  statusCode: integer('status_code'),
+  isSuccess: boolean('is_success').notNull().default(false),
+  blockedBy: varchar('blocked_by', { length: 50 }),
+  costUsd: numeric('cost_usd', { precision: 21, scale: 15 }).default('0'),
+  costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }),
+  inputTokens: bigint('input_tokens', { mode: 'number' }),
+  outputTokens: bigint('output_tokens', { mode: 'number' }),
+  cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
+  cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
+  cacheCreation5mInputTokens: bigint('cache_creation_5m_input_tokens', { mode: 'number' }),
+  cacheCreation1hInputTokens: bigint('cache_creation_1h_input_tokens', { mode: 'number' }),
+  cacheTtlApplied: varchar('cache_ttl_applied', { length: 10 }),
+  context1mApplied: boolean('context_1m_applied').default(false),
+  swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
+  durationMs: integer('duration_ms'),
+  ttfbMs: integer('ttfb_ms'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+}, (table) => ({
+  // UNIQUE on requestId (survives message_request log deletion)
+  usageLedgerRequestIdIdx: uniqueIndex('idx_usage_ledger_request_id').on(table.requestId),
+  usageLedgerUserCreatedAtIdx: index('idx_usage_ledger_user_created_at')
+    .on(table.userId, table.createdAt)
+    .where(sql`${table.blockedBy} IS NULL`),
+  usageLedgerKeyCreatedAtIdx: index('idx_usage_ledger_key_created_at')
+    .on(table.key, table.createdAt)
+    .where(sql`${table.blockedBy} IS NULL`),
+  usageLedgerProviderCreatedAtIdx: index('idx_usage_ledger_provider_created_at')
+    .on(table.finalProviderId, table.createdAt)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // Expression index on minute truncation - AT TIME ZONE 'UTC' makes date_trunc IMMUTABLE on timestamptz
+  usageLedgerCreatedAtMinuteIdx: index('idx_usage_ledger_created_at_minute')
+    .on(sql`date_trunc('minute', ${table.createdAt} AT TIME ZONE 'UTC')`),
+  usageLedgerCreatedAtDescIdIdx: index('idx_usage_ledger_created_at_desc_id')
+    .on(table.createdAt.desc(), table.id.desc()),
+  usageLedgerSessionIdIdx: index('idx_usage_ledger_session_id')
+    .on(table.sessionId)
+    .where(sql`${table.sessionId} IS NOT NULL`),
+  usageLedgerModelIdx: index('idx_usage_ledger_model')
+    .on(table.model)
+    .where(sql`${table.model} IS NOT NULL`),
+  usageLedgerKeyCostIdx: index('idx_usage_ledger_key_cost')
+    .on(table.key, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   keys: many(keys),
