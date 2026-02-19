@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total}個のプロバイダー、{healthy}個正常 → {provider} ✓",
-    "sessionReuse": "セッション再利用 → {provider} ✓"
+    "sessionReuse": "セッション再利用 → {provider} ✓",
+    "originHint": "セッション再利用 - 元は {method} で選択"
   },
   "description": {
     "noDecisionRecord": "決定記録なし",

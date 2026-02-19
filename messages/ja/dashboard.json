@@ -340,7 +340,12 @@
         "sessionAge": "セッション経過時間",
         "reusedProvider": "再利用プロバイダー",
         "executeRequest": "リクエスト実行",
-        "cacheOptimizationHint": "セッション再利用は、同じ会話内でプロバイダーの親和性を維持することでパフォーマンスを最適化し、選択オーバーヘッドを削減してキャッシュヒット率を向上させます。"
+        "cacheOptimizationHint": "セッション再利用は、同じ会話内でプロバイダーの親和性を維持することでパフォーマンスを最適化し、選択オーバーヘッドを削減してキャッシュヒット率を向上させます。",
+        "originDecisionTitle": "元の選択決定",
+        "originDecisionDesc": "このセッションでプロバイダーが最初に選択された理由",
+        "originDecisionLoading": "元の決定を読み込み中...",
+        "originDecisionUnavailable": "元の決定記録は利用できません",
+        "originDecisionExpand": "元の選択を表示"
       }
     },
     "providerChain": {
@@ -1051,92 +1056,6 @@
       "load": "負荷"
     },
     "timeRange": {
-      "15min": "15分",
-      "1h": "1時間",
-      "6h": "6時間",
-      "24h": "24時間",
-      "7d": "7日"
-    },
-    "laneChart": {
-      "title": "プロバイダー可用性タイムライン",
-      "noData": "データがありません",
-      "requests": "{count} リクエスト",
-      "availability": "{value}% 可用",
-      "noRequests": "リクエストなし"
-    },
-    "latencyChart": {
-      "title": "遅延分布",
-      "p50": "P50",
-      "p95": "P95",
-      "p99": "P99",
-      "noData": "遅延データがありません"
-    },
-    "latencyCurve": {
-      "title": "遅延トレンド",
-      "noData": "遅延データがありません",
-      "avg": "平均",
-      "min": "最小",
-      "max": "最大",
-      "latency": "遅延"
-    },
-    "terminal": {
-      "title": "プローブログ",
-      "live": "LIVE",
-      "download": "ログをダウンロード",
-      "noLogs": "プローブログがありません",
-      "manual": "手動",
-      "auto": "自動",
-      "filterPlaceholder": "ログをフィルター..."
-    },
-    "probeGrid": {
-      "noEndpoints": "エンドポイントが設定されていません",
-      "lastProbe": "最終プローブ",
-      "status": {
-        "unknown": "不明",
-        "healthy": "正常",
-        "unhealthy": "異常"
-      }
-    },
-    "endpoint": {
-      "selectVendor": "ベンダーを選択",
-      "selectType": "タイプを選択"
-    },
-    "confidence": {
-      "low": "低",
-      "medium": "中",
-      "high": "高",
-      "lowTooltip": "{count} 件未満のリクエスト。データが代表的でない可能性があります。",
-      "mediumTooltip": "中程度のリクエスト量。データは比較的信頼できます。",
-      "highTooltip": "高いリクエスト量。データは信頼できます。"
-    },
-    "actions": {
-      "probeNow": "今すぐプローブ",
-      "probing": "プローブ中...",
-      "probeSuccess": "プローブ成功",
-      "probeFailed": "プローブ失敗"
-    },
-    "status": {
-      "green": "正常(OK)",
-      "red": "異常",
-      "unknown": "不明"
-    },
-    "statusDescription": {
-      "green": "サービスは正常、リクエスト成功",
-      "red": "サービスが利用不可またはエラー",
-      "unknown": "データがありません"
-    },
-    "metrics": {
-      "systemAvailability": "システム可用性",
-      "totalRequests": "総リクエスト数",
-      "successRate": "成功率(%)",
-      "avgLatency": "平均遅延",
-      "p50Latency": "P50 遅延",
-      "p95Latency": "P95 遅延",
-      "p99Latency": "P99 遅延",
-      "lastRequest": "最終リクエスト",
-      "requestCount": "リクエスト数"
-    },
-    "timeRange": {
       "label": "時間範囲",
       "15min": "15分",
       "1h": "1時間",
@@ -1149,107 +1068,6 @@
       "last24h": "過去24時間",
       "last7d": "過去7日間",
       "custom": "カスタム"
-    },
-    "filters": {
-      "provider": "プロバイダー",
-      "allProviders": "すべてのプロバイダー",
-      "includeDisabled": "無効を含む"
-    },
-    "sort": {
-      "label": "並び替え",
-      "availability": "可用性(稼働率)",
-      "name": "名前",
-      "requests": "リクエスト数"
-    },
-    "columns": {
-      "provider": "プロバイダー",
-      "type": "タイプ",
-      "status": "ステータス",
-      "availability": "可用性(稼働率)",
-      "requests": "リクエスト",
-      "successRate": "成功率(%)",
-      "avgLatency": "平均遅延",
-      "lastRequest": "最終リクエスト",
-      "actions": "アクション"
-    },
-    "chart": {
-      "title": "可用性トレンド",
-      "description": "時間ごとの可用性の変化",
-      "availabilityScore": "可用性スコア",
-      "requestVolume": "リクエスト量",
-      "latencyTrend": "遅延トレンド",
-      "noData": "データなし"
-    },
-    "details": {
-      "title": "プロバイダー詳細",
-      "overview": "概要",
-      "timeBuckets": "時間バケット",
-      "greenCount": "成功リクエスト",
-      "redCount": "失敗リクエスト"
-    },
-    "actions": {
-      "refresh": "更新",
-      "refreshing": "更新中...",
-      "autoRefresh": "自動更新",
-      "stopAutoRefresh": "自動更新を停止",
-      "viewDetails": "詳細を表示",
-      "testProvider": "プロバイダーをテスト",
-      "retry": "再試行",
-      "probeNow": "今すぐプローブ",
-      "probing": "プローブ中...",
-      "probeAll": "すべてプローブ",
-      "probeSuccess": "プローブ成功",
-      "probeFailed": "プローブ失敗"
-    },
-    "states": {
-      "loading": "読み込み中...",
-      "error": "読み込み失敗",
-      "noProviders": "プロバイダーなし",
-      "noData": "可用性データなし",
-      "fetchFailed": "可用性データの取得に失敗しました"
-    },
-    "legend": {
-      "green": "優秀 (可用性 95%+)",
-      "lime": "良好(可用性 80-95%)",
-      "orange": "警告(可用性 50-80%)",
-      "red": "異常 (可用性 <50%)",
-      "noData": "データなし"
-    },
-    "summary": {
-      "title": "可用性サマリー",
-      "healthyProviders": "正常なプロバイダー",
-      "unhealthyProviders": "異常なプロバイダー",
-      "unknownProviders": "データなし",
-      "totalProviders": "プロバイダー総数"
-    },
-    "heatmap": {
-      "bucketSize": "バケットサイズ",
-      "minutes": "分",
-      "requests": "リクエスト",
-      "noData": "データなし",
-      "noRequests": "リクエストなし"
-    },
-    "probeHistory": {
-      "title": "エンドポイントプローブ履歴",
-      "description": "プローブログを確認し、特定のエンドポイントを手動でプローブできます",
-      "selectVendor": "ベンダーを選択",
-      "selectType": "プロバイダー種別を選択",
-      "selectEndpoint": "エンドポイントを選択",
-      "noEndpoints": "エンドポイントが見つかりません",
-      "probeNow": "今すぐプローブ",
-      "probing": "プローブ中...",
-      "columns": {
-        "time": "時間",
-        "method": "方法",
-        "status": "ステータス",
-        "latency": "レイテンシ",
-        "error": "エラー"
-      },
-      "success": "成功",
-      "manual": "手動プローブ",
-      "auto": "自動プローブ",
-      "probeSuccess": "プローブ成功",
-      "probeFailed": "プローブ失敗"
     },
     "laneChart": {
       "title": "プロバイダー可用性タイムライン",
@@ -1306,6 +1124,128 @@
       "lowTooltip": "リクエスト数が {count} 未満です。データが代表的でない可能性があります。",
       "mediumTooltip": "リクエスト量は適度です。データは比較的信頼できます。",
       "highTooltip": "リクエスト量が十分です。データは信頼できます。"
+    },
+    "actions": {
+      "refresh": "更新",
+      "refreshing": "更新中...",
+      "autoRefresh": "自動更新",
+      "stopAutoRefresh": "自動更新を停止",
+      "viewDetails": "詳細を表示",
+      "testProvider": "プロバイダーをテスト",
+      "retry": "再試行",
+      "probeNow": "今すぐプローブ",
+      "probing": "プローブ中...",
+      "probeAll": "すべてプローブ",
+      "probeSuccess": "プローブ成功",
+      "probeFailed": "プローブ失敗"
+    },
+    "status": {
+      "green": "正常(OK)",
+      "red": "異常",
+      "unknown": "不明"
+    },
+    "statusDescription": {
+      "green": "サービスは正常、リクエスト成功",
+      "red": "サービスが利用不可またはエラー",
+      "unknown": "データがありません"
+    },
+    "metrics": {
+      "systemAvailability": "システム可用性",
+      "totalRequests": "総リクエスト数",
+      "successRate": "成功率(%)",
+      "avgLatency": "平均遅延",
+      "p50Latency": "P50 遅延",
+      "p95Latency": "P95 遅延",
+      "p99Latency": "P99 遅延",
+      "lastRequest": "最終リクエスト",
+      "requestCount": "リクエスト数"
+    },
+    "filters": {
+      "provider": "プロバイダー",
+      "allProviders": "すべてのプロバイダー",
+      "includeDisabled": "無効を含む"
+    },
+    "sort": {
+      "label": "並び替え",
+      "availability": "可用性(稼働率)",
+      "name": "名前",
+      "requests": "リクエスト数"
+    },
+    "columns": {
+      "provider": "プロバイダー",
+      "type": "タイプ",
+      "status": "ステータス",
+      "availability": "可用性(稼働率)",
+      "requests": "リクエスト",
+      "successRate": "成功率(%)",
+      "avgLatency": "平均遅延",
+      "lastRequest": "最終リクエスト",
+      "actions": "アクション"
+    },
+    "chart": {
+      "title": "可用性トレンド",
+      "description": "時間ごとの可用性の変化",
+      "availabilityScore": "可用性スコア",
+      "requestVolume": "リクエスト量",
+      "latencyTrend": "遅延トレンド",
+      "noData": "データなし"
+    },
+    "details": {
+      "title": "プロバイダー詳細",
+      "overview": "概要",
+      "timeBuckets": "時間バケット",
+      "greenCount": "成功リクエスト",
+      "redCount": "失敗リクエスト"
+    },
+    "states": {
+      "loading": "読み込み中...",
+      "error": "読み込み失敗",
+      "noProviders": "プロバイダーなし",
+      "noData": "可用性データなし",
+      "fetchFailed": "可用性データの取得に失敗しました"
+    },
+    "legend": {
+      "green": "優秀 (可用性 95%+)",
+      "lime": "良好(可用性 80-95%)",
+      "orange": "警告(可用性 50-80%)",
+      "red": "異常 (可用性 <50%)",
+      "noData": "データなし"
+    },
+    "summary": {
+      "title": "可用性サマリー",
+      "healthyProviders": "正常なプロバイダー",
+      "unhealthyProviders": "異常なプロバイダー",
+      "unknownProviders": "データなし",
+      "totalProviders": "プロバイダー総数"
+    },
+    "heatmap": {
+      "bucketSize": "バケットサイズ",
+      "minutes": "分",
+      "requests": "リクエスト",
+      "noData": "データなし",
+      "noRequests": "リクエストなし"
+    },
+    "probeHistory": {
+      "title": "エンドポイントプローブ履歴",
+      "description": "プローブログを確認し、特定のエンドポイントを手動でプローブできます",
+      "selectVendor": "ベンダーを選択",
+      "selectType": "プロバイダー種別を選択",
+      "selectEndpoint": "エンドポイントを選択",
+      "noEndpoints": "エンドポイントが見つかりません",
+      "probeNow": "今すぐプローブ",
+      "probing": "プローブ中...",
+      "columns": {
+        "time": "時間",
+        "method": "方法",
+        "status": "ステータス",
+        "latency": "レイテンシ",
+        "error": "エラー"
+      },
+      "success": "成功",
+      "manual": "手動プローブ",
+      "auto": "自動プローブ",
+      "probeSuccess": "プローブ成功",
+      "probeFailed": "プローブ失敗"
     },
     "toast": {
       "refreshSuccess": "可用性データを更新しました",

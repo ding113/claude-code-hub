@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total} 个供应商，{healthy} 个健康 → {provider} ✓",
-    "sessionReuse": "会话复用 → {provider} ✓"
+    "sessionReuse": "会话复用 → {provider} ✓",
+    "originHint": "会话复用 - 最初通过 {method} 选择"
   },
   "description": {
     "noDecisionRecord": "无决策记录",

@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total} провайдеров, {healthy} работоспособных → {provider} ✓",
-    "sessionReuse": "Повторное использование сессии → {provider} ✓"
+    "sessionReuse": "Повторное использование сессии → {provider} ✓",
+    "originHint": "Повторное использование сессии - изначально выбрано через {method}"
   },
   "description": {
     "noDecisionRecord": "Нет записей решений",
