@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
+import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
@@ -232,6 +233,124 @@ export async function findLatestMessageRequestByKey(key: string): Promise<Messag
   return toMessageRequest(result);
 }
 
+export async function findMessageRequestById(id: number): Promise<MessageRequest | null> {
+  const [result] = await db
+    .select({
+      id: messageRequest.id,
+      providerId: messageRequest.providerId,
+      userId: messageRequest.userId,
+      key: messageRequest.key,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      durationMs: messageRequest.durationMs,
+      ttfbMs: messageRequest.ttfbMs,
+      costUsd: messageRequest.costUsd,
+      costMultiplier: messageRequest.costMultiplier,
+      sessionId: messageRequest.sessionId,
+      userAgent: messageRequest.userAgent,
+      endpoint: messageRequest.endpoint,
+      messagesCount: messageRequest.messagesCount,
+      statusCode: messageRequest.statusCode,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+      errorMessage: messageRequest.errorMessage,
+      providerChain: messageRequest.providerChain,
+      blockedBy: messageRequest.blockedBy,
+      blockedReason: messageRequest.blockedReason,
+      context1mApplied: messageRequest.context1mApplied,
+      swapCacheTtlApplied: messageRequest.swapCacheTtlApplied,
+      specialSettings: messageRequest.specialSettings,
+      createdAt: messageRequest.createdAt,
+      updatedAt: messageRequest.updatedAt,
+      deletedAt: messageRequest.deletedAt,
+    })
+    .from(messageRequest)
+    .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)))
+    .limit(1);
+
+  if (result) {
+    return toMessageRequest(result);
+  }
+
+  if (!(await isLedgerOnlyMode())) {
+    return null;
+  }
+
+  const [ledgerRow] = await db
+    .select({
+      requestId: usageLedger.requestId,
+      finalProviderId: usageLedger.finalProviderId,
+      userId: usageLedger.userId,
+      key: usageLedger.key,
+      model: usageLedger.model,
+      originalModel: usageLedger.originalModel,
+      endpoint: usageLedger.endpoint,
+      statusCode: usageLedger.statusCode,
+      costUsd: usageLedger.costUsd,
+      costMultiplier: usageLedger.costMultiplier,
+      inputTokens: usageLedger.inputTokens,
+      outputTokens: usageLedger.outputTokens,
+      cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
+      cacheReadInputTokens: usageLedger.cacheReadInputTokens,
+      cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
+      cacheTtlApplied: usageLedger.cacheTtlApplied,
+      context1mApplied: usageLedger.context1mApplied,
+      swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
+      durationMs: usageLedger.durationMs,
+      ttfbMs: usageLedger.ttfbMs,
+      sessionId: usageLedger.sessionId,
+      createdAt: usageLedger.createdAt,
+    })
+    .from(usageLedger)
+    .where(and(eq(usageLedger.requestId, id), LEDGER_BILLING_CONDITION))
+    .limit(1);
+
+  if (!ledgerRow) {
+    return null;
+  }
+
+  return toMessageRequest({
+    id: ledgerRow.requestId,
+    providerId: ledgerRow.finalProviderId,
+    userId: ledgerRow.userId,
+    key: ledgerRow.key,
+    model: ledgerRow.model,
+    originalModel: ledgerRow.originalModel,
+    durationMs: ledgerRow.durationMs,
+    ttfbMs: ledgerRow.ttfbMs,
+    costUsd: ledgerRow.costUsd,
+    costMultiplier: ledgerRow.costMultiplier,
+    sessionId: ledgerRow.sessionId,
+    userAgent: null,
+    endpoint: ledgerRow.endpoint,
+    messagesCount: null,
+    statusCode: ledgerRow.statusCode,
+    inputTokens: ledgerRow.inputTokens,
+    outputTokens: ledgerRow.outputTokens,
+    cacheCreationInputTokens: ledgerRow.cacheCreationInputTokens,
+    cacheReadInputTokens: ledgerRow.cacheReadInputTokens,
+    cacheCreation5mInputTokens: ledgerRow.cacheCreation5mInputTokens,
+    cacheCreation1hInputTokens: ledgerRow.cacheCreation1hInputTokens,
+    cacheTtlApplied: ledgerRow.cacheTtlApplied,
+    errorMessage: null,
+    providerChain: null,
+    blockedBy: null,
+    blockedReason: null,
+    context1mApplied: ledgerRow.context1mApplied,
+    swapCacheTtlApplied: ledgerRow.swapCacheTtlApplied,
+    specialSettings: null,
+    createdAt: ledgerRow.createdAt,
+    updatedAt: ledgerRow.createdAt,
+    deletedAt: null,
+  });
+}
+
 /**
  * 根据 session ID 查询消息请求记录（用于获取完整元数据）
  * 返回该 session 的最后一条记录（最新的）
@@ -274,8 +393,83 @@ export async function findMessageRequestBySessionId(
     .orderBy(desc(messageRequest.createdAt))
     .limit(1);
 
-  if (!result) return null;
-  return toMessageRequest(result);
+  if (result) {
+    return toMessageRequest(result);
+  }
+
+  if (!(await isLedgerOnlyMode())) {
+    return null;
+  }
+
+  const [ledgerRow] = await db
+    .select({
+      requestId: usageLedger.requestId,
+      finalProviderId: usageLedger.finalProviderId,
+      userId: usageLedger.userId,
+      key: usageLedger.key,
+      model: usageLedger.model,
+      originalModel: usageLedger.originalModel,
+      endpoint: usageLedger.endpoint,
+      statusCode: usageLedger.statusCode,
+      costUsd: usageLedger.costUsd,
+      costMultiplier: usageLedger.costMultiplier,
+      inputTokens: usageLedger.inputTokens,
+      outputTokens: usageLedger.outputTokens,
+      cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
+      cacheReadInputTokens: usageLedger.cacheReadInputTokens,
+      cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
+      cacheTtlApplied: usageLedger.cacheTtlApplied,
+      context1mApplied: usageLedger.context1mApplied,
+      swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
+      durationMs: usageLedger.durationMs,
+      ttfbMs: usageLedger.ttfbMs,
+      sessionId: usageLedger.sessionId,
+      createdAt: usageLedger.createdAt,
+    })
+    .from(usageLedger)
+    .where(and(eq(usageLedger.sessionId, sessionId), LEDGER_BILLING_CONDITION))
+    .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
+    .limit(1);
+
+  if (!ledgerRow) {
+    return null;
+  }
+
+  return toMessageRequest({
+    id: ledgerRow.requestId,
+    providerId: ledgerRow.finalProviderId,
+    userId: ledgerRow.userId,
+    key: ledgerRow.key,
+    model: ledgerRow.model,
+    originalModel: ledgerRow.originalModel,
+    durationMs: ledgerRow.durationMs,
+    ttfbMs: ledgerRow.ttfbMs,
+    costUsd: ledgerRow.costUsd,
+    costMultiplier: ledgerRow.costMultiplier,
+    sessionId: ledgerRow.sessionId,
+    userAgent: null,
+    endpoint: ledgerRow.endpoint,
+    messagesCount: null,
+    statusCode: ledgerRow.statusCode,
+    inputTokens: ledgerRow.inputTokens,
+    outputTokens: ledgerRow.outputTokens,
+    cacheCreationInputTokens: ledgerRow.cacheCreationInputTokens,
+    cacheReadInputTokens: ledgerRow.cacheReadInputTokens,
+    cacheCreation5mInputTokens: ledgerRow.cacheCreation5mInputTokens,
+    cacheCreation1hInputTokens: ledgerRow.cacheCreation1hInputTokens,
+    cacheTtlApplied: ledgerRow.cacheTtlApplied,
+    errorMessage: null,
+    providerChain: null,
+    blockedBy: null,
+    blockedReason: null,
+    context1mApplied: ledgerRow.context1mApplied,
+    swapCacheTtlApplied: ledgerRow.swapCacheTtlApplied,
+    specialSettings: null,
+    createdAt: ledgerRow.createdAt,
+    updatedAt: ledgerRow.createdAt,
+    deletedAt: null,
+  });
 }
 
 /**
@@ -766,7 +960,109 @@ export async function findUsageLogs(params: {
 
   const logs = results.map(toMessageRequest);
 
-  return { logs, total };
+  if (logs.length > 0) {
+    return { logs, total };
+  }
+
+  if (!(await isLedgerOnlyMode())) {
+    return { logs, total };
+  }
+
+  const ledgerConditions = [LEDGER_BILLING_CONDITION];
+
+  if (userId !== undefined) {
+    ledgerConditions.push(eq(usageLedger.userId, userId));
+  }
+
+  if (startDate) {
+    ledgerConditions.push(sql`${usageLedger.createdAt} >= ${startDate}`);
+  }
+
+  if (endDate) {
+    ledgerConditions.push(sql`${usageLedger.createdAt} <= ${endDate}`);
+  }
+
+  if (model) {
+    ledgerConditions.push(eq(usageLedger.model, model));
+  }
+
+  const [ledgerCountResult] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(usageLedger)
+    .where(and(...ledgerConditions));
+
+  const ledgerTotal = ledgerCountResult?.count ?? 0;
+
+  const ledgerResults = await db
+    .select({
+      requestId: usageLedger.requestId,
+      finalProviderId: usageLedger.finalProviderId,
+      userId: usageLedger.userId,
+      key: usageLedger.key,
+      model: usageLedger.model,
+      originalModel: usageLedger.originalModel,
+      endpoint: usageLedger.endpoint,
+      statusCode: usageLedger.statusCode,
+      costUsd: usageLedger.costUsd,
+      costMultiplier: usageLedger.costMultiplier,
+      inputTokens: usageLedger.inputTokens,
+      outputTokens: usageLedger.outputTokens,
+      cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
+      cacheReadInputTokens: usageLedger.cacheReadInputTokens,
+      cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
+      cacheTtlApplied: usageLedger.cacheTtlApplied,
+      context1mApplied: usageLedger.context1mApplied,
+      swapCacheTtlApplied: usageLedger.swapCacheTtlApplied,
+      durationMs: usageLedger.durationMs,
+      ttfbMs: usageLedger.ttfbMs,
+      sessionId: usageLedger.sessionId,
+      createdAt: usageLedger.createdAt,
+    })
+    .from(usageLedger)
+    .where(and(...ledgerConditions))
+    .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
+    .limit(pageSize)
+    .offset(offset);
+
+  const ledgerLogs = ledgerResults.map((row) =>
+    toMessageRequest({
+      id: row.requestId,
+      providerId: row.finalProviderId,
+      userId: row.userId,
+      key: row.key,
+      model: row.model,
+      originalModel: row.originalModel,
+      durationMs: row.durationMs,
+      ttfbMs: row.ttfbMs,
+      costUsd: row.costUsd,
+      costMultiplier: row.costMultiplier,
+      sessionId: row.sessionId,
+      userAgent: null,
+      endpoint: row.endpoint,
+      messagesCount: null,
+      statusCode: row.statusCode,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      cacheCreationInputTokens: row.cacheCreationInputTokens,
+      cacheReadInputTokens: row.cacheReadInputTokens,
+      cacheCreation5mInputTokens: row.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: row.cacheCreation1hInputTokens,
+      cacheTtlApplied: row.cacheTtlApplied,
+      errorMessage: null,
+      providerChain: null,
+      blockedBy: null,
+      blockedReason: null,
+      context1mApplied: row.context1mApplied,
+      swapCacheTtlApplied: row.swapCacheTtlApplied,
+      specialSettings: null,
+      createdAt: row.createdAt,
+      updatedAt: row.createdAt,
+      deletedAt: null,
+    })
+  );
+
+  return { logs: ledgerLogs, total: ledgerTotal };
 }
 
 /**
