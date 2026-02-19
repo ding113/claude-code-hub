@@ -340,7 +340,12 @@
         "sessionAge": "会话年龄",
         "reusedProvider": "复用的供应商",
         "executeRequest": "执行请求",
-        "cacheOptimizationHint": "会话复用通过在同一对话中保持供应商亲和性来优化性能，减少选择开销并提高缓存命中率。"
+        "cacheOptimizationHint": "会话复用通过在同一对话中保持供应商亲和性来优化性能，减少选择开销并提高缓存命中率。",
+        "originDecisionTitle": "原始选择决策",
+        "originDecisionDesc": "此会话中供应商最初被选择的原因",
+        "originDecisionLoading": "正在加载原始决策...",
+        "originDecisionUnavailable": "原始决策记录不可用",
+        "originDecisionExpand": "查看原始选择"
       }
     },
     "providerChain": {
@@ -388,13 +393,13 @@
       "users": "用户排行",
       "keys": "密钥排行",
       "userRanking": "用户排行",
-    "providerRanking": "供应商排行",
-    "providerCacheHitRateRanking": "供应商缓存命中率排行",
-    "modelRanking": "模型排行",
-    "dailyRanking": "今日",
-    "weeklyRanking": "本周",
-    "monthlyRanking": "本月",
-    "allTimeRanking": "全部"
+      "providerRanking": "供应商排行",
+      "providerCacheHitRateRanking": "供应商缓存命中率排行",
+      "modelRanking": "模型排行",
+      "dailyRanking": "今日",
+      "weeklyRanking": "本周",
+      "monthlyRanking": "本月",
+      "allTimeRanking": "全部"
     },
     "dateRange": {
       "to": "至",
@@ -413,22 +418,22 @@
       "requests": "请求数",
       "tokens": "Token 数",
       "consumedAmount": "消耗金额",
-    "provider": "供应商",
-    "model": "模型",
-    "cost": "成本",
-    "cacheHitRequests": "缓存触发请求数",
-    "cacheHitRate": "缓存命中率",
-    "cacheReadTokens": "缓存读取 Token 数",
-    "totalTokens": "总 Token 数",
-    "cacheCreationConsumedAmount": "缓存创建消耗金额",
-    "totalConsumedAmount": "总消耗金额",
-    "successRate": "成功率",
-    "avgResponseTime": "平均响应时间",
-    "avgTtfbMs": "平均 TTFB",
-    "avgTokensPerSecond": "平均输出速率",
-    "avgCostPerRequest": "平均单次请求成本",
-    "avgCostPerMillionTokens": "平均百万 Token 成本"
-  },
+      "provider": "供应商",
+      "model": "模型",
+      "cost": "成本",
+      "cacheHitRequests": "缓存触发请求数",
+      "cacheHitRate": "缓存命中率",
+      "cacheReadTokens": "缓存读取 Token 数",
+      "totalTokens": "总 Token 数",
+      "cacheCreationConsumedAmount": "缓存创建消耗金额",
+      "totalConsumedAmount": "总消耗金额",
+      "successRate": "成功率",
+      "avgResponseTime": "平均响应时间",
+      "avgTtfbMs": "平均 TTFB",
+      "avgTokensPerSecond": "平均输出速率",
+      "avgCostPerRequest": "平均单次请求成本",
+      "avgCostPerMillionTokens": "平均百万 Token 成本"
+    },
     "expandModelStats": "展开模型详情",
     "collapseModelStats": "收起模型详情",
     "states": {
@@ -1829,14 +1834,14 @@
           "descriptionEnabled": "启用后，此密钥在登录时将进入独立的个人用量页面。但不可修改自己密钥的供应商分组。",
           "descriptionDisabled": "关闭后，用户将无法进入个人独立用量页面 UI，而是进入受限的 Web UI。"
         },
-      "providerGroup": {
-        "label": "供应商分组",
-        "placeholder": "默认：default",
-        "selectHint": "选择此 Key 可使用的供应商分组",
-        "editHint": "已有密钥的分组不可修改",
-        "allGroups": "使用全部分组",
-        "noGroupHint": "default 分组包含所有未设置 groupTag 的供应商"
-      },
+        "providerGroup": {
+          "label": "供应商分组",
+          "placeholder": "默认：default",
+          "selectHint": "选择此 Key 可使用的供应商分组",
+          "editHint": "已有密钥的分组不可修改",
+          "allGroups": "使用全部分组",
+          "noGroupHint": "default 分组包含所有未设置 groupTag 的供应商"
+        },
         "cacheTtl": {
           "label": "Cache TTL 覆写",
           "description": "强制为包含 cache_control 的请求设置 Anthropic prompt cache TTL。",

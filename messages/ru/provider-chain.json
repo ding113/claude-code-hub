@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total} провайдеров, {healthy} работоспособных → {provider} ✓",
-    "sessionReuse": "Повторное использование сессии → {provider} ✓"
+    "sessionReuse": "Повторное использование сессии → {provider} ✓",
+    "originHint": "Повторное использование сессии - изначально выбрано через {method}"
   },
   "description": {
     "noDecisionRecord": "Нет записей решений",
@@ -213,5 +214,11 @@
     "strictBlockSelectorError": "Строгий режим: ошибка селектора конечных точек, провайдер пропущен без отката",
     "vendorTypeAllTimeout": "Тайм-аут всех конечных точек типа поставщика (524)",
     "vendorTypeAllTimeoutNote": "Все конечные точки этого типа поставщика превысили тайм-аут. Активирован размыкатель типа поставщика."
+  },
+  "selectionMethods": {
+    "session_reuse": "Повторное использование сессии",
+    "weighted_random": "Взвешенный случайный",
+    "group_filtered": "Фильтрация по группе",
+    "fail_open_fallback": "Резервный вариант при сбое"
   }
 }

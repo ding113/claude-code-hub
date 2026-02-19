@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total}個のプロバイダー、{healthy}個正常 → {provider} ✓",
-    "sessionReuse": "セッション再利用 → {provider} ✓"
+    "sessionReuse": "セッション再利用 → {provider} ✓",
+    "originHint": "セッション再利用 - 元は {method} で選択"
   },
   "description": {
     "noDecisionRecord": "決定記録なし",
@@ -213,5 +214,11 @@
     "strictBlockSelectorError": "厳格モード：エンドポイントセレクターでエラーが発生したため、フォールバックなしでプロバイダーをスキップ",
     "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト（524）",
     "vendorTypeAllTimeoutNote": "このベンダータイプの全エンドポイントがタイムアウトしました。ベンダータイプサーキットブレーカーが発動しました。"
+  },
+  "selectionMethods": {
+    "session_reuse": "セッション再利用",
+    "weighted_random": "重み付きランダム",
+    "group_filtered": "グループフィルタ",
+    "fail_open_fallback": "フェイルオープンフォールバック"
   }
 }

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { getSessionOriginChain } from "@/actions/session-origin-chain";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -53,6 +54,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
 export function LogicTraceTab({
   statusCode: _statusCode,
   providerChain,
+  sessionId,
   blockedBy,
   blockedReason,
   requestSequence,
@@ -61,6 +63,9 @@ export function LogicTraceTab({
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
   const [timelineCopied, setTimelineCopied] = useState(false);
+  const [originOpen, setOriginOpen] = useState(false);
+  const [originChain, setOriginChain] = useState<ProviderChainItem[] | null | undefined>(undefined);
+  const [originLoading, setOriginLoading] = useState(false);
 
   const handleCopyTimeline = async () => {
     if (!providerChain) return;
@@ -293,6 +298,111 @@ export function LogicTraceTab({
                 </div>
               }
             />
+          )}
+
+          {isSessionReuseFlow && sessionId && (
+            <Collapsible
+              open={originOpen}
+              onOpenChange={(open) => {
+                setOriginOpen(open);
+                if (open && originChain === undefined && !originLoading) {
+                  setOriginLoading(true);
+                  getSessionOriginChain(sessionId)
+                    .then((result) => {
+                      setOriginChain(result.ok ? result.data : null);
+                    })
+                    .catch(() => {
+                      setOriginChain(null);
+                    })
+                    .finally(() => {
+                      setOriginLoading(false);
+                    });
+                }
+              }}
+            >
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground w-full py-1 px-2">
+                <span>{t("logicTrace.originDecisionExpand")}</span>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                {originLoading && (
+                  <div className="text-xs text-muted-foreground px-2 py-1">
+                    {t("logicTrace.originDecisionLoading")}
+                  </div>
+                )}
+                {!originLoading && originChain === null && (
+                  <div className="text-xs text-muted-foreground px-2 py-1">
+                    {t("logicTrace.originDecisionUnavailable")}
+                  </div>
+                )}
+                {!originLoading &&
+                  originChain &&
+                  originChain.length > 0 &&
+                  (() => {
+                    const originItem =
+                      originChain.find((item) => item.reason === "initial_selection") ??
+                      originChain[0];
+                    const ctx = originItem?.decisionContext;
+                    return (
+                      <div className="space-y-2 px-2 py-1 text-xs">
+                        <div className="font-medium text-muted-foreground">
+                          {t("logicTrace.originDecisionTitle")}
+                        </div>
+                        {ctx && (
+                          <div className="grid grid-cols-2 gap-1.5 pl-2 min-w-0">
+                            <div>
+                              <span className="text-muted-foreground">
+                                {t("logicTrace.providersCount", { count: ctx.totalProviders })}
+                              </span>
+                            </div>
+                            {ctx.enabledProviders !== undefined && (
+                              <div>
+                                <span className="text-muted-foreground">
+                                  {t("logicTrace.providersCount", { count: ctx.enabledProviders })}
+                                </span>
+                              </div>
+                            )}
+                            {ctx.afterHealthCheck !== undefined && (
+                              <div>
+                                <span className="text-muted-foreground">
+                                  {tChain("details.afterHealthCheck")}:
+                                </span>{" "}
+                                <span className="font-mono">{ctx.afterHealthCheck}</span>
+                              </div>
+                            )}
+                            {ctx.selectedPriority !== undefined && (
+                              <div>
+                                <span className="text-muted-foreground">
+                                  {tChain("details.priority")}:
+                                </span>{" "}
+                                <span className="font-mono">P{ctx.selectedPriority}</span>
+                              </div>
+                            )}
+                            {ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0 && (
+                              <div className="col-span-2">
+                                <span className="text-muted-foreground">
+                                  {tChain("details.candidates")}:
+                                </span>{" "}
+                                {ctx.candidatesAtPriority.map((c, i) => (
+                                  <span key={c.id}>
+                                    {i > 0 && ", "}
+                                    {c.name}
+                                    {c.probability !== undefined && (
+                                      <span className="text-muted-foreground">
+                                        {" "}
+                                        {formatProbability(c.probability)}
+                                      </span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
           {/* Step 1: Initial Selection (only for non-session-reuse flow) */}

@@ -101,7 +101,9 @@ const messages = {
       },
     },
   },
-  "provider-chain": {},
+  "provider-chain": {
+    summary: { originHint: "Session reuse - originally selected via {method}" },
+  },
 };
 
 function renderWithIntl(node: ReactNode) {
@@ -323,6 +325,55 @@ describe("provider-chain-popover layout", () => {
 
     const truncateNode = document.querySelector("#root span.truncate");
     expect(truncateNode).not.toBeNull();
+  });
+
+  test("session_reuse item with selectionMethod shows origin hint text", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "session_reuse",
+            selectionMethod: "weighted_random",
+          },
+          { id: 1, name: "p1", reason: "request_success", statusCode: 200 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+    expect(html).toContain("weighted_random");
+    expect(html).toContain("Session reuse - originally selected via");
+  });
+
+  test("non-session-reuse item does NOT show origin hint", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "initial_selection",
+            decisionContext: {
+              totalProviders: 1,
+              enabledProviders: 1,
+              targetType: "claude",
+              groupFilterApplied: false,
+              beforeHealthCheck: 1,
+              afterHealthCheck: 1,
+              priorityLevels: [1],
+              selectedPriority: 1,
+              candidatesAtPriority: [
+                { id: 1, name: "p1", weight: 100, costMultiplier: 1, probability: 1 },
+              ],
+            },
+          },
+          { id: 1, name: "p1", reason: "request_success", statusCode: 200 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+    expect(html).not.toContain("Session reuse - originally selected via");
   });
 
   test("requestCount>1 branch uses w-full/min-w-0 button and flex-1 name container", () => {

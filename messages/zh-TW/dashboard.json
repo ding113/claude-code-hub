@@ -340,7 +340,12 @@
         "sessionAge": "會話年齡",
         "reusedProvider": "複用的供應商",
         "executeRequest": "執行請求",
-        "cacheOptimizationHint": "會話複用通過在同一對話中保持供應商親和性來優化效能，減少選擇開銷並提高快取命中率。"
+        "cacheOptimizationHint": "會話複用通過在同一對話中保持供應商親和性來優化效能，減少選擇開銷並提高快取命中率。",
+        "originDecisionTitle": "原始選擇決策",
+        "originDecisionDesc": "此會話中供應商最初被選擇的原因",
+        "originDecisionLoading": "正在載入原始決策...",
+        "originDecisionUnavailable": "原始決策記錄不可用",
+        "originDecisionExpand": "查看原始選擇"
       }
     },
     "providerChain": {
@@ -1120,8 +1125,16 @@
       "highTooltip": "請求量充足，資料可靠。"
     },
     "actions": {
+      "refresh": "重新整理",
+      "refreshing": "重新整理中...",
+      "autoRefresh": "自動重新整理",
+      "stopAutoRefresh": "停止自動重新整理",
+      "viewDetails": "檢視詳情",
+      "testProvider": "測試供應商",
+      "retry": "重試",
       "probeNow": "立即探測",
       "probing": "探測中...",
+      "probeAll": "探測全部",
       "probeSuccess": "探測成功",
       "probeFailed": "探測失敗"
     },
@@ -1182,20 +1195,6 @@
       "timeBuckets": "時間分段",
       "greenCount": "成功請求",
       "redCount": "失敗請求"
-    },
-    "actions": {
-      "refresh": "重新整理",
-      "refreshing": "重新整理中...",
-      "autoRefresh": "自動重新整理",
-      "stopAutoRefresh": "停止自動重新整理",
-      "viewDetails": "檢視詳情",
-      "testProvider": "測試供應商",
-      "retry": "重試",
-      "probeNow": "立即探測",
-      "probing": "探測中...",
-      "probeAll": "探測全部",
-      "probeSuccess": "探測成功",
-      "probeFailed": "探測失敗"
     },
     "states": {
       "loading": "載入中...",
