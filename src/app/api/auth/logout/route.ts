@@ -30,7 +30,10 @@ async function getLogoutSessionStore() {
 function resolveSessionTokenMode(): SessionTokenMode {
   try {
     return getSessionTokenMode();
-  } catch {
+  } catch (err) {
+    logger.warn("[AuthLogout] Failed to resolve session token mode, defaulting to legacy", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return "legacy";
   }
 }
@@ -38,7 +41,10 @@ function resolveSessionTokenMode(): SessionTokenMode {
 async function resolveAuthCookieToken(): Promise<string | undefined> {
   try {
     return await getAuthCookie();
-  } catch {
+  } catch (err) {
+    logger.warn("[AuthLogout] Failed to read auth cookie", {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return undefined;
   }
 }

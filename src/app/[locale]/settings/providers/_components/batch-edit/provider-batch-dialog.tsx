@@ -194,7 +194,7 @@ function BatchEditDialogContent({
         setStep("edit");
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : t("toast.unknownError");
       toast.error(t("toast.previewFailed", { error: message }));
       setStep("edit");
     } finally {
@@ -235,12 +235,17 @@ function BatchEditDialogContent({
           action: {
             label: t("toast.undo"),
             onClick: async () => {
-              const undoResult = await undoProviderPatch({ undoToken, operationId });
-              if (undoResult.ok) {
-                toast.success(t("toast.undoSuccess", { count: undoResult.data.revertedCount }));
-                queryClient.invalidateQueries({ queryKey: ["providers"] });
-              } else {
-                toast.error(t("toast.undoFailed", { error: undoResult.error }));
+              try {
+                const undoResult = await undoProviderPatch({ undoToken, operationId });
+                if (undoResult.ok) {
+                  toast.success(t("toast.undoSuccess", { count: undoResult.data.revertedCount }));
+                  queryClient.invalidateQueries({ queryKey: ["providers"] });
+                } else {
+                  toast.error(t("toast.undoFailed", { error: undoResult.error }));
+                }
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : t("toast.unknownError");
+                toast.error(t("toast.undoFailed", { error: msg }));
               }
             },
           },
@@ -249,7 +254,7 @@ function BatchEditDialogContent({
         toast.error(t("toast.failed", { error: result.error }));
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : t("toast.unknownError");
       toast.error(t("toast.failed", { error: message }));
     } finally {
       setIsSubmitting(false);
@@ -446,7 +451,7 @@ function BatchConfirmDialog({
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
+      const message = error instanceof Error ? error.message : t("toast.unknownError");
       toast.error(t("toast.failed", { error: message }));
     } finally {
       setIsSubmitting(false);

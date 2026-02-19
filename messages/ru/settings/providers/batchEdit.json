@@ -99,6 +99,7 @@
     "undoSuccess": "Восстановлено поставщиков: {count}",
     "undoFailed": "Отмена не удалась: {error}",
     "undoExpired": "Время отмены истекло",
-    "previewFailed": "Предпросмотр не удался: {error}"
+    "previewFailed": "Предпросмотр не удался: {error}",
+    "unknownError": "Неизвестная ошибка"
   }
 }

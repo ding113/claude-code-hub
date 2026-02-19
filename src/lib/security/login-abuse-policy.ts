@@ -156,6 +156,8 @@ export class LoginAbusePolicy {
 
     if (record.count >= threshold) {
       const lockedUntil = now + this.config.lockoutSeconds * 1000;
+      // LRU bump: delete + re-insert so locked entries survive eviction
+      this.attempts.delete(scopeKey);
       this.attempts.set(scopeKey, { ...record, lockedUntil });
       return {
         allowed: false,
@@ -163,6 +165,11 @@ export class LoginAbusePolicy {
         reason,
       };
     }
+
+    // LRU bump: delete + re-insert moves entry to end of Map iteration order,
+    // so the eviction loop in sweepStaleEntries removes least-recently-used first
+    this.attempts.delete(scopeKey);
+    this.attempts.set(scopeKey, record);
 
     return { allowed: true };
   }
@@ -185,11 +192,13 @@ export class LoginAbusePolicy {
         return;
       }
 
+      this.attempts.delete(scopeKey);
       this.attempts.set(scopeKey, this.createFirstRecord(now, threshold));
       return;
     }
 
     if (this.isWindowExpired(record, now)) {
+      this.attempts.delete(scopeKey);
       this.attempts.set(scopeKey, this.createFirstRecord(now, threshold));
       return;
     }
@@ -204,6 +213,8 @@ export class LoginAbusePolicy {
       nextRecord.lockedUntil = now + this.config.lockoutSeconds * 1000;
     }
 
+    // LRU bump: delete + re-insert moves entry to end of iteration order
+    this.attempts.delete(scopeKey);
     this.attempts.set(scopeKey, nextRecord);
   }
 

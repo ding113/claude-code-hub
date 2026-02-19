@@ -209,7 +209,7 @@ describe("ThinkingBudgetEditor", () => {
       input.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    expect(onChange).toHaveBeenCalledWith("inherit");
+    expect(onChange).toHaveBeenCalledWith("");
 
     unmount();
   });

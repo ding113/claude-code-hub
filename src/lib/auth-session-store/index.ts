@@ -17,4 +17,4 @@ export interface SessionStore {
   rotate(oldSessionId: string): Promise<SessionData | null>;
 }
 
-export const DEFAULT_SESSION_TTL = 86400;
+export const DEFAULT_SESSION_TTL = 604800;

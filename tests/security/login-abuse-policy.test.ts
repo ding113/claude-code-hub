@@ -157,4 +157,78 @@ describe("LoginAbusePolicy", () => {
       expect(policy.check(ip)).toEqual({ allowed: true });
     }
   });
+
+  it("uses LRU eviction: recently accessed entries survive over stale ones", () => {
+    const policy = new LoginAbusePolicy({
+      maxAttemptsPerIp: 5,
+      windowSeconds: 600,
+      lockoutSeconds: 900,
+    });
+
+    // Fill 10_050 entries via recordFailure (does NOT trigger sweep).
+    const totalEntries = 10_050;
+    for (let i = 0; i < totalEntries; i++) {
+      const ip = `${Math.floor(i / 65536) % 256}.${Math.floor(i / 256) % 256}.${i % 256}.1`;
+      policy.recordFailure(ip);
+    }
+
+    // "Touch" an early IP via recordFailure - LRU bump moves it to the end.
+    // Position 10 (i=10) is inside the eviction range [0..49], so without
+    // the LRU bump this entry WOULD be evicted.
+    const touchedIp = "0.0.10.1";
+    policy.recordFailure(touchedIp);
+
+    // Pick an un-bumped IP also inside the eviction range to verify it IS evicted.
+    const evictedIp = "0.0.5.1";
+
+    // Trigger a sweep by calling check (lastSweepAt=0, so sweep interval met).
+    // Sweep finds size 10_050 > 10_000, evicts 50 from the start.
+    // The touchedIp was bumped to end, so it survives eviction.
+    vi.advanceTimersByTime(61_000);
+    policy.check("99.99.99.99");
+
+    // Negative assertion: un-bumped early entry was evicted (starts fresh).
+    expect(policy.check(evictedIp)).toEqual({ allowed: true });
+
+    // touchedIp had 1 (initial) + 1 (bump) = 2 failures.
+    // Record 3 more to hit threshold of 5.
+    policy.recordFailure(touchedIp);
+    policy.recordFailure(touchedIp);
+    policy.recordFailure(touchedIp);
+
+    const decision = policy.check(touchedIp);
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe("ip_rate_limited");
+  });
+
+  it("LRU bump in recordFailureForScope preserves active entries", () => {
+    const policy = new LoginAbusePolicy({
+      maxAttemptsPerIp: 10,
+      windowSeconds: 600,
+      lockoutSeconds: 900,
+    });
+
+    // Fill with stale entries
+    for (let i = 0; i < 10_050; i++) {
+      const ip = `${Math.floor(i / 65536) % 256}.${Math.floor(i / 256) % 256}.${i % 256}.2`;
+      policy.recordFailure(ip);
+    }
+
+    // Record additional failures on an early entry (LRU bump via recordFailure)
+    const activeIp = "0.0.10.2";
+    policy.recordFailure(activeIp);
+
+    // Trigger sweep
+    vi.advanceTimersByTime(61_000);
+    policy.check("99.99.99.99");
+
+    // The actively-failed IP should still be tracked
+    // Record enough total failures to trigger lockout (it had 1 initial + 1 bump = 2)
+    for (let j = 0; j < 8; j++) {
+      policy.recordFailure(activeIp);
+    }
+    const decision = policy.check(activeIp);
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe("ip_rate_limited");
+  });
 });

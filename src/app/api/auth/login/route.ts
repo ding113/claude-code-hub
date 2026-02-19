@@ -188,6 +188,8 @@ export async function POST(request: NextRequest) {
     const { key } = await request.json();
 
     if (!key || typeof key !== "string") {
+      loginPolicy.recordFailure(clientIp);
+
       if (!shouldIncludeFailureTaxonomy(request)) {
         return withAuthResponseHeaders(
           NextResponse.json(

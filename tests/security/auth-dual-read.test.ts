@@ -205,8 +205,8 @@ describe("auth dual-read session resolver", () => {
       keyFingerprint: toFingerprint(keyString),
       userId: 21,
       userRole: "user",
-      createdAt: 1_700_000_000,
-      expiresAt: 1_700_000_600,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 3_600_000,
     });
     mockFindKeyList.mockResolvedValue([
       buildKey(1, 21, "sk-not-match"),

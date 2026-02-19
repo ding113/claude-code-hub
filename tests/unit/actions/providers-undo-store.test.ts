@@ -1,5 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const setexMock = vi.fn();
+const getMock = vi.fn();
+const delMock = vi.fn();
+const evalMock = vi.fn();
+
+vi.mock("@/lib/redis/client", () => ({
+  getRedisClient: () => ({
+    status: "ready",
+    setex: setexMock,
+    get: getMock,
+    del: delMock,
+    eval: evalMock,
+  }),
+}));
+
+vi.mock("@/lib/logger", () => ({
+  logger: {
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
+vi.mock("server-only", () => ({}));
+
 function buildSnapshot(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     operationId: "op-1",
@@ -16,6 +42,9 @@ describe("providers undo store", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-02-18T00:00:00.000Z"));
     vi.resetModules();
+    vi.clearAllMocks();
+    setexMock.mockResolvedValue("OK");
+    delMock.mockResolvedValue(1);
   });
 
   afterEach(() => {
@@ -26,31 +55,34 @@ describe("providers undo store", () => {
   it("stores snapshot and consumes token within TTL", async () => {
     const token = "11111111-1111-1111-1111-111111111111";
     vi.spyOn(crypto, "randomUUID").mockReturnValue(token);
-    const { storeUndoSnapshot, consumeUndoToken } = await import("@/lib/providers/undo-store");
 
     const snapshot = buildSnapshot();
+    evalMock.mockResolvedValue(JSON.stringify(snapshot));
+
+    const { storeUndoSnapshot, consumeUndoToken } = await import("@/lib/providers/undo-store");
+
     const storeResult = await storeUndoSnapshot(snapshot);
 
     expect(storeResult).toEqual({
       undoAvailable: true,
       undoToken: token,
-      expiresAt: "2026-02-18T00:00:10.000Z",
+      expiresAt: "2026-02-18T00:00:30.000Z",
     });
+    expect(setexMock).toHaveBeenCalledWith(`cch:prov:undo:${token}`, 30, JSON.stringify(snapshot));
 
     const consumeResult = await consumeUndoToken(token);
     expect(consumeResult).toEqual({
       ok: true,
       snapshot,
     });
+    expect(evalMock).toHaveBeenCalledWith(expect.any(String), 1, `cch:prov:undo:${token}`);
   });
 
-  it("returns UNDO_EXPIRED after token TTL has passed", async () => {
+  it("returns UNDO_EXPIRED when Redis returns null (TTL passed)", async () => {
     const token = "22222222-2222-2222-2222-222222222222";
-    vi.spyOn(crypto, "randomUUID").mockReturnValue(token);
-    const { storeUndoSnapshot, consumeUndoToken } = await import("@/lib/providers/undo-store");
+    evalMock.mockResolvedValue(null);
 
-    await storeUndoSnapshot(buildSnapshot({ operationId: "op-2" }));
-    vi.advanceTimersByTime(10_001);
+    const { consumeUndoToken } = await import("@/lib/providers/undo-store");
 
     const consumeResult = await consumeUndoToken(token);
     expect(consumeResult).toEqual({
@@ -59,13 +91,17 @@ describe("providers undo store", () => {
     });
   });
 
-  it("consumes a token only once", async () => {
+  it("consumes a token only once (getAndDelete)", async () => {
     const token = "33333333-3333-3333-3333-333333333333";
     vi.spyOn(crypto, "randomUUID").mockReturnValue(token);
-    const { storeUndoSnapshot, consumeUndoToken } = await import("@/lib/providers/undo-store");
 
     const snapshot = buildSnapshot({ operationId: "op-3" });
+
+    const { storeUndoSnapshot, consumeUndoToken } = await import("@/lib/providers/undo-store");
+
     await storeUndoSnapshot(snapshot);
+
+    evalMock.mockResolvedValueOnce(JSON.stringify(snapshot)).mockResolvedValueOnce(null);
 
     const first = await consumeUndoToken(token);
     const second = await consumeUndoToken(token);
@@ -75,6 +111,8 @@ describe("providers undo store", () => {
   });
 
   it("returns UNDO_EXPIRED for unknown token", async () => {
+    evalMock.mockResolvedValue(null);
+
     const { consumeUndoToken } = await import("@/lib/providers/undo-store");
     const result = await consumeUndoToken("undo-token-missing");
 
@@ -104,6 +142,10 @@ describe("providers undo store", () => {
     expect(storeA.undoToken).toBe(tokenA);
     expect(storeB.undoToken).toBe(tokenB);
 
+    evalMock
+      .mockResolvedValueOnce(JSON.stringify(snapshotA))
+      .mockResolvedValueOnce(JSON.stringify(snapshotB));
+
     await expect(consumeUndoToken(tokenA)).resolves.toEqual({
       ok: true,
       snapshot: snapshotA,
@@ -121,6 +163,17 @@ describe("providers undo store", () => {
 
     const { storeUndoSnapshot } = await import("@/lib/providers/undo-store");
     const result = await storeUndoSnapshot(buildSnapshot({ operationId: "op-6" }));
+
+    expect(result).toEqual({ undoAvailable: false });
+  });
+
+  it("returns undoAvailable false when Redis set fails", async () => {
+    const token = "66666666-6666-6666-6666-666666666666";
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(token);
+    setexMock.mockRejectedValue(new Error("Redis write error"));
+
+    const { storeUndoSnapshot } = await import("@/lib/providers/undo-store");
+    const result = await storeUndoSnapshot(buildSnapshot({ operationId: "op-7" }));
 
     expect(result).toEqual({ undoAvailable: false });
   });

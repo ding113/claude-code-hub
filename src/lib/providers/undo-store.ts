@@ -1,8 +1,10 @@
 import "server-only";
 
+import { logger } from "@/lib/logger";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 
-const UNDO_SNAPSHOT_TTL_MS = 10_000;
+const UNDO_SNAPSHOT_TTL_SECONDS = 30;
 
 export interface UndoSnapshot {
   operationId: string;
@@ -28,40 +30,23 @@ export type ConsumeUndoResult =
       code: "UNDO_EXPIRED" | "UNDO_CONFLICT";
     };
 
-interface UndoStoreEntry {
-  snapshot: UndoSnapshot;
-  expiresAtMs: number;
-  cleanupTimer: ReturnType<typeof setTimeout>;
-}
-
-const undoSnapshotStore = new Map<string, UndoStoreEntry>();
-
-function removeUndoEntry(token: string, entry?: UndoStoreEntry): void {
-  const resolved = entry ?? undoSnapshotStore.get(token);
-  if (!resolved) {
-    return;
-  }
-
-  clearTimeout(resolved.cleanupTimer);
-  undoSnapshotStore.delete(token);
-}
+const store = new RedisKVStore<UndoSnapshot>({
+  prefix: "cch:prov:undo:",
+  defaultTtlSeconds: UNDO_SNAPSHOT_TTL_SECONDS,
+});
 
 export async function storeUndoSnapshot(snapshot: UndoSnapshot): Promise<StoreUndoResult> {
   try {
-    const nowMs = Date.now();
     const undoToken = crypto.randomUUID();
-    const expiresAtMs = nowMs + UNDO_SNAPSHOT_TTL_MS;
+    const expiresAtMs = Date.now() + UNDO_SNAPSHOT_TTL_SECONDS * 1000;
 
-    const cleanupTimer = setTimeout(() => {
-      undoSnapshotStore.delete(undoToken);
-    }, UNDO_SNAPSHOT_TTL_MS);
-    cleanupTimer.unref?.();
-
-    undoSnapshotStore.set(undoToken, {
-      snapshot,
-      expiresAtMs,
-      cleanupTimer,
-    });
+    const stored = await store.set(undoToken, snapshot);
+    if (!stored) {
+      logger.warn("[undo-store] Failed to persist undo snapshot; undo unavailable", {
+        operationId: snapshot.operationId,
+      });
+      return { undoAvailable: false };
+    }
 
     return {
       undoAvailable: true,
@@ -75,17 +60,8 @@ export async function storeUndoSnapshot(snapshot: UndoSnapshot): Promise<StoreUn
 
 export async function consumeUndoToken(token: string): Promise<ConsumeUndoResult> {
   try {
-    const entry = undoSnapshotStore.get(token);
-    if (!entry) {
-      return {
-        ok: false,
-        code: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
-      };
-    }
-
-    removeUndoEntry(token, entry);
-
-    if (entry.expiresAtMs <= Date.now()) {
+    const snapshot = await store.getAndDelete(token);
+    if (!snapshot) {
       return {
         ok: false,
         code: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
@@ -94,7 +70,7 @@ export async function consumeUndoToken(token: string): Promise<ConsumeUndoResult
 
     return {
       ok: true,
-      snapshot: entry.snapshot,
+      snapshot,
     };
   } catch {
     return {

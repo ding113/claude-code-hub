@@ -37,12 +37,7 @@ export function ThinkingBudgetEditor({
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    if (val === "") {
-      onChange("inherit");
-    } else {
-      onChange(val);
-    }
+    onChange(e.target.value);
   };
 
   const handleMaxOut = () => {

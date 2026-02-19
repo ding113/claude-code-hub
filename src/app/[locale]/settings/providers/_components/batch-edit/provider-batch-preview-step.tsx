@@ -2,7 +2,24 @@
 
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+
+// ---------------------------------------------------------------------------
+// Field label lookup (uses existing translations with readable fallback)
+// ---------------------------------------------------------------------------
+
+const FIELD_LABEL_KEYS: Record<string, string> = {
+  is_enabled: "fields.isEnabled.label",
+  priority: "fields.priority",
+  weight: "fields.weight",
+  cost_multiplier: "fields.costMultiplier",
+  group_tag: "fields.groupTag.label",
+  model_redirects: "fields.modelRedirects",
+  allowed_models: "fields.allowedModels",
+  anthropic_thinking_budget_preference: "fields.thinkingBudget",
+  anthropic_adaptive_thinking: "fields.adaptiveThinking",
+};
+
 import type { ProviderBatchPreviewRow } from "@/actions/providers";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -53,6 +70,15 @@ export function ProviderBatchPreviewStep({
     }
     return Array.from(map.values());
   }, [rows]);
+
+  const getFieldLabel = useCallback(
+    (field: string): string => {
+      const key = FIELD_LABEL_KEYS[field];
+      if (key) return t(key);
+      return field.replace(/_/g, " ");
+    },
+    [t]
+  );
 
   if (isLoading) {
     return (
@@ -121,12 +147,12 @@ export function ProviderBatchPreviewStep({
                   >
                     {row.status === "changed"
                       ? t("preview.fieldChanged", {
-                          field: row.field,
+                          field: getFieldLabel(row.field),
                           before: formatValue(row.before),
                           after: formatValue(row.after),
                         })
                       : t("preview.fieldSkipped", {
-                          field: row.field,
+                          field: getFieldLabel(row.field),
                           reason: row.skipReason ?? "",
                         })}
                   </div>

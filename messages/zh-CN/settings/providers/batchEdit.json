@@ -99,6 +99,7 @@
     "undoSuccess": "已还原 {count} 个供应商",
     "undoFailed": "撤销失败: {error}",
     "undoExpired": "撤销窗口已过期",
-    "previewFailed": "预览失败: {error}"
+    "previewFailed": "预览失败: {error}",
+    "unknownError": "未知错误"
   }
 }

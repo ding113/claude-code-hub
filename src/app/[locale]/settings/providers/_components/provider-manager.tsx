@@ -346,7 +346,7 @@ export function ProviderManager({
               ?.split(",")
               .map((tag) => tag.trim())
               .filter(Boolean) ?? [];
-          if (tags.includes(group)) {
+          if (tags.includes(group) || (group === "default" && tags.length === 0)) {
             next.add(p.id);
           }
         }

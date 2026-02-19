@@ -7,7 +7,12 @@ import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
+import type {
+  AnthropicAdaptiveThinkingConfig,
+  CreateProviderData,
+  Provider,
+  UpdateProviderData,
+} from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
 import {
   ensureProviderEndpointExistsForUrl,
@@ -969,7 +974,7 @@ export interface BatchProviderUpdates {
   modelRedirects?: Record<string, string> | null;
   allowedModels?: string[] | null;
   anthropicThinkingBudgetPreference?: string | null;
-  anthropicAdaptiveThinking?: object | null;
+  anthropicAdaptiveThinking?: AnthropicAdaptiveThinkingConfig | null;
   // Routing
   preserveClientIp?: boolean;
   groupPriorities?: Record<string, number> | null;

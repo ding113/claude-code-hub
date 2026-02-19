@@ -27,7 +27,7 @@ export default function LoginLoading() {
           <Skeleton className="h-4 w-64" />
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
-          <LoadingState className="text-center" />
+          <LoadingState label="" className="text-center" />
         </div>
       </div>
     </div>

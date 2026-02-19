@@ -40,6 +40,7 @@ import {
   deleteProviderCircuitConfig,
   saveProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
+import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
@@ -784,16 +785,11 @@ export async function editProvider(
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "edit", providerId });
 
-    const nowMs = Date.now();
-    cleanupProviderPatchStores(nowMs);
-
     const undoToken = createProviderPatchUndoToken();
     const operationId = createProviderPatchOperationId();
-    const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_MS;
 
-    providerPatchUndoStore.set(undoToken, {
+    await providerPatchUndoStore.set(undoToken, {
       undoToken,
-      undoExpiresAt: undoExpiresAtMs,
       operationId,
       providerIds: [providerId],
       preimage: {
@@ -829,23 +825,13 @@ export async function removeProvider(
     const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
 
-    const nowMs = Date.now();
-    cleanupProviderPatchStores(nowMs);
-
     const undoToken = createProviderPatchUndoToken();
     const operationId = createProviderPatchOperationId();
-    const undoExpiresAtMs = nowMs + PROVIDER_DELETE_UNDO_TTL_MS;
-    const cleanupTimer = setTimeout(() => {
-      providerDeleteUndoStore.delete(undoToken);
-    }, PROVIDER_DELETE_UNDO_TTL_MS);
-    cleanupTimer.unref?.();
 
-    providerDeleteUndoStore.set(undoToken, {
+    await providerDeleteUndoStore.set(undoToken, {
       undoToken,
-      undoExpiresAt: undoExpiresAtMs,
       operationId,
       providerIds: [providerId],
-      cleanupTimer,
     });
 
     // 清除内存缓存（无论 Redis 是否成功都要执行）
@@ -1115,9 +1101,9 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
 }
 
 const BATCH_OPERATION_MAX_SIZE = 500;
-const PROVIDER_BATCH_PREVIEW_TTL_MS = 60_000;
-const PROVIDER_PATCH_UNDO_TTL_MS = 10_000;
-const PROVIDER_DELETE_UNDO_TTL_MS = 60_000;
+const PROVIDER_BATCH_PREVIEW_TTL_SECONDS = 60;
+const PROVIDER_PATCH_UNDO_TTL_SECONDS = 10;
+const PROVIDER_DELETE_UNDO_TTL_SECONDS = 60;
 
 const ProviderBatchPatchProviderIdsSchema = z
   .array(z.number().int().positive())
@@ -1219,19 +1205,17 @@ export interface UndoProviderDeleteResult {
 interface ProviderBatchPatchPreviewSnapshot {
   previewToken: string;
   previewRevision: string;
-  previewExpiresAt: number;
   providerIds: number[];
   patch: ProviderBatchPatch;
   patchSerialized: string;
   changedFields: ProviderBatchPatchField[];
   rows: ProviderBatchPreviewRow[];
   applied: boolean;
-  appliedResultByIdempotencyKey: Map<string, ApplyProviderBatchPatchResult>;
+  appliedResultByIdempotencyKey: Record<string, ApplyProviderBatchPatchResult>;
 }
 
 interface ProviderPatchUndoSnapshot {
   undoToken: string;
-  undoExpiresAt: number;
   operationId: string;
   providerIds: number[];
   preimage: Record<number, Record<string, unknown>>;
@@ -1240,15 +1224,22 @@ interface ProviderPatchUndoSnapshot {
 
 interface ProviderDeleteUndoSnapshot {
   undoToken: string;
-  undoExpiresAt: number;
   operationId: string;
   providerIds: number[];
-  cleanupTimer: ReturnType<typeof setTimeout>;
 }
 
-const providerBatchPatchPreviewStore = new Map<string, ProviderBatchPatchPreviewSnapshot>();
-const providerPatchUndoStore = new Map<string, ProviderPatchUndoSnapshot>();
-const providerDeleteUndoStore = new Map<string, ProviderDeleteUndoSnapshot>();
+const providerBatchPatchPreviewStore = new RedisKVStore<ProviderBatchPatchPreviewSnapshot>({
+  prefix: "cch:prov:preview:",
+  defaultTtlSeconds: PROVIDER_BATCH_PREVIEW_TTL_SECONDS,
+});
+const providerPatchUndoStore = new RedisKVStore<ProviderPatchUndoSnapshot>({
+  prefix: "cch:prov:undo-patch:",
+  defaultTtlSeconds: PROVIDER_PATCH_UNDO_TTL_SECONDS,
+});
+const providerDeleteUndoStore = new RedisKVStore<ProviderDeleteUndoSnapshot>({
+  prefix: "cch:prov:undo-del:",
+  defaultTtlSeconds: PROVIDER_DELETE_UNDO_TTL_SECONDS,
+});
 type ProviderPatchActionError = Extract<ActionResult, { ok: false }>;
 
 const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider> = {
@@ -1336,19 +1327,9 @@ function dedupeProviderIds(providerIds: number[]): number[] {
 }
 
 function getChangedPatchFields(patch: ProviderBatchPatch): ProviderBatchPatchField[] {
-  const fieldOrder: ProviderBatchPatchField[] = [
-    "is_enabled",
-    "priority",
-    "weight",
-    "cost_multiplier",
-    "group_tag",
-    "model_redirects",
-    "allowed_models",
-    "anthropic_thinking_budget_preference",
-    "anthropic_adaptive_thinking",
-  ];
-
-  return fieldOrder.filter((field) => patch[field].mode !== "no_change");
+  return (Object.keys(patch) as ProviderBatchPatchField[]).filter(
+    (field) => patch[field].mode !== "no_change"
+  );
 }
 
 function isSameProviderIdList(left: number[], right: number[]): boolean {
@@ -1375,37 +1356,6 @@ function createProviderPatchUndoToken(): string {
 
 function createProviderPatchOperationId(): string {
   return `provider_patch_apply_${crypto.randomUUID()}`;
-}
-
-function clearProviderDeleteUndoSnapshot(undoToken: string): void {
-  const snapshot = providerDeleteUndoStore.get(undoToken);
-  if (!snapshot) {
-    return;
-  }
-
-  clearTimeout(snapshot.cleanupTimer);
-  providerDeleteUndoStore.delete(undoToken);
-}
-
-function cleanupProviderPatchStores(nowMs: number): void {
-  for (const [previewToken, snapshot] of providerBatchPatchPreviewStore.entries()) {
-    if (snapshot.previewExpiresAt <= nowMs) {
-      providerBatchPatchPreviewStore.delete(previewToken);
-    }
-  }
-
-  for (const [undoToken, snapshot] of providerPatchUndoStore.entries()) {
-    if (snapshot.undoExpiresAt <= nowMs) {
-      providerPatchUndoStore.delete(undoToken);
-    }
-  }
-
-  for (const [undoToken, snapshot] of providerDeleteUndoStore.entries()) {
-    if (snapshot.undoExpiresAt <= nowMs) {
-      clearTimeout(snapshot.cleanupTimer);
-      providerDeleteUndoStore.delete(undoToken);
-    }
-  }
 }
 
 function buildActionValidationError(error: z.ZodError): ProviderPatchActionError {
@@ -1639,6 +1589,41 @@ function isGeminiProviderType(providerType: ProviderType): boolean {
   return providerType === "gemini" || providerType === "gemini-cli";
 }
 
+const CLAUDE_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
+  "anthropicThinkingBudgetPreference",
+  "anthropicAdaptiveThinking",
+  "anthropicMaxTokensPreference",
+  "context1mPreference",
+]);
+
+const CODEX_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
+  "codexReasoningEffortPreference",
+  "codexReasoningSummaryPreference",
+  "codexTextVerbosityPreference",
+  "codexParallelToolCallsPreference",
+]);
+
+const GEMINI_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
+  "geminiGoogleSearchPreference",
+]);
+
+function filterRepositoryUpdatesByProviderType(
+  updates: BatchProviderUpdates,
+  providerType: string
+): BatchProviderUpdates {
+  const filtered = { ...updates };
+  if (!isClaudeProviderType(providerType as ProviderType)) {
+    for (const key of CLAUDE_ONLY_REPO_KEYS) delete filtered[key];
+  }
+  if (!isCodexProviderType(providerType as ProviderType)) {
+    for (const key of CODEX_ONLY_REPO_KEYS) delete filtered[key];
+  }
+  if (!isGeminiProviderType(providerType as ProviderType)) {
+    for (const key of GEMINI_ONLY_REPO_KEYS) delete filtered[key];
+  }
+  return filtered;
+}
+
 function computePreviewAfterValue(
   field: ProviderBatchPatchField,
   operation: ProviderPatchOperation<unknown>
@@ -1746,7 +1731,6 @@ export async function previewProviderBatchPatch(
     const providerIds = dedupeProviderIds(parsed.data.providerIds);
     const changedFields = getChangedPatchFields(normalizedPatch.data);
     const nowMs = Date.now();
-    cleanupProviderPatchStores(nowMs);
 
     const allProviders = await findAllProvidersFresh();
     const providerIdSet = new Set(providerIds);
@@ -1756,19 +1740,18 @@ export async function previewProviderBatchPatch(
 
     const previewToken = createProviderBatchPreviewToken();
     const previewRevision = `${nowMs}:${providerIds.join(",")}:${changedFields.join(",")}`;
-    const previewExpiresAt = nowMs + PROVIDER_BATCH_PREVIEW_TTL_MS;
+    const previewExpiresAt = nowMs + PROVIDER_BATCH_PREVIEW_TTL_SECONDS * 1000;
 
-    providerBatchPatchPreviewStore.set(previewToken, {
+    await providerBatchPatchPreviewStore.set(previewToken, {
       previewToken,
       previewRevision,
-      previewExpiresAt,
       providerIds,
       patch: normalizedPatch.data,
       patchSerialized: JSON.stringify(normalizedPatch.data),
       changedFields,
       rows,
       applied: false,
-      appliedResultByIdempotencyKey: new Map(),
+      appliedResultByIdempotencyKey: {},
     });
 
     return {
@@ -1809,11 +1792,9 @@ export async function applyProviderBatchPatch(
     }
 
     const nowMs = Date.now();
-    cleanupProviderPatchStores(nowMs);
 
-    const snapshot = providerBatchPatchPreviewStore.get(parsed.data.previewToken);
-    if (!snapshot || snapshot.previewExpiresAt <= nowMs) {
-      providerBatchPatchPreviewStore.delete(parsed.data.previewToken);
+    const snapshot = await providerBatchPatchPreviewStore.get(parsed.data.previewToken);
+    if (!snapshot) {
       return {
         ok: false,
         error: "预览已过期，请重新预览",
@@ -1842,7 +1823,7 @@ export async function applyProviderBatchPatch(
       patchSerialized !== snapshot.patchSerialized;
 
     if (parsed.data.idempotencyKey) {
-      const existingResult = snapshot.appliedResultByIdempotencyKey.get(parsed.data.idempotencyKey);
+      const existingResult = snapshot.appliedResultByIdempotencyKey[parsed.data.idempotencyKey];
       if (existingResult) {
         return { ok: true, data: existingResult };
       }
@@ -1890,13 +1871,36 @@ export async function applyProviderBatchPatch(
     }
 
     const repositoryUpdates = mapApplyUpdatesToRepositoryFormat(updatesResult.data);
-    const dbUpdatedCount = await updateProvidersBatch(effectiveProviderIds, repositoryUpdates);
+
+    const hasTypeSpecificFields = changedFields.some(
+      (f) => CLAUDE_ONLY_FIELDS.has(f) || CODEX_ONLY_FIELDS.has(f) || GEMINI_ONLY_FIELDS.has(f)
+    );
+
+    let dbUpdatedCount: number;
+    if (!hasTypeSpecificFields) {
+      dbUpdatedCount = await updateProvidersBatch(effectiveProviderIds, repositoryUpdates);
+    } else {
+      const providersByType = new Map<string, number[]>();
+      for (const provider of matchedProviders) {
+        const type = provider.providerType;
+        if (!providersByType.has(type)) providersByType.set(type, []);
+        providersByType.get(type)!.push(provider.id);
+      }
+
+      dbUpdatedCount = 0;
+      for (const [type, ids] of providersByType) {
+        const filtered = filterRepositoryUpdatesByProviderType(repositoryUpdates, type);
+        if (Object.keys(filtered).length > 0) {
+          dbUpdatedCount += await updateProvidersBatch(ids, filtered);
+        }
+      }
+    }
 
     await publishProviderCacheInvalidation();
 
     const appliedAt = new Date(nowMs).toISOString();
     const undoToken = createProviderPatchUndoToken();
-    const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_MS;
+    const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_SECONDS * 1000;
 
     const applyResult: ApplyProviderBatchPatchResult = {
       operationId: createProviderPatchOperationId(),
@@ -1908,12 +1912,12 @@ export async function applyProviderBatchPatch(
 
     snapshot.applied = true;
     if (parsed.data.idempotencyKey) {
-      snapshot.appliedResultByIdempotencyKey.set(parsed.data.idempotencyKey, applyResult);
+      snapshot.appliedResultByIdempotencyKey[parsed.data.idempotencyKey] = applyResult;
     }
+    await providerBatchPatchPreviewStore.set(parsed.data.previewToken, snapshot);
 
-    providerPatchUndoStore.set(undoToken, {
+    await providerPatchUndoStore.set(undoToken, {
       undoToken,
-      undoExpiresAt: undoExpiresAtMs,
       operationId: applyResult.operationId,
       providerIds: effectiveProviderIds,
       preimage,
@@ -1943,11 +1947,9 @@ export async function undoProviderPatch(
     }
 
     const nowMs = Date.now();
-    cleanupProviderPatchStores(nowMs);
 
-    const snapshot = providerPatchUndoStore.get(parsed.data.undoToken);
-    if (!snapshot || snapshot.undoExpiresAt <= nowMs) {
-      providerPatchUndoStore.delete(parsed.data.undoToken);
+    const snapshot = await providerPatchUndoStore.get(parsed.data.undoToken);
+    if (!snapshot) {
       return {
         ok: false,
         error: "撤销窗口已过期",
@@ -1962,6 +1964,9 @@ export async function undoProviderPatch(
         errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
       };
     }
+
+    // Delete after validation passes so operationId mismatch doesn't destroy the token
+    await providerPatchUndoStore.delete(parsed.data.undoToken);
 
     // Group providers by identical preimage values to minimise DB round-trips
     const preimageGroups = new Map<string, { ids: number[]; updates: BatchProviderUpdates }>();
@@ -2000,8 +2005,6 @@ export async function undoProviderPatch(
     if (preimageGroups.size > 0) {
       await publishProviderCacheInvalidation();
     }
-
-    providerPatchUndoStore.delete(parsed.data.undoToken);
 
     return {
       ok: true,
@@ -2134,23 +2137,13 @@ export async function batchDeleteProviders(
 
     const deletedCount = await deleteProvidersBatch(snapshotProviderIds);
 
-    const nowMs = Date.now();
-    cleanupProviderPatchStores(nowMs);
-
     const undoToken = createProviderPatchUndoToken();
     const operationId = createProviderPatchOperationId();
-    const undoExpiresAtMs = nowMs + PROVIDER_DELETE_UNDO_TTL_MS;
-    const cleanupTimer = setTimeout(() => {
-      providerDeleteUndoStore.delete(undoToken);
-    }, PROVIDER_DELETE_UNDO_TTL_MS);
-    cleanupTimer.unref?.();
 
-    providerDeleteUndoStore.set(undoToken, {
+    await providerDeleteUndoStore.set(undoToken, {
       undoToken,
-      undoExpiresAt: undoExpiresAtMs,
       operationId,
       providerIds: snapshotProviderIds,
-      cleanupTimer,
     });
 
     for (const id of snapshotProviderIds) {
@@ -2199,11 +2192,9 @@ export async function undoProviderDelete(
     }
 
     const nowMs = Date.now();
-    cleanupProviderPatchStores(nowMs);
 
-    const snapshot = providerDeleteUndoStore.get(parsed.data.undoToken);
-    if (!snapshot || snapshot.undoExpiresAt <= nowMs) {
-      clearProviderDeleteUndoSnapshot(parsed.data.undoToken);
+    const snapshot = await providerDeleteUndoStore.get(parsed.data.undoToken);
+    if (!snapshot) {
       return {
         ok: false,
         error: "撤销窗口已过期",
@@ -2219,6 +2210,9 @@ export async function undoProviderDelete(
       };
     }
 
+    // Delete after validation passes so operationId mismatch doesn't destroy the token
+    await providerDeleteUndoStore.delete(parsed.data.undoToken);
+
     const restoredCount = await restoreProvidersBatch(snapshot.providerIds);
 
     for (const id of snapshot.providerIds) {
@@ -2227,7 +2221,6 @@ export async function undoProviderDelete(
     }
 
     await publishProviderCacheInvalidation();
-    clearProviderDeleteUndoSnapshot(parsed.data.undoToken);
 
     return {
       ok: true,

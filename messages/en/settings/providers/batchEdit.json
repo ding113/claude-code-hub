@@ -99,6 +99,7 @@
     "undoSuccess": "Reverted {count} providers",
     "undoFailed": "Undo failed: {error}",
     "undoExpired": "Undo window expired",
-    "previewFailed": "Preview failed: {error}"
+    "previewFailed": "Preview failed: {error}",
+    "unknownError": "Unknown error"
   }
 }

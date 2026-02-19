@@ -99,6 +99,7 @@
     "undoSuccess": "{count} 件のプロバイダーを復元しました",
     "undoFailed": "元に戻す操作に失敗しました: {error}",
     "undoExpired": "元に戻す期限が切れました",
-    "previewFailed": "プレビューに失敗しました: {error}"
+    "previewFailed": "プレビューに失敗しました: {error}",
+    "unknownError": "不明なエラー"
   }
 }

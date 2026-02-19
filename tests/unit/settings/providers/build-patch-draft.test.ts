@@ -457,13 +457,13 @@ describe("buildPatchDraftFromFormState", () => {
     expect(draft.first_byte_timeout_streaming_ms).toEqual({ set: 30000 });
   });
 
-  it("sets firstByteTimeoutStreamingMs to 0 when dirty and undefined", () => {
+  it("skips firstByteTimeoutStreamingMs when dirty and undefined", () => {
     const state = createBatchState();
     const dirty = new Set(["network.firstByteTimeoutStreamingSeconds"]);
 
     const draft = buildPatchDraftFromFormState(state, dirty);
 
-    expect(draft.first_byte_timeout_streaming_ms).toEqual({ set: 0 });
+    expect(draft.first_byte_timeout_streaming_ms).toBeUndefined();
   });
 
   it("converts streamingIdleTimeoutSeconds to ms", () => {

@@ -99,6 +99,7 @@
     "undoSuccess": "已還原 {count} 個供應商",
     "undoFailed": "復原失敗: {error}",
     "undoExpired": "復原時限已過期",
-    "previewFailed": "預覽失敗: {error}"
+    "previewFailed": "預覽失敗: {error}",
+    "unknownError": "未知錯誤"
   }
 }

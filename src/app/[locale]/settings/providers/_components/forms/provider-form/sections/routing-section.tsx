@@ -392,7 +392,7 @@ export function RoutingSection() {
             </SmartInputWrapper>
 
             {/* 1M Context Window - Claude type only (or batch mode) */}
-            {(providerType === "claude" || isBatch) && (
+            {(providerType === "claude" || providerType === "claude-auth" || isBatch) && (
               <SmartInputWrapper
                 label={t("sections.routing.context1m.label")}
                 description={t("sections.routing.context1m.desc")}
