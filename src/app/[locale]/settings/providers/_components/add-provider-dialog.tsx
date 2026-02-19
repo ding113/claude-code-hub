@@ -1,11 +1,11 @@
 "use client";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { ServerCog } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { ProviderForm } from "./forms/provider-form";
 
 interface AddProviderDialogProps {
