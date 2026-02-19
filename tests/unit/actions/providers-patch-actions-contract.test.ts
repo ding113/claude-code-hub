@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import { buildRedisMock, createRedisStore } from "./redis-mock-utils";
 
 const getSessionMock = vi.fn();
 const findAllProvidersFreshMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
+const { store: redisStore, mocks: redisMocks } = createRedisStore();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -18,6 +20,8 @@ vi.mock("@/repository/provider", () => ({
 vi.mock("@/lib/cache/provider-cache", () => ({
   publishProviderCacheInvalidation: vi.fn(),
 }));
+
+vi.mock("@/lib/redis/client", () => buildRedisMock(redisMocks));
 
 vi.mock("@/lib/circuit-breaker", () => ({
   clearProviderState: vi.fn(),
@@ -100,6 +104,7 @@ describe("Provider Batch Patch Action Contracts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    redisStore.clear();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findAllProvidersFreshMock.mockResolvedValue([]);
     updateProvidersBatchMock.mockResolvedValue(0);

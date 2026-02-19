@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "../../../src/lib/provider-batch-patch-error-codes";
+import { buildRedisMock, createRedisStore } from "./redis-mock-utils";
 
 const getSessionMock = vi.fn();
 const findProviderByIdMock = vi.fn();
@@ -10,6 +11,7 @@ const clearProviderStateMock = vi.fn();
 const clearConfigCacheMock = vi.fn();
 const saveProviderCircuitConfigMock = vi.fn();
 const deleteProviderCircuitConfigMock = vi.fn();
+const { store: redisStore, mocks: redisMocks } = createRedisStore();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -42,6 +44,8 @@ vi.mock("@/lib/redis/circuit-breaker-config", () => ({
   saveProviderCircuitConfig: saveProviderCircuitConfigMock,
   deleteProviderCircuitConfig: deleteProviderCircuitConfigMock,
 }));
+
+vi.mock("@/lib/redis/client", () => buildRedisMock(redisMocks));
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -118,6 +122,7 @@ describe("Provider Single Edit Undo Actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    redisStore.clear();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findProviderByIdMock.mockResolvedValue(makeProvider(1, { name: "Before Name", key: "sk-old" }));
     updateProviderMock.mockResolvedValue(makeProvider(1, { name: "After Name", key: "sk-new" }));

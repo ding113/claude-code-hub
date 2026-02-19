@@ -280,7 +280,7 @@
         "cacheWrite1h": "快取寫入（1h）",
         "cacheRead": "快取讀取",
         "cacheTtl": "快取 TTL",
-        "cacheTtlSwapped": "計費 TTL (已互換)",
+        "cacheTtlSwapped": "計費 TTL（已互換）",
         "multiplier": "供應商倍率",
         "totalCost": "總費用",
         "context1m": "1M 上下文",
@@ -366,7 +366,7 @@
       "cacheWrite1h": "快取寫入（1h）",
       "cacheRead": "快取讀取",
       "cacheTtl": "快取 TTL",
-      "cacheTtlSwapped": "計費 TTL (已互換)",
+      "cacheTtlSwapped": "計費 TTL（已互換）",
       "multiplier": "供應商倍率",
       "totalCost": "總費用",
       "context1m": "1M 上下文長度",
@@ -704,7 +704,8 @@
     "states": {
       "noData": "暫無統計資料",
       "fetchFailed": "取得統計資料失敗"
-    }
+    },
+    "othersAggregate": "其他使用者"
   },
   "errors": {
     "fetchSystemSettingsFailed": "取得系統設定失敗",

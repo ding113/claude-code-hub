@@ -498,6 +498,13 @@
       "when": 1771233193254,
       "tag": "0070_stormy_exiles",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1771491614848,
+      "tag": "0071_purple_captain_midlands",
+      "breakpoints": true
     }
   ]
 }
