@@ -2,7 +2,7 @@ import "server-only";
 
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, messageRequest } from "@/drizzle/schema";
+import { keys, messageRequest, usageLedger } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
@@ -15,6 +15,7 @@ import type {
   RateLimitType,
   TimeRange,
 } from "@/types/statistics";
+import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 /**
@@ -82,7 +83,7 @@ function getTimeRangeSqlConfig(timeRange: TimeRange, timezone: string): SqlTimeR
       return {
         startTs: sql`(DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone})`,
         endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
-        bucketExpr: sql`DATE_TRUNC('hour', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('hour', usage_ledger.created_at AT TIME ZONE ${timezone})`,
         bucketSeriesQuery: sql`
           SELECT generate_series(
             DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}),
@@ -95,7 +96,7 @@ function getTimeRangeSqlConfig(timeRange: TimeRange, timezone: string): SqlTimeR
       return {
         startTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})`,
         endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
-        bucketExpr: sql`DATE_TRUNC('day', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', usage_ledger.created_at AT TIME ZONE ${timezone})`,
         bucketSeriesQuery: sql`
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
@@ -108,7 +109,7 @@ function getTimeRangeSqlConfig(timeRange: TimeRange, timezone: string): SqlTimeR
       return {
         startTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})`,
         endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
-        bucketExpr: sql`DATE_TRUNC('day', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', usage_ledger.created_at AT TIME ZONE ${timezone})`,
         bucketSeriesQuery: sql`
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
@@ -121,7 +122,7 @@ function getTimeRangeSqlConfig(timeRange: TimeRange, timezone: string): SqlTimeR
       return {
         startTs: sql`((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})`,
         endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
-        bucketExpr: sql`DATE_TRUNC('day', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', usage_ledger.created_at AT TIME ZONE ${timezone})`,
         bucketSeriesQuery: sql`
           SELECT generate_series(
             DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
@@ -272,14 +273,13 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
       u.id AS user_id,
       u.name AS user_name,
       ${bucketExpr} AS bucket,
-      COUNT(message_request.id) AS api_calls,
-      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
     FROM users u
-    LEFT JOIN message_request ON u.id = message_request.user_id
-      AND message_request.created_at >= ${startTs}
-      AND message_request.created_at < ${endTs}
-      AND message_request.deleted_at IS NULL
-      AND ${EXCLUDE_WARMUP_CONDITION}
+    LEFT JOIN usage_ledger ON u.id = usage_ledger.user_id
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
     WHERE u.deleted_at IS NULL
     GROUP BY u.id, u.name, bucket
     ORDER BY bucket ASC, u.name ASC
@@ -325,15 +325,14 @@ export async function getKeyStatisticsFromDB(
       k.id AS key_id,
       k.name AS key_name,
       ${bucketExpr} AS bucket,
-      COUNT(message_request.id) AS api_calls,
-      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
     FROM keys k
-    LEFT JOIN message_request ON message_request.key = k.key
-      AND message_request.user_id = ${userId}
-      AND message_request.created_at >= ${startTs}
-      AND message_request.created_at < ${endTs}
-      AND message_request.deleted_at IS NULL
-      AND ${EXCLUDE_WARMUP_CONDITION}
+    LEFT JOIN usage_ledger ON usage_ledger.key = k.key
+      AND usage_ledger.user_id = ${userId}
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
     WHERE k.user_id = ${userId}
       AND k.deleted_at IS NULL
     GROUP BY k.id, k.name, bucket
@@ -385,15 +384,14 @@ export async function getMixedStatisticsFromDB(
       k.id AS key_id,
       k.name AS key_name,
       ${bucketExpr} AS bucket,
-      COUNT(message_request.id) AS api_calls,
-      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
     FROM keys k
-    LEFT JOIN message_request ON message_request.key = k.key
-      AND message_request.user_id = ${userId}
-      AND message_request.created_at >= ${startTs}
-      AND message_request.created_at < ${endTs}
-      AND message_request.deleted_at IS NULL
-      AND ${EXCLUDE_WARMUP_CONDITION}
+    LEFT JOIN usage_ledger ON usage_ledger.key = k.key
+      AND usage_ledger.user_id = ${userId}
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
     WHERE k.user_id = ${userId}
       AND k.deleted_at IS NULL
     GROUP BY k.id, k.name, bucket
@@ -403,14 +401,13 @@ export async function getMixedStatisticsFromDB(
   const othersQuery = sql`
     SELECT
       ${bucketExpr} AS bucket,
-      COUNT(message_request.id) AS api_calls,
-      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
-    FROM message_request
-    WHERE message_request.user_id <> ${userId}
-      AND message_request.created_at >= ${startTs}
-      AND message_request.created_at < ${endTs}
-      AND message_request.deleted_at IS NULL
-      AND ${EXCLUDE_WARMUP_CONDITION}
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
+    FROM usage_ledger
+    WHERE usage_ledger.user_id <> ${userId}
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
     GROUP BY bucket
     ORDER BY bucket ASC
   `;
@@ -448,13 +445,11 @@ export async function sumUserCostToday(userId: number): Promise<number> {
   const timezone = await resolveSystemTimezone();
 
   const query = sql`
-    SELECT COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-    FROM message_request mr
-    INNER JOIN keys k ON mr.key = k.key
-    WHERE k.user_id = ${userId}
-      AND (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-      AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-      AND k.deleted_at IS NULL
+    SELECT COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
+    FROM usage_ledger
+    WHERE usage_ledger.user_id = ${userId}
+      AND (usage_ledger.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
+      AND ${LEDGER_BILLING_CONDITION}
   `;
 
   const result = await db.execute(query);
@@ -468,21 +463,17 @@ export async function sumUserCostToday(userId: number): Promise<number> {
  * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365): Promise<number> {
-  const conditions = [
-    eq(messageRequest.key, keyHash),
-    isNull(messageRequest.deletedAt),
-    EXCLUDE_WARMUP_CONDITION,
-  ];
+  const conditions = [eq(usageLedger.key, keyHash), LEDGER_BILLING_CONDITION];
 
   // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
   if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
     const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
   }
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
@@ -494,21 +485,17 @@ export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365)
  * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365): Promise<number> {
-  const conditions = [
-    eq(messageRequest.userId, userId),
-    isNull(messageRequest.deletedAt),
-    EXCLUDE_WARMUP_CONDITION,
-  ];
+  const conditions = [eq(usageLedger.userId, userId), LEDGER_BILLING_CONDITION];
 
   // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
   if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
     const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
   }
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
@@ -525,18 +512,12 @@ export async function sumUserTotalCostBatch(userIds: number[]): Promise<Map<numb
 
   const rows = await db
     .select({
-      userId: messageRequest.userId,
-      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+      userId: usageLedger.userId,
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
     })
-    .from(messageRequest)
-    .where(
-      and(
-        inArray(messageRequest.userId, userIds),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
-      )
-    )
-    .groupBy(messageRequest.userId);
+    .from(usageLedger)
+    .where(and(inArray(usageLedger.userId, userIds), LEDGER_BILLING_CONDITION))
+    .groupBy(usageLedger.userId);
 
   for (const id of userIds) {
     result.set(id, 0);
@@ -559,17 +540,10 @@ export async function sumKeyTotalCostBatchByIds(keyIds: number[]): Promise<Map<n
   const rows = await db
     .select({
       keyId: keys.id,
-      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
     })
     .from(keys)
-    .leftJoin(
-      messageRequest,
-      and(
-        eq(messageRequest.key, keys.key),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
-      )
-    )
+    .leftJoin(usageLedger, and(eq(usageLedger.key, keys.key), LEDGER_BILLING_CONDITION))
     .where(inArray(keys.id, keyIds))
     .groupBy(keys.id);
 
@@ -600,14 +574,13 @@ export async function sumProviderTotalCost(
     resetAt instanceof Date && !Number.isNaN(resetAt.getTime()) ? resetAt : null;
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.providerId, providerId),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        ...(effectiveStart ? [gte(messageRequest.createdAt, effectiveStart)] : [])
+        eq(usageLedger.finalProviderId, providerId),
+        LEDGER_BILLING_CONDITION,
+        ...(effectiveStart ? [gte(usageLedger.createdAt, effectiveStart)] : [])
       )
     );
 
@@ -624,15 +597,14 @@ export async function sumUserCostInTimeRange(
   endTime: Date
 ): Promise<number> {
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.userId, userId),
-        gte(messageRequest.createdAt, startTime),
-        lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
+        eq(usageLedger.userId, userId),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
       )
     );
 
@@ -652,15 +624,14 @@ export async function sumKeyCostInTimeRange(
   if (!keyString) return 0;
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.key, keyString), // 使用 key 字符串而非 ID
-        gte(messageRequest.createdAt, startTime),
-        lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
+        eq(usageLedger.key, keyString), // 使用 key 字符串而非 ID
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
       )
     );
 
@@ -722,25 +693,24 @@ export async function sumUserQuotaCosts(
   );
 
   const costTotal = cutoffDate
-    ? sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`
-    : sql<string>`COALESCE(SUM(${messageRequest.costUsd}), 0)`;
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate}), 0)`
+    : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
 
   const [row] = await db
     .select({
-      cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
-      costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
-      costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
-      costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
       costTotal,
     })
-    .from(messageRequest)
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.userId, userId),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        ...(scanStart ? [gte(messageRequest.createdAt, scanStart)] : []),
-        lt(messageRequest.createdAt, scanEnd)
+        eq(usageLedger.userId, userId),
+        LEDGER_BILLING_CONDITION,
+        ...(scanStart ? [gte(usageLedger.createdAt, scanStart)] : []),
+        lt(usageLedger.createdAt, scanEnd)
       )
     );
 
@@ -793,25 +763,24 @@ export async function sumKeyQuotaCostsById(
   );
 
   const costTotal = cutoffDate
-    ? sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${cutoffDate}), 0)`
-    : sql<string>`COALESCE(SUM(${messageRequest.costUsd}), 0)`;
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate}), 0)`
+    : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
 
   const [row] = await db
     .select({
-      cost5h: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.range5h.startTime} AND ${messageRequest.createdAt} < ${ranges.range5h.endTime}), 0)`,
-      costDaily: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeDaily.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
-      costWeekly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
-      costMonthly: sql<string>`COALESCE(SUM(${messageRequest.costUsd}) FILTER (WHERE ${messageRequest.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${messageRequest.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
       costTotal,
     })
-    .from(messageRequest)
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.key, keyString),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        ...(scanStart ? [gte(messageRequest.createdAt, scanStart)] : []),
-        lt(messageRequest.createdAt, scanEnd)
+        eq(usageLedger.key, keyString),
+        LEDGER_BILLING_CONDITION,
+        ...(scanStart ? [gte(usageLedger.createdAt, scanStart)] : []),
+        lt(usageLedger.createdAt, scanEnd)
       )
     );
 
@@ -1103,15 +1072,14 @@ export async function sumProviderCostInTimeRange(
   endTime: Date
 ): Promise<number> {
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.providerId, providerId),
-        gte(messageRequest.createdAt, startTime),
-        lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
+        eq(usageLedger.finalProviderId, providerId),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
       )
     );
 
