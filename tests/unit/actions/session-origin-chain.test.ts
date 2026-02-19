@@ -94,6 +94,28 @@ describe("getSessionOriginChain", () => {
     expect(dbSelectMock).not.toHaveBeenCalled();
   });
 
+  test("non-admin without access: returns unauthorized error", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 3, role: "user" } });
+    findKeyListMock.mockResolvedValue([{ key: "user-key-3" }]);
+    dbLimitMock.mockResolvedValue([]);
+
+    const { getSessionOriginChain } = await import("@/actions/session-origin-chain");
+    const result = await getSessionOriginChain("sess-other-user");
+
+    expect(result).toEqual({ ok: false, error: "无权访问该 Session" });
+    expect(findSessionOriginChainMock).not.toHaveBeenCalled();
+  });
+
+  test("exception path: returns error on unexpected throw", async () => {
+    getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    findSessionOriginChainMock.mockRejectedValue(new Error("db error"));
+
+    const { getSessionOriginChain } = await import("@/actions/session-origin-chain");
+    const result = await getSessionOriginChain("sess-throws");
+
+    expect(result).toEqual({ ok: false, error: "获取会话来源链失败" });
+  });
+
   test("not found: returns ok with null data", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findSessionOriginChainMock.mockResolvedValue(null);

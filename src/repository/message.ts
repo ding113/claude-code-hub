@@ -277,6 +277,10 @@ export async function findMessageRequestBySessionId(
   return toMessageRequest(result);
 }
 
+/**
+ * 根据 sessionId 查询该 session 首条非 warmup 请求的 providerChain
+ * 用于展示会话来源链（原始选择决策）
+ */
 export async function findSessionOriginChain(
   sessionId: string
 ): Promise<ProviderChainItem[] | null> {

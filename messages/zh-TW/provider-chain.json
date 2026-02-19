@@ -214,5 +214,11 @@
     "strictBlockSelectorError": "嚴格模式：端點選擇器發生錯誤，跳過該供應商且不降級",
     "vendorTypeAllTimeout": "供應商類型全端點逾時（524）",
     "vendorTypeAllTimeoutNote": "該供應商類型的所有端點均逾時，已觸發供應商類型臨時熔斷。"
+  },
+  "selectionMethods": {
+    "session_reuse": "會話複用",
+    "weighted_random": "加權隨機",
+    "group_filtered": "分組過濾",
+    "fail_open_fallback": "故障開放回退"
   }
 }

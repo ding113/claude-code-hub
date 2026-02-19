@@ -1161,7 +1161,8 @@ describe("error-details-dialog origin decision chain", () => {
       button.textContent?.includes("View original selection")
     );
 
-    click(trigger ?? null);
+    expect(trigger).toBeTruthy();
+    click(trigger!);
 
     await act(async () => {
       await Promise.resolve();

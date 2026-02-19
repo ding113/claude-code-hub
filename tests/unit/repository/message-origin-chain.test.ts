@@ -179,7 +179,7 @@ describe("repository/message findSessionOriginChain", () => {
   test("null providerChain: 首条非 warmup 记录 providerChain 为空时返回 null", async () => {
     vi.resetModules();
 
-    const selectMock = vi.fn(() => createThenableQuery([]));
+    const selectMock = vi.fn(() => createThenableQuery([{ providerChain: null }]));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {

@@ -214,5 +214,11 @@
     "strictBlockSelectorError": "Strict mode: endpoint selector encountered an error, provider skipped without fallback",
     "vendorTypeAllTimeout": "Vendor-Type All Endpoints Timeout (524)",
     "vendorTypeAllTimeoutNote": "All endpoints for this vendor-type timed out. Vendor-type circuit breaker triggered."
+  },
+  "selectionMethods": {
+    "session_reuse": "Session Reuse",
+    "weighted_random": "Weighted Random",
+    "group_filtered": "Group Filtered",
+    "fail_open_fallback": "Fail-Open Fallback"
   }
 }
