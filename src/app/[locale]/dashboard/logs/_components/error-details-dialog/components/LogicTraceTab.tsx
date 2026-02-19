@@ -356,7 +356,9 @@ export function LogicTraceTab({
                             </div>
                             {ctx.enabledProviders !== undefined && (
                               <div>
-                                <span className="text-muted-foreground">{t("logicTrace.providersCount", { count: ctx.enabledProviders })}</span>
+                                <span className="text-muted-foreground">
+                                  {t("logicTrace.providersCount", { count: ctx.enabledProviders })}
+                                </span>
                               </div>
                             )}
                             {ctx.afterHealthCheck !== undefined && (
