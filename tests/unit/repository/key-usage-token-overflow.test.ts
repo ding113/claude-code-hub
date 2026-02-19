@@ -115,7 +115,6 @@ describe("Key usage token aggregation overflow", () => {
       ])
     );
     selectQueue.push(createThenableQuery([]));
-    selectQueue.push(createThenableQuery([]));
 
     const fallbackSelect = createThenableQuery<unknown[]>([]);
     const selectMock = vi.fn((selection: unknown) => {
@@ -123,13 +122,10 @@ describe("Key usage token aggregation overflow", () => {
       return selectQueue.shift() ?? fallbackSelect;
     });
 
-    const selectDistinctOnMock = vi.fn(() => createThenableQuery([]));
-
     vi.doMock("@/drizzle/db", () => ({
       db: {
         select: selectMock,
-        selectDistinctOn: selectDistinctOnMock,
-        execute: vi.fn(async () => ({ count: 0 })),
+        execute: vi.fn(async () => []),
       },
     }));
 

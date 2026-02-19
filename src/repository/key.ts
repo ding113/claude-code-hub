@@ -874,30 +874,32 @@ export async function findKeysWithStatisticsBatch(
     }
   }
 
-  // Step 3: Query last usage for all keys at once using DISTINCT ON
-  const lastUsageRows = await db
-    .selectDistinctOn([messageRequest.key], {
-      key: messageRequest.key,
-      createdAt: messageRequest.createdAt,
-      providerName: providers.name,
-    })
-    .from(messageRequest)
-    .innerJoin(providers, eq(messageRequest.providerId, providers.id))
-    .where(
-      and(
-        inArray(messageRequest.key, keyStrings),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
-      )
-    )
-    .orderBy(messageRequest.key, desc(messageRequest.createdAt));
+  // Step 3: Query last usage for all keys via LATERAL JOIN (1 index probe per key)
+  const lastUsageResult = await db.execute(sql`
+    SELECT k.key_val AS key, lr.created_at, p.name AS provider_name
+    FROM unnest(${keyStrings}::varchar[]) AS k(key_val)
+    LEFT JOIN LATERAL (
+      SELECT mr.created_at, mr.provider_id
+      FROM message_request mr
+      WHERE mr.key = k.key_val
+        AND mr.deleted_at IS NULL
+        AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+      ORDER BY mr.created_at DESC NULLS LAST
+      LIMIT 1
+    ) lr ON true
+    LEFT JOIN providers p ON lr.provider_id = p.id
+  `);
 
   const lastUsageMap = new Map<string, { createdAt: Date | null; providerName: string | null }>();
-  for (const row of lastUsageRows) {
+  for (const row of Array.from(lastUsageResult) as Array<{
+    key: string | null;
+    created_at: Date | null;
+    provider_name: string | null;
+  }>) {
     if (row.key) {
       lastUsageMap.set(row.key, {
-        createdAt: row.createdAt,
-        providerName: row.providerName,
+        createdAt: row.created_at ?? null,
+        providerName: row.provider_name ?? null,
       });
     }
   }

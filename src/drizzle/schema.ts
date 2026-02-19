@@ -534,6 +534,14 @@ export const messageRequest = pgTable('message_request', {
   messageRequestStatusCodeActiveIdx: index('idx_message_request_status_code_active').on(table.statusCode).where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
   messageRequestCreatedAtIdx: index('idx_message_request_created_at').on(table.createdAt),
   messageRequestDeletedAtIdx: index('idx_message_request_deleted_at').on(table.deletedAt),
+  // #slow-query: DISTINCT ON / LATERAL last-provider lookup per key
+  messageRequestKeyLastActiveIdx: index('idx_message_request_key_last_active')
+    .on(table.key, table.createdAt.desc())
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
+  // #slow-query: SUM(cost_usd) per key, enables index-only scan
+  messageRequestKeyCostActiveIdx: index('idx_message_request_key_cost_active')
+    .on(table.key, table.costUsd)
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
 }));
 
 // Model Prices table

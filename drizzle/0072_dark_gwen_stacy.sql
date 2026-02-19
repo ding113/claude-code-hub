@@ -1,0 +1,3 @@
+-- #slow-query: composite partial indexes for key-based lookups with EXCLUDE_WARMUP filter
+CREATE INDEX IF NOT EXISTS "idx_message_request_key_last_active" ON "message_request" USING btree ("key","created_at" DESC NULLS LAST) WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_message_request_key_cost_active" ON "message_request" USING btree ("key","cost_usd") WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');

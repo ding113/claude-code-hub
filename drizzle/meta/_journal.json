@@ -505,6 +505,13 @@
       "when": 1771491614848,
       "tag": "0071_purple_captain_midlands",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1771519353657,
+      "tag": "0072_dark_gwen_stacy",
+      "breakpoints": true
     }
   ]
 }
