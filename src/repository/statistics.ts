@@ -42,173 +42,257 @@ async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
   return keyString;
 }
 
-/**
- * 根据时间范围获取用户消费和API调用统计
- * 注意：这个函数使用原生SQL，因为涉及到PostgreSQL特定的generate_series函数
- */
-export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<DatabaseStatRow[]> {
-  const timezone = await resolveSystemTimezone();
-  let query;
+type SqlTimeRangeConfig = {
+  startTs: ReturnType<typeof sql>;
+  endTs: ReturnType<typeof sql>;
+  bucketExpr: ReturnType<typeof sql>;
+  bucketSeriesQuery: ReturnType<typeof sql>;
+};
 
+type TimeBucketValue = Date | string | null;
+
+type UserBucketStatsRow = {
+  user_id: number;
+  user_name: string;
+  bucket: TimeBucketValue;
+  api_calls: number | string | null;
+  total_cost: string | number | null;
+};
+
+type KeyBucketStatsRow = {
+  key_id: number;
+  key_name: string;
+  bucket: TimeBucketValue;
+  api_calls: number | string | null;
+  total_cost: string | number | null;
+};
+
+type MixedOthersBucketStatsRow = {
+  bucket: TimeBucketValue;
+  api_calls: number | string | null;
+  total_cost: string | number | null;
+};
+
+type RuntimeDatabaseStatRow = Omit<DatabaseStatRow, "date"> & { date: Date };
+type RuntimeDatabaseKeyStatRow = Omit<DatabaseKeyStatRow, "date"> & { date: Date };
+
+function getTimeRangeSqlConfig(timeRange: TimeRange, timezone: string): SqlTimeRangeConfig {
   switch (timeRange) {
     case "today":
-      // 今天（小时分辨率）
-      query = sql`
-        WITH hour_range AS (
+      return {
+        startTs: sql`(DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('hour', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
+            DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}),
+            DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '23 hours',
             '1 hour'::interval
-          ) AS hour
-        ),
-        hourly_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN hour_range hr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, hr.hour
-        )
-        SELECT
-          user_id,
-          user_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     case "7days":
-      // 过去7天（天分辨率）
-      query = sql`
-        WITH date_range AS (
+      return {
+        startTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, dr.date
-        )
-        SELECT
-          user_id,
-          user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     case "30days":
-      // 过去 30 天（天分辨率）
-      query = sql`
-        WITH date_range AS (
+      return {
+        startTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, dr.date
-        )
-        SELECT
-          user_id,
-          user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     case "thisMonth":
-      // 本月（天分辨率，从本月第一天到今天）
-      query = sql`
-        WITH date_range AS (
+      return {
+        startTs: sql`((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', message_request.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
             DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, dr.date
-        )
-        SELECT
-          user_id,
-          user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     default:
       throw new Error(`Unsupported time range: ${timeRange}`);
   }
+}
 
-  const result = await db.execute(query);
-  return Array.from(result) as unknown as DatabaseStatRow[];
+function normalizeBucketDate(value: TimeBucketValue): Date | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizeApiCalls(value: number | string | null): number {
+  const normalized = Number(value ?? 0);
+  return Number.isFinite(normalized) ? normalized : 0;
+}
+
+function normalizeTotalCost(value: string | number | null): string | number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  return value;
+}
+
+async function getTimeBuckets(timeRange: TimeRange, timezone: string): Promise<Date[]> {
+  const { bucketSeriesQuery } = getTimeRangeSqlConfig(timeRange, timezone);
+  const result = await db.execute(bucketSeriesQuery);
+  return (Array.from(result) as Array<{ bucket: TimeBucketValue }>)
+    .map((row) => normalizeBucketDate(row.bucket))
+    .filter((bucket): bucket is Date => bucket !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+}
+
+function zeroFillUserStats(
+  dbRows: UserBucketStatsRow[],
+  allUsers: Array<{ id: number; name: string }>,
+  buckets: Date[]
+): RuntimeDatabaseStatRow[] {
+  const rowMap = new Map<string, { api_calls: number; total_cost: string | number }>();
+  for (const row of dbRows) {
+    const bucket = normalizeBucketDate(row.bucket);
+    if (!bucket) continue;
+
+    rowMap.set(`${row.user_id}:${bucket.getTime()}`, {
+      api_calls: normalizeApiCalls(row.api_calls),
+      total_cost: normalizeTotalCost(row.total_cost),
+    });
+  }
+
+  const sortedUsers = [...allUsers].sort((a, b) => a.name.localeCompare(b.name));
+  const filledRows: RuntimeDatabaseStatRow[] = [];
+
+  for (const bucket of buckets) {
+    const bucketTime = bucket.getTime();
+    for (const user of sortedUsers) {
+      const row = rowMap.get(`${user.id}:${bucketTime}`);
+      filledRows.push({
+        user_id: user.id,
+        user_name: user.name,
+        date: new Date(bucketTime),
+        api_calls: row?.api_calls ?? 0,
+        total_cost: row?.total_cost ?? 0,
+      });
+    }
+  }
+
+  return filledRows;
+}
+
+function zeroFillKeyStats(
+  dbRows: KeyBucketStatsRow[],
+  allKeys: Array<{ id: number; name: string }>,
+  buckets: Date[]
+): RuntimeDatabaseKeyStatRow[] {
+  const rowMap = new Map<string, { api_calls: number; total_cost: string | number }>();
+  for (const row of dbRows) {
+    const bucket = normalizeBucketDate(row.bucket);
+    if (!bucket) continue;
+
+    rowMap.set(`${row.key_id}:${bucket.getTime()}`, {
+      api_calls: normalizeApiCalls(row.api_calls),
+      total_cost: normalizeTotalCost(row.total_cost),
+    });
+  }
+
+  const sortedKeys = [...allKeys].sort((a, b) => a.name.localeCompare(b.name));
+  const filledRows: RuntimeDatabaseKeyStatRow[] = [];
+
+  for (const bucket of buckets) {
+    const bucketTime = bucket.getTime();
+    for (const key of sortedKeys) {
+      const row = rowMap.get(`${key.id}:${bucketTime}`);
+      filledRows.push({
+        key_id: key.id,
+        key_name: key.name,
+        date: new Date(bucketTime),
+        api_calls: row?.api_calls ?? 0,
+        total_cost: row?.total_cost ?? 0,
+      });
+    }
+  }
+
+  return filledRows;
+}
+
+function zeroFillMixedOthersStats(
+  dbRows: MixedOthersBucketStatsRow[],
+  buckets: Date[]
+): RuntimeDatabaseStatRow[] {
+  const rowMap = new Map<number, { api_calls: number; total_cost: string | number }>();
+  for (const row of dbRows) {
+    const bucket = normalizeBucketDate(row.bucket);
+    if (!bucket) continue;
+
+    rowMap.set(bucket.getTime(), {
+      api_calls: normalizeApiCalls(row.api_calls),
+      total_cost: normalizeTotalCost(row.total_cost),
+    });
+  }
+
+  return buckets.map((bucket) => {
+    const row = rowMap.get(bucket.getTime());
+    return {
+      user_id: -1,
+      user_name: "其他用户",
+      date: new Date(bucket.getTime()),
+      api_calls: row?.api_calls ?? 0,
+      total_cost: row?.total_cost ?? 0,
+    };
+  });
+}
+
+/**
+ * 根据时间范围获取用户消费和API调用统计
+ */
+export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<DatabaseStatRow[]> {
+  const timezone = await resolveSystemTimezone();
+  const { startTs, endTs, bucketExpr } = getTimeRangeSqlConfig(timeRange, timezone);
+
+  const statsQuery = sql`
+    SELECT
+      u.id AS user_id,
+      u.name AS user_name,
+      ${bucketExpr} AS bucket,
+      COUNT(message_request.id) AS api_calls,
+      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
+    FROM users u
+    LEFT JOIN message_request ON u.id = message_request.user_id
+      AND message_request.created_at >= ${startTs}
+      AND message_request.created_at < ${endTs}
+      AND message_request.deleted_at IS NULL
+      AND ${EXCLUDE_WARMUP_CONDITION}
+    WHERE u.deleted_at IS NULL
+    GROUP BY u.id, u.name, ${bucketExpr}
+    ORDER BY bucket ASC, u.name ASC
+  `;
+
+  const [users, buckets, statsResult] = await Promise.all([
+    getActiveUsersFromDB(),
+    getTimeBuckets(timeRange, timezone),
+    db.execute(statsQuery),
+  ]);
+
+  const rows = Array.from(statsResult) as UserBucketStatsRow[];
+  return zeroFillUserStats(rows, users, buckets) as unknown as DatabaseStatRow[];
 }
 
 /**
@@ -234,187 +318,36 @@ export async function getKeyStatisticsFromDB(
   timeRange: TimeRange
 ): Promise<DatabaseKeyStatRow[]> {
   const timezone = await resolveSystemTimezone();
-  let query;
+  const { startTs, endTs, bucketExpr } = getTimeRangeSqlConfig(timeRange, timezone);
 
-  switch (timeRange) {
-    case "today":
-      query = sql`
-        WITH hour_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
-            '1 hour'::interval
-          ) AS hour
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        hourly_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN hour_range hr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, hr.hour
-        )
-        SELECT
-          key_id,
-          key_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC, key_name ASC
-      `;
-      break;
+  const statsQuery = sql`
+    SELECT
+      k.id AS key_id,
+      k.name AS key_name,
+      ${bucketExpr} AS bucket,
+      COUNT(message_request.id) AS api_calls,
+      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
+    FROM keys k
+    LEFT JOIN message_request ON message_request.key = k.key
+      AND message_request.user_id = ${userId}
+      AND message_request.created_at >= ${startTs}
+      AND message_request.created_at < ${endTs}
+      AND message_request.deleted_at IS NULL
+      AND ${EXCLUDE_WARMUP_CONDITION}
+    WHERE k.user_id = ${userId}
+      AND k.deleted_at IS NULL
+    GROUP BY k.id, k.name, ${bucketExpr}
+    ORDER BY bucket ASC, k.name ASC
+  `;
 
-    case "7days":
-      query = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-      break;
+  const [activeKeys, buckets, statsResult] = await Promise.all([
+    getActiveKeysForUserFromDB(userId),
+    getTimeBuckets(timeRange, timezone),
+    db.execute(statsQuery),
+  ]);
 
-    case "30days":
-      query = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-      break;
-
-    case "thisMonth":
-      query = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
-            AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-      break;
-
-    default:
-      throw new Error(`Unsupported time range: ${timeRange}`);
-  }
-
-  const result = await db.execute(query);
-  return Array.from(result) as unknown as DatabaseKeyStatRow[];
+  const rows = Array.from(statsResult) as KeyBucketStatsRow[];
+  return zeroFillKeyStats(rows, activeKeys, buckets) as unknown as DatabaseKeyStatRow[];
 }
 
 /**
@@ -445,326 +378,60 @@ export async function getMixedStatisticsFromDB(
   othersAggregate: DatabaseStatRow[];
 }> {
   const timezone = await resolveSystemTimezone();
-  let ownKeysQuery;
-  let othersQuery;
+  const { startTs, endTs, bucketExpr } = getTimeRangeSqlConfig(timeRange, timezone);
 
-  switch (timeRange) {
-    case "today":
-      // 自己的密钥明细（小时分辨率）
-      ownKeysQuery = sql`
-        WITH hour_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
-            '1 hour'::interval
-          ) AS hour
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-         hourly_stats AS (
-           SELECT
-             k.id AS key_id,
-             k.name AS key_name,
-             hr.hour,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM user_keys k
-           CROSS JOIN hour_range hr
-           LEFT JOIN message_request mr ON mr.key = k.key
-             AND mr.user_id = ${userId}
-             AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY k.id, k.name, hr.hour
-         )
-        SELECT
-          key_id,
-          key_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC, key_name ASC
-      `;
+  const ownKeysQuery = sql`
+    SELECT
+      k.id AS key_id,
+      k.name AS key_name,
+      ${bucketExpr} AS bucket,
+      COUNT(message_request.id) AS api_calls,
+      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
+    FROM keys k
+    LEFT JOIN message_request ON message_request.key = k.key
+      AND message_request.user_id = ${userId}
+      AND message_request.created_at >= ${startTs}
+      AND message_request.created_at < ${endTs}
+      AND message_request.deleted_at IS NULL
+      AND ${EXCLUDE_WARMUP_CONDITION}
+    WHERE k.user_id = ${userId}
+      AND k.deleted_at IS NULL
+    GROUP BY k.id, k.name, ${bucketExpr}
+    ORDER BY bucket ASC, k.name ASC
+  `;
 
-      // 其他用户汇总（小时分辨率）
-      othersQuery = sql`
-        WITH hour_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
-            '1 hour'::interval
-          ) AS hour
-        ),
-         hourly_stats AS (
-           SELECT
-             hr.hour,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM hour_range hr
-            LEFT JOIN message_request mr ON DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-             AND mr.created_at >= (DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND mr.user_id != ${userId}
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY hr.hour
-         )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC
-      `;
-      break;
+  const othersQuery = sql`
+    SELECT
+      ${bucketExpr} AS bucket,
+      COUNT(message_request.id) AS api_calls,
+      COALESCE(SUM(message_request.cost_usd), 0) AS total_cost
+    FROM message_request
+    WHERE message_request.user_id <> ${userId}
+      AND message_request.created_at >= ${startTs}
+      AND message_request.created_at < ${endTs}
+      AND message_request.deleted_at IS NULL
+      AND ${EXCLUDE_WARMUP_CONDITION}
+    GROUP BY ${bucketExpr}
+    ORDER BY bucket ASC
+  `;
 
-    case "7days":
-      // 自己的密钥明细（天分辨率）
-      ownKeysQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-         daily_stats AS (
-           SELECT
-             k.id AS key_id,
-             k.name AS key_name,
-             dr.date,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM user_keys k
-           CROSS JOIN date_range dr
-           LEFT JOIN message_request mr ON mr.key = k.key
-             AND mr.user_id = ${userId}
-             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY k.id, k.name, dr.date
-         )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-
-      // 其他用户汇总（天分辨率）
-      othersQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-         daily_stats AS (
-           SELECT
-             dr.date,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM date_range dr
-            LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND mr.user_id != ${userId}
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY dr.date
-         )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC
-      `;
-      break;
-
-    case "30days":
-      // 自己的密钥明细（天分辨率）
-      ownKeysQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-         daily_stats AS (
-           SELECT
-             k.id AS key_id,
-             k.name AS key_name,
-             dr.date,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM user_keys k
-           CROSS JOIN date_range dr
-           LEFT JOIN message_request mr ON mr.key = k.key
-             AND mr.user_id = ${userId}
-             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY k.id, k.name, dr.date
-         )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-
-      // 其他用户汇总（天分辨率）
-      othersQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-         daily_stats AS (
-           SELECT
-             dr.date,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM date_range dr
-            LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-             AND mr.created_at >= ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND mr.user_id != ${userId}
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY dr.date
-         )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC
-      `;
-      break;
-
-    case "thisMonth":
-      // 自己的密钥明细（天分辨率，本月）
-      ownKeysQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-         daily_stats AS (
-           SELECT
-             k.id AS key_id,
-             k.name AS key_name,
-             dr.date,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM user_keys k
-           CROSS JOIN date_range dr
-           LEFT JOIN message_request mr ON mr.key = k.key
-             AND mr.user_id = ${userId}
-             AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY k.id, k.name, dr.date
-         )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-
-      // 其他用户汇总（天分辨率，本月）
-      othersQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-         daily_stats AS (
-           SELECT
-             dr.date,
-             COUNT(mr.id) AS api_calls,
-             COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-           FROM date_range dr
-            LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-             AND mr.created_at >= ((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})
-             AND mr.created_at < ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})
-             AND mr.user_id != ${userId}
-             AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-           GROUP BY dr.date
-         )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC
-      `;
-      break;
-
-    default:
-      throw new Error(`Unsupported time range: ${timeRange}`);
-  }
-
-  const [ownKeysResult, othersResult] = await Promise.all([
+  const [activeKeys, buckets, ownKeysResult, othersResult] = await Promise.all([
+    getActiveKeysForUserFromDB(userId),
+    getTimeBuckets(timeRange, timezone),
     db.execute(ownKeysQuery),
     db.execute(othersQuery),
   ]);
 
   return {
-    ownKeys: Array.from(ownKeysResult) as unknown as DatabaseKeyStatRow[],
-    othersAggregate: Array.from(othersResult) as unknown as DatabaseStatRow[],
+    ownKeys: zeroFillKeyStats(
+      Array.from(ownKeysResult) as KeyBucketStatsRow[],
+      activeKeys,
+      buckets
+    ) as unknown as DatabaseKeyStatRow[],
+    othersAggregate: zeroFillMixedOthersStats(
+      Array.from(othersResult) as MixedOthersBucketStatsRow[],
+      buckets
+    ) as unknown as DatabaseStatRow[],
   };
 }
 
