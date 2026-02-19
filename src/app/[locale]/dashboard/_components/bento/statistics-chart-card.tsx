@@ -254,8 +254,8 @@ export function StatisticsChartCard({
       </div>
 
       {/* Chart */}
-      <div className="flex-1 p-4">
-        <ChartContainer config={chartConfig} className="h-full w-full min-h-[200px]">
+      <div className="flex-1 min-h-0 p-4">
+        <ChartContainer config={chartConfig} className="aspect-auto h-full w-full min-h-[200px]">
           <AreaChart data={numericChartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
             <defs>
               {data.users.map((user, index) => {
