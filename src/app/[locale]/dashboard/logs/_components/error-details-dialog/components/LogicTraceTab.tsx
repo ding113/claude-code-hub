@@ -350,28 +350,28 @@ export function LogicTraceTab({
                         {ctx && (
                           <div className="grid grid-cols-2 gap-1.5 pl-2 min-w-0">
                             <div>
-                              <span className="text-muted-foreground">Total:</span>{" "}
-                              <span className="font-mono">{ctx.totalProviders}</span>
+                              <span className="text-muted-foreground">{t("logicTrace.providersCount", { count: ctx.totalProviders })}</span>
                             </div>
-                            <div>
-                              <span className="text-muted-foreground">Enabled:</span>{" "}
-                              <span className="font-mono">{ctx.enabledProviders}</span>
-                            </div>
+                            {ctx.enabledProviders !== undefined && (
+                              <div>
+                                <span className="text-muted-foreground">{t("logicTrace.healthyCount", { count: ctx.enabledProviders })}</span>
+                              </div>
+                            )}
                             {ctx.afterHealthCheck !== undefined && (
                               <div>
-                                <span className="text-muted-foreground">Healthy:</span>{" "}
+                                <span className="text-muted-foreground">{tChain("details.afterHealthCheck")}:</span>{" "}
                                 <span className="font-mono">{ctx.afterHealthCheck}</span>
                               </div>
                             )}
                             {ctx.selectedPriority !== undefined && (
                               <div>
-                                <span className="text-muted-foreground">Priority:</span>{" "}
+                                <span className="text-muted-foreground">{tChain("details.priority")}:</span>{" "}
                                 <span className="font-mono">P{ctx.selectedPriority}</span>
                               </div>
                             )}
                             {ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0 && (
                               <div className="col-span-2">
-                                <span className="text-muted-foreground">Candidates:</span>{" "}
+                                <span className="text-muted-foreground">{tChain("details.candidates")}:</span>{" "}
                                 {ctx.candidatesAtPriority.map((c, i) => (
                                   <span key={c.id}>
                                     {i > 0 && ", "}
