@@ -42,6 +42,8 @@ export {
   findProviderById,
   findProviderList,
   getDistinctProviderGroups,
+  restoreProvider,
+  restoreProvidersBatch,
   updateProvider,
 } from "./provider";
 export type { ProviderEndpointProbeTarget } from "./provider-endpoints";

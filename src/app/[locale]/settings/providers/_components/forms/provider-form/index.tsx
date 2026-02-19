@@ -5,7 +5,13 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getProviderEndpoints, getProviderVendors } from "@/actions/provider-endpoints";
-import { addProvider, editProvider, removeProvider } from "@/actions/providers";
+import {
+  addProvider,
+  editProvider,
+  removeProvider,
+  undoProviderDelete,
+  undoProviderPatch,
+} from "@/actions/providers";
 import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
   AlertDialog,
@@ -19,6 +25,7 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { isValidUrl } from "@/lib/utils/validation";
 import type {
   ProviderDisplay,
@@ -89,6 +96,7 @@ function ProviderFormContent({
   resolvedUrl?: string | null;
 }) {
   const t = useTranslations("settings.providers.form");
+  const tBatchEdit = useTranslations("settings.providers.batchEdit");
   const { state, dispatch, mode, provider, hideUrl } = useProviderForm();
   const [isPending, startTransition] = useTransition();
   const isEdit = mode === "edit";
@@ -363,7 +371,36 @@ function ProviderFormContent({
             toast.error(res.error || t("errors.updateFailed"));
             return;
           }
-          toast.success(t("success.updated"));
+
+          const undoToken = res.data.undoToken;
+          const operationId = res.data.operationId;
+
+          toast.success(tBatchEdit("undo.singleEditSuccess"), {
+            duration: 10000,
+            action: {
+              label: tBatchEdit("undo.button"),
+              onClick: async () => {
+                try {
+                  const undoResult = await undoProviderPatch({ undoToken, operationId });
+                  if (undoResult.ok) {
+                    toast.success(tBatchEdit("undo.singleEditUndone"));
+                    await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+                    await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                  } else if (
+                    undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
+                  ) {
+                    toast.error(tBatchEdit("undo.expired"));
+                  } else {
+                    toast.error(tBatchEdit("undo.failed"));
+                  }
+                } catch {
+                  toast.error(tBatchEdit("undo.failed"));
+                }
+              },
+            },
+          });
 
           void queryClient.invalidateQueries({ queryKey: ["providers"] });
           void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
@@ -426,7 +463,39 @@ function ProviderFormContent({
           toast.error(res.error || t("errors.deleteFailed"));
           return;
         }
-        toast.success(t("success.deleted"));
+
+        const undoToken = res.data.undoToken;
+        const operationId = res.data.operationId;
+
+        toast.success(tBatchEdit("undo.singleDeleteSuccess"), {
+          duration: 10000,
+          action: {
+            label: tBatchEdit("undo.button"),
+            onClick: async () => {
+              try {
+                const undoResult = await undoProviderDelete({ undoToken, operationId });
+                if (undoResult.ok) {
+                  toast.success(tBatchEdit("undo.singleDeleteUndone"));
+                  await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                  await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                  await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+                  await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                } else if (undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED) {
+                  toast.error(tBatchEdit("undo.expired"));
+                } else {
+                  toast.error(tBatchEdit("undo.failed"));
+                }
+              } catch {
+                toast.error(tBatchEdit("undo.failed"));
+              }
+            },
+          },
+        });
+
+        void queryClient.invalidateQueries({ queryKey: ["providers"] });
+        void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+        void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+        void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         onSuccess?.();
       } catch (e) {
         console.error("Delete error:", e);

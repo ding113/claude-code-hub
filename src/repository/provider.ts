@@ -7,7 +7,12 @@ import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
+import type {
+  AnthropicAdaptiveThinkingConfig,
+  CreateProviderData,
+  Provider,
+  UpdateProviderData,
+} from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
 import {
   ensureProviderEndpointExistsForUrl,
@@ -15,6 +20,150 @@ import {
   syncProviderEndpointOnProviderEdit,
   tryDeleteProviderVendorIfEmpty,
 } from "./provider-endpoints";
+
+type ProviderTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const PROVIDER_RESTORE_MAX_AGE_MS = 60_000;
+const ENDPOINT_RESTORE_TIME_TOLERANCE_MS = 1_000;
+
+interface ProviderRestoreCandidate {
+  id: number;
+  providerVendorId: number | null;
+  providerType: Provider["providerType"];
+  url: string;
+  deletedAt: Date | null;
+}
+
+async function restoreSoftDeletedEndpointForProvider(
+  tx: ProviderTransaction,
+  provider: ProviderRestoreCandidate,
+  now: Date
+): Promise<void> {
+  if (provider.providerVendorId == null || !provider.url || !provider.deletedAt) {
+    return;
+  }
+
+  const trimmedUrl = provider.url.trim();
+  if (!trimmedUrl) {
+    return;
+  }
+
+  const [activeReference] = await tx
+    .select({ id: providers.id })
+    .from(providers)
+    .where(
+      and(
+        eq(providers.providerVendorId, provider.providerVendorId),
+        eq(providers.providerType, provider.providerType),
+        eq(providers.url, trimmedUrl),
+        eq(providers.isEnabled, true),
+        isNull(providers.deletedAt),
+        ne(providers.id, provider.id)
+      )
+    )
+    .limit(1);
+
+  if (activeReference) {
+    return;
+  }
+
+  const [activeEndpoint] = await tx
+    .select({ id: providerEndpoints.id })
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, provider.providerVendorId),
+        eq(providerEndpoints.providerType, provider.providerType),
+        eq(providerEndpoints.url, trimmedUrl),
+        isNull(providerEndpoints.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (activeEndpoint) {
+    return;
+  }
+
+  const lowerBound = new Date(provider.deletedAt.getTime() - ENDPOINT_RESTORE_TIME_TOLERANCE_MS);
+  const upperBound = new Date(provider.deletedAt.getTime() + ENDPOINT_RESTORE_TIME_TOLERANCE_MS);
+
+  const [endpointToRestore] = await tx
+    .select({ id: providerEndpoints.id })
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, provider.providerVendorId),
+        eq(providerEndpoints.providerType, provider.providerType),
+        eq(providerEndpoints.url, trimmedUrl),
+        isNotNull(providerEndpoints.deletedAt),
+        sql`${providerEndpoints.deletedAt} >= ${lowerBound}`,
+        sql`${providerEndpoints.deletedAt} <= ${upperBound}`
+      )
+    )
+    .orderBy(desc(providerEndpoints.deletedAt), desc(providerEndpoints.id))
+    .limit(1);
+
+  if (!endpointToRestore) {
+    return;
+  }
+
+  await tx
+    .update(providerEndpoints)
+    .set({
+      deletedAt: null,
+      isEnabled: true,
+      updatedAt: now,
+    })
+    .where(
+      and(eq(providerEndpoints.id, endpointToRestore.id), isNotNull(providerEndpoints.deletedAt))
+    );
+}
+
+async function restoreProviderInTransaction(
+  tx: ProviderTransaction,
+  providerId: number,
+  now: Date
+): Promise<boolean> {
+  const [candidate] = await tx
+    .select({
+      id: providers.id,
+      providerVendorId: providers.providerVendorId,
+      providerType: providers.providerType,
+      url: providers.url,
+      deletedAt: providers.deletedAt,
+    })
+    .from(providers)
+    .where(and(eq(providers.id, providerId), isNotNull(providers.deletedAt)))
+    .limit(1);
+
+  if (!candidate?.deletedAt) {
+    return false;
+  }
+
+  if (now.getTime() - candidate.deletedAt.getTime() > PROVIDER_RESTORE_MAX_AGE_MS) {
+    return false;
+  }
+
+  const restored = await tx
+    .update(providers)
+    .set({ deletedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(providers.id, providerId),
+        isNotNull(providers.deletedAt),
+        eq(providers.deletedAt, candidate.deletedAt)
+      )
+    )
+    .returning({ id: providers.id });
+
+  if (restored.length === 0) {
+    return false;
+  }
+
+  await restoreSoftDeletedEndpointForProvider(tx, candidate, now);
+
+  return true;
+}
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const dbData = {
@@ -803,12 +952,64 @@ export async function deleteProvider(id: number): Promise<boolean> {
   return deleted;
 }
 
+/**
+ * 恢复单个软删除供应商及其关联端点。
+ *
+ * 安全策略：仅允许恢复 60 秒内删除的供应商。
+ */
+export async function restoreProvider(id: number): Promise<boolean> {
+  const now = new Date();
+
+  const restored = await db.transaction(async (tx) => restoreProviderInTransaction(tx, id, now));
+
+  return restored;
+}
+
 export interface BatchProviderUpdates {
   isEnabled?: boolean;
   priority?: number;
   weight?: number;
   costMultiplier?: string;
   groupTag?: string | null;
+  modelRedirects?: Record<string, string> | null;
+  allowedModels?: string[] | null;
+  anthropicThinkingBudgetPreference?: string | null;
+  anthropicAdaptiveThinking?: AnthropicAdaptiveThinkingConfig | null;
+  // Routing
+  preserveClientIp?: boolean;
+  groupPriorities?: Record<string, number> | null;
+  cacheTtlPreference?: string | null;
+  swapCacheTtlBilling?: boolean;
+  context1mPreference?: string | null;
+  codexReasoningEffortPreference?: string | null;
+  codexReasoningSummaryPreference?: string | null;
+  codexTextVerbosityPreference?: string | null;
+  codexParallelToolCallsPreference?: string | null;
+  anthropicMaxTokensPreference?: string | null;
+  geminiGoogleSearchPreference?: string | null;
+  // Rate Limit
+  limit5hUsd?: string | null;
+  limitDailyUsd?: string | null;
+  dailyResetMode?: string;
+  dailyResetTime?: string;
+  limitWeeklyUsd?: string | null;
+  limitMonthlyUsd?: string | null;
+  limitTotalUsd?: string | null;
+  limitConcurrentSessions?: number;
+  // Circuit Breaker
+  circuitBreakerFailureThreshold?: number;
+  circuitBreakerOpenDuration?: number;
+  circuitBreakerHalfOpenSuccessThreshold?: number;
+  maxRetryAttempts?: number | null;
+  // Network
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  firstByteTimeoutStreamingMs?: number;
+  streamingIdleTimeoutMs?: number;
+  requestTimeoutNonStreamingMs?: number;
+  // MCP
+  mcpPassthroughType?: string;
+  mcpPassthroughUrl?: string | null;
 }
 
 export async function updateProvidersBatch(
@@ -837,6 +1038,114 @@ export async function updateProvidersBatch(
   }
   if (updates.groupTag !== undefined) {
     setClauses.groupTag = updates.groupTag;
+  }
+  if (updates.modelRedirects !== undefined) {
+    setClauses.modelRedirects = updates.modelRedirects;
+  }
+  if (updates.allowedModels !== undefined) {
+    setClauses.allowedModels = updates.allowedModels;
+  }
+  if (updates.anthropicThinkingBudgetPreference !== undefined) {
+    setClauses.anthropicThinkingBudgetPreference = updates.anthropicThinkingBudgetPreference;
+  }
+  if (updates.anthropicAdaptiveThinking !== undefined) {
+    setClauses.anthropicAdaptiveThinking = updates.anthropicAdaptiveThinking;
+  }
+  // Routing
+  if (updates.preserveClientIp !== undefined) {
+    setClauses.preserveClientIp = updates.preserveClientIp;
+  }
+  if (updates.groupPriorities !== undefined) {
+    setClauses.groupPriorities = updates.groupPriorities;
+  }
+  if (updates.cacheTtlPreference !== undefined) {
+    setClauses.cacheTtlPreference = updates.cacheTtlPreference;
+  }
+  if (updates.swapCacheTtlBilling !== undefined) {
+    setClauses.swapCacheTtlBilling = updates.swapCacheTtlBilling;
+  }
+  if (updates.context1mPreference !== undefined) {
+    setClauses.context1mPreference = updates.context1mPreference;
+  }
+  if (updates.codexReasoningEffortPreference !== undefined) {
+    setClauses.codexReasoningEffortPreference = updates.codexReasoningEffortPreference;
+  }
+  if (updates.codexReasoningSummaryPreference !== undefined) {
+    setClauses.codexReasoningSummaryPreference = updates.codexReasoningSummaryPreference;
+  }
+  if (updates.codexTextVerbosityPreference !== undefined) {
+    setClauses.codexTextVerbosityPreference = updates.codexTextVerbosityPreference;
+  }
+  if (updates.codexParallelToolCallsPreference !== undefined) {
+    setClauses.codexParallelToolCallsPreference = updates.codexParallelToolCallsPreference;
+  }
+  if (updates.anthropicMaxTokensPreference !== undefined) {
+    setClauses.anthropicMaxTokensPreference = updates.anthropicMaxTokensPreference;
+  }
+  if (updates.geminiGoogleSearchPreference !== undefined) {
+    setClauses.geminiGoogleSearchPreference = updates.geminiGoogleSearchPreference;
+  }
+  // Rate Limit
+  if (updates.limit5hUsd !== undefined) {
+    setClauses.limit5hUsd = updates.limit5hUsd;
+  }
+  if (updates.limitDailyUsd !== undefined) {
+    setClauses.limitDailyUsd = updates.limitDailyUsd;
+  }
+  if (updates.dailyResetMode !== undefined) {
+    setClauses.dailyResetMode = updates.dailyResetMode;
+  }
+  if (updates.dailyResetTime !== undefined) {
+    setClauses.dailyResetTime = updates.dailyResetTime;
+  }
+  if (updates.limitWeeklyUsd !== undefined) {
+    setClauses.limitWeeklyUsd = updates.limitWeeklyUsd;
+  }
+  if (updates.limitMonthlyUsd !== undefined) {
+    setClauses.limitMonthlyUsd = updates.limitMonthlyUsd;
+  }
+  if (updates.limitTotalUsd !== undefined) {
+    setClauses.limitTotalUsd = updates.limitTotalUsd;
+  }
+  if (updates.limitConcurrentSessions !== undefined) {
+    setClauses.limitConcurrentSessions = updates.limitConcurrentSessions;
+  }
+  // Circuit Breaker
+  if (updates.circuitBreakerFailureThreshold !== undefined) {
+    setClauses.circuitBreakerFailureThreshold = updates.circuitBreakerFailureThreshold;
+  }
+  if (updates.circuitBreakerOpenDuration !== undefined) {
+    setClauses.circuitBreakerOpenDuration = updates.circuitBreakerOpenDuration;
+  }
+  if (updates.circuitBreakerHalfOpenSuccessThreshold !== undefined) {
+    setClauses.circuitBreakerHalfOpenSuccessThreshold =
+      updates.circuitBreakerHalfOpenSuccessThreshold;
+  }
+  if (updates.maxRetryAttempts !== undefined) {
+    setClauses.maxRetryAttempts = updates.maxRetryAttempts;
+  }
+  // Network
+  if (updates.proxyUrl !== undefined) {
+    setClauses.proxyUrl = updates.proxyUrl;
+  }
+  if (updates.proxyFallbackToDirect !== undefined) {
+    setClauses.proxyFallbackToDirect = updates.proxyFallbackToDirect;
+  }
+  if (updates.firstByteTimeoutStreamingMs !== undefined) {
+    setClauses.firstByteTimeoutStreamingMs = updates.firstByteTimeoutStreamingMs;
+  }
+  if (updates.streamingIdleTimeoutMs !== undefined) {
+    setClauses.streamingIdleTimeoutMs = updates.streamingIdleTimeoutMs;
+  }
+  if (updates.requestTimeoutNonStreamingMs !== undefined) {
+    setClauses.requestTimeoutNonStreamingMs = updates.requestTimeoutNonStreamingMs;
+  }
+  // MCP
+  if (updates.mcpPassthroughType !== undefined) {
+    setClauses.mcpPassthroughType = updates.mcpPassthroughType;
+  }
+  if (updates.mcpPassthroughUrl !== undefined) {
+    setClauses.mcpPassthroughUrl = updates.mcpPassthroughUrl;
   }
 
   if (Object.keys(setClauses).length === 1) {
@@ -1036,6 +1345,39 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
   });
 
   return deletedCount;
+}
+
+/**
+ * 批量恢复软删除供应商及其关联端点（事务内逐个恢复）。
+ *
+ * 安全策略：仅允许恢复 60 秒内删除的供应商。
+ */
+export async function restoreProvidersBatch(ids: number[]): Promise<number> {
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const uniqueIds = [...new Set(ids)];
+  const now = new Date();
+
+  const restoredCount = await db.transaction(async (tx) => {
+    let restored = 0;
+
+    for (const id of uniqueIds) {
+      if (await restoreProviderInTransaction(tx, id, now)) {
+        restored += 1;
+      }
+    }
+
+    return restored;
+  });
+
+  logger.debug("restoreProvidersBatch:completed", {
+    requestedIds: uniqueIds.length,
+    restoredCount,
+  });
+
+  return restoredCount;
 }
 
 /**

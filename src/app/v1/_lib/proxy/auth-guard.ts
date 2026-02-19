@@ -1,12 +1,67 @@
 import { logger } from "@/lib/logger";
+import { LoginAbusePolicy } from "@/lib/security/login-abuse-policy";
 import { validateApiKeyAndGetUser } from "@/repository/key";
 import { markUserExpired } from "@/repository/user";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { ProxyResponses } from "./responses";
 import type { AuthState, ProxySession } from "./session";
 
+/**
+ * Pre-auth rate limiter: throttles repeated authentication failures per IP
+ * to prevent brute-force API key enumeration on /v1/* endpoints.
+ *
+ * Uses the same LoginAbusePolicy as the login route but with separate
+ * thresholds appropriate for programmatic API access.
+ */
+const proxyAuthPolicy = new LoginAbusePolicy({
+  maxAttemptsPerIp: 20,
+  maxAttemptsPerKey: 20,
+  windowSeconds: 300,
+  lockoutSeconds: 600,
+});
+
+function extractClientIp(session: ProxySession): string {
+  // Prefer x-real-ip (set by trusted reverse proxy), then rightmost
+  // x-forwarded-for entry, avoiding the client-spoofable leftmost value.
+  const realIp = session.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+
+  const forwarded = session.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const ips = forwarded
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (ips.length > 0) return ips[ips.length - 1];
+  }
+
+  return "unknown";
+}
+
 export class ProxyAuthenticator {
   static async ensure(session: ProxySession): Promise<Response | null> {
+    // Pre-auth rate limit: block IPs with too many recent auth failures
+    const clientIp = extractClientIp(session);
+    const rateLimitDecision = proxyAuthPolicy.check(clientIp);
+    if (!rateLimitDecision.allowed) {
+      const retryAfter = rateLimitDecision.retryAfterSeconds;
+      const response = ProxyResponses.buildError(
+        429,
+        "Too many authentication failures. Please retry later.",
+        "rate_limit_error"
+      );
+      if (retryAfter != null) {
+        const headers = new Headers(response.headers);
+        headers.set("Retry-After", String(retryAfter));
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      }
+      return response;
+    }
+
     const authHeader = session.headers.get("authorization") ?? undefined;
     const apiKeyHeader = session.headers.get("x-api-key") ?? undefined;
     // Gemini CLI 认证：支持 x-goog-api-key 头部和 key 查询参数
@@ -22,8 +77,12 @@ export class ProxyAuthenticator {
     session.setAuthState(authState);
 
     if (authState.success) {
+      proxyAuthPolicy.recordSuccess(clientIp);
       return null;
     }
+
+    // Record failure for rate limiting
+    proxyAuthPolicy.recordFailure(clientIp);
 
     // 返回详细的错误信息，帮助用户快速定位问题
     return authState.errorResponse ?? ProxyResponses.buildError(401, "认证失败");

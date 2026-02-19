@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
-import { validateKey } from "@/lib/auth";
+import { AUTH_COOKIE_NAME } from "@/lib/auth";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
@@ -10,16 +10,12 @@ import { logger } from "@/lib/logger";
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
 const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
 
-// Paths that allow read-only access (for canLoginWebUi=false keys)
-// These paths bypass the canLoginWebUi check in validateKey
-const READ_ONLY_PATH_PATTERNS = ["/my-usage"];
-
 const API_PROXY_PATH = "/v1";
 
 // Create next-intl middleware for locale detection and routing
 const intlMiddleware = createMiddleware(routing);
 
-async function proxyHandler(request: NextRequest) {
+function proxyHandler(request: NextRequest) {
   const method = request.method;
   const pathname = request.nextUrl.pathname;
 
@@ -61,13 +57,12 @@ async function proxyHandler(request: NextRequest) {
     return localeResponse;
   }
 
-  // Check if current path allows read-only access (for canLoginWebUi=false keys)
-  const isReadOnlyPath = READ_ONLY_PATH_PATTERNS.some(
-    (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(`${pattern}/`)
-  );
-
-  // Check authentication for protected routes
-  const authToken = request.cookies.get("auth-token");
+  // Check authentication for protected routes (cookie existence only).
+  // Full session validation (Redis lookup, key permissions, expiry) is handled
+  // by downstream layouts (dashboard/layout.tsx, etc.) which run in Node.js
+  // runtime with guaranteed Redis/DB access. This avoids a death loop where
+  // the proxy deletes the cookie on transient validation failures.
+  const authToken = request.cookies.get(AUTH_COOKIE_NAME);
 
   if (!authToken) {
     // Not authenticated, redirect to login page
@@ -79,21 +74,7 @@ async function proxyHandler(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Validate key permissions (canLoginWebUi, isEnabled, expiresAt, etc.)
-  const session = await validateKey(authToken.value, { allowReadOnlyAccess: isReadOnlyPath });
-  if (!session) {
-    // Invalid key or insufficient permissions, clear cookie and redirect to login
-    const url = request.nextUrl.clone();
-    // Preserve locale in redirect
-    const locale = isLocaleInPath ? potentialLocale : routing.defaultLocale;
-    url.pathname = `/${locale}/login`;
-    url.searchParams.set("from", pathWithoutLocale || "/dashboard");
-    const response = NextResponse.redirect(url);
-    response.cookies.delete("auth-token");
-    return response;
-  }
-
-  // Authentication passed, return locale response
+  // Cookie exists - pass through to layout for full validation
   return localeResponse;
 }
 

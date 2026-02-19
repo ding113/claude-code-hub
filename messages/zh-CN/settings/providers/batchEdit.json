@@ -5,6 +5,10 @@
   "invertSelection": "反选",
   "selectedCount": "已选 {count} 项",
   "editSelected": "编辑选中项",
+  "selectByType": "按类型选择",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "按分组选择",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "编辑",
     "delete": "删除",
@@ -20,12 +24,33 @@
     "next": "下一步",
     "noFieldEnabled": "请至少启用一个要更新的字段"
   },
+  "sections": {
+    "basic": "基本设置",
+    "routing": "分组与路由",
+    "anthropic": "Anthropic 设置"
+  },
   "fields": {
-    "isEnabled": "状态",
+    "isEnabled": {
+      "label": "状态",
+      "noChange": "不修改",
+      "enable": "启用",
+      "disable": "禁用"
+    },
     "priority": "优先级",
     "weight": "权重",
     "costMultiplier": "价格倍率",
-    "groupTag": "分组标签"
+    "groupTag": {
+      "label": "分组标签",
+      "clear": "清除"
+    },
+    "modelRedirects": "模型重定向",
+    "allowedModels": "允许的模型",
+    "thinkingBudget": "思维预算",
+    "adaptiveThinking": "自适应思维"
+  },
+  "affectedProviders": {
+    "title": "受影响的供应商",
+    "more": "+{count} 更多"
   },
   "confirm": {
     "title": "确认操作",
@@ -34,10 +59,47 @@
     "goBack": "返回",
     "processing": "处理中..."
   },
+  "preview": {
+    "title": "预览变更",
+    "description": "将变更应用到 {count} 个供应商前请先确认",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: 已跳过 ({reason})",
+    "excludeProvider": "排除",
+    "summary": "{providerCount} 个供应商, {fieldCount} 项变更, {skipCount} 项跳过",
+    "noChanges": "没有可应用的变更",
+    "apply": "应用变更",
+    "back": "返回编辑",
+    "loading": "正在生成预览..."
+  },
+  "batchNotes": {
+    "codexOnly": "仅 Codex",
+    "claudeOnly": "仅 Claude",
+    "geminiOnly": "仅 Gemini"
+  },
+  "selectionHint": "选择多个服务商后可进行批量操作",
+  "undo": {
+    "button": "撤销",
+    "success": "操作已成功撤销",
+    "expired": "撤销窗口已过期",
+    "batchDeleteSuccess": "已删除 {count} 个供应商",
+    "batchDeleteUndone": "已恢复 {count} 个供应商",
+    "singleDeleteSuccess": "供应商已删除",
+    "singleDeleteUndone": "供应商已恢复",
+    "singleEditSuccess": "供应商已更新",
+    "singleEditUndone": "更改已回退",
+    "failed": "撤销失败"
+  },
   "toast": {
     "updated": "已更新 {count} 个供应商",
     "deleted": "已删除 {count} 个供应商",
     "circuitReset": "已重置 {count} 个熔断器",
-    "failed": "操作失败: {error}"
+    "failed": "操作失败: {error}",
+    "undo": "撤销",
+    "undoSuccess": "已还原 {count} 个供应商",
+    "undoFailed": "撤销失败: {error}",
+    "undoExpired": "撤销窗口已过期",
+    "previewFailed": "预览失败: {error}",
+    "unknownError": "未知错误"
   }
 }

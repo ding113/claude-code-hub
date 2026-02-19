@@ -21,6 +21,7 @@ export function TestingSection() {
   const t = useTranslations("settings.providers.form");
   const { state, dispatch, mode, provider, enableMultiProviderTypes } = useProviderForm();
   const isEdit = mode === "edit";
+  const isBatch = mode === "batch";
 
   return (
     <motion.div
@@ -30,47 +31,49 @@ export function TestingSection() {
       transition={{ duration: 0.2 }}
       className="space-y-6"
     >
-      {/* API Test */}
-      <SectionCard
-        title={t("sections.apiTest.title")}
-        description={t("sections.apiTest.desc")}
-        icon={FlaskConical}
-        variant="highlight"
-      >
-        <div className="space-y-4">
-          {/* Test Summary */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-            <Zap className="h-4 w-4 text-primary" />
-            <div className="flex-1 text-xs text-muted-foreground">
-              {t("sections.apiTest.summary")}
-            </div>
-          </div>
-
-          {/* API Test Button */}
-          <div className="p-4 rounded-lg bg-card/50 border border-border/50 space-y-4">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
-                <FlaskConical className="h-5 w-5" />
-              </span>
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">{t("sections.apiTest.testLabel")}</div>
-                <p className="text-xs text-muted-foreground">{t("sections.apiTest.desc")}</p>
+      {/* API Test - hidden in batch mode */}
+      {!isBatch && (
+        <SectionCard
+          title={t("sections.apiTest.title")}
+          description={t("sections.apiTest.desc")}
+          icon={FlaskConical}
+          variant="highlight"
+        >
+          <div className="space-y-4">
+            {/* Test Summary */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+              <Zap className="h-4 w-4 text-primary" />
+              <div className="flex-1 text-xs text-muted-foreground">
+                {t("sections.apiTest.summary")}
               </div>
             </div>
-            <ApiTestButton
-              providerUrl={state.basic.url}
-              apiKey={state.basic.key}
-              proxyUrl={state.network.proxyUrl}
-              proxyFallbackToDirect={state.network.proxyFallbackToDirect}
-              providerId={isEdit ? provider?.id : undefined}
-              providerType={state.routing.providerType}
-              allowedModels={state.routing.allowedModels}
-              enableMultiProviderTypes={enableMultiProviderTypes}
-              disabled={state.ui.isPending || !state.basic.url.trim()}
-            />
+
+            {/* API Test Button */}
+            <div className="p-4 rounded-lg bg-card/50 border border-border/50 space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
+                  <FlaskConical className="h-5 w-5" />
+                </span>
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">{t("sections.apiTest.testLabel")}</div>
+                  <p className="text-xs text-muted-foreground">{t("sections.apiTest.desc")}</p>
+                </div>
+              </div>
+              <ApiTestButton
+                providerUrl={state.basic.url}
+                apiKey={state.basic.key}
+                proxyUrl={state.network.proxyUrl}
+                proxyFallbackToDirect={state.network.proxyFallbackToDirect}
+                providerId={isEdit ? provider?.id : undefined}
+                providerType={state.routing.providerType}
+                allowedModels={state.routing.allowedModels}
+                enableMultiProviderTypes={enableMultiProviderTypes}
+                disabled={state.ui.isPending || !state.basic.url.trim()}
+              />
+            </div>
           </div>
-        </div>
-      </SectionCard>
+        </SectionCard>
+      )}
 
       {/* MCP Passthrough */}
       <SectionCard

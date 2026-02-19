@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, type ReactNode, useContext, useReducer } from "react";
+import {
+  createContext,
+  type Dispatch,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useReducer,
+  useRef,
+} from "react";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import type {
   FormMode,
@@ -8,6 +17,52 @@ import type {
   ProviderFormContextValue,
   ProviderFormState,
 } from "./provider-form-types";
+
+// Maps action types to dirty field paths for batch mode tracking
+const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> = {
+  SET_BATCH_IS_ENABLED: "batch.isEnabled",
+  SET_PRIORITY: "routing.priority",
+  SET_WEIGHT: "routing.weight",
+  SET_COST_MULTIPLIER: "routing.costMultiplier",
+  SET_GROUP_TAG: "routing.groupTag",
+  SET_PRESERVE_CLIENT_IP: "routing.preserveClientIp",
+  SET_MODEL_REDIRECTS: "routing.modelRedirects",
+  SET_ALLOWED_MODELS: "routing.allowedModels",
+  SET_GROUP_PRIORITIES: "routing.groupPriorities",
+  SET_CACHE_TTL_PREFERENCE: "routing.cacheTtlPreference",
+  SET_SWAP_CACHE_TTL_BILLING: "routing.swapCacheTtlBilling",
+  SET_CONTEXT_1M_PREFERENCE: "routing.context1mPreference",
+  SET_CODEX_REASONING_EFFORT: "routing.codexReasoningEffortPreference",
+  SET_CODEX_REASONING_SUMMARY: "routing.codexReasoningSummaryPreference",
+  SET_CODEX_TEXT_VERBOSITY: "routing.codexTextVerbosityPreference",
+  SET_CODEX_PARALLEL_TOOL_CALLS: "routing.codexParallelToolCallsPreference",
+  SET_ANTHROPIC_MAX_TOKENS: "routing.anthropicMaxTokensPreference",
+  SET_ANTHROPIC_THINKING_BUDGET: "routing.anthropicThinkingBudgetPreference",
+  SET_ADAPTIVE_THINKING_ENABLED: "routing.anthropicAdaptiveThinking",
+  SET_ADAPTIVE_THINKING_EFFORT: "routing.anthropicAdaptiveThinking",
+  SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE: "routing.anthropicAdaptiveThinking",
+  SET_ADAPTIVE_THINKING_MODELS: "routing.anthropicAdaptiveThinking",
+  SET_GEMINI_GOOGLE_SEARCH: "routing.geminiGoogleSearchPreference",
+  SET_LIMIT_5H_USD: "rateLimit.limit5hUsd",
+  SET_LIMIT_DAILY_USD: "rateLimit.limitDailyUsd",
+  SET_DAILY_RESET_MODE: "rateLimit.dailyResetMode",
+  SET_DAILY_RESET_TIME: "rateLimit.dailyResetTime",
+  SET_LIMIT_WEEKLY_USD: "rateLimit.limitWeeklyUsd",
+  SET_LIMIT_MONTHLY_USD: "rateLimit.limitMonthlyUsd",
+  SET_LIMIT_TOTAL_USD: "rateLimit.limitTotalUsd",
+  SET_LIMIT_CONCURRENT_SESSIONS: "rateLimit.limitConcurrentSessions",
+  SET_FAILURE_THRESHOLD: "circuitBreaker.failureThreshold",
+  SET_OPEN_DURATION_MINUTES: "circuitBreaker.openDurationMinutes",
+  SET_HALF_OPEN_SUCCESS_THRESHOLD: "circuitBreaker.halfOpenSuccessThreshold",
+  SET_MAX_RETRY_ATTEMPTS: "circuitBreaker.maxRetryAttempts",
+  SET_PROXY_URL: "network.proxyUrl",
+  SET_PROXY_FALLBACK_TO_DIRECT: "network.proxyFallbackToDirect",
+  SET_FIRST_BYTE_TIMEOUT_STREAMING: "network.firstByteTimeoutStreamingSeconds",
+  SET_STREAMING_IDLE_TIMEOUT: "network.streamingIdleTimeoutSeconds",
+  SET_REQUEST_TIMEOUT_NON_STREAMING: "network.requestTimeoutNonStreamingSeconds",
+  SET_MCP_PASSTHROUGH_TYPE: "mcp.mcpPassthroughType",
+  SET_MCP_PASSTHROUGH_URL: "mcp.mcpPassthroughUrl",
+};
 
 // Initial state factory
 export function createInitialState(
@@ -22,8 +77,71 @@ export function createInitialState(
   }
 ): ProviderFormState {
   const isEdit = mode === "edit";
+  const isBatch = mode === "batch";
   const raw = isEdit ? provider : cloneProvider;
   const sourceProvider = raw ? structuredClone(raw) : undefined;
+
+  // Batch mode: all fields start at neutral defaults (no provider source)
+  if (isBatch) {
+    return {
+      basic: { name: "", url: "", key: "", websiteUrl: "" },
+      routing: {
+        providerType: "claude",
+        groupTag: [],
+        preserveClientIp: false,
+        modelRedirects: {},
+        allowedModels: [],
+        priority: 0,
+        groupPriorities: {},
+        weight: 1,
+        costMultiplier: 1.0,
+        cacheTtlPreference: "inherit",
+        swapCacheTtlBilling: false,
+        context1mPreference: "inherit",
+        codexReasoningEffortPreference: "inherit",
+        codexReasoningSummaryPreference: "inherit",
+        codexTextVerbosityPreference: "inherit",
+        codexParallelToolCallsPreference: "inherit",
+        anthropicMaxTokensPreference: "inherit",
+        anthropicThinkingBudgetPreference: "inherit",
+        anthropicAdaptiveThinking: null,
+        geminiGoogleSearchPreference: "inherit",
+      },
+      rateLimit: {
+        limit5hUsd: null,
+        limitDailyUsd: null,
+        dailyResetMode: "fixed",
+        dailyResetTime: "00:00",
+        limitWeeklyUsd: null,
+        limitMonthlyUsd: null,
+        limitTotalUsd: null,
+        limitConcurrentSessions: null,
+      },
+      circuitBreaker: {
+        failureThreshold: undefined,
+        openDurationMinutes: undefined,
+        halfOpenSuccessThreshold: undefined,
+        maxRetryAttempts: null,
+      },
+      network: {
+        proxyUrl: "",
+        proxyFallbackToDirect: false,
+        firstByteTimeoutStreamingSeconds: undefined,
+        streamingIdleTimeoutSeconds: undefined,
+        requestTimeoutNonStreamingSeconds: undefined,
+      },
+      mcp: {
+        mcpPassthroughType: "none",
+        mcpPassthroughUrl: "",
+      },
+      batch: { isEnabled: "no_change" },
+      ui: {
+        activeTab: "basic",
+        isPending: false,
+        showFailureThresholdConfirm: false,
+      },
+    };
+  }
 
   return {
     basic: {
@@ -105,6 +223,7 @@ export function createInitialState(
       mcpPassthroughType: sourceProvider?.mcpPassthroughType ?? "none",
       mcpPassthroughUrl: sourceProvider?.mcpPassthroughUrl ?? "",
     },
+    batch: { isEnabled: "no_change" },
     ui: {
       activeTab: "basic",
       isPending: false,
@@ -317,6 +436,10 @@ export function providerFormReducer(
     case "SET_MCP_PASSTHROUGH_URL":
       return { ...state, mcp: { ...state.mcp, mcpPassthroughUrl: action.payload } };
 
+    // Batch
+    case "SET_BATCH_IS_ENABLED":
+      return { ...state, batch: { ...state.batch, isEnabled: action.payload } };
+
     // UI
     case "SET_ACTIVE_TAB":
       return { ...state, ui: { ...state.ui, activeTab: action.payload } };
@@ -357,6 +480,7 @@ export function ProviderFormProvider({
   hideWebsiteUrl = false,
   preset,
   groupSuggestions,
+  batchProviders,
 }: {
   children: ReactNode;
   mode: FormMode;
@@ -372,27 +496,58 @@ export function ProviderFormProvider({
     providerType?: ProviderType;
   };
   groupSuggestions: string[];
+  batchProviders?: ProviderDisplay[];
 }) {
-  const [state, dispatch] = useReducer(
+  const [state, rawDispatch] = useReducer(
     providerFormReducer,
     createInitialState(mode, provider, cloneProvider, preset)
   );
 
+  const dirtyFieldsRef = useRef(new Set<string>());
+  const isBatch = mode === "batch";
+
+  // Wrap dispatch for batch mode to auto-track dirty fields
+  const dispatch: Dispatch<ProviderFormAction> = useCallback(
+    (action: ProviderFormAction) => {
+      if (isBatch) {
+        const fieldPath = ACTION_TO_FIELD_PATH[action.type];
+        if (fieldPath) {
+          dirtyFieldsRef.current.add(fieldPath);
+        }
+      }
+      rawDispatch(action);
+    },
+    [isBatch]
+  );
+
+  const contextValue = useMemo<ProviderFormContextValue>(
+    () => ({
+      state,
+      dispatch,
+      mode,
+      provider,
+      enableMultiProviderTypes,
+      hideUrl,
+      hideWebsiteUrl,
+      groupSuggestions,
+      batchProviders,
+      dirtyFields: dirtyFieldsRef.current,
+    }),
+    [
+      state,
+      dispatch,
+      mode,
+      provider,
+      enableMultiProviderTypes,
+      hideUrl,
+      hideWebsiteUrl,
+      groupSuggestions,
+      batchProviders,
+    ]
+  );
+
   return (
-    <ProviderFormContext.Provider
-      value={{
-        state,
-        dispatch,
-        mode,
-        provider,
-        enableMultiProviderTypes,
-        hideUrl,
-        hideWebsiteUrl,
-        groupSuggestions,
-      }}
-    >
-      {children}
-    </ProviderFormContext.Provider>
+    <ProviderFormContext.Provider value={contextValue}>{children}</ProviderFormContext.Provider>
   );
 }
 
