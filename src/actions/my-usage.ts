@@ -3,7 +3,7 @@
 import { fromZonedTime } from "date-fns-tz";
 import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest } from "@/drizzle/schema";
+import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
@@ -11,6 +11,7 @@ import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
@@ -359,24 +360,23 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
 
     const breakdown = await db
       .select({
-        model: messageRequest.model,
-        originalModel: messageRequest.originalModel,
+        model: usageLedger.model,
+        originalModel: usageLedger.originalModel,
         calls: sql<number>`count(*)::int`,
-        costUsd: sql<string>`COALESCE(sum(${messageRequest.costUsd}), 0)`,
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
+        costUsd: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
+        inputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
+        outputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
       })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          eq(messageRequest.key, session.key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          gte(messageRequest.createdAt, timeRange.startTime),
-          lt(messageRequest.createdAt, timeRange.endTime)
+          eq(usageLedger.key, session.key.key),
+          LEDGER_BILLING_CONDITION,
+          gte(usageLedger.createdAt, timeRange.startTime),
+          lt(usageLedger.createdAt, timeRange.endTime)
         )
       )
-      .groupBy(messageRequest.model, messageRequest.originalModel);
+      .groupBy(usageLedger.model, usageLedger.originalModel);
 
     let totalCalls = 0;
     let totalInputTokens = 0;
