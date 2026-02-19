@@ -135,9 +135,11 @@ export async function getStatisticsWithCache(
     return data ?? (await queryDatabase(timeRange, mode, userId));
   } finally {
     if (locked) {
-      await redis.del(lockKey).catch((err) =>
-        logger.warn("[StatisticsCache] Failed to release lock", { lockKey, error: err })
-      );
+      await redis
+        .del(lockKey)
+        .catch((err) =>
+          logger.warn("[StatisticsCache] Failed to release lock", { lockKey, error: err })
+        );
     }
   }
 }

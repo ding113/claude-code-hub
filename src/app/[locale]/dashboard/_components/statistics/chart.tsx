@@ -468,7 +468,8 @@ export function UserStatisticsChart({
                                   <span className="font-medium truncate">
                                     {displayUser?.name === "__others__"
                                       ? t("othersAggregate")
-                                      : displayUser?.name || baseKey}:
+                                      : displayUser?.name || baseKey}
+                                    :
                                   </span>
                                 </div>
                                 <span className="ml-auto font-mono flex-shrink-0">

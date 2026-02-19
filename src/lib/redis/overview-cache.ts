@@ -68,9 +68,11 @@ export async function getOverviewWithCache(
     return data ?? (await getOverviewMetricsWithComparison(userId));
   } finally {
     if (lockAcquired) {
-      await redis.del(lockKey).catch((err) =>
-        logger.warn("[OverviewCache] Failed to release lock", { lockKey, error: err })
-      );
+      await redis
+        .del(lockKey)
+        .catch((err) =>
+          logger.warn("[OverviewCache] Failed to release lock", { lockKey, error: err })
+        );
     }
   }
 }
