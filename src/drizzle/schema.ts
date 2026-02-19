@@ -483,8 +483,14 @@ export const messageRequest = pgTable('message_request', {
 }, (table) => ({
   // 优化统计查询的复合索引（用户+时间+费用）
   messageRequestUserDateCostIdx: index('idx_message_request_user_date_cost').on(table.userId, table.createdAt, table.costUsd).where(sql`${table.deletedAt} IS NULL`),
+  messageRequestUserCreatedAtCostStatsIdx: index('idx_message_request_user_created_at_cost_stats')
+    .on(table.userId, table.createdAt, table.costUsd)
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
   // 优化用户查询的复合索引（按创建时间倒序）
   messageRequestUserQueryIdx: index('idx_message_request_user_query').on(table.userId, table.createdAt).where(sql`${table.deletedAt} IS NULL`),
+  messageRequestProviderCreatedAtActiveIdx: index('idx_message_request_provider_created_at_active')
+    .on(table.providerId, table.createdAt)
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
   // Session ID 前缀查询索引（LIKE 'prefix%'，可稳定命中 B-tree）

@@ -1,0 +1,2 @@
+CREATE INDEX "idx_message_request_user_created_at_cost_stats" ON "message_request" USING btree ("user_id","created_at","cost_usd") WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');--> statement-breakpoint
+CREATE INDEX "idx_message_request_provider_created_at_active" ON "message_request" USING btree ("provider_id","created_at") WHERE "message_request"."deleted_at" IS NULL AND ("message_request"."blocked_by" IS NULL OR "message_request"."blocked_by" <> 'warmup');
