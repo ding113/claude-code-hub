@@ -2,13 +2,18 @@ import { spawn } from "node:child_process";
 import { logger } from "@/lib/logger";
 import { getDatabaseConfig } from "./db-config";
 
+export type ExportMode = "full" | "excludeLogs" | "ledgerOnly";
+
 /**
  * 执行 pg_dump 导出数据库
  *
- * @param excludeLogs 是否排除日志数据（保留表结构但不导出 message_request 数据）
+ * @param mode 导出模式:
+ *   - 'full': 完整备份（默认）
+ *   - 'excludeLogs': 排除日志数据（保留表结构但不导出 message_request 数据）
+ *   - 'ledgerOnly': 仅导出账单数据（完全排除 message_request 表的结构和数据）
  * @returns ReadableStream 数据流
  */
-export function executePgDump(excludeLogs = false): ReadableStream<Uint8Array> {
+export function executePgDump(mode: ExportMode = "full"): ReadableStream<Uint8Array> {
   const dbConfig = getDatabaseConfig();
 
   const args = [
@@ -24,9 +29,12 @@ export function executePgDump(excludeLogs = false): ReadableStream<Uint8Array> {
     "-v", // Verbose
   ];
 
-  // 排除日志数据（保留表结构但不导出数据）
-  if (excludeLogs) {
+  if (mode === "excludeLogs") {
+    // 保留表结构但不导出数据
     args.push("--exclude-table-data=message_request");
+  } else if (mode === "ledgerOnly") {
+    // 完全排除 message_request 表（结构和数据）
+    args.push("--exclude-table=message_request");
   }
 
   const pgProcess = spawn("pg_dump", args, {
@@ -41,7 +49,7 @@ export function executePgDump(excludeLogs = false): ReadableStream<Uint8Array> {
     host: dbConfig.host,
     port: dbConfig.port,
     database: dbConfig.database,
-    excludeLogs,
+    mode,
   });
 
   return new ReadableStream({

@@ -39,6 +39,16 @@
     "error": "匯出資料庫失敗",
     "exporting": "正在匯出...",
     "failed": "匯出失敗",
+    "mode": {
+      "excludeLogs": "排除日誌",
+      "full": "完整備份",
+      "ledgerOnly": "僅帳單資料"
+    },
+    "modeDescription": {
+      "excludeLogs": "不匯出日誌資料（保留表結構）",
+      "full": "匯出所有資料，包括請求日誌",
+      "ledgerOnly": "僅匯出帳單記錄（最小體積）"
+    },
     "successMessage": "資料庫匯出成功！"
   },
   "guide": {

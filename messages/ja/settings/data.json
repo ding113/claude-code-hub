@@ -39,6 +39,16 @@
     "error": "データベースのエクスポートに失敗しました",
     "exporting": "エクスポート中...",
     "failed": "エクスポート失敗",
+    "mode": {
+      "excludeLogs": "ログを除外",
+      "full": "完全バックアップ",
+      "ledgerOnly": "課金データのみ"
+    },
+    "modeDescription": {
+      "excludeLogs": "ログデータなしでエクスポート（テーブル構造は保持）",
+      "full": "リクエストログを含む全データをエクスポート",
+      "ledgerOnly": "課金台帳のみエクスポート（最小サイズ）"
+    },
     "successMessage": "データベースのエクスポートに成功しました！"
   },
   "guide": {
