@@ -61,6 +61,8 @@ export interface TriggerInfo {
  * @param triggerInfo 触发信息
  * @returns 清理结果
  */
+// NOTE: usage_ledger is intentionally immune to log cleanup.
+// Only message_request rows are deleted here.
 export async function cleanupLogs(
   conditions: CleanupConditions,
   options: CleanupOptions = {},

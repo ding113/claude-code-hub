@@ -5,7 +5,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
-import { messageRequest, users as usersTable } from "@/drizzle/schema";
+import { messageRequest, usageLedger, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -1231,6 +1231,7 @@ export async function editUser(
 }
 
 // 删除用户
+// Ledger rows intentionally survive user deletion (billing audit trail)
 export async function removeUser(userId: number): Promise<ActionResult> {
   try {
     // Get translations for error messages
@@ -1571,6 +1572,9 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
 
     // 1. Delete all messageRequest logs for this user
     await db.delete(messageRequest).where(eq(messageRequest.userId, userId));
+
+    // Also clear ledger rows -- the ONLY legitimate DELETE path for usage_ledger
+    await db.delete(usageLedger).where(eq(usageLedger.userId, userId));
 
     // 2. Clear Redis cache
     const { getRedisClient } = await import("@/lib/redis");
