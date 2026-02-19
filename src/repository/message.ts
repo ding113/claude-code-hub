@@ -294,7 +294,8 @@ export async function findSessionOriginChain(
         eq(messageRequest.sessionId, sessionId),
         isNull(messageRequest.deletedAt),
         EXCLUDE_WARMUP_CONDITION,
-        sql`${messageRequest.providerChain} IS NOT NULL`
+        sql`${messageRequest.providerChain} IS NOT NULL`,
+        sql`${messageRequest.providerChain} @> '[{"reason": "initial_selection"}]'::jsonb`
       )
     )
     .orderBy(asc(messageRequest.requestSequence))

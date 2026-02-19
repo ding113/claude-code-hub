@@ -103,6 +103,7 @@ describe("repository/message findSessionOriginChain", () => {
     const whereSql = sqlToString(whereArgs[0]).toLowerCase();
     expect(whereSql).toContain("warmup");
     expect(whereSql).toContain("is not null");
+    expect(whereSql).toContain("initial_selection");
 
     expect(orderByArgs.length).toBeGreaterThan(0);
     const orderSql = sqlToString(orderByArgs[0]).toLowerCase();
@@ -119,8 +120,8 @@ describe("repository/message findSessionOriginChain", () => {
       {
         id: 202,
         name: "provider-b",
-        reason: "session_reuse",
-        selectionMethod: "session_reuse",
+        reason: "initial_selection",
+        selectionMethod: "weighted_random",
         attemptNumber: 2,
       },
     ];
@@ -192,5 +193,56 @@ describe("repository/message findSessionOriginChain", () => {
     const result = await findSessionOriginChain("session-null-provider-chain");
 
     expect(result).toBeNull();
+  });
+
+  test("all session_reuse: 全部请求都是 session_reuse 时 JSONB 过滤后返回 null", async () => {
+    vi.resetModules();
+
+    const selectMock = vi.fn(() => createThenableQuery([]));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { findSessionOriginChain } = await import("@/repository/message");
+    const result = await findSessionOriginChain("session-all-reuse");
+
+    expect(result).toBeNull();
+  });
+
+  test("JSONB filter present: WHERE 子句包含 initial_selection 过滤条件", async () => {
+    vi.resetModules();
+
+    const whereArgs: unknown[] = [];
+
+    const chain: ProviderChainItem[] = [
+      {
+        id: 301,
+        name: "provider-c",
+        reason: "initial_selection",
+        selectionMethod: "weighted_random",
+        attemptNumber: 1,
+      },
+    ];
+
+    const selectMock = vi.fn(() => createThenableQuery([{ providerChain: chain }], { whereArgs }));
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async () => ({ count: 0 })),
+      },
+    }));
+
+    const { findSessionOriginChain } = await import("@/repository/message");
+    await findSessionOriginChain("session-jsonb-filter");
+
+    expect(whereArgs.length).toBeGreaterThan(0);
+    const whereSql = sqlToString(whereArgs[0]).toLowerCase();
+    expect(whereSql).toContain("initial_selection");
+    expect(whereSql).toContain("@>");
   });
 });
