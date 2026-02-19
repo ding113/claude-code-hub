@@ -122,6 +122,33 @@ describe("getOverviewWithCache", () => {
     expect(getOverviewMetricsWithComparison).toHaveBeenCalledWith(undefined);
   });
 
+  it("falls back to direct DB query when lock is held and retry is still empty", async () => {
+    vi.useFakeTimers();
+    try {
+      const data = createOverviewData();
+      const redis = createRedisMock();
+      redis.get.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+      redis.set.mockResolvedValueOnce(null);
+
+      vi.mocked(getRedisClient).mockReturnValue(
+        redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+      );
+      vi.mocked(getOverviewMetricsWithComparison).mockResolvedValueOnce(data);
+
+      const pending = getOverviewWithCache(99);
+      await vi.advanceTimersByTimeAsync(100);
+      const result = await pending;
+
+      expect(result).toEqual(data);
+      expect(redis.set).toHaveBeenCalledWith("overview:user:99:lock", "1", "EX", 5, "NX");
+      expect(redis.get).toHaveBeenNthCalledWith(1, "overview:user:99");
+      expect(redis.get).toHaveBeenNthCalledWith(2, "overview:user:99");
+      expect(getOverviewMetricsWithComparison).toHaveBeenCalledWith(99);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("uses different cache keys for global vs user scope", async () => {
     const redis = createRedisMock();
     const data = createOverviewData();
@@ -168,5 +195,16 @@ describe("invalidateOverviewCache", () => {
     vi.mocked(getRedisClient).mockReturnValue(null);
 
     await expect(invalidateOverviewCache(42)).resolves.toBeUndefined();
+  });
+
+  it("swallows Redis errors during invalidation", async () => {
+    const redis = createRedisMock();
+    redis.del.mockRejectedValueOnce(new Error("delete failed"));
+
+    vi.mocked(getRedisClient).mockReturnValue(
+      redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+    );
+
+    await expect(invalidateOverviewCache()).resolves.toBeUndefined();
   });
 });

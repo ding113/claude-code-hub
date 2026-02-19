@@ -6,7 +6,7 @@ import {
   getMixedStatisticsFromDB,
   getUserStatisticsFromDB,
 } from "@/repository/statistics";
-import type { DatabaseKeyStatRow, DatabaseStatRow, TimeRange } from "@/types/statistics";
+import type { DatabaseKeyStatRow, DatabaseStatRow } from "@/types/statistics";
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -191,6 +191,76 @@ describe("getStatisticsWithCache", () => {
     expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today");
   });
 
+  it("uses retry path and returns cached data when lock is held", async () => {
+    vi.useFakeTimers();
+    try {
+      const redis = createRedisMock();
+      const rows = createUserStats();
+      redis.get.mockResolvedValueOnce(null).mockResolvedValueOnce(JSON.stringify(rows));
+      redis.set.mockResolvedValueOnce(null);
+
+      vi.mocked(getRedisClient).mockReturnValue(
+        redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+      );
+
+      const pending = getStatisticsWithCache("today", "users");
+      await vi.advanceTimersByTimeAsync(100);
+      const result = await pending;
+
+      expect(result).toEqual(rows);
+      expect(redis.set).toHaveBeenCalledWith(
+        "statistics:today:users:global:lock",
+        "1",
+        "EX",
+        5,
+        "NX"
+      );
+      expect(getUserStatisticsFromDB).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to direct DB when retry times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const redis = createRedisMock();
+      const rows = createUserStats();
+      redis.get.mockResolvedValue(null);
+      redis.set.mockResolvedValueOnce(null);
+
+      vi.mocked(getRedisClient).mockReturnValue(
+        redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+      );
+      vi.mocked(getUserStatisticsFromDB).mockResolvedValueOnce(rows);
+
+      const pending = getStatisticsWithCache("today", "users");
+      await vi.advanceTimersByTimeAsync(5100);
+      const result = await pending;
+
+      expect(result).toEqual(rows);
+      expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to direct DB on Redis error", async () => {
+    const redis = createRedisMock();
+    const rows = createUserStats();
+    redis.get.mockRejectedValueOnce(new Error("redis get failed"));
+
+    vi.mocked(getRedisClient).mockReturnValue(
+      redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+    );
+    vi.mocked(getUserStatisticsFromDB).mockResolvedValueOnce(rows);
+
+    const result = await getStatisticsWithCache("today", "users");
+
+    expect(result).toEqual(rows);
+    expect(getUserStatisticsFromDB).toHaveBeenCalledWith("today");
+  });
+
   it("uses different cache keys for different timeRanges", async () => {
     const redis = createRedisMock();
     const rows = createUserStats();
@@ -264,5 +334,36 @@ describe("invalidateStatisticsCache", () => {
 
     expect(redis.keys).toHaveBeenCalledWith("statistics:*:*:global");
     expect(redis.del).toHaveBeenCalledWith(...matchedKeys);
+  });
+
+  it("does nothing when Redis is unavailable", async () => {
+    vi.mocked(getRedisClient).mockReturnValue(null);
+
+    await expect(invalidateStatisticsCache("today", 42)).resolves.toBeUndefined();
+  });
+
+  it("does not call del when wildcard query returns no key", async () => {
+    const redis = createRedisMock();
+    redis.keys.mockResolvedValueOnce([]);
+
+    vi.mocked(getRedisClient).mockReturnValue(
+      redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+    );
+
+    await invalidateStatisticsCache(undefined, 42);
+
+    expect(redis.keys).toHaveBeenCalledWith("statistics:*:*:42");
+    expect(redis.del).not.toHaveBeenCalled();
+  });
+
+  it("swallows Redis errors during invalidation", async () => {
+    const redis = createRedisMock();
+    redis.del.mockRejectedValueOnce(new Error("delete failed"));
+
+    vi.mocked(getRedisClient).mockReturnValue(
+      redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+    );
+
+    await expect(invalidateStatisticsCache("today", 42)).resolves.toBeUndefined();
   });
 });
