@@ -338,65 +338,143 @@ export function LogicTraceTab({
                   originChain &&
                   originChain.length > 0 &&
                   (() => {
-                    const originItem =
-                      originChain.find((item) => item.reason === "initial_selection") ??
-                      originChain[0];
+                    const originItem = originChain.find(
+                      (item) => item.reason === "initial_selection"
+                    );
                     const ctx = originItem?.decisionContext;
+                    const originFilteredProviders = originChain.flatMap(
+                      (item) => item.decisionContext?.filteredProviders || []
+                    );
                     return (
-                      <div className="space-y-2 px-2 py-1 text-xs">
-                        <div className="font-medium text-muted-foreground">
+                      <div className="space-y-2 px-2 py-1">
+                        <div className="text-xs font-medium text-muted-foreground">
                           {t("logicTrace.originDecisionTitle")}
                         </div>
                         {ctx && (
-                          <div className="grid grid-cols-2 gap-1.5 pl-2 min-w-0">
-                            <div>
-                              <span className="text-muted-foreground">
-                                {t("logicTrace.providersCount", { count: ctx.totalProviders })}
-                              </span>
-                            </div>
-                            {ctx.enabledProviders !== undefined && (
-                              <div>
-                                <span className="text-muted-foreground">
-                                  {t("logicTrace.providersCount", { count: ctx.enabledProviders })}
-                                </span>
+                          <StepCard
+                            step={1}
+                            icon={Database}
+                            title={t("logicTrace.initialSelection")}
+                            subtitle={`${ctx.totalProviders} -> ${ctx.afterModelFilter || ctx.afterHealthCheck}`}
+                            status="success"
+                            details={
+                              <div className="grid grid-cols-2 gap-2 text-xs min-w-0">
+                                <div className="min-w-0">
+                                  <span className="text-muted-foreground">Total:</span>{" "}
+                                  <span className="font-mono">{ctx.totalProviders}</span>
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-muted-foreground">Enabled:</span>{" "}
+                                  <span className="font-mono">{ctx.enabledProviders}</span>
+                                </div>
+                                {ctx.afterGroupFilter !== undefined && (
+                                  <div className="min-w-0">
+                                    <span className="text-muted-foreground">After Group:</span>{" "}
+                                    <span className="font-mono">{ctx.afterGroupFilter}</span>
+                                  </div>
+                                )}
+                                {ctx.afterModelFilter !== undefined && (
+                                  <div className="min-w-0">
+                                    <span className="text-muted-foreground">After Model:</span>{" "}
+                                    <span className="font-mono">{ctx.afterModelFilter}</span>
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            {ctx.afterHealthCheck !== undefined && (
-                              <div>
-                                <span className="text-muted-foreground">
-                                  {tChain("details.afterHealthCheck")}:
-                                </span>{" "}
-                                <span className="font-mono">{ctx.afterHealthCheck}</span>
-                              </div>
-                            )}
-                            {ctx.selectedPriority !== undefined && (
-                              <div>
-                                <span className="text-muted-foreground">
-                                  {tChain("details.priority")}:
-                                </span>{" "}
-                                <span className="font-mono">P{ctx.selectedPriority}</span>
-                              </div>
-                            )}
-                            {ctx.candidatesAtPriority && ctx.candidatesAtPriority.length > 0 && (
-                              <div className="col-span-2">
-                                <span className="text-muted-foreground">
-                                  {tChain("details.candidates")}:
-                                </span>{" "}
-                                {ctx.candidatesAtPriority.map((c, i) => (
-                                  <span key={c.id}>
-                                    {i > 0 && ", "}
-                                    {c.name}
-                                    {c.probability !== undefined && (
-                                      <span className="text-muted-foreground">
-                                        {" "}
-                                        {formatProbability(c.probability)}
+                            }
+                          />
+                        )}
+                        {originFilteredProviders.length > 0 && (
+                          <StepCard
+                            step={2}
+                            icon={Filter}
+                            title={t("logicTrace.healthCheck")}
+                            subtitle={`${originFilteredProviders.length} providers filtered`}
+                            status="warning"
+                            details={
+                              <div className="space-y-1 min-w-0">
+                                {originFilteredProviders.map((p, idx) => (
+                                  <div
+                                    key={`${p.id}-${idx}`}
+                                    className="flex items-center gap-2 text-xs flex-wrap min-w-0"
+                                  >
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] shrink-0 max-w-[120px] truncate"
+                                    >
+                                      {p.name}
+                                    </Badge>
+                                    <span className="text-rose-600 break-all">
+                                      {tChain(`filterReasons.${p.reason}`)}
+                                    </span>
+                                    {p.details && (
+                                      <span className="text-muted-foreground break-all">
+                                        (
+                                        {tChain.has(`filterDetails.${p.details}`)
+                                          ? tChain(`filterDetails.${p.details}`)
+                                          : p.details}
+                                        )
                                       </span>
                                     )}
-                                  </span>
+                                  </div>
                                 ))}
                               </div>
-                            )}
-                          </div>
+                            }
+                          />
+                        )}
+                        {ctx?.priorityLevels && ctx.priorityLevels.length > 0 && (
+                          <StepCard
+                            step={originFilteredProviders.length > 0 ? 3 : 2}
+                            icon={Layers}
+                            title={t("logicTrace.prioritySelection")}
+                            subtitle={`Priority ${ctx.selectedPriority}`}
+                            status="success"
+                            details={
+                              <div className="space-y-2">
+                                <div className="flex gap-1 flex-wrap">
+                                  {ctx.priorityLevels.map((p) => (
+                                    <Badge
+                                      key={p}
+                                      variant={p === ctx?.selectedPriority ? "default" : "outline"}
+                                      className="text-[10px]"
+                                    >
+                                      P{p}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                {ctx.candidatesAtPriority &&
+                                  ctx.candidatesAtPriority.length > 0 && (
+                                    <div className="space-y-1 mt-2">
+                                      {ctx.candidatesAtPriority.map((c, idx) => {
+                                        const formattedProbability = formatProbability(
+                                          c.probability
+                                        );
+                                        return (
+                                          <div
+                                            key={`${c.id}-${idx}`}
+                                            className="flex items-center justify-between text-xs"
+                                          >
+                                            <span className="font-medium">{c.name}</span>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-muted-foreground">
+                                                W:{c.weight}
+                                              </span>
+                                              <span className="text-muted-foreground">
+                                                x{c.costMultiplier}
+                                              </span>
+                                              {formattedProbability && (
+                                                <Badge variant="secondary" className="text-[10px]">
+                                                  {formattedProbability}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                              </div>
+                            }
+                          />
                         )}
                       </div>
                     );
