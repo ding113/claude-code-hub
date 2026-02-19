@@ -32,7 +32,7 @@ type RedisMock = {
   set: ReturnType<typeof vi.fn>;
   setex: ReturnType<typeof vi.fn>;
   del: ReturnType<typeof vi.fn>;
-  keys: ReturnType<typeof vi.fn>;
+  scan: ReturnType<typeof vi.fn>;
 };
 
 function createRedisMock(): RedisMock {
@@ -41,7 +41,7 @@ function createRedisMock(): RedisMock {
     set: vi.fn(),
     setex: vi.fn(),
     del: vi.fn(),
-    keys: vi.fn(),
+    scan: vi.fn(),
   };
 }
 
@@ -323,7 +323,7 @@ describe("invalidateStatisticsCache", () => {
       "statistics:7days:keys:global",
       "statistics:30days:mixed:global",
     ];
-    redis.keys.mockResolvedValueOnce(matchedKeys);
+    redis.scan.mockResolvedValueOnce(["0", matchedKeys]);
     redis.del.mockResolvedValueOnce(matchedKeys.length);
 
     vi.mocked(getRedisClient).mockReturnValue(
@@ -332,7 +332,7 @@ describe("invalidateStatisticsCache", () => {
 
     await invalidateStatisticsCache(undefined, undefined);
 
-    expect(redis.keys).toHaveBeenCalledWith("statistics:*:*:global");
+    expect(redis.scan).toHaveBeenCalledWith("0", "MATCH", "statistics:*:*:global", "COUNT", 100);
     expect(redis.del).toHaveBeenCalledWith(...matchedKeys);
   });
 
@@ -344,7 +344,7 @@ describe("invalidateStatisticsCache", () => {
 
   it("does not call del when wildcard query returns no key", async () => {
     const redis = createRedisMock();
-    redis.keys.mockResolvedValueOnce([]);
+    redis.scan.mockResolvedValueOnce(["0", []]);
 
     vi.mocked(getRedisClient).mockReturnValue(
       redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
@@ -352,7 +352,7 @@ describe("invalidateStatisticsCache", () => {
 
     await invalidateStatisticsCache(undefined, 42);
 
-    expect(redis.keys).toHaveBeenCalledWith("statistics:*:*:42");
+    expect(redis.scan).toHaveBeenCalledWith("0", "MATCH", "statistics:*:*:42", "COUNT", 100);
     expect(redis.del).not.toHaveBeenCalled();
   });
 

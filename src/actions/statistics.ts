@@ -84,7 +84,7 @@ export async function getUserStatistics(
       statsData = [...mixedData.ownKeys, ...mixedData.othersAggregate];
 
       // 合并实体列表：自己的密钥 + 其他用户虚拟实体
-      entities = [...ownKeysList, { id: -1, name: "其他用户" }];
+      entities = [...ownKeysList, { id: -1, name: "__others__" }];
     } else {
       // 非 Admin + !allowGlobalUsageView: 仅显示自己的密钥
       const [cachedData, keyList] = await Promise.all([

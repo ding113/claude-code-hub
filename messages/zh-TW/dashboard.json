@@ -704,7 +704,8 @@
     "states": {
       "noData": "暫無統計資料",
       "fetchFailed": "取得統計資料失敗"
-    }
+    },
+    "othersAggregate": "其他使用者"
   },
   "errors": {
     "fetchSystemSettingsFailed": "取得系統設定失敗",

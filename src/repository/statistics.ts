@@ -252,7 +252,7 @@ function zeroFillMixedOthersStats(
     const row = rowMap.get(bucket.getTime());
     return {
       user_id: -1,
-      user_name: "其他用户",
+      user_name: "__others__",
       date: new Date(bucket.getTime()),
       api_calls: row?.api_calls ?? 0,
       total_cost: row?.total_cost ?? 0,

@@ -4,8 +4,10 @@ import {
   getMixedStatisticsFromDB,
   getUserStatisticsFromDB,
 } from "@/repository/statistics";
+import { buildStatisticsCacheKey } from "@/types/dashboard-cache";
 import type { DatabaseKeyStatRow, DatabaseStatRow, TimeRange } from "@/types/statistics";
 import { getRedisClient } from "./client";
+import { scanPattern } from "./scan-helper";
 
 const CACHE_TTL = 30;
 const LOCK_TTL = 5;
@@ -17,15 +19,6 @@ type MixedStatisticsResult = {
 
 type StatisticsCacheData = DatabaseStatRow[] | DatabaseKeyStatRow[] | MixedStatisticsResult;
 
-function buildCacheKey(
-  timeRange: TimeRange,
-  mode: "users" | "keys" | "mixed",
-  userId?: number
-): string {
-  const scope = userId !== undefined ? `${userId}` : "global";
-  return `statistics:${timeRange}:${mode}:${scope}`;
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -35,6 +28,9 @@ async function queryDatabase(
   mode: "users" | "keys" | "mixed",
   userId?: number
 ): Promise<StatisticsCacheData> {
+  if ((mode === "keys" || mode === "mixed") && userId === undefined) {
+    throw new Error(`queryDatabase: userId required for mode="${mode}"`);
+  }
   switch (mode) {
     case "users":
       return await getUserStatisticsFromDB(timeRange);
@@ -70,8 +66,11 @@ export async function getStatisticsWithCache(
     return await queryDatabase(timeRange, mode, userId);
   }
 
-  const cacheKey = buildCacheKey(timeRange, mode, userId);
+  const cacheKey = buildStatisticsCacheKey(timeRange, mode, userId);
   const lockKey = `${cacheKey}:lock`;
+
+  let locked = false;
+  let data: StatisticsCacheData | undefined;
 
   try {
     // 1. Try cache
@@ -82,15 +81,19 @@ export async function getStatisticsWithCache(
     }
 
     // 2. Cache miss - acquire lock (SET NX EX)
-    const locked = await redis.set(lockKey, "1", "EX", LOCK_TTL, "NX");
+    const lockResult = await redis.set(lockKey, "1", "EX", LOCK_TTL, "NX");
+    locked = lockResult === "OK";
 
-    if (locked === "OK") {
+    if (locked) {
       logger.debug("[StatisticsCache] Acquired lock, computing", { timeRange, mode, lockKey });
 
-      const data = await queryDatabase(timeRange, mode, userId);
+      data = await queryDatabase(timeRange, mode, userId);
 
-      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data));
-      await redis.del(lockKey);
+      try {
+        await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data));
+      } catch (writeErr) {
+        logger.warn("[StatisticsCache] Failed to write cache", { cacheKey, error: writeErr });
+      }
 
       logger.info("[StatisticsCache] Cache updated", {
         timeRange,
@@ -129,7 +132,13 @@ export async function getStatisticsWithCache(
       mode,
       error,
     });
-    return await queryDatabase(timeRange, mode, userId);
+    return data ?? (await queryDatabase(timeRange, mode, userId));
+  } finally {
+    if (locked) {
+      await redis.del(lockKey).catch((err) =>
+        logger.warn("[StatisticsCache] Failed to release lock", { lockKey, error: err })
+      );
+    }
   }
 }
 
@@ -153,12 +162,12 @@ export async function invalidateStatisticsCache(
   try {
     if (timeRange) {
       const modes = ["users", "keys", "mixed"] as const;
-      const keysToDelete = modes.map((m) => `statistics:${timeRange}:${m}:${scope}`);
+      const keysToDelete = modes.map((m) => buildStatisticsCacheKey(timeRange, m, userId));
       await redis.del(...keysToDelete);
       logger.info("[StatisticsCache] Cache invalidated", { timeRange, scope, keysToDelete });
     } else {
       const pattern = `statistics:*:*:${scope}`;
-      const matchedKeys = await redis.keys(pattern);
+      const matchedKeys = await scanPattern(redis, pattern);
       if (matchedKeys.length > 0) {
         await redis.del(...matchedKeys);
       }

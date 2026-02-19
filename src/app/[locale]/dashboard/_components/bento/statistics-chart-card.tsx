@@ -79,7 +79,7 @@ export function StatisticsChartCard({
     };
     data.users.forEach((user, index) => {
       config[user.dataKey] = {
-        label: user.name,
+        label: user.name === "__others__" ? t("othersAggregate") : user.name,
         color: getUserColor(index),
       };
     });
@@ -337,7 +337,11 @@ export function StatisticsChartCard({
                                   className="h-2 w-2 rounded-full flex-shrink-0"
                                   style={{ backgroundColor: entry.color }}
                                 />
-                                <span className="truncate">{displayUser?.name || baseKey}</span>
+                                <span className="truncate">
+                                  {displayUser?.name === "__others__"
+                                    ? t("othersAggregate")
+                                    : displayUser?.name || baseKey}
+                                </span>
                               </div>
                               <span className="font-mono font-medium">
                                 {activeChart === "cost"
@@ -444,7 +448,9 @@ export function StatisticsChartCard({
                         className="h-2 w-2 rounded-full flex-shrink-0"
                         style={{ backgroundColor: color }}
                       />
-                      <span className="font-medium truncate max-w-[80px]">{user.name}</span>
+                      <span className="font-medium truncate max-w-[80px]">
+                        {user.name === "__others__" ? t("othersAggregate") : user.name}
+                      </span>
                       <span className="text-muted-foreground">
                         {activeChart === "cost"
                           ? formatCurrency(userTotal?.cost ?? 0, currencyCode)

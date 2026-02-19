@@ -29,6 +29,9 @@ export async function getOverviewWithCache(
     return await getOverviewMetricsWithComparison(userId);
   }
 
+  let lockAcquired = false;
+  let data: OverviewMetricsWithComparison | undefined;
+
   try {
     // 1. Try cache hit
     const cached = await redis.get(cacheKey);
@@ -37,7 +40,8 @@ export async function getOverviewWithCache(
     }
 
     // 2. Acquire lock (prevent thundering herd)
-    const lockAcquired = await redis.set(lockKey, "1", "EX", LOCK_TTL, "NX");
+    const lockResult = await redis.set(lockKey, "1", "EX", LOCK_TTL, "NX");
+    lockAcquired = lockResult === "OK";
 
     if (!lockAcquired) {
       // Another instance is computing -- wait briefly and retry cache
@@ -49,18 +53,25 @@ export async function getOverviewWithCache(
     }
 
     // 3. Cache miss -- query DB
-    const data = await getOverviewMetricsWithComparison(userId);
+    data = await getOverviewMetricsWithComparison(userId);
 
-    // 4. Store in cache with TTL
-    await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data));
-
-    // 5. Release lock
-    await redis.del(lockKey);
+    // 4. Store in cache with TTL (best-effort)
+    try {
+      await redis.setex(cacheKey, CACHE_TTL, JSON.stringify(data));
+    } catch (writeErr) {
+      logger.warn("[OverviewCache] Failed to write cache", { cacheKey, error: writeErr });
+    }
 
     return data;
   } catch (error) {
     logger.warn("[OverviewCache] Redis error, fallback to direct query", { userId, error });
-    return await getOverviewMetricsWithComparison(userId);
+    return data ?? (await getOverviewMetricsWithComparison(userId));
+  } finally {
+    if (lockAcquired) {
+      await redis.del(lockKey).catch((err) =>
+        logger.warn("[OverviewCache] Failed to release lock", { lockKey, error: err })
+      );
+    }
   }
 }
 

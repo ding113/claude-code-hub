@@ -117,7 +117,7 @@ export function UserStatisticsChart({
 
     data.users.forEach((user, index) => {
       config[user.dataKey] = {
-        label: user.name,
+        label: user.name === "__others__" ? t("othersAggregate") : user.name,
         color: getUserColor(index),
       };
     });
@@ -466,7 +466,9 @@ export function UserStatisticsChart({
                                     style={{ backgroundColor: color }}
                                   />
                                   <span className="font-medium truncate">
-                                    {displayUser?.name || baseKey}:
+                                    {displayUser?.name === "__others__"
+                                      ? t("othersAggregate")
+                                      : displayUser?.name || baseKey}:
                                   </span>
                                 </div>
                                 <span className="ml-auto font-mono flex-shrink-0">
@@ -566,7 +568,7 @@ export function UserStatisticsChart({
                               aria-hidden="true"
                             />
                             <span className="text-xs font-medium text-foreground truncate max-w-12">
-                              {user.name}
+                              {user.name === "__others__" ? t("othersAggregate") : user.name}
                             </span>
                           </div>
 

@@ -706,7 +706,8 @@
     "states": {
       "noData": "No statistics data available",
       "fetchFailed": "Failed to fetch statistics"
-    }
+    },
+    "othersAggregate": "Other Users"
   },
   "errors": {
     "fetchSystemSettingsFailed": "Failed to fetch system settings",

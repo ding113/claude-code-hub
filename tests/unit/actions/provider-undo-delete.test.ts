@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "../../../src/lib/provider-batch-patch-error-codes";
+import { buildRedisMock, createRedisStore } from "./redis-mock-utils";
 
 const getSessionMock = vi.fn();
 const deleteProvidersBatchMock = vi.fn();
@@ -7,45 +8,7 @@ const restoreProvidersBatchMock = vi.fn();
 const publishCacheInvalidationMock = vi.fn();
 const clearProviderStateMock = vi.fn();
 const clearConfigCacheMock = vi.fn();
-const redisStore = new Map<string, { value: string; expiresAt: number }>();
-
-function readRedisValue(key: string): string | null {
-  const entry = redisStore.get(key);
-  if (!entry) {
-    return null;
-  }
-
-  if (entry.expiresAt <= Date.now()) {
-    redisStore.delete(key);
-    return null;
-  }
-
-  return entry.value;
-}
-
-const redisSetexMock = vi.fn(async (key: string, ttlSeconds: number, value: string) => {
-  redisStore.set(key, {
-    value,
-    expiresAt: Date.now() + ttlSeconds * 1000,
-  });
-  return "OK";
-});
-
-const redisGetMock = vi.fn(async (key: string) => readRedisValue(key));
-
-const redisDelMock = vi.fn(async (key: string) => {
-  const existed = redisStore.delete(key);
-  return existed ? 1 : 0;
-});
-
-const redisEvalMock = vi.fn(async (_script: string, _numKeys: number, key: string) => {
-  const value = readRedisValue(key);
-  if (value === null) {
-    return null;
-  }
-  redisStore.delete(key);
-  return value;
-});
+const { store: redisStore, mocks: redisMocks } = createRedisStore();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -72,15 +35,7 @@ vi.mock("@/lib/circuit-breaker", () => ({
   getAllHealthStatusAsync: vi.fn(),
 }));
 
-vi.mock("@/lib/redis/client", () => ({
-  getRedisClient: () => ({
-    status: "ready",
-    setex: redisSetexMock,
-    get: redisGetMock,
-    del: redisDelMock,
-    eval: redisEvalMock,
-  }),
-}));
+vi.mock("@/lib/redis/client", () => buildRedisMock(redisMocks));
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -97,10 +52,6 @@ describe("Provider Delete Undo Actions", () => {
     vi.clearAllMocks();
     vi.resetModules();
     redisStore.clear();
-    redisSetexMock.mockClear();
-    redisGetMock.mockClear();
-    redisDelMock.mockClear();
-    redisEvalMock.mockClear();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     deleteProvidersBatchMock.mockResolvedValue(2);
     restoreProvidersBatchMock.mockResolvedValue(2);

@@ -11,6 +11,8 @@ export type StatisticsCacheKey = {
   userId?: number;
 };
 
+export function buildOverviewCacheKey(scope: "global"): string;
+export function buildOverviewCacheKey(scope: "user", userId: number): string;
 export function buildOverviewCacheKey(scope: "global" | "user", userId?: number): string {
   return scope === "global" ? "overview:global" : `overview:user:${userId}`;
 }
