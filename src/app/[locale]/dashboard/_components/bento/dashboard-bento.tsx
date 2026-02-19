@@ -60,9 +60,9 @@ async function fetchActiveSessions(): Promise<ActiveSessionInfo[]> {
   return result.data;
 }
 
-async function fetchStatistics(timeRange: TimeRange): Promise<UserStatisticsData | null> {
+async function fetchStatistics(timeRange: TimeRange): Promise<UserStatisticsData> {
   const result = await getUserStatistics(timeRange);
-  if (!result.ok) return null;
+  if (!result.ok) throw new Error(result.error || "Failed to fetch statistics");
   return result.data;
 }
 
@@ -140,12 +140,13 @@ export function DashboardBento({
   });
 
   // Statistics
-  const { data: statistics } = useQuery<UserStatisticsData | null>({
+  const { data: statistics } = useQuery<UserStatisticsData>({
     queryKey: ["statistics", timeRange],
     queryFn: () => fetchStatistics(timeRange),
     initialData: timeRange === DEFAULT_TIME_RANGE ? initialStatistics : undefined,
     staleTime: 30_000,
     placeholderData: keepPreviousData,
+    retry: 3,
   });
 
   // Leaderboards
