@@ -281,7 +281,7 @@ export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<Dat
       AND message_request.deleted_at IS NULL
       AND ${EXCLUDE_WARMUP_CONDITION}
     WHERE u.deleted_at IS NULL
-    GROUP BY u.id, u.name, ${bucketExpr}
+    GROUP BY u.id, u.name, bucket
     ORDER BY bucket ASC, u.name ASC
   `;
 
@@ -336,7 +336,7 @@ export async function getKeyStatisticsFromDB(
       AND ${EXCLUDE_WARMUP_CONDITION}
     WHERE k.user_id = ${userId}
       AND k.deleted_at IS NULL
-    GROUP BY k.id, k.name, ${bucketExpr}
+    GROUP BY k.id, k.name, bucket
     ORDER BY bucket ASC, k.name ASC
   `;
 
@@ -396,7 +396,7 @@ export async function getMixedStatisticsFromDB(
       AND ${EXCLUDE_WARMUP_CONDITION}
     WHERE k.user_id = ${userId}
       AND k.deleted_at IS NULL
-    GROUP BY k.id, k.name, ${bucketExpr}
+    GROUP BY k.id, k.name, bucket
     ORDER BY bucket ASC, k.name ASC
   `;
 
@@ -411,7 +411,7 @@ export async function getMixedStatisticsFromDB(
       AND message_request.created_at < ${endTs}
       AND message_request.deleted_at IS NULL
       AND ${EXCLUDE_WARMUP_CONDITION}
-    GROUP BY ${bucketExpr}
+    GROUP BY bucket
     ORDER BY bucket ASC
   `;
 
