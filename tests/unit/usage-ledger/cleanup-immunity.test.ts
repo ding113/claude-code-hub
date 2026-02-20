@@ -7,7 +7,7 @@ const usersTs = readFileSync(resolve(process.cwd(), "src/actions/users.ts"), "ut
 
 describe("usage_ledger cleanup immunity", () => {
   it("log cleanup service never imports or queries usageLedger", () => {
-    expect(serviceTs).not.toContain("import.*usageLedger");
+    expect(serviceTs).not.toMatch(/import\b.*\busageLedger\b/);
     expect(serviceTs).not.toMatch(/from.*schema.*usageLedger/);
     expect(serviceTs).not.toContain("db.delete(usageLedger)");
     expect(serviceTs).not.toContain('from("usage_ledger")');

@@ -975,7 +975,7 @@ export async function findUsageLogsStats(
   }
 
   if (providerId !== undefined) {
-    conditions.push(eq(usageLedger.providerId, providerId));
+    conditions.push(eq(usageLedger.finalProviderId, providerId));
   }
 
   const trimmedSessionId = filters.sessionId?.trim();
@@ -1029,8 +1029,10 @@ export async function findUsageLogsStats(
       ? baseQuery.innerJoin(keysTable, eq(usageLedger.key, keysTable.key))
       : baseQuery;
 
+  // In ledger-only mode, message_request is empty — skip the innerJoin to avoid zeroing all results
+  const ledgerOnly = await isLedgerOnlyMode();
   const query =
-    filters.minRetryCount !== undefined
+    filters.minRetryCount !== undefined && !ledgerOnly
       ? queryByKey.innerJoin(messageRequest, eq(usageLedger.requestId, messageRequest.id))
       : queryByKey;
 
