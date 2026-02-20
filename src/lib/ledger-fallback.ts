@@ -2,6 +2,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
+import { logger } from "@/lib/logger";
 
 let cachedResult: boolean | null = null;
 let cacheExpiry = 0;
@@ -18,9 +19,10 @@ export async function isLedgerOnlyMode(): Promise<boolean> {
     cachedResult = !hasData;
     cacheExpiry = now + 60_000;
     return cachedResult;
-  } catch {
-    cachedResult = true;
+  } catch (err) {
+    logger.warn("[ledger-fallback] Failed to check message_request existence", { error: err });
+    cachedResult = cachedResult ?? false;
     cacheExpiry = now + 60_000;
-    return true;
+    return cachedResult;
   }
 }

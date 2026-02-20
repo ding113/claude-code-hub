@@ -15,27 +15,30 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
   const startTime = Date.now();
   const LOCK_KEY = 20260101;
 
-  const result = await db.execute(sql`
-    SELECT pg_try_advisory_lock(${LOCK_KEY}) AS acquired
-  `);
+  // Use pg_try_advisory_xact_lock (transaction-scoped) so lock/unlock always happen
+  // on the same connection — safe with connection pools.
+  return await db.transaction(async (tx) => {
+    const lockResult = await tx.execute(sql`
+      SELECT pg_try_advisory_xact_lock(${LOCK_KEY}) AS acquired
+    `);
 
-  const acquired = (result as unknown as Array<{ acquired: boolean }>)[0]?.acquired;
-  if (!acquired) {
-    return {
-      totalProcessed: 0,
-      totalInserted: 0,
-      durationMs: Date.now() - startTime,
-      alreadyExisted: 0,
-    };
-  }
+    const acquired = (lockResult as unknown as Array<{ acquired: boolean }>)[0]?.acquired;
+    if (!acquired) {
+      return {
+        totalProcessed: 0,
+        totalInserted: 0,
+        durationMs: Date.now() - startTime,
+        alreadyExisted: 0,
+      };
+    }
 
-  try {
+    try {
     let totalProcessed = 0;
     let totalInserted = 0;
     let lastId = 0;
 
     while (true) {
-      const batchResult = await db.execute(sql`
+      const batchResult = await tx.execute(sql`
         WITH batch AS (
           SELECT
             mr.id,
@@ -159,14 +162,15 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
       });
     }
 
-    const durationMs = Date.now() - startTime;
-    return {
-      totalProcessed,
-      totalInserted,
-      durationMs,
-      alreadyExisted: totalProcessed - totalInserted,
-    };
-  } finally {
-    await db.execute(sql`SELECT pg_advisory_unlock(${LOCK_KEY})`);
-  }
+      const durationMs = Date.now() - startTime;
+      return {
+        totalProcessed,
+        totalInserted,
+        durationMs,
+        alreadyExisted: totalProcessed - totalInserted,
+      };
+    } finally {
+      // pg_try_advisory_xact_lock is automatically released when the transaction ends
+    }
+  });
 }

@@ -5,6 +5,8 @@ DECLARE
   v_is_success boolean;
 BEGIN
   IF NEW.blocked_by = 'warmup' THEN
+    -- If a ledger row already exists (row was originally non-warmup), mark it as warmup
+    UPDATE usage_ledger SET blocked_by = 'warmup' WHERE request_id = NEW.id;
     RETURN NEW;
   END IF;
 
