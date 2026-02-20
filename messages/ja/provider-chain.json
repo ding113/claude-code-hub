@@ -55,7 +55,8 @@
     "session_reuse": "セッション再利用",
     "initial_selection": "初期選択",
     "endpoint_pool_exhausted": "エンドポイントプール枯渇",
-    "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト"
+    "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト",
+    "client_restriction_filtered": "クライアント制限"
   },
   "filterReasons": {
     "rate_limited": "レート制限",
@@ -70,13 +71,15 @@
     "group_mismatch": "グループ不一致",
     "health_check_failed": "ヘルスチェック失敗",
     "endpoint_circuit_open": "エンドポイントサーキットオープン",
-    "endpoint_disabled": "エンドポイント無効"
+    "endpoint_disabled": "エンドポイント無効",
+    "client_restriction": "クライアント制限"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "ベンダータイプ一時サーキットブレイク",
     "circuit_open": "サーキットブレーカーオープン",
     "circuit_half_open": "サーキットブレーカーハーフオープン",
-    "rate_limited": "レート制限"
+    "rate_limited": "レート制限",
+    "provider_client_restriction": "クライアント制限によりプロバイダーをスキップ"
   },
   "details": {
     "selectionMethod": "選択方法",

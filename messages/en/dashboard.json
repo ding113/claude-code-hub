@@ -1826,6 +1826,12 @@
           "customLabel": "Custom Client Pattern",
           "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
         },
+        "blockedClients": {
+          "label": "Blocked Clients",
+          "description": "Clients matching these patterns will be rejected, even if they match allowed clients.",
+          "customLabel": "Custom Block Pattern",
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
+        },
         "allowedModels": {
           "label": "Model Restrictions",
           "placeholder": "Enter model name or select from dropdown",
@@ -1849,7 +1855,14 @@
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code (all)",
+        "claude-code-cli": "Claude Code CLI",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
+        "claude-code-sdk-py": "Claude Code SDK (Python)",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {

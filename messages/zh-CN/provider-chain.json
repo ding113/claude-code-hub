@@ -55,7 +55,8 @@
     "session_reuse": "会话复用",
     "initial_selection": "首次选择",
     "endpoint_pool_exhausted": "端点池耗尽",
-    "vendor_type_all_timeout": "供应商类型全端点超时"
+    "vendor_type_all_timeout": "供应商类型全端点超时",
+    "client_restriction_filtered": "客户端受限"
   },
   "filterReasons": {
     "rate_limited": "速率限制",
@@ -70,13 +71,15 @@
     "group_mismatch": "分组不匹配",
     "health_check_failed": "健康检查失败",
     "endpoint_circuit_open": "端点已熔断",
-    "endpoint_disabled": "端点已禁用"
+    "endpoint_disabled": "端点已禁用",
+    "client_restriction": "客户端限制"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "供应商类型临时熔断",
     "circuit_open": "熔断器打开",
     "circuit_half_open": "熔断器半开",
-    "rate_limited": "速率限制"
+    "rate_limited": "速率限制",
+    "provider_client_restriction": "供应商因客户端限制被跳过"
   },
   "details": {
     "selectionMethod": "选择方式",

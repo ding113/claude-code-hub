@@ -1401,6 +1401,12 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.allowed_models !== undefined) {
     result.allowedModels = applyUpdates.allowed_models;
   }
+  if (applyUpdates.allowed_clients !== undefined) {
+    result.allowedClients = applyUpdates.allowed_clients;
+  }
+  if (applyUpdates.blocked_clients !== undefined) {
+    result.blockedClients = applyUpdates.blocked_clients;
+  }
   if (applyUpdates.anthropic_thinking_budget_preference !== undefined) {
     result.anthropicThinkingBudgetPreference = applyUpdates.anthropic_thinking_budget_preference;
   }
@@ -2035,6 +2041,8 @@ export interface BatchUpdateProvidersParams {
     group_tag?: string | null;
     model_redirects?: Record<string, string> | null;
     allowed_models?: string[] | null;
+    allowed_clients?: string[];
+    blocked_clients?: string[];
     anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
     anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   };
@@ -2082,6 +2090,12 @@ export async function batchUpdateProviders(
         Array.isArray(updates.allowed_models) && updates.allowed_models.length === 0
           ? null
           : updates.allowed_models;
+    }
+    if (updates.allowed_clients !== undefined) {
+      repositoryUpdates.allowedClients = updates.allowed_clients;
+    }
+    if (updates.blocked_clients !== undefined) {
+      repositoryUpdates.blockedClients = updates.blocked_clients;
     }
     if (updates.anthropic_thinking_budget_preference !== undefined) {
       repositoryUpdates.anthropicThinkingBudgetPreference =

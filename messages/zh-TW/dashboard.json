@@ -1770,6 +1770,12 @@
           "customLabel": "自訂用戶端模式",
           "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
         },
+        "blockedClients": {
+          "label": "黑名單客戶端",
+          "description": "符合這些模式的客戶端將被拒絕，即使它們也符合白名單。",
+          "customLabel": "自訂黑名單模式",
+          "customPlaceholder": "輸入模式（如 'xcode'、'my-ide'）"
+        },
         "allowedModels": {
           "label": "Model 限制",
           "placeholder": "輸入模型名稱或從下拉選單選擇",
@@ -1793,7 +1799,14 @@
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code（全部）",
+        "claude-code-cli": "Claude Code CLI",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK（TypeScript）",
+        "claude-code-sdk-py": "Claude Code SDK（Python）",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {

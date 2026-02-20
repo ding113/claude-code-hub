@@ -1810,6 +1810,12 @@
           "customLabel": "Пользовательские шаблоны клиентов",
           "customPlaceholder": "Введите шаблон (например, 'xcode', 'my-ide')"
         },
+        "blockedClients": {
+          "label": "Заблокированные клиенты",
+          "description": "Клиенты, соответствующие этим шаблонам, будут отклонены, даже если они соответствуют разрешённым.",
+          "customLabel": "Пользовательский шаблон блокировки",
+          "customPlaceholder": "Введите шаблон (например, 'xcode', 'my-ide')"
+        },
         "allowedModels": {
           "label": "Ограничения моделей",
           "placeholder": "Введите название модели или выберите из списка",
@@ -1833,7 +1839,14 @@
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code (все)",
+        "claude-code-cli": "Claude Code CLI",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
+        "claude-code-sdk-py": "Claude Code SDK (Python)",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {

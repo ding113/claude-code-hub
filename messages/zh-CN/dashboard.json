@@ -1785,6 +1785,12 @@
           "customLabel": "自定义客户端模式",
           "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
         },
+        "blockedClients": {
+          "label": "黑名单客户端",
+          "description": "匹配这些模式的客户端将被拒绝，即使它们也匹配白名单。",
+          "customLabel": "自定义黑名单模式",
+          "customPlaceholder": "输入模式（如 'xcode'、'my-ide'）"
+        },
         "allowedModels": {
           "label": "模型限制",
           "placeholder": "输入模型名称或从下拉列表选择",
@@ -1808,7 +1814,14 @@
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code（全部）",
+        "claude-code-cli": "Claude Code CLI",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK（TypeScript）",
+        "claude-code-sdk-py": "Claude Code SDK（Python）",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {
