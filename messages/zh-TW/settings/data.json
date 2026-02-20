@@ -138,7 +138,9 @@
     "loading": "載入中...",
     "retry": "重試",
     "tables": "{count} 個資料表",
-    "unavailable": "資料庫無法使用"
+    "unavailable": "資料庫無法使用",
+    "size": "資料庫大小",
+    "tableCount": "資料表數量"
   },
   "title": "資料管理"
 }

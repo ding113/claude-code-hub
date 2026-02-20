@@ -138,7 +138,9 @@
     "loading": "Loading...",
     "retry": "Retry",
     "tables": "{count} tables",
-    "unavailable": "Database unavailable"
+    "unavailable": "Database unavailable",
+    "size": "Database Size",
+    "tableCount": "Table Count"
   },
   "title": "Data Management"
 }

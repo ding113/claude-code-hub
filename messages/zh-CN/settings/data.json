@@ -8,7 +8,9 @@
     "retry": "重试",
     "connected": "数据库连接正常",
     "unavailable": "数据库不可用",
-    "tables": "{count} 个表"
+    "tables": "{count} 个表",
+    "size": "数据库大小",
+    "tableCount": "数据表数量"
   },
   "cleanup": {
     "rangeLabel": "清理范围",
