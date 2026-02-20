@@ -57,18 +57,19 @@ export interface UserEditTranslations {
       customLabel: string;
       customPlaceholder: string;
     };
+    blockedClients: {
+      label: string;
+      description: string;
+      customLabel: string;
+      customPlaceholder: string;
+    };
     allowedModels: {
       label: string;
       placeholder: string;
       description: string;
     };
   };
-  presetClients: {
-    "claude-cli": string;
-    "gemini-cli": string;
-    "factory-cli": string;
-    "codex-cli": string;
-  };
+  presetClients: Record<string, string>;
   limitRules: {
     addRule: string;
     ruleTypes: {
@@ -172,6 +173,12 @@ export function useUserTranslations(
           customLabel: t("userEditSection.fields.allowedClients.customLabel"),
           customPlaceholder: t("userEditSection.fields.allowedClients.customPlaceholder"),
         },
+        blockedClients: {
+          label: t("userEditSection.fields.blockedClients.label"),
+          description: t("userEditSection.fields.blockedClients.description"),
+          customLabel: t("userEditSection.fields.blockedClients.customLabel"),
+          customPlaceholder: t("userEditSection.fields.blockedClients.customPlaceholder"),
+        },
         allowedModels: {
           label: t("userEditSection.fields.allowedModels.label"),
           placeholder: t("userEditSection.fields.allowedModels.placeholder"),
@@ -179,7 +186,13 @@ export function useUserTranslations(
         },
       },
       presetClients: {
-        "claude-cli": t("userEditSection.presetClients.claude-cli"),
+        "claude-code": t("userEditSection.presetClients.claude-code"),
+        "claude-code-cli": t("userEditSection.presetClients.claude-code-cli"),
+        "claude-code-cli-sdk": t("userEditSection.presetClients.claude-code-cli-sdk"),
+        "claude-code-vscode": t("userEditSection.presetClients.claude-code-vscode"),
+        "claude-code-sdk-ts": t("userEditSection.presetClients.claude-code-sdk-ts"),
+        "claude-code-sdk-py": t("userEditSection.presetClients.claude-code-sdk-py"),
+        "claude-code-gh-action": t("userEditSection.presetClients.claude-code-gh-action"),
         "gemini-cli": t("userEditSection.presetClients.gemini-cli"),
         "factory-cli": t("userEditSection.presetClients.factory-cli"),
         "codex-cli": t("userEditSection.presetClients.codex-cli"),

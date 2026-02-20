@@ -270,6 +270,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
               dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
               dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
               allowedClients: currentUserDraft.allowedClients || [],
+              blockedClients: currentUserDraft.blockedClients || [],
               allowedModels: currentUserDraft.allowedModels || [],
             }}
             isEnabled={user.isEnabled}

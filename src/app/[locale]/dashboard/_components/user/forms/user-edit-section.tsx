@@ -45,6 +45,7 @@ export interface UserEditSectionProps {
     dailyResetTime?: string;
     // 访问限制字段
     allowedClients?: string[];
+    blockedClients?: string[];
     allowedModels?: string[];
   };
   isEnabled?: boolean;
@@ -95,6 +96,12 @@ export interface UserEditSectionProps {
         processing: string;
       };
       allowedClients: {
+        label: string;
+        description: string;
+        customLabel: string;
+        customPlaceholder: string;
+      };
+      blockedClients: {
         label: string;
         description: string;
         customLabel: string;
@@ -481,6 +488,7 @@ export function UserEditSection({
 
       <AccessRestrictionsSection
         allowedClients={user.allowedClients || []}
+        blockedClients={user.blockedClients || []}
         allowedModels={user.allowedModels || []}
         modelSuggestions={modelSuggestions}
         onChange={onChange}
@@ -490,6 +498,7 @@ export function UserEditSection({
           },
           fields: {
             allowedClients: translations.fields.allowedClients,
+            blockedClients: translations.fields.blockedClients,
             allowedModels: translations.fields.allowedModels,
           },
           presetClients: translations.presetClients,

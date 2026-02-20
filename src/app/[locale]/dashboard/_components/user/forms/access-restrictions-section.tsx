@@ -6,29 +6,50 @@ import { ArrayTagInputField } from "@/components/form/form-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
-// Preset client patterns
-const PRESET_CLIENTS = [
-  { value: "claude-cli", label: "Claude Code CLI" },
-  { value: "gemini-cli", label: "Gemini CLI" },
-  { value: "factory-cli", label: "Droid CLI" },
-  { value: "codex-cli", label: "Codex CLI" },
+// Claude Code builtin sub-clients (must match BUILTIN_CLIENT_KEYWORDS in client-detector.ts)
+const CLAUDE_CODE_CLIENTS = [
+  { value: "claude-code", isParent: true },
+  { value: "claude-code-cli", isParent: false },
+  { value: "claude-code-cli-sdk", isParent: false },
+  { value: "claude-code-vscode", isParent: false },
+  { value: "claude-code-sdk-ts", isParent: false },
+  { value: "claude-code-sdk-py", isParent: false },
+  { value: "claude-code-gh-action", isParent: false },
 ];
 
-// Model name validation pattern: allows alphanumeric, dots, colons, slashes, underscores, hyphens
-// Examples: gemini-1.5-pro, gpt-4.1, claude-3-opus-20240229, o1-mini
+// Other preset clients (non-Claude Code)
+const OTHER_PRESET_CLIENTS = [
+  { value: "gemini-cli" },
+  { value: "factory-cli" },
+  { value: "codex-cli" },
+];
+
+const ALL_PRESET_VALUES = new Set([
+  ...CLAUDE_CODE_CLIENTS.map((c) => c.value),
+  ...OTHER_PRESET_CLIENTS.map((c) => c.value),
+]);
+
+// Model name validation pattern
 const MODEL_NAME_PATTERN = /^[a-zA-Z0-9._:/-]+$/;
 
 export interface AccessRestrictionsSectionProps {
   allowedClients: string[];
+  blockedClients: string[];
   allowedModels: string[];
   modelSuggestions: string[];
-  onChange: (field: "allowedClients" | "allowedModels", value: string[]) => void;
+  onChange: (field: "allowedClients" | "blockedClients" | "allowedModels", value: string[]) => void;
   translations: {
     sections: {
       accessRestrictions: string;
     };
     fields: {
       allowedClients: {
+        label: string;
+        description: string;
+        customLabel: string;
+        customPlaceholder: string;
+      };
+      blockedClients: {
         label: string;
         description: string;
         customLabel: string;
@@ -46,96 +67,149 @@ export interface AccessRestrictionsSectionProps {
 
 export function AccessRestrictionsSection({
   allowedClients,
+  blockedClients,
   allowedModels,
   modelSuggestions,
   onChange,
   translations,
 }: AccessRestrictionsSectionProps) {
-  // Separate preset clients from custom clients
-  const { presetSelected, customClients } = useMemo(() => {
-    const presetValues = PRESET_CLIENTS.map((p) => p.value);
-    const preset = (allowedClients || []).filter((c) => presetValues.includes(c));
-    const custom = (allowedClients || []).filter((c) => !presetValues.includes(c));
-    return { presetSelected: preset, customClients: custom };
-  }, [allowedClients]);
+  const allowed = allowedClients || [];
+  const blocked = blockedClients || [];
 
-  const handlePresetChange = (clientValue: string, checked: boolean) => {
-    const currentClients = allowedClients || [];
+  const { presetAllowed, customAllowed } = useMemo(() => {
+    const preset = allowed.filter((c) => ALL_PRESET_VALUES.has(c));
+    const custom = allowed.filter((c) => !ALL_PRESET_VALUES.has(c));
+    return { presetAllowed: preset, customAllowed: custom };
+  }, [allowed]);
+
+  const { presetBlocked, customBlocked } = useMemo(() => {
+    const preset = blocked.filter((c) => ALL_PRESET_VALUES.has(c));
+    const custom = blocked.filter((c) => !ALL_PRESET_VALUES.has(c));
+    return { presetBlocked: preset, customBlocked: custom };
+  }, [blocked]);
+
+  const handleAllowToggle = (clientValue: string, checked: boolean) => {
     if (checked) {
-      onChange("allowedClients", [...currentClients, clientValue]);
+      onChange("allowedClients", [...allowed.filter((c) => c !== clientValue), clientValue]);
+      onChange("blockedClients", blocked.filter((c) => c !== clientValue));
     } else {
-      onChange(
-        "allowedClients",
-        currentClients.filter((c) => c !== clientValue)
-      );
+      onChange("allowedClients", allowed.filter((c) => c !== clientValue));
     }
   };
 
-  const handleCustomClientsChange = (newCustomClients: string[]) => {
-    // Merge preset clients with new custom clients
-    onChange("allowedClients", [...presetSelected, ...newCustomClients]);
+  const handleBlockToggle = (clientValue: string, checked: boolean) => {
+    if (checked) {
+      onChange("blockedClients", [...blocked.filter((c) => c !== clientValue), clientValue]);
+      onChange("allowedClients", allowed.filter((c) => c !== clientValue));
+    } else {
+      onChange("blockedClients", blocked.filter((c) => c !== clientValue));
+    }
   };
 
-  // Custom validation for model names (allows dots, colons, slashes)
+  const handleCustomAllowedChange = (newCustom: string[]) => {
+    onChange("allowedClients", [...presetAllowed, ...newCustom]);
+  };
+
+  const handleCustomBlockedChange = (newCustom: string[]) => {
+    onChange("blockedClients", [...presetBlocked, ...newCustom]);
+  };
+
   const validateModelTag = useCallback(
     (tag: string): boolean => {
       if (!tag || tag.trim().length === 0) return false;
       if (tag.length > 64) return false;
       if (!MODEL_NAME_PATTERN.test(tag)) return false;
-      if (allowedModels.includes(tag)) return false; // duplicate check
-      if (allowedModels.length >= 50) return false; // max tags check
+      if (allowedModels.includes(tag)) return false;
+      if (allowedModels.length >= 50) return false;
       return true;
     },
-    [allowedModels]
+    [allowedModels],
   );
 
+  const renderPresetRow = (value: string, indent: boolean) => {
+    const isAllowed = allowed.includes(value);
+    const isBlocked = blocked.includes(value);
+    const displayLabel = translations.presetClients[value] ?? value;
+
+    return (
+      <div key={value} className={`flex items-center gap-4 py-1 ${indent ? "pl-6" : ""}`}>
+        <span className="text-sm flex-1 text-foreground">{displayLabel}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Checkbox
+              id={`allow-${value}`}
+              checked={isAllowed}
+              onCheckedChange={(checked) => handleAllowToggle(value, checked === true)}
+            />
+            <Label
+              htmlFor={`allow-${value}`}
+              className="text-xs font-normal cursor-pointer text-muted-foreground"
+            >
+              Allow
+            </Label>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Checkbox
+              id={`block-${value}`}
+              checked={isBlocked}
+              onCheckedChange={(checked) => handleBlockToggle(value, checked === true)}
+            />
+            <Label
+              htmlFor={`block-${value}`}
+              className="text-xs font-normal cursor-pointer text-muted-foreground"
+            >
+              Block
+            </Label>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <section className="rounded-lg border border-border bg-card/50 p-3 space-y-3">
-      <div className="flex items-center gap-2">
-        <Shield className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <h4 className="text-sm font-semibold">{translations.sections.accessRestrictions}</h4>
+    <section className="space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Shield className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-sm font-medium">{translations.sections.accessRestrictions}</h3>
       </div>
 
-      {/* Allowed Clients (CLI/IDE restrictions) */}
+      {/* Client Restrictions */}
       <div className="space-y-3">
-        <div className="space-y-0.5">
-          <Label className="text-sm font-medium">{translations.fields.allowedClients.label}</Label>
-          <p className="text-xs text-muted-foreground">
+        <div>
+          <p className="text-sm font-medium mb-1">{translations.fields.allowedClients.label}</p>
+          <p className="text-xs text-muted-foreground mb-2">
             {translations.fields.allowedClients.description}
           </p>
         </div>
 
-        {/* Preset client checkboxes in 2x2 grid */}
-        <div className="grid grid-cols-2 gap-2">
-          {PRESET_CLIENTS.map((client) => {
-            const isChecked = presetSelected.includes(client.value);
-            const displayLabel = translations.presetClients[client.value] || client.label;
-            return (
-              <div key={client.value} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`client-${client.value}`}
-                  checked={isChecked}
-                  onCheckedChange={(checked) => handlePresetChange(client.value, checked === true)}
-                />
-                <Label
-                  htmlFor={`client-${client.value}`}
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  {displayLabel}
-                </Label>
-              </div>
-            );
-          })}
+        {/* Claude Code group */}
+        <div className="space-y-0.5 border rounded-md p-2">
+          {CLAUDE_CODE_CLIENTS.map((client) => renderPresetRow(client.value, !client.isParent))}
         </div>
 
-        {/* Custom client patterns */}
+        {/* Other presets */}
+        <div className="space-y-0.5">
+          {OTHER_PRESET_CLIENTS.map((client) => renderPresetRow(client.value, false))}
+        </div>
+
+        {/* Custom allowed patterns */}
         <ArrayTagInputField
           label={translations.fields.allowedClients.customLabel}
           maxTagLength={64}
           maxTags={50}
           placeholder={translations.fields.allowedClients.customPlaceholder}
-          value={customClients}
-          onChange={handleCustomClientsChange}
+          value={customAllowed}
+          onChange={handleCustomAllowedChange}
+        />
+
+        {/* Custom blocked patterns */}
+        <ArrayTagInputField
+          label={translations.fields.blockedClients.customLabel}
+          maxTagLength={64}
+          maxTags={50}
+          placeholder={translations.fields.blockedClients.customPlaceholder}
+          value={customBlocked}
+          onChange={handleCustomBlockedChange}
         />
       </div>
 

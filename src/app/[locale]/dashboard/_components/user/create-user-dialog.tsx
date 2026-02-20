@@ -363,6 +363,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
               dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
               dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
               allowedClients: currentUserDraft.allowedClients || [],
+              blockedClients: currentUserDraft.blockedClients || [],
               allowedModels: currentUserDraft.allowedModels || [],
             }}
             isEnabled={true}
