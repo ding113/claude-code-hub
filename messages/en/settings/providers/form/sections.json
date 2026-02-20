@@ -305,6 +305,12 @@
       "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
       "title": "Model Allowlist"
     },
+    "clientRestrictions": {
+      "allowedLabel": "Allowed Clients",
+      "allowedPlaceholder": "e.g. claude-code-cli",
+      "blockedLabel": "Blocked Clients",
+      "blockedPlaceholder": "e.g. gemini-cli"
+    },
     "preserveClientIp": {
       "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",
       "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",

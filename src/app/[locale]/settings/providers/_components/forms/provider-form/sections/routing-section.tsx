@@ -219,6 +219,22 @@ export function RoutingSection() {
               </p>
             </FieldGroup>
           </div>
+
+          {/* Client Restrictions */}
+          <FieldGroup label={t("sections.routing.clientRestrictions.allowedLabel")}>
+            <TagInput
+              value={state.routing.allowedClients}
+              onChange={(v: string[]) => dispatch({ type: "SET_ALLOWED_CLIENTS", payload: v })}
+              placeholder={t("sections.routing.clientRestrictions.allowedPlaceholder")}
+            />
+          </FieldGroup>
+          <FieldGroup label={t("sections.routing.clientRestrictions.blockedLabel")}>
+            <TagInput
+              value={state.routing.blockedClients}
+              onChange={(v: string[]) => dispatch({ type: "SET_BLOCKED_CLIENTS", payload: v })}
+              placeholder={t("sections.routing.clientRestrictions.blockedPlaceholder")}
+            />
+          </FieldGroup>
         </SectionCard>
 
         {/* Scheduling Parameters */}

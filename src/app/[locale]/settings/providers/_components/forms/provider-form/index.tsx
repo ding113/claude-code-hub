@@ -318,6 +318,10 @@ function ProviderFormContent({
           model_redirects: state.routing.modelRedirects,
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
+          allowed_clients:
+            state.routing.allowedClients.length > 0 ? state.routing.allowedClients : null,
+          blocked_clients:
+            state.routing.blockedClients.length > 0 ? state.routing.blockedClients : null,
           priority: state.routing.priority,
           group_priorities:
             Object.keys(state.routing.groupPriorities).length > 0

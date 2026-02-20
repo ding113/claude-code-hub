@@ -306,6 +306,12 @@
       "selectedOnly": "僅允許所選的 {count} 個模型。其他模型將不會被路由到此供應商。",
       "title": "模型允許清單"
     },
+    "clientRestrictions": {
+      "allowedLabel": "白名單客戶端",
+      "allowedPlaceholder": "例如 claude-code-cli",
+      "blockedLabel": "黑名單客戶端",
+      "blockedPlaceholder": "例如 gemini-cli"
+    },
     "preserveClientIp": {
       "desc": "向上游轉發 x-forwarded-for / x-real-ip，可能暴露真實來源 IP",
       "help": "預設關閉以保護隱私；僅在需要上游感知終端 IP 時開啟。",

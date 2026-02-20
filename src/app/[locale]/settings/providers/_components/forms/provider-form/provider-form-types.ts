@@ -42,6 +42,8 @@ export interface RoutingState {
   preserveClientIp: boolean;
   modelRedirects: Record<string, string>;
   allowedModels: string[];
+  allowedClients: string[];
+  blockedClients: string[];
   priority: number;
   groupPriorities: Record<string, number>;
   weight: number;
@@ -128,6 +130,8 @@ export type ProviderFormAction =
   | { type: "SET_PRESERVE_CLIENT_IP"; payload: boolean }
   | { type: "SET_MODEL_REDIRECTS"; payload: Record<string, string> }
   | { type: "SET_ALLOWED_MODELS"; payload: string[] }
+  | { type: "SET_ALLOWED_CLIENTS"; payload: string[] }
+  | { type: "SET_BLOCKED_CLIENTS"; payload: string[] }
   | { type: "SET_PRIORITY"; payload: number }
   | { type: "SET_GROUP_PRIORITIES"; payload: Record<string, number> }
   | { type: "SET_WEIGHT"; payload: number }

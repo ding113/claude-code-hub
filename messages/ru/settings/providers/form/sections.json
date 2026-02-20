@@ -306,6 +306,12 @@
       "selectedOnly": "Разрешены только выбранные {count} моделей. Другие модели не будут направляться к этому провайдеру.",
       "title": "Список разрешённых моделей"
     },
+    "clientRestrictions": {
+      "allowedLabel": "Разрешённые клиенты",
+      "allowedPlaceholder": "напр. claude-code-cli",
+      "blockedLabel": "Заблокированные клиенты",
+      "blockedPlaceholder": "напр. gemini-cli"
+    },
     "preserveClientIp": {
       "desc": "Передавать x-forwarded-for / x-real-ip в апстрим (может раскрыть реальный IP клиента)",
       "help": "По умолчанию выключено для приватности. Включайте только если апстриму нужен IP пользователя.",

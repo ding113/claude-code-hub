@@ -306,6 +306,12 @@
       "selectedOnly": "選択した {count} 件のモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",
       "title": "モデル許可リスト"
     },
+    "clientRestrictions": {
+      "allowedLabel": "許可クライアント",
+      "allowedPlaceholder": "例: claude-code-cli",
+      "blockedLabel": "ブロッククライアント",
+      "blockedPlaceholder": "例: gemini-cli"
+    },
     "preserveClientIp": {
       "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",
       "help": "プライバシー保護のためデフォルトはオフ。上流側で端末 IP が必要な場合のみ有効化してください。",
