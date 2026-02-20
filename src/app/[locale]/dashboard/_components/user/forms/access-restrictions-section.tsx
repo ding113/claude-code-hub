@@ -91,18 +91,30 @@ export function AccessRestrictionsSection({
   const handleAllowToggle = (clientValue: string, checked: boolean) => {
     if (checked) {
       onChange("allowedClients", [...allowed.filter((c) => c !== clientValue), clientValue]);
-      onChange("blockedClients", blocked.filter((c) => c !== clientValue));
+      onChange(
+        "blockedClients",
+        blocked.filter((c) => c !== clientValue)
+      );
     } else {
-      onChange("allowedClients", allowed.filter((c) => c !== clientValue));
+      onChange(
+        "allowedClients",
+        allowed.filter((c) => c !== clientValue)
+      );
     }
   };
 
   const handleBlockToggle = (clientValue: string, checked: boolean) => {
     if (checked) {
       onChange("blockedClients", [...blocked.filter((c) => c !== clientValue), clientValue]);
-      onChange("allowedClients", allowed.filter((c) => c !== clientValue));
+      onChange(
+        "allowedClients",
+        allowed.filter((c) => c !== clientValue)
+      );
     } else {
-      onChange("blockedClients", blocked.filter((c) => c !== clientValue));
+      onChange(
+        "blockedClients",
+        blocked.filter((c) => c !== clientValue)
+      );
     }
   };
 
@@ -123,7 +135,7 @@ export function AccessRestrictionsSection({
       if (allowedModels.length >= 50) return false;
       return true;
     },
-    [allowedModels],
+    [allowedModels]
   );
 
   const renderPresetRow = (value: string, indent: boolean) => {

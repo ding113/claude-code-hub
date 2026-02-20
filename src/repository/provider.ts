@@ -588,8 +588,10 @@ export async function updateProvider(
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
   if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
-  if (providerData.allowed_clients !== undefined) dbData.allowedClients = providerData.allowed_clients ?? [];
-  if (providerData.blocked_clients !== undefined) dbData.blockedClients = providerData.blocked_clients ?? [];
+  if (providerData.allowed_clients !== undefined)
+    dbData.allowedClients = providerData.allowed_clients ?? [];
+  if (providerData.blocked_clients !== undefined)
+    dbData.blockedClients = providerData.blocked_clients ?? [];
   if (providerData.mcp_passthrough_type !== undefined)
     dbData.mcpPassthroughType = providerData.mcp_passthrough_type;
   if (providerData.mcp_passthrough_url !== undefined)
