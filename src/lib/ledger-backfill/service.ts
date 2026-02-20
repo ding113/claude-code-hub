@@ -33,12 +33,12 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
     }
 
     try {
-    let totalProcessed = 0;
-    let totalInserted = 0;
-    let lastId = 0;
+      let totalProcessed = 0;
+      let totalInserted = 0;
+      let lastId = 0;
 
-    while (true) {
-      const batchResult = await tx.execute(sql`
+      while (true) {
+        const batchResult = await tx.execute(sql`
         WITH batch AS (
           SELECT
             mr.id,
@@ -135,32 +135,32 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
           COALESCE((SELECT MAX(id) FROM batch), 0)::integer AS max_id
       `);
 
-      const batchRow = (
-        batchResult as unknown as Array<{
-          processed?: number | string;
-          inserted?: number | string;
-          max_id?: number | string;
-        }>
-      )[0];
+        const batchRow = (
+          batchResult as unknown as Array<{
+            processed?: number | string;
+            inserted?: number | string;
+            max_id?: number | string;
+          }>
+        )[0];
 
-      const processed = Number(batchRow?.processed ?? 0);
-      const inserted = Number(batchRow?.inserted ?? 0);
-      const maxId = Number(batchRow?.max_id ?? 0);
+        const processed = Number(batchRow?.processed ?? 0);
+        const inserted = Number(batchRow?.inserted ?? 0);
+        const maxId = Number(batchRow?.max_id ?? 0);
 
-      if (processed === 0) {
-        break;
+        if (processed === 0) {
+          break;
+        }
+
+        totalProcessed += processed;
+        totalInserted += inserted;
+        lastId = maxId;
+
+        logger.info("Backfill progress", {
+          processed: totalProcessed,
+          inserted: totalInserted,
+          elapsed: Date.now() - startTime,
+        });
       }
-
-      totalProcessed += processed;
-      totalInserted += inserted;
-      lastId = maxId;
-
-      logger.info("Backfill progress", {
-        processed: totalProcessed,
-        inserted: totalInserted,
-        elapsed: Date.now() - startTime,
-      });
-    }
 
       const durationMs = Date.now() - startTime;
       return {
