@@ -491,6 +491,8 @@ export interface CreateProviderData {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 
@@ -565,6 +567,8 @@ export interface UpdateProviderData {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 

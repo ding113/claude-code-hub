@@ -8,6 +8,7 @@ import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
+import { isClientAllowed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
@@ -423,10 +424,15 @@ export class ProxyProviderResolver {
         const circuitOpen = filteredProviders.filter((p) => p.reason === "circuit_open");
         const disabled = filteredProviders.filter((p) => p.reason === "disabled");
         const modelNotAllowed = filteredProviders.filter((p) => p.reason === "model_not_allowed");
+        const clientRestricted = filteredProviders.filter((p) => p.reason === "client_restriction");
 
         // 计算可用供应商数量（排除禁用和模型不支持的）
         const unavailableCount = rateLimited.length + circuitOpen.length;
-        const totalEnabled = filteredProviders.length - disabled.length - modelNotAllowed.length;
+        const totalEnabled =
+          filteredProviders.length -
+          disabled.length -
+          modelNotAllowed.length -
+          clientRestricted.length;
 
         if (
           rateLimited.length > 0 &&
@@ -473,11 +479,20 @@ export class ProxyProviderResolver {
 
     const filteredProviders = session.getLastSelectionContext()?.filteredProviders;
     if (filteredProviders) {
+      const clientRestricted = filteredProviders.filter((p) => p.reason === "client_restriction");
+
       // C-001: 脱敏供应商名称，仅暴露 id 和 reason
       details.filteredProviders = filteredProviders.map((p) => ({
         id: p.id,
         reason: p.reason,
       }));
+
+      if (clientRestricted.length > 0) {
+        details.clientRestrictedProviders = clientRestricted.map((p) => ({
+          id: p.id,
+          reason: p.reason,
+        }));
+      }
     }
 
     return ProxyResponses.buildError(status, message, errorType, details);
@@ -748,6 +763,30 @@ export class ProxyProviderResolver {
       candidatesAtPriority: [],
       excludedProviderIds: excludeIds.length > 0 ? excludeIds : undefined,
     };
+
+    if (session) {
+      const clientFilteredProviders: typeof visibleProviders = [];
+      for (const p of visibleProviders) {
+        const providerAllowed = p.allowedClients ?? [];
+        const providerBlocked = p.blockedClients ?? [];
+        if (providerAllowed.length === 0 && providerBlocked.length === 0) {
+          clientFilteredProviders.push(p);
+          continue;
+        }
+        const allowed = isClientAllowed(session, providerAllowed, providerBlocked);
+        if (!allowed) {
+          context.filteredProviders?.push({
+            id: p.id,
+            name: p.name,
+            reason: "client_restriction",
+            details: "provider_client_restriction",
+          });
+          continue;
+        }
+        clientFilteredProviders.push(p);
+      }
+      visibleProviders = clientFilteredProviders;
+    }
 
     // Step 2: 基础过滤 + 格式/模型匹配（使用 visibleProviders）
     const enabledProviders = visibleProviders.filter((provider) => {

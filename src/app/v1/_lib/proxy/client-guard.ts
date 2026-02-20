@@ -1,21 +1,7 @@
+import { isClientAllowed } from "./client-detector";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
-/**
- * Client (CLI/IDE) restriction guard
- *
- * Validates that the client making the request is allowed based on User-Agent header matching.
- * This check is ONLY performed when the user has configured client restrictions (allowedClients).
- *
- * Logic:
- * - If allowedClients is empty or undefined: skip all checks, allow request
- * - If allowedClients is non-empty:
- *   - Missing or empty User-Agent → 400 error
- *   - User-Agent doesn't match any allowed pattern → 400 error
- *   - User-Agent matches at least one pattern → allow request
- *
- * Matching: case-insensitive substring match
- */
 export class ProxyClientGuard {
   static async ensure(session: ProxySession): Promise<Response | null> {
     const user = session.authState?.user;
@@ -24,18 +10,16 @@ export class ProxyClientGuard {
       return null;
     }
 
-    // Check if client restrictions are configured
     const allowedClients = user.allowedClients ?? [];
-    if (allowedClients.length === 0) {
-      // No restrictions configured - skip all checks
+    const blockedClients = user.blockedClients ?? [];
+
+    if (allowedClients.length === 0 && blockedClients.length === 0) {
       return null;
     }
 
     // Restrictions exist - now User-Agent is required
-    const userAgent = session.userAgent;
-
-    // Missing or empty User-Agent when restrictions exist
-    if (!userAgent || userAgent.trim() === "") {
+    const userAgent = session.userAgent?.trim();
+    if (!userAgent) {
       return ProxyResponses.buildError(
         400,
         "Client not allowed. User-Agent header is required when client restrictions are configured.",
@@ -43,16 +27,7 @@ export class ProxyClientGuard {
       );
     }
 
-    // Case-insensitive substring match with hyphen/underscore normalization
-    // This handles variations like "gemini-cli" matching "GeminiCLI" or "gemini_cli"
-    const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
-    const userAgentNorm = normalize(userAgent);
-    const isAllowed = allowedClients.some((pattern) => {
-      const normalizedPattern = normalize(pattern);
-      // Skip empty patterns to prevent includes("") matching everything
-      if (normalizedPattern === "") return false;
-      return userAgentNorm.includes(normalizedPattern);
-    });
+    const isAllowed = isClientAllowed(session, allowedClients, blockedClients);
 
     if (!isAllowed) {
       return ProxyResponses.buildError(

@@ -48,6 +48,7 @@ export function toUser(dbUser: any): User {
     isEnabled: dbUser?.isEnabled ?? true,
     expiresAt: dbUser?.expiresAt ? new Date(dbUser.expiresAt) : null,
     allowedClients: dbUser?.allowedClients ?? [],
+    blockedClients: dbUser?.blockedClients ?? [],
     allowedModels: dbUser?.allowedModels ?? [],
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
