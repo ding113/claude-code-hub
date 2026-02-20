@@ -864,9 +864,10 @@ export async function findKeysWithStatisticsBatch(
   }
 
   // Step 3: Query last usage for all keys via LATERAL JOIN (1 index probe per key)
+  const keyParams = sql.join(keyStrings.map((k) => sql`${k}`), sql.raw(", "));
   const lastUsageResult = await db.execute(sql`
     SELECT k.key_val AS key, lr.created_at, p.name AS provider_name
-    FROM unnest(${keyStrings}::varchar[]) AS k(key_val)
+    FROM unnest(ARRAY[${keyParams}]::varchar[]) AS k(key_val)
     LEFT JOIN LATERAL (
       SELECT ul.created_at, ul.final_provider_id
       FROM usage_ledger ul
