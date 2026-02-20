@@ -519,6 +519,13 @@
       "when": 1771527016184,
       "tag": "0073_magical_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1771600203231,
+      "tag": "0074_wide_retro_girl",
+      "breakpoints": true
     }
   ]
 }

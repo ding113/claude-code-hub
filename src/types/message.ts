@@ -34,7 +34,8 @@ export interface ProviderChainItem {
     | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
     | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
     | "endpoint_pool_exhausted" // 端点池耗尽（所有端点熔断或不可用，严格模式阻止降级）
-    | "vendor_type_all_timeout"; // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
+    | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
+    | "client_restriction_filtered"; // Provider skipped due to client restriction (neutral, no circuit breaker)
 
   // === 选择方法（细化） ===
   selectionMethod?:
@@ -171,7 +172,8 @@ export interface ProviderChainItem {
         | "type_mismatch"
         | "model_not_allowed"
         | "context_1m_disabled" // 供应商禁用了 1M 上下文功能
-        | "disabled";
+        | "disabled"
+        | "client_restriction"; // Provider filtered due to client restriction
       details?: string; // 额外信息（如费用：$15.2/$15）
     }>;
 

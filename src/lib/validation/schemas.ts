@@ -202,6 +202,12 @@ export const CreateUserSchema = z.object({
     .max(50, "客户端模式数量不能超过50个")
     .optional()
     .default([]),
+  // Blocked clients (CLI/IDE restrictions)
+  blockedClients: z
+    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+    .max(50, "客户端模式数量不能超过50个")
+    .optional()
+    .default([]),
   // Allowed models (AI model restrictions)
   allowedModels: z
     .array(z.string().max(64, "模型名称长度不能超过64个字符"))
@@ -326,6 +332,11 @@ export const UpdateUserSchema = z.object({
     .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
     .max(50, "客户端模式数量不能超过50个")
     .optional(),
+  // Blocked clients (CLI/IDE restrictions)
+  blockedClients: z
+    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+    .max(50, "客户端模式数量不能超过50个")
+    .optional(),
   // Allowed models (AI model restrictions)
   allowedModels: z
     .array(z.string().max(64, "模型名称长度不能超过64个字符"))
@@ -437,6 +448,16 @@ export const CreateProviderSchema = z
     preserve_client_ip: z.boolean().optional().default(false),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_clients: z
+      .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+      .max(50, "客户端模式数量不能超过50个")
+      .optional()
+      .default([]),
+    blocked_clients: z
+      .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+      .max(50, "客户端模式数量不能超过50个")
+      .optional()
+      .default([]),
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional().default("none"),
     mcp_passthrough_url: z
@@ -643,6 +664,14 @@ export const UpdateProviderSchema = z
     preserve_client_ip: z.boolean().optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_clients: z
+      .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+      .max(50, "客户端模式数量不能超过50个")
+      .optional(),
+    blocked_clients: z
+      .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
+      .max(50, "客户端模式数量不能超过50个")
+      .optional(),
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional(),
     mcp_passthrough_url: z
