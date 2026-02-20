@@ -72,6 +72,10 @@ export const users = pgTable('users', {
   // Empty array = no restrictions, non-empty = only listed models allowed
   allowedModels: jsonb('allowed_models').$type<string[]>().default([]),
 
+  // Blocked clients (CLI/IDE blocklist)
+  // Non-empty = listed patterns are denied even if allowedClients permits them
+  blockedClients: jsonb('blocked_clients').$type<string[]>().notNull().default([]),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -192,6 +196,12 @@ export const providers = pgTable('providers', {
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: jsonb('allowed_models').$type<string[] | null>().default(null),
+
+  // Client restrictions for this provider
+  // allowedClients: empty = no restriction; non-empty = only listed patterns allowed
+  // blockedClients: non-empty = listed patterns are denied
+  allowedClients: jsonb('allowed_clients').$type<string[]>().notNull().default([]),
+  blockedClients: jsonb('blocked_clients').$type<string[]>().notNull().default([]),
 
   // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
   // 启用后，如果该提供商配置了重定向到 claude-* 模型，可以加入 claude 调度池
