@@ -25,7 +25,7 @@ export function spawnPgTool(
   command: string,
   args: string[],
   env: Record<string, string>,
-  options?: { stdin?: boolean },
+  options?: { stdin?: boolean }
 ) {
   const composeExec = getDockerComposeExec();
 
@@ -41,14 +41,11 @@ export function spawnPgTool(
     execFlags.push("-e", `PGPASSWORD=${env.PGPASSWORD}`);
   }
 
-  return spawn(composeExec[0], [
-    ...composeExec.slice(1),
-    "exec",
-    ...execFlags,
-    "postgres",
-    command,
-    ...args,
-  ], { env: { ...process.env } });
+  return spawn(
+    composeExec[0],
+    [...composeExec.slice(1), "exec", ...execFlags, "postgres", command, ...args],
+    { env: { ...process.env } }
+  );
 }
 
 /**
@@ -263,7 +260,7 @@ export function executePgRestore(
     "pg_restore",
     args,
     { PGPASSWORD: dbConfig.password },
-    { stdin: isDockerExec },
+    { stdin: isDockerExec }
   );
 
   if (isDockerExec) {

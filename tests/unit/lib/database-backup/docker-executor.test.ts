@@ -66,26 +66,19 @@ describe("getDockerComposeExec", () => {
 
   test("returns null when PG_COMPOSE_EXEC is unset", async () => {
     delete process.env.PG_COMPOSE_EXEC;
-    const { getDockerComposeExec } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { getDockerComposeExec } = await import("@/lib/database-backup/docker-executor");
     expect(getDockerComposeExec()).toBeNull();
   });
 
   test("returns null when PG_COMPOSE_EXEC is empty string", async () => {
     process.env.PG_COMPOSE_EXEC = "";
-    const { getDockerComposeExec } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { getDockerComposeExec } = await import("@/lib/database-backup/docker-executor");
     expect(getDockerComposeExec()).toBeNull();
   });
 
   test("parses command with spaces correctly", async () => {
-    process.env.PG_COMPOSE_EXEC =
-      "docker compose -f /home/dev/docker-compose.yaml -p cch-dev";
-    const { getDockerComposeExec } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    process.env.PG_COMPOSE_EXEC = "docker compose -f /home/dev/docker-compose.yaml -p cch-dev";
+    const { getDockerComposeExec } = await import("@/lib/database-backup/docker-executor");
     expect(getDockerComposeExec()).toEqual([
       "docker",
       "compose",
@@ -117,9 +110,7 @@ describe("spawnPgTool", () => {
     const fakeProc = makeFakeProcess();
     mockSpawn.mockReturnValue(fakeProc);
 
-    const { spawnPgTool } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { spawnPgTool } = await import("@/lib/database-backup/docker-executor");
     const result = spawnPgTool("pg_dump", ["-h", "localhost"], {
       PGPASSWORD: "secret",
     });
@@ -130,7 +121,7 @@ describe("spawnPgTool", () => {
       ["-h", "localhost"],
       expect.objectContaining({
         env: expect.objectContaining({ PGPASSWORD: "secret" }),
-      }),
+      })
     );
   });
 
@@ -139,9 +130,7 @@ describe("spawnPgTool", () => {
     const fakeProc = makeFakeProcess();
     mockSpawn.mockReturnValue(fakeProc);
 
-    const { spawnPgTool } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { spawnPgTool } = await import("@/lib/database-backup/docker-executor");
     const result = spawnPgTool("pg_dump", ["-Fc", "-v"], {
       PGPASSWORD: "secret",
     });
@@ -164,7 +153,7 @@ describe("spawnPgTool", () => {
         "-Fc",
         "-v",
       ],
-      expect.objectContaining({ env: expect.any(Object) }),
+      expect.objectContaining({ env: expect.any(Object) })
     );
   });
 
@@ -173,18 +162,13 @@ describe("spawnPgTool", () => {
     const fakeProc = makeFakeProcess({ withStdin: true });
     mockSpawn.mockReturnValue(fakeProc);
 
-    const { spawnPgTool } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { spawnPgTool } = await import("@/lib/database-backup/docker-executor");
     spawnPgTool("pg_restore", ["-d", "mydb"], { PGPASSWORD: "pw" }, { stdin: true });
 
     const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
     // -T and -i should both be present before "postgres"
     const postgresIdx = spawnArgs.indexOf("postgres");
-    const flags = spawnArgs.slice(
-      spawnArgs.indexOf("exec") + 1,
-      postgresIdx,
-    );
+    const flags = spawnArgs.slice(spawnArgs.indexOf("exec") + 1, postgresIdx);
     expect(flags).toContain("-T");
     expect(flags).toContain("-i");
   });
@@ -194,9 +178,7 @@ describe("spawnPgTool", () => {
     const fakeProc = makeFakeProcess();
     mockSpawn.mockReturnValue(fakeProc);
 
-    const { spawnPgTool } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { spawnPgTool } = await import("@/lib/database-backup/docker-executor");
     spawnPgTool("pg_dump", [], {});
 
     const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
@@ -209,21 +191,15 @@ describe("checkDatabaseConnection", () => {
     const { db } = await import("@/drizzle/db");
     (db.execute as MockInstance).mockResolvedValueOnce([{ "?column?": 1 }]);
 
-    const { checkDatabaseConnection } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { checkDatabaseConnection } = await import("@/lib/database-backup/docker-executor");
     expect(await checkDatabaseConnection()).toBe(true);
   });
 
   test("returns false when db.execute throws", async () => {
     const { db } = await import("@/drizzle/db");
-    (db.execute as MockInstance).mockRejectedValueOnce(
-      new Error("connection refused"),
-    );
+    (db.execute as MockInstance).mockRejectedValueOnce(new Error("connection refused"));
 
-    const { checkDatabaseConnection } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { checkDatabaseConnection } = await import("@/lib/database-backup/docker-executor");
     expect(await checkDatabaseConnection()).toBe(false);
   });
 });
@@ -239,9 +215,7 @@ describe("getDatabaseInfo", () => {
       },
     ]);
 
-    const { getDatabaseInfo } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { getDatabaseInfo } = await import("@/lib/database-backup/docker-executor");
     const info = await getDatabaseInfo();
 
     expect(info).toEqual({
@@ -255,9 +229,7 @@ describe("getDatabaseInfo", () => {
     const { db } = await import("@/drizzle/db");
     (db.execute as MockInstance).mockResolvedValueOnce([{}]);
 
-    const { getDatabaseInfo } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { getDatabaseInfo } = await import("@/lib/database-backup/docker-executor");
     const info = await getDatabaseInfo();
 
     expect(info).toEqual({
@@ -271,9 +243,7 @@ describe("getDatabaseInfo", () => {
     const { db } = await import("@/drizzle/db");
     (db.execute as MockInstance).mockResolvedValueOnce([]);
 
-    const { getDatabaseInfo } = await import(
-      "@/lib/database-backup/docker-executor"
-    );
+    const { getDatabaseInfo } = await import("@/lib/database-backup/docker-executor");
     const info = await getDatabaseInfo();
 
     expect(info).toEqual({
