@@ -67,7 +67,7 @@
       "searchSessionId": "搜尋 Session ID...",
       "noUserFound": "未找到匹配的使用者",
       "noProviderFound": "未找到匹配的供應商",
-      "noSessionFound": "未找到匹配的 Session ID",
+      "noSessionFound": "未找到符合的 Session ID",
       "model": "Model",
       "endpoint": "端點",
       "status": "狀態",
@@ -1376,7 +1376,7 @@
         "group": "分組",
         "todayUsage": "今日請求",
         "todayCost": "今日花費",
-        "todayTokens": "今日Token",
+        "todayTokens": "今日 Token",
         "lastUsed": "最後使用",
         "actions": "動作",
         "quotaButton": "查看限額用量",
@@ -1502,8 +1502,8 @@
         "button": "重置統計",
         "confirmTitle": "重置所有統計？",
         "confirmDescription": "這將永久刪除該使用者的所有請求日誌和使用統計。此操作無法撤銷。",
-        "confirm": "是的，重置全部",
-        "loading": "重置中...",
+        "confirm": "是的，重設全部",
+        "loading": "重設中...",
         "success": "所有統計已重置"
       }
     },
