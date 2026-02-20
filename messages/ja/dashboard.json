@@ -1766,7 +1766,7 @@
           "label": "ブロックするクライアント",
           "description": "これらのパターンに一致するクライアントは、許可リストに一致しても拒否されます。",
           "customLabel": "カスタムブロックパターン",
-          "customPlaceholder": "パターンを入力（例: 'xcode'、'my-ide'）"
+          "customPlaceholder": "パターンを入力(例: 'xcode'、'my-ide')"
         },
         "allowedModels": {
           "label": "モデル制限",
@@ -1792,12 +1792,12 @@
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI",
-        "claude-code": "Claude Code（全て）",
+        "claude-code": "Claude Code (全て)",
         "claude-code-cli": "Claude Code CLI",
         "claude-code-cli-sdk": "Claude Code CLI SDK",
         "claude-code-vscode": "Claude Code VSCode",
-        "claude-code-sdk-ts": "Claude Code SDK（TypeScript）",
-        "claude-code-sdk-py": "Claude Code SDK（Python）",
+        "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
+        "claude-code-sdk-py": "Claude Code SDK (Python)",
         "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
