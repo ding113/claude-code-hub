@@ -693,15 +693,15 @@ export async function sumUserQuotaCosts(
   );
 
   const costTotal = cutoffDate
-    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate}), 0)`
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()}), 0)`
     : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
 
   const [row] = await db
     .select({
-      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime}), 0)`,
-      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
-      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
-      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime.toISOString()}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime.toISOString()}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()}), 0)`,
       costTotal,
     })
     .from(usageLedger)
@@ -763,15 +763,15 @@ export async function sumKeyQuotaCostsById(
   );
 
   const costTotal = cutoffDate
-    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate}), 0)`
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()}), 0)`
     : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
 
   const [row] = await db
     .select({
-      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime}), 0)`,
-      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime}), 0)`,
-      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime}), 0)`,
-      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime}), 0)`,
+      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime.toISOString()}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime.toISOString()}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()}), 0)`,
       costTotal,
     })
     .from(usageLedger)
