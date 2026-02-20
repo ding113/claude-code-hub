@@ -225,7 +225,7 @@ async function deleteBatch(whereConditions: SQL[], batchSize: number): Promise<n
       WHERE ${and(...whereConditions)}
       ORDER BY created_at ASC
       LIMIT ${batchSize}
-      FOR UPDATE SKIP LOCKED
+      FOR UPDATE
     )
     DELETE FROM message_request
     WHERE id IN (SELECT id FROM ids_to_delete)
