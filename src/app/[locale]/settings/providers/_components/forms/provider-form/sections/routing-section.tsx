@@ -5,7 +5,9 @@ import { Info, Layers, Route, Scale, Settings, Timer } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -16,6 +18,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  CLIENT_RESTRICTION_PRESET_OPTIONS,
+  isPresetSelected,
+  mergePresetAndCustomClients,
+  removePresetValues,
+  splitPresetAndCustomClients,
+  togglePresetSelection,
+} from "@/lib/client-restrictions/client-presets";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type {
   CodexParallelToolCallsPreference,
@@ -69,6 +79,44 @@ export function RoutingSection() {
   };
 
   const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
+  const allowedClients = state.routing.allowedClients;
+  const blockedClients = state.routing.blockedClients;
+  const { customValues: customAllowedClients } = splitPresetAndCustomClients(allowedClients);
+  const { customValues: customBlockedClients } = splitPresetAndCustomClients(blockedClients);
+
+  const handleAllowToggle = (presetValue: string, checked: boolean) => {
+    const nextAllowed = togglePresetSelection(allowedClients, presetValue, checked);
+    dispatch({ type: "SET_ALLOWED_CLIENTS", payload: nextAllowed });
+
+    if (checked) {
+      const nextBlocked = removePresetValues(blockedClients, presetValue);
+      dispatch({ type: "SET_BLOCKED_CLIENTS", payload: nextBlocked });
+    }
+  };
+
+  const handleBlockToggle = (presetValue: string, checked: boolean) => {
+    const nextBlocked = togglePresetSelection(blockedClients, presetValue, checked);
+    dispatch({ type: "SET_BLOCKED_CLIENTS", payload: nextBlocked });
+
+    if (checked) {
+      const nextAllowed = removePresetValues(allowedClients, presetValue);
+      dispatch({ type: "SET_ALLOWED_CLIENTS", payload: nextAllowed });
+    }
+  };
+
+  const handleCustomAllowedChange = (customValues: string[]) => {
+    dispatch({
+      type: "SET_ALLOWED_CLIENTS",
+      payload: mergePresetAndCustomClients(allowedClients, customValues),
+    });
+  };
+
+  const handleCustomBlockedChange = (customValues: string[]) => {
+    dispatch({
+      type: "SET_BLOCKED_CLIENTS",
+      payload: mergePresetAndCustomClients(blockedClients, customValues),
+    });
+  };
 
   return (
     <TooltipProvider>
@@ -219,6 +267,85 @@ export function RoutingSection() {
               </p>
             </FieldGroup>
           </div>
+
+          {/* Client Restrictions */}
+          <FieldGroup label={t("sections.routing.clientRestrictions.allowedLabel")}>
+            <div className="space-y-2 rounded-md border p-3">
+              {CLIENT_RESTRICTION_PRESET_OPTIONS.map((option) => {
+                const isAllowed = isPresetSelected(allowedClients, option.value);
+                const isBlocked = isPresetSelected(blockedClients, option.value);
+                return (
+                  <div key={option.value} className="flex items-center gap-4 py-1">
+                    <span className="flex-1 text-sm">
+                      {t(`sections.routing.clientRestrictions.presetClients.${option.value}`)}
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <Checkbox
+                          id={`provider-allow-${option.value}`}
+                          checked={isAllowed}
+                          disabled={state.ui.isPending}
+                          onCheckedChange={(checked) =>
+                            handleAllowToggle(option.value, checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor={`provider-allow-${option.value}`}
+                          className="cursor-pointer text-xs font-normal text-muted-foreground"
+                        >
+                          {t("sections.routing.clientRestrictions.allowAction")}
+                        </Label>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <Checkbox
+                          id={`provider-block-${option.value}`}
+                          checked={isBlocked}
+                          disabled={state.ui.isPending}
+                          onCheckedChange={(checked) =>
+                            handleBlockToggle(option.value, checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor={`provider-block-${option.value}`}
+                          className="cursor-pointer text-xs font-normal text-muted-foreground"
+                        >
+                          {t("sections.routing.clientRestrictions.blockAction")}
+                        </Label>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </FieldGroup>
+
+          <FieldGroup label={t("sections.routing.clientRestrictions.customAllowedLabel")}>
+            <TagInput
+              value={customAllowedClients}
+              onChange={handleCustomAllowedChange}
+              placeholder={t("sections.routing.clientRestrictions.customAllowedPlaceholder")}
+              maxTagLength={64}
+              maxTags={50}
+              disabled={state.ui.isPending}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("sections.routing.clientRestrictions.customHelp")}
+            </p>
+          </FieldGroup>
+
+          <FieldGroup label={t("sections.routing.clientRestrictions.customBlockedLabel")}>
+            <TagInput
+              value={customBlockedClients}
+              onChange={handleCustomBlockedChange}
+              placeholder={t("sections.routing.clientRestrictions.customBlockedPlaceholder")}
+              maxTagLength={64}
+              maxTags={50}
+              disabled={state.ui.isPending}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("sections.routing.clientRestrictions.customHelp")}
+            </p>
+          </FieldGroup>
         </SectionCard>
 
         {/* Scheduling Parameters */}

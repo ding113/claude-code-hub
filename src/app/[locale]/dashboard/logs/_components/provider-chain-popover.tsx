@@ -6,6 +6,7 @@ import {
   ChevronRight,
   InfoIcon,
   Link2,
+  MinusCircle,
   RefreshCw,
   XCircle,
   Zap,
@@ -33,6 +34,8 @@ interface ProviderChainPopoverProps {
  * Determine if this is an actual request record (excluding intermediate states)
  */
 function isActualRequest(item: ProviderChainItem): boolean {
+  if (item.reason === "client_restriction_filtered") return false;
+
   if (item.reason === "concurrent_limit_failed") return true;
 
   if (item.reason === "retry_failed" || item.reason === "system_error") return true;
@@ -99,6 +102,13 @@ function getItemStatus(item: ProviderChainItem): {
       icon: AlertTriangle,
       color: "text-orange-600",
       bgColor: "bg-orange-50 dark:bg-orange-950/30",
+    };
+  }
+  if (item.reason === "client_restriction_filtered") {
+    return {
+      icon: MinusCircle,
+      color: "text-muted-foreground",
+      bgColor: "bg-muted/30",
     };
   }
   return {

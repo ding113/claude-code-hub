@@ -49,6 +49,25 @@
       "selectedOnly": "仅允许选中的 {count} 个模型。其他模型的请求不会调度到此供应商。",
       "moreModels": "+{count} 更多"
     },
+    "clientRestrictions": {
+      "allowedLabel": "白名单客户端",
+      "allowedPlaceholder": "例如 claude-code-cli",
+      "blockedLabel": "黑名单客户端",
+      "blockedPlaceholder": "例如 gemini-cli",
+      "allowAction": "允许",
+      "blockAction": "阻止",
+      "customAllowedLabel": "自定义白名单模式",
+      "customAllowedPlaceholder": "例如 my-ide、internal-tool",
+      "customBlockedLabel": "自定义黑名单模式",
+      "customBlockedPlaceholder": "例如 legacy-client",
+      "customHelp": "自定义模式使用 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。",
+      "presetClients": {
+        "claude-code": "Claude Code（全部）",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "scheduleParams": {
       "title": "调度参数",
       "priority": {

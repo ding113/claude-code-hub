@@ -68,16 +68,25 @@ export async function sumLedgerTotalCost(
 /**
  * Batch total cost grouped by entity (single SQL query).
  * Returns Map of entityId (as string) -> totalCost.
+ * @param maxAgeDays - Only include ledger rows created within this many days (default 365).
+ *                     Pass Infinity or a non-positive number to include all-time records.
  */
 export async function sumLedgerTotalCostBatch(
   entityType: "user" | "key",
-  entityIds: number[] | string[]
+  entityIds: number[] | string[],
+  maxAgeDays: number = 365
 ): Promise<Map<string, string>> {
   const result = new Map<string, string>();
   if (entityIds.length === 0) return result;
 
   for (const id of entityIds) {
     result.set(String(id), "0");
+  }
+
+  const timeConditions: ReturnType<typeof gte>[] = [];
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    timeConditions.push(gte(usageLedger.createdAt, cutoffDate));
   }
 
   if (entityType === "user") {
@@ -88,7 +97,7 @@ export async function sumLedgerTotalCostBatch(
         total: sql<string>`COALESCE(SUM(${usageLedger.costUsd}), '0')`,
       })
       .from(usageLedger)
-      .where(and(inArray(usageLedger.userId, ids), LEDGER_BILLING_CONDITION))
+      .where(and(inArray(usageLedger.userId, ids), LEDGER_BILLING_CONDITION, ...timeConditions))
       .groupBy(usageLedger.userId);
     for (const row of rows) {
       result.set(String(row.entityId), row.total ?? "0");
@@ -101,7 +110,7 @@ export async function sumLedgerTotalCostBatch(
         total: sql<string>`COALESCE(SUM(${usageLedger.costUsd}), '0')`,
       })
       .from(usageLedger)
-      .where(and(inArray(usageLedger.key, ids), LEDGER_BILLING_CONDITION))
+      .where(and(inArray(usageLedger.key, ids), LEDGER_BILLING_CONDITION, ...timeConditions))
       .groupBy(usageLedger.key);
     for (const row of rows) {
       result.set(row.entityId, row.total ?? "0");

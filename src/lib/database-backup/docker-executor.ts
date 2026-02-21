@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { db } from "@/drizzle/db";
 import { sql } from "drizzle-orm";
+import { db } from "@/drizzle/db";
 import { logger } from "@/lib/logger";
 import { getDatabaseConfig } from "./db-config";
 

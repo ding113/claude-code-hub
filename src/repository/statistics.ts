@@ -1,5 +1,6 @@
 import "server-only";
 
+import type { SQL } from "drizzle-orm";
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, usageLedger } from "@/drizzle/schema";
@@ -502,13 +503,23 @@ export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365)
 }
 
 /**
- * Batch query: all-time total cost grouped by user_id (single SQL query)
+ * Batch query: total cost grouped by user_id (single SQL query)
  * @param userIds - Array of user IDs
+ * @param maxAgeDays - Only include records newer than this many days (default 365, use Infinity to include all)
  * @returns Map of userId -> totalCost
  */
-export async function sumUserTotalCostBatch(userIds: number[]): Promise<Map<number, number>> {
+export async function sumUserTotalCostBatch(
+  userIds: number[],
+  maxAgeDays: number = 365
+): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (userIds.length === 0) return result;
+
+  const conditions: SQL[] = [inArray(usageLedger.userId, userIds), LEDGER_BILLING_CONDITION];
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+  }
 
   const rows = await db
     .select({
@@ -516,42 +527,59 @@ export async function sumUserTotalCostBatch(userIds: number[]): Promise<Map<numb
       total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
     })
     .from(usageLedger)
-    .where(and(inArray(usageLedger.userId, userIds), LEDGER_BILLING_CONDITION))
+    .where(and(...conditions))
     .groupBy(usageLedger.userId);
 
-  for (const id of userIds) {
-    result.set(id, 0);
-  }
-  for (const row of rows) {
-    result.set(row.userId, Number(row.total || 0));
-  }
+  for (const id of userIds) result.set(id, 0);
+  for (const row of rows) result.set(row.userId, Number(row.total || 0));
   return result;
 }
 
 /**
- * Batch query: all-time total cost grouped by key_id (single SQL query via JOIN)
+ * Batch query: total cost grouped by key_id using a two-step PK lookup then aggregate.
+ * Avoids varchar LEFT JOIN by first resolving key strings via PK, then aggregating on
+ * usage_ledger directly (hits idx_usage_ledger_key_cost index).
  * @param keyIds - Array of key IDs
+ * @param maxAgeDays - Only include records newer than this many days (default 365, use Infinity to include all)
  * @returns Map of keyId -> totalCost
  */
-export async function sumKeyTotalCostBatchByIds(keyIds: number[]): Promise<Map<number, number>> {
+export async function sumKeyTotalCostBatchByIds(
+  keyIds: number[],
+  maxAgeDays: number = 365
+): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (keyIds.length === 0) return result;
+  for (const id of keyIds) result.set(id, 0);
+
+  // Step 1: PK lookup -> key strings
+  const keyMappings = await db
+    .select({ id: keys.id, key: keys.key })
+    .from(keys)
+    .where(inArray(keys.id, keyIds));
+
+  const keyStringToId = new Map(keyMappings.map((k) => [k.key, k.id]));
+  const keyStrings = keyMappings.map((k) => k.key);
+  if (keyStrings.length === 0) return result;
+
+  // Step 2: Aggregate on usage_ledger directly (hits idx_usage_ledger_key_cost)
+  const conditions: SQL[] = [inArray(usageLedger.key, keyStrings), LEDGER_BILLING_CONDITION];
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+  }
 
   const rows = await db
     .select({
-      keyId: keys.id,
+      key: usageLedger.key,
       total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
     })
-    .from(keys)
-    .leftJoin(usageLedger, and(eq(usageLedger.key, keys.key), LEDGER_BILLING_CONDITION))
-    .where(inArray(keys.id, keyIds))
-    .groupBy(keys.id);
+    .from(usageLedger)
+    .where(and(...conditions))
+    .groupBy(usageLedger.key);
 
-  for (const id of keyIds) {
-    result.set(id, 0);
-  }
   for (const row of rows) {
-    result.set(row.keyId, Number(row.total || 0));
+    const keyId = keyStringToId.get(row.key);
+    if (keyId !== undefined) result.set(keyId, Number(row.total || 0));
   }
   return result;
 }

@@ -65,6 +65,8 @@ export type ProviderBatchPatchField =
   | "group_tag"
   | "model_redirects"
   | "allowed_models"
+  | "allowed_clients"
+  | "blocked_clients"
   | "anthropic_thinking_budget_preference"
   | "anthropic_adaptive_thinking"
   // Routing
@@ -112,6 +114,8 @@ export interface ProviderBatchPatchDraft {
   group_tag?: ProviderPatchDraftInput<string>;
   model_redirects?: ProviderPatchDraftInput<Record<string, string>>;
   allowed_models?: ProviderPatchDraftInput<string[]>;
+  allowed_clients?: ProviderPatchDraftInput<string[]>;
+  blocked_clients?: ProviderPatchDraftInput<string[]>;
   anthropic_thinking_budget_preference?: ProviderPatchDraftInput<AnthropicThinkingBudgetPreference>;
   anthropic_adaptive_thinking?: ProviderPatchDraftInput<AnthropicAdaptiveThinkingConfig>;
   // Routing
@@ -160,6 +164,8 @@ export interface ProviderBatchPatch {
   group_tag: ProviderPatchOperation<string>;
   model_redirects: ProviderPatchOperation<Record<string, string>>;
   allowed_models: ProviderPatchOperation<string[]>;
+  allowed_clients: ProviderPatchOperation<string[]>;
+  blocked_clients: ProviderPatchOperation<string[]>;
   anthropic_thinking_budget_preference: ProviderPatchOperation<AnthropicThinkingBudgetPreference>;
   anthropic_adaptive_thinking: ProviderPatchOperation<AnthropicAdaptiveThinkingConfig>;
   // Routing
@@ -208,6 +214,8 @@ export interface ProviderBatchApplyUpdates {
   group_tag?: string | null;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[];
+  blocked_clients?: string[];
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   // Routing
@@ -285,6 +293,8 @@ export interface Provider {
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: string[] | null;
+  allowedClients: string[]; // Allowed client patterns (empty = no restriction)
+  blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
 
   // MCP 透传类型：控制是否启用 MCP 透传功能
   // 'none': 不启用（默认）
@@ -390,6 +400,8 @@ export interface ProviderDisplay {
   modelRedirects: Record<string, string> | null;
   // 模型列表（双重语义）
   allowedModels: string[] | null;
+  allowedClients: string[]; // Allowed client patterns (empty = no restriction)
+  blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
   // MCP 透传类型
   mcpPassthroughType: McpPassthroughType;
   // MCP 透传 URL
@@ -479,6 +491,8 @@ export interface CreateProviderData {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 
@@ -553,6 +567,8 @@ export interface UpdateProviderData {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 

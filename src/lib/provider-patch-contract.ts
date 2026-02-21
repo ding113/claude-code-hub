@@ -31,6 +31,8 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "group_tag",
   "model_redirects",
   "allowed_models",
+  "allowed_clients",
+  "blocked_clients",
   "anthropic_thinking_budget_preference",
   "anthropic_adaptive_thinking",
   // Routing
@@ -79,6 +81,8 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   group_tag: true,
   model_redirects: true,
   allowed_models: true,
+  allowed_clients: true,
+  blocked_clients: true,
   anthropic_thinking_budget_preference: true,
   anthropic_adaptive_thinking: true,
   // Routing
@@ -395,6 +399,12 @@ export function normalizeProviderBatchPatchDraft(
   const allowedModels = normalizePatchField("allowed_models", typedDraft.allowed_models);
   if (!allowedModels.ok) return allowedModels;
 
+  const allowedClients = normalizePatchField("allowed_clients", typedDraft.allowed_clients);
+  if (!allowedClients.ok) return allowedClients;
+
+  const blockedClients = normalizePatchField("blocked_clients", typedDraft.blocked_clients);
+  if (!blockedClients.ok) return blockedClients;
+
   const thinkingBudget = normalizePatchField(
     "anthropic_thinking_budget_preference",
     typedDraft.anthropic_thinking_budget_preference
@@ -566,6 +576,8 @@ export function normalizeProviderBatchPatchDraft(
       group_tag: groupTag.data,
       model_redirects: modelRedirects.data,
       allowed_models: allowedModels.data,
+      allowed_clients: allowedClients.data,
+      blocked_clients: blockedClients.data,
       anthropic_thinking_budget_preference: thinkingBudget.data,
       anthropic_adaptive_thinking: adaptiveThinking.data,
       // Routing
@@ -641,6 +653,12 @@ function applyPatchField<T>(
           (patch.value as string[]).length > 0
             ? (patch.value as ProviderBatchApplyUpdates["allowed_models"])
             : null;
+        return { ok: true, data: undefined };
+      case "allowed_clients":
+        updates.allowed_clients = patch.value as ProviderBatchApplyUpdates["allowed_clients"];
+        return { ok: true, data: undefined };
+      case "blocked_clients":
+        updates.blocked_clients = patch.value as ProviderBatchApplyUpdates["blocked_clients"];
         return { ok: true, data: undefined };
       case "anthropic_thinking_budget_preference":
         updates.anthropic_thinking_budget_preference =
@@ -780,6 +798,12 @@ function applyPatchField<T>(
     case "allowed_models":
       updates.allowed_models = null;
       return { ok: true, data: undefined };
+    case "allowed_clients":
+      updates.allowed_clients = [];
+      return { ok: true, data: undefined };
+    case "blocked_clients":
+      updates.blocked_clients = [];
+      return { ok: true, data: undefined };
     case "anthropic_thinking_budget_preference":
       updates.anthropic_thinking_budget_preference = "inherit";
       return { ok: true, data: undefined };
@@ -861,6 +885,8 @@ export function buildProviderBatchApplyUpdates(
     ["group_tag", patch.group_tag],
     ["model_redirects", patch.model_redirects],
     ["allowed_models", patch.allowed_models],
+    ["allowed_clients", patch.allowed_clients],
+    ["blocked_clients", patch.blocked_clients],
     ["anthropic_thinking_budget_preference", patch.anthropic_thinking_budget_preference],
     ["anthropic_adaptive_thinking", patch.anthropic_adaptive_thinking],
     // Routing
@@ -922,6 +948,8 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.group_tag.mode !== "no_change" ||
     patch.model_redirects.mode !== "no_change" ||
     patch.allowed_models.mode !== "no_change" ||
+    patch.allowed_clients.mode !== "no_change" ||
+    patch.blocked_clients.mode !== "no_change" ||
     patch.anthropic_thinking_budget_preference.mode !== "no_change" ||
     patch.anthropic_adaptive_thinking.mode !== "no_change" ||
     // Routing

@@ -306,6 +306,25 @@
       "selectedOnly": "選択した {count} 件のモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",
       "title": "モデル許可リスト"
     },
+    "clientRestrictions": {
+      "allowedLabel": "許可クライアント",
+      "allowedPlaceholder": "例: claude-code-cli",
+      "blockedLabel": "ブロッククライアント",
+      "blockedPlaceholder": "例: gemini-cli",
+      "allowAction": "許可",
+      "blockAction": "ブロック",
+      "customAllowedLabel": "カスタム許可パターン",
+      "customAllowedPlaceholder": "例: my-ide、internal-tool",
+      "customBlockedLabel": "カスタムブロックパターン",
+      "customBlockedPlaceholder": "例: legacy-client",
+      "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます（大文字小文字を区別しません）。'-' と '_' は同等として扱います。",
+      "presetClients": {
+        "claude-code": "Claude Code（すべて）",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "preserveClientIp": {
       "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",
       "help": "プライバシー保護のためデフォルトはオフ。上流側で端末 IP が必要な場合のみ有効化してください。",

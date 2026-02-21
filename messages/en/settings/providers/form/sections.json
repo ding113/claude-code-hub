@@ -305,6 +305,25 @@
       "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
       "title": "Model Allowlist"
     },
+    "clientRestrictions": {
+      "allowedLabel": "Allowed Clients",
+      "allowedPlaceholder": "e.g. claude-code-cli",
+      "blockedLabel": "Blocked Clients",
+      "blockedPlaceholder": "e.g. gemini-cli",
+      "allowAction": "Allow",
+      "blockAction": "Block",
+      "customAllowedLabel": "Custom Allowed Patterns",
+      "customAllowedPlaceholder": "e.g. my-ide, internal-tool",
+      "customBlockedLabel": "Custom Blocked Patterns",
+      "customBlockedPlaceholder": "e.g. legacy-client",
+      "customHelp": "Custom patterns use case-insensitive User-Agent contains matching. '-' and '_' are treated as equivalent.",
+      "presetClients": {
+        "claude-code": "Claude Code (all)",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "preserveClientIp": {
       "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",
       "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",

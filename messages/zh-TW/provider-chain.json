@@ -55,7 +55,8 @@
     "session_reuse": "會話複用",
     "initial_selection": "首次選擇",
     "endpoint_pool_exhausted": "端點池耗盡",
-    "vendor_type_all_timeout": "供應商類型全端點逾時"
+    "vendor_type_all_timeout": "供應商類型全端點逾時",
+    "client_restriction_filtered": "客戶端受限"
   },
   "filterReasons": {
     "rate_limited": "速率限制",
@@ -70,13 +71,21 @@
     "group_mismatch": "分組不匹配",
     "health_check_failed": "健康檢查失敗",
     "endpoint_circuit_open": "端點已熔斷",
-    "endpoint_disabled": "端點已停用"
+    "endpoint_disabled": "端點已停用",
+    "client_restriction": "客戶端限制"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "供應商類型臨時熔斷",
     "circuit_open": "熔斷器打開",
     "circuit_half_open": "熔斷器半開",
-    "rate_limited": "速率限制"
+    "rate_limited": "速率限制",
+    "provider_client_restriction": "供應商因客戶端限制被跳過",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "選擇方式",
