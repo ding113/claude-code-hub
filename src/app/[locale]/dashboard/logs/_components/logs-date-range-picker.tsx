@@ -179,7 +179,6 @@ export function LogsDateRangePicker({
         ))}
       </div>
 
-
       {/* Navigation and date display */}
       <div className="flex items-center gap-1">
         <Button
