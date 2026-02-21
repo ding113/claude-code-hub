@@ -1783,13 +1783,15 @@
           "label": "客户端限制",
           "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
           "customLabel": "自定义客户端模式",
-          "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
+          "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）",
+          "customHelp": "自定义模式按 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。"
         },
         "blockedClients": {
           "label": "黑名单客户端",
           "description": "匹配这些模式的客户端将被拒绝，即使它们也匹配白名单。",
           "customLabel": "自定义黑名单模式",
-          "customPlaceholder": "输入模式（如 'xcode'、'my-ide'）"
+          "customPlaceholder": "输入模式（如 'xcode'、'my-ide'）",
+          "customHelp": "自定义模式按 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。"
         },
         "allowedModels": {
           "label": "模型限制",
@@ -1809,6 +1811,10 @@
           "cancel": "取消",
           "processing": "处理中..."
         }
+      },
+      "actions": {
+        "allow": "允许",
+        "block": "阻止"
       },
       "presetClients": {
         "claude-cli": "Claude Code CLI",

@@ -1824,13 +1824,15 @@
           "label": "Client Restrictions",
           "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",
           "customLabel": "Custom Client Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
+          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
         },
         "blockedClients": {
           "label": "Blocked Clients",
           "description": "Clients matching these patterns will be rejected, even if they match allowed clients.",
           "customLabel": "Custom Block Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
+          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
         },
         "allowedModels": {
           "label": "Model Restrictions",
@@ -1850,6 +1852,10 @@
           "cancel": "Cancel",
           "processing": "Processing..."
         }
+      },
+      "actions": {
+        "allow": "Allow",
+        "block": "Block"
       },
       "presetClients": {
         "claude-cli": "Claude Code CLI",

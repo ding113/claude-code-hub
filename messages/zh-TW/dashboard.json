@@ -1768,13 +1768,15 @@
           "label": "用戶端限制",
           "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
           "customLabel": "自訂用戶端模式",
-          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）",
+          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
         },
         "blockedClients": {
           "label": "黑名單客戶端",
           "description": "符合這些模式的客戶端將被拒絕，即使它們也符合白名單。",
           "customLabel": "自訂黑名單模式",
-          "customPlaceholder": "輸入模式（如 'xcode'、'my-ide'）"
+          "customPlaceholder": "輸入模式（如 'xcode'、'my-ide'）",
+          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
         },
         "allowedModels": {
           "label": "Model 限制",
@@ -1794,6 +1796,10 @@
           "cancel": "取消變更",
           "processing": "處理中..."
         }
+      },
+      "actions": {
+        "allow": "允許",
+        "block": "封鎖"
       },
       "presetClients": {
         "claude-cli": "Claude Code CLI",

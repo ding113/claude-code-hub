@@ -310,7 +310,20 @@
       "allowedLabel": "白名單客戶端",
       "allowedPlaceholder": "例如 claude-code-cli",
       "blockedLabel": "黑名單客戶端",
-      "blockedPlaceholder": "例如 gemini-cli"
+      "blockedPlaceholder": "例如 gemini-cli",
+      "allowAction": "允許",
+      "blockAction": "封鎖",
+      "customAllowedLabel": "自訂白名單模式",
+      "customAllowedPlaceholder": "例如 my-ide、internal-tool",
+      "customBlockedLabel": "自訂黑名單模式",
+      "customBlockedPlaceholder": "例如 legacy-client",
+      "customHelp": "自訂模式使用 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。",
+      "presetClients": {
+        "claude-code": "Claude Code（全部）",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
     },
     "preserveClientIp": {
       "desc": "向上游轉發 x-forwarded-for / x-real-ip，可能暴露真實來源 IP",

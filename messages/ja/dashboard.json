@@ -1760,13 +1760,15 @@
           "label": "クライアント制限",
           "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空欄は制限なし。",
           "customLabel": "カスタムクライアントパターン",
-          "customPlaceholder": "パターンを入力(例：'xcode', 'my-ide')"
+          "customPlaceholder": "パターンを入力(例：'xcode', 'my-ide')",
+          "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます(大文字小文字を区別しません)。'-' と '_' は同等として扱います。"
         },
         "blockedClients": {
           "label": "ブロックするクライアント",
           "description": "これらのパターンに一致するクライアントは、許可リストに一致しても拒否されます。",
           "customLabel": "カスタムブロックパターン",
-          "customPlaceholder": "パターンを入力(例: 'xcode'、'my-ide')"
+          "customPlaceholder": "パターンを入力(例: 'xcode'、'my-ide')",
+          "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます(大文字小文字を区別しません)。'-' と '_' は同等として扱います。"
         },
         "allowedModels": {
           "label": "モデル制限",
@@ -1786,6 +1788,10 @@
           "cancel": "キャンセル",
           "processing": "処理中..."
         }
+      },
+      "actions": {
+        "allow": "許可",
+        "block": "ブロック"
       },
       "presetClients": {
         "claude-cli": "Claude Code CLI",
