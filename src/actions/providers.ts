@@ -479,6 +479,8 @@ export async function addProvider(data: {
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
@@ -650,6 +652,8 @@ export async function editProvider(
     preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;
     allowed_models?: string[] | null;
+    allowed_clients?: string[] | null;
+    blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
     limit_daily_usd?: number | null;
     daily_reset_time?: string;
