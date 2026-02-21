@@ -74,7 +74,11 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
 // - 'disabled': force remove googleSearch tool from request
 const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
 
-const CLIENT_PATTERN_SCHEMA = z.string().max(64, "客户端模式长度不能超过64个字符");
+const CLIENT_PATTERN_SCHEMA = z
+  .string()
+  .trim()
+  .min(1, "客户端模式不能为空")
+  .max(64, "客户端模式长度不能超过64个字符");
 const CLIENT_PATTERN_ARRAY_SCHEMA = z
   .array(CLIENT_PATTERN_SCHEMA)
   .max(50, "客户端模式数量不能超过50个");

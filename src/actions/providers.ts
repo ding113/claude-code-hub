@@ -1406,10 +1406,10 @@ function mapApplyUpdatesToRepositoryFormat(
     result.allowedModels = applyUpdates.allowed_models;
   }
   if (applyUpdates.allowed_clients !== undefined) {
-    result.allowedClients = applyUpdates.allowed_clients;
+    result.allowedClients = applyUpdates.allowed_clients ?? [];
   }
   if (applyUpdates.blocked_clients !== undefined) {
-    result.blockedClients = applyUpdates.blocked_clients;
+    result.blockedClients = applyUpdates.blocked_clients ?? [];
   }
   if (applyUpdates.anthropic_thinking_budget_preference !== undefined) {
     result.anthropicThinkingBudgetPreference = applyUpdates.anthropic_thinking_budget_preference;
@@ -1561,6 +1561,8 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
 };
 
 const PATCH_FIELD_CLEAR_VALUE: Partial<Record<ProviderBatchPatchField, unknown>> = {
+  allowed_clients: [],
+  blocked_clients: [],
   anthropic_thinking_budget_preference: "inherit",
   cache_ttl_preference: "inherit",
   context_1m_preference: "inherit",
