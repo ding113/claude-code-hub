@@ -5,29 +5,14 @@ import { useCallback, useMemo } from "react";
 import { ArrayTagInputField } from "@/components/form/form-field";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-
-// Claude Code builtin sub-clients (must match BUILTIN_CLIENT_KEYWORDS in client-detector.ts)
-const CLAUDE_CODE_CLIENTS = [
-  { value: "claude-code", isParent: true },
-  { value: "claude-code-cli", isParent: false },
-  { value: "claude-code-cli-sdk", isParent: false },
-  { value: "claude-code-vscode", isParent: false },
-  { value: "claude-code-sdk-ts", isParent: false },
-  { value: "claude-code-sdk-py", isParent: false },
-  { value: "claude-code-gh-action", isParent: false },
-];
-
-// Other preset clients (non-Claude Code)
-const OTHER_PRESET_CLIENTS = [
-  { value: "gemini-cli" },
-  { value: "factory-cli" },
-  { value: "codex-cli" },
-];
-
-const ALL_PRESET_VALUES = new Set([
-  ...CLAUDE_CODE_CLIENTS.map((c) => c.value),
-  ...OTHER_PRESET_CLIENTS.map((c) => c.value),
-]);
+import {
+  CLIENT_RESTRICTION_PRESET_OPTIONS,
+  isPresetSelected,
+  mergePresetAndCustomClients,
+  removePresetValues,
+  splitPresetAndCustomClients,
+  togglePresetSelection,
+} from "@/lib/client-restrictions/client-presets";
 
 // Model name validation pattern
 const MODEL_NAME_PATTERN = /^[a-zA-Z0-9._:/-]+$/;
@@ -48,18 +33,24 @@ export interface AccessRestrictionsSectionProps {
         description: string;
         customLabel: string;
         customPlaceholder: string;
+        customHelp: string;
       };
       blockedClients: {
         label: string;
         description: string;
         customLabel: string;
         customPlaceholder: string;
+        customHelp: string;
       };
       allowedModels: {
         label: string;
         placeholder: string;
         description: string;
       };
+    };
+    actions: {
+      allow: string;
+      block: string;
     };
     presetClients: Record<string, string>;
   };
@@ -76,54 +67,36 @@ export function AccessRestrictionsSection({
   const allowed = allowedClients || [];
   const blocked = blockedClients || [];
 
-  const { presetAllowed, customAllowed } = useMemo(() => {
-    const preset = allowed.filter((c) => ALL_PRESET_VALUES.has(c));
-    const custom = allowed.filter((c) => !ALL_PRESET_VALUES.has(c));
-    return { presetAllowed: preset, customAllowed: custom };
-  }, [allowed]);
+  const { customValues: customAllowed } = useMemo(
+    () => splitPresetAndCustomClients(allowed),
+    [allowed]
+  );
 
-  const { presetBlocked, customBlocked } = useMemo(() => {
-    const preset = blocked.filter((c) => ALL_PRESET_VALUES.has(c));
-    const custom = blocked.filter((c) => !ALL_PRESET_VALUES.has(c));
-    return { presetBlocked: preset, customBlocked: custom };
-  }, [blocked]);
+  const { customValues: customBlocked } = useMemo(
+    () => splitPresetAndCustomClients(blocked),
+    [blocked]
+  );
 
-  const handleAllowToggle = (clientValue: string, checked: boolean) => {
+  const handleAllowToggle = (presetValue: string, checked: boolean) => {
+    onChange("allowedClients", togglePresetSelection(allowed, presetValue, checked));
     if (checked) {
-      onChange("allowedClients", [...allowed.filter((c) => c !== clientValue), clientValue]);
-      onChange(
-        "blockedClients",
-        blocked.filter((c) => c !== clientValue)
-      );
-    } else {
-      onChange(
-        "allowedClients",
-        allowed.filter((c) => c !== clientValue)
-      );
+      onChange("blockedClients", removePresetValues(blocked, presetValue));
     }
   };
 
-  const handleBlockToggle = (clientValue: string, checked: boolean) => {
+  const handleBlockToggle = (presetValue: string, checked: boolean) => {
+    onChange("blockedClients", togglePresetSelection(blocked, presetValue, checked));
     if (checked) {
-      onChange("blockedClients", [...blocked.filter((c) => c !== clientValue), clientValue]);
-      onChange(
-        "allowedClients",
-        allowed.filter((c) => c !== clientValue)
-      );
-    } else {
-      onChange(
-        "blockedClients",
-        blocked.filter((c) => c !== clientValue)
-      );
+      onChange("allowedClients", removePresetValues(allowed, presetValue));
     }
   };
 
   const handleCustomAllowedChange = (newCustom: string[]) => {
-    onChange("allowedClients", [...presetAllowed, ...newCustom]);
+    onChange("allowedClients", mergePresetAndCustomClients(allowed, newCustom));
   };
 
   const handleCustomBlockedChange = (newCustom: string[]) => {
-    onChange("blockedClients", [...presetBlocked, ...newCustom]);
+    onChange("blockedClients", mergePresetAndCustomClients(blocked, newCustom));
   };
 
   const validateModelTag = useCallback(
@@ -138,13 +111,13 @@ export function AccessRestrictionsSection({
     [allowedModels]
   );
 
-  const renderPresetRow = (value: string, indent: boolean) => {
-    const isAllowed = allowed.includes(value);
-    const isBlocked = blocked.includes(value);
+  const renderPresetRow = (value: string) => {
+    const isAllowed = isPresetSelected(allowed, value);
+    const isBlocked = isPresetSelected(blocked, value);
     const displayLabel = translations.presetClients[value] ?? value;
 
     return (
-      <div key={value} className={`flex items-center gap-4 py-1 ${indent ? "pl-6" : ""}`}>
+      <div key={value} className="flex items-center gap-4 py-1">
         <span className="text-sm flex-1 text-foreground">{displayLabel}</span>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
@@ -157,7 +130,7 @@ export function AccessRestrictionsSection({
               htmlFor={`allow-${value}`}
               className="text-xs font-normal cursor-pointer text-muted-foreground"
             >
-              Allow
+              {translations.actions.allow}
             </Label>
           </div>
           <div className="flex items-center gap-1.5">
@@ -170,7 +143,7 @@ export function AccessRestrictionsSection({
               htmlFor={`block-${value}`}
               className="text-xs font-normal cursor-pointer text-muted-foreground"
             >
-              Block
+              {translations.actions.block}
             </Label>
           </div>
         </div>
@@ -194,19 +167,14 @@ export function AccessRestrictionsSection({
           </p>
         </div>
 
-        {/* Claude Code group */}
         <div className="space-y-0.5 border rounded-md p-2">
-          {CLAUDE_CODE_CLIENTS.map((client) => renderPresetRow(client.value, !client.isParent))}
-        </div>
-
-        {/* Other presets */}
-        <div className="space-y-0.5">
-          {OTHER_PRESET_CLIENTS.map((client) => renderPresetRow(client.value, false))}
+          {CLIENT_RESTRICTION_PRESET_OPTIONS.map((client) => renderPresetRow(client.value))}
         </div>
 
         {/* Custom allowed patterns */}
         <ArrayTagInputField
           label={translations.fields.allowedClients.customLabel}
+          description={translations.fields.allowedClients.customHelp}
           maxTagLength={64}
           maxTags={50}
           placeholder={translations.fields.allowedClients.customPlaceholder}
@@ -217,6 +185,7 @@ export function AccessRestrictionsSection({
         {/* Custom blocked patterns */}
         <ArrayTagInputField
           label={translations.fields.blockedClients.customLabel}
+          description={translations.fields.blockedClients.customHelp}
           maxTagLength={64}
           maxTags={50}
           placeholder={translations.fields.blockedClients.customPlaceholder}

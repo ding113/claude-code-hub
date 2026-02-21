@@ -50,6 +50,7 @@ const EditUserSchema = UpdateUserSchema.extend({
   name: z.string().min(1).max(64),
   providerGroup: z.string().max(200).nullable().optional(),
   allowedClients: z.array(z.string().max(64)).max(50).optional().default([]),
+  blockedClients: z.array(z.string().max(64)).max(50).optional().default([]),
   allowedModels: z.array(z.string().max(64)).max(50).optional().default([]),
   dailyQuota: z.number().nullable().optional(),
 });
@@ -73,6 +74,7 @@ function buildDefaultValues(user: UserDisplay): EditUserValues {
     dailyResetMode: user.dailyResetMode ?? "fixed",
     dailyResetTime: user.dailyResetTime ?? "00:00",
     allowedClients: user.allowedClients || [],
+    blockedClients: user.blockedClients || [],
     allowedModels: user.allowedModels || [],
   };
 }
@@ -113,6 +115,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
             dailyResetMode: data.dailyResetMode,
             dailyResetTime: data.dailyResetTime,
             allowedClients: data.allowedClients,
+            blockedClients: data.blockedClients,
             allowedModels: data.allowedModels,
           });
           if (!userRes.ok) {

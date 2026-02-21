@@ -100,18 +100,24 @@ export interface UserEditSectionProps {
         description: string;
         customLabel: string;
         customPlaceholder: string;
+        customHelp: string;
       };
       blockedClients: {
         label: string;
         description: string;
         customLabel: string;
         customPlaceholder: string;
+        customHelp: string;
       };
       allowedModels: {
         label: string;
         placeholder: string;
         description: string;
       };
+    };
+    actions: {
+      allow: string;
+      block: string;
     };
     presetClients: Record<string, string>;
     limitRules: {
@@ -501,6 +507,7 @@ export function UserEditSection({
             blockedClients: translations.fields.blockedClients,
             allowedModels: translations.fields.allowedModels,
           },
+          actions: translations.actions,
           presetClients: translations.presetClients,
         }}
       />
