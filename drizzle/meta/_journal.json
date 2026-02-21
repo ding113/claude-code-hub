@@ -526,6 +526,13 @@
       "when": 1771600203231,
       "tag": "0074_wide_retro_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1771688588623,
+      "tag": "0075_faithful_speed_demon",
+      "breakpoints": true
     }
   ]
 }

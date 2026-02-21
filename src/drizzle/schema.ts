@@ -552,6 +552,13 @@ export const messageRequest = pgTable('message_request', {
   messageRequestKeyCostActiveIdx: index('idx_message_request_key_cost_active')
     .on(table.key, table.costUsd)
     .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
+  // #slow-query: composite index for session user-info LATERAL lookup
+  // Query: WHERE session_id = $1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1
+  // Provides seek + pre-sorted scan; user_id, key in index reduce heap columns to fetch.
+  // user_agent/api_type still require one heap fetch per session (LIMIT 1, negligible).
+  messageRequestSessionUserInfoIdx: index('idx_message_request_session_user_info')
+    .on(table.sessionId, table.createdAt, table.userId, table.key)
+    .where(sql`${table.deletedAt} IS NULL`),
 }));
 
 // Model Prices table
@@ -891,8 +898,18 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerModelIdx: index('idx_usage_ledger_model')
     .on(table.model)
     .where(sql`${table.model} IS NOT NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per key (replaces old key+cost, adds created_at for time range)
   usageLedgerKeyCostIdx: index('idx_usage_ledger_key_cost')
-    .on(table.key, table.costUsd)
+    .on(table.key, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per user (Quotas page + rate-limit total)
+  // Keys: user_id (equality), created_at (range filter), cost_usd (aggregation, index-only scan)
+  usageLedgerUserCostCoverIdx: index('idx_usage_ledger_user_cost_cover')
+    .on(table.userId, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per provider (rate-limit total)
+  usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
+    .on(table.finalProviderId, table.createdAt, table.costUsd)
     .where(sql`${table.blockedBy} IS NULL`),
 }));
 
