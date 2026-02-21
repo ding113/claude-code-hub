@@ -8,7 +8,7 @@ import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
-import { isClientAllowed } from "./client-detector";
+import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
@@ -591,10 +591,47 @@ export class ProxyProviderResolver {
     // Check provider-level client restrictions on session reuse
     const providerAllowed = provider.allowedClients ?? [];
     const providerBlocked = provider.blockedClients ?? [];
-    if (!isClientAllowed(session, providerAllowed, providerBlocked)) {
+    const clientResult = isClientAllowedDetailed(session, providerAllowed, providerBlocked);
+    if (!clientResult.allowed) {
       logger.debug("ProviderSelector: Session provider blocked by client restrictions", {
         sessionId: session.sessionId,
         providerId: provider.id,
+        matchType: clientResult.matchType,
+        matchedPattern: clientResult.matchedPattern,
+        detectedClient: clientResult.detectedClient,
+      });
+      session.addProviderToChain(provider, {
+        reason: "client_restriction_filtered",
+        decisionContext: {
+          totalProviders: 0,
+          enabledProviders: 0,
+          targetType: provider.providerType as NonNullable<
+            ProviderChainItem["decisionContext"]
+          >["targetType"],
+          requestedModel: session.getOriginalModel() || "",
+          groupFilterApplied: false,
+          beforeHealthCheck: 0,
+          afterHealthCheck: 0,
+          priorityLevels: [],
+          selectedPriority: 0,
+          candidatesAtPriority: [],
+          filteredProviders: [
+            {
+              id: provider.id,
+              name: provider.name,
+              reason: "client_restriction",
+              details:
+                clientResult.matchType === "blocklist_hit" ? "blocklist_hit" : "allowlist_miss",
+              clientRestrictionContext: {
+                matchType: clientResult.matchType as "blocklist_hit" | "allowlist_miss",
+                matchedPattern: clientResult.matchedPattern,
+                detectedClient: clientResult.detectedClient,
+                providerAllowlist: clientResult.checkedAllowlist,
+                providerBlocklist: clientResult.checkedBlocklist,
+              },
+            },
+          ],
+        },
       });
       await SessionManager.clearSessionProvider(session.sessionId);
       return null;
@@ -785,13 +822,20 @@ export class ProxyProviderResolver {
           clientFilteredProviders.push(p);
           continue;
         }
-        const allowed = isClientAllowed(session, providerAllowed, providerBlocked);
-        if (!allowed) {
+        const result = isClientAllowedDetailed(session, providerAllowed, providerBlocked);
+        if (!result.allowed) {
           context.filteredProviders?.push({
             id: p.id,
             name: p.name,
             reason: "client_restriction",
-            details: "provider_client_restriction",
+            details: result.matchType === "blocklist_hit" ? "blocklist_hit" : "allowlist_miss",
+            clientRestrictionContext: {
+              matchType: result.matchType as "blocklist_hit" | "allowlist_miss",
+              matchedPattern: result.matchedPattern,
+              detectedClient: result.detectedClient,
+              providerAllowlist: result.checkedAllowlist,
+              providerBlocklist: result.checkedBlocklist,
+            },
           });
           continue;
         }

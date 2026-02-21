@@ -5,6 +5,7 @@ import {
   detectClientFull,
   isBuiltinKeyword,
   isClientAllowed,
+  isClientAllowedDetailed,
   matchClientPattern,
 } from "@/app/v1/_lib/proxy/client-detector";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
@@ -291,6 +292,94 @@ describe("client-detector", () => {
     test("should allow when blocked does not match and allowed matches", () => {
       const session = createMockSession({ userAgent: "codex_cli/2.0" });
       expect(isClientAllowed(session, ["codex-cli"], ["gemini-cli"])).toBe(true);
+    });
+  });
+
+  describe("isClientAllowedDetailed", () => {
+    test("should return no_restriction when both lists are empty", () => {
+      const session = createMockSession({ userAgent: "AnyClient/1.0" });
+      const result = isClientAllowedDetailed(session, [], []);
+      expect(result).toEqual({
+        allowed: true,
+        matchType: "no_restriction",
+        matchedPattern: undefined,
+        detectedClient: undefined,
+        checkedAllowlist: [],
+        checkedBlocklist: [],
+      });
+    });
+
+    test("should return blocklist_hit with matched pattern", () => {
+      const session = createMockSession({ userAgent: "GeminiCLI/1.0" });
+      const result = isClientAllowedDetailed(session, [], ["gemini-cli"]);
+      expect(result.allowed).toBe(false);
+      expect(result.matchType).toBe("blocklist_hit");
+      expect(result.matchedPattern).toBe("gemini-cli");
+      expect(result.detectedClient).toBe("GeminiCLI/1.0");
+      expect(result.checkedBlocklist).toEqual(["gemini-cli"]);
+    });
+
+    test("should return allowlist_miss when no allowlist pattern matches", () => {
+      const session = createMockSession({ userAgent: "UnknownClient/1.0" });
+      const result = isClientAllowedDetailed(session, ["gemini-cli", "codex-cli"], []);
+      expect(result.allowed).toBe(false);
+      expect(result.matchType).toBe("allowlist_miss");
+      expect(result.matchedPattern).toBeUndefined();
+      expect(result.detectedClient).toBe("UnknownClient/1.0");
+      expect(result.checkedAllowlist).toEqual(["gemini-cli", "codex-cli"]);
+    });
+
+    test("should return allowed when allowlist matches", () => {
+      const session = createMockSession({ userAgent: "GeminiCLI/1.0" });
+      const result = isClientAllowedDetailed(session, ["gemini-cli"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchType).toBe("allowed");
+      expect(result.matchedPattern).toBe("gemini-cli");
+      expect(result.detectedClient).toBe("GeminiCLI/1.0");
+    });
+
+    test("blocklist takes precedence over allowlist", () => {
+      const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, cli)");
+      const result = isClientAllowedDetailed(session, ["claude-code"], ["claude-code"]);
+      expect(result.allowed).toBe(false);
+      expect(result.matchType).toBe("blocklist_hit");
+      expect(result.matchedPattern).toBe("claude-code");
+    });
+
+    test("should detect sub-client for builtin keywords", () => {
+      const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, sdk-ts)");
+      const result = isClientAllowedDetailed(session, ["claude-code"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchType).toBe("allowed");
+      expect(result.detectedClient).toBe("claude-code-sdk-ts");
+      expect(result.matchedPattern).toBe("claude-code");
+    });
+
+    test("should return allowed when only blocklist set and no match", () => {
+      const session = createMockSession({ userAgent: "CodexCLI/1.0" });
+      const result = isClientAllowedDetailed(session, [], ["gemini-cli"]);
+      expect(result.allowed).toBe(true);
+      expect(result.matchType).toBe("allowed");
+      expect(result.detectedClient).toBe("CodexCLI/1.0");
+    });
+
+    test("should return no_restriction when blockedClients is undefined and allowlist empty", () => {
+      const session = createMockSession({ userAgent: "AnyClient/1.0" });
+      const result = isClientAllowedDetailed(session, []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchType).toBe("no_restriction");
+    });
+
+    test("should capture first matching blocked pattern", () => {
+      const session = createMockSession({ userAgent: "GeminiCLI/1.0" });
+      const result = isClientAllowedDetailed(
+        session,
+        [],
+        ["codex-cli", "gemini-cli", "factory-cli"]
+      );
+      expect(result.allowed).toBe(false);
+      expect(result.matchType).toBe("blocklist_hit");
+      expect(result.matchedPattern).toBe("gemini-cli");
     });
   });
 

@@ -175,6 +175,13 @@ export interface ProviderChainItem {
         | "disabled"
         | "client_restriction"; // Provider filtered due to client restriction
       details?: string; // 额外信息（如费用：$15.2/$15）
+      clientRestrictionContext?: {
+        matchType: "blocklist_hit" | "allowlist_miss";
+        matchedPattern?: string;
+        detectedClient?: string;
+        providerAllowlist: string[];
+        providerBlocklist: string[];
+      };
     }>;
 
     // --- 优先级分层 ---

@@ -20,6 +20,15 @@ export interface ClientDetectionResult {
   supplementary: string[];
 }
 
+export interface ClientRestrictionResult {
+  allowed: boolean;
+  matchType: "no_restriction" | "allowed" | "blocklist_hit" | "allowlist_miss";
+  matchedPattern?: string;
+  detectedClient?: string;
+  checkedAllowlist: string[];
+  checkedBlocklist: string[];
+}
+
 const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
 
 const ENTRYPOINT_MAP: Record<string, string> = {
@@ -142,14 +151,33 @@ export function isClientAllowed(
   allowedClients: string[],
   blockedClients?: string[]
 ): boolean {
-  const hasBlockList = !!blockedClients && blockedClients.length > 0;
-  if (!hasBlockList && allowedClients.length === 0) return true;
+  return isClientAllowedDetailed(session, allowedClients, blockedClients).allowed;
+}
+
+export function isClientAllowedDetailed(
+  session: ProxySession,
+  allowedClients: string[],
+  blockedClients?: string[]
+): ClientRestrictionResult {
+  const checkedAllowlist = allowedClients;
+  const checkedBlocklist = blockedClients ?? [];
+
+  const hasBlockList = checkedBlocklist.length > 0;
+  if (!hasBlockList && allowedClients.length === 0) {
+    return {
+      allowed: true,
+      matchType: "no_restriction",
+      checkedAllowlist,
+      checkedBlocklist,
+    };
+  }
 
   // Pre-compute once to avoid repeated signal checks per pattern
   const claudeCode = confirmClaudeCodeSignals(session);
   const ua = session.userAgent?.trim() ?? "";
   const normalizedUa = normalize(ua);
   const subClient = claudeCode.confirmed ? extractSubClient(ua) : null;
+  const detectedClient = subClient || ua || undefined;
 
   const matches = (pattern: string): boolean => {
     if (!isBuiltinKeyword(pattern)) {
@@ -162,11 +190,47 @@ export function isClientAllowed(
     return subClient === pattern;
   };
 
-  if (blockedClients && blockedClients.length > 0) {
-    if (blockedClients.some(matches)) return false;
+  if (checkedBlocklist.length > 0) {
+    const blockedPattern = checkedBlocklist.find(matches);
+    if (blockedPattern) {
+      return {
+        allowed: false,
+        matchType: "blocklist_hit",
+        matchedPattern: blockedPattern,
+        detectedClient,
+        checkedAllowlist,
+        checkedBlocklist,
+      };
+    }
   }
 
-  if (allowedClients.length === 0) return true;
+  if (allowedClients.length === 0) {
+    return {
+      allowed: true,
+      matchType: "allowed",
+      detectedClient,
+      checkedAllowlist,
+      checkedBlocklist,
+    };
+  }
 
-  return allowedClients.some(matches);
+  const allowedPattern = allowedClients.find(matches);
+  if (allowedPattern) {
+    return {
+      allowed: true,
+      matchType: "allowed",
+      matchedPattern: allowedPattern,
+      detectedClient,
+      checkedAllowlist,
+      checkedBlocklist,
+    };
+  }
+
+  return {
+    allowed: false,
+    matchType: "allowlist_miss",
+    detectedClient,
+    checkedAllowlist,
+    checkedBlocklist,
+  };
 }

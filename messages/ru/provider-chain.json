@@ -79,7 +79,13 @@
     "circuit_open": "Размыкатель открыт",
     "circuit_half_open": "Размыкатель полуоткрыт",
     "rate_limited": "Ограничение скорости",
-    "provider_client_restriction": "Провайдер пропущен из-за ограничения клиента"
+    "provider_client_restriction": "Провайдер пропущен из-за ограничения клиента",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "Метод выбора",

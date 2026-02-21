@@ -1,4 +1,4 @@
-import { isClientAllowed } from "./client-detector";
+import { isClientAllowedDetailed } from "./client-detector";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
@@ -28,14 +28,17 @@ export class ProxyClientGuard {
       );
     }
 
-    const isAllowed = isClientAllowed(session, allowedClients, blockedClients);
+    const result = isClientAllowedDetailed(session, allowedClients, blockedClients);
 
-    if (!isAllowed) {
-      return ProxyResponses.buildError(
-        400,
-        `Client not allowed. Your client is not in the allowed list.`,
-        "invalid_request_error"
-      );
+    if (!result.allowed) {
+      const detected = result.detectedClient ? ` (detected: ${result.detectedClient})` : "";
+      let message: string;
+      if (result.matchType === "blocklist_hit") {
+        message = `Client blocked by pattern: ${result.matchedPattern}${detected}`;
+      } else {
+        message = `Client not in allowed list: [${allowedClients.join(", ")}]${detected}`;
+      }
+      return ProxyResponses.buildError(400, message, "invalid_request_error");
     }
 
     // Client is allowed

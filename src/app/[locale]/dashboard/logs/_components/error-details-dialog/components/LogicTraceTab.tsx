@@ -415,6 +415,52 @@ export function LogicTraceTab({
                                         )
                                       </span>
                                     )}
+                                    {p.clientRestrictionContext && (
+                                      <div className="ml-4 mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+                                        {p.clientRestrictionContext.matchedPattern && (
+                                          <div>
+                                            {tChain(
+                                              `filterDetails.${p.clientRestrictionContext.matchType}`,
+                                              { pattern: p.clientRestrictionContext.matchedPattern }
+                                            )}
+                                          </div>
+                                        )}
+                                        {!p.clientRestrictionContext.matchedPattern && (
+                                          <div>
+                                            {tChain(
+                                              `filterDetails.${p.clientRestrictionContext.matchType}`
+                                            )}
+                                          </div>
+                                        )}
+                                        {p.clientRestrictionContext.detectedClient && (
+                                          <div>
+                                            {tChain("filterDetails.detectedClient", {
+                                              client: p.clientRestrictionContext.detectedClient,
+                                            })}
+                                          </div>
+                                        )}
+                                        {p.clientRestrictionContext.providerAllowlist.length >
+                                          0 && (
+                                          <div>
+                                            {tChain("filterDetails.providerAllowlist", {
+                                              list: p.clientRestrictionContext.providerAllowlist.join(
+                                                ", "
+                                              ),
+                                            })}
+                                          </div>
+                                        )}
+                                        {p.clientRestrictionContext.providerBlocklist.length >
+                                          0 && (
+                                          <div>
+                                            {tChain("filterDetails.providerBlocklist", {
+                                              list: p.clientRestrictionContext.providerBlocklist.join(
+                                                ", "
+                                              ),
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -550,6 +596,43 @@ export function LogicTraceTab({
                             : p.details}
                           )
                         </span>
+                      )}
+                      {p.clientRestrictionContext && (
+                        <div className="ml-4 mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+                          {p.clientRestrictionContext.matchedPattern && (
+                            <div>
+                              {tChain(`filterDetails.${p.clientRestrictionContext.matchType}`, {
+                                pattern: p.clientRestrictionContext.matchedPattern,
+                              })}
+                            </div>
+                          )}
+                          {!p.clientRestrictionContext.matchedPattern && (
+                            <div>
+                              {tChain(`filterDetails.${p.clientRestrictionContext.matchType}`)}
+                            </div>
+                          )}
+                          {p.clientRestrictionContext.detectedClient && (
+                            <div>
+                              {tChain("filterDetails.detectedClient", {
+                                client: p.clientRestrictionContext.detectedClient,
+                              })}
+                            </div>
+                          )}
+                          {p.clientRestrictionContext.providerAllowlist.length > 0 && (
+                            <div>
+                              {tChain("filterDetails.providerAllowlist", {
+                                list: p.clientRestrictionContext.providerAllowlist.join(", "),
+                              })}
+                            </div>
+                          )}
+                          {p.clientRestrictionContext.providerBlocklist.length > 0 && (
+                            <div>
+                              {tChain("filterDetails.providerBlocklist", {
+                                list: p.clientRestrictionContext.providerBlocklist.join(", "),
+                              })}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}

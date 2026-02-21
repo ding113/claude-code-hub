@@ -79,7 +79,13 @@
     "circuit_open": "Circuit breaker open",
     "circuit_half_open": "Circuit breaker half-open",
     "rate_limited": "Rate limited",
-    "provider_client_restriction": "Provider skipped due to client restriction"
+    "provider_client_restriction": "Provider skipped due to client restriction",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "Selection",

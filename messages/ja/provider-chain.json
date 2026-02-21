@@ -79,7 +79,13 @@
     "circuit_open": "サーキットブレーカーオープン",
     "circuit_half_open": "サーキットブレーカーハーフオープン",
     "rate_limited": "レート制限",
-    "provider_client_restriction": "クライアント制限によりプロバイダーをスキップ"
+    "provider_client_restriction": "クライアント制限によりプロバイダーをスキップ",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "選択方法",

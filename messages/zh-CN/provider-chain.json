@@ -79,7 +79,13 @@
     "circuit_open": "熔断器打开",
     "circuit_half_open": "熔断器半开",
     "rate_limited": "速率限制",
-    "provider_client_restriction": "供应商因客户端限制被跳过"
+    "provider_client_restriction": "供应商因客户端限制被跳过",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "选择方式",
