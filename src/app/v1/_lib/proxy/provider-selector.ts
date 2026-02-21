@@ -588,6 +588,18 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    // Check provider-level client restrictions on session reuse
+    const providerAllowed = provider.allowedClients ?? [];
+    const providerBlocked = provider.blockedClients ?? [];
+    if (!isClientAllowed(session, providerAllowed, providerBlocked)) {
+      logger.debug("ProviderSelector: Session provider blocked by client restrictions", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
+      return null;
+    }
+
     // 修复：检查用户分组权限（严格分组隔离 + 支持多分组）
     // Check if session provider matches user's group
     // Priority: key.providerGroup > user.providerGroup

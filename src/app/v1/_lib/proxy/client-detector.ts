@@ -20,6 +20,8 @@ export interface ClientDetectionResult {
   supplementary: string[];
 }
 
+const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
+
 const ENTRYPOINT_MAP: Record<string, string> = {
   cli: "claude-code-cli",
   "sdk-cli": "claude-code-cli-sdk",
@@ -45,7 +47,7 @@ function confirmClaudeCodeSignals(session: ProxySession): {
     signals.push("ua-prefix");
   }
 
-  const betas = (session.request.message as any).betas;
+  const betas = session.request.message["betas"];
   if (
     Array.isArray(betas) &&
     betas.some((beta) => typeof beta === "string" && /^claude-code-/i.test(beta))
@@ -80,7 +82,6 @@ export function isBuiltinKeyword(pattern: string): boolean {
 
 export function matchClientPattern(session: ProxySession, pattern: string): boolean {
   if (!isBuiltinKeyword(pattern)) {
-    const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
     const ua = session.userAgent?.trim();
     if (!ua) {
       return false;
@@ -118,7 +119,6 @@ export function detectClientFull(session: ProxySession, pattern: string): Client
         pattern === CLAUDE_CODE_KEYWORD_PREFIX || (subClient !== null && subClient === pattern);
     }
   } else {
-    const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
     const ua = session.userAgent?.trim();
     if (ua) {
       const normalizedPattern = normalize(pattern);
@@ -142,16 +142,31 @@ export function isClientAllowed(
   allowedClients: string[],
   blockedClients?: string[]
 ): boolean {
-  if (blockedClients && blockedClients.length > 0) {
-    const isBlocked = blockedClients.some((pattern) => matchClientPattern(session, pattern));
-    if (isBlocked) {
-      return false;
+  const hasBlockList = !!blockedClients && blockedClients.length > 0;
+  if (!hasBlockList && allowedClients.length === 0) return true;
+
+  // Pre-compute once to avoid repeated signal checks per pattern
+  const claudeCode = confirmClaudeCodeSignals(session);
+  const ua = session.userAgent?.trim() ?? "";
+  const normalizedUa = normalize(ua);
+  const subClient = claudeCode.confirmed ? extractSubClient(ua) : null;
+
+  const matches = (pattern: string): boolean => {
+    if (!isBuiltinKeyword(pattern)) {
+      if (!ua) return false;
+      const normalizedPattern = normalize(pattern);
+      return normalizedPattern !== "" && normalizedUa.includes(normalizedPattern);
     }
+    if (!claudeCode.confirmed) return false;
+    if (pattern === CLAUDE_CODE_KEYWORD_PREFIX) return true;
+    return subClient === pattern;
+  };
+
+  if (blockedClients && blockedClients.length > 0) {
+    if (blockedClients.some(matches)) return false;
   }
 
-  if (allowedClients.length === 0) {
-    return true;
-  }
+  if (allowedClients.length === 0) return true;
 
-  return allowedClients.some((pattern) => matchClientPattern(session, pattern));
+  return allowedClients.some(matches);
 }

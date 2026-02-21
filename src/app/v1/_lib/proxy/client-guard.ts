@@ -17,9 +17,10 @@ export class ProxyClientGuard {
       return null;
     }
 
-    // Restrictions exist - now User-Agent is required
+    // User-Agent is only required when an allowlist is configured.
+    // Blocklist-only: no UA can't match any block pattern, so the request passes through.
     const userAgent = session.userAgent?.trim();
-    if (!userAgent) {
+    if (!userAgent && allowedClients.length > 0) {
       return ProxyResponses.buildError(
         400,
         "Client not allowed. User-Agent header is required when client restrictions are configured.",

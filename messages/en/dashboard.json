@@ -1863,7 +1863,7 @@
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI",
         "claude-code": "Claude Code (all)",
-        "claude-code-cli": "Claude Code CLI",
+        "claude-code-cli": "Claude Code CLI (builtin)",
         "claude-code-cli-sdk": "Claude Code CLI SDK",
         "claude-code-vscode": "Claude Code VSCode",
         "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
