@@ -19,6 +19,7 @@ export async function UsageLogsActiveSessionsSection() {
       currencyCode={systemSettings.currencyDisplay}
       maxHeight="200px"
       showTokensCost={false}
+      compactEmpty
     />
   );
 }
