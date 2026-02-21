@@ -47,4 +47,74 @@ describe("ProxyProviderResolver.pickRandomProvider - model redirect", () => {
     expect(context.requestedModel).toBe("claude-test");
     expect(provider?.id).toBe(1);
   });
+
+  test("treats modelRedirects key as supported for claude provider with allowedModels whitelist (fix #786)", async () => {
+    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
+
+    vi.spyOn(ProxyProviderResolver as any, "filterByLimits").mockImplementation(
+      async (...args: unknown[]) => args[0] as Provider[]
+    );
+
+    const providers: Provider[] = [
+      {
+        id: 1,
+        name: "p1",
+        isEnabled: true,
+        providerType: "claude",
+        groupTag: null,
+        weight: 1,
+        priority: 0,
+        costMultiplier: 1,
+        allowedModels: ["claude-opus-4-6-think"],
+        modelRedirects: { "claude-opus-4-6": "claude-opus-4-6-think" },
+      } as unknown as Provider,
+    ];
+
+    const session = {
+      originalFormat: "claude",
+      authState: null,
+      getProvidersSnapshot: async () => providers,
+      getOriginalModel: () => "claude-opus-4-6",
+      getCurrentModel: () => "claude-opus-4-6-think",
+      clientRequestsContext1m: () => false,
+    } as any;
+
+    const { provider } = await (ProxyProviderResolver as any).pickRandomProvider(session, []);
+    expect(provider?.id).toBe(1);
+  });
+
+  test("filters claude provider when requested model is not allowed and no redirect exists", async () => {
+    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
+
+    vi.spyOn(ProxyProviderResolver as any, "filterByLimits").mockImplementation(
+      async (...args: unknown[]) => args[0] as Provider[]
+    );
+
+    const providers: Provider[] = [
+      {
+        id: 1,
+        name: "p1",
+        isEnabled: true,
+        providerType: "claude",
+        groupTag: null,
+        weight: 1,
+        priority: 0,
+        costMultiplier: 1,
+        allowedModels: ["claude-opus-4-6-think"],
+        modelRedirects: null,
+      } as unknown as Provider,
+    ];
+
+    const session = {
+      originalFormat: "claude",
+      authState: null,
+      getProvidersSnapshot: async () => providers,
+      getOriginalModel: () => "claude-opus-4-6",
+      getCurrentModel: () => "claude-opus-4-6",
+      clientRequestsContext1m: () => false,
+    } as any;
+
+    const { provider } = await (ProxyProviderResolver as any).pickRandomProvider(session, []);
+    expect(provider).toBeNull();
+  });
 });
