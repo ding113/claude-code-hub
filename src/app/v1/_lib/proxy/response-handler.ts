@@ -185,7 +185,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     } else {
       effectiveStatusCode = 502;
     }
-    errorMessage = detected.code;
+    errorMessage = detected.detail ? `${detected.code}: ${detected.detail}` : detected.code;
   } else if (!streamEndedNormally) {
     effectiveStatusCode = clientAborted ? 499 : 502;
     errorMessage = clientAborted ? "CLIENT_ABORTED" : (abortReason ?? "STREAM_ABORTED");
@@ -330,7 +330,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
       statusCodeInferred,
-      errorMessage: detected.code,
+      errorMessage: detected.detail ? `${detected.code}: ${detected.detail}` : detected.code,
     });
 
     return { effectiveStatusCode, errorMessage, providerIdForPersistence };

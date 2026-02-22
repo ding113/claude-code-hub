@@ -131,9 +131,11 @@ export function ProviderChainPopover({
   const hasFake200PostStreamFailure = chain.some(
     (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
   );
-  const fake200CodeForDisplay = chain.find(
-    (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
-  )?.errorMessage;
+  const fake200CodeForDisplay = chain
+    .find(
+      (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
+    )
+    ?.errorMessage?.split(": ")[0];
 
   // Calculate actual request count (excluding intermediate states)
   const requestCount = chain.filter(isActualRequest).length;
@@ -545,7 +547,7 @@ export function ProviderChainPopover({
                             {t("logs.details.fake200DetectedReason", {
                               reason: t(
                                 getFake200ReasonKey(
-                                  item.errorMessage,
+                                  item.errorMessage.split(": ")[0],
                                   "logs.details.fake200Reasons"
                                 )
                               ),
