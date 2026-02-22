@@ -306,6 +306,25 @@
       "selectedOnly": "Разрешены только выбранные {count} моделей. Другие модели не будут направляться к этому провайдеру.",
       "title": "Список разрешённых моделей"
     },
+    "clientRestrictions": {
+      "allowedLabel": "Разрешённые клиенты",
+      "allowedPlaceholder": "напр. claude-code-cli",
+      "blockedLabel": "Заблокированные клиенты",
+      "blockedPlaceholder": "напр. gemini-cli",
+      "allowAction": "Разрешить",
+      "blockAction": "Блокировать",
+      "customAllowedLabel": "Пользовательские разрешённые шаблоны",
+      "customAllowedPlaceholder": "напр. my-ide, internal-tool",
+      "customBlockedLabel": "Пользовательские шаблоны блокировки",
+      "customBlockedPlaceholder": "напр. legacy-client",
+      "customHelp": "Пользовательские шаблоны проверяются по вхождению в User-Agent без учёта регистра. '-' и '_' считаются эквивалентными.",
+      "presetClients": {
+        "claude-code": "Claude Code (все)",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "preserveClientIp": {
       "desc": "Передавать x-forwarded-for / x-real-ip в апстрим (может раскрыть реальный IP клиента)",
       "help": "По умолчанию выключено для приватности. Включайте только если апстриму нужен IP пользователя.",

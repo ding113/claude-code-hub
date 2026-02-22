@@ -181,6 +181,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     preserveClientIp: providerData.preserve_client_ip ?? false,
     modelRedirects: providerData.model_redirects,
     allowedModels: providerData.allowed_models,
+    allowedClients: providerData.allowed_clients ?? [],
+    blockedClients: providerData.blocked_clients ?? [],
     mcpPassthroughType: providerData.mcp_passthrough_type ?? "none",
     mcpPassthroughUrl: providerData.mcp_passthrough_url ?? null,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
@@ -256,6 +258,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         preserveClientIp: providers.preserveClientIp,
         modelRedirects: providers.modelRedirects,
         allowedModels: providers.allowedModels,
+        allowedClients: providers.allowedClients,
+        blockedClients: providers.blockedClients,
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
@@ -336,6 +340,8 @@ export async function findProviderList(
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      allowedClients: providers.allowedClients,
+      blockedClients: providers.blockedClients,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -416,6 +422,8 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      allowedClients: providers.allowedClients,
+      blockedClients: providers.blockedClients,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -500,6 +508,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      allowedClients: providers.allowedClients,
+      blockedClients: providers.blockedClients,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -578,6 +588,10 @@ export async function updateProvider(
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
   if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
+  if (providerData.allowed_clients !== undefined)
+    dbData.allowedClients = providerData.allowed_clients ?? [];
+  if (providerData.blocked_clients !== undefined)
+    dbData.blockedClients = providerData.blocked_clients ?? [];
   if (providerData.mcp_passthrough_type !== undefined)
     dbData.mcpPassthroughType = providerData.mcp_passthrough_type;
   if (providerData.mcp_passthrough_url !== undefined)
@@ -723,6 +737,8 @@ export async function updateProvider(
         preserveClientIp: providers.preserveClientIp,
         modelRedirects: providers.modelRedirects,
         allowedModels: providers.allowedModels,
+        allowedClients: providers.allowedClients,
+        blockedClients: providers.blockedClients,
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
@@ -973,6 +989,8 @@ export interface BatchProviderUpdates {
   groupTag?: string | null;
   modelRedirects?: Record<string, string> | null;
   allowedModels?: string[] | null;
+  allowedClients?: string[] | null;
+  blockedClients?: string[] | null;
   anthropicThinkingBudgetPreference?: string | null;
   anthropicAdaptiveThinking?: AnthropicAdaptiveThinkingConfig | null;
   // Routing
@@ -1044,6 +1062,12 @@ export async function updateProvidersBatch(
   }
   if (updates.allowedModels !== undefined) {
     setClauses.allowedModels = updates.allowedModels;
+  }
+  if (updates.allowedClients !== undefined) {
+    setClauses.allowedClients = updates.allowedClients;
+  }
+  if (updates.blockedClients !== undefined) {
+    setClauses.blockedClients = updates.blockedClients;
   }
   if (updates.anthropicThinkingBudgetPreference !== undefined) {
     setClauses.anthropicThinkingBudgetPreference = updates.anthropicThinkingBudgetPreference;

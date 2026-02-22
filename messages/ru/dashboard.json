@@ -1808,7 +1808,15 @@
           "label": "Ограничения клиентов",
           "description": "Ограничьте, какие CLI/IDE клиенты могут использовать эту учетную запись. Пусто = без ограничений.",
           "customLabel": "Пользовательские шаблоны клиентов",
-          "customPlaceholder": "Введите шаблон (например, 'xcode', 'my-ide')"
+          "customPlaceholder": "Введите шаблон (например, 'xcode', 'my-ide')",
+          "customHelp": "Пользовательские шаблоны проверяются по вхождению в User-Agent без учёта регистра. '-' и '_' считаются эквивалентными."
+        },
+        "blockedClients": {
+          "label": "Заблокированные клиенты",
+          "description": "Клиенты, соответствующие этим шаблонам, будут отклонены, даже если они соответствуют разрешённым.",
+          "customLabel": "Пользовательский шаблон блокировки",
+          "customPlaceholder": "Введите шаблон (например, 'xcode', 'my-ide')",
+          "customHelp": "Пользовательские шаблоны проверяются по вхождению в User-Agent без учёта регистра. '-' и '_' считаются эквивалентными."
         },
         "allowedModels": {
           "label": "Ограничения моделей",
@@ -1829,11 +1837,22 @@
           "processing": "Обработка..."
         }
       },
+      "actions": {
+        "allow": "Разрешить",
+        "block": "Блокировать"
+      },
       "presetClients": {
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code (все)",
+        "claude-code-cli": "Claude Code CLI (точное обнаружение)",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
+        "claude-code-sdk-py": "Claude Code SDK (Python)",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {

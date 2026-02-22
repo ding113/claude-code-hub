@@ -56,6 +56,14 @@ export interface UserEditTranslations {
       description: string;
       customLabel: string;
       customPlaceholder: string;
+      customHelp: string;
+    };
+    blockedClients: {
+      label: string;
+      description: string;
+      customLabel: string;
+      customPlaceholder: string;
+      customHelp: string;
     };
     allowedModels: {
       label: string;
@@ -63,12 +71,11 @@ export interface UserEditTranslations {
       description: string;
     };
   };
-  presetClients: {
-    "claude-cli": string;
-    "gemini-cli": string;
-    "factory-cli": string;
-    "codex-cli": string;
+  actions: {
+    allow: string;
+    block: string;
   };
+  presetClients: Record<string, string>;
   limitRules: {
     addRule: string;
     ruleTypes: {
@@ -171,6 +178,14 @@ export function useUserTranslations(
           description: t("userEditSection.fields.allowedClients.description"),
           customLabel: t("userEditSection.fields.allowedClients.customLabel"),
           customPlaceholder: t("userEditSection.fields.allowedClients.customPlaceholder"),
+          customHelp: t("userEditSection.fields.allowedClients.customHelp"),
+        },
+        blockedClients: {
+          label: t("userEditSection.fields.blockedClients.label"),
+          description: t("userEditSection.fields.blockedClients.description"),
+          customLabel: t("userEditSection.fields.blockedClients.customLabel"),
+          customPlaceholder: t("userEditSection.fields.blockedClients.customPlaceholder"),
+          customHelp: t("userEditSection.fields.blockedClients.customHelp"),
         },
         allowedModels: {
           label: t("userEditSection.fields.allowedModels.label"),
@@ -178,8 +193,12 @@ export function useUserTranslations(
           description: t("userEditSection.fields.allowedModels.description"),
         },
       },
+      actions: {
+        allow: t("userEditSection.actions.allow"),
+        block: t("userEditSection.actions.block"),
+      },
       presetClients: {
-        "claude-cli": t("userEditSection.presetClients.claude-cli"),
+        "claude-code": t("userEditSection.presetClients.claude-code"),
         "gemini-cli": t("userEditSection.presetClients.gemini-cli"),
         "factory-cli": t("userEditSection.presetClients.factory-cli"),
         "codex-cli": t("userEditSection.presetClients.codex-cli"),

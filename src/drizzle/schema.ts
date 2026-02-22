@@ -72,6 +72,10 @@ export const users = pgTable('users', {
   // Empty array = no restrictions, non-empty = only listed models allowed
   allowedModels: jsonb('allowed_models').$type<string[]>().default([]),
 
+  // Blocked clients (CLI/IDE blocklist)
+  // Non-empty = listed patterns are denied even if allowedClients permits them
+  blockedClients: jsonb('blocked_clients').$type<string[]>().notNull().default([]),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -192,6 +196,12 @@ export const providers = pgTable('providers', {
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: jsonb('allowed_models').$type<string[] | null>().default(null),
+
+  // Client restrictions for this provider
+  // allowedClients: empty = no restriction; non-empty = only listed patterns allowed
+  // blockedClients: non-empty = listed patterns are denied
+  allowedClients: jsonb('allowed_clients').$type<string[]>().notNull().default([]),
+  blockedClients: jsonb('blocked_clients').$type<string[]>().notNull().default([]),
 
   // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
   // 启用后，如果该提供商配置了重定向到 claude-* 模型，可以加入 claude 调度池
@@ -542,6 +552,13 @@ export const messageRequest = pgTable('message_request', {
   messageRequestKeyCostActiveIdx: index('idx_message_request_key_cost_active')
     .on(table.key, table.costUsd)
     .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
+  // #slow-query: composite index for session user-info LATERAL lookup
+  // Query: WHERE session_id = $1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1
+  // Provides seek + pre-sorted scan; user_id, key in index reduce heap columns to fetch.
+  // user_agent/api_type still require one heap fetch per session (LIMIT 1, negligible).
+  messageRequestSessionUserInfoIdx: index('idx_message_request_session_user_info')
+    .on(table.sessionId, table.createdAt, table.userId, table.key)
+    .where(sql`${table.deletedAt} IS NULL`),
 }));
 
 // Model Prices table
@@ -881,8 +898,18 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerModelIdx: index('idx_usage_ledger_model')
     .on(table.model)
     .where(sql`${table.model} IS NOT NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per key (replaces old key+cost, adds created_at for time range)
   usageLedgerKeyCostIdx: index('idx_usage_ledger_key_cost')
-    .on(table.key, table.costUsd)
+    .on(table.key, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per user (Quotas page + rate-limit total)
+  // Keys: user_id (equality), created_at (range filter), cost_usd (aggregation, index-only scan)
+  usageLedgerUserCostCoverIdx: index('idx_usage_ledger_user_cost_cover')
+    .on(table.userId, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per provider (rate-limit total)
+  usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
+    .on(table.finalProviderId, table.createdAt, table.costUsd)
     .where(sql`${table.blockedBy} IS NULL`),
 }));
 

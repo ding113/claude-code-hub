@@ -74,6 +74,21 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
 // - 'disabled': force remove googleSearch tool from request
 const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
 
+const CLIENT_PATTERN_SCHEMA = z
+  .string()
+  .trim()
+  .min(1, "客户端模式不能为空")
+  .max(64, "客户端模式长度不能超过64个字符");
+const CLIENT_PATTERN_ARRAY_SCHEMA = z
+  .array(CLIENT_PATTERN_SCHEMA)
+  .max(50, "客户端模式数量不能超过50个");
+const OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA = z.preprocess(
+  (value) => (value === null ? [] : value),
+  CLIENT_PATTERN_ARRAY_SCHEMA.optional()
+);
+const OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA =
+  OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA.default([]);
+
 /**
  * 用户创建数据验证schema
  */
@@ -197,11 +212,9 @@ export const CreateUserSchema = z.object({
     .optional()
     .default("00:00"),
   // Allowed clients (CLI/IDE restrictions)
-  allowedClients: z
-    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
-    .max(50, "客户端模式数量不能超过50个")
-    .optional()
-    .default([]),
+  allowedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
+  // Blocked clients (CLI/IDE restrictions)
+  blockedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
   // Allowed models (AI model restrictions)
   allowedModels: z
     .array(z.string().max(64, "模型名称长度不能超过64个字符"))
@@ -322,10 +335,9 @@ export const UpdateUserSchema = z.object({
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "重置时间格式必须为 HH:mm")
     .optional(),
   // Allowed clients (CLI/IDE restrictions)
-  allowedClients: z
-    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
-    .max(50, "客户端模式数量不能超过50个")
-    .optional(),
+  allowedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
+  // Blocked clients (CLI/IDE restrictions)
+  blockedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
   // Allowed models (AI model restrictions)
   allowedModels: z
     .array(z.string().max(64, "模型名称长度不能超过64个字符"))
@@ -437,6 +449,8 @@ export const CreateProviderSchema = z
     preserve_client_ip: z.boolean().optional().default(false),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
+    blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional().default("none"),
     mcp_passthrough_url: z
@@ -643,6 +657,8 @@ export const UpdateProviderSchema = z
     preserve_client_ip: z.boolean().optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
+    blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional(),
     mcp_passthrough_url: z

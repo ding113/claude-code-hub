@@ -28,6 +28,8 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_PRESERVE_CLIENT_IP: "routing.preserveClientIp",
   SET_MODEL_REDIRECTS: "routing.modelRedirects",
   SET_ALLOWED_MODELS: "routing.allowedModels",
+  SET_ALLOWED_CLIENTS: "routing.allowedClients",
+  SET_BLOCKED_CLIENTS: "routing.blockedClients",
   SET_GROUP_PRIORITIES: "routing.groupPriorities",
   SET_CACHE_TTL_PREFERENCE: "routing.cacheTtlPreference",
   SET_SWAP_CACHE_TTL_BILLING: "routing.swapCacheTtlBilling",
@@ -91,6 +93,8 @@ export function createInitialState(
         preserveClientIp: false,
         modelRedirects: {},
         allowedModels: [],
+        allowedClients: [],
+        blockedClients: [],
         priority: 0,
         groupPriorities: {},
         weight: 1,
@@ -165,6 +169,8 @@ export function createInitialState(
       preserveClientIp: sourceProvider?.preserveClientIp ?? false,
       modelRedirects: sourceProvider?.modelRedirects ?? {},
       allowedModels: sourceProvider?.allowedModels ?? [],
+      allowedClients: sourceProvider?.allowedClients ?? [],
+      blockedClients: sourceProvider?.blockedClients ?? [],
       priority: sourceProvider?.priority ?? 0,
       groupPriorities: sourceProvider?.groupPriorities ?? {},
       weight: sourceProvider?.weight ?? 1,
@@ -262,6 +268,10 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, modelRedirects: action.payload } };
     case "SET_ALLOWED_MODELS":
       return { ...state, routing: { ...state.routing, allowedModels: action.payload } };
+    case "SET_ALLOWED_CLIENTS":
+      return { ...state, routing: { ...state.routing, allowedClients: action.payload } };
+    case "SET_BLOCKED_CLIENTS":
+      return { ...state, routing: { ...state.routing, blockedClients: action.payload } };
     case "SET_PRIORITY":
       return { ...state, routing: { ...state.routing, priority: action.payload } };
     case "SET_GROUP_PRIORITIES":

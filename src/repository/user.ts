@@ -59,6 +59,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     isEnabled: userData.isEnabled ?? true,
     expiresAt: userData.expiresAt ?? null,
     allowedClients: userData.allowedClients ?? [],
+    blockedClients: userData.blockedClients ?? [],
     allowedModels: userData.allowedModels ?? [],
   };
 
@@ -84,6 +85,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     isEnabled: users.isEnabled,
     expiresAt: users.expiresAt,
     allowedClients: users.allowedClients,
+    blockedClients: users.blockedClients,
     allowedModels: users.allowedModels,
   });
 
@@ -116,6 +118,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
       allowedClients: users.allowedClients,
+      blockedClients: users.blockedClients,
       allowedModels: users.allowedModels,
     })
     .from(users)
@@ -294,6 +297,7 @@ export async function findUserListBatch(
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
       allowedClients: users.allowedClients,
+      blockedClients: users.blockedClients,
       allowedModels: users.allowedModels,
     })
     .from(users)
@@ -338,6 +342,7 @@ export async function findUserById(id: number): Promise<User | null> {
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
       allowedClients: users.allowedClients,
+      blockedClients: users.blockedClients,
       allowedModels: users.allowedModels,
     })
     .from(users)
@@ -371,6 +376,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     isEnabled?: boolean;
     expiresAt?: Date | null;
     allowedClients?: string[];
+    blockedClients?: string[];
     allowedModels?: string[];
   }
 
@@ -402,6 +408,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
   if (userData.isEnabled !== undefined) dbData.isEnabled = userData.isEnabled;
   if (userData.expiresAt !== undefined) dbData.expiresAt = userData.expiresAt;
   if (userData.allowedClients !== undefined) dbData.allowedClients = userData.allowedClients;
+  if (userData.blockedClients !== undefined) dbData.blockedClients = userData.blockedClients;
   if (userData.allowedModels !== undefined) dbData.allowedModels = userData.allowedModels;
 
   const [user] = await db
@@ -430,6 +437,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       isEnabled: users.isEnabled,
       expiresAt: users.expiresAt,
       allowedClients: users.allowedClients,
+      blockedClients: users.blockedClients,
       allowedModels: users.allowedModels,
     });
 

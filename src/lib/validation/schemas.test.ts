@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { CreateProviderSchema, UpdateProviderSchema } from "./schemas";
+import {
+  CreateProviderSchema,
+  CreateUserSchema,
+  UpdateProviderSchema,
+  UpdateUserSchema,
+} from "./schemas";
 
 describe("Provider schemas - priority/weight/costMultiplier 规则对齐", () => {
   describe("UpdateProviderSchema", () => {
@@ -98,6 +103,56 @@ describe("Provider schemas - priority/weight/costMultiplier 规则对齐", () =>
         false
       );
       // 注意: null 会被 coerce 转为 0 (Number(null) === 0)，所以会通过
+    });
+
+    test("allowed_clients/blocked_clients 支持 null 并归一化为空数组", () => {
+      const base = {
+        name: "测试供应商",
+        url: "https://api.example.com",
+        key: "sk-test",
+      };
+
+      const parsed = CreateProviderSchema.parse({
+        ...base,
+        allowed_clients: null,
+        blocked_clients: null,
+      });
+
+      expect(parsed.allowed_clients).toEqual([]);
+      expect(parsed.blocked_clients).toEqual([]);
+    });
+  });
+
+  describe("client restrictions null normalization", () => {
+    test("UpdateProviderSchema 将 null 归一化为空数组", () => {
+      const parsed = UpdateProviderSchema.parse({
+        allowed_clients: null,
+        blocked_clients: null,
+      });
+
+      expect(parsed.allowed_clients).toEqual([]);
+      expect(parsed.blocked_clients).toEqual([]);
+    });
+
+    test("CreateUserSchema 将 null 归一化为空数组", () => {
+      const parsed = CreateUserSchema.parse({
+        name: "test-user",
+        allowedClients: null,
+        blockedClients: null,
+      });
+
+      expect(parsed.allowedClients).toEqual([]);
+      expect(parsed.blockedClients).toEqual([]);
+    });
+
+    test("UpdateUserSchema 将 null 归一化为空数组", () => {
+      const parsed = UpdateUserSchema.parse({
+        allowedClients: null,
+        blockedClients: null,
+      });
+
+      expect(parsed.allowedClients).toEqual([]);
+      expect(parsed.blockedClients).toEqual([]);
     });
   });
 });

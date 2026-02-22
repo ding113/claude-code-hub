@@ -254,6 +254,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
@@ -320,6 +321,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: [],
         };
@@ -523,6 +525,7 @@ export async function getUsersBatch(
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
@@ -585,6 +588,7 @@ export async function getUsersBatch(
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: [],
         };
@@ -750,6 +754,7 @@ export async function addUser(data: {
   isEnabled?: boolean;
   expiresAt?: Date | null;
   allowedClients?: string[];
+  blockedClients?: string[];
   allowedModels?: string[];
 }): Promise<
   ActionResult<{
@@ -810,6 +815,7 @@ export async function addUser(data: {
       isEnabled: data.isEnabled,
       expiresAt: data.expiresAt,
       allowedClients: data.allowedClients || [],
+      blockedClients: data.blockedClients || [],
       allowedModels: data.allowedModels || [],
     });
 
@@ -869,6 +875,7 @@ export async function addUser(data: {
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt ?? null,
       allowedClients: validatedData.allowedClients ?? [],
+      blockedClients: validatedData.blockedClients ?? [],
       allowedModels: validatedData.allowedModels ?? [],
     });
 
@@ -942,6 +949,7 @@ export async function createUserOnly(data: {
   isEnabled?: boolean;
   expiresAt?: Date | null;
   allowedClients?: string[];
+  blockedClients?: string[];
   allowedModels?: string[];
 }): Promise<
   ActionResult<{
@@ -995,6 +1003,7 @@ export async function createUserOnly(data: {
       isEnabled: data.isEnabled,
       expiresAt: data.expiresAt,
       allowedClients: data.allowedClients || [],
+      blockedClients: data.blockedClients || [],
       allowedModels: data.allowedModels || [],
     });
 
@@ -1053,6 +1062,7 @@ export async function createUserOnly(data: {
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt ?? null,
       allowedClients: validatedData.allowedClients ?? [],
+      blockedClients: validatedData.blockedClients ?? [],
       allowedModels: validatedData.allowedModels ?? [],
     });
 
@@ -1111,6 +1121,7 @@ export async function editUser(
     isEnabled?: boolean;
     expiresAt?: Date | null;
     allowedClients?: string[];
+    blockedClients?: string[];
     allowedModels?: string[];
   }
 ): Promise<ActionResult> {
@@ -1211,6 +1222,7 @@ export async function editUser(
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt,
       allowedClients: validatedData.allowedClients,
+      blockedClients: validatedData.blockedClients,
       allowedModels: validatedData.allowedModels,
     });
 

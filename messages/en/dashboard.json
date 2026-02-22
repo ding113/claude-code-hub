@@ -1824,7 +1824,15 @@
           "label": "Client Restrictions",
           "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",
           "customLabel": "Custom Client Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
+          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
+        },
+        "blockedClients": {
+          "label": "Blocked Clients",
+          "description": "Clients matching these patterns will be rejected, even if they match allowed clients.",
+          "customLabel": "Custom Block Pattern",
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
+          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
         },
         "allowedModels": {
           "label": "Model Restrictions",
@@ -1845,11 +1853,22 @@
           "processing": "Processing..."
         }
       },
+      "actions": {
+        "allow": "Allow",
+        "block": "Block"
+      },
       "presetClients": {
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code (all)",
+        "claude-code-cli": "Claude Code CLI (builtin)",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
+        "claude-code-sdk-py": "Claude Code SDK (Python)",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {

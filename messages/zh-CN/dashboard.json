@@ -1783,7 +1783,15 @@
           "label": "客户端限制",
           "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
           "customLabel": "自定义客户端模式",
-          "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
+          "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）",
+          "customHelp": "自定义模式按 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。"
+        },
+        "blockedClients": {
+          "label": "黑名单客户端",
+          "description": "匹配这些模式的客户端将被拒绝，即使它们也匹配白名单。",
+          "customLabel": "自定义黑名单模式",
+          "customPlaceholder": "输入模式（如 'xcode'、'my-ide'）",
+          "customHelp": "自定义模式按 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。"
         },
         "allowedModels": {
           "label": "模型限制",
@@ -1804,11 +1812,22 @@
           "processing": "处理中..."
         }
       },
+      "actions": {
+        "allow": "允许",
+        "block": "阻止"
+      },
       "presetClients": {
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code（全部）",
+        "claude-code-cli": "Claude Code CLI (精确检测)",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK（TypeScript）",
+        "claude-code-sdk-py": "Claude Code SDK（Python）",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {

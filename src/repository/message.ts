@@ -837,33 +837,63 @@ export async function aggregateMultipleSessionStats(sessionIds: string[]): Promi
   }
 
   // 4. 批量获取用户信息（每个 session 的第一条请求）
-  // 使用 DISTINCT ON + ORDER BY 优化
-  const userInfoResults = await db
-    .select({
-      sessionId: messageRequest.sessionId,
-      userName: users.name,
-      userId: users.id,
-      keyName: keysTable.name,
-      keyId: keysTable.id,
-      userAgent: messageRequest.userAgent,
-      apiType: messageRequest.apiType,
-      createdAt: messageRequest.createdAt,
-    })
-    .from(messageRequest)
-    .innerJoin(users, eq(messageRequest.userId, users.id))
-    .innerJoin(keysTable, eq(messageRequest.key, keysTable.key))
-    .where(and(inArray(messageRequest.sessionId, sessionIds), isNull(messageRequest.deletedAt)))
-    .orderBy(messageRequest.sessionId, messageRequest.createdAt);
+  // LATERAL JOIN: 每个 session_id 做 1 次索引探测，无全局排序
+  const sessionIdParams = sql.join(
+    sessionIds.map((id) => sql`${id}`),
+    sql.raw(", ")
+  );
+  const userInfoRows = await db.execute(sql`
+    SELECT
+      sid AS session_id,
+      u.name AS user_name,
+      u.id AS user_id,
+      k.name AS key_name,
+      k.id AS key_id,
+      mr.user_agent,
+      mr.api_type
+    FROM unnest(ARRAY[${sessionIdParams}]::varchar[]) AS sid
+    CROSS JOIN LATERAL (
+      SELECT user_id, key, user_agent, api_type
+      FROM message_request
+      WHERE session_id = sid AND deleted_at IS NULL
+      ORDER BY created_at
+      LIMIT 1
+    ) mr
+    INNER JOIN users u ON mr.user_id = u.id
+    INNER JOIN keys k ON mr.key = k.key
+  `);
 
-  // 创建 sessionId → userInfo 的 Map（取每个 session 最早的记录）
-  const userInfoMap = new Map<string, (typeof userInfoResults)[0]>();
-  for (const info of userInfoResults) {
-    // 跳过 null sessionId（虽然 WHERE 条件已过滤，但需要满足 TypeScript 类型检查）
-    if (!info.sessionId) continue;
-
-    if (!userInfoMap.has(info.sessionId)) {
-      userInfoMap.set(info.sessionId, info);
+  // 创建 sessionId → userInfo 的 Map
+  const userInfoMap = new Map<
+    string,
+    {
+      sessionId: string;
+      userName: string;
+      userId: number;
+      keyName: string;
+      keyId: number;
+      userAgent: string | null;
+      apiType: string | null;
     }
+  >();
+  for (const row of Array.from(userInfoRows) as Array<{
+    session_id: string;
+    user_name: string;
+    user_id: number;
+    key_name: string;
+    key_id: number;
+    user_agent: string | null;
+    api_type: string | null;
+  }>) {
+    userInfoMap.set(row.session_id, {
+      sessionId: row.session_id,
+      userName: row.user_name,
+      userId: row.user_id,
+      keyName: row.key_name,
+      keyId: row.key_id,
+      userAgent: row.user_agent,
+      apiType: row.api_type,
+    });
   }
 
   // 5. 组装最终结果
