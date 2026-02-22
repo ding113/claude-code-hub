@@ -27,6 +27,8 @@ export interface ClientRestrictionResult {
   detectedClient?: string;
   checkedAllowlist: string[];
   checkedBlocklist: string[];
+  signals?: string[];
+  hubConfirmed?: boolean;
 }
 
 const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
@@ -56,11 +58,8 @@ function confirmClaudeCodeSignals(session: ProxySession): {
     signals.push("ua-prefix");
   }
 
-  const betas = session.request.message["betas"];
-  if (
-    Array.isArray(betas) &&
-    betas.some((beta) => typeof beta === "string" && /^claude-code-/i.test(beta))
-  ) {
+  const betaHeader = session.headers.get("anthropic-beta") ?? "";
+  if (/claude-code-/i.test(betaHeader)) {
     signals.push("betas-claude-code");
   }
 
@@ -178,6 +177,8 @@ export function isClientAllowedDetailed(
   const normalizedUa = normalize(ua);
   const subClient = claudeCode.confirmed ? extractSubClient(ua) : null;
   const detectedClient = subClient || ua || undefined;
+  const hasBuiltinKeyword =
+    checkedAllowlist.some(isBuiltinKeyword) || checkedBlocklist.some(isBuiltinKeyword);
 
   const matches = (pattern: string): boolean => {
     if (!isBuiltinKeyword(pattern)) {
@@ -200,6 +201,10 @@ export function isClientAllowedDetailed(
         detectedClient,
         checkedAllowlist,
         checkedBlocklist,
+        ...(hasBuiltinKeyword && {
+          signals: claudeCode.signals,
+          hubConfirmed: claudeCode.confirmed,
+        }),
       };
     }
   }
@@ -211,6 +216,7 @@ export function isClientAllowedDetailed(
       detectedClient,
       checkedAllowlist,
       checkedBlocklist,
+      ...(hasBuiltinKeyword && { signals: claudeCode.signals, hubConfirmed: claudeCode.confirmed }),
     };
   }
 
@@ -223,6 +229,7 @@ export function isClientAllowedDetailed(
       detectedClient,
       checkedAllowlist,
       checkedBlocklist,
+      ...(hasBuiltinKeyword && { signals: claudeCode.signals, hubConfirmed: claudeCode.confirmed }),
     };
   }
 
@@ -232,5 +239,6 @@ export function isClientAllowedDetailed(
     detectedClient,
     checkedAllowlist,
     checkedBlocklist,
+    ...(hasBuiltinKeyword && { signals: claudeCode.signals, hubConfirmed: claudeCode.confirmed }),
   };
 }

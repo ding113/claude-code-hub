@@ -14,7 +14,7 @@ type SessionOptions = {
   userAgent?: string | null;
   xApp?: string | null;
   dangerousBrowserAccess?: string | null;
-  betas?: unknown;
+  anthropicBeta?: string | null;
 };
 
 function createMockSession(options: SessionOptions = {}): ProxySession {
@@ -25,17 +25,15 @@ function createMockSession(options: SessionOptions = {}): ProxySession {
   if (options.dangerousBrowserAccess !== undefined && options.dangerousBrowserAccess !== null) {
     headers.set("anthropic-dangerous-direct-browser-access", options.dangerousBrowserAccess);
   }
-
-  const message: Record<string, unknown> = {};
-  if ("betas" in options) {
-    message.betas = options.betas;
+  if (options.anthropicBeta !== undefined && options.anthropicBeta !== null) {
+    headers.set("anthropic-beta", options.anthropicBeta);
   }
 
   return {
     userAgent: options.userAgent ?? null,
     headers,
     request: {
-      message,
+      message: {},
     },
   } as unknown as ProxySession;
 }
@@ -44,7 +42,7 @@ function createConfirmedClaudeCodeSession(userAgent: string): ProxySession {
   return createMockSession({
     userAgent,
     xApp: "cli",
-    betas: ["claude-code-test"],
+    anthropicBeta: "claude-code-test",
   });
 }
 
@@ -86,7 +84,7 @@ describe("client-detector", () => {
       const session = createMockSession({
         userAgent: "claude-cli/1.0.0 (external, cli)",
         xApp: "cli",
-        betas: ["claude-code-cache-control-20260101"],
+        anthropicBeta: "claude-code-cache-control-20260101",
       });
 
       const result = detectClientFull(session, "claude-code");
@@ -100,7 +98,7 @@ describe("client-detector", () => {
         name: "missing x-app",
         options: {
           userAgent: "claude-cli/1.0.0 (external, cli)",
-          betas: ["claude-code-foo"],
+          anthropicBeta: "claude-code-foo",
         },
       },
       {
@@ -108,7 +106,7 @@ describe("client-detector", () => {
         options: {
           userAgent: "GeminiCLI/1.0",
           xApp: "cli",
-          betas: ["claude-code-foo"],
+          anthropicBeta: "claude-code-foo",
         },
       },
       {
@@ -116,7 +114,7 @@ describe("client-detector", () => {
         options: {
           userAgent: "claude-cli/1.0.0 (external, cli)",
           xApp: "cli",
-          betas: ["not-claude-code"],
+          anthropicBeta: "not-claude-code",
         },
       },
     ])("should not confirm with only 2-of-3 signals: $name", ({ options }) => {
@@ -127,7 +125,7 @@ describe("client-detector", () => {
     });
 
     test("should not confirm with 0 strong signals", () => {
-      const session = createMockSession({ userAgent: "GeminiCLI/1.0", betas: "not-array" });
+      const session = createMockSession({ userAgent: "GeminiCLI/1.0" });
       const result = detectClientFull(session, "claude-code");
 
       expect(result.hubConfirmed).toBe(false);
@@ -189,7 +187,7 @@ describe("client-detector", () => {
       const session = createMockSession({
         userAgent: "claude-cli/1.2.3 external, cli",
         xApp: "cli",
-        betas: ["claude-code-a"],
+        anthropicBeta: "claude-code-a",
       });
       const result = detectClientFull(session, "claude-code");
 
@@ -225,7 +223,7 @@ describe("client-detector", () => {
       const session = createMockSession({
         userAgent: "claude-cli/1.2.3 (external, cli)",
         xApp: "cli",
-        betas: ["non-claude-code"],
+        anthropicBeta: "non-claude-code",
       });
       expect(matchClientPattern(session, "claude-code")).toBe(false);
     });
@@ -380,6 +378,27 @@ describe("client-detector", () => {
       expect(result.allowed).toBe(false);
       expect(result.matchType).toBe("blocklist_hit");
       expect(result.matchedPattern).toBe("gemini-cli");
+    });
+
+    test("should include signals and hubConfirmed when builtin keyword is in allowlist", () => {
+      const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, cli)");
+      const result = isClientAllowedDetailed(session, ["claude-code"], []);
+      expect(result.signals).toEqual(["x-app-cli", "ua-prefix", "betas-claude-code"]);
+      expect(result.hubConfirmed).toBe(true);
+    });
+
+    test("should include signals and hubConfirmed when builtin keyword is in blocklist", () => {
+      const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, cli)");
+      const result = isClientAllowedDetailed(session, [], ["claude-code"]);
+      expect(result.signals).toEqual(["x-app-cli", "ua-prefix", "betas-claude-code"]);
+      expect(result.hubConfirmed).toBe(true);
+    });
+
+    test("should not include signals when no builtin keyword is in lists", () => {
+      const session = createMockSession({ userAgent: "GeminiCLI/1.0" });
+      const result = isClientAllowedDetailed(session, ["gemini-cli"], []);
+      expect(result.signals).toBeUndefined();
+      expect(result.hubConfirmed).toBeUndefined();
     });
   });
 

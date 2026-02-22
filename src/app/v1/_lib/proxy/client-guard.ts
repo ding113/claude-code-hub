@@ -38,6 +38,9 @@ export class ProxyClientGuard {
       } else {
         message = `Client not in allowed list: [${allowedClients.join(", ")}]${detected}`;
       }
+      if (result.signals) {
+        message += `\nSignals(${result.signals.length}/3): [${result.signals.join(", ")}]`;
+      }
       return ProxyResponses.buildError(400, message, "invalid_request_error");
     }
 
