@@ -29,6 +29,26 @@ function createMockSession(
   } as unknown as ProxySession;
 }
 
+// Helper for fully-confirmed Claude Code CLI sessions (all 4 signals)
+function createClaudeCodeSession(
+  userAgent: string,
+  allowedClients: string[] = [],
+  blockedClients: string[] = [],
+  betaHeader = "claude-code-test"
+): ProxySession {
+  const headers = new Headers();
+  headers.set("x-app", "cli");
+  headers.set("anthropic-beta", betaHeader);
+  return {
+    userAgent,
+    headers,
+    request: { message: { metadata: { user_id: "user_123" } } },
+    authState: {
+      user: { allowedClients, blockedClients },
+    },
+  } as unknown as ProxySession;
+}
+
 describe("ProxyClientGuard", () => {
   describe("when authState is missing", () => {
     test("should allow request when authState is undefined", async () => {
@@ -241,6 +261,59 @@ describe("ProxyClientGuard", () => {
 
     test("should allow non-matching client", async () => {
       const session = createMockSession("claude-cli/1.0", [], ["codex-cli"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("claude-code builtin keyword with 4-signal detection", () => {
+    test("should allow claude-cli/2.0.70 with non-claude-code beta header (the bug fix)", async () => {
+      // CLI 2.0.70 sends interleaved-thinking-2025-05-14, not a claude-code-* beta
+      const session = createClaudeCodeSession(
+        "claude-cli/2.0.70 (external, cli)",
+        ["claude-code"],
+        [],
+        "interleaved-thinking-2025-05-14"
+      );
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+
+    test("should reject when metadata.user_id is missing (only 3-of-4 signals)", async () => {
+      const headers = new Headers();
+      headers.set("x-app", "cli");
+      headers.set("anthropic-beta", "some-beta");
+      const session = {
+        userAgent: "claude-cli/2.0.70 (external, cli)",
+        headers,
+        request: { message: {} },
+        authState: { user: { allowedClients: ["claude-code"], blockedClients: [] } },
+      } as unknown as import("@/app/v1/_lib/proxy/session").ProxySession;
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe(400);
+      const body = await result!.json();
+      expect(body.error.message).toContain("Signals(3/4)");
+    });
+
+    test("should reject when anthropic-beta header is missing (only 3-of-4 signals)", async () => {
+      const headers = new Headers();
+      headers.set("x-app", "cli");
+      const session = {
+        userAgent: "claude-cli/2.0.70 (external, cli)",
+        headers,
+        request: { message: { metadata: { user_id: "user_abc" } } },
+        authState: { user: { allowedClients: ["claude-code"], blockedClients: [] } },
+      } as unknown as import("@/app/v1/_lib/proxy/session").ProxySession;
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe(400);
+      const body = await result!.json();
+      expect(body.error.message).toContain("Signals(3/4)");
+    });
+
+    test("should allow when all 4 signals present with claude-code allowlist", async () => {
+      const session = createClaudeCodeSession("claude-cli/1.0.0 (external, cli)", ["claude-code"]);
       const result = await ProxyClientGuard.ensure(session);
       expect(result).toBeNull();
     });

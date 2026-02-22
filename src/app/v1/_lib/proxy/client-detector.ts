@@ -58,9 +58,18 @@ function confirmClaudeCodeSignals(session: ProxySession): {
     signals.push("ua-prefix");
   }
 
-  const betaHeader = session.headers.get("anthropic-beta") ?? "";
-  if (/claude-code-/i.test(betaHeader)) {
-    signals.push("betas-claude-code");
+  if (session.headers.has("anthropic-beta")) {
+    signals.push("betas-present");
+  }
+
+  const metadata = session.request.message.metadata;
+  if (
+    metadata !== null &&
+    typeof metadata === "object" &&
+    "user_id" in metadata &&
+    typeof (metadata as Record<string, unknown>).user_id === "string"
+  ) {
+    signals.push("metadata-user-id");
   }
 
   if (session.headers.get("anthropic-dangerous-direct-browser-access") === "true") {
@@ -68,7 +77,7 @@ function confirmClaudeCodeSignals(session: ProxySession): {
   }
 
   return {
-    confirmed: signals.length === 3,
+    confirmed: signals.length === 4,
     signals,
     supplementary,
   };

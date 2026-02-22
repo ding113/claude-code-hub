@@ -15,6 +15,7 @@ type SessionOptions = {
   xApp?: string | null;
   dangerousBrowserAccess?: string | null;
   anthropicBeta?: string | null;
+  metadataUserId?: string | null;
 };
 
 function createMockSession(options: SessionOptions = {}): ProxySession {
@@ -29,11 +30,16 @@ function createMockSession(options: SessionOptions = {}): ProxySession {
     headers.set("anthropic-beta", options.anthropicBeta);
   }
 
+  const message: Record<string, unknown> = {};
+  if (options.metadataUserId !== undefined && options.metadataUserId !== null) {
+    message.metadata = { user_id: options.metadataUserId };
+  }
+
   return {
     userAgent: options.userAgent ?? null,
     headers,
     request: {
-      message: {},
+      message,
     },
   } as unknown as ProxySession;
 }
@@ -43,6 +49,7 @@ function createConfirmedClaudeCodeSession(userAgent: string): ProxySession {
     userAgent,
     xApp: "cli",
     anthropicBeta: "claude-code-test",
+    metadataUserId: "user_123",
   });
 }
 
@@ -80,17 +87,41 @@ describe("client-detector", () => {
   });
 
   describe("confirmClaudeCodeSignals via detectClientFull", () => {
-    test("should confirm when all 3 strong signals are present", () => {
+    test("should confirm when all 4 strong signals are present", () => {
       const session = createMockSession({
         userAgent: "claude-cli/1.0.0 (external, cli)",
         xApp: "cli",
-        anthropicBeta: "claude-code-cache-control-20260101",
+        anthropicBeta: "interleaved-thinking-2025-05-14",
+        metadataUserId: "user_abc",
       });
 
       const result = detectClientFull(session, "claude-code");
       expect(result.hubConfirmed).toBe(true);
-      expect(result.signals).toEqual(["x-app-cli", "ua-prefix", "betas-claude-code"]);
+      expect(result.signals).toEqual([
+        "x-app-cli",
+        "ua-prefix",
+        "betas-present",
+        "metadata-user-id",
+      ]);
       expect(result.supplementary).toEqual([]);
+    });
+
+    test("should confirm when anthropic-beta has claude-code- prefix (backwards compat)", () => {
+      const session = createMockSession({
+        userAgent: "claude-cli/1.0.0 (external, cli)",
+        xApp: "cli",
+        anthropicBeta: "claude-code-cache-control-20260101",
+        metadataUserId: "user_abc",
+      });
+
+      const result = detectClientFull(session, "claude-code");
+      expect(result.hubConfirmed).toBe(true);
+      expect(result.signals).toEqual([
+        "x-app-cli",
+        "ua-prefix",
+        "betas-present",
+        "metadata-user-id",
+      ]);
     });
 
     test.each([
@@ -98,7 +129,8 @@ describe("client-detector", () => {
         name: "missing x-app",
         options: {
           userAgent: "claude-cli/1.0.0 (external, cli)",
-          anthropicBeta: "claude-code-foo",
+          anthropicBeta: "some-beta",
+          metadataUserId: "user_abc",
         },
       },
       {
@@ -106,22 +138,31 @@ describe("client-detector", () => {
         options: {
           userAgent: "GeminiCLI/1.0",
           xApp: "cli",
-          anthropicBeta: "claude-code-foo",
+          anthropicBeta: "some-beta",
+          metadataUserId: "user_abc",
         },
       },
       {
-        name: "missing betas-claude-code",
+        name: "missing betas-present",
         options: {
           userAgent: "claude-cli/1.0.0 (external, cli)",
           xApp: "cli",
-          anthropicBeta: "not-claude-code",
+          metadataUserId: "user_abc",
         },
       },
-    ])("should not confirm with only 2-of-3 signals: $name", ({ options }) => {
+      {
+        name: "missing metadata-user-id",
+        options: {
+          userAgent: "claude-cli/1.0.0 (external, cli)",
+          xApp: "cli",
+          anthropicBeta: "some-beta",
+        },
+      },
+    ])("should not confirm with only 3-of-4 signals: $name", ({ options }) => {
       const session = createMockSession(options);
       const result = detectClientFull(session, "claude-code");
       expect(result.hubConfirmed).toBe(false);
-      expect(result.signals.length).toBe(2);
+      expect(result.signals.length).toBe(3);
     });
 
     test("should not confirm with 0 strong signals", () => {
@@ -136,7 +177,6 @@ describe("client-detector", () => {
       const session = createMockSession({
         userAgent: "claude-cli/1.0.0 (external, cli)",
         xApp: "cli",
-        betas: ["not-claude-code"],
         dangerousBrowserAccess: "true",
       });
 
@@ -188,6 +228,7 @@ describe("client-detector", () => {
         userAgent: "claude-cli/1.2.3 external, cli",
         xApp: "cli",
         anthropicBeta: "claude-code-a",
+        metadataUserId: "user_abc",
       });
       const result = detectClientFull(session, "claude-code");
 
@@ -219,7 +260,7 @@ describe("client-detector", () => {
       expect(matchClientPattern(session, "claude-code-sdk-ts")).toBe(false);
     });
 
-    test("should return false when only 2-of-3 signals are present", () => {
+    test("should return false when only 3-of-4 signals are present (missing metadata-user-id)", () => {
       const session = createMockSession({
         userAgent: "claude-cli/1.2.3 (external, cli)",
         xApp: "cli",
@@ -383,14 +424,24 @@ describe("client-detector", () => {
     test("should include signals and hubConfirmed when builtin keyword is in allowlist", () => {
       const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, cli)");
       const result = isClientAllowedDetailed(session, ["claude-code"], []);
-      expect(result.signals).toEqual(["x-app-cli", "ua-prefix", "betas-claude-code"]);
+      expect(result.signals).toEqual([
+        "x-app-cli",
+        "ua-prefix",
+        "betas-present",
+        "metadata-user-id",
+      ]);
       expect(result.hubConfirmed).toBe(true);
     });
 
     test("should include signals and hubConfirmed when builtin keyword is in blocklist", () => {
       const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, cli)");
       const result = isClientAllowedDetailed(session, [], ["claude-code"]);
-      expect(result.signals).toEqual(["x-app-cli", "ua-prefix", "betas-claude-code"]);
+      expect(result.signals).toEqual([
+        "x-app-cli",
+        "ua-prefix",
+        "betas-present",
+        "metadata-user-id",
+      ]);
       expect(result.hubConfirmed).toBe(true);
     });
 
@@ -411,7 +462,7 @@ describe("client-detector", () => {
         matched: true,
         hubConfirmed: true,
         subClient: "claude-code-sdk-ts",
-        signals: ["x-app-cli", "ua-prefix", "betas-claude-code"],
+        signals: ["x-app-cli", "ua-prefix", "betas-present", "metadata-user-id"],
         supplementary: [],
       });
     });
