@@ -82,6 +82,9 @@ export async function backfillUsageLedger(): Promise<BackfillUsageLedgerSummary>
           FROM message_request mr
           WHERE mr.id > ${lastId}
             AND mr.blocked_by IS DISTINCT FROM 'warmup'
+            AND NOT EXISTS (
+              SELECT 1 FROM usage_ledger ul WHERE ul.request_id = mr.id
+            )
           ORDER BY mr.id ASC
           LIMIT 10000
         ),
