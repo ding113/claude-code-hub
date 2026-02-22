@@ -69,9 +69,11 @@ export function SummaryTab({
     specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
+  const fake200Code =
+    isFake200PostStreamFailure && errorMessage ? errorMessage.split(": ")[0] : errorMessage;
   const fake200Reason =
-    isFake200PostStreamFailure && typeof errorMessage === "string"
-      ? t(getFake200ReasonKey(errorMessage, "fake200Reasons"))
+    isFake200PostStreamFailure && fake200Code
+      ? t(getFake200ReasonKey(fake200Code, "fake200Reasons"))
       : null;
 
   return (
