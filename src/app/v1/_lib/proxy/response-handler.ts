@@ -330,7 +330,7 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       attemptNumber: meta.attemptNumber,
       statusCode: effectiveStatusCode,
       statusCodeInferred,
-      errorMessage: detected.detail ?? detected.code,
+      errorMessage: detected.detail ? `${detected.code}: ${detected.detail}` : detected.code,
     });
 
     return { effectiveStatusCode, errorMessage, providerIdForPersistence };
