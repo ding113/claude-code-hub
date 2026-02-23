@@ -198,7 +198,6 @@ export function UsageLogsTable({
                                   log.providerName ||
                                   tChain("circuit.unknown")
                                 }
-                                hasCostBadge={hasCostBadge}
                                 onChainItemClick={(chainIndex) => {
                                   setDialogState({
                                     logId: log.id,

@@ -24,8 +24,6 @@ import { getFake200ReasonKey } from "./fake200-reason";
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
   finalProvider: string;
-  /** Whether a cost badge is displayed, affects name max width */
-  hasCostBadge?: boolean;
   /** Callback when a chain item is clicked in the popover */
   onChainItemClick?: (chainIndex: number) => void;
 }
@@ -121,13 +119,12 @@ function getItemStatus(item: ProviderChainItem): {
 export function ProviderChainPopover({
   chain,
   finalProvider,
-  hasCostBadge = false,
   onChainItemClick,
 }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
 
-  // “假 200”识别发生在 SSE 流式结束后：此时响应内容可能已透传给客户端，但内部会按失败统计/熔断。
+  // "假 200"识别发生在 SSE 流式结束后：此时响应内容可能已透传给客户端，但内部会按失败统计/熔断。
   const hasFake200PostStreamFailure = chain.some(
     (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
   );
@@ -142,9 +139,6 @@ export function ProviderChainPopover({
 
   // Fallback for empty string
   const displayName = finalProvider || "-";
-
-  // Determine max width based on whether cost badge is present
-  const maxWidthClass = hasCostBadge ? "max-w-[140px]" : "max-w-[180px]";
 
   // Check if this is a session reuse
   const isSessionReuse =
@@ -164,7 +158,7 @@ export function ProviderChainPopover({
     const singleRequestItem = chain.find(isActualRequest);
 
     return (
-      <div className={`${maxWidthClass} min-w-0 w-full`}>
+      <div className="min-w-0 w-full">
         <TooltipProvider>
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>

@@ -212,12 +212,12 @@ export function VirtualizedLogsTable({
           {/* Fixed header */}
           <div className="bg-muted/40 border-b sticky top-0 z-10">
             <div className="flex items-center h-9 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              <div className="flex-[0.6] min-w-[56px] pl-3 truncate" title={t("logs.columns.time")}>
+              <div className="flex-[0.4] min-w-[56px] pl-3 truncate" title={t("logs.columns.time")}>
                 {t("logs.columns.time")}
               </div>
               {hideUserColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[50px] px-1.5 truncate"
+                  className="flex-[1] min-w-[50px] px-1.5 truncate"
                   title={t("logs.columns.user")}
                 >
                   {t("logs.columns.user")}
@@ -225,7 +225,7 @@ export function VirtualizedLogsTable({
               )}
               {hideKeyColumn ? null : (
                 <div
-                  className="flex-[0.6] min-w-[50px] px-1.5 truncate"
+                  className="flex-[0.8] min-w-[50px] px-1.5 truncate"
                   title={t("logs.columns.key")}
                 >
                   {t("logs.columns.key")}
@@ -233,7 +233,7 @@ export function VirtualizedLogsTable({
               )}
               {hideSessionIdColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[80px] px-1.5 truncate"
+                  className="flex-[1] min-w-[80px] px-1.5 truncate"
                   title={t("logs.columns.sessionId")}
                 >
                   {t("logs.columns.sessionId")}
@@ -241,21 +241,21 @@ export function VirtualizedLogsTable({
               )}
               {hideProviderColumn ? null : (
                 <div
-                  className="flex-[1.5] min-w-[100px] px-1.5 truncate"
+                  className="flex-[2] min-w-[100px] px-1.5 truncate"
                   title={t("logs.columns.provider")}
                 >
                   {t("logs.columns.provider")}
                 </div>
               )}
               <div
-                className="flex-[1] min-w-[80px] px-1.5 truncate"
+                className="flex-[1.5] min-w-[80px] px-1.5 truncate"
                 title={t("logs.columns.model")}
               >
                 {t("logs.columns.model")}
               </div>
               {hideTokensColumn ? null : (
                 <div
-                  className="flex-[0.7] min-w-[70px] text-right px-1.5 truncate"
+                  className="flex-[0.5] min-w-[70px] text-right px-1.5 truncate"
                   title={t("logs.columns.tokens")}
                 >
                   {t("logs.columns.tokens")}
@@ -263,7 +263,7 @@ export function VirtualizedLogsTable({
               )}
               {hideCacheColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[70px] text-right px-1.5 truncate"
+                  className="flex-[0.5] min-w-[70px] text-right px-1.5 truncate"
                   title={t("logs.columns.cache")}
                 >
                   {t("logs.columns.cache")}
@@ -271,7 +271,7 @@ export function VirtualizedLogsTable({
               )}
               {hideCostColumn ? null : (
                 <div
-                  className="flex-[0.7] min-w-[60px] text-right px-1.5 truncate"
+                  className="flex-[0.4] min-w-[60px] text-right px-1.5 truncate"
                   title={t("logs.columns.cost")}
                 >
                   {t("logs.columns.cost")}
@@ -279,14 +279,14 @@ export function VirtualizedLogsTable({
               )}
               {hidePerformanceColumn ? null : (
                 <div
-                  className="flex-[0.8] min-w-[80px] text-right px-1.5 truncate"
+                  className="flex-[0.6] min-w-[80px] text-right px-1.5 truncate"
                   title={t("logs.columns.performance")}
                 >
                   {t("logs.columns.performance")}
                 </div>
               )}
               <div
-                className="flex-[0.7] min-w-[70px] pr-3 truncate"
+                className="flex-[0.4] min-w-[70px] pr-3 truncate"
                 title={t("logs.columns.status")}
               >
                 {t("logs.columns.status")}
@@ -349,14 +349,14 @@ export function VirtualizedLogsTable({
                     )}
                   >
                     {/* Time */}
-                    <div className="flex-[0.6] min-w-[56px] font-mono text-xs truncate pl-3">
+                    <div className="flex-[0.4] min-w-[56px] font-mono text-xs truncate pl-3">
                       <RelativeTime date={log.createdAt} fallback="-" format="short" />
                     </div>
 
                     {/* User */}
                     {hideUserColumn ? null : (
                       <div
-                        className="flex-[0.8] min-w-[50px] text-sm truncate px-1.5"
+                        className="flex-[1] min-w-[50px] text-sm truncate px-1.5"
                         title={log.userName}
                       >
                         {log.userName}
@@ -366,7 +366,7 @@ export function VirtualizedLogsTable({
                     {/* Key */}
                     {hideKeyColumn ? null : (
                       <div
-                        className="flex-[0.6] min-w-[50px] font-mono text-xs truncate px-1.5"
+                        className="flex-[0.8] min-w-[50px] font-mono text-xs truncate px-1.5"
                         title={log.keyName}
                       >
                         {log.keyName}
@@ -375,7 +375,7 @@ export function VirtualizedLogsTable({
 
                     {/* Session ID */}
                     {hideSessionIdColumn ? null : (
-                      <div className="flex-[0.8] min-w-[80px] px-1.5">
+                      <div className="flex-[1] min-w-[80px] px-1.5">
                         {log.sessionId ? (
                           <TooltipProvider>
                             <Tooltip delayDuration={300}>
@@ -404,7 +404,7 @@ export function VirtualizedLogsTable({
 
                     {/* Provider */}
                     {hideProviderColumn ? null : (
-                      <div className="flex-[1.5] min-w-[100px] px-1.5">
+                      <div className="flex-[2] min-w-[100px] px-1.5">
                         {log.blockedBy ? (
                           <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                             <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
@@ -468,7 +468,6 @@ export function VirtualizedLogsTable({
                                           log.providerName ||
                                           tChain("circuit.unknown")
                                         }
-                                        hasCostBadge={hasCostBadge}
                                         onChainItemClick={(chainIndex) => {
                                           setDialogState({
                                             logId: log.id,
@@ -502,7 +501,7 @@ export function VirtualizedLogsTable({
                     )}
 
                     {/* Model */}
-                    <div className="flex-[1] min-w-[80px] font-mono text-xs px-1.5">
+                    <div className="flex-[1.5] min-w-[80px] font-mono text-xs px-1.5">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -526,7 +525,7 @@ export function VirtualizedLogsTable({
 
                     {/* Tokens */}
                     {hideTokensColumn ? null : (
-                      <div className="flex-[0.7] min-w-[70px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.5] min-w-[70px] text-right font-mono text-xs px-1.5">
                         <TooltipProvider>
                           <Tooltip delayDuration={250}>
                             <TooltipTrigger asChild>
@@ -554,7 +553,7 @@ export function VirtualizedLogsTable({
 
                     {/* Cache */}
                     {hideCacheColumn ? null : (
-                      <div className="flex-[0.8] min-w-[70px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.5] min-w-[70px] text-right font-mono text-xs px-1.5">
                         <TooltipProvider>
                           <Tooltip delayDuration={250}>
                             <TooltipTrigger asChild>
@@ -622,7 +621,7 @@ export function VirtualizedLogsTable({
 
                     {/* Cost */}
                     {hideCostColumn ? null : (
-                      <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.4] min-w-[60px] text-right font-mono text-xs px-1.5">
                         {isNonBilling ? (
                           "-"
                         ) : log.costUsd != null ? (
@@ -669,7 +668,7 @@ export function VirtualizedLogsTable({
 
                     {/* Performance */}
                     {hidePerformanceColumn ? null : (
-                      <div className="flex-[0.8] min-w-[80px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.6] min-w-[80px] text-right font-mono text-xs px-1.5">
                         {(() => {
                           const rate = calculateOutputRate(
                             log.outputTokens,
@@ -728,7 +727,7 @@ export function VirtualizedLogsTable({
                     )}
 
                     {/* Status */}
-                    <div className="flex-[0.7] min-w-[70px] pr-3">
+                    <div className="flex-[0.4] min-w-[70px] pr-3">
                       <ErrorDetailsDialog
                         statusCode={log.statusCode}
                         errorMessage={log.errorMessage}
