@@ -227,7 +227,7 @@ export function SchedulingRulesDialog() {
           {t("triggerButton")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[80vh] max-h-[80dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Lightbulb className="h-5 w-5 text-primary" />

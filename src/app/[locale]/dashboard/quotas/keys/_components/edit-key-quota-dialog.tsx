@@ -149,7 +149,7 @@ export function EditKeyQuotaDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[70vh] flex flex-col">
+      <DialogContent className="sm:max-w-[600px] max-h-[70vh] max-h-[70dvh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description", { keyName, userName })}</DialogDescription>

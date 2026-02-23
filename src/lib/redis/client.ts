@@ -20,7 +20,7 @@ function maskRedisUrl(redisUrl: string) {
  * Supports skipping certificate verification via REDIS_TLS_REJECT_UNAUTHORIZED env.
  * Includes servername for SNI (Server Name Indication) support.
  */
-function buildTlsConfig(redisUrl: string): Record<string, unknown> {
+function buildTlsConfig(redisUrl: string): NonNullable<RedisOptions["tls"]> {
   const raw = process.env.REDIS_TLS_REJECT_UNAUTHORIZED?.trim();
   const rejectUnauthorized = raw !== "false" && raw !== "0";
 
@@ -42,7 +42,10 @@ function buildTlsConfig(redisUrl: string): Record<string, unknown> {
  * - When `redis://` is used, keep plaintext TCP (no TLS option)
  * - Supports REDIS_TLS_REJECT_UNAUTHORIZED env to skip certificate verification
  */
-export function buildRedisOptionsForUrl(redisUrl: string) {
+export function buildRedisOptionsForUrl(redisUrl: string): {
+  isTLS: boolean;
+  options: RedisOptions;
+} {
   const isTLS = (() => {
     try {
       const parsed = new URL(redisUrl);
@@ -53,7 +56,7 @@ export function buildRedisOptionsForUrl(redisUrl: string) {
     }
   })();
 
-  const baseOptions = {
+  const baseOptions: RedisOptions = {
     enableOfflineQueue: false, // 快速失败
     maxRetriesPerRequest: 3,
     retryStrategy(times: number) {
@@ -65,12 +68,13 @@ export function buildRedisOptionsForUrl(redisUrl: string) {
       logger.warn(`[Redis] Retry ${times}/5 after ${delay}ms`);
       return delay;
     },
-  } as const;
+  };
 
-  // Explicit TLS config for Upstash and other managed Redis providers
-  const tlsOptions = isTLS ? { tls: buildTlsConfig(redisUrl) } : {};
+  const options: RedisOptions = isTLS
+    ? { ...baseOptions, tls: buildTlsConfig(redisUrl) }
+    : { ...baseOptions };
 
-  return { isTLS, options: { ...baseOptions, ...tlsOptions } };
+  return { isTLS, options };
 }
 
 export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean }): Redis | null {
@@ -107,7 +111,7 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
     }
 
     // 3. 使用组合后的配置创建客户端
-    const client = new Redis(redisUrl, redisOptions as RedisOptions);
+    const client = new Redis(redisUrl, redisOptions);
     redisClient = client;
 
     // 4. 保持原始的事件监听器
@@ -151,7 +155,10 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
 
 export async function closeRedis(): Promise<void> {
   if (redisClient) {
-    await redisClient.quit();
-    redisClient = null;
+    const client = redisClient;
+    await client.quit();
+    if (redisClient === client) {
+      redisClient = null;
+    }
   }
 }

@@ -203,7 +203,7 @@ function LoginPageContent() {
   const isLoading = status === "submitting" || status === "success";
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-background via-background to-orange-500/5 dark:to-orange-500/10">
+    <div className="relative min-h-[var(--cch-viewport-height,100vh)] overflow-hidden bg-gradient-to-br from-background via-background to-orange-500/5 dark:to-orange-500/10">
       {/* Fullscreen Loading Overlay */}
       {isLoading && (
         <div
@@ -253,7 +253,7 @@ function LoginPageContent() {
       </div>
 
       {/* Main Layout */}
-      <div className="flex min-h-screen">
+      <div className="flex min-h-[var(--cch-viewport-height,100vh)]">
         {/* Brand Panel - Desktop Only */}
         <motion.aside
           data-testid="login-brand-panel"
@@ -433,7 +433,7 @@ function LoginPageContent() {
 
 function LoginPageFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="flex min-h-[var(--cch-viewport-height,100vh)] items-center justify-center bg-background">
       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
     </div>
   );

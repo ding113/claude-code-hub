@@ -139,7 +139,7 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
+      <DialogContent className="max-w-2xl max-h-[80vh] max-h-[80dvh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>{t("errorRules.dialog.editTitle")}</DialogTitle>

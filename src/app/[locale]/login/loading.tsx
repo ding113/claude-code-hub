@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function LoginLoading() {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-[var(--cch-viewport-height,100vh)] bg-background">
       {/* Brand Panel Skeleton - Desktop Only */}
       <div className="hidden w-[45%] items-center justify-center lg:flex">
         <div className="flex flex-col items-center gap-6">

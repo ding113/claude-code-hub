@@ -70,7 +70,7 @@ export function AddKeyDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90dvh] max-h-[90vh] p-0 flex flex-col overflow-hidden">
+      <DialogContent className="max-w-2xl max-h-[90vh] max-h-[90dvh] p-0 flex flex-col overflow-hidden">
         {generatedKey ? (
           <>
             <DialogHeader className="px-6 pt-6 pb-4 border-b">

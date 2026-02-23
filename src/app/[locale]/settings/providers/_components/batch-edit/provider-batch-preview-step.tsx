@@ -112,7 +112,7 @@ export function ProviderBatchPreviewStep({
       </p>
 
       {/* Provider groups */}
-      <div className="max-h-[50vh] space-y-3 overflow-y-auto">
+      <div className="max-h-[50vh] max-h-[50dvh] space-y-3 overflow-y-auto">
         {grouped.map((group) => {
           const excluded = excludedProviderIds.has(group.providerId);
           return (

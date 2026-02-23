@@ -168,7 +168,9 @@ export function StatisticsChartCard({
   };
 
   return (
-    <BentoCard className={cn("flex flex-col p-0 overflow-hidden max-h-[50vh]", className)}>
+    <BentoCard
+      className={cn("flex flex-col p-0 overflow-hidden max-h-[50vh] max-h-[50dvh]", className)}
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/50 dark:border-white/[0.06]">
         <div className="flex items-center gap-4 p-4">

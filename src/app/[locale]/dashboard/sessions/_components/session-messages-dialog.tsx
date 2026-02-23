@@ -67,7 +67,7 @@ export function SessionMessagesDialog({ sessionId }: SessionMessagesDialogProps)
           {t("actions.view")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[80vh] max-h-[80dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{t("details.title")}</DialogTitle>
           <DialogDescription className="font-mono text-xs">{sessionId}</DialogDescription>

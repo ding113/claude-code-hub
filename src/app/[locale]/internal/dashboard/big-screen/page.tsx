@@ -787,7 +787,7 @@ export default function BigScreenPage() {
 
   return (
     <div
-      className={`relative w-full h-screen overflow-hidden transition-colors duration-500 font-sans selection:bg-orange-500/30 ${theme.bg}`}
+      className={`relative w-full h-[var(--cch-viewport-height,100vh)] overflow-hidden transition-colors duration-500 font-sans selection:bg-orange-500/30 ${theme.bg}`}
     >
       <ParticleBackground themeMode={themeMode} />
 

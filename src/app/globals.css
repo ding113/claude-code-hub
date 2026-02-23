@@ -148,36 +148,6 @@
     padding-bottom: var(--safe-area-pb, env(safe-area-inset-bottom, 0px));
   }
 
-  /* 视口高度：在移动端地址栏伸缩时，dvh 比 vh 更符合可视区域 */
-  @supports (height: 100dvh) {
-    .max-h-\[50vh\] {
-      max-height: 50dvh;
-    }
-    .max-h-\[70vh\] {
-      max-height: 70dvh;
-    }
-    .max-h-\[80vh\] {
-      max-height: 80dvh;
-    }
-    .max-h-\[85vh\] {
-      max-height: 85dvh;
-    }
-    .max-h-\[90vh\] {
-      max-height: 90dvh;
-    }
-    .max-h-\[95vh\] {
-      max-height: 95dvh;
-    }
-
-    /* vaul Drawer 的 max-h 通过 data attribute 控制，直接用 dvh 覆盖 vh */
-    [data-slot="drawer-content"][data-vaul-drawer-direction="top"] {
-      max-height: 80dvh;
-    }
-    [data-slot="drawer-content"][data-vaul-drawer-direction="bottom"] {
-      max-height: 95dvh;
-    }
-  }
-
   /* 新增记录高亮动画 */
   @keyframes highlight-flash {
     0% {
