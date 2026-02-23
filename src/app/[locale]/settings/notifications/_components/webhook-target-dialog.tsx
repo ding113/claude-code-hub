@@ -228,7 +228,7 @@ export function WebhookTargetDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full max-w-2xl max-h-[90vh] max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="w-full max-w-2xl max-h-[var(--cch-viewport-height-90)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {mode === "create"

@@ -550,7 +550,10 @@ function ProviderFormContent({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh] max-h-[85dvh]">
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col h-full max-h-[var(--cch-viewport-height-85)]"
+    >
       {/* Form Layout */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
         <div className="order-2 md:order-1 shrink-0">

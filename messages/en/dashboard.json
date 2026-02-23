@@ -790,6 +790,12 @@
   },
   "keyListHeader": {
     "todayUsage": "Today's Usage",
+    "userStatus": {
+      "disabled": "Disabled",
+      "expired": "Expired",
+      "expiringSoon": "Expiring soon",
+      "active": "Enabled"
+    },
     "allowedModels": {
       "label": "Allowed Models",
       "noRestrictions": "Allowed Models: No restrictions"

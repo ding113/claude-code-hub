@@ -105,7 +105,7 @@ export function VendorKeysCompactList(props: {
                 {t("addVendorKey")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] max-h-[90dvh] flex flex-col overflow-hidden p-0 gap-0">
+            <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
               <VisuallyHidden>
                 <DialogTitle>{t("addVendorKey")}</DialogTitle>
               </VisuallyHidden>
@@ -503,7 +503,7 @@ function VendorKeyRow(props: {
                     <Edit2 className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] max-h-[90dvh] flex flex-col overflow-hidden p-0 gap-0">
+                <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
                   <VisuallyHidden>
                     <DialogTitle>{t("editProvider")}</DialogTitle>
                   </VisuallyHidden>

@@ -131,7 +131,7 @@ export function AddRuleDialog() {
           {t("errorRules.add")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] max-h-[80dvh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
+      <DialogContent className="max-w-2xl max-h-[var(--cch-viewport-height-80)] flex flex-col bg-card/95 backdrop-blur-xl border-border">
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <DialogHeader className="flex-shrink-0">
             <DialogTitle>{t("errorRules.dialog.addTitle")}</DialogTitle>

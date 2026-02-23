@@ -46,6 +46,12 @@
 :root {
   --radius: 0.65rem;
   --cch-viewport-height: 100vh;
+  --cch-viewport-height-50: 50vh;
+  --cch-viewport-height-70: 70vh;
+  --cch-viewport-height-80: 80vh;
+  --cch-viewport-height-85: 85vh;
+  --cch-viewport-height-90: 90vh;
+  --cch-viewport-height-95: 95vh;
   --background: oklch(1 0 0);
   --foreground: oklch(0.141 0.005 285.823);
   --card: oklch(1 0 0);
@@ -82,6 +88,12 @@
 @supports (height: 100dvh) {
   :root {
     --cch-viewport-height: 100dvh;
+    --cch-viewport-height-50: 50dvh;
+    --cch-viewport-height-70: 70dvh;
+    --cch-viewport-height-80: 80dvh;
+    --cch-viewport-height-85: 85dvh;
+    --cch-viewport-height-90: 90dvh;
+    --cch-viewport-height-95: 95dvh;
   }
 }
 

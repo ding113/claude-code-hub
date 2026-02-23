@@ -154,9 +154,19 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
 }
 
 export async function closeRedis(): Promise<void> {
-  if (redisClient) {
-    const client = redisClient;
-    await client.quit();
+  const client = redisClient;
+  if (!client) return;
+
+  try {
+    if (client.status !== "end") {
+      await client.quit();
+    }
+  } catch (error) {
+    logger.warn("[Redis] Error during quit, forcing disconnect", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    client.disconnect();
+  } finally {
     if (redisClient === client) {
       redisClient = null;
     }

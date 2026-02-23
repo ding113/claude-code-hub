@@ -27,6 +27,15 @@ import { UserActions } from "./user-actions";
 
 const PROXY_STATUS_REFRESH_INTERVAL = 2000;
 
+type UserStatusCode = "disabled" | "expired" | "expiringSoon" | "active";
+
+const USER_STATUS_LABEL_KEYS: Record<UserStatusCode, string> = {
+  disabled: "userStatus.disabled",
+  expired: "userStatus.expired",
+  expiringSoon: "userStatus.expiringSoon",
+  active: "userStatus.active",
+};
+
 async function fetchProxyStatus(): Promise<ProxyStatusResponse> {
   const result = await getProxyStatus();
   if (result.ok) {
@@ -123,19 +132,18 @@ export function KeyListHeader({
     const exp = activeUser.expiresAt ? new Date(activeUser.expiresAt).getTime() : null;
 
     let status: {
-      code: string;
-      badge: string;
+      code: UserStatusCode;
       variant: "default" | "secondary" | "destructive" | "outline";
     };
 
     if (!activeUser.isEnabled) {
-      status = { code: "disabled", badge: "已禁用", variant: "secondary" };
+      status = { code: "disabled", variant: "secondary" };
     } else if (exp && exp <= now) {
-      status = { code: "expired", badge: "已过期", variant: "destructive" };
+      status = { code: "expired", variant: "destructive" };
     } else if (exp && exp - now <= 72 * 60 * 60 * 1000) {
-      status = { code: "expiringSoon", badge: "即将过期", variant: "outline" };
+      status = { code: "expiringSoon", variant: "outline" };
     } else {
-      status = { code: "active", badge: "已启用", variant: "default" };
+      status = { code: "active", variant: "default" };
     }
 
     const expiryText = activeUser.expiresAt
@@ -255,7 +263,7 @@ export function KeyListHeader({
             <span>{activeUser ? activeUser.name : "-"}</span>
             {activeUser && userStatusInfo && (
               <Badge variant={userStatusInfo.status.variant} className="text-xs">
-                {userStatusInfo.status.badge}
+                {t(USER_STATUS_LABEL_KEYS[userStatusInfo.status.code])}
               </Badge>
             )}
             {activeUser && <UserActions user={activeUser} currentUser={currentUser} />}
@@ -318,7 +326,7 @@ export function KeyListHeader({
                 <ListPlus className="h-3.5 w-3.5" /> {t("addKey")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[80vh] max-h-[80dvh] flex flex-col overflow-y-auto">
+            <DialogContent className="max-h-[var(--cch-viewport-height-80)] flex flex-col overflow-y-auto">
               <FormErrorBoundary>
                 <AddKeyForm
                   userId={activeUser?.id}

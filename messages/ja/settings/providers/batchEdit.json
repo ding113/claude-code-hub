@@ -64,6 +64,7 @@
     "description": "{count} 件のプロバイダーに適用する前に変更内容を確認してください",
     "providerHeader": "{name}",
     "fieldChanged": "{field}: {before} -> {after}",
+    "nullValue": "なし",
     "fieldSkipped": "{field}: スキップ ({reason})",
     "excludeProvider": "除外",
     "summary": "{providerCount} 件のプロバイダー, {fieldCount} 件の変更, {skipCount} 件スキップ",

@@ -782,6 +782,12 @@
   },
   "keyListHeader": {
     "todayUsage": "今日使用量",
+    "userStatus": {
+      "disabled": "已禁用",
+      "expired": "已過期",
+      "expiringSoon": "即將過期",
+      "active": "已啟用"
+    },
     "allowedModels": {
       "label": "允許的模型",
       "noRestrictions": "允許的模型：無限制"
