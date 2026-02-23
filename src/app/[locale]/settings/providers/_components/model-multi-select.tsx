@@ -222,7 +222,7 @@ export function ModelMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[400px] p-0 flex flex-col"
+        className="w-[400px] max-w-[calc(100vw-2rem)] p-0 flex flex-col"
         align="start"
         onWheel={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}

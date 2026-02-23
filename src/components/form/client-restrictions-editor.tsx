@@ -1,27 +1,31 @@
 "use client";
 
-import { useId } from "react";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { TagInput } from "@/components/ui/tag-input";
-import {
-  CLIENT_RESTRICTION_PRESET_OPTIONS,
-  isPresetSelected,
-  mergePresetAndCustomClients,
-  removePresetValues,
-  splitPresetAndCustomClients,
-  togglePresetSelection,
-} from "@/lib/client-restrictions/client-presets";
+import { TagInput, type TagInputSuggestion } from "@/components/ui/tag-input";
+import { CLIENT_RESTRICTION_PRESET_OPTIONS } from "@/lib/client-restrictions/client-presets";
 import { cn } from "@/lib/utils";
+
+function uniqueOrdered(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+
+  return result;
+}
 
 interface ClientRestrictionListEditorProps {
   label: string;
   values: string[];
   placeholder?: string;
   disabled?: boolean;
-  getPresetLabel: (presetValue: string) => string;
-  onTogglePreset: (presetValue: string, checked: boolean) => void;
-  onCustomChange: (customValues: string[]) => void;
+  suggestions: TagInputSuggestion[];
+  onChange: (next: string[]) => void;
   onInvalidTag?: (tag: string, reason: string) => void;
   className?: string;
 }
@@ -31,50 +35,25 @@ function ClientRestrictionListEditor({
   values,
   placeholder,
   disabled,
-  getPresetLabel,
-  onTogglePreset,
-  onCustomChange,
+  suggestions,
+  onChange,
   onInvalidTag,
   className,
 }: ClientRestrictionListEditorProps) {
-  const idPrefix = useId();
-  const { customValues } = splitPresetAndCustomClients(values);
-
   return (
     <div className={cn("space-y-3", className)}>
       <div className="text-sm font-medium text-foreground">{label}</div>
-      <div className="space-y-2 rounded-md border p-3">
-        {CLIENT_RESTRICTION_PRESET_OPTIONS.map((option) => {
-          const checked = isPresetSelected(values, option.value);
-          const checkboxId = `${idPrefix}-${option.value}`;
-          return (
-            <div key={option.value} className="flex items-center gap-2">
-              <Checkbox
-                id={checkboxId}
-                checked={checked}
-                disabled={disabled}
-                onCheckedChange={(next) => onTogglePreset(option.value, next === true)}
-              />
-              <Label htmlFor={checkboxId} className="cursor-pointer text-sm font-normal">
-                {getPresetLabel(option.value)}
-              </Label>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="space-y-1">
-        <TagInput
-          value={customValues}
-          onChange={onCustomChange}
-          placeholder={placeholder}
-          maxTagLength={64}
-          maxTags={50}
-          disabled={disabled}
-          validateTag={() => true}
-          onInvalidTag={onInvalidTag}
-        />
-      </div>
+      <TagInput
+        value={values}
+        onChange={onChange}
+        placeholder={placeholder}
+        maxTagLength={64}
+        maxTags={50}
+        disabled={disabled}
+        validateTag={() => true}
+        onInvalidTag={onInvalidTag}
+        suggestions={suggestions}
+      />
     </div>
   );
 }
@@ -108,44 +87,32 @@ export function ClientRestrictionsEditor({
   onInvalidTag,
   className,
 }: ClientRestrictionsEditorProps) {
-  const handleAllowToggle = (presetValue: string, checked: boolean) => {
-    const nextAllowed = togglePresetSelection(allowed, presetValue, checked);
+  const suggestions: TagInputSuggestion[] = CLIENT_RESTRICTION_PRESET_OPTIONS.map((option) => ({
+    value: option.value,
+    label: getPresetLabel(option.value),
+    keywords: [...option.aliases],
+  }));
+
+  const handleAllowedChange = (next: string[]) => {
+    const nextAllowed = uniqueOrdered(next);
     onAllowedChange(nextAllowed);
 
-    if (checked) {
-      const nextBlocked = removePresetValues(blocked, presetValue);
+    const allowedSet = new Set(nextAllowed);
+    const nextBlocked = blocked.filter((value) => !allowedSet.has(value));
+    if (nextBlocked.length !== blocked.length) {
       onBlockedChange(nextBlocked);
     }
   };
 
-  const handleBlockToggle = (presetValue: string, checked: boolean) => {
-    const nextBlocked = togglePresetSelection(blocked, presetValue, checked);
+  const handleBlockedChange = (next: string[]) => {
+    const nextBlocked = uniqueOrdered(next);
     onBlockedChange(nextBlocked);
 
-    if (checked) {
-      const nextAllowed = removePresetValues(allowed, presetValue);
+    const blockedSet = new Set(nextBlocked);
+    const nextAllowed = allowed.filter((value) => !blockedSet.has(value));
+    if (nextAllowed.length !== allowed.length) {
       onAllowedChange(nextAllowed);
     }
-  };
-
-  const handleAllowedCustomChange = (customValues: string[]) => {
-    const blockedMerged = mergePresetAndCustomClients(
-      blocked,
-      splitPresetAndCustomClients(blocked).customValues
-    );
-    const blockedValueSet = new Set(blockedMerged);
-    const filteredCustomValues = customValues.filter((value) => !blockedValueSet.has(value));
-    onAllowedChange(mergePresetAndCustomClients(allowed, filteredCustomValues));
-  };
-
-  const handleBlockedCustomChange = (customValues: string[]) => {
-    const allowedMerged = mergePresetAndCustomClients(
-      allowed,
-      splitPresetAndCustomClients(allowed).customValues
-    );
-    const allowedValueSet = new Set(allowedMerged);
-    const filteredCustomValues = customValues.filter((value) => !allowedValueSet.has(value));
-    onBlockedChange(mergePresetAndCustomClients(blocked, filteredCustomValues));
   };
 
   return (
@@ -155,9 +122,8 @@ export function ClientRestrictionsEditor({
         values={allowed}
         placeholder={allowedPlaceholder}
         disabled={disabled}
-        getPresetLabel={getPresetLabel}
-        onTogglePreset={handleAllowToggle}
-        onCustomChange={handleAllowedCustomChange}
+        suggestions={suggestions}
+        onChange={handleAllowedChange}
         onInvalidTag={onInvalidTag}
       />
       <ClientRestrictionListEditor
@@ -165,9 +131,8 @@ export function ClientRestrictionsEditor({
         values={blocked}
         placeholder={blockedPlaceholder}
         disabled={disabled}
-        getPresetLabel={getPresetLabel}
-        onTogglePreset={handleBlockToggle}
-        onCustomChange={handleBlockedCustomChange}
+        suggestions={suggestions}
+        onChange={handleBlockedChange}
         onInvalidTag={onInvalidTag}
       />
     </div>

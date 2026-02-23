@@ -194,48 +194,50 @@ export function RoutingSection() {
 
             {/* Allowed Models */}
             <FieldGroup label={t("sections.routing.modelWhitelist.label")}>
-              <ModelMultiSelect
-                providerType={state.routing.providerType}
-                selectedModels={state.routing.allowedModels}
-                onChange={(value: string[]) =>
-                  dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
-                }
-                disabled={state.ui.isPending}
-                providerUrl={state.basic.url}
-                apiKey={state.basic.key}
-                proxyUrl={state.network.proxyUrl}
-                proxyFallbackToDirect={state.network.proxyFallbackToDirect}
-                providerId={isEdit ? provider?.id : undefined}
-              />
-              {state.routing.allowedModels.length > 0 && (
-                <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md">
-                  {state.routing.allowedModels.slice(0, 5).map((model) => (
-                    <Badge key={model} variant="outline" className="font-mono text-xs">
-                      {model}
-                    </Badge>
-                  ))}
-                  {state.routing.allowedModels.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {t("sections.routing.modelWhitelist.moreModels", {
-                        count: state.routing.allowedModels.length - 5,
-                      })}
-                    </Badge>
-                  )}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {state.routing.allowedModels.length === 0 ? (
-                  <span className="text-green-600">
-                    {t("sections.routing.modelWhitelist.allowAll")}
-                  </span>
-                ) : (
-                  <span>
-                    {t("sections.routing.modelWhitelist.selectedOnly", {
-                      count: state.routing.allowedModels.length,
-                    })}
-                  </span>
+              <div className="space-y-2">
+                <ModelMultiSelect
+                  providerType={state.routing.providerType}
+                  selectedModels={state.routing.allowedModels}
+                  onChange={(value: string[]) =>
+                    dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
+                  }
+                  disabled={state.ui.isPending}
+                  providerUrl={state.basic.url}
+                  apiKey={state.basic.key}
+                  proxyUrl={state.network.proxyUrl}
+                  proxyFallbackToDirect={state.network.proxyFallbackToDirect}
+                  providerId={isEdit ? provider?.id : undefined}
+                />
+                {state.routing.allowedModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md">
+                    {state.routing.allowedModels.slice(0, 5).map((model) => (
+                      <Badge key={model} variant="outline" className="font-mono text-xs">
+                        {model}
+                      </Badge>
+                    ))}
+                    {state.routing.allowedModels.length > 5 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {t("sections.routing.modelWhitelist.moreModels", {
+                          count: state.routing.allowedModels.length - 5,
+                        })}
+                      </Badge>
+                    )}
+                  </div>
                 )}
-              </p>
+                <p className="text-xs text-muted-foreground">
+                  {state.routing.allowedModels.length === 0 ? (
+                    <span className="text-green-600">
+                      {t("sections.routing.modelWhitelist.allowAll")}
+                    </span>
+                  ) : (
+                    <span>
+                      {t("sections.routing.modelWhitelist.selectedOnly", {
+                        count: state.routing.allowedModels.length,
+                      })}
+                    </span>
+                  )}
+                </p>
+              </div>
             </FieldGroup>
 
             <ToggleRow
@@ -272,12 +274,8 @@ export function RoutingSection() {
                   }
                   allowedLabel={t("sections.routing.clientRestrictions.allowedLabel")}
                   blockedLabel={t("sections.routing.clientRestrictions.blockedLabel")}
-                  allowedPlaceholder={t(
-                    "sections.routing.clientRestrictions.customAllowedPlaceholder"
-                  )}
-                  blockedPlaceholder={t(
-                    "sections.routing.clientRestrictions.customBlockedPlaceholder"
-                  )}
+                  allowedPlaceholder={t("sections.routing.clientRestrictions.allowedPlaceholder")}
+                  blockedPlaceholder={t("sections.routing.clientRestrictions.blockedPlaceholder")}
                   disabled={state.ui.isPending}
                   getPresetLabel={(presetValue) =>
                     t(`sections.routing.clientRestrictions.presetClients.${presetValue}`)
