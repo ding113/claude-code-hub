@@ -5,6 +5,12 @@ const isIntegrationFileFilterRequested = process.argv.some((arg) =>
   /tests[\\/]+integration[\\/].+\.(test|spec)\.[cm]?[jt]sx?$/.test(arg)
 );
 
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export default defineConfig({
   test: {
     // ==================== 全局配置 ====================
@@ -90,6 +96,9 @@ export default defineConfig({
     // ==================== 并发配置 ====================
     maxConcurrency: 5, // 最大并发测试数
     pool: "threads", // 使用线程池（推荐）
+    // 高核机器/Windows 下 threads worker 过多可能触发 EMFILE / 资源争用导致用例超时。
+    // 允许通过环境变量覆盖：VITEST_MAX_WORKERS=...
+    maxWorkers: parsePositiveInt(process.env.VITEST_MAX_WORKERS, 8),
 
     // ==================== 文件匹配 ====================
     include: [
