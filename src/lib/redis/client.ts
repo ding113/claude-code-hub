@@ -74,8 +74,8 @@ export function buildRedisOptionsForUrl(redisUrl: string) {
 }
 
 export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean }): Redis | null {
-  // Skip Redis connection during CI/build phase (avoid connection attempts)
-  if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
+  // Skip Redis connection during Next.js production build phase (avoid connection attempts)
+  if (process.env.NEXT_PHASE === "phase-production-build") {
     return null;
   }
 
