@@ -92,7 +92,11 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
   const safeRedisUrl = maskRedisUrl(redisUrl);
 
   if (redisClient) {
-    return redisClient;
+    if (redisClient.status === "end") {
+      redisClient = null;
+    } else {
+      return redisClient;
+    }
   }
 
   try {
@@ -147,6 +151,11 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
 
     redisClient.on("close", () => {
       logger.warn("[Redis] Connection closed", { redisUrl: safeRedisUrl });
+    });
+
+    redisClient.on("end", () => {
+      logger.warn("[Redis] Connection ended, resetting client", { redisUrl: safeRedisUrl });
+      redisClient = null;
     });
 
     // 5. 返回客户端实例
