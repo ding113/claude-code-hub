@@ -214,9 +214,12 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       : [],
   });
 
+  // Stable fingerprint: only changes when a query actually receives new data,
+  // not on every render tick (useQueries returns a new array reference each time).
+  const usageDataVersion = usageQueries.map((q) => q.dataUpdatedAt).join(",");
+
   // Build merged usageByKeyId lookup from all resolved usage queries.
-  // usageQueries reference changes on every render, but the memo only produces
-  // a new object when actual query data has changed (ok + non-empty).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: usageDataVersion tracks actual data changes; usageQueries ref is unstable
   const usageByKeyId = useMemo(() => {
     const merged: Record<number, KeyUsageData> = {};
     for (const query of usageQueries) {
@@ -225,7 +228,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       }
     }
     return merged;
-  }, [usageQueries]);
+  }, [usageDataVersion]);
 
   const coreUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
 
