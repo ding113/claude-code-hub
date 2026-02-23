@@ -1,10 +1,17 @@
 "use client";
 
-import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAllUserKeyGroups, getAllUserTags, getUsers, getUsersBatch } from "@/actions/users";
+import type { KeyUsageData } from "@/actions/users";
+import {
+  getAllUserKeyGroups,
+  getAllUserTags,
+  getUsers,
+  getUsersBatchCore,
+  getUsersUsageBatch,
+} from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -137,7 +144,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         return { users, nextCursor: null, hasMore: false };
       }
 
-      const result = await getUsersBatch({
+      const result = await getUsersBatchCore({
         cursor: pageParam,
         limit: 50,
         searchTerm: resolvedSearchTerm,
@@ -153,7 +160,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       return result.data;
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: 0,
+    initialPageParam: undefined as string | undefined,
     placeholderData: (previousData) => previousData,
   });
 
@@ -189,7 +196,64 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     staleTime: 30_000,
   });
 
-  const allUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
+  // Per-page usage queries: fire independently for each loaded page
+  const pageUserIds = useMemo(
+    () => (data?.pages ?? []).map((page) => page.users.map((u) => u.id)),
+    [data]
+  );
+
+  const usageQueries = useQueries({
+    queries: isAdmin
+      ? pageUserIds.map((ids) => ({
+          queryKey: ["users-usage", ids],
+          queryFn: () => getUsersUsageBatch(ids),
+          enabled: ids.length > 0,
+          staleTime: 60_000,
+          refetchOnWindowFocus: false,
+        }))
+      : [],
+  });
+
+  // Build merged usageByKeyId lookup from all resolved usage queries.
+  // usageQueries reference changes on every render, but the memo only produces
+  // a new object when actual query data has changed (ok + non-empty).
+  const usageByKeyId = useMemo(() => {
+    const merged: Record<number, KeyUsageData> = {};
+    for (const query of usageQueries) {
+      if (query.data?.ok) {
+        Object.assign(merged, query.data.data.usageByKeyId);
+      }
+    }
+    return merged;
+  }, [usageQueries]);
+
+  const coreUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
+
+  // Merge usage data into core users
+  const allUsers = useMemo(() => {
+    if (Object.keys(usageByKeyId).length === 0) return coreUsers;
+    return coreUsers.map((user) => {
+      const hasUsageForAnyKey = user.keys.some((k) => k.id in usageByKeyId);
+      if (!hasUsageForAnyKey) return user;
+      return {
+        ...user,
+        keys: user.keys.map((key) => {
+          const usage = usageByKeyId[key.id];
+          if (!usage) return key;
+          return {
+            ...key,
+            todayUsage: usage.todayUsage,
+            todayCallCount: usage.todayCallCount,
+            todayTokens: usage.todayTokens,
+            lastUsedAt: usage.lastUsedAt,
+            lastProviderName: usage.lastProviderName,
+            modelStats: usage.modelStats,
+          };
+        }),
+      };
+    });
+  }, [coreUsers, usageByKeyId]);
+
   const visibleUsers = useMemo(() => {
     if (isAdmin) return allUsers;
     return allUsers.filter((user) => user.id === currentUser.id);
@@ -706,6 +770,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             translations={tableTranslations}
             onRefresh={() => {
               clearUsageCache();
+              queryClient.invalidateQueries({ queryKey: ["users-usage"] });
               refetch();
             }}
             isRefreshing={isRefreshing}
