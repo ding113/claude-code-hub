@@ -5,7 +5,7 @@
  * and bound memory usage.
  */
 
-import { TTLMap } from "./ttl-map";
+import { TTLMap } from "@/lib/cache/ttl-map";
 
 class SessionCache<T> {
   private cache: TTLMap<string, T>;

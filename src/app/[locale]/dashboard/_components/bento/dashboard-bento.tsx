@@ -100,14 +100,14 @@ async function fetchLeaderboard(scope: "user" | "provider" | "model"): Promise<L
   }));
 }
 
-/**
- * Calculate percentage change between current and previous values
- */
 function formatResponseTime(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/**
+ * Calculate percentage change between current and previous values
+ */
 function calcPercentageChange(current: number, previous: number): number {
   if (previous === 0) {
     return current > 0 ? 100 : 0;

@@ -1,3 +1,5 @@
+import { logger } from "@/lib/logger";
+
 type Listener = () => void;
 
 const DEFAULT_INTERVAL_MS = 10_000;
@@ -11,8 +13,8 @@ function startIfNeeded(): void {
     for (const listener of listeners) {
       try {
         listener();
-      } catch {
-        // Swallow: a single broken subscriber must not block others.
+      } catch (err) {
+        logger.error("[shared-timer] subscriber threw", { error: err });
       }
     }
   }, DEFAULT_INTERVAL_MS);
