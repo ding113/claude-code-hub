@@ -78,9 +78,7 @@ export function RoutingSection() {
     useState(hasAnyClientRestrictions);
 
   useEffect(() => {
-    if (hasAnyClientRestrictions) {
-      setClientRestrictionsEnabled(true);
-    }
+    setClientRestrictionsEnabled(hasAnyClientRestrictions);
   }, [hasAnyClientRestrictions]);
 
   const handleClientRestrictionsEnabledChange = (enabled: boolean) => {

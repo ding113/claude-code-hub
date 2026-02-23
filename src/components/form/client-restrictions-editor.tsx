@@ -124,11 +124,23 @@ export function ClientRestrictionsEditor({
   };
 
   const handleAllowedCustomChange = (customValues: string[]) => {
-    onAllowedChange(mergePresetAndCustomClients(allowed, customValues));
+    const blockedMerged = mergePresetAndCustomClients(
+      blocked,
+      splitPresetAndCustomClients(blocked).customValues
+    );
+    const blockedValueSet = new Set(blockedMerged);
+    const filteredCustomValues = customValues.filter((value) => !blockedValueSet.has(value));
+    onAllowedChange(mergePresetAndCustomClients(allowed, filteredCustomValues));
   };
 
   const handleBlockedCustomChange = (customValues: string[]) => {
-    onBlockedChange(mergePresetAndCustomClients(blocked, customValues));
+    const allowedMerged = mergePresetAndCustomClients(
+      allowed,
+      splitPresetAndCustomClients(allowed).customValues
+    );
+    const allowedValueSet = new Set(allowedMerged);
+    const filteredCustomValues = customValues.filter((value) => !allowedValueSet.has(value));
+    onBlockedChange(mergePresetAndCustomClients(blocked, filteredCustomValues));
   };
 
   return (

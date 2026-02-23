@@ -1,5 +1,7 @@
 "use client";
 
+import "./globals.css";
+
 import { isNetworkError } from "@/lib/utils/error-detection";
 
 /**
