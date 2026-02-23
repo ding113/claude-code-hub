@@ -1,92 +1,50 @@
 /**
- * Session 数据缓存层
+ * Session data cache layer
  *
- * 使用内存缓存减少数据库查询频率，适用于高频读取场景
+ * Uses TTLMap (TTL + LRU eviction) to reduce database query frequency
+ * and bound memory usage.
  */
 
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-}
+import { TTLMap } from "@/lib/cache/ttl-map";
 
 class SessionCache<T> {
-  private cache = new Map<string, CacheEntry<T>>();
-  private ttl: number; // TTL in milliseconds
+  private cache: TTLMap<string, T>;
+  private readonly ttlSeconds: number;
 
-  constructor(ttlSeconds: number = 2) {
-    this.ttl = ttlSeconds * 1000;
+  constructor(ttlSeconds: number = 2, maxSize: number = 1000) {
+    this.ttlSeconds = ttlSeconds;
+    this.cache = new TTLMap<string, T>({ ttlMs: ttlSeconds * 1000, maxSize });
   }
 
-  /**
-   * 获取缓存数据
-   */
   get(key: string): T | null {
-    const entry = this.cache.get(key);
-    if (!entry) {
-      return null;
-    }
-
-    const now = Date.now();
-    const age = now - entry.timestamp;
-
-    // 检查是否过期
-    if (age > this.ttl) {
-      this.cache.delete(key);
-      return null;
-    }
-
-    return entry.data;
+    return this.cache.get(key) ?? null;
   }
 
-  /**
-   * 设置缓存数据
-   */
   set(key: string, data: T): void {
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now(),
-    });
+    this.cache.set(key, data);
   }
 
-  /**
-   * 删除缓存数据
-   */
   delete(key: string): void {
     this.cache.delete(key);
   }
 
-  /**
-   * 清空所有缓存
-   */
   clear(): void {
     this.cache.clear();
   }
 
-  /**
-   * 清理过期的缓存条目
-   */
   cleanup(): void {
-    const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
-      const age = now - entry.timestamp;
-      if (age > this.ttl) {
-        this.cache.delete(key);
-      }
-    }
+    this.cache.purgeExpired();
   }
 
-  /**
-   * 获取缓存统计信息
-   */
   getStats(): { size: number; ttl: number } {
     return {
       size: this.cache.size,
-      ttl: this.ttl / 1000,
+      ttl: this.ttlSeconds,
     };
   }
 }
 
-// 活跃 Session 列表缓存（2 秒 TTL）
+// Active Sessions list cache (2s TTL, max 100 entries)
 const activeSessionsCache = new SessionCache<
   Array<{
     sessionId: string;
@@ -109,9 +67,9 @@ const activeSessionsCache = new SessionCache<
     apiType: string | null;
     cacheTtlApplied: string | null;
   }>
->(2);
+>(2, 100);
 
-// Session 详情缓存（1 秒 TTL，更短因为单个 session 的数据变化更频繁）
+// Session details cache (1s TTL, max 10000 entries)
 const sessionDetailsCache = new SessionCache<{
   sessionId: string;
   requestCount: number;
@@ -132,23 +90,17 @@ const sessionDetailsCache = new SessionCache<{
   userAgent: string | null;
   apiType: string | null;
   cacheTtlApplied: string | null;
-}>(1);
+}>(1, 10_000);
 
-// 使用 globalThis 存储 interval ID，支持热重载场景
+// Store interval ID on globalThis for HMR support
 const cacheCleanupState = globalThis as unknown as {
   __CCH_CACHE_CLEANUP_INTERVAL_ID__?: ReturnType<typeof setInterval> | null;
 };
 
-/**
- * 获取活跃 Sessions 的缓存
- */
 export function getActiveSessionsCache(key: string = "active_sessions") {
   return activeSessionsCache.get(key);
 }
 
-/**
- * 设置活跃 Sessions 的缓存
- */
 export function setActiveSessionsCache(
   data: Parameters<typeof activeSessionsCache.set>[1],
   key: string = "active_sessions"
@@ -156,16 +108,10 @@ export function setActiveSessionsCache(
   activeSessionsCache.set(key, data);
 }
 
-/**
- * 获取 Session 详情的缓存
- */
 export function getSessionDetailsCache(sessionId: string) {
   return sessionDetailsCache.get(sessionId);
 }
 
-/**
- * 设置 Session 详情的缓存
- */
 export function setSessionDetailsCache(
   sessionId: string,
   data: Parameters<typeof sessionDetailsCache.set>[1]
@@ -173,9 +119,6 @@ export function setSessionDetailsCache(
   sessionDetailsCache.set(sessionId, data);
 }
 
-/**
- * 清空活跃 Sessions 的缓存
- */
 export function clearActiveSessionsCache() {
   activeSessionsCache.delete("active_sessions");
 }
@@ -187,9 +130,6 @@ export function clearAllSessionsQueryCache() {
   activeSessionsCache.delete("all_sessions");
 }
 
-/**
- * 清空指定 Session 详情的缓存
- */
 export function clearSessionDetailsCache(sessionId: string) {
   sessionDetailsCache.delete(sessionId);
 }
@@ -202,9 +142,6 @@ export function clearAllCaches() {
   sessionDetailsCache.clear();
 }
 
-/**
- * 定期清理过期缓存（可选，用于内存优化）
- */
 export function startCacheCleanup(intervalSeconds: number = 60) {
   if (cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__) {
     return;
@@ -216,9 +153,6 @@ export function startCacheCleanup(intervalSeconds: number = 60) {
   }, intervalSeconds * 1000);
 }
 
-/**
- * 停止定期清理任务
- */
 export function stopCacheCleanup() {
   if (!cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__) {
     return;
@@ -228,9 +162,6 @@ export function stopCacheCleanup() {
   cacheCleanupState.__CCH_CACHE_CLEANUP_INTERVAL_ID__ = null;
 }
 
-/**
- * 获取缓存统计信息
- */
 export function getCacheStats() {
   return {
     activeSessions: activeSessionsCache.getStats(),

@@ -105,4 +105,39 @@ describe("TTLMap", () => {
     // Should still be alive (TTL was reset on second set)
     expect(map.get("a")).toBe(2);
   });
+
+  it("clear() should remove all entries", () => {
+    const map = new TTLMap<string, number>({ ttlMs: 10000, maxSize: 10 });
+    map.set("a", 1);
+    map.set("b", 2);
+    map.set("c", 3);
+    expect(map.size).toBe(3);
+
+    map.clear();
+    expect(map.size).toBe(0);
+    expect(map.get("a")).toBeUndefined();
+    expect(map.get("b")).toBeUndefined();
+    expect(map.get("c")).toBeUndefined();
+  });
+
+  it("purgeExpired() should remove only expired entries", () => {
+    const map = new TTLMap<string, number>({ ttlMs: 1000, maxSize: 10 });
+    map.set("old", 1);
+
+    vi.advanceTimersByTime(500);
+    map.set("fresh", 2);
+
+    vi.advanceTimersByTime(600); // old at 1100ms (expired), fresh at 600ms (alive)
+    map.purgeExpired();
+
+    expect(map.size).toBe(1);
+    expect(map.get("old")).toBeUndefined();
+    expect(map.get("fresh")).toBe(2);
+  });
+
+  it("purgeExpired() on empty map is a no-op", () => {
+    const map = new TTLMap<string, number>({ ttlMs: 1000, maxSize: 10 });
+    expect(() => map.purgeExpired()).not.toThrow();
+    expect(map.size).toBe(0);
+  });
 });
