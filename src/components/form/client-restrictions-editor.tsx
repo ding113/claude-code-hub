@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { TagInput, type TagInputSuggestion } from "@/components/ui/tag-input";
 import { CLIENT_RESTRICTION_PRESET_OPTIONS } from "@/lib/client-restrictions/client-presets";
 import { cn } from "@/lib/utils";
@@ -87,11 +88,15 @@ export function ClientRestrictionsEditor({
   onInvalidTag,
   className,
 }: ClientRestrictionsEditorProps) {
-  const suggestions: TagInputSuggestion[] = CLIENT_RESTRICTION_PRESET_OPTIONS.map((option) => ({
-    value: option.value,
-    label: getPresetLabel(option.value),
-    keywords: [...option.aliases],
-  }));
+  const suggestions: TagInputSuggestion[] = useMemo(
+    () =>
+      CLIENT_RESTRICTION_PRESET_OPTIONS.map((option) => ({
+        value: option.value,
+        label: getPresetLabel(option.value),
+        keywords: [...option.aliases],
+      })),
+    [getPresetLabel]
+  );
 
   const handleAllowedChange = (next: string[]) => {
     const nextAllowed = uniqueOrdered(next);

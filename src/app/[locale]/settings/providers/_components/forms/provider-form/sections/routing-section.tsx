@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Info, Layers, Route, Scale, Settings, Timer } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { Badge } from "@/components/ui/badge";
@@ -88,6 +88,12 @@ export function RoutingSection() {
       dispatch({ type: "SET_BLOCKED_CLIENTS", payload: [] });
     }
   };
+
+  const getClientRestrictionPresetLabel = useCallback(
+    (presetValue: string) =>
+      t(`sections.routing.clientRestrictions.presetClients.${presetValue}`),
+    [t]
+  );
 
   return (
     <TooltipProvider>
@@ -277,9 +283,7 @@ export function RoutingSection() {
                   allowedPlaceholder={t("sections.routing.clientRestrictions.allowedPlaceholder")}
                   blockedPlaceholder={t("sections.routing.clientRestrictions.blockedPlaceholder")}
                   disabled={state.ui.isPending}
-                  getPresetLabel={(presetValue) =>
-                    t(`sections.routing.clientRestrictions.presetClients.${presetValue}`)
-                  }
+                  getPresetLabel={getClientRestrictionPresetLabel}
                   onInvalidTag={(_tag, reason) => {
                     const messages: Record<string, string> = {
                       empty: tUI("emptyTag"),
