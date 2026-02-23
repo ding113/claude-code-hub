@@ -778,7 +778,9 @@ export async function getUsersUsageBatch(
       return { ok: true, data: { usageByKeyId: {} } };
     }
 
-    const sanitizedIds = Array.from(new Set(userIds)).filter((id) => Number.isInteger(id));
+    const sanitizedIds = Array.from(new Set(userIds)).filter(
+      (id) => Number.isInteger(id) && id > 0
+    );
     if (sanitizedIds.length === 0) {
       return { ok: true, data: { usageByKeyId: {} } };
     }

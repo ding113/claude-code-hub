@@ -161,10 +161,13 @@ interface KeysetCursor {
 }
 
 function parseKeysetCursor(raw: string): KeysetCursor | null {
+  if (raw.length > 1024) return null;
   try {
     const parsed = JSON.parse(raw);
     if (typeof parsed === "object" && parsed !== null && "v" in parsed && "id" in parsed) {
-      return { v: String(parsed.v), id: Number(parsed.id) };
+      const id = Number(parsed.id);
+      if (!Number.isFinite(id) || !Number.isInteger(id) || id <= 0) return null;
+      return { v: String(parsed.v), id };
     }
   } catch {
     // not JSON - treat as offset
@@ -299,6 +302,7 @@ export async function findUserListBatch(
   // Keyset cursor: seek past the last row of the previous page.
   // ASC:  ORDER BY col ASC,  id ASC  -> WHERE (col, id) > (cv, cid)
   // DESC: ORDER BY col DESC, id ASC  -> mixed direction, must decompose manually
+  // Truncate timestamps to millisecond precision to match JS Date encoding.
   let offset = 0;
   if (cursor && useKeyset) {
     const keyset = parseKeysetCursor(cursor);
@@ -306,11 +310,12 @@ export async function findUserListBatch(
       if (sortBy === "createdAt") {
         const d = new Date(keyset.v);
         if (!Number.isNaN(d.getTime())) {
+          const truncCol = sql`date_trunc('milliseconds', ${sortColumn})`;
           if (sortOrder === "asc") {
-            conditions.push(sql`(${sortColumn}, ${users.id}) > (${d}, ${keyset.id})`);
+            conditions.push(sql`(${truncCol}, ${users.id}) > (${d}, ${keyset.id})`);
           } else {
             conditions.push(
-              sql`(${sortColumn} < ${d} OR (${sortColumn} = ${d} AND ${users.id} > ${keyset.id}))`
+              sql`(${truncCol} < ${d} OR (${truncCol} = ${d} AND ${users.id} > ${keyset.id}))`
             );
           }
         }
@@ -323,6 +328,9 @@ export async function findUserListBatch(
           );
         }
       }
+    } else {
+      // Cursor is not valid keyset JSON -- fall back to offset
+      offset = Math.max(Number(cursor) || 0, 0);
     }
   } else if (cursor) {
     // Offset fallback for nullable columns
@@ -369,8 +377,11 @@ export async function findUserListBatch(
   if (hasMore) {
     if (useKeyset) {
       const lastRow = usersToReturn[usersToReturn.length - 1];
-      const rawValue = sortBy === "name" ? lastRow.name : lastRow.createdAt;
-      nextCursor = encodeKeysetCursor(rawValue, lastRow.id);
+      const keysetRowValue: Record<string, unknown> = {
+        name: lastRow.name,
+        createdAt: lastRow.createdAt,
+      };
+      nextCursor = encodeKeysetCursor(keysetRowValue[sortBy], lastRow.id);
     } else {
       nextCursor = String(offset + effectiveLimit);
     }
