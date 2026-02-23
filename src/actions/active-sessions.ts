@@ -864,12 +864,12 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
     }
 
     // 4. 清除缓存
-    const { clearActiveSessionsCache, clearSessionDetailsCache, clearAllSessionsCache } =
+    const { clearActiveSessionsCache, clearSessionDetailsCache, clearAllSessionsQueryCache } =
       await import("@/lib/cache/session-cache");
 
     clearActiveSessionsCache();
     clearSessionDetailsCache(sessionId);
-    clearAllSessionsCache();
+    clearAllSessionsQueryCache();
 
     logger.info("Session terminated by user", {
       sessionId,
@@ -1012,11 +1012,11 @@ export async function terminateActiveSessionsBatch(
     const failedCount = allowedFailedCount + unauthorizedCount + missingCount;
 
     // 4. 清除缓存
-    const { clearActiveSessionsCache, clearAllSessionsCache, clearSessionDetailsCache } =
+    const { clearActiveSessionsCache, clearAllSessionsQueryCache, clearSessionDetailsCache } =
       await import("@/lib/cache/session-cache");
 
     clearActiveSessionsCache();
-    clearAllSessionsCache();
+    clearAllSessionsQueryCache();
 
     // 清除每个终止 Session 的详情缓存
     for (const sid of allowedSessionIds) {
