@@ -489,6 +489,7 @@ describe("endpoint-circuit-breaker", () => {
     expect(getEndpointCircuitStateSync(200)).toBe("open");
 
     // 打开熔断会触发异步告警；确保该任务在用例结束前完成，避免串台。
+    vi.useRealTimers();
     await waitForMockCalled(sendAlertMock);
     expect(sendAlertMock).toHaveBeenCalledTimes(1);
   });

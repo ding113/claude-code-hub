@@ -22,6 +22,7 @@ interface ClientRestrictionListEditorProps {
   getPresetLabel: (presetValue: string) => string;
   onTogglePreset: (presetValue: string, checked: boolean) => void;
   onCustomChange: (customValues: string[]) => void;
+  onInvalidTag?: (tag: string, reason: string) => void;
   className?: string;
 }
 
@@ -33,6 +34,7 @@ function ClientRestrictionListEditor({
   getPresetLabel,
   onTogglePreset,
   onCustomChange,
+  onInvalidTag,
   className,
 }: ClientRestrictionListEditorProps) {
   const idPrefix = useId();
@@ -70,6 +72,7 @@ function ClientRestrictionListEditor({
           maxTags={50}
           disabled={disabled}
           validateTag={() => true}
+          onInvalidTag={onInvalidTag}
         />
       </div>
     </div>
@@ -87,6 +90,7 @@ export interface ClientRestrictionsEditorProps {
   blockedPlaceholder?: string;
   disabled?: boolean;
   getPresetLabel: (presetValue: string) => string;
+  onInvalidTag?: (tag: string, reason: string) => void;
   className?: string;
 }
 
@@ -101,6 +105,7 @@ export function ClientRestrictionsEditor({
   blockedPlaceholder,
   disabled,
   getPresetLabel,
+  onInvalidTag,
   className,
 }: ClientRestrictionsEditorProps) {
   const handleAllowToggle = (presetValue: string, checked: boolean) => {
@@ -153,6 +158,7 @@ export function ClientRestrictionsEditor({
         getPresetLabel={getPresetLabel}
         onTogglePreset={handleAllowToggle}
         onCustomChange={handleAllowedCustomChange}
+        onInvalidTag={onInvalidTag}
       />
       <ClientRestrictionListEditor
         label={blockedLabel}
@@ -162,6 +168,7 @@ export function ClientRestrictionsEditor({
         getPresetLabel={getPresetLabel}
         onTogglePreset={handleBlockToggle}
         onCustomChange={handleBlockedCustomChange}
+        onInvalidTag={onInvalidTag}
       />
     </div>
   );

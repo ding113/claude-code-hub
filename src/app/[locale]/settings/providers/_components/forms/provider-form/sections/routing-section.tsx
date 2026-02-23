@@ -282,6 +282,16 @@ export function RoutingSection() {
                   getPresetLabel={(presetValue) =>
                     t(`sections.routing.clientRestrictions.presetClients.${presetValue}`)
                   }
+                  onInvalidTag={(_tag, reason) => {
+                    const messages: Record<string, string> = {
+                      empty: tUI("emptyTag"),
+                      duplicate: tUI("duplicateTag"),
+                      too_long: tUI("tooLong", { max: 64 }),
+                      invalid_format: tUI("invalidFormat"),
+                      max_tags: tUI("maxTags"),
+                    };
+                    toast.error(messages[reason] || reason);
+                  }}
                 />
               </div>
             )}
