@@ -100,39 +100,19 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
   }
 
   try {
-    const useTls = redisUrl.startsWith("rediss://");
+    const { isTLS: useTls, options: redisOptions } = buildRedisOptionsForUrl(redisUrl);
 
-    // 1. 定义基础配置
-    const redisOptions: RedisOptions = {
-      enableOfflineQueue: false, // 快速失败
-      maxRetriesPerRequest: 3,
-      retryStrategy(times) {
-        if (times > 5) {
-          logger.error("[Redis] Max retries reached, giving up");
-          return null; // 停止重试，降级
-        }
-        const delay = Math.min(times * 200, 2000);
-        logger.warn(`[Redis] Retry ${times}/5 after ${delay}ms`);
-        return delay;
-      },
-    };
-
-    // 2. 如果使用 rediss://，则添加显式的 TLS 配置（支持跳过证书验证）
     if (useTls) {
-      const raw = process.env.REDIS_TLS_REJECT_UNAUTHORIZED?.trim();
-      const rejectUnauthorized = raw !== "false" && raw !== "0";
-      logger.info("[Redis] Using TLS connection (rediss://)", {
-        redisUrl: safeRedisUrl,
-        rejectUnauthorized,
-      });
-      redisOptions.tls = buildTlsConfig(redisUrl);
+      logger.info("[Redis] Using TLS connection (rediss://)", { redisUrl: safeRedisUrl });
     }
 
     // 3. 使用组合后的配置创建客户端
-    redisClient = new Redis(redisUrl, redisOptions);
+    const client = new Redis(redisUrl, redisOptions as RedisOptions);
+    redisClient = client;
 
     // 4. 保持原始的事件监听器
-    redisClient.on("connect", () => {
+    client.on("connect", () => {
+      if (redisClient !== client) return;
       logger.info("[Redis] Connected successfully", {
         protocol: useTls ? "rediss" : "redis",
         tlsEnabled: useTls,
@@ -140,7 +120,8 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
       });
     });
 
-    redisClient.on("error", (error) => {
+    client.on("error", (error) => {
+      if (redisClient !== client) return;
       logger.error("[Redis] Connection error", {
         error: error instanceof Error ? error.message : String(error),
         protocol: useTls ? "rediss" : "redis",
@@ -149,17 +130,19 @@ export function getRedisClient(input?: { allowWhenRateLimitDisabled?: boolean })
       });
     });
 
-    redisClient.on("close", () => {
+    client.on("close", () => {
+      if (redisClient !== client) return;
       logger.warn("[Redis] Connection closed", { redisUrl: safeRedisUrl });
     });
 
-    redisClient.on("end", () => {
+    client.on("end", () => {
+      if (redisClient !== client) return;
       logger.warn("[Redis] Connection ended, resetting client", { redisUrl: safeRedisUrl });
       redisClient = null;
     });
 
     // 5. 返回客户端实例
-    return redisClient;
+    return client;
   } catch (error) {
     logger.error("[Redis] Failed to initialize:", error, { redisUrl: safeRedisUrl });
     return null;

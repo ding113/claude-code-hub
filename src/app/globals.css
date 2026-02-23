@@ -144,7 +144,8 @@
 
   /* iOS 安全区：避免底部固定导航被 Home Indicator 挡住 */
   .safe-area-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* 可通过 --safe-area-pb 覆盖：例如 style={{ "--safe-area-pb": "0px" }} */
+    padding-bottom: var(--safe-area-pb, env(safe-area-inset-bottom, 0px));
   }
 
   /* 视口高度：在移动端地址栏伸缩时，dvh 比 vh 更符合可视区域 */
