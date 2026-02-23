@@ -103,6 +103,11 @@ async function fetchLeaderboard(scope: "user" | "provider" | "model"): Promise<L
 /**
  * Calculate percentage change between current and previous values
  */
+function formatResponseTime(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 function calcPercentageChange(current: number, previous: number): number {
   if (previous === 0) {
     return current > 0 ? 100 : 0;
@@ -187,11 +192,6 @@ export function DashboardBento({
     yesterdaySamePeriodCost: 0,
     yesterdaySamePeriodAvgResponseTime: 0,
     recentMinuteRequests: 0,
-  };
-
-  const formatResponseTime = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
   };
 
   // Calculate comparisons
