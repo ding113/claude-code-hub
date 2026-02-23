@@ -22,7 +22,7 @@ export function AddProviderDialog({ enableMultiProviderTypes }: AddProviderDialo
           <ServerCog className="h-4 w-4" /> {t("addProvider")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
         <VisuallyHidden>
           <DialogTitle>{t("addProvider")}</DialogTitle>
         </VisuallyHidden>

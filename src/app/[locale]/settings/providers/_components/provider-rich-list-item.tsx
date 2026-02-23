@@ -978,7 +978,7 @@ export function ProviderRichListItem({
 
       {/* 编辑 Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
           <VisuallyHidden>
             <DialogTitle>{t("editProvider")}</DialogTitle>
           </VisuallyHidden>
@@ -997,7 +997,7 @@ export function ProviderRichListItem({
 
       {/* 克隆 Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 gap-0">
           <VisuallyHidden>
             <DialogTitle>{t("clone")}</DialogTitle>
           </VisuallyHidden>

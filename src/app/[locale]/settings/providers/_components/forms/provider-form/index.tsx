@@ -553,18 +553,20 @@ function ProviderFormContent({
     <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
       {/* Form Layout */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
-        {/* Tab Navigation */}
-        <FormTabNav
-          activeTab={state.ui.activeTab}
-          onTabChange={handleTabChange}
-          disabled={isPending}
-          tabStatus={getTabStatus()}
-        />
+        <div className="order-2 md:order-1 shrink-0">
+          {/* Tab Navigation */}
+          <FormTabNav
+            activeTab={state.ui.activeTab}
+            onTabChange={handleTabChange}
+            disabled={isPending}
+            tabStatus={getTabStatus()}
+          />
+        </div>
 
         {/* All Sections Stacked Vertically */}
         <div
           ref={contentRef}
-          className="flex-1 overflow-y-auto p-6 pb-24 md:pb-6 min-h-0 scroll-smooth"
+          className="order-1 md:order-2 flex-1 overflow-y-auto p-6 min-h-0 scroll-smooth"
           onScroll={handleScroll}
         >
           <div className="space-y-8">
