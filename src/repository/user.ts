@@ -8,8 +8,8 @@ import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
 
 export interface UserListBatchFilters {
-  /** Offset pagination cursor */
-  cursor?: number;
+  /** Cursor for pagination (JSON-encoded keyset or numeric offset) */
+  cursor?: string;
   /** Page size */
   limit?: number;
   /** Search in username / note */
@@ -37,7 +37,7 @@ export interface UserListBatchFilters {
 
 export interface UserListBatchResult {
   users: User[];
-  nextCursor: number | null;
+  nextCursor: string | null;
   hasMore: boolean;
 }
 
@@ -148,11 +148,42 @@ export async function searchUsersForFilter(
     })
     .from(users)
     .where(and(...conditions))
-    .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.id);
+    .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.id)
+    .limit(200);
+}
+
+/** Sort columns that are NOT NULL and support keyset cursor pagination */
+const KEYSET_SORT_COLUMNS = new Set<string>(["name", "createdAt"]);
+
+interface KeysetCursor {
+  v: string; // sort column value (ISO string for dates, raw string for text)
+  id: number; // tie-breaker user ID
+}
+
+function parseKeysetCursor(raw: string): KeysetCursor | null {
+  if (raw.length > 1024) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null && "v" in parsed && "id" in parsed) {
+      const id = Number(parsed.id);
+      if (!Number.isFinite(id) || !Number.isInteger(id) || id <= 0) return null;
+      return { v: String(parsed.v), id };
+    }
+  } catch {
+    // not JSON - treat as offset
+  }
+  return null;
+}
+
+function encodeKeysetCursor(sortValue: unknown, id: number): string {
+  const v = sortValue instanceof Date ? sortValue.toISOString() : String(sortValue ?? "");
+  return JSON.stringify({ v, id });
 }
 
 /**
- * Offset-based pagination for user list.
+ * Hybrid cursor pagination for user list.
+ * - NOT NULL sort columns (name, createdAt): keyset cursor for O(1) seek
+ * - Nullable sort columns: OFFSET fallback
  */
 export async function findUserListBatch(
   filters: UserListBatchFilters
@@ -168,8 +199,9 @@ export async function findUserListBatch(
     sortOrder = "asc",
   } = filters;
 
-  const conditions = [isNull(users.deletedAt)];
+  const conditions: SQL[] = [isNull(users.deletedAt)];
 
+  const effectiveLimit = Math.min(Math.max(1, limit), 200);
   const trimmedSearch = searchTerm?.trim();
   if (trimmedSearch) {
     const pattern = `%${trimmedSearch}%`;
@@ -228,36 +260,29 @@ export async function findUserListBatch(
   if (statusFilter && statusFilter !== "all") {
     switch (statusFilter) {
       case "active":
-        // User is enabled and either never expires or expires in the future
         conditions.push(
           sql`(${users.expiresAt} IS NULL OR ${users.expiresAt} >= NOW()) AND ${users.isEnabled} = true`
         );
         break;
       case "expired":
-        // User has expired (expiresAt is in the past)
         conditions.push(sql`${users.expiresAt} < NOW()`);
         break;
       case "expiringSoon":
-        // User expires within 7 days
         conditions.push(
           sql`${users.expiresAt} IS NOT NULL AND ${users.expiresAt} >= NOW() AND ${users.expiresAt} <= NOW() + INTERVAL '7 days'`
         );
         break;
       case "enabled":
-        // User is enabled regardless of expiration
         conditions.push(sql`${users.isEnabled} = true`);
         break;
       case "disabled":
-        // User is disabled
         conditions.push(sql`${users.isEnabled} = false`);
         break;
     }
   }
 
-  const offset = Math.max(cursor ?? 0, 0);
-
-  // Fetch limit + 1 to determine if there are more records
-  const fetchLimit = limit + 1;
+  const fetchLimit = effectiveLimit + 1;
+  const useKeyset = KEYSET_SORT_COLUMNS.has(sortBy);
 
   // Build dynamic ORDER BY based on sortBy and sortOrder
   const sortColumn = {
@@ -274,7 +299,45 @@ export async function findUserListBatch(
 
   const orderByClause = sortOrder === "asc" ? asc(sortColumn) : sql`${sortColumn} DESC`;
 
-  const results = await db
+  // Keyset cursor: seek past the last row of the previous page.
+  // ASC:  ORDER BY col ASC,  id ASC  -> WHERE (col, id) > (cv, cid)
+  // DESC: ORDER BY col DESC, id ASC  -> mixed direction, must decompose manually
+  // Truncate timestamps to millisecond precision to match JS Date encoding.
+  let offset = 0;
+  if (cursor && useKeyset) {
+    const keyset = parseKeysetCursor(cursor);
+    if (keyset) {
+      if (sortBy === "createdAt") {
+        const d = new Date(keyset.v);
+        if (!Number.isNaN(d.getTime())) {
+          const truncCol = sql`date_trunc('milliseconds', ${sortColumn})`;
+          if (sortOrder === "asc") {
+            conditions.push(sql`(${truncCol}, ${users.id}) > (${d}, ${keyset.id})`);
+          } else {
+            conditions.push(
+              sql`(${truncCol} < ${d} OR (${truncCol} = ${d} AND ${users.id} > ${keyset.id}))`
+            );
+          }
+        }
+      } else {
+        if (sortOrder === "asc") {
+          conditions.push(sql`(${sortColumn}, ${users.id}) > (${keyset.v}, ${keyset.id})`);
+        } else {
+          conditions.push(
+            sql`(${sortColumn} < ${keyset.v} OR (${sortColumn} = ${keyset.v} AND ${users.id} > ${keyset.id}))`
+          );
+        }
+      }
+    } else {
+      // Cursor is not valid keyset JSON -- fall back to offset
+      offset = Math.max(Number(cursor) || 0, 0);
+    }
+  } else if (cursor) {
+    // Offset fallback for nullable columns
+    offset = Math.max(Number(cursor) || 0, 0);
+  }
+
+  const query = db
     .select({
       id: users.id,
       name: users.name,
@@ -303,13 +366,26 @@ export async function findUserListBatch(
     .from(users)
     .where(and(...conditions))
     .orderBy(orderByClause, asc(users.id))
-    .limit(fetchLimit)
-    .offset(offset);
+    .limit(fetchLimit);
 
-  const hasMore = results.length > limit;
-  const usersToReturn = hasMore ? results.slice(0, limit) : results;
+  const results = offset > 0 ? await query.offset(offset) : await query;
 
-  const nextCursor = hasMore ? offset + limit : null;
+  const hasMore = results.length > effectiveLimit;
+  const usersToReturn = hasMore ? results.slice(0, effectiveLimit) : results;
+
+  let nextCursor: string | null = null;
+  if (hasMore) {
+    if (useKeyset) {
+      const lastRow = usersToReturn[usersToReturn.length - 1];
+      const keysetRowValue: Record<string, unknown> = {
+        name: lastRow.name,
+        createdAt: lastRow.createdAt,
+      };
+      nextCursor = encodeKeysetCursor(keysetRowValue[sortBy], lastRow.id);
+    } else {
+      nextCursor = String(offset + effectiveLimit);
+    }
+  }
 
   return {
     users: usersToReturn.map(toUser),

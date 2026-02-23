@@ -795,6 +795,21 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
 }
 
 /**
+ * Batch version of findKeysWithStatistics using a pre-fetched keysMap.
+ * Eliminates the redundant findKeyListBatch call when the caller already has keys.
+ *
+ * Queries: 3 (today call counts, last usage via LATERAL, model statistics).
+ * Callers typically also run findKeyListBatch + findKeyUsageTodayBatch
+ * for a grand total of 5 DB roundtrips.
+ */
+export async function findKeysStatisticsBatchFromKeys(
+  keysMap: Map<number, Key[]>
+): Promise<Map<number, KeyStatistics[]>> {
+  const userIds = Array.from(keysMap.keys());
+  return _findKeysStatisticsBatchInternal(userIds, keysMap);
+}
+
+/**
  * Batch version of findKeysWithStatistics - fetches statistics for multiple users in optimized queries
  * Returns a Map<userId, KeyStatistics[]> for efficient lookup
  *
@@ -813,6 +828,17 @@ export async function findKeysWithStatisticsBatch(
 
   // Step 1: Get all keys for all users
   const keyMap = await findKeyListBatch(userIds);
+
+  return _findKeysStatisticsBatchInternal(userIds, keyMap);
+}
+
+async function _findKeysStatisticsBatchInternal(
+  userIds: number[],
+  keyMap: Map<number, Key[]>
+): Promise<Map<number, KeyStatistics[]>> {
+  if (userIds.length === 0) {
+    return new Map();
+  }
 
   // Collect all keys and create a keyString -> (userId, keyId) lookup
   const allKeys: Key[] = [];
