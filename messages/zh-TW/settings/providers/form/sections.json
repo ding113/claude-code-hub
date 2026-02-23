@@ -307,6 +307,9 @@
       "title": "模型允許清單"
     },
     "clientRestrictions": {
+      "toggleLabel": "啟用用戶端限制",
+      "toggleDesc": "預設不限制用戶端。啟用後可設定白名單/黑名單。",
+      "priorityNote": "黑名單優先於白名單。",
       "allowedLabel": "白名單客戶端",
       "allowedPlaceholder": "例如 claude-code-cli",
       "blockedLabel": "黑名單客戶端",

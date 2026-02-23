@@ -264,7 +264,14 @@ export function FormTabNav({
           })}
         </div>
         {/* Step indicator */}
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted">
+        <div
+          className="absolute top-0 left-0 right-0 h-0.5 bg-muted"
+          role="progressbar"
+          aria-valuenow={stepNumber}
+          aria-valuemin={0}
+          aria-valuemax={TAB_CONFIG.length}
+          aria-label={t("tabs.stepProgress")}
+        >
           <motion.div
             className="h-full bg-primary"
             initial={{ width: stepProgressWidth }}
