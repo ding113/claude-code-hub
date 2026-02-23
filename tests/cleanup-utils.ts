@@ -44,11 +44,11 @@ export async function cleanupTestUsers(options?: {
       .where(and(...whereConditions));
 
     if (testUsers.length === 0) {
-      console.log("✅ 没有找到测试用户");
+      console.log("[OK] No test users found");
       return { deletedUsers: 0, deletedKeys: 0 };
     }
 
-    console.log(`🔍 找到 ${testUsers.length} 个测试用户`);
+    console.log(`[INFO] Found ${testUsers.length} test users`);
 
     const testUserIds = testUsers.map((u) => u.id);
 
@@ -67,7 +67,7 @@ export async function cleanupTestUsers(options?: {
       .where(and(inArray(users.id, testUserIds), isNull(users.deletedAt)))
       .returning({ id: users.id });
 
-    console.log(`✅ 清理完成：删除 ${testUsers.length} 个用户和对应的 Keys`);
+    console.log(`[OK] Cleanup complete: deleted ${testUsers.length} users and associated Keys`);
 
     return {
       deletedUsers: testUsers.length,
@@ -75,7 +75,7 @@ export async function cleanupTestUsers(options?: {
       userNames: testUsers.map((u) => u.name),
     };
   } catch (error) {
-    console.error("❌ 清理测试用户失败:", error);
+    console.error("[ERROR] Failed to cleanup test users:", error);
     throw error;
   }
 }

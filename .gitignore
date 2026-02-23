@@ -12,12 +12,7 @@
 
 # testing
 /coverage
-/coverage-quota
-/coverage-my-usage
-/coverage-proxy-guard-pipeline
-/coverage-thinking-signature-rectifier
-/coverage-logs-sessionid-time-filter
-/coverage-usage-logs-sessionid-search
+tests/.tmp-*
 
 # next.js
 /.next/

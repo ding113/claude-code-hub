@@ -1,5 +1,5 @@
-import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { sharedResolve } from "./tests/vitest.base";
 
 const isIntegrationFileFilterRequested = process.argv.some((arg) =>
   /tests[\\/]+integration[\\/].+\.(test|spec)\.[cm]?[jt]sx?$/.test(arg)
@@ -136,13 +136,5 @@ export default defineConfig({
     },
   },
 
-  // ==================== 路径别名（与 tsconfig.json 保持一致）====================
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@messages": path.resolve(__dirname, "./messages"),
-      // Mock server-only 包，避免测试环境报错
-      "server-only": path.resolve(__dirname, "./tests/server-only.mock.ts"),
-    },
-  },
+  resolve: sharedResolve({ includeMessages: true }),
 });
