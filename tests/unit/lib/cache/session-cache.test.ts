@@ -10,9 +10,9 @@ async function loadSessionCache() {
     getSessionDetailsCache: mod.getSessionDetailsCache,
     setSessionDetailsCache: mod.setSessionDetailsCache,
     clearActiveSessionsCache: mod.clearActiveSessionsCache,
-    clearAllSessionsCache: mod.clearAllSessionsCache,
+    clearAllSessionsQueryCache: mod.clearAllSessionsQueryCache,
     clearSessionDetailsCache: mod.clearSessionDetailsCache,
-    clearAllSessionCache: mod.clearAllSessionCache,
+    clearAllCaches: mod.clearAllCaches,
     startCacheCleanup: mod.startCacheCleanup,
     stopCacheCleanup: mod.stopCacheCleanup,
     getCacheStats: mod.getCacheStats,
@@ -125,9 +125,9 @@ describe("SessionCache（Session 数据缓存层）", () => {
       getSessionDetailsCache,
       setSessionDetailsCache,
       clearActiveSessionsCache,
-      clearAllSessionsCache,
+      clearAllSessionsQueryCache,
       clearSessionDetailsCache,
-      clearAllSessionCache,
+      clearAllCaches,
     } = await loadSessionCache();
 
     setActiveSessionsCache(
@@ -182,14 +182,14 @@ describe("SessionCache（Session 数据缓存层）", () => {
     clearActiveSessionsCache();
     expect(getActiveSessionsCache()).toBeNull();
 
-    clearAllSessionsCache();
-    // clearAllSessionsCache 删除 all_sessions，而非 active_sessions
+    clearAllSessionsQueryCache();
+    // clearAllSessionsQueryCache 删除 all_sessions，而非 active_sessions
     expect(getActiveSessionsCache("all_sessions")).toBeNull();
 
     clearSessionDetailsCache("s_1");
     expect(getSessionDetailsCache("s_1")).toBeNull();
 
-    // 再次写入后，clearAllSessionCache 应清空两类缓存
+    // 再次写入后，clearAllCaches 应清空两类缓存
     setActiveSessionsCache([], "active_sessions");
     setSessionDetailsCache("s_2", {
       sessionId: "s_2",
@@ -213,7 +213,7 @@ describe("SessionCache（Session 数据缓存层）", () => {
       cacheTtlApplied: null,
     });
 
-    clearAllSessionCache();
+    clearAllCaches();
     expect(getActiveSessionsCache()).toBeNull();
     expect(getSessionDetailsCache("s_2")).toBeNull();
   });
