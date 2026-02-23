@@ -90,8 +90,7 @@ export function RoutingSection() {
   };
 
   const getClientRestrictionPresetLabel = useCallback(
-    (presetValue: string) =>
-      t(`sections.routing.clientRestrictions.presetClients.${presetValue}`),
+    (presetValue: string) => t(`sections.routing.clientRestrictions.presetClients.${presetValue}`),
     [t]
   );
 
