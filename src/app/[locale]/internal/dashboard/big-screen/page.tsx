@@ -743,8 +743,9 @@ export default function BigScreenPage() {
       return result.data;
     },
     {
-      refreshInterval: 2000, // 2秒刷新
+      refreshInterval: 2000,
       revalidateOnFocus: false,
+      refreshWhenHidden: false,
     }
   );
 
@@ -756,7 +757,7 @@ export default function BigScreenPage() {
       if (!response.ok) throw new Error("Failed to fetch settings");
       return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
     },
-    { revalidateOnFocus: false }
+    { revalidateOnFocus: false, refreshWhenHidden: false }
   );
 
   const currencySymbol = CURRENCY_CONFIG[systemSettings?.currencyDisplay ?? "USD"]?.symbol ?? "$";

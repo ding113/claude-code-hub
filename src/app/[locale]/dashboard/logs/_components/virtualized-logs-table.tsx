@@ -123,6 +123,7 @@ export function VirtualizedLogsTable({
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
       refetchInterval: shouldPoll ? autoRefreshIntervalMs : false,
+      maxPages: 5,
     });
 
   // Flatten all pages into a single array

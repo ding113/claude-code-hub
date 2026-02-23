@@ -100,6 +100,11 @@ async function fetchLeaderboard(scope: "user" | "provider" | "model"): Promise<L
   }));
 }
 
+function formatResponseTime(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 /**
  * Calculate percentage change between current and previous values
  */
@@ -187,11 +192,6 @@ export function DashboardBento({
     yesterdaySamePeriodCost: 0,
     yesterdaySamePeriodAvgResponseTime: 0,
     recentMinuteRequests: 0,
-  };
-
-  const formatResponseTime = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
   };
 
   // Calculate comparisons
