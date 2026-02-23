@@ -9,18 +9,20 @@ interface AppProvidersProps {
   children: ReactNode;
 }
 
+export const QUERY_CLIENT_DEFAULTS = {
+  queries: {
+    gcTime: 2 * 60 * 1000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false,
+  },
+};
+
 export function AppProviders({ children }: AppProvidersProps) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
-        defaultOptions: {
-          queries: {
-            gcTime: 2 * 60 * 1000,
-            staleTime: 30_000,
-            refetchOnWindowFocus: false,
-            refetchIntervalInBackground: false,
-          },
-        },
+        defaultOptions: QUERY_CLIENT_DEFAULTS,
       })
   );
 

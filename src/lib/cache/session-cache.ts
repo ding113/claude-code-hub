@@ -123,7 +123,7 @@ export function clearActiveSessionsCache() {
   activeSessionsCache.delete("active_sessions");
 }
 
-export function clearAllSessionsCache() {
+export function clearAllSessionsQueryCache() {
   activeSessionsCache.delete("all_sessions");
 }
 
@@ -131,7 +131,7 @@ export function clearSessionDetailsCache(sessionId: string) {
   sessionDetailsCache.delete(sessionId);
 }
 
-export function clearAllSessionCache() {
+export function clearAllCaches() {
   activeSessionsCache.clear();
   sessionDetailsCache.clear();
 }

@@ -9,18 +9,12 @@ import { describe, expect, test } from "vitest";
  * we test the configuration by constructing a QueryClient with the same options.
  */
 
+import { QUERY_CLIENT_DEFAULTS } from "@/app/providers";
 import { QueryClient } from "@tanstack/react-query";
 
 function createQueryClientWithDefaults(): QueryClient {
   return new QueryClient({
-    defaultOptions: {
-      queries: {
-        gcTime: 2 * 60 * 1000,
-        staleTime: 30_000,
-        refetchOnWindowFocus: false,
-        refetchIntervalInBackground: false,
-      },
-    },
+    defaultOptions: QUERY_CLIENT_DEFAULTS,
   });
 }
 

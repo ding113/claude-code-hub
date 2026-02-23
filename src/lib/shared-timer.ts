@@ -4,13 +4,21 @@ type Listener = () => void;
 
 const DEFAULT_INTERVAL_MS = 10_000;
 
-let listeners = new Set<Listener>();
-let intervalId: ReturnType<typeof setInterval> | null = null;
+// Store state on globalThis so it survives HMR (module-level variables
+// get re-initialised on hot reload, orphaning any running setInterval).
+const timerState = globalThis as unknown as {
+  __CCH_SHARED_TIMER_LISTENERS__?: Set<Listener>;
+  __CCH_SHARED_TIMER_INTERVAL_ID__?: ReturnType<typeof setInterval> | null;
+};
+
+if (!timerState.__CCH_SHARED_TIMER_LISTENERS__) {
+  timerState.__CCH_SHARED_TIMER_LISTENERS__ = new Set();
+}
 
 function startIfNeeded(): void {
-  if (intervalId !== null) return;
-  intervalId = setInterval(() => {
-    for (const listener of listeners) {
+  if (timerState.__CCH_SHARED_TIMER_INTERVAL_ID__ != null) return;
+  timerState.__CCH_SHARED_TIMER_INTERVAL_ID__ = setInterval(() => {
+    for (const listener of timerState.__CCH_SHARED_TIMER_LISTENERS__!) {
       try {
         listener();
       } catch (err) {
@@ -21,9 +29,14 @@ function startIfNeeded(): void {
 }
 
 function stopIfEmpty(): void {
-  if (listeners.size > 0 || intervalId === null) return;
-  clearInterval(intervalId);
-  intervalId = null;
+  if (
+    timerState.__CCH_SHARED_TIMER_LISTENERS__!.size > 0 ||
+    timerState.__CCH_SHARED_TIMER_INTERVAL_ID__ == null
+  ) {
+    return;
+  }
+  clearInterval(timerState.__CCH_SHARED_TIMER_INTERVAL_ID__);
+  timerState.__CCH_SHARED_TIMER_INTERVAL_ID__ = null;
 }
 
 /**
@@ -32,29 +45,29 @@ function stopIfEmpty(): void {
  * Returns an unsubscribe function.
  */
 export function subscribeToTick(listener: Listener): () => void {
-  listeners.add(listener);
+  timerState.__CCH_SHARED_TIMER_LISTENERS__!.add(listener);
   startIfNeeded();
   return () => {
-    listeners.delete(listener);
+    timerState.__CCH_SHARED_TIMER_LISTENERS__!.delete(listener);
     stopIfEmpty();
   };
 }
 
 /** @internal Test-only: reset all state */
 export function _reset(): void {
-  if (intervalId !== null) {
-    clearInterval(intervalId);
-    intervalId = null;
+  if (timerState.__CCH_SHARED_TIMER_INTERVAL_ID__ != null) {
+    clearInterval(timerState.__CCH_SHARED_TIMER_INTERVAL_ID__);
+    timerState.__CCH_SHARED_TIMER_INTERVAL_ID__ = null;
   }
-  listeners = new Set();
+  timerState.__CCH_SHARED_TIMER_LISTENERS__ = new Set();
 }
 
 /** @internal Test-only: get subscriber count */
 export function _getListenerCount(): number {
-  return listeners.size;
+  return timerState.__CCH_SHARED_TIMER_LISTENERS__!.size;
 }
 
 /** @internal Test-only: check if timer is running */
 export function _isRunning(): boolean {
-  return intervalId !== null;
+  return timerState.__CCH_SHARED_TIMER_INTERVAL_ID__ != null;
 }
