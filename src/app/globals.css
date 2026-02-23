@@ -135,6 +135,11 @@
     display: none;
   }
 
+  /* iOS 安全区：避免底部固定导航被 Home Indicator 挡住 */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   /* 新增记录高亮动画 */
   @keyframes highlight-flash {
     0% {

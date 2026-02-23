@@ -42,6 +42,10 @@ export function FormTabNav({
     }
   };
 
+  const activeTabIndex = TAB_CONFIG.findIndex((tab) => tab.id === activeTab);
+  const stepNumber = activeTabIndex >= 0 ? activeTabIndex + 1 : 0;
+  const stepProgressWidth = `${(stepNumber / TAB_CONFIG.length) * 100}%`;
+
   if (layout === "horizontal") {
     return (
       <nav className="sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md shrink-0">
@@ -263,10 +267,8 @@ export function FormTabNav({
         <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted">
           <motion.div
             className="h-full bg-primary"
-            initial={{ width: "20%" }}
-            animate={{
-              width: `${((TAB_CONFIG.findIndex((t) => t.id === activeTab) + 1) / TAB_CONFIG.length) * 100}%`,
-            }}
+            initial={{ width: stepProgressWidth }}
+            animate={{ width: stepProgressWidth }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           />
         </div>
