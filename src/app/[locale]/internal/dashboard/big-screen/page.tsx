@@ -606,7 +606,7 @@ const TrafficTrend = ({
               }}
               itemStyle={{ color: "#fff" }}
               labelFormatter={(value) => `${value}:00`}
-              formatter={(value) => [`${value ?? 0} 请求`, "数量"]}
+              formatter={(value) => [`${value ?? 0} ${t("chart.requestUnit")}`, t("chart.countLabel")]}
             />
             <Area
               type="monotone"
@@ -815,7 +815,7 @@ export default function BigScreenPage() {
               <button
                 onClick={handleLocaleSwitch}
                 className={`p-1.5 rounded hover:bg-white/5 ${theme.text} flex items-center gap-1.5 transition-colors`}
-                title={`当前: ${localeLabels[currentLocale]} (点击切��)`}
+                title={t("chart.switchLocale", { locale: localeLabels[currentLocale] })}
               >
                 <Globe size={18} />
                 <span className="text-[10px] font-mono uppercase">

@@ -476,7 +476,7 @@ function UsageLogsViewContent({
               hideStatusBar={true}
               hideScrollToTop={true}
               hiddenColumns={hideProviderColumn ? ["provider"] : undefined}
-              bodyClassName="h-[calc(var(--cch-viewport-height,100vh)-56px-32px-40px)]"
+              bodyClassName="h-[calc(var(--cch-viewport-height,100vh)_-_56px_-_32px_-_40px)]"
             />
           </div>
         </div>

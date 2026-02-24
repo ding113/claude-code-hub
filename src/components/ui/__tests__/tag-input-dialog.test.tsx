@@ -117,7 +117,7 @@ describe("TagInput inside Dialog", () => {
     expect(first).not.toBeNull();
 
     await act(async () => {
-      first?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      first?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
@@ -125,7 +125,7 @@ describe("TagInput inside Dialog", () => {
     expect(second).not.toBeNull();
 
     await act(async () => {
-      second?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      second?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 

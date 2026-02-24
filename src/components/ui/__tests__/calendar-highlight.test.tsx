@@ -76,7 +76,7 @@ describe("Calendar highlight classes", () => {
     const calendar = container.querySelector('[data-slot="calendar"]');
     expect(calendar).not.toBeNull();
 
-    // Find range start button - should exist since we selected a range starting today
+    // Find range start button - should exist since we selected a range starting on day 10 of the current month
     const rangeStartButton = container.querySelector('[data-range-start="true"]');
     expect(rangeStartButton).not.toBeNull();
 
@@ -126,7 +126,7 @@ describe("Calendar highlight classes", () => {
     const calendar = container.querySelector('[data-slot="calendar"]');
     expect(calendar).not.toBeNull();
 
-    // Find range end button - should exist since we selected a range ending 5 days from now
+    // Find range end button - should exist since we selected a range ending on day 15 of the current month
     const rangeEndButton = container.querySelector('[data-range-end="true"]');
     expect(rangeEndButton).not.toBeNull();
 

@@ -32,5 +32,10 @@
   "status": {
     "normal": "系统正常",
     "lastUpdate": "数据更新"
+  },
+  "chart": {
+    "requestUnit": "请求",
+    "countLabel": "数量",
+    "switchLocale": "切换语言: {locale}"
   }
 }

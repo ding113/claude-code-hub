@@ -81,7 +81,7 @@ export default async function RootLayout({
         <NextIntlClientProvider messages={messages} timeZone={timeZone} now={now}>
           <AppProviders>
             <div className="flex min-h-[var(--cch-viewport-height,100vh)] flex-col bg-background text-foreground">
-              <main className="flex-1">{children}</main>
+              <div className="flex-1">{children}</div>
               <Footer />
             </div>
             <Toaster />
