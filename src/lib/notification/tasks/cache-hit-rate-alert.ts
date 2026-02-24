@@ -31,8 +31,7 @@ function parseNumber(input: string | null | undefined, fallback: number): number
 
 function parseIntNumber(input: number | null | undefined, fallback: number): number {
   if (input === null || input === undefined) return fallback;
-  const value = Number(input);
-  return Number.isFinite(value) ? Math.trunc(value) : fallback;
+  return Number.isFinite(input) ? Math.trunc(input) : fallback;
 }
 
 function resolveWindowMode(
@@ -93,7 +92,7 @@ function toDecisionMetric(
   };
 }
 
-async function getStartOfToday(timezone: string, now: Date): Promise<Date> {
+function getStartOfToday(timezone: string, now: Date): Date {
   const zonedNow = toZonedTime(now, timezone);
   const zonedStart = startOfDay(zonedNow);
   return fromZonedTime(zonedStart, timezone);
@@ -132,7 +131,7 @@ export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAl
   const prevEnd = currentStart;
 
   const timezone = await resolveSystemTimezone();
-  const todayStart = await getStartOfToday(timezone, now);
+  const todayStart = getStartOfToday(timezone, now);
   const historicalStartZoned = addDays(toZonedTime(todayStart, timezone), -lookbackDays);
   const historicalStart = fromZonedTime(historicalStartZoned, timezone);
   const historicalEnd = todayStart;
@@ -203,24 +202,28 @@ export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAl
   const suppressedKeys = new Set<string>();
 
   if (redis) {
-    for (const anomaly of anomalies) {
-      const key = buildCooldownKey({
+    const keys = anomalies.map((anomaly) =>
+      buildCooldownKey({
         providerId: anomaly.providerId,
         model: anomaly.model,
         windowMode: resolvedWindowMode,
-      });
-      try {
-        const cached = await redis.get(key);
-        if (cached) {
-          suppressedKeys.add(key);
+      })
+    );
+
+    try {
+      const values = await redis.mget(...keys);
+      for (let i = 0; i < keys.length; i++) {
+        if (values[i]) {
+          suppressedKeys.add(keys[i]);
         }
-      } catch (error) {
-        logger.warn({
-          action: "cache_hit_rate_alert_dedup_read_failed",
-          key,
-          error: error instanceof Error ? error.message : String(error),
-        });
       }
+    } catch (error) {
+      logger.warn({
+        action: "cache_hit_rate_alert_dedup_read_failed",
+        keysCount: keys.length,
+        windowMode: resolvedWindowMode,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -329,7 +332,21 @@ export async function commitCacheHitRateAlertCooldown(
   }
 
   try {
-    await pipeline.exec();
+    const results = await pipeline.exec();
+    if (!results) return;
+
+    for (let i = 0; i < results.length; i++) {
+      const [error] = results[i];
+      if (!error) continue;
+
+      logger.warn({
+        action: "cache_hit_rate_alert_dedup_write_failed",
+        key: keys[i],
+        keysCount: keys.length,
+        cooldownMinutes,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   } catch (error) {
     logger.warn({
       action: "cache_hit_rate_alert_dedup_write_failed",
