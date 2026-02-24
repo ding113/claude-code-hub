@@ -606,7 +606,10 @@ const TrafficTrend = ({
               }}
               itemStyle={{ color: "#fff" }}
               labelFormatter={(value) => `${value}:00`}
-              formatter={(value) => [`${value ?? 0} ${t("chart.requestUnit")}`, t("chart.countLabel")]}
+              formatter={(value) => [
+                `${value ?? 0} ${t("chart.requestUnit")}`,
+                t("chart.countLabel"),
+              ]}
             />
             <Area
               type="monotone"
