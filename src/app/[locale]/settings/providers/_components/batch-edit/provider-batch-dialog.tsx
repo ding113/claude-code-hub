@@ -119,7 +119,7 @@ function BatchEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] overflow-hidden flex flex-col">
         <ProviderFormProvider
           mode="batch"
           enableMultiProviderTypes={false}

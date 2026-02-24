@@ -32,5 +32,10 @@
   "status": {
     "normal": "System Normal",
     "lastUpdate": "Last Update"
+  },
+  "chart": {
+    "requestUnit": "requests",
+    "countLabel": "Count",
+    "switchLocale": "Switch language: {locale}"
   }
 }

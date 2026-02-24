@@ -1,6 +1,16 @@
 "use client";
 
-import { ChevronDown, ChevronRight, Info, Lightbulb } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Info,
+  Lightbulb,
+  type LucideIcon,
+  RefreshCw,
+  Shield,
+  Target,
+  Users,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -33,7 +43,7 @@ function useScenarios() {
   return [
     {
       title: t("scenario1Title"),
-      emoji: "🎯",
+      icon: Target,
       description: t("scenario1Desc"),
       steps: [
         {
@@ -67,7 +77,7 @@ function useScenarios() {
     },
     {
       title: t("scenario2Title"),
-      emoji: "👥",
+      icon: Users,
       description: t("scenario2Desc"),
       steps: [
         {
@@ -92,7 +102,7 @@ function useScenarios() {
     },
     {
       title: t("scenario3Title"),
-      emoji: "🛡️",
+      icon: Shield,
       description: t("scenario3Desc"),
       steps: [
         {
@@ -126,7 +136,7 @@ function useScenarios() {
     },
     {
       title: t("scenario4Title"),
-      emoji: "🔄",
+      icon: RefreshCw,
       description: t("scenario4Desc"),
       steps: [
         {
@@ -154,12 +164,12 @@ function useScenarios() {
 
 interface ScenarioCardProps {
   title: string;
-  emoji: string;
+  icon: LucideIcon;
   description: string;
   steps: ScenarioStep[];
 }
 
-function ScenarioCard({ title, emoji, description, steps }: ScenarioCardProps) {
+function ScenarioCard({ title, icon: Icon, description, steps }: ScenarioCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const t = useTranslations("settings.providers.guide");
 
@@ -168,7 +178,7 @@ function ScenarioCard({ title, emoji, description, steps }: ScenarioCardProps) {
       <CollapsibleTrigger asChild>
         <button className="flex items-center justify-between w-full p-4 hover:bg-muted/50 transition-colors cursor-pointer">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">{emoji}</span>
+            <Icon className="h-6 w-6 shrink-0 text-muted-foreground" />
             <div className="text-left">
               <h3 className="font-semibold text-base">{title}</h3>
               <p className="text-sm text-muted-foreground">{description}</p>
@@ -227,7 +237,7 @@ export function SchedulingRulesDialog() {
           {t("triggerButton")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[var(--cch-viewport-height-80)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <Lightbulb className="h-5 w-5 text-primary" />

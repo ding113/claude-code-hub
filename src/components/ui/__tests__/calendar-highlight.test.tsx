@@ -65,8 +65,9 @@ describe("Calendar highlight classes", () => {
 
   test("Calendar range_start className should use primary-based highlight", () => {
     const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 5);
+    startDate.setDate(10);
+    const endDate = new Date(startDate);
+    endDate.setDate(15);
 
     const { container, unmount } = render(
       <Calendar mode="range" selected={{ from: startDate, to: endDate }} />
@@ -75,7 +76,7 @@ describe("Calendar highlight classes", () => {
     const calendar = container.querySelector('[data-slot="calendar"]');
     expect(calendar).not.toBeNull();
 
-    // Find range start button - should exist since we selected a range starting today
+    // Find range start button - should exist since we selected a range starting on day 10 of the current month
     const rangeStartButton = container.querySelector('[data-range-start="true"]');
     expect(rangeStartButton).not.toBeNull();
 
@@ -89,8 +90,9 @@ describe("Calendar highlight classes", () => {
 
   test("Calendar range_middle className should use primary-based highlight", () => {
     const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 5);
+    startDate.setDate(10);
+    const endDate = new Date(startDate);
+    endDate.setDate(15);
 
     const { container, unmount } = render(
       <Calendar mode="range" selected={{ from: startDate, to: endDate }} />
@@ -113,8 +115,9 @@ describe("Calendar highlight classes", () => {
 
   test("Calendar range_end className should use primary-based highlight", () => {
     const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 5);
+    startDate.setDate(10);
+    const endDate = new Date(startDate);
+    endDate.setDate(15);
 
     const { container, unmount } = render(
       <Calendar mode="range" selected={{ from: startDate, to: endDate }} />
@@ -123,7 +126,7 @@ describe("Calendar highlight classes", () => {
     const calendar = container.querySelector('[data-slot="calendar"]');
     expect(calendar).not.toBeNull();
 
-    // Find range end button - should exist since we selected a range ending 5 days from now
+    // Find range end button - should exist since we selected a range ending on day 15 of the current month
     const rangeEndButton = container.querySelector('[data-range-end="true"]');
     expect(rangeEndButton).not.toBeNull();
 
@@ -137,8 +140,9 @@ describe("Calendar highlight classes", () => {
 
   test("CalendarDayButton should have primary-based highlight classes for range states", () => {
     const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + 5);
+    startDate.setDate(10);
+    const endDate = new Date(startDate);
+    endDate.setDate(15);
 
     const { container, unmount } = render(
       <Calendar mode="range" selected={{ from: startDate, to: endDate }} />

@@ -49,7 +49,7 @@ export function ThinkingBudgetEditor({
       <TooltipTrigger asChild>
         <div className="flex gap-2 items-center">
           <Select value={mode} onValueChange={handleModeChange} disabled={disabled}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className={mode === "inherit" ? "flex-1 min-w-0" : "w-40"}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

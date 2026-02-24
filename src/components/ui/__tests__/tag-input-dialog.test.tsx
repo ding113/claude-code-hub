@@ -94,6 +94,48 @@ describe("TagInput inside Dialog", () => {
     unmount();
   });
 
+  test("keeps suggestions open after selecting a suggestion", async () => {
+    const { unmount } = render(<DialogTagInput />);
+
+    const input = document.querySelector("input");
+    expect(input).not.toBeNull();
+
+    await act(async () => {
+      input?.focus();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    const dialogContent = document.querySelector('[data-slot="dialog-content"]');
+    expect(dialogContent).not.toBeNull();
+
+    const findSuggestion = (label: string) =>
+      Array.from(dialogContent?.querySelectorAll("button") ?? []).find(
+        (button) => button.textContent === label
+      );
+
+    const first = findSuggestion("Tag 1");
+    expect(first).not.toBeNull();
+
+    await act(async () => {
+      first?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const second = findSuggestion("Tag 2");
+    expect(second).not.toBeNull();
+
+    await act(async () => {
+      second?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const dialogContentAfterClicks = document.querySelector('[data-slot="dialog-content"]');
+    expect(dialogContentAfterClicks?.textContent).toContain("tag1");
+    expect(dialogContentAfterClicks?.textContent).toContain("tag2");
+
+    unmount();
+  });
+
   test("supports keyboard selection within dialog", async () => {
     const { container, unmount } = render(<DialogTagInput />);
 

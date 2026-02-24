@@ -112,7 +112,7 @@ export function ProviderBatchPreviewStep({
       </p>
 
       {/* Provider groups */}
-      <div className="max-h-[50vh] space-y-3 overflow-y-auto">
+      <div className="max-h-[var(--cch-viewport-height-50)] space-y-3 overflow-y-auto">
         {grouped.map((group) => {
           const excluded = excludedProviderIds.has(group.providerId);
           return (
@@ -148,8 +148,8 @@ export function ProviderBatchPreviewStep({
                     {row.status === "changed"
                       ? t("preview.fieldChanged", {
                           field: getFieldLabel(row.field),
-                          before: formatValue(row.before),
-                          after: formatValue(row.after),
+                          before: formatValue(row.before, t),
+                          after: formatValue(row.after, t),
                         })
                       : t("preview.fieldSkipped", {
                           field: getFieldLabel(row.field),
@@ -170,8 +170,8 @@ export function ProviderBatchPreviewStep({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return "null";
+function formatValue(value: unknown, t: (key: string) => string): string {
+  if (value === null || value === undefined) return t("preview.nullValue");
   if (typeof value === "boolean") return String(value);
   if (typeof value === "number") return String(value);
   if (typeof value === "string") return value;

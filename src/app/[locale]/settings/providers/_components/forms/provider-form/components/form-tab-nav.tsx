@@ -42,6 +42,10 @@ export function FormTabNav({
     }
   };
 
+  const activeTabIndex = TAB_CONFIG.findIndex((tab) => tab.id === activeTab);
+  const stepNumber = activeTabIndex >= 0 ? activeTabIndex + 1 : 0;
+  const stepProgressWidth = `${(stepNumber / TAB_CONFIG.length) * 100}%`;
+
   if (layout === "horizontal") {
     return (
       <nav className="sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md shrink-0">
@@ -211,7 +215,7 @@ export function FormTabNav({
       </nav>
 
       {/* Mobile: Bottom Navigation */}
-      <nav className="flex md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
+      <nav className="flex md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
         <div className="flex items-center justify-around w-full px-2 py-1">
           {TAB_CONFIG.map((tab) => {
             const Icon = tab.icon;
@@ -260,13 +264,18 @@ export function FormTabNav({
           })}
         </div>
         {/* Step indicator */}
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted">
+        <div
+          className="absolute top-0 left-0 right-0 h-0.5 bg-muted"
+          role="progressbar"
+          aria-valuenow={stepNumber}
+          aria-valuemin={0}
+          aria-valuemax={TAB_CONFIG.length}
+          aria-label={t("tabs.stepProgress")}
+        >
           <motion.div
             className="h-full bg-primary"
-            initial={{ width: "20%" }}
-            animate={{
-              width: `${((TAB_CONFIG.findIndex((t) => t.id === activeTab) + 1) / TAB_CONFIG.length) * 100}%`,
-            }}
+            initial={false}
+            animate={{ width: stepProgressWidth }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           />
         </div>

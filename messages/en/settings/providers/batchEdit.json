@@ -64,6 +64,7 @@
     "description": "Review changes before applying to {count} providers",
     "providerHeader": "{name}",
     "fieldChanged": "{field}: {before} -> {after}",
+    "nullValue": "null",
     "fieldSkipped": "{field}: Skipped ({reason})",
     "excludeProvider": "Exclude",
     "summary": "{providerCount} providers, {fieldCount} changes, {skipCount} skipped",

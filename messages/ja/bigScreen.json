@@ -32,5 +32,10 @@
   "status": {
     "normal": "システム正常",
     "lastUpdate": "データ更新"
+  },
+  "chart": {
+    "requestUnit": "リクエスト",
+    "countLabel": "件数",
+    "switchLocale": "言語を切り替え: {locale}"
   }
 }

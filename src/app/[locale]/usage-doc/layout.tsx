@@ -42,7 +42,7 @@ export default async function UsageDocLayout({
   const [session, t] = await Promise.all([getSession(), getUsageTranslations(locale)]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
       {/* 条件渲染头部：已登录显示 DashboardHeader，未登录显示简化版头部 */}
       {session ? (
         <DashboardHeader session={session} />

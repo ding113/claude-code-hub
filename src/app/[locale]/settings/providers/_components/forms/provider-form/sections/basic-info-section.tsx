@@ -85,7 +85,7 @@ export function BasicInfoSection({ autoUrlPending, endpointPool }: BasicInfoSect
                   })
                 }
               >
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

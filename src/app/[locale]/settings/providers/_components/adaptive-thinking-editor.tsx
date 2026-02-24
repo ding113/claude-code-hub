@@ -81,7 +81,7 @@ export function AdaptiveThinkingEditor({
                     }
                     disabled={disabled}
                   >
-                    <SelectTrigger className="w-40">
+                    <SelectTrigger className="flex-1 min-w-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -118,7 +118,7 @@ export function AdaptiveThinkingEditor({
                     }
                     disabled={disabled}
                   >
-                    <SelectTrigger className="w-40">
+                    <SelectTrigger className="flex-1 min-w-0">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

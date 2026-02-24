@@ -307,6 +307,9 @@
       "title": "モデル許可リスト"
     },
     "clientRestrictions": {
+      "toggleLabel": "クライアント制限を有効化",
+      "toggleDesc": "既定ではクライアントを制限しません。有効化すると許可/拒否リストを設定できます。",
+      "priorityNote": "拒否リストは許可リストより優先されます。",
       "allowedLabel": "許可クライアント",
       "allowedPlaceholder": "例: claude-code-cli",
       "blockedLabel": "ブロッククライアント",
