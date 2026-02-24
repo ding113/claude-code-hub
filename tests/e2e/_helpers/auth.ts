@@ -2,6 +2,78 @@ function resolveAppOrigin(apiBaseUrl: string): string {
   return apiBaseUrl.replace(/\/api\/actions\/?$/, "");
 }
 
+export function splitSetCookieHeader(combined: string): string[] {
+  const cookies: string[] = [];
+  let start = 0;
+  let inExpires = false;
+  let inQuotes = false;
+  let escapeNext = false;
+
+  function isExpiresStart(index: number): boolean {
+    if (combined.slice(index, index + 8).toLowerCase() !== "expires=") return false;
+    if (index === 0) return true;
+    const prev = combined[index - 1];
+    return prev === ";" || prev === " " || prev === "\t";
+  }
+
+  for (let i = 0; i < combined.length; i++) {
+    const ch = combined[i];
+
+    if (inQuotes) {
+      if (escapeNext) {
+        escapeNext = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escapeNext = true;
+        continue;
+      }
+      if (ch === '"') {
+        inQuotes = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    if (!inExpires && isExpiresStart(i)) {
+      inExpires = true;
+      i += 7;
+      continue;
+    }
+
+    if (inExpires && ch === ";") {
+      inExpires = false;
+      continue;
+    }
+
+    if (ch !== ",") continue;
+
+    const next = combined.slice(i + 1);
+    const looksLikeCookieStart = /^\s*[^;\s]+=/.test(next);
+    if (!looksLikeCookieStart) {
+      continue;
+    }
+
+    const part = combined.slice(start, i).trim();
+    if (part) {
+      cookies.push(part);
+    }
+    start = i + 1;
+    inExpires = false;
+  }
+
+  const last = combined.slice(start).trim();
+  if (last) {
+    cookies.push(last);
+  }
+
+  return cookies;
+}
+
 function getSetCookieHeaders(response: Response): string[] {
   const headersWithGetSetCookie = response.headers as unknown as {
     getSetCookie?: () => string[];
@@ -15,10 +87,7 @@ function getSetCookieHeaders(response: Response): string[] {
   const combined = response.headers.get("set-cookie");
   if (!combined) return [];
 
-  return combined
-    .split(/,(?=[^;]+?=)/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return splitSetCookieHeader(combined);
 }
 
 function extractCookieValue(setCookieHeader: string, cookieName: string): string | null {
@@ -42,6 +111,21 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function shouldRetryFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const cause = (error as { cause?: unknown }).cause;
+  if (cause && typeof cause === "object") {
+    const code = (cause as { code?: unknown }).code;
+    if (typeof code === "string") {
+      return ["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND"].includes(code);
+    }
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("fetch failed") || message.includes("network");
+}
+
 export async function loginAndGetAuthToken(apiBaseUrl: string, key: string): Promise<string> {
   const origin = resolveAppOrigin(apiBaseUrl);
 
@@ -59,6 +143,9 @@ export async function loginAndGetAuthToken(apiBaseUrl: string, key: string): Pro
       });
     } catch (error) {
       lastError = error;
+      if (!shouldRetryFetchError(error)) {
+        break;
+      }
       if (attempt >= maxAttempts) {
         break;
       }
