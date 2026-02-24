@@ -119,7 +119,6 @@ function shouldRetryFetchError(error: unknown): boolean {
     "ECONNRESET",
     "ETIMEDOUT",
     "EAI_AGAIN",
-    "ENOTFOUND",
     "UND_ERR_CONNECT_TIMEOUT",
     "UND_ERR_HEADERS_TIMEOUT",
     "UND_ERR_BODY_TIMEOUT",
@@ -127,17 +126,21 @@ function shouldRetryFetchError(error: unknown): boolean {
   ]);
 
   const errorWithCause = error as { cause?: unknown; code?: unknown };
-  const maybeCodes: unknown[] = [errorWithCause.code];
+  const maybeCodes: string[] = [];
+  if (typeof errorWithCause.code === "string") {
+    maybeCodes.push(errorWithCause.code);
+  }
 
   const cause = errorWithCause.cause;
   if (cause && typeof cause === "object") {
-    maybeCodes.push((cause as { code?: unknown }).code);
+    const causeCode = (cause as { code?: unknown }).code;
+    if (typeof causeCode === "string") {
+      maybeCodes.push(causeCode);
+    }
   }
 
-  for (const code of maybeCodes) {
-    if (typeof code === "string" && retryCodes.has(code)) {
-      return true;
-    }
+  if (maybeCodes.length > 0) {
+    return maybeCodes.some((code) => retryCodes.has(code));
   }
 
   const message = error.message.toLowerCase();
