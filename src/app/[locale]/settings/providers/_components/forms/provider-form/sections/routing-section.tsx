@@ -547,7 +547,10 @@ export function RoutingSection() {
                           )}
                         </SelectContent>
                       </Select>
-                      <Info className="absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Info
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                      />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-xs">
