@@ -93,7 +93,13 @@ function toMetricMap(
     return map;
   }
 
-  return new Map([...input]);
+  const map = new Map<string, CacheHitRateAlertMetric>();
+  for (const [, item] of input) {
+    if (!item) continue;
+    if (!item.model || item.model.trim() === "") continue;
+    map.set(toCacheHitRateAlertMetricKey(item.providerId, item.model), item);
+  }
+  return map;
 }
 
 function pickSample(

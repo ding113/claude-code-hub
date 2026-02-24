@@ -144,6 +144,30 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies).toHaveLength(0);
   });
 
+  it("should filter invalid metrics in map inputs", () => {
+    const current = new Map<string, CacheHitRateAlertMetric>([
+      ["k1", metric({ providerId: 1, model: "", hitRateTokensEligible: 0 })],
+      ["k2", metric({ providerId: 2, model: "m", hitRateTokensEligible: 0 })],
+    ]);
+
+    const prev = new Map<string, CacheHitRateAlertMetric>([
+      ["k1", metric({ providerId: 1, model: "", hitRateTokensEligible: 0.2 })],
+      ["k2", metric({ providerId: 2, model: "m", hitRateTokensEligible: 0.2 })],
+    ]);
+
+    const anomalies = decideCacheHitRateAnomalies({
+      current,
+      prev,
+      today: new Map<string, CacheHitRateAlertMetric>(),
+      historical: new Map<string, CacheHitRateAlertMetric>(),
+      settings: { ...defaultSettings, dropAbs: 0.9, dropRel: 0.9 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].providerId).toBe(2);
+    expect(anomalies[0].model).toBe("m");
+  });
+
   it("should return empty when eligible and overall samples are insufficient", () => {
     const anomalies = decideCacheHitRateAnomalies({
       current: [
