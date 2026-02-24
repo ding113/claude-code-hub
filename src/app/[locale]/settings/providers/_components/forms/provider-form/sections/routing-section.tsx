@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { Info, Layers, Route, Scale, Settings, Timer } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { Badge } from "@/components/ui/badge";
@@ -90,11 +90,6 @@ export function RoutingSection() {
       dispatch({ type: "SET_BLOCKED_CLIENTS", payload: [] });
     }
   };
-
-  const getClientRestrictionPresetLabel = useCallback(
-    (presetValue: string) => t(`sections.routing.clientRestrictions.presetClients.${presetValue}`),
-    [t]
-  );
 
   return (
     <TooltipProvider>
@@ -279,12 +274,32 @@ export function RoutingSection() {
                   onBlockedChange={(next) =>
                     dispatch({ type: "SET_BLOCKED_CLIENTS", payload: next })
                   }
-                  allowedLabel={t("sections.routing.clientRestrictions.allowedLabel")}
-                  blockedLabel={t("sections.routing.clientRestrictions.blockedLabel")}
-                  allowedPlaceholder={t("sections.routing.clientRestrictions.allowedPlaceholder")}
-                  blockedPlaceholder={t("sections.routing.clientRestrictions.blockedPlaceholder")}
                   disabled={state.ui.isPending}
-                  getPresetLabel={getClientRestrictionPresetLabel}
+                  translations={{
+                    allowAction: t("sections.routing.clientRestrictions.allowAction"),
+                    blockAction: t("sections.routing.clientRestrictions.blockAction"),
+                    customAllowedLabel: t("sections.routing.clientRestrictions.customAllowedLabel"),
+                    customAllowedPlaceholder: t(
+                      "sections.routing.clientRestrictions.customAllowedPlaceholder"
+                    ),
+                    customBlockedLabel: t("sections.routing.clientRestrictions.customBlockedLabel"),
+                    customBlockedPlaceholder: t(
+                      "sections.routing.clientRestrictions.customBlockedPlaceholder"
+                    ),
+                    customHelp: t("sections.routing.clientRestrictions.customHelp"),
+                    presetClients: {
+                      "claude-code": t(
+                        "sections.routing.clientRestrictions.presetClients.claude-code"
+                      ),
+                      "gemini-cli": t(
+                        "sections.routing.clientRestrictions.presetClients.gemini-cli"
+                      ),
+                      "factory-cli": t(
+                        "sections.routing.clientRestrictions.presetClients.factory-cli"
+                      ),
+                      "codex-cli": t("sections.routing.clientRestrictions.presetClients.codex-cli"),
+                    },
+                  }}
                   onInvalidTag={(_tag, reason) => {
                     const messages: Record<string, string> = {
                       empty: tUI("emptyTag"),

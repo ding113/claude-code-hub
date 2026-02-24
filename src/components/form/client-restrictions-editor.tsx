@@ -1,77 +1,37 @@
 "use client";
 
 import { useMemo } from "react";
-import { TagInput, type TagInputSuggestion } from "@/components/ui/tag-input";
-import { CLIENT_RESTRICTION_PRESET_OPTIONS } from "@/lib/client-restrictions/client-presets";
+import { ArrayTagInputField } from "@/components/form/form-field";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  CLIENT_RESTRICTION_PRESET_OPTIONS,
+  isPresetSelected,
+  mergePresetAndCustomClients,
+  removePresetValues,
+  splitPresetAndCustomClients,
+  togglePresetSelection,
+} from "@/lib/client-restrictions/client-presets";
 import { cn } from "@/lib/utils";
-
-function uniqueOrdered(values: string[]): string[] {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const value of values) {
-    const trimmed = value.trim();
-    if (!trimmed) continue;
-    if (seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    result.push(trimmed);
-  }
-
-  return result;
-}
-
-interface ClientRestrictionListEditorProps {
-  label: string;
-  values: string[];
-  placeholder?: string;
-  disabled?: boolean;
-  suggestions: TagInputSuggestion[];
-  onChange: (next: string[]) => void;
-  onInvalidTag?: (tag: string, reason: string) => void;
-  className?: string;
-}
-
-function ClientRestrictionListEditor({
-  label,
-  values,
-  placeholder,
-  disabled,
-  suggestions,
-  onChange,
-  onInvalidTag,
-  className,
-}: ClientRestrictionListEditorProps) {
-  return (
-    <div className={cn("space-y-3", className)}>
-      <div className="text-sm font-medium text-foreground">{label}</div>
-      <TagInput
-        value={values}
-        onChange={onChange}
-        placeholder={placeholder}
-        maxTagLength={64}
-        maxTags={50}
-        disabled={disabled}
-        validateTag={() => true}
-        onInvalidTag={onInvalidTag}
-        suggestions={suggestions}
-      />
-    </div>
-  );
-}
 
 export interface ClientRestrictionsEditorProps {
   allowed: string[];
   blocked: string[];
   onAllowedChange: (next: string[]) => void;
   onBlockedChange: (next: string[]) => void;
-  allowedLabel: string;
-  blockedLabel: string;
-  allowedPlaceholder?: string;
-  blockedPlaceholder?: string;
   disabled?: boolean;
-  getPresetLabel: (presetValue: string) => string;
   onInvalidTag?: (tag: string, reason: string) => void;
   className?: string;
+  translations: {
+    allowAction: string;
+    blockAction: string;
+    customAllowedLabel: string;
+    customAllowedPlaceholder: string;
+    customBlockedLabel: string;
+    customBlockedPlaceholder: string;
+    customHelp: string;
+    presetClients: Record<string, string>;
+  };
 }
 
 export function ClientRestrictionsEditor({
@@ -79,65 +39,115 @@ export function ClientRestrictionsEditor({
   blocked,
   onAllowedChange,
   onBlockedChange,
-  allowedLabel,
-  blockedLabel,
-  allowedPlaceholder,
-  blockedPlaceholder,
   disabled,
-  getPresetLabel,
   onInvalidTag,
   className,
+  translations,
 }: ClientRestrictionsEditorProps) {
-  const suggestions: TagInputSuggestion[] = useMemo(
-    () =>
-      CLIENT_RESTRICTION_PRESET_OPTIONS.map((option) => ({
-        value: option.value,
-        label: getPresetLabel(option.value),
-        keywords: [...option.aliases],
-      })),
-    [getPresetLabel]
+  const { customValues: customAllowed } = useMemo(
+    () => splitPresetAndCustomClients(allowed),
+    [allowed]
   );
 
-  const handleAllowedChange = (next: string[]) => {
-    const nextAllowed = uniqueOrdered(next);
-    onAllowedChange(nextAllowed);
+  const { customValues: customBlocked } = useMemo(
+    () => splitPresetAndCustomClients(blocked),
+    [blocked]
+  );
 
-    const allowedSet = new Set(nextAllowed);
-    const nextBlocked = blocked.filter((value) => !allowedSet.has(value));
-    if (nextBlocked.length !== blocked.length) {
-      onBlockedChange(nextBlocked);
+  const handleAllowToggle = (presetValue: string, checked: boolean) => {
+    onAllowedChange(togglePresetSelection(allowed, presetValue, checked));
+    if (checked) {
+      onBlockedChange(removePresetValues(blocked, presetValue));
     }
   };
 
-  const handleBlockedChange = (next: string[]) => {
-    const nextBlocked = uniqueOrdered(next);
-    onBlockedChange(nextBlocked);
-
-    const blockedSet = new Set(nextBlocked);
-    const nextAllowed = allowed.filter((value) => !blockedSet.has(value));
-    if (nextAllowed.length !== allowed.length) {
-      onAllowedChange(nextAllowed);
+  const handleBlockToggle = (presetValue: string, checked: boolean) => {
+    onBlockedChange(togglePresetSelection(blocked, presetValue, checked));
+    if (checked) {
+      onAllowedChange(removePresetValues(allowed, presetValue));
     }
+  };
+
+  const handleCustomAllowedChange = (newCustom: string[]) => {
+    onAllowedChange(mergePresetAndCustomClients(allowed, newCustom));
+  };
+
+  const handleCustomBlockedChange = (newCustom: string[]) => {
+    onBlockedChange(mergePresetAndCustomClients(blocked, newCustom));
+  };
+
+  const renderPresetRow = (value: string) => {
+    const isAllowed = isPresetSelected(allowed, value);
+    const isBlocked = isPresetSelected(blocked, value);
+    const displayLabel = translations.presetClients[value] ?? value;
+
+    return (
+      <div key={value} className="flex items-center gap-4 py-1">
+        <span className="text-sm flex-1 text-foreground">{displayLabel}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Checkbox
+              id={`allow-${value}`}
+              checked={isAllowed}
+              onCheckedChange={(checked) => handleAllowToggle(value, checked === true)}
+              disabled={disabled}
+            />
+            <Label
+              htmlFor={`allow-${value}`}
+              className="text-xs font-normal cursor-pointer text-muted-foreground"
+            >
+              {translations.allowAction}
+            </Label>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Checkbox
+              id={`block-${value}`}
+              checked={isBlocked}
+              onCheckedChange={(checked) => handleBlockToggle(value, checked === true)}
+              disabled={disabled}
+            />
+            <Label
+              htmlFor={`block-${value}`}
+              className="text-xs font-normal cursor-pointer text-muted-foreground"
+            >
+              {translations.blockAction}
+            </Label>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2", className)}>
-      <ClientRestrictionListEditor
-        label={allowedLabel}
-        values={allowed}
-        placeholder={allowedPlaceholder}
+    <div className={cn("space-y-3", className)}>
+      {/* Preset client checkbox rows */}
+      <div className="space-y-0.5 border rounded-md p-2">
+        {CLIENT_RESTRICTION_PRESET_OPTIONS.map((client) => renderPresetRow(client.value))}
+      </div>
+
+      {/* Custom allowed patterns */}
+      <ArrayTagInputField
+        label={translations.customAllowedLabel}
+        description={translations.customHelp}
+        maxTagLength={64}
+        maxTags={50}
+        placeholder={translations.customAllowedPlaceholder}
+        value={customAllowed}
+        onChange={handleCustomAllowedChange}
         disabled={disabled}
-        suggestions={suggestions}
-        onChange={handleAllowedChange}
         onInvalidTag={onInvalidTag}
       />
-      <ClientRestrictionListEditor
-        label={blockedLabel}
-        values={blocked}
-        placeholder={blockedPlaceholder}
+
+      {/* Custom blocked patterns */}
+      <ArrayTagInputField
+        label={translations.customBlockedLabel}
+        description={translations.customHelp}
+        maxTagLength={64}
+        maxTags={50}
+        placeholder={translations.customBlockedPlaceholder}
+        value={customBlocked}
+        onChange={handleCustomBlockedChange}
         disabled={disabled}
-        suggestions={suggestions}
-        onChange={handleBlockedChange}
         onInvalidTag={onInvalidTag}
       />
     </div>
