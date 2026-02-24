@@ -306,6 +306,9 @@
       "title": "Model Allowlist"
     },
     "clientRestrictions": {
+      "toggleLabel": "Enable Client Restrictions",
+      "toggleDesc": "Clients are not restricted by default. Enable to configure allowlist/blocklist rules.",
+      "priorityNote": "Blocklist takes precedence over allowlist.",
       "allowedLabel": "Allowed Clients",
       "allowedPlaceholder": "e.g. claude-code-cli",
       "blockedLabel": "Blocked Clients",

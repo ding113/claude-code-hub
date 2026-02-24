@@ -64,9 +64,10 @@ describe("LoginPage Visual Regression", () => {
   it("renders key structural elements", async () => {
     await render();
 
-    const mainContainer = container.querySelector("div.min-h-screen");
+    const mainContainer = container.querySelector("div.bg-gradient-to-br");
     expect(mainContainer).not.toBeNull();
     const className = mainContainer?.className || "";
+    expect(className).toContain("min-h-[var(--cch-viewport-height,100vh)]");
     expect(className).toContain("bg-gradient-to");
 
     const langSwitcher = container.querySelector(".fixed.top-4.right-4");

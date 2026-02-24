@@ -94,8 +94,12 @@ describe("ThinkingBudgetEditor", () => {
 
     // No number input when inherit
     expect(container.querySelector('input[type="number"]')).toBeNull();
-    // No max-out button when inherit
-    expect(container.querySelector("button")).toBeNull();
+    // No max-out button when inherit (help button always exists)
+    const buttons = Array.from(container.querySelectorAll("button"));
+    expect(buttons.some((b) => b.textContent?.includes("maxOutButton"))).toBe(false);
+
+    // Help icon should exist
+    expect(container.querySelector('[data-testid="info-icon"]')).toBeTruthy();
 
     unmount();
   });
@@ -110,7 +114,9 @@ describe("ThinkingBudgetEditor", () => {
     expect(input).toBeTruthy();
     expect(input.value).toBe("15000");
 
-    const maxButton = container.querySelector("button");
+    const maxButton = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("maxOutButton")
+    );
     expect(maxButton).toBeTruthy();
     expect(maxButton?.textContent).toContain("maxOutButton");
 
@@ -159,7 +165,10 @@ describe("ThinkingBudgetEditor", () => {
       <ThinkingBudgetEditor {...defaultProps} value="10000" onChange={onChange} />
     );
 
-    const maxButton = container.querySelector("button") as HTMLButtonElement;
+    const maxButton = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("maxOutButton")
+    ) as HTMLButtonElement;
+    expect(maxButton).toBeTruthy();
 
     act(() => {
       maxButton.click();
@@ -225,7 +234,10 @@ describe("ThinkingBudgetEditor", () => {
     const input = container.querySelector('input[type="number"]') as HTMLInputElement;
     expect(input.disabled).toBe(true);
 
-    const maxButton = container.querySelector("button") as HTMLButtonElement;
+    const maxButton = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("maxOutButton")
+    ) as HTMLButtonElement;
+    expect(maxButton).toBeTruthy();
     expect(maxButton.disabled).toBe(true);
 
     unmount();

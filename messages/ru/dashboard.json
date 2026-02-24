@@ -785,6 +785,12 @@
   },
   "keyListHeader": {
     "todayUsage": "Использование сегодня",
+    "userStatus": {
+      "disabled": "Отключен",
+      "expired": "Истек",
+      "expiringSoon": "Скоро истечет",
+      "active": "Активен"
+    },
     "allowedModels": {
       "label": "Разрешённые модели",
       "noRestrictions": "Разрешённые модели: без ограничений"

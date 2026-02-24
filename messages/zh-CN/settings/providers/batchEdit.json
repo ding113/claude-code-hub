@@ -64,6 +64,7 @@
     "description": "将变更应用到 {count} 个供应商前请先确认",
     "providerHeader": "{name}",
     "fieldChanged": "{field}: {before} -> {after}",
+    "nullValue": "空",
     "fieldSkipped": "{field}: 已跳过 ({reason})",
     "excludeProvider": "排除",
     "summary": "{providerCount} 个供应商, {fieldCount} 项变更, {skipCount} 项跳过",

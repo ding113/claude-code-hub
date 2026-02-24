@@ -50,6 +50,9 @@
       "moreModels": "+{count} 更多"
     },
     "clientRestrictions": {
+      "toggleLabel": "启用客户端限制",
+      "toggleDesc": "默认不限制客户端。启用后可配置白名单/黑名单。",
+      "priorityNote": "黑名单优先级高于白名单。",
       "allowedLabel": "白名单客户端",
       "allowedPlaceholder": "例如 claude-code-cli",
       "blockedLabel": "黑名单客户端",

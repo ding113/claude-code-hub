@@ -782,6 +782,12 @@
   },
   "keyListHeader": {
     "todayUsage": "本日の使用量",
+    "userStatus": {
+      "disabled": "無効",
+      "expired": "期限切れ",
+      "expiringSoon": "まもなく期限切れ",
+      "active": "有効"
+    },
     "allowedModels": {
       "label": "許可モデル",
       "noRestrictions": "許可されたクライアント：制限なし"

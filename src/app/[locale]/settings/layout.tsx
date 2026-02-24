@@ -31,7 +31,7 @@ export default async function SettingsLayout({
   const translatedNavItems = await getTranslatedNavItems();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
       <DashboardHeader session={session} />
       <main className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 md:py-8 pb-24 md:pb-8">
         <div className="space-y-6">

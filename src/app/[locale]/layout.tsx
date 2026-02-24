@@ -80,7 +80,7 @@ export default async function RootLayout({
       <body className="antialiased">
         <NextIntlClientProvider messages={messages} timeZone={timeZone} now={now}>
           <AppProviders>
-            <div className="flex min-h-screen flex-col bg-background text-foreground">
+            <div className="flex min-h-[var(--cch-viewport-height,100vh)] flex-col bg-background text-foreground">
               <main className="flex-1">{children}</main>
               <Footer />
             </div>

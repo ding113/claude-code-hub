@@ -64,6 +64,7 @@
     "description": "Проверьте изменения перед применением к {count} поставщикам",
     "providerHeader": "{name}",
     "fieldChanged": "{field}: {before} -> {after}",
+    "nullValue": "null",
     "fieldSkipped": "{field}: Пропущено ({reason})",
     "excludeProvider": "Исключить",
     "summary": "{providerCount} поставщиков, {fieldCount} изменений, {skipCount} пропущено",

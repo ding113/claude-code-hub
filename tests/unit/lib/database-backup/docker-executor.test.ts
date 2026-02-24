@@ -5,19 +5,15 @@ const { mockSpawn, mockCreateReadStream } = vi.hoisted(() => ({
   mockCreateReadStream: vi.fn(() => ({ pipe: vi.fn(), on: vi.fn() })),
 }));
 
-vi.mock("node:child_process", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:child_process")>();
-  return { default: { ...actual, spawn: mockSpawn }, ...actual, spawn: mockSpawn };
-});
+vi.mock("node:child_process", () => ({
+  default: { spawn: mockSpawn },
+  spawn: mockSpawn,
+}));
 
-vi.mock("node:fs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:fs")>();
-  return {
-    default: { ...actual, createReadStream: mockCreateReadStream },
-    ...actual,
-    createReadStream: mockCreateReadStream,
-  };
-});
+vi.mock("node:fs", () => ({
+  default: { createReadStream: mockCreateReadStream },
+  createReadStream: mockCreateReadStream,
+}));
 
 vi.mock("@/drizzle/db", () => ({
   db: { execute: vi.fn() },

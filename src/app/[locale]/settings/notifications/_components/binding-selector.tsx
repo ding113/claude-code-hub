@@ -336,7 +336,7 @@ export function BindingSelector({ type, targets, bindings, onSave }: BindingSele
         open={templateDialogOpen}
         onOpenChange={(open) => (open ? setTemplateDialogOpen(true) : closeTemplateDialog())}
       >
-        <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-3xl max-h-[var(--cch-viewport-height-90)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t("notifications.bindings.templateOverrideTitle")}</DialogTitle>
           </DialogHeader>

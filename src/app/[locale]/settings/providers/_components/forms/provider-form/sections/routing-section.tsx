@@ -3,11 +3,11 @@
 import { motion } from "framer-motion";
 import { Info, Layers, Route, Scale, Settings, Timer } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -18,14 +18,6 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  CLIENT_RESTRICTION_PRESET_OPTIONS,
-  isPresetSelected,
-  mergePresetAndCustomClients,
-  removePresetValues,
-  splitPresetAndCustomClients,
-  togglePresetSelection,
-} from "@/lib/client-restrictions/client-presets";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type {
   CodexParallelToolCallsPreference,
@@ -81,42 +73,28 @@ export function RoutingSection() {
   const providerTypes: ProviderType[] = ["claude", "codex", "gemini", "openai-compatible"];
   const allowedClients = state.routing.allowedClients;
   const blockedClients = state.routing.blockedClients;
-  const { customValues: customAllowedClients } = splitPresetAndCustomClients(allowedClients);
-  const { customValues: customBlockedClients } = splitPresetAndCustomClients(blockedClients);
+  const hasAnyClientRestrictions = allowedClients.length > 0 || blockedClients.length > 0;
+  const [clientRestrictionsEnabled, setClientRestrictionsEnabled] = useState(
+    () => hasAnyClientRestrictions
+  );
 
-  const handleAllowToggle = (presetValue: string, checked: boolean) => {
-    const nextAllowed = togglePresetSelection(allowedClients, presetValue, checked);
-    dispatch({ type: "SET_ALLOWED_CLIENTS", payload: nextAllowed });
+  useEffect(() => {
+    if (!hasAnyClientRestrictions) return;
+    setClientRestrictionsEnabled(true);
+  }, [hasAnyClientRestrictions]);
 
-    if (checked) {
-      const nextBlocked = removePresetValues(blockedClients, presetValue);
-      dispatch({ type: "SET_BLOCKED_CLIENTS", payload: nextBlocked });
+  const handleClientRestrictionsEnabledChange = (enabled: boolean) => {
+    setClientRestrictionsEnabled(enabled);
+    if (!enabled) {
+      dispatch({ type: "SET_ALLOWED_CLIENTS", payload: [] });
+      dispatch({ type: "SET_BLOCKED_CLIENTS", payload: [] });
     }
   };
 
-  const handleBlockToggle = (presetValue: string, checked: boolean) => {
-    const nextBlocked = togglePresetSelection(blockedClients, presetValue, checked);
-    dispatch({ type: "SET_BLOCKED_CLIENTS", payload: nextBlocked });
-
-    if (checked) {
-      const nextAllowed = removePresetValues(allowedClients, presetValue);
-      dispatch({ type: "SET_ALLOWED_CLIENTS", payload: nextAllowed });
-    }
-  };
-
-  const handleCustomAllowedChange = (customValues: string[]) => {
-    dispatch({
-      type: "SET_ALLOWED_CLIENTS",
-      payload: mergePresetAndCustomClients(allowedClients, customValues),
-    });
-  };
-
-  const handleCustomBlockedChange = (customValues: string[]) => {
-    dispatch({
-      type: "SET_BLOCKED_CLIENTS",
-      payload: mergePresetAndCustomClients(blockedClients, customValues),
-    });
-  };
+  const getClientRestrictionPresetLabel = useCallback(
+    (presetValue: string) => t(`sections.routing.clientRestrictions.presetClients.${presetValue}`),
+    [t]
+  );
 
   return (
     <TooltipProvider>
@@ -223,129 +201,104 @@ export function RoutingSection() {
 
             {/* Allowed Models */}
             <FieldGroup label={t("sections.routing.modelWhitelist.label")}>
-              <ModelMultiSelect
-                providerType={state.routing.providerType}
-                selectedModels={state.routing.allowedModels}
-                onChange={(value: string[]) =>
-                  dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
-                }
-                disabled={state.ui.isPending}
-                providerUrl={state.basic.url}
-                apiKey={state.basic.key}
-                proxyUrl={state.network.proxyUrl}
-                proxyFallbackToDirect={state.network.proxyFallbackToDirect}
-                providerId={isEdit ? provider?.id : undefined}
-              />
-              {state.routing.allowedModels.length > 0 && (
-                <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md">
-                  {state.routing.allowedModels.slice(0, 5).map((model) => (
-                    <Badge key={model} variant="outline" className="font-mono text-xs">
-                      {model}
-                    </Badge>
-                  ))}
-                  {state.routing.allowedModels.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      {t("sections.routing.modelWhitelist.moreModels", {
-                        count: state.routing.allowedModels.length - 5,
-                      })}
-                    </Badge>
-                  )}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {state.routing.allowedModels.length === 0 ? (
-                  <span className="text-green-600">
-                    {t("sections.routing.modelWhitelist.allowAll")}
-                  </span>
-                ) : (
-                  <span>
-                    {t("sections.routing.modelWhitelist.selectedOnly", {
-                      count: state.routing.allowedModels.length,
-                    })}
-                  </span>
-                )}
-              </p>
-            </FieldGroup>
-          </div>
-
-          {/* Client Restrictions */}
-          <FieldGroup label={t("sections.routing.clientRestrictions.allowedLabel")}>
-            <div className="space-y-2 rounded-md border p-3">
-              {CLIENT_RESTRICTION_PRESET_OPTIONS.map((option) => {
-                const isAllowed = isPresetSelected(allowedClients, option.value);
-                const isBlocked = isPresetSelected(blockedClients, option.value);
-                return (
-                  <div key={option.value} className="flex items-center gap-4 py-1">
-                    <span className="flex-1 text-sm">
-                      {t(`sections.routing.clientRestrictions.presetClients.${option.value}`)}
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5">
-                        <Checkbox
-                          id={`provider-allow-${option.value}`}
-                          checked={isAllowed}
-                          disabled={state.ui.isPending}
-                          onCheckedChange={(checked) =>
-                            handleAllowToggle(option.value, checked === true)
-                          }
-                        />
-                        <Label
-                          htmlFor={`provider-allow-${option.value}`}
-                          className="cursor-pointer text-xs font-normal text-muted-foreground"
-                        >
-                          {t("sections.routing.clientRestrictions.allowAction")}
-                        </Label>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Checkbox
-                          id={`provider-block-${option.value}`}
-                          checked={isBlocked}
-                          disabled={state.ui.isPending}
-                          onCheckedChange={(checked) =>
-                            handleBlockToggle(option.value, checked === true)
-                          }
-                        />
-                        <Label
-                          htmlFor={`provider-block-${option.value}`}
-                          className="cursor-pointer text-xs font-normal text-muted-foreground"
-                        >
-                          {t("sections.routing.clientRestrictions.blockAction")}
-                        </Label>
-                      </div>
-                    </div>
+              <div className="space-y-2">
+                <ModelMultiSelect
+                  providerType={state.routing.providerType}
+                  selectedModels={state.routing.allowedModels}
+                  onChange={(value: string[]) =>
+                    dispatch({ type: "SET_ALLOWED_MODELS", payload: value })
+                  }
+                  disabled={state.ui.isPending}
+                  providerUrl={state.basic.url}
+                  apiKey={state.basic.key}
+                  proxyUrl={state.network.proxyUrl}
+                  proxyFallbackToDirect={state.network.proxyFallbackToDirect}
+                  providerId={isEdit ? provider?.id : undefined}
+                />
+                {state.routing.allowedModels.length > 0 && (
+                  <div className="flex flex-wrap gap-1 p-2 bg-muted/50 rounded-md">
+                    {state.routing.allowedModels.slice(0, 5).map((model) => (
+                      <Badge key={model} variant="outline" className="font-mono text-xs">
+                        {model}
+                      </Badge>
+                    ))}
+                    {state.routing.allowedModels.length > 5 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {t("sections.routing.modelWhitelist.moreModels", {
+                          count: state.routing.allowedModels.length - 5,
+                        })}
+                      </Badge>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          </FieldGroup>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {state.routing.allowedModels.length === 0 ? (
+                    <span className="text-green-600">
+                      {t("sections.routing.modelWhitelist.allowAll")}
+                    </span>
+                  ) : (
+                    <span>
+                      {t("sections.routing.modelWhitelist.selectedOnly", {
+                        count: state.routing.allowedModels.length,
+                      })}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </FieldGroup>
 
-          <FieldGroup label={t("sections.routing.clientRestrictions.customAllowedLabel")}>
-            <TagInput
-              value={customAllowedClients}
-              onChange={handleCustomAllowedChange}
-              placeholder={t("sections.routing.clientRestrictions.customAllowedPlaceholder")}
-              maxTagLength={64}
-              maxTags={50}
-              disabled={state.ui.isPending}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("sections.routing.clientRestrictions.customHelp")}
-            </p>
-          </FieldGroup>
+            <ToggleRow
+              icon={Info}
+              label={t("sections.routing.clientRestrictions.toggleLabel")}
+              description={t("sections.routing.clientRestrictions.toggleDesc")}
+            >
+              <Switch
+                checked={clientRestrictionsEnabled}
+                onCheckedChange={handleClientRestrictionsEnabledChange}
+                disabled={state.ui.isPending}
+              />
+            </ToggleRow>
 
-          <FieldGroup label={t("sections.routing.clientRestrictions.customBlockedLabel")}>
-            <TagInput
-              value={customBlockedClients}
-              onChange={handleCustomBlockedChange}
-              placeholder={t("sections.routing.clientRestrictions.customBlockedPlaceholder")}
-              maxTagLength={64}
-              maxTags={50}
-              disabled={state.ui.isPending}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {t("sections.routing.clientRestrictions.customHelp")}
-            </p>
-          </FieldGroup>
+            {clientRestrictionsEnabled && (
+              <div className="space-y-3">
+                <div className="space-y-1 rounded-md border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.routing.clientRestrictions.priorityNote")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.routing.clientRestrictions.customHelp")}
+                  </p>
+                </div>
+
+                <ClientRestrictionsEditor
+                  allowed={allowedClients}
+                  blocked={blockedClients}
+                  onAllowedChange={(next) =>
+                    dispatch({ type: "SET_ALLOWED_CLIENTS", payload: next })
+                  }
+                  onBlockedChange={(next) =>
+                    dispatch({ type: "SET_BLOCKED_CLIENTS", payload: next })
+                  }
+                  allowedLabel={t("sections.routing.clientRestrictions.allowedLabel")}
+                  blockedLabel={t("sections.routing.clientRestrictions.blockedLabel")}
+                  allowedPlaceholder={t("sections.routing.clientRestrictions.allowedPlaceholder")}
+                  blockedPlaceholder={t("sections.routing.clientRestrictions.blockedPlaceholder")}
+                  disabled={state.ui.isPending}
+                  getPresetLabel={getClientRestrictionPresetLabel}
+                  onInvalidTag={(_tag, reason) => {
+                    const messages: Record<string, string> = {
+                      empty: tUI("emptyTag"),
+                      duplicate: tUI("duplicateTag"),
+                      too_long: tUI("tooLong", { max: 64 }),
+                      invalid_format: tUI("invalidFormat"),
+                      max_tags: tUI("maxTags"),
+                    };
+                    toast.error(messages[reason] || reason);
+                  }}
+                />
+              </div>
+            )}
+          </div>
         </SectionCard>
 
         {/* Scheduling Parameters */}
@@ -596,7 +549,10 @@ export function RoutingSection() {
                           )}
                         </SelectContent>
                       </Select>
-                      <Info className="absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Info
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                      />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="max-w-xs">
@@ -716,7 +672,13 @@ export function RoutingSection() {
                     }}
                     disabled={state.ui.isPending}
                   >
-                    <SelectTrigger className="w-40">
+                    <SelectTrigger
+                      className={
+                        state.routing.anthropicMaxTokensPreference === "inherit"
+                          ? "flex-1 min-w-0"
+                          : "w-40"
+                      }
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

@@ -337,7 +337,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
   }
 
   return (
-    <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[90vh] max-h-[90dvh] p-0 flex flex-col overflow-hidden">
+    <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[var(--cch-viewport-height-90)] p-0 flex flex-col overflow-hidden">
       <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <div className="flex items-center gap-2">
