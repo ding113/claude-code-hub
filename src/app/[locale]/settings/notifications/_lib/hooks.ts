@@ -134,17 +134,17 @@ function toClientSettings(raw: any): NotificationSettingsState {
     costAlertCheckInterval: Number(raw?.costAlertCheckInterval || 60),
     cacheHitRateAlertEnabled: Boolean(raw?.cacheHitRateAlertEnabled),
     cacheHitRateAlertWindowMode,
-    cacheHitRateAlertCheckInterval: Number(raw?.cacheHitRateAlertCheckInterval || 5),
+    cacheHitRateAlertCheckInterval: Number(raw?.cacheHitRateAlertCheckInterval ?? 5),
     cacheHitRateAlertHistoricalLookbackDays: Number(
-      raw?.cacheHitRateAlertHistoricalLookbackDays || 7
+      raw?.cacheHitRateAlertHistoricalLookbackDays ?? 7
     ),
-    cacheHitRateAlertMinEligibleRequests: Number(raw?.cacheHitRateAlertMinEligibleRequests || 20),
-    cacheHitRateAlertMinEligibleTokens: Number(raw?.cacheHitRateAlertMinEligibleTokens || 0),
-    cacheHitRateAlertAbsMin: parseFloat(raw?.cacheHitRateAlertAbsMin || "0.05"),
-    cacheHitRateAlertDropRel: parseFloat(raw?.cacheHitRateAlertDropRel || "0.3"),
-    cacheHitRateAlertDropAbs: parseFloat(raw?.cacheHitRateAlertDropAbs || "0.1"),
-    cacheHitRateAlertCooldownMinutes: Number(raw?.cacheHitRateAlertCooldownMinutes || 30),
-    cacheHitRateAlertTopN: Number(raw?.cacheHitRateAlertTopN || 10),
+    cacheHitRateAlertMinEligibleRequests: Number(raw?.cacheHitRateAlertMinEligibleRequests ?? 20),
+    cacheHitRateAlertMinEligibleTokens: Number(raw?.cacheHitRateAlertMinEligibleTokens ?? 0),
+    cacheHitRateAlertAbsMin: parseFloat(raw?.cacheHitRateAlertAbsMin ?? "0.05"),
+    cacheHitRateAlertDropRel: parseFloat(raw?.cacheHitRateAlertDropRel ?? "0.3"),
+    cacheHitRateAlertDropAbs: parseFloat(raw?.cacheHitRateAlertDropAbs ?? "0.1"),
+    cacheHitRateAlertCooldownMinutes: Number(raw?.cacheHitRateAlertCooldownMinutes ?? 30),
+    cacheHitRateAlertTopN: Number(raw?.cacheHitRateAlertTopN ?? 10),
   };
 }
 

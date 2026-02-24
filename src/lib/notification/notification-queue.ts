@@ -161,7 +161,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
       // 特殊：targets 模式下，缓存命中率告警使用 fan-out 作业避免重复计算
       if (type === "cache-hit-rate-alert" && !webhookUrl && !targetId) {
         const { getNotificationSettings } = await import("@/repository/notifications");
-        const settings = (await getNotificationSettings()) as any;
+        const settings = await getNotificationSettings();
 
         if (!settings.enabled || !settings.cacheHitRateAlertEnabled) {
           logger.info({
@@ -480,7 +480,7 @@ export async function scheduleNotifications() {
   try {
     // 动态导入以避免循环依赖
     const { getNotificationSettings } = await import("@/repository/notifications");
-    const settings = (await getNotificationSettings()) as any;
+    const settings = await getNotificationSettings();
 
     const queue = getNotificationQueue();
 

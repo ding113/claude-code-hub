@@ -100,7 +100,7 @@ async function getStartOfToday(timezone: string, now: Date): Promise<Date> {
 }
 
 export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAlertTaskResult | null> {
-  const settings = (await getNotificationSettings()) as any;
+  const settings = await getNotificationSettings();
 
   if (!settings.enabled || !settings.cacheHitRateAlertEnabled) {
     logger.info({ action: "cache_hit_rate_alert_disabled" });
