@@ -240,9 +240,7 @@ export function decideCacheHitRateAnomalies(
     }
 
     if (baselineValue > 0) {
-      const effDropAbs = baselineValue - currentValue;
-      const effDropRel = effDropAbs / baselineValue;
-      if (effDropAbs >= settings.dropAbs && effDropRel >= settings.dropRel) {
+      if (dropAbs >= settings.dropAbs && dropAbs / baselineValue >= settings.dropRel) {
         triggered.push("drop_abs_rel");
       }
     }
@@ -261,9 +259,9 @@ export function decideCacheHitRateAnomalies(
         key,
         providerId: currentMetric.providerId,
         model: currentMetric.model,
-        baselineSource: baselinePicked?.source ?? null,
+        baselineSource: baselinePicked.source,
         current: currentPicked.sample,
-        baseline: baselinePicked?.sample ?? null,
+        baseline: baselinePicked.sample,
         deltaAbs,
         deltaRel,
         dropAbs,

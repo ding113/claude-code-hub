@@ -27,7 +27,7 @@ function sqlToString(sqlObj: unknown): string {
         if (Object.hasOwn(anyNode, "value")) {
           const { value } = anyNode;
           if (Array.isArray(value)) {
-            return value.map(String).join("");
+            return value.map(walk).join("");
           }
           if (value === null || value === undefined) return "";
           return String(value);
@@ -125,5 +125,25 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
     expect(sqlText).toContain("WHEN 1 THEN 2");
     expect(sqlText).toContain("WHERE id IN (1) AND deleted_at IS NULL");
     expect(sqlText).toContain("RETURNING id");
+  });
+
+  test("propagates db.execute errors", async () => {
+    vi.resetModules();
+
+    const executeMock = vi.fn(async () => {
+      throw new Error("DB connection failed");
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        execute: executeMock,
+      },
+    }));
+
+    const { updateProviderPrioritiesBatch } = await import("@/repository/provider");
+
+    await expect(updateProviderPrioritiesBatch([{ id: 1, priority: 0 }])).rejects.toThrow(
+      "DB connection failed"
+    );
   });
 });
