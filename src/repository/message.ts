@@ -958,13 +958,14 @@ export async function findUsageLogs(params: {
     conditions.push(eq(messageRequest.userId, userId));
   }
 
-  if (startDate) {
-    const startIso = startDate.toISOString();
+  const startIso = startDate?.toISOString();
+  const endIso = endDate?.toISOString();
+
+  if (startIso) {
     conditions.push(sql`${messageRequest.createdAt} >= ${startIso}::timestamptz`);
   }
 
-  if (endDate) {
-    const endIso = endDate.toISOString();
+  if (endIso) {
     conditions.push(sql`${messageRequest.createdAt} <= ${endIso}::timestamptz`);
   }
 
@@ -1006,13 +1007,11 @@ export async function findUsageLogs(params: {
     ledgerConditions.push(eq(usageLedger.userId, userId));
   }
 
-  if (startDate) {
-    const startIso = startDate.toISOString();
+  if (startIso) {
     ledgerConditions.push(sql`${usageLedger.createdAt} >= ${startIso}::timestamptz`);
   }
 
-  if (endDate) {
-    const endIso = endDate.toISOString();
+  if (endIso) {
     ledgerConditions.push(sql`${usageLedger.createdAt} <= ${endIso}::timestamptz`);
   }
 
