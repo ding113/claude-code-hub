@@ -74,11 +74,13 @@ export function RoutingSection() {
   const allowedClients = state.routing.allowedClients;
   const blockedClients = state.routing.blockedClients;
   const hasAnyClientRestrictions = allowedClients.length > 0 || blockedClients.length > 0;
-  const [clientRestrictionsEnabled, setClientRestrictionsEnabled] =
-    useState(hasAnyClientRestrictions);
+  const [clientRestrictionsEnabled, setClientRestrictionsEnabled] = useState(
+    () => hasAnyClientRestrictions
+  );
 
   useEffect(() => {
-    setClientRestrictionsEnabled(hasAnyClientRestrictions);
+    if (!hasAnyClientRestrictions) return;
+    setClientRestrictionsEnabled(true);
   }, [hasAnyClientRestrictions]);
 
   const handleClientRestrictionsEnabledChange = (enabled: boolean) => {

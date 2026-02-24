@@ -114,16 +114,34 @@ async function sleep(ms: number): Promise<void> {
 function shouldRetryFetchError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
 
-  const cause = (error as { cause?: unknown }).cause;
+  const retryCodes = new Set([
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "EAI_AGAIN",
+    "ENOTFOUND",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "UND_ERR_HEADERS_TIMEOUT",
+    "UND_ERR_BODY_TIMEOUT",
+    "UND_ERR_SOCKET",
+  ]);
+
+  const errorWithCause = error as { cause?: unknown; code?: unknown };
+  const maybeCodes: unknown[] = [errorWithCause.code];
+
+  const cause = errorWithCause.cause;
   if (cause && typeof cause === "object") {
-    const code = (cause as { code?: unknown }).code;
-    if (typeof code === "string") {
-      return ["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EAI_AGAIN", "ENOTFOUND"].includes(code);
+    maybeCodes.push((cause as { code?: unknown }).code);
+  }
+
+  for (const code of maybeCodes) {
+    if (typeof code === "string" && retryCodes.has(code)) {
+      return true;
     }
   }
 
   const message = error.message.toLowerCase();
-  return message.includes("fetch failed") || message.includes("network");
+  return message.includes("fetch failed");
 }
 
 export async function loginAndGetAuthToken(apiBaseUrl: string, key: string): Promise<string> {
