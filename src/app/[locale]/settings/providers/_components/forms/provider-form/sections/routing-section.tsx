@@ -667,7 +667,13 @@ export function RoutingSection() {
                     }}
                     disabled={state.ui.isPending}
                   >
-                    <SelectTrigger className="w-40">
+                    <SelectTrigger
+                      className={
+                        state.routing.anthropicMaxTokensPreference === "inherit"
+                          ? "flex-1 min-w-0"
+                          : "w-40"
+                      }
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
