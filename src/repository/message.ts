@@ -959,11 +959,13 @@ export async function findUsageLogs(params: {
   }
 
   if (startDate) {
-    conditions.push(sql`${messageRequest.createdAt} >= ${startDate}`);
+    const startIso = startDate.toISOString();
+    conditions.push(sql`${messageRequest.createdAt} >= ${startIso}::timestamptz`);
   }
 
   if (endDate) {
-    conditions.push(sql`${messageRequest.createdAt} <= ${endDate}`);
+    const endIso = endDate.toISOString();
+    conditions.push(sql`${messageRequest.createdAt} <= ${endIso}::timestamptz`);
   }
 
   if (model) {
@@ -1005,11 +1007,13 @@ export async function findUsageLogs(params: {
   }
 
   if (startDate) {
-    ledgerConditions.push(sql`${usageLedger.createdAt} >= ${startDate}`);
+    const startIso = startDate.toISOString();
+    ledgerConditions.push(sql`${usageLedger.createdAt} >= ${startIso}::timestamptz`);
   }
 
   if (endDate) {
-    ledgerConditions.push(sql`${usageLedger.createdAt} <= ${endDate}`);
+    const endIso = endDate.toISOString();
+    ledgerConditions.push(sql`${usageLedger.createdAt} <= ${endIso}::timestamptz`);
   }
 
   if (model) {

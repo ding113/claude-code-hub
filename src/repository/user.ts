@@ -311,11 +311,15 @@ export async function findUserListBatch(
         const d = new Date(keyset.v);
         if (!Number.isNaN(d.getTime())) {
           const truncCol = sql`date_trunc('milliseconds', ${sortColumn})`;
+          // Pass ISO string with explicit cast instead of Date object to avoid
+          // postgres.js serialization error: bytes.js str() calls Buffer.byteLength()
+          // which rejects Date instances with "Received an instance of Date".
+          const dIso = d.toISOString();
           if (sortOrder === "asc") {
-            conditions.push(sql`(${truncCol}, ${users.id}) > (${d}, ${keyset.id})`);
+            conditions.push(sql`(${truncCol}, ${users.id}) > (${dIso}::timestamptz, ${keyset.id})`);
           } else {
             conditions.push(
-              sql`(${truncCol} < ${d} OR (${truncCol} = ${d} AND ${users.id} > ${keyset.id}))`
+              sql`(${truncCol} < ${dIso}::timestamptz OR (${truncCol} = ${dIso}::timestamptz AND ${users.id} > ${keyset.id}))`
             );
           }
         }
