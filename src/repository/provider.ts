@@ -896,12 +896,11 @@ export async function updateProviderPrioritiesBatch(
       ${priorityCol} = CASE id ${sql.join(cases, sql` `)} ELSE ${priorityCol} END,
       ${updatedAtCol} = NOW()
     WHERE id IN (${idList}) AND deleted_at IS NULL
+    RETURNING id
   `;
 
   const result = await db.execute(query);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Number((result as any).rowCount ?? (result as any).count ?? 0) || 0;
+  return Array.from(result).length;
 }
 
 export async function deleteProvider(id: number): Promise<boolean> {
