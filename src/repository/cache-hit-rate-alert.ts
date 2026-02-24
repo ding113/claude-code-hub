@@ -125,6 +125,11 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
     number | null
   >`EXTRACT(EPOCH FROM (${messageRequest.createdAt} - ${prev.createdAt}))::double precision`;
 
+  // 维护提示：这里的 ttlFallbackSecondsExpr 与 normalizeTtlFallbackSeconds() 内的 base 以及 ProviderType 强耦合。
+  // 如果 ProviderType 新增/调整类型，务必同时更新：
+  // - normalizeTtlFallbackSeconds() 的 base 默认映射
+  // - 本处 ttlFallbackSecondsExpr 的 CASE 分支
+  // 否则 TTL fallback 可能不一致，进而影响 eligible 口径判断。
   const ttlFallbackSecondsExpr = sql<number>`CASE
     WHEN ${providers.providerType} = 'claude' THEN ${ttlFallback.byType.claude}
     WHEN ${providers.providerType} = 'claude-auth' THEN ${ttlFallback.byType["claude-auth"]}

@@ -263,6 +263,60 @@ describe("Message Templates", () => {
       expect(sectionsStr).toContain("异常列表");
     });
 
+    it("should handle anomalies with null baseline", () => {
+      const data: CacheHitRateAlertData = {
+        window: {
+          mode: "5m",
+          startTime: "2026-02-24T00:00:00.000Z",
+          endTime: "2026-02-24T00:05:00.000Z",
+          durationMinutes: 5,
+        },
+        anomalies: [
+          {
+            providerId: 1,
+            providerName: "OpenAI",
+            providerType: "openai-compatible",
+            model: "gpt-4o",
+            baselineSource: null,
+            current: {
+              kind: "eligible",
+              requests: 100,
+              denominatorTokens: 10000,
+              hitRateTokens: 0.1,
+            },
+            baseline: null,
+            deltaAbs: null,
+            deltaRel: null,
+            dropAbs: null,
+            reasonCodes: ["abs_min"],
+          },
+        ],
+        suppressedCount: 0,
+        settings: {
+          windowMode: "auto",
+          checkIntervalMinutes: 5,
+          historicalLookbackDays: 7,
+          minEligibleRequests: 20,
+          minEligibleTokens: 0,
+          absMin: 0.05,
+          dropRel: 0.3,
+          dropAbs: 0.1,
+          cooldownMinutes: 30,
+          topN: 10,
+        },
+        generatedAt: "2026-02-24T00:05:00.000Z",
+      };
+
+      const message = buildCacheHitRateAlertMessage(data, "UTC");
+
+      expect(message.header.level).toBe("warning");
+      expect(message.timestamp).toBeInstanceOf(Date);
+
+      const sectionsStr = JSON.stringify(message.sections);
+      expect(sectionsStr).toContain("gpt-4o");
+      expect(sectionsStr).toContain("基线: 无");
+    });
+
     it("should handle empty anomalies", () => {
       const data: CacheHitRateAlertData = {
         window: {

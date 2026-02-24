@@ -87,6 +87,26 @@ export interface CacheHitRateAlertSample {
 
 export type CacheHitRateAlertBaselineSource = "historical" | "today" | "prev" | null;
 
+export const CACHE_HIT_RATE_ALERT_SETTINGS_WINDOW_MODES = [
+  "auto",
+  "5m",
+  "30m",
+  "1h",
+  "1.5h",
+] as const;
+
+export type CacheHitRateAlertSettingsWindowMode =
+  (typeof CACHE_HIT_RATE_ALERT_SETTINGS_WINDOW_MODES)[number];
+
+export function isCacheHitRateAlertSettingsWindowMode(
+  value: unknown
+): value is CacheHitRateAlertSettingsWindowMode {
+  return (
+    typeof value === "string" &&
+    (CACHE_HIT_RATE_ALERT_SETTINGS_WINDOW_MODES as readonly string[]).includes(value)
+  );
+}
+
 export interface CacheHitRateAlertAnomaly {
   providerId: number;
   providerName?: string;
@@ -112,7 +132,7 @@ export interface CacheHitRateAlertWindow {
 }
 
 export interface CacheHitRateAlertSettingsSnapshot {
-  windowMode: string;
+  windowMode: CacheHitRateAlertSettingsWindowMode;
   checkIntervalMinutes: number;
   historicalLookbackDays: number;
   minEligibleRequests: number;

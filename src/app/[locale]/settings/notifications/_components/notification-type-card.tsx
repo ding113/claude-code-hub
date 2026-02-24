@@ -7,6 +7,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { isCacheHitRateAlertSettingsWindowMode } from "@/lib/webhook/types";
 import type {
   ClientActionResult,
   NotificationBindingState,
@@ -292,9 +293,13 @@ export function NotificationTypeCard({
                     id="cacheHitRateAlertWindowMode"
                     value={settings.cacheHitRateAlertWindowMode}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
-                      onUpdateSettings({ cacheHitRateAlertWindowMode: e.target.value })
-                    }
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      if (!isCacheHitRateAlertSettingsWindowMode(nextValue)) {
+                        return;
+                      }
+                      onUpdateSettings({ cacheHitRateAlertWindowMode: nextValue });
+                    }}
                     className={cn(
                       "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                       "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",

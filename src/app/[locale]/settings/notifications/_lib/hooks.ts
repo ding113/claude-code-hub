@@ -13,6 +13,10 @@ import {
   testWebhookTargetAction,
   updateWebhookTargetAction,
 } from "@/actions/webhook-targets";
+import {
+  type CacheHitRateAlertSettingsWindowMode,
+  isCacheHitRateAlertSettingsWindowMode,
+} from "@/lib/webhook/types";
 import type { NotificationType, WebhookProviderType } from "./schemas";
 
 export interface ClientActionResult<T> {
@@ -37,7 +41,7 @@ export interface NotificationSettingsState {
   costAlertCheckInterval: number;
 
   cacheHitRateAlertEnabled: boolean;
-  cacheHitRateAlertWindowMode: string;
+  cacheHitRateAlertWindowMode: CacheHitRateAlertSettingsWindowMode;
   cacheHitRateAlertCheckInterval: number;
   cacheHitRateAlertHistoricalLookbackDays: number;
   cacheHitRateAlertMinEligibleRequests: number;
@@ -110,6 +114,12 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
 ];
 
 function toClientSettings(raw: any): NotificationSettingsState {
+  const cacheHitRateAlertWindowMode = isCacheHitRateAlertSettingsWindowMode(
+    raw?.cacheHitRateAlertWindowMode
+  )
+    ? raw.cacheHitRateAlertWindowMode
+    : "auto";
+
   return {
     enabled: Boolean(raw?.enabled),
     circuitBreakerEnabled: Boolean(raw?.circuitBreakerEnabled),
@@ -123,7 +133,7 @@ function toClientSettings(raw: any): NotificationSettingsState {
     costAlertThreshold: parseFloat(raw?.costAlertThreshold || "0.80"),
     costAlertCheckInterval: Number(raw?.costAlertCheckInterval || 60),
     cacheHitRateAlertEnabled: Boolean(raw?.cacheHitRateAlertEnabled),
-    cacheHitRateAlertWindowMode: raw?.cacheHitRateAlertWindowMode || "auto",
+    cacheHitRateAlertWindowMode,
     cacheHitRateAlertCheckInterval: Number(raw?.cacheHitRateAlertCheckInterval || 5),
     cacheHitRateAlertHistoricalLookbackDays: Number(
       raw?.cacheHitRateAlertHistoricalLookbackDays || 7

@@ -30,6 +30,18 @@ const defaultSettings: CacheHitRateAlertDecisionSettings = {
 };
 
 describe("decideCacheHitRateAnomalies", () => {
+  it("should return empty when topN is 0", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.2 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.5 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.01, topN: 0 },
+    });
+
+    expect(anomalies).toHaveLength(0);
+  });
+
   it("should prefer historical baseline over today/prev", () => {
     const anomalies = decideCacheHitRateAnomalies({
       current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.2 })],
@@ -132,6 +144,29 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies).toHaveLength(0);
   });
 
+  it("should return empty when eligible and overall samples are insufficient", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [
+        metric({
+          providerId: 1,
+          model: "m",
+          totalRequests: 1,
+          denominatorTokens: 10,
+          hitRateTokens: 0,
+          eligibleRequests: 1,
+          eligibleDenominatorTokens: 10,
+          hitRateTokensEligible: 0,
+        }),
+      ],
+      prev: [],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, minEligibleRequests: 20, minEligibleTokens: 1000 },
+    });
+
+    expect(anomalies).toHaveLength(0);
+  });
+
   it("should trigger drop_abs_rel when thresholds are met", () => {
     const anomalies = decideCacheHitRateAnomalies({
       current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.2 })],
@@ -146,7 +181,7 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies[0].dropAbs).toBeCloseTo(0.3, 10);
   });
 
-  it("should trigger abs_min only when baseline is also above absMin", () => {
+  it("should trigger abs_min when current is below absMin", () => {
     const shouldTrigger = decideCacheHitRateAnomalies({
       current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.03 })],
       prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.2 })],
@@ -159,7 +194,7 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(shouldTrigger[0].reasonCodes).toContain("abs_min");
 
     const shouldNotTrigger = decideCacheHitRateAnomalies({
-      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.03 })],
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.06 })],
       prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.04 })],
       today: [],
       historical: [],
@@ -167,6 +202,20 @@ describe("decideCacheHitRateAnomalies", () => {
     });
 
     expect(shouldNotTrigger).toHaveLength(0);
+  });
+
+  it("should set deltaRel to null when baseline hit rate is 0", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, dropAbs: 0.9, dropRel: 0.9 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].baseline?.hitRateTokens).toBe(0);
+    expect(anomalies[0].deltaRel).toBeNull();
   });
 
   it("should sort by severity and respect topN", () => {

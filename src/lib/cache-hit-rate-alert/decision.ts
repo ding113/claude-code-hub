@@ -235,7 +235,7 @@ export function decideCacheHitRateAnomalies(
 
     const triggered: string[] = [];
 
-    if (baselineValue >= settings.absMin && currentValue < settings.absMin) {
+    if (currentValue < settings.absMin) {
       triggered.push("abs_min");
     }
 

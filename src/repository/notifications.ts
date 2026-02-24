@@ -4,6 +4,10 @@ import { eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { notificationSettings } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
+import {
+  type CacheHitRateAlertSettingsWindowMode,
+  isCacheHitRateAlertSettingsWindowMode,
+} from "@/lib/webhook/types";
 
 /**
  * 通知设置类型
@@ -32,7 +36,7 @@ export interface NotificationSettings {
   // 缓存命中率异常告警配置（provider × model）
   cacheHitRateAlertEnabled: boolean;
   cacheHitRateAlertWebhook: string | null;
-  cacheHitRateAlertWindowMode: string | null;
+  cacheHitRateAlertWindowMode: CacheHitRateAlertSettingsWindowMode | null;
   cacheHitRateAlertCheckInterval: number | null;
   cacheHitRateAlertHistoricalLookbackDays: number | null;
   cacheHitRateAlertMinEligibleRequests: number | null;
@@ -69,7 +73,7 @@ export interface UpdateNotificationSettingsInput {
 
   cacheHitRateAlertEnabled?: boolean;
   cacheHitRateAlertWebhook?: string | null;
-  cacheHitRateAlertWindowMode?: string;
+  cacheHitRateAlertWindowMode?: CacheHitRateAlertSettingsWindowMode;
   cacheHitRateAlertCheckInterval?: number;
   cacheHitRateAlertHistoricalLookbackDays?: number;
   cacheHitRateAlertMinEligibleRequests?: number;
@@ -209,6 +213,14 @@ function isColumnMissingError(error: unknown, depth = 0): boolean {
   return false;
 }
 
+function normalizeCacheHitRateAlertWindowMode(
+  value: unknown
+): CacheHitRateAlertSettingsWindowMode | null {
+  if (value === null) return null;
+  if (isCacheHitRateAlertSettingsWindowMode(value)) return value;
+  return "auto";
+}
+
 /**
  * 创建默认通知设置
  */
@@ -258,6 +270,9 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
         ...settings,
         useLegacyMode: settings.useLegacyMode ?? false,
         cacheHitRateAlertEnabled: settings.cacheHitRateAlertEnabled ?? false,
+        cacheHitRateAlertWindowMode: normalizeCacheHitRateAlertWindowMode(
+          settings.cacheHitRateAlertWindowMode
+        ),
         createdAt: settings.createdAt ?? new Date(),
         updatedAt: settings.updatedAt ?? new Date(),
       };
@@ -295,6 +310,9 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
         ...created,
         useLegacyMode: created.useLegacyMode ?? false,
         cacheHitRateAlertEnabled: created.cacheHitRateAlertEnabled ?? false,
+        cacheHitRateAlertWindowMode: normalizeCacheHitRateAlertWindowMode(
+          created.cacheHitRateAlertWindowMode
+        ),
         createdAt: created.createdAt ?? new Date(),
         updatedAt: created.updatedAt ?? new Date(),
       };
@@ -311,6 +329,9 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
       ...fallback,
       useLegacyMode: fallback.useLegacyMode ?? false,
       cacheHitRateAlertEnabled: fallback.cacheHitRateAlertEnabled ?? false,
+      cacheHitRateAlertWindowMode: normalizeCacheHitRateAlertWindowMode(
+        fallback.cacheHitRateAlertWindowMode
+      ),
       createdAt: fallback.createdAt ?? new Date(),
       updatedAt: fallback.updatedAt ?? new Date(),
     };
@@ -393,7 +414,9 @@ export async function updateNotificationSettings(
       updates.cacheHitRateAlertWebhook = payload.cacheHitRateAlertWebhook;
     }
     if (payload.cacheHitRateAlertWindowMode !== undefined) {
-      updates.cacheHitRateAlertWindowMode = payload.cacheHitRateAlertWindowMode;
+      updates.cacheHitRateAlertWindowMode = normalizeCacheHitRateAlertWindowMode(
+        payload.cacheHitRateAlertWindowMode
+      );
     }
     if (payload.cacheHitRateAlertCheckInterval !== undefined) {
       updates.cacheHitRateAlertCheckInterval = payload.cacheHitRateAlertCheckInterval;
@@ -436,6 +459,9 @@ export async function updateNotificationSettings(
 
     return {
       ...updated,
+      cacheHitRateAlertWindowMode: normalizeCacheHitRateAlertWindowMode(
+        updated.cacheHitRateAlertWindowMode
+      ),
       createdAt: updated.createdAt ?? new Date(),
       updatedAt: updated.updatedAt ?? new Date(),
     };

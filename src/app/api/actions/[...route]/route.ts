@@ -1362,7 +1362,7 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
           .optional()
           .describe("缓存命中率异常告警 Webhook URL（旧版模式）"),
         cacheHitRateAlertWindowMode: z
-          .string()
+          .enum(["auto", "5m", "30m", "1h", "1.5h"])
           .optional()
           .describe("检测窗口模式（auto/5m/30m/1h/1.5h）"),
         cacheHitRateAlertCheckInterval: z
