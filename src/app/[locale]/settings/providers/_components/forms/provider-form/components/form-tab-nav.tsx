@@ -274,7 +274,7 @@ export function FormTabNav({
         >
           <motion.div
             className="h-full bg-primary"
-            initial={{ width: stepProgressWidth }}
+            initial={false}
             animate={{ width: stepProgressWidth }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           />
