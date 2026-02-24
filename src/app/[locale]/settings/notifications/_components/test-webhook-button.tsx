@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import type { WebhookNotificationType } from "@/lib/webhook/types";
 import type { NotificationType } from "../_lib/schemas";
 
 interface TestWebhookButtonProps {
@@ -22,7 +23,7 @@ interface TestWebhookButtonProps {
 
 export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookButtonProps) {
   const t = useTranslations("settings");
-  const [type, setType] = useState<NotificationType>("circuit_breaker");
+  const [type, setType] = useState<WebhookNotificationType>("circuit_breaker");
   const [isTesting, setIsTesting] = useState(false);
 
   const options = useMemo(
@@ -30,6 +31,7 @@ export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookBut
       { value: "circuit_breaker" as const, label: t("notifications.circuitBreaker.title") },
       { value: "daily_leaderboard" as const, label: t("notifications.dailyLeaderboard.title") },
       { value: "cost_alert" as const, label: t("notifications.costAlert.title") },
+      { value: "cache_hit_rate_alert" as const, label: t("notifications.cacheHitRateAlert.title") },
     ],
     [t]
   );
@@ -37,7 +39,7 @@ export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookBut
   const handleTest = async () => {
     setIsTesting(true);
     try {
-      await onTest(targetId, type);
+      await onTest(targetId, type as unknown as NotificationType);
     } finally {
       setIsTesting(false);
     }
@@ -47,7 +49,7 @@ export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookBut
     <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
       <Select
         value={type}
-        onValueChange={(v) => setType(v as NotificationType)}
+        onValueChange={(v) => setType(v as WebhookNotificationType)}
         disabled={disabled || isTesting}
       >
         <SelectTrigger

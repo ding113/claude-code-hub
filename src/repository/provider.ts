@@ -901,7 +901,7 @@ export async function updateProviderPrioritiesBatch(
   const result = await db.execute(query);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return Number((result as any).count) || 0;
+  return Number((result as any).rowCount ?? (result as any).count ?? 0) || 0;
 }
 
 export async function deleteProvider(id: number): Promise<boolean> {

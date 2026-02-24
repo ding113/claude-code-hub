@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { buildCacheHitRateAlertMessage } from "@/lib/webhook/templates/cache-hit-rate-alert";
 import { buildCircuitBreakerMessage } from "@/lib/webhook/templates/circuit-breaker";
 import { buildCostAlertMessage } from "@/lib/webhook/templates/cost-alert";
 import { buildDailyLeaderboardMessage } from "@/lib/webhook/templates/daily-leaderboard";
 import type {
+  CacheHitRateAlertData,
   CircuitBreakerAlertData,
   CostAlertData,
   DailyLeaderboardData,
@@ -194,6 +196,102 @@ describe("Message Templates", () => {
       expect(message.header.level).toBe("info");
       const sectionsStr = JSON.stringify(message.sections);
       expect(sectionsStr).toContain("暂无数据");
+    });
+  });
+
+  describe("buildCacheHitRateAlertMessage", () => {
+    it("should create structured message for cache hit rate alert", () => {
+      const data: CacheHitRateAlertData = {
+        window: {
+          mode: "5m",
+          startTime: "2026-02-24T00:00:00.000Z",
+          endTime: "2026-02-24T00:05:00.000Z",
+          durationMinutes: 5,
+        },
+        anomalies: [
+          {
+            providerId: 1,
+            providerName: "OpenAI",
+            providerType: "openai-compatible",
+            model: "gpt-4o",
+            baselineSource: "historical",
+            current: {
+              kind: "eligible",
+              requests: 100,
+              denominatorTokens: 10000,
+              hitRateTokens: 0.1,
+            },
+            baseline: {
+              kind: "eligible",
+              requests: 200,
+              denominatorTokens: 20000,
+              hitRateTokens: 0.5,
+            },
+            deltaAbs: -0.4,
+            deltaRel: -0.8,
+            dropAbs: 0.4,
+            reasonCodes: ["abs_min"],
+          },
+        ],
+        suppressedCount: 0,
+        settings: {
+          windowMode: "auto",
+          checkIntervalMinutes: 5,
+          historicalLookbackDays: 7,
+          minEligibleRequests: 20,
+          minEligibleTokens: 0,
+          absMin: 0.05,
+          dropRel: 0.3,
+          dropAbs: 0.1,
+          cooldownMinutes: 30,
+          topN: 10,
+        },
+        generatedAt: "2026-02-24T00:05:00.000Z",
+      };
+
+      const message = buildCacheHitRateAlertMessage(data, "UTC");
+
+      expect(message.header.level).toBe("warning");
+      expect(message.header.icon).toBe("[CACHE]");
+      expect(message.header.title).toContain("缓存命中率");
+      expect(message.timestamp).toBeInstanceOf(Date);
+
+      const sectionsStr = JSON.stringify(message.sections);
+      expect(sectionsStr).toContain("OpenAI");
+      expect(sectionsStr).toContain("gpt-4o");
+      expect(sectionsStr).toContain("5m");
+      expect(sectionsStr).toContain("异常列表");
+    });
+
+    it("should handle empty anomalies", () => {
+      const data: CacheHitRateAlertData = {
+        window: {
+          mode: "30m",
+          startTime: "2026-02-24T00:00:00.000Z",
+          endTime: "2026-02-24T00:30:00.000Z",
+          durationMinutes: 30,
+        },
+        anomalies: [],
+        suppressedCount: 2,
+        settings: {
+          windowMode: "30m",
+          checkIntervalMinutes: 5,
+          historicalLookbackDays: 7,
+          minEligibleRequests: 20,
+          minEligibleTokens: 0,
+          absMin: 0.05,
+          dropRel: 0.3,
+          dropAbs: 0.1,
+          cooldownMinutes: 30,
+          topN: 10,
+        },
+        generatedAt: "2026-02-24T00:30:00.000Z",
+      };
+
+      const message = buildCacheHitRateAlertMessage(data, "UTC");
+      const sectionsStr = JSON.stringify(message.sections);
+      expect(sectionsStr).toContain("未检测到异常");
+      expect(sectionsStr).not.toContain("异常列表");
     });
   });
 });

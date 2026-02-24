@@ -29,6 +29,20 @@ export interface NotificationSettings {
   costAlertThreshold: string | null; // numeric 类型作为 string
   costAlertCheckInterval: number | null;
 
+  // 缓存命中率异常告警配置（provider × model）
+  cacheHitRateAlertEnabled: boolean;
+  cacheHitRateAlertWebhook: string | null;
+  cacheHitRateAlertWindowMode: string | null;
+  cacheHitRateAlertCheckInterval: number | null;
+  cacheHitRateAlertHistoricalLookbackDays: number | null;
+  cacheHitRateAlertMinEligibleRequests: number | null;
+  cacheHitRateAlertMinEligibleTokens: number | null;
+  cacheHitRateAlertAbsMin: string | null; // numeric 类型作为 string
+  cacheHitRateAlertDropRel: string | null; // numeric 类型作为 string
+  cacheHitRateAlertDropAbs: string | null; // numeric 类型作为 string
+  cacheHitRateAlertCooldownMinutes: number | null;
+  cacheHitRateAlertTopN: number | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,6 +66,19 @@ export interface UpdateNotificationSettingsInput {
   costAlertWebhook?: string | null;
   costAlertThreshold?: string;
   costAlertCheckInterval?: number;
+
+  cacheHitRateAlertEnabled?: boolean;
+  cacheHitRateAlertWebhook?: string | null;
+  cacheHitRateAlertWindowMode?: string;
+  cacheHitRateAlertCheckInterval?: number;
+  cacheHitRateAlertHistoricalLookbackDays?: number;
+  cacheHitRateAlertMinEligibleRequests?: number;
+  cacheHitRateAlertMinEligibleTokens?: number;
+  cacheHitRateAlertAbsMin?: string;
+  cacheHitRateAlertDropRel?: string;
+  cacheHitRateAlertDropAbs?: string;
+  cacheHitRateAlertCooldownMinutes?: number;
+  cacheHitRateAlertTopN?: number;
 }
 
 /**
@@ -201,6 +228,19 @@ function createFallbackSettings(): NotificationSettings {
     costAlertWebhook: null,
     costAlertThreshold: "0.80",
     costAlertCheckInterval: 60,
+
+    cacheHitRateAlertEnabled: false,
+    cacheHitRateAlertWebhook: null,
+    cacheHitRateAlertWindowMode: "auto",
+    cacheHitRateAlertCheckInterval: 5,
+    cacheHitRateAlertHistoricalLookbackDays: 7,
+    cacheHitRateAlertMinEligibleRequests: 20,
+    cacheHitRateAlertMinEligibleTokens: 0,
+    cacheHitRateAlertAbsMin: "0.05",
+    cacheHitRateAlertDropRel: "0.3",
+    cacheHitRateAlertDropAbs: "0.1",
+    cacheHitRateAlertCooldownMinutes: 30,
+    cacheHitRateAlertTopN: 10,
     createdAt: now,
     updatedAt: now,
   };
@@ -217,6 +257,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
       return {
         ...settings,
         useLegacyMode: settings.useLegacyMode ?? false,
+        cacheHitRateAlertEnabled: settings.cacheHitRateAlertEnabled ?? false,
         createdAt: settings.createdAt ?? new Date(),
         updatedAt: settings.updatedAt ?? new Date(),
       };
@@ -234,6 +275,17 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
         costAlertEnabled: false,
         costAlertThreshold: "0.80",
         costAlertCheckInterval: 60,
+        cacheHitRateAlertEnabled: false,
+        cacheHitRateAlertWindowMode: "auto",
+        cacheHitRateAlertCheckInterval: 5,
+        cacheHitRateAlertHistoricalLookbackDays: 7,
+        cacheHitRateAlertMinEligibleRequests: 20,
+        cacheHitRateAlertMinEligibleTokens: 0,
+        cacheHitRateAlertAbsMin: "0.05",
+        cacheHitRateAlertDropRel: "0.3",
+        cacheHitRateAlertDropAbs: "0.1",
+        cacheHitRateAlertCooldownMinutes: 30,
+        cacheHitRateAlertTopN: 10,
       })
       .onConflictDoNothing()
       .returning();
@@ -242,6 +294,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
       return {
         ...created,
         useLegacyMode: created.useLegacyMode ?? false,
+        cacheHitRateAlertEnabled: created.cacheHitRateAlertEnabled ?? false,
         createdAt: created.createdAt ?? new Date(),
         updatedAt: created.updatedAt ?? new Date(),
       };
@@ -257,6 +310,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
     return {
       ...fallback,
       useLegacyMode: fallback.useLegacyMode ?? false,
+      cacheHitRateAlertEnabled: fallback.cacheHitRateAlertEnabled ?? false,
       createdAt: fallback.createdAt ?? new Date(),
       updatedAt: fallback.updatedAt ?? new Date(),
     };
@@ -329,6 +383,45 @@ export async function updateNotificationSettings(
     }
     if (payload.costAlertCheckInterval !== undefined) {
       updates.costAlertCheckInterval = payload.costAlertCheckInterval;
+    }
+
+    // 缓存命中率异常告警配置
+    if (payload.cacheHitRateAlertEnabled !== undefined) {
+      updates.cacheHitRateAlertEnabled = payload.cacheHitRateAlertEnabled;
+    }
+    if (payload.cacheHitRateAlertWebhook !== undefined) {
+      updates.cacheHitRateAlertWebhook = payload.cacheHitRateAlertWebhook;
+    }
+    if (payload.cacheHitRateAlertWindowMode !== undefined) {
+      updates.cacheHitRateAlertWindowMode = payload.cacheHitRateAlertWindowMode;
+    }
+    if (payload.cacheHitRateAlertCheckInterval !== undefined) {
+      updates.cacheHitRateAlertCheckInterval = payload.cacheHitRateAlertCheckInterval;
+    }
+    if (payload.cacheHitRateAlertHistoricalLookbackDays !== undefined) {
+      updates.cacheHitRateAlertHistoricalLookbackDays =
+        payload.cacheHitRateAlertHistoricalLookbackDays;
+    }
+    if (payload.cacheHitRateAlertMinEligibleRequests !== undefined) {
+      updates.cacheHitRateAlertMinEligibleRequests = payload.cacheHitRateAlertMinEligibleRequests;
+    }
+    if (payload.cacheHitRateAlertMinEligibleTokens !== undefined) {
+      updates.cacheHitRateAlertMinEligibleTokens = payload.cacheHitRateAlertMinEligibleTokens;
+    }
+    if (payload.cacheHitRateAlertAbsMin !== undefined) {
+      updates.cacheHitRateAlertAbsMin = payload.cacheHitRateAlertAbsMin;
+    }
+    if (payload.cacheHitRateAlertDropRel !== undefined) {
+      updates.cacheHitRateAlertDropRel = payload.cacheHitRateAlertDropRel;
+    }
+    if (payload.cacheHitRateAlertDropAbs !== undefined) {
+      updates.cacheHitRateAlertDropAbs = payload.cacheHitRateAlertDropAbs;
+    }
+    if (payload.cacheHitRateAlertCooldownMinutes !== undefined) {
+      updates.cacheHitRateAlertCooldownMinutes = payload.cacheHitRateAlertCooldownMinutes;
+    }
+    if (payload.cacheHitRateAlertTopN !== undefined) {
+      updates.cacheHitRateAlertTopN = payload.cacheHitRateAlertTopN;
     }
 
     const [updated] = await db

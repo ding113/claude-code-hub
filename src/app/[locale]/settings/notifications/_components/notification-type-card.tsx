@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, DollarSign, Settings2, TrendingUp } from "lucide-react";
+import { AlertTriangle, Database, DollarSign, Settings2, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ComponentProps } from "react";
 import { useMemo } from "react";
@@ -33,7 +33,7 @@ interface TypeConfig {
   iconColor: string;
   iconBgColor: string;
   borderColor: string;
-  IconComponent: typeof AlertTriangle | typeof TrendingUp | typeof DollarSign;
+  IconComponent: typeof AlertTriangle | typeof TrendingUp | typeof DollarSign | typeof Database;
 }
 
 function getTypeConfig(type: NotificationType): TypeConfig {
@@ -58,6 +58,13 @@ function getTypeConfig(type: NotificationType): TypeConfig {
         iconBgColor: "bg-yellow-500/10",
         borderColor: "border-border/50 hover:border-border",
         IconComponent: DollarSign,
+      };
+    case "cache_hit_rate_alert":
+      return {
+        iconColor: "text-blue-400",
+        iconBgColor: "bg-blue-500/10",
+        borderColor: "border-blue-500/20 hover:border-blue-500/30",
+        IconComponent: Database,
       };
   }
 }
@@ -98,6 +105,14 @@ export function NotificationTypeCard({
           enabled: settings.costAlertEnabled,
           enabledKey: "costAlertEnabled" as const,
           enableLabel: t("notifications.costAlert.enable"),
+        };
+      case "cache_hit_rate_alert":
+        return {
+          title: t("notifications.cacheHitRateAlert.title"),
+          description: t("notifications.cacheHitRateAlert.description"),
+          enabled: settings.cacheHitRateAlertEnabled,
+          enabledKey: "cacheHitRateAlertEnabled" as const,
+          enableLabel: t("notifications.cacheHitRateAlert.enable"),
         };
     }
   }, [settings, t, type]);
@@ -259,6 +274,283 @@ export function NotificationTypeCard({
                     "disabled:opacity-50 disabled:cursor-not-allowed"
                   )}
                 />
+              </div>
+            </div>
+          )}
+
+          {type === "cache_hit_rate_alert" && (
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertWindowMode"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.windowMode")}
+                  </label>
+                  <select
+                    id="cacheHitRateAlertWindowMode"
+                    value={settings.cacheHitRateAlertWindowMode}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({ cacheHitRateAlertWindowMode: e.target.value })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  >
+                    <option value="auto">
+                      {t("notifications.cacheHitRateAlert.windowModeAuto")}
+                    </option>
+                    <option value="5m">5m</option>
+                    <option value="30m">30m</option>
+                    <option value="1h">1h</option>
+                    <option value="1.5h">1.5h</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertCheckInterval"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.checkInterval")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertCheckInterval"
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={settings.cacheHitRateAlertCheckInterval}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertCheckInterval: Number(e.target.value),
+                      })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertHistoricalLookbackDays"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.historicalLookbackDays")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertHistoricalLookbackDays"
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={settings.cacheHitRateAlertHistoricalLookbackDays}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertHistoricalLookbackDays: Number(e.target.value),
+                      })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertCooldownMinutes"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.cooldownMinutes")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertCooldownMinutes"
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={settings.cacheHitRateAlertCooldownMinutes}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertCooldownMinutes: Number(e.target.value),
+                      })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertAbsMin"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.absMin")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertAbsMin"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={settings.cacheHitRateAlertAbsMin}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({ cacheHitRateAlertAbsMin: Number(e.target.value) })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertDropAbs"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.dropAbs")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertDropAbs"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={settings.cacheHitRateAlertDropAbs}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({ cacheHitRateAlertDropAbs: Number(e.target.value) })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertDropRel"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.dropRel")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertDropRel"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={settings.cacheHitRateAlertDropRel}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({ cacheHitRateAlertDropRel: Number(e.target.value) })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertMinEligibleRequests"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.minEligibleRequests")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertMinEligibleRequests"
+                    type="number"
+                    min={1}
+                    max={100000}
+                    value={settings.cacheHitRateAlertMinEligibleRequests}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertMinEligibleRequests: Number(e.target.value),
+                      })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertMinEligibleTokens"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.minEligibleTokens")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertMinEligibleTokens"
+                    type="number"
+                    min={0}
+                    value={settings.cacheHitRateAlertMinEligibleTokens}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertMinEligibleTokens: Number(e.target.value),
+                      })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label
+                    htmlFor="cacheHitRateAlertTopN"
+                    className="text-xs font-medium text-muted-foreground"
+                  >
+                    {t("notifications.cacheHitRateAlert.topN")}
+                  </label>
+                  <input
+                    id="cacheHitRateAlertTopN"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={settings.cacheHitRateAlertTopN}
+                    disabled={!settings.enabled}
+                    onChange={(e) =>
+                      onUpdateSettings({ cacheHitRateAlertTopN: Number(e.target.value) })
+                    }
+                    className={cn(
+                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  />
+                </div>
               </div>
             </div>
           )}

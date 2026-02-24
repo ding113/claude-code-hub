@@ -78,13 +78,71 @@ export interface CostAlertData {
   period: string;
 }
 
+export interface CacheHitRateAlertSample {
+  kind: "eligible" | "overall";
+  requests: number;
+  denominatorTokens: number;
+  hitRateTokens: number;
+}
+
+export type CacheHitRateAlertBaselineSource = "historical" | "today" | "prev" | null;
+
+export interface CacheHitRateAlertAnomaly {
+  providerId: number;
+  providerName?: string;
+  providerType?: string;
+  model: string;
+
+  baselineSource: CacheHitRateAlertBaselineSource;
+  current: CacheHitRateAlertSample;
+  baseline: CacheHitRateAlertSample | null;
+
+  deltaAbs: number | null;
+  deltaRel: number | null;
+  dropAbs: number | null;
+
+  reasonCodes: string[];
+}
+
+export interface CacheHitRateAlertWindow {
+  mode: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+}
+
+export interface CacheHitRateAlertSettingsSnapshot {
+  windowMode: string;
+  checkIntervalMinutes: number;
+  historicalLookbackDays: number;
+  minEligibleRequests: number;
+  minEligibleTokens: number;
+  absMin: number;
+  dropRel: number;
+  dropAbs: number;
+  cooldownMinutes: number;
+  topN: number;
+}
+
+export interface CacheHitRateAlertData {
+  window: CacheHitRateAlertWindow;
+  anomalies: CacheHitRateAlertAnomaly[];
+  suppressedCount: number;
+  settings: CacheHitRateAlertSettingsSnapshot;
+  generatedAt: string;
+}
+
 /**
  * Webhook 相关类型
  */
 
 export type ProviderType = "wechat" | "feishu" | "dingtalk" | "telegram" | "custom";
 
-export type WebhookNotificationType = "circuit_breaker" | "daily_leaderboard" | "cost_alert";
+export type WebhookNotificationType =
+  | "circuit_breaker"
+  | "daily_leaderboard"
+  | "cost_alert"
+  | "cache_hit_rate_alert";
 
 export interface WebhookTargetConfig {
   id?: number;

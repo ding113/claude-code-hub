@@ -4,9 +4,11 @@ import type { NotificationJobType } from "@/lib/constants/notification.constants
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
+  buildCacheHitRateAlertMessage,
   buildCircuitBreakerMessage,
   buildCostAlertMessage,
   buildDailyLeaderboardMessage,
+  type CacheHitRateAlertData,
   type CircuitBreakerAlertData,
   type CostAlertData,
   type DailyLeaderboardData,
@@ -14,6 +16,10 @@ import {
   sendWebhookMessage,
   type WebhookNotificationType,
 } from "@/lib/webhook";
+import {
+  commitCacheHitRateAlertCooldown,
+  generateCacheHitRateAlertPayload,
+} from "./tasks/cache-hit-rate-alert";
 import { generateCostAlerts } from "./tasks/cost-alert";
 import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
 
@@ -27,7 +33,7 @@ export interface NotificationJobData {
   // 新模式使用（多目标）
   targetId?: number;
   bindingId?: number;
-  data?: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData; // 可选：定时任务会在执行时动态生成
+  data?: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | CacheHitRateAlertData; // 可选：定时任务会在执行时动态生成
 }
 
 function toWebhookNotificationType(type: NotificationJobType): WebhookNotificationType {
@@ -38,6 +44,8 @@ function toWebhookNotificationType(type: NotificationJobType): WebhookNotificati
       return "daily_leaderboard";
     case "cost-alert":
       return "cost_alert";
+    case "cache-hit-rate-alert":
+      return "cache_hit_rate_alert";
   }
 }
 
@@ -150,10 +158,103 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         timezone = await resolveSystemTimezone();
       }
 
+      // 特殊：targets 模式下，缓存命中率告警使用 fan-out 作业避免重复计算
+      if (type === "cache-hit-rate-alert" && !webhookUrl && !targetId) {
+        const { getNotificationSettings } = await import("@/repository/notifications");
+        const settings = (await getNotificationSettings()) as any;
+
+        if (!settings.enabled || !settings.cacheHitRateAlertEnabled) {
+          logger.info({
+            action: "cache_hit_rate_alert_disabled",
+            jobId: job.id,
+          });
+          return { success: true, skipped: true };
+        }
+
+        const result = await generateCacheHitRateAlertPayload();
+        if (!result) {
+          logger.info({
+            action: "cache_hit_rate_alert_no_data",
+            jobId: job.id,
+          });
+          return { success: true, skipped: true };
+        }
+
+        if (settings.useLegacyMode) {
+          const url = settings.cacheHitRateAlertWebhook?.trim();
+          if (!url) {
+            logger.info({
+              action: "cache_hit_rate_alert_disabled",
+              jobId: job.id,
+              reason: "legacy_webhook_missing",
+            });
+            return { success: true, skipped: true };
+          }
+
+          const message = buildCacheHitRateAlertMessage(result.payload, timezone);
+          const sendResult = await sendWebhookMessage(url, message, { timezone });
+
+          if (!sendResult.success) {
+            throw new Error(sendResult.error || "Failed to send cache hit rate alert");
+          }
+
+          await commitCacheHitRateAlertCooldown(result.dedupKeysToSet, result.cooldownMinutes);
+
+          logger.info({
+            action: "cache_hit_rate_alert_sent",
+            jobId: job.id,
+            mode: "legacy",
+            anomalies: result.payload.anomalies.length,
+            suppressedCount: result.payload.suppressedCount,
+          });
+
+          return { success: true };
+        }
+
+        const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
+        const bindings = await getEnabledBindingsByType("cache_hit_rate_alert");
+
+        if (bindings.length === 0) {
+          logger.info({
+            action: "cache_hit_rate_alert_skipped",
+            jobId: job.id,
+            reason: "no_bindings",
+          });
+          return { success: true, skipped: true };
+        }
+
+        for (const binding of bindings) {
+          await queue.add({
+            type: "cache-hit-rate-alert",
+            targetId: binding.targetId,
+            bindingId: binding.id,
+            data: result.payload,
+          });
+        }
+
+        await commitCacheHitRateAlertCooldown(result.dedupKeysToSet, result.cooldownMinutes);
+
+        logger.info({
+          action: "cache_hit_rate_alert_fanout_enqueued",
+          jobId: job.id,
+          mode: "targets",
+          targets: bindings.length,
+          anomalies: result.payload.anomalies.length,
+          suppressedCount: result.payload.suppressedCount,
+        });
+
+        return { success: true, enqueued: bindings.length };
+      }
+
       // 构建结构化消息
       let message: StructuredMessage;
-      let templateData: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | undefined =
-        data;
+      let templateData:
+        | CircuitBreakerAlertData
+        | DailyLeaderboardData
+        | CostAlertData
+        | CacheHitRateAlertData
+        | undefined = data;
+      let cooldownCommit: { keys: string[]; cooldownMinutes: number } | undefined;
       switch (type) {
         case "circuit-breaker":
           message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData, timezone);
@@ -197,6 +298,33 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           // 发送第一个告警（后续可扩展为批量发送）
           templateData = alerts[0];
           message = buildCostAlertMessage(alerts[0]);
+          break;
+        }
+        case "cache-hit-rate-alert": {
+          let payload: CacheHitRateAlertData;
+
+          if (data) {
+            payload = data as CacheHitRateAlertData;
+          } else {
+            const result = await generateCacheHitRateAlertPayload();
+
+            if (!result) {
+              logger.info({
+                action: "cache_hit_rate_alert_no_data",
+                jobId: job.id,
+              });
+              return { success: true, skipped: true };
+            }
+
+            payload = result.payload;
+            cooldownCommit = {
+              keys: result.dedupKeysToSet,
+              cooldownMinutes: result.cooldownMinutes,
+            };
+          }
+
+          templateData = payload;
+          message = buildCacheHitRateAlertMessage(payload, timezone);
           break;
         }
         default:
@@ -244,6 +372,10 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         throw new Error(result.error || "Failed to send notification");
       }
 
+      if (cooldownCommit) {
+        await commitCacheHitRateAlertCooldown(cooldownCommit.keys, cooldownCommit.cooldownMinutes);
+      }
+
       logger.info({
         action: "notification_job_complete",
         jobId: job.id,
@@ -285,7 +417,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
 export async function addNotificationJob(
   type: NotificationJobType,
   webhookUrl: string,
-  data: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData
+  data: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | CacheHitRateAlertData
 ): Promise<void> {
   try {
     const queue = getNotificationQueue();
@@ -315,7 +447,7 @@ export async function addNotificationJobForTarget(
   type: NotificationJobType,
   targetId: number,
   bindingId: number | null,
-  data: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData
+  data: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | CacheHitRateAlertData
 ): Promise<void> {
   try {
     const queue = getNotificationQueue();
@@ -348,7 +480,7 @@ export async function scheduleNotifications() {
   try {
     // 动态导入以避免循环依赖
     const { getNotificationSettings } = await import("@/repository/notifications");
-    const settings = await getNotificationSettings();
+    const settings = (await getNotificationSettings()) as any;
 
     const queue = getNotificationQueue();
 
@@ -422,6 +554,29 @@ export async function scheduleNotifications() {
           mode: "legacy",
         });
       }
+
+      if (settings.cacheHitRateAlertEnabled && settings.cacheHitRateAlertWebhook) {
+        const interval = settings.cacheHitRateAlertCheckInterval ?? 5;
+        const cron = `*/${interval} * * * *`;
+
+        await queue.add(
+          {
+            type: "cache-hit-rate-alert",
+            webhookUrl: settings.cacheHitRateAlertWebhook,
+          },
+          {
+            repeat: { cron },
+            jobId: "cache-hit-rate-alert-scheduled",
+          }
+        );
+
+        logger.info({
+          action: "cache_hit_rate_alert_scheduled",
+          schedule: cron,
+          intervalMinutes: interval,
+          mode: "legacy",
+        });
+      }
     } else {
       // 新模式：按绑定调度（支持 cron 覆盖）
       const { getEnabledBindingsByType } = await import("@/repository/notification-bindings");
@@ -481,6 +636,32 @@ export async function scheduleNotifications() {
 
         logger.info({
           action: "cost_alert_scheduled",
+          schedule: defaultCron,
+          intervalMinutes: interval,
+          targets: bindings.length,
+          mode: "targets",
+        });
+      }
+
+      if (settings.cacheHitRateAlertEnabled) {
+        const bindings = await getEnabledBindingsByType("cache_hit_rate_alert");
+        const interval = settings.cacheHitRateAlertCheckInterval ?? 5;
+        const defaultCron = `*/${interval} * * * *`;
+
+        if (bindings.length > 0) {
+          await queue.add(
+            {
+              type: "cache-hit-rate-alert",
+            },
+            {
+              repeat: { cron: defaultCron, tz: systemTimezone },
+              jobId: "cache-hit-rate-alert-targets-scheduled",
+            }
+          );
+        }
+
+        logger.info({
+          action: "cache_hit_rate_alert_scheduled",
           schedule: defaultCron,
           intervalMinutes: interval,
           targets: bindings.length,

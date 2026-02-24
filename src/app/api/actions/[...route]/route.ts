@@ -1353,6 +1353,66 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
           .positive()
           .optional()
           .describe("成本预警检查间隔（分钟）"),
+
+        cacheHitRateAlertEnabled: z.boolean().optional().describe("是否启用缓存命中率异常告警"),
+        cacheHitRateAlertWebhook: z
+          .string()
+          .url()
+          .nullable()
+          .optional()
+          .describe("缓存命中率异常告警 Webhook URL（旧版模式）"),
+        cacheHitRateAlertWindowMode: z
+          .string()
+          .optional()
+          .describe("检测窗口模式（auto/5m/30m/1h/1.5h）"),
+        cacheHitRateAlertCheckInterval: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("缓存命中率告警检查间隔（分钟）"),
+        cacheHitRateAlertHistoricalLookbackDays: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("历史基线回看天数"),
+        cacheHitRateAlertMinEligibleRequests: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("最小 eligible 请求数门槛"),
+        cacheHitRateAlertMinEligibleTokens: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("最小 eligible tokens 门槛"),
+        cacheHitRateAlertAbsMin: z
+          .string()
+          .optional()
+          .describe("absMin（numeric 字段以 string 表示）"),
+        cacheHitRateAlertDropRel: z
+          .string()
+          .optional()
+          .describe("dropRel（numeric 字段以 string 表示）"),
+        cacheHitRateAlertDropAbs: z
+          .string()
+          .optional()
+          .describe("dropAbs（numeric 字段以 string 表示）"),
+        cacheHitRateAlertCooldownMinutes: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("冷却时间（分钟）"),
+        cacheHitRateAlertTopN: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe("TopN（最多返回/推送条数）"),
       }),
       summary: "更新通知设置",
       description: "更新通知开关与各类型通知配置（生产环境会触发重新调度定时任务）",
@@ -1390,6 +1450,7 @@ const WebhookNotificationTypeSchema = z.enum([
   "circuit_breaker",
   "daily_leaderboard",
   "cost_alert",
+  "cache_hit_rate_alert",
 ]);
 
 const WebhookTargetSchema = z.object({

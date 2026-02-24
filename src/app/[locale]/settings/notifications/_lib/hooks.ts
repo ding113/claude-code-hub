@@ -35,6 +35,18 @@ export interface NotificationSettingsState {
   costAlertWebhook: string;
   costAlertThreshold: number;
   costAlertCheckInterval: number;
+
+  cacheHitRateAlertEnabled: boolean;
+  cacheHitRateAlertWindowMode: string;
+  cacheHitRateAlertCheckInterval: number;
+  cacheHitRateAlertHistoricalLookbackDays: number;
+  cacheHitRateAlertMinEligibleRequests: number;
+  cacheHitRateAlertMinEligibleTokens: number;
+  cacheHitRateAlertAbsMin: number;
+  cacheHitRateAlertDropRel: number;
+  cacheHitRateAlertDropAbs: number;
+  cacheHitRateAlertCooldownMinutes: number;
+  cacheHitRateAlertTopN: number;
 }
 
 export interface WebhookTestResult {
@@ -94,6 +106,7 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   "circuit_breaker",
   "daily_leaderboard",
   "cost_alert",
+  "cache_hit_rate_alert",
 ];
 
 function toClientSettings(raw: any): NotificationSettingsState {
@@ -109,6 +122,19 @@ function toClientSettings(raw: any): NotificationSettingsState {
     costAlertWebhook: raw?.costAlertWebhook || "",
     costAlertThreshold: parseFloat(raw?.costAlertThreshold || "0.80"),
     costAlertCheckInterval: Number(raw?.costAlertCheckInterval || 60),
+    cacheHitRateAlertEnabled: Boolean(raw?.cacheHitRateAlertEnabled),
+    cacheHitRateAlertWindowMode: raw?.cacheHitRateAlertWindowMode || "auto",
+    cacheHitRateAlertCheckInterval: Number(raw?.cacheHitRateAlertCheckInterval || 5),
+    cacheHitRateAlertHistoricalLookbackDays: Number(
+      raw?.cacheHitRateAlertHistoricalLookbackDays || 7
+    ),
+    cacheHitRateAlertMinEligibleRequests: Number(raw?.cacheHitRateAlertMinEligibleRequests || 20),
+    cacheHitRateAlertMinEligibleTokens: Number(raw?.cacheHitRateAlertMinEligibleTokens || 0),
+    cacheHitRateAlertAbsMin: parseFloat(raw?.cacheHitRateAlertAbsMin || "0.05"),
+    cacheHitRateAlertDropRel: parseFloat(raw?.cacheHitRateAlertDropRel || "0.3"),
+    cacheHitRateAlertDropAbs: parseFloat(raw?.cacheHitRateAlertDropAbs || "0.1"),
+    cacheHitRateAlertCooldownMinutes: Number(raw?.cacheHitRateAlertCooldownMinutes || 30),
+    cacheHitRateAlertTopN: Number(raw?.cacheHitRateAlertTopN || 10),
   };
 }
 
@@ -121,6 +147,7 @@ export function useNotificationsPageData() {
     circuit_breaker: [],
     daily_leaderboard: [],
     cost_alert: [],
+    cache_hit_rate_alert: [],
   }));
 
   const [isLoading, setIsLoading] = useState(true);
@@ -214,6 +241,41 @@ export function useNotificationsPageData() {
       }
       if (patch.costAlertCheckInterval !== undefined) {
         payload.costAlertCheckInterval = patch.costAlertCheckInterval;
+      }
+
+      if (patch.cacheHitRateAlertEnabled !== undefined) {
+        payload.cacheHitRateAlertEnabled = patch.cacheHitRateAlertEnabled;
+      }
+      if (patch.cacheHitRateAlertWindowMode !== undefined) {
+        payload.cacheHitRateAlertWindowMode = patch.cacheHitRateAlertWindowMode;
+      }
+      if (patch.cacheHitRateAlertCheckInterval !== undefined) {
+        payload.cacheHitRateAlertCheckInterval = patch.cacheHitRateAlertCheckInterval;
+      }
+      if (patch.cacheHitRateAlertHistoricalLookbackDays !== undefined) {
+        payload.cacheHitRateAlertHistoricalLookbackDays =
+          patch.cacheHitRateAlertHistoricalLookbackDays;
+      }
+      if (patch.cacheHitRateAlertMinEligibleRequests !== undefined) {
+        payload.cacheHitRateAlertMinEligibleRequests = patch.cacheHitRateAlertMinEligibleRequests;
+      }
+      if (patch.cacheHitRateAlertMinEligibleTokens !== undefined) {
+        payload.cacheHitRateAlertMinEligibleTokens = patch.cacheHitRateAlertMinEligibleTokens;
+      }
+      if (patch.cacheHitRateAlertAbsMin !== undefined) {
+        payload.cacheHitRateAlertAbsMin = patch.cacheHitRateAlertAbsMin.toString();
+      }
+      if (patch.cacheHitRateAlertDropRel !== undefined) {
+        payload.cacheHitRateAlertDropRel = patch.cacheHitRateAlertDropRel.toString();
+      }
+      if (patch.cacheHitRateAlertDropAbs !== undefined) {
+        payload.cacheHitRateAlertDropAbs = patch.cacheHitRateAlertDropAbs.toString();
+      }
+      if (patch.cacheHitRateAlertCooldownMinutes !== undefined) {
+        payload.cacheHitRateAlertCooldownMinutes = patch.cacheHitRateAlertCooldownMinutes;
+      }
+      if (patch.cacheHitRateAlertTopN !== undefined) {
+        payload.cacheHitRateAlertTopN = patch.cacheHitRateAlertTopN;
       }
 
       const result = await updateNotificationSettingsAction(payload);
