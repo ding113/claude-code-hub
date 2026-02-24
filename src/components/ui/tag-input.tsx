@@ -160,19 +160,19 @@ export function TagInput({
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(target) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(target)
-      ) {
+      const isInContainer = containerRef.current?.contains(target) ?? false;
+      const isInDropdown = dropdownRef.current?.contains(target) ?? false;
+
+      // 使用 capture 阶段监听，避免点击建议项后 React 同步更新导致 target 节点被移除，
+      // 进而被误判为“点击了外部”并关闭下拉列表。
+      if (!isInContainer && !isInDropdown) {
         setShowSuggestions(false);
         setHighlightedIndex(-1);
       }
     };
 
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside, true);
+    return () => document.removeEventListener("mousedown", handleClickOutside, true);
   }, [showSuggestions]);
 
   const inputMinWidthClass = normalizedMaxVisible === undefined ? "min-w-[120px]" : "min-w-[60px]";
