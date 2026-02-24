@@ -84,8 +84,8 @@ async function restoreSoftDeletedEndpointForProvider(
     return;
   }
 
-  const lowerBound = new Date(provider.deletedAt.getTime() - ENDPOINT_RESTORE_TIME_TOLERANCE_MS);
-  const upperBound = new Date(provider.deletedAt.getTime() + ENDPOINT_RESTORE_TIME_TOLERANCE_MS);
+  const lowerIso = new Date(provider.deletedAt.getTime() - ENDPOINT_RESTORE_TIME_TOLERANCE_MS).toISOString();
+  const upperIso = new Date(provider.deletedAt.getTime() + ENDPOINT_RESTORE_TIME_TOLERANCE_MS).toISOString();
 
   const [endpointToRestore] = await tx
     .select({ id: providerEndpoints.id })
@@ -96,8 +96,8 @@ async function restoreSoftDeletedEndpointForProvider(
         eq(providerEndpoints.providerType, provider.providerType),
         eq(providerEndpoints.url, trimmedUrl),
         isNotNull(providerEndpoints.deletedAt),
-        sql`${providerEndpoints.deletedAt} >= ${lowerBound}`,
-        sql`${providerEndpoints.deletedAt} <= ${upperBound}`
+        sql`${providerEndpoints.deletedAt} >= ${lowerIso}::timestamptz`,
+        sql`${providerEndpoints.deletedAt} <= ${upperIso}::timestamptz`
       )
     )
     .orderBy(desc(providerEndpoints.deletedAt), desc(providerEndpoints.id))
