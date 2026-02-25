@@ -59,6 +59,10 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values));
+}
+
 function isCacheHitRateAlertSamplePayload(value: unknown): boolean {
   if (!isPlainObject(value)) return false;
   const sample = value as Record<string, unknown>;
@@ -321,12 +325,14 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             throw new Error(sendResult.error || "Failed to send cache hit rate alert");
           }
 
-          const keys = payload.anomalies.map((a) =>
-            buildCacheHitRateAlertCooldownKey({
-              providerId: a.providerId,
-              model: a.model,
-              windowMode: payload.window.mode,
-            })
+          const keys = uniqueStrings(
+            payload.anomalies.map((a) =>
+              buildCacheHitRateAlertCooldownKey({
+                providerId: a.providerId,
+                model: a.model,
+                windowMode: payload.window.mode,
+              })
+            )
           );
 
           try {
@@ -506,12 +512,14 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             dedupKeysToSet = applied.dedupKeysToSet;
             cooldownMinutes = payload.settings.cooldownMinutes;
           } else {
-            dedupKeysToSet ??= payload.anomalies.map((a) =>
-              buildCacheHitRateAlertCooldownKey({
-                providerId: a.providerId,
-                model: a.model,
-                windowMode: payload.window.mode,
-              })
+            dedupKeysToSet ??= uniqueStrings(
+              payload.anomalies.map((a) =>
+                buildCacheHitRateAlertCooldownKey({
+                  providerId: a.providerId,
+                  model: a.model,
+                  windowMode: payload.window.mode,
+                })
+              )
             );
             cooldownMinutes ??= payload.settings.cooldownMinutes;
           }
@@ -519,7 +527,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           templateData = payload;
           message = buildCacheHitRateAlertMessage(payload, timezone);
           cooldownCommit = {
-            keys: dedupKeysToSet ?? [],
+            keys: dedupKeysToSet ? uniqueStrings(dedupKeysToSet) : [],
             cooldownMinutes: cooldownMinutes ?? payload.settings.cooldownMinutes,
           };
           break;
