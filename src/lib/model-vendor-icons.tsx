@@ -42,8 +42,10 @@ export interface ModelVendorEntry {
   litellmProvider?: string;
 }
 
-// Sorted by prefix length descending to ensure longest-match-first
+// Strictly sorted by prefix length descending to ensure longest-match-first.
+// Within same length, sorted alphabetically.
 const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
+  // 9 chars
   {
     prefix: "codestral",
     icon: Mistral.Color,
@@ -52,8 +54,8 @@ const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
     litellmProvider: "mistral",
   },
   { prefix: "sensenova", icon: SenseNova.Color, hasColor: true, i18nKey: "sensenova" },
-  { prefix: "internlm", icon: InternLM.Color, hasColor: true, i18nKey: "internlm" },
-  { prefix: "moonshot", icon: Moonshot, hasColor: false, i18nKey: "moonshot" },
+  // 8 chars
+  { prefix: "baichuan", icon: Baichuan.Color, hasColor: true, i18nKey: "baichuan" },
   {
     prefix: "deepseek",
     icon: DeepSeek.Color,
@@ -61,14 +63,9 @@ const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
     i18nKey: "deepseek",
     litellmProvider: "deepseek",
   },
-  { prefix: "hunyuan", icon: Hunyuan.Color, hasColor: true, i18nKey: "hunyuan" },
-  {
-    prefix: "command",
-    icon: Cohere.Color,
-    hasColor: true,
-    i18nKey: "cohere",
-    litellmProvider: "cohere_chat",
-  },
+  { prefix: "internlm", icon: InternLM.Color, hasColor: true, i18nKey: "internlm" },
+  { prefix: "moonshot", icon: Moonshot, hasColor: false, i18nKey: "moonshot" },
+  // 7 chars
   {
     prefix: "chatglm",
     icon: ChatGLM.Color,
@@ -83,7 +80,22 @@ const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
     i18nKey: "openai",
     litellmProvider: "openai",
   },
-  { prefix: "baichuan", icon: Baichuan.Color, hasColor: true, i18nKey: "baichuan" },
+  {
+    prefix: "command",
+    icon: Cohere.Color,
+    hasColor: true,
+    i18nKey: "cohere",
+    litellmProvider: "cohere_chat",
+  },
+  { prefix: "hunyuan", icon: Hunyuan.Color, hasColor: true, i18nKey: "hunyuan" },
+  { prefix: "minimax", icon: Minimax.Color, hasColor: true, i18nKey: "minimax" },
+  {
+    prefix: "mistral",
+    icon: Mistral.Color,
+    hasColor: true,
+    i18nKey: "mistral",
+    litellmProvider: "mistral",
+  },
   {
     prefix: "mixtral",
     icon: Mistral.Color,
@@ -92,21 +104,13 @@ const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
     litellmProvider: "mistral",
   },
   {
-    prefix: "mistral",
-    icon: Mistral.Color,
-    hasColor: true,
-    i18nKey: "mistral",
-    litellmProvider: "mistral",
-  },
-  { prefix: "minimax", icon: Minimax.Color, hasColor: true, i18nKey: "minimax" },
-  {
     prefix: "pixtral",
     icon: Mistral.Color,
     hasColor: true,
     i18nKey: "mistral",
     litellmProvider: "mistral",
   },
-  { prefix: "nvidia", icon: Nvidia.Color, hasColor: true, i18nKey: "nvidia" },
+  // 6 chars
   {
     prefix: "claude",
     icon: Claude.Color,
@@ -115,27 +119,33 @@ const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
     litellmProvider: "anthropic",
   },
   {
-    prefix: "gemini",
-    icon: Gemini.Color,
-    hasColor: true,
-    i18nKey: "vertex",
-    litellmProvider: "vertex_ai-language-models",
-  },
-  { prefix: "wenxin", icon: Wenxin.Color, hasColor: true, i18nKey: "wenxin" },
-  {
     prefix: "doubao",
     icon: Doubao.Color,
     hasColor: true,
     i18nKey: "volcengine",
     litellmProvider: "volcengine",
   },
+  {
+    prefix: "gemini",
+    icon: Gemini.Color,
+    hasColor: true,
+    i18nKey: "vertex",
+    litellmProvider: "vertex_ai-language-models",
+  },
+  { prefix: "nvidia", icon: Nvidia.Color, hasColor: true, i18nKey: "nvidia" },
+  { prefix: "wenxin", icon: Wenxin.Color, hasColor: true, i18nKey: "wenxin" },
+  // 5 chars
+  { prefix: "ernie", icon: Wenxin.Color, hasColor: true, i18nKey: "wenxin" },
   { prefix: "gemma", icon: Gemma.Color, hasColor: true, i18nKey: "gemma" },
   { prefix: "llama", icon: Meta.Color, hasColor: true, i18nKey: "meta" },
-  { prefix: "spark", icon: Spark.Color, hasColor: true, i18nKey: "spark" },
   { prefix: "sonar", icon: Perplexity.Color, hasColor: true, i18nKey: "perplexity" },
-  { prefix: "ernie", icon: Wenxin.Color, hasColor: true, i18nKey: "wenxin" },
+  { prefix: "spark", icon: Spark.Color, hasColor: true, i18nKey: "spark" },
+  // 4 chars
+  { prefix: "abab", icon: Minimax.Color, hasColor: true, i18nKey: "minimax" },
+  { prefix: "grok", icon: Grok, hasColor: false, i18nKey: "xai", litellmProvider: "xai" },
+  { prefix: "kimi", icon: Kimi.Color, hasColor: true, i18nKey: "kimi" },
+  { prefix: "pplx", icon: Perplexity.Color, hasColor: true, i18nKey: "perplexity" },
   { prefix: "qwen", icon: Qwen.Color, hasColor: true, i18nKey: "qwen" },
-  { prefix: "step", icon: Stepfun.Color, hasColor: true, i18nKey: "stepfun" },
   {
     prefix: "seed",
     icon: Doubao.Color,
@@ -143,10 +153,8 @@ const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
     i18nKey: "volcengine",
     litellmProvider: "volcengine",
   },
-  { prefix: "pplx", icon: Perplexity.Color, hasColor: true, i18nKey: "perplexity" },
-  { prefix: "kimi", icon: Kimi.Color, hasColor: true, i18nKey: "kimi" },
-  { prefix: "grok", icon: Grok, hasColor: false, i18nKey: "xai", litellmProvider: "xai" },
-  { prefix: "abab", icon: Minimax.Color, hasColor: true, i18nKey: "minimax" },
+  { prefix: "step", icon: Stepfun.Color, hasColor: true, i18nKey: "stepfun" },
+  // 3 chars
   {
     prefix: "glm",
     icon: ChatGLM.Color,
@@ -155,10 +163,11 @@ const MODEL_VENDOR_RULES: ModelVendorEntry[] = [
     litellmProvider: "zhipuai",
   },
   { prefix: "gpt", icon: OpenAI, hasColor: false, i18nKey: "openai", litellmProvider: "openai" },
-  { prefix: "yi", icon: Yi.Color, hasColor: true, i18nKey: "yi" },
+  // 2 chars
   { prefix: "o1", icon: OpenAI, hasColor: false, i18nKey: "openai", litellmProvider: "openai" },
   { prefix: "o3", icon: OpenAI, hasColor: false, i18nKey: "openai", litellmProvider: "openai" },
   { prefix: "o4", icon: OpenAI, hasColor: false, i18nKey: "openai", litellmProvider: "openai" },
+  { prefix: "yi", icon: Yi.Color, hasColor: true, i18nKey: "yi" },
 ];
 
 export function getModelVendor(modelId: string): ModelVendorEntry | null {
