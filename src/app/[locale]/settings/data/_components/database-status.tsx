@@ -91,22 +91,22 @@ export function DatabaseStatusDisplay() {
         </Button>
       </div>
 
-      {/* Glass cards for stats */}
+      {/* Inline stats */}
       {status.isAvailable && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <Database className="h-4 w-4" />
-              <span>{t("size")}</span>
-            </div>
-            <p className="text-lg font-mono font-bold text-foreground">{status.databaseSize}</p>
+        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <Database className="h-3.5 w-3.5" />
+            <span>{t("size")}</span>
+            <span className="text-sm font-semibold font-mono text-foreground">
+              {status.databaseSize}
+            </span>
           </div>
-          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
-              <Table className="h-4 w-4" />
-              <span>{t("tableCount")}</span>
-            </div>
-            <p className="text-lg font-mono font-bold text-foreground">{status.tableCount}</p>
+          <div className="flex items-center gap-1.5">
+            <Table className="h-3.5 w-3.5" />
+            <span>{t("tableCount")}</span>
+            <span className="text-sm font-semibold font-mono text-foreground">
+              {status.tableCount}
+            </span>
           </div>
         </div>
       )}

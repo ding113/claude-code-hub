@@ -307,10 +307,7 @@ export function ModelPriceDrawer({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{trigger || defaultTrigger}</SheetTrigger>
-      <SheetContent
-        side="right"
-        className="w-[90vw] sm:w-[440px] overflow-y-auto bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-      >
+      <SheetContent side="right" className="w-[90vw] sm:w-[440px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{mode === "create" ? t("addModel") : t("editModel")}</SheetTitle>
           <SheetDescription>
