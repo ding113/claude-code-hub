@@ -95,6 +95,9 @@ function isCacheHitRateAlertAnomalyPayload(value: unknown): boolean {
   const dropAbs = anomaly.dropAbs;
   if (dropAbs !== null && dropAbs !== undefined && !isFiniteNumber(dropAbs)) return false;
 
+  const deltaAbs = anomaly.deltaAbs;
+  if (deltaAbs !== null && deltaAbs !== undefined && !isFiniteNumber(deltaAbs)) return false;
+
   const deltaRel = anomaly.deltaRel;
   if (deltaRel !== null && deltaRel !== undefined && !isFiniteNumber(deltaRel)) return false;
 
@@ -460,8 +463,11 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             payload = data;
           } else {
             // legacy webhook：全局 cooldown 去重；targets：每个 binding 单独去重，避免“一个 target 发送成功后把全局 cooldown 写死”导致其他 target 永久漏发
-            const dedupMode = webhookUrl ? "global" : "none";
-            const result = await generateCacheHitRateAlertPayload({ dedupMode });
+            // 仅在“生成 payload”路径下使用：当 payload 由 fan-out 预填充时（data 存在），本分支不会执行。
+            const generationDedupMode = webhookUrl ? "global" : "none";
+            const result = await generateCacheHitRateAlertPayload({
+              dedupMode: generationDedupMode,
+            });
 
             if (!result) {
               logger.info({
@@ -472,7 +478,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             }
 
             payload = result.payload;
-            if (dedupMode === "global") {
+            if (generationDedupMode === "global") {
               dedupKeysToSet = result.dedupKeysToSet;
               cooldownMinutes = result.cooldownMinutes;
             }

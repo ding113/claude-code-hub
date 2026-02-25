@@ -82,13 +82,21 @@ describe("cache-hit-rate-alert cooldown dedup", () => {
       bindingId: 42,
     });
 
-    expect(globalKey.split(":")).toHaveLength(5);
-    expect(bindingKey.split(":").slice(0, 4)).toEqual([
-      "cache-hit-rate-alert",
-      "v1",
-      "binding",
-      "42",
-    ]);
+    const encodedModel = Buffer.from("m", "utf8").toString("base64url");
+
+    const globalParts = globalKey.split(":");
+    expect(globalParts).toHaveLength(5);
+    expect(globalParts.slice(0, 2)).toEqual(["cache-hit-rate-alert", "v1"]);
+    expect(globalParts[2]).toBe("1");
+    expect(globalParts[3]).toBe(encodedModel);
+    expect(globalParts[4]).toBe("5m");
+
+    const bindingParts = bindingKey.split(":");
+    expect(bindingParts).toHaveLength(7);
+    expect(bindingParts.slice(0, 4)).toEqual(["cache-hit-rate-alert", "v1", "binding", "42"]);
+    expect(bindingParts[4]).toBe("1");
+    expect(bindingParts[5]).toBe(encodedModel);
+    expect(bindingParts[6]).toBe("5m");
     expect(bindingKey).not.toEqual(globalKey);
   });
 
@@ -99,30 +107,33 @@ describe("cache-hit-rate-alert cooldown dedup", () => {
       redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
     );
 
-    const input = payload([
-      {
-        providerId: 1,
-        model: "m1",
-        baselineSource: "prev",
-        current: sample(0.5),
-        baseline: sample(0.8),
-        deltaAbs: -0.3,
-        deltaRel: -0.375,
-        dropAbs: 0.3,
-        reasonCodes: ["drop_abs_rel"],
-      },
-      {
-        providerId: 2,
-        model: "m2",
-        baselineSource: "prev",
-        current: sample(0.5),
-        baseline: sample(0.8),
-        deltaAbs: -0.3,
-        deltaRel: -0.375,
-        dropAbs: 0.3,
-        reasonCodes: ["drop_abs_rel"],
-      },
-    ]);
+    const input = {
+      ...payload([
+        {
+          providerId: 1,
+          model: "m1",
+          baselineSource: "prev",
+          current: sample(0.5),
+          baseline: sample(0.8),
+          deltaAbs: -0.3,
+          deltaRel: -0.375,
+          dropAbs: 0.3,
+          reasonCodes: ["drop_abs_rel"],
+        },
+        {
+          providerId: 2,
+          model: "m2",
+          baselineSource: "prev",
+          current: sample(0.5),
+          baseline: sample(0.8),
+          deltaAbs: -0.3,
+          deltaRel: -0.375,
+          dropAbs: 0.3,
+          reasonCodes: ["drop_abs_rel"],
+        },
+      ]),
+      suppressedCount: 2,
+    };
 
     const result = await applyCacheHitRateAlertCooldownToPayload({ payload: input, bindingId: 7 });
 
@@ -133,7 +144,7 @@ describe("cache-hit-rate-alert cooldown dedup", () => {
     expect(passedKeys[1]).toContain(":binding:7:");
 
     expect(result.suppressedCount).toBe(1);
-    expect(result.payload.suppressedCount).toBe(1);
+    expect(result.payload.suppressedCount).toBe(3);
     expect(result.payload.anomalies).toHaveLength(1);
     expect(result.payload.anomalies[0].providerId).toBe(2);
 
