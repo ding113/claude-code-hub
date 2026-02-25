@@ -123,6 +123,11 @@ function isCacheHitRateAlertDataPayload(value: unknown): value is CacheHitRateAl
   if (!isCacheHitRateAlertSettingsWindowMode(window.mode)) return false;
   if (typeof window.startTime !== "string") return false;
   if (typeof window.endTime !== "string") return false;
+  const windowStartMs = Date.parse(window.startTime);
+  if (Number.isNaN(windowStartMs)) return false;
+  const windowEndMs = Date.parse(window.endTime);
+  if (Number.isNaN(windowEndMs)) return false;
+  if (windowEndMs < windowStartMs) return false;
   if (!isFiniteNumber(window.durationMinutes)) return false;
 
   if (!Array.isArray(payload.anomalies)) return false;
@@ -294,10 +299,18 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
 
           payload = generated.payload;
 
-          await job.update({
-            ...job.data,
-            data: payload,
-          });
+          try {
+            await job.update({
+              ...job.data,
+              data: payload,
+            });
+          } catch (error) {
+            logger.error({
+              action: "cache_hit_rate_alert_update_failed",
+              jobId: job.id,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
 
         if (payload.anomalies.length === 0) {
@@ -868,6 +881,9 @@ export async function scheduleNotifications() {
         const defaultCron = `*/${interval} * * * *`;
 
         if (bindings.length > 0) {
+          // 注意：这里刻意只调度一个共享的 repeat 作业，然后在处理器内 fan-out 到所有 bindings。
+          // 这样可以避免对每个 binding 重复计算同一份 payload；代价是 binding 的 scheduleCron/scheduleTimezone 将被忽略。
+          // 若未来需要支持 per-binding 的 cron/timezone，需要改为“每个 binding 一个 repeat 作业”或引入更细粒度的调度层。
           await queue.add(
             {
               type: "cache-hit-rate-alert",
