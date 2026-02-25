@@ -32,6 +32,7 @@ vi.mock("@/lib/redis", () => ({
 function makePipeline() {
   const pipeline = {
     setex: vi.fn(() => pipeline),
+    expire: vi.fn(() => pipeline),
     exec: vi.fn(async () => []),
   };
   return pipeline;
