@@ -788,24 +788,26 @@ export async function scheduleNotifications() {
       }
 
       if (settings.cacheHitRateAlertEnabled && settings.cacheHitRateAlertWebhook) {
-        const interval = Math.max(1, settings.cacheHitRateAlertCheckInterval ?? 5);
-        const cron = `*/${interval} * * * *`;
+        const intervalMinutesRaw = settings.cacheHitRateAlertCheckInterval ?? 5;
+        const intervalMinutes = Math.max(1, Math.trunc(intervalMinutesRaw));
+        const clampedIntervalMinutes = Math.min(intervalMinutes, 24 * 60);
+        const repeat =
+          clampedIntervalMinutes <= 59
+            ? { cron: `*/${clampedIntervalMinutes} * * * *` }
+            : { every: clampedIntervalMinutes * 60 * 1000 };
 
         await queue.add(
           {
             type: "cache-hit-rate-alert",
             webhookUrl: settings.cacheHitRateAlertWebhook,
           },
-          {
-            repeat: { cron },
-            jobId: "cache-hit-rate-alert-scheduled",
-          }
+          { repeat, jobId: "cache-hit-rate-alert-scheduled" }
         );
 
         logger.info({
           action: "cache_hit_rate_alert_scheduled",
-          schedule: cron,
-          intervalMinutes: interval,
+          schedule: "cron" in repeat ? repeat.cron : `every:${clampedIntervalMinutes}m`,
+          intervalMinutes: clampedIntervalMinutes,
           mode: "legacy",
         });
       }
@@ -877,8 +879,14 @@ export async function scheduleNotifications() {
 
       if (settings.cacheHitRateAlertEnabled) {
         const bindings = await getEnabledBindingsByType("cache_hit_rate_alert");
-        const interval = Math.max(1, settings.cacheHitRateAlertCheckInterval ?? 5);
-        const defaultCron = `*/${interval} * * * *`;
+        const intervalMinutesRaw = settings.cacheHitRateAlertCheckInterval ?? 5;
+        const intervalMinutes = Math.max(1, Math.trunc(intervalMinutesRaw));
+        const clampedIntervalMinutes = Math.min(intervalMinutes, 24 * 60);
+        const defaultCron = `*/${clampedIntervalMinutes} * * * *`;
+        const repeat =
+          clampedIntervalMinutes <= 59
+            ? { cron: defaultCron, tz: systemTimezone }
+            : { every: clampedIntervalMinutes * 60 * 1000 };
 
         if (bindings.length > 0) {
           // 注意：这里刻意只调度一个共享的 repeat 作业，然后在处理器内 fan-out 到所有 bindings。
@@ -889,22 +897,23 @@ export async function scheduleNotifications() {
               type: "cache-hit-rate-alert",
             },
             {
-              repeat: { cron: defaultCron, tz: systemTimezone },
+              repeat,
               jobId: "cache-hit-rate-alert-targets-scheduled",
             }
           );
           logger.info({
             action: "cache_hit_rate_alert_scheduled",
-            schedule: defaultCron,
-            intervalMinutes: interval,
+            schedule: "cron" in repeat ? repeat.cron : `every:${clampedIntervalMinutes}m`,
+            intervalMinutes: clampedIntervalMinutes,
             targets: bindings.length,
             mode: "targets",
           });
         } else {
           logger.info({
             action: "cache_hit_rate_alert_schedule_skipped",
-            schedule: defaultCron,
-            intervalMinutes: interval,
+            schedule:
+              clampedIntervalMinutes <= 59 ? defaultCron : `every:${clampedIntervalMinutes}m`,
+            intervalMinutes: clampedIntervalMinutes,
             reason: "no_bindings",
             mode: "targets",
           });
