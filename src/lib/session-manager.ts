@@ -512,7 +512,7 @@ export class SessionManager {
     if (redis && redis.status === "ready") {
       try {
         const hashKey = `hash:${contentHash}:session`;
-        let existingSessionId = await redis.get(hashKey);
+        const existingSessionId = await redis.get(hashKey);
 
         if (existingSessionId) {
           const terminatedAt = await SessionManager.readTerminationMarker(redis, existingSessionId);
@@ -525,10 +525,7 @@ export class SessionManager {
                 hash: contentHash,
               }
             );
-            existingSessionId = null;
-          }
-
-          if (existingSessionId) {
+          } else {
             // 找到已有 session，刷新 TTL
             await SessionManager.refreshSessionTTL(existingSessionId);
             logger.trace("SessionManager: Reusing session via hash", {
@@ -2059,7 +2056,15 @@ export class SessionManager {
       const markerOk = markerResult === "OK";
 
       if (!markerOk) {
-        logger.warn("SessionManager: Failed to set termination marker", { sessionId });
+        logger.warn(
+          "SessionManager: Failed to set termination marker; cleanup will still proceed (session may be reusable)",
+          {
+            sessionId,
+            terminatedKey,
+            terminatedAt,
+            ttlSeconds,
+          }
+        );
       }
 
       // 1. 先查询绑定信息（用于从 ZSET 中移除）

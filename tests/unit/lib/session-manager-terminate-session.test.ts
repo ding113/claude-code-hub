@@ -41,7 +41,6 @@ describe("SessionManager.terminateSession", () => {
       get: vi.fn(async () => null),
       hget: vi.fn(async () => null),
       scan: vi.fn(async () => ["0", []]),
-      mget: vi.fn(async () => [null, null]),
       pipeline: vi
         .fn()
         // 第一次 pipeline：用于 ZSET 清理（global/key/provider/user）
@@ -123,5 +122,17 @@ describe("SessionManager.terminateSession", () => {
     expect(result.markerOk).toBe(true);
 
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
+  });
+
+  it("当终止标记写入失败时，markerOk 应为 false（但清理仍会执行）", async () => {
+    const sessionId = "sess_marker_fail";
+    redisClientRef.set.mockResolvedValueOnce(null);
+    redisClientRef.scan.mockResolvedValueOnce(["0", [`session:${sessionId}:provider`]]);
+
+    const { SessionManager } = await import("@/lib/session-manager");
+    const result = await SessionManager.terminateSession(sessionId);
+
+    expect(result.markerOk).toBe(false);
+    expect(deletePipelineRef.del).toHaveBeenCalledWith(`session:${sessionId}:provider`);
   });
 });
