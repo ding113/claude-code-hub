@@ -45,8 +45,8 @@ describe("SessionManager.terminateSession", () => {
         .fn()
         // 第一次 pipeline：用于 ZSET 清理（global/key/provider/user）
         .mockImplementationOnce(() => pipelineRef)
-        // 第二次 pipeline：用于批量删除 session:{id}:* key
-        .mockImplementationOnce(() => deletePipelineRef),
+        // 后续 pipeline：用于批量删除 session:{id}:* key（可能多页 SCAN）
+        .mockImplementation(() => deletePipelineRef),
     };
   });
 

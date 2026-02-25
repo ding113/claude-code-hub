@@ -84,7 +84,8 @@ export class TerminatedSessionError extends Error {
     public readonly sessionId: string,
     public readonly terminatedAt: string | null = null
   ) {
-    super("Session has been terminated");
+    // 注意：此错误的 message 不应作为用户可见文案；用户提示由 HTTP 层/ProxySessionGuard 统一映射。
+    super("ERR_TERMINATED_SESSION");
     this.name = "TerminatedSessionError";
   }
 }
@@ -125,9 +126,15 @@ export class SessionManager {
   // 规范环境变量：SESSION_TERMINATION_TTL_SECONDS
   // 兼容旧名（计划弃用）：SESSION_TERMINATION_TTL / TERMINATED_SESSION_TTL
   private static readonly TERMINATED_SESSION_TTL = (() => {
-    const rawPrimary = process.env.SESSION_TERMINATION_TTL_SECONDS;
-    const rawLegacyA = process.env.SESSION_TERMINATION_TTL;
-    const rawLegacyB = process.env.TERMINATED_SESSION_TTL;
+    const normalize = (value: string | undefined): string | undefined => {
+      if (typeof value !== "string") return undefined;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
+
+    const rawPrimary = normalize(process.env.SESSION_TERMINATION_TTL_SECONDS);
+    const rawLegacyA = normalize(process.env.SESSION_TERMINATION_TTL);
+    const rawLegacyB = normalize(process.env.TERMINATED_SESSION_TTL);
 
     if (!rawPrimary && (rawLegacyA || rawLegacyB)) {
       logger.warn("SessionManager: Deprecated termination TTL env var detected", {
@@ -137,8 +144,8 @@ export class SessionManager {
       });
     }
 
-    const raw = rawPrimary ?? rawLegacyA ?? rawLegacyB ?? "";
-    const parsed = Number.parseInt(raw, 10);
+    const raw = rawPrimary ?? rawLegacyA ?? rawLegacyB;
+    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
     if (Number.isFinite(parsed) && parsed > 0) {
       return parsed;
     }
@@ -2083,6 +2090,14 @@ export class SessionManager {
         keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
         userId = userIdStr ? parseInt(userIdStr, 10) : null;
 
+        if (!Number.isFinite(providerId)) {
+          providerId = null;
+        }
+
+        if (!Number.isFinite(keyId)) {
+          keyId = null;
+        }
+
         if (!Number.isFinite(userId)) {
           userId = null;
         }
@@ -2099,21 +2114,55 @@ export class SessionManager {
 
       // 2. 从 ZSET 中移除（始终尝试，即使查询失败）
       const pipeline = redis.pipeline();
-      pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);
+      const zremKeys: string[] = [];
 
-      if (providerId) {
-        pipeline.zrem(`provider:${providerId}:active_sessions`, sessionId);
+      const globalKey = getGlobalActiveSessionsKey();
+      pipeline.zrem(globalKey, sessionId);
+      zremKeys.push(globalKey);
+
+      if (providerId !== null) {
+        const key = `provider:${providerId}:active_sessions`;
+        pipeline.zrem(key, sessionId);
+        zremKeys.push(key);
       }
 
-      if (keyId) {
-        pipeline.zrem(getKeyActiveSessionsKey(keyId), sessionId);
+      if (keyId !== null) {
+        const key = getKeyActiveSessionsKey(keyId);
+        pipeline.zrem(key, sessionId);
+        zremKeys.push(key);
       }
 
-      if (userId) {
-        pipeline.zrem(getUserActiveSessionsKey(userId), sessionId);
+      if (userId !== null) {
+        const key = getUserActiveSessionsKey(userId);
+        pipeline.zrem(key, sessionId);
+        zremKeys.push(key);
       }
 
-      await pipeline.exec();
+      try {
+        const results = await pipeline.exec();
+        if (results) {
+          for (let i = 0; i < results.length; i++) {
+            const [err] = results[i];
+            if (!err) continue;
+            logger.warn("SessionManager: Failed to remove session from active_sessions ZSET", {
+              sessionId,
+              zsetKey: zremKeys[i],
+              providerId,
+              keyId,
+              userId,
+              error: err,
+            });
+          }
+        }
+      } catch (zremError) {
+        logger.warn("SessionManager: Failed to cleanup active_sessions ZSET, continuing", {
+          sessionId,
+          providerId,
+          keyId,
+          userId,
+          error: zremError,
+        });
+      }
 
       // 3. 删除 session:* 相关 key（包含 req:* 新格式；保留 terminated 标记）
       let deletedKeys = 0;
