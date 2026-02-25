@@ -2187,14 +2187,14 @@ export class SessionManager {
       const CHUNK_SIZE = 20;
       let successCount = 0;
 
-        for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
-          const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
-          const results = await Promise.all(
-            chunk.map(async (sessionId) => {
-              const result = await SessionManager.terminateSession(sessionId);
-              return result.markerOk ? 1 : 0;
-            })
-          );
+      for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
+        const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
+        const results = await Promise.all(
+          chunk.map(async (sessionId) => {
+            const result = await SessionManager.terminateSession(sessionId);
+            return result.markerOk ? 1 : 0;
+          })
+        );
         successCount += results.reduce<number>((sum, value) => sum + value, 0);
       }
 
