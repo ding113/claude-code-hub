@@ -152,6 +152,9 @@ export class SessionManager {
     return 24 * 60 * 60; // 1 天
   })();
 
+  private static readonly SCAN_COUNT = 100;
+  private static readonly TERMINATE_SCAN_COUNT = 200;
+
   private static getTerminationMarkerKey(sessionId: string): string {
     return `session:${sessionId}:terminated`;
   }
@@ -1265,7 +1268,7 @@ export class SessionManager {
           "MATCH",
           "session:*:info",
           "COUNT",
-          100
+          SessionManager.SCAN_COUNT
         )) as [string, string[]];
 
         cursor = nextCursor;
@@ -1360,7 +1363,7 @@ export class SessionManager {
           "MATCH",
           "session:*:info",
           "COUNT",
-          100
+          SessionManager.SCAN_COUNT
         )) as [string, string[]];
 
         cursor = nextCursor;
@@ -1451,7 +1454,7 @@ export class SessionManager {
           "MATCH",
           `session:${escapedSessionId}:req:*:messages`,
           "COUNT",
-          100
+          SessionManager.SCAN_COUNT
         )) as [string, string[]];
 
         cursor = nextCursor;
@@ -2178,10 +2181,13 @@ export class SessionManager {
         let deletedInRound = 0;
 
         do {
-          const scanResult = (await redis.scan(cursor, "MATCH", matchPattern, "COUNT", 200)) as [
-            string,
-            string[],
-          ];
+          const scanResult = (await redis.scan(
+            cursor,
+            "MATCH",
+            matchPattern,
+            "COUNT",
+            SessionManager.TERMINATE_SCAN_COUNT
+          )) as [string, string[]];
           const nextCursor = scanResult[0];
           const keys = scanResult[1] ?? [];
           cursor = nextCursor;

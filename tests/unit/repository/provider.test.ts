@@ -51,7 +51,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("returns 0 and does not execute SQL when updates is empty", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 0 }));
+    const executeMock = vi.fn(async () => ({ count: 0 }));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {

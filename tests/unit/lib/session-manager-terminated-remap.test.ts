@@ -73,9 +73,12 @@ describe("SessionManager.getOrCreateSessionId - terminated blocking", () => {
 
     const { SessionManager, TerminatedSessionError } = await import("@/lib/session-manager");
 
-    await expect(
-      SessionManager.getOrCreateSessionId(keyId, [], oldSessionId)
-    ).rejects.toBeInstanceOf(TerminatedSessionError);
+    const error = await SessionManager.getOrCreateSessionId(keyId, [], oldSessionId).catch(
+      (e) => e as any
+    );
+    expect(error).toBeInstanceOf(TerminatedSessionError);
+    expect(error.sessionId).toBe(oldSessionId);
+    expect(error.terminatedAt).toBe("1");
   });
 
   it("hash 命中已终止 session 时应创建新 session", async () => {
