@@ -77,8 +77,8 @@ describe("SessionManager.terminateSession", () => {
       await import("@/lib/redis/active-session-keys");
     const { SessionManager } = await import("@/lib/session-manager");
 
-    const ok = await SessionManager.terminateSession(sessionId);
-    expect(ok).toBe(true);
+    const result = await SessionManager.terminateSession(sessionId);
+    expect(result.markerOk).toBe(true);
 
     expect(redisClientRef.set).toHaveBeenCalledWith(terminatedKey, expect.any(String), "EX", 86400);
     expect(redisClientRef.hget).toHaveBeenCalledWith(`session:${sessionId}:info`, "userId");
@@ -119,8 +119,8 @@ describe("SessionManager.terminateSession", () => {
     const { getUserActiveSessionsKey } = await import("@/lib/redis/active-session-keys");
     const { SessionManager } = await import("@/lib/session-manager");
 
-    const ok = await SessionManager.terminateSession(sessionId);
-    expect(ok).toBe(true);
+    const result = await SessionManager.terminateSession(sessionId);
+    expect(result.markerOk).toBe(true);
 
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
   });

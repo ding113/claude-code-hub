@@ -89,6 +89,11 @@ export class TerminatedSessionError extends Error {
   }
 }
 
+export type TerminateSessionResult = {
+  markerOk: boolean;
+  deletedKeys: number;
+};
+
 type SessionRequestMeta = {
   url: string;
   method: string;
@@ -2034,13 +2039,13 @@ export class SessionManager {
    * 影响：客户端后续继续携带同一 sessionId 时，将被阻断（getOrCreateSessionId 抛出 TerminatedSessionError）
    *
    * @param sessionId - Session ID
-   * @returns 是否成功删除
+   * @returns markerOk: 是否成功写入终止标记; deletedKeys: 清理掉的 key 数量（不含 terminated 标记）
    */
-  static async terminateSession(sessionId: string): Promise<boolean> {
+  static async terminateSession(sessionId: string): Promise<TerminateSessionResult> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, cannot terminate session");
-      return false;
+      return { markerOk: false, deletedKeys: 0 };
     }
 
     try {
@@ -2148,13 +2153,13 @@ export class SessionManager {
         markerOk,
       });
 
-      return markerOk || deletedKeys > 0;
+      return { markerOk, deletedKeys };
     } catch (error) {
       logger.error("SessionManager: Failed to terminate session", {
         error,
         sessionId,
       });
-      return false;
+      return { markerOk: false, deletedKeys: 0 };
     }
   }
 
@@ -2182,14 +2187,14 @@ export class SessionManager {
       const CHUNK_SIZE = 20;
       let successCount = 0;
 
-      for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
-        const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
-        const results = await Promise.all(
-          chunk.map(async (sessionId) => {
-            const success = await SessionManager.terminateSession(sessionId);
-            return success ? 1 : 0;
-          })
-        );
+        for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
+          const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
+          const results = await Promise.all(
+            chunk.map(async (sessionId) => {
+              const result = await SessionManager.terminateSession(sessionId);
+              return result.markerOk ? 1 : 0;
+            })
+          );
         successCount += results.reduce<number>((sum, value) => sum + value, 0);
       }
 
