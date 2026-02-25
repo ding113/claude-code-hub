@@ -124,7 +124,7 @@ export function ClientVersionStatsTable({ data }: ClientVersionStatsTableProps) 
             </div>
 
             {/* Users Table */}
-            <div className="rounded-xl border border-border/50 overflow-hidden bg-black/10">
+            <div className="rounded-xl border border-border/50 overflow-hidden bg-muted/20">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border/50 hover:bg-transparent">
