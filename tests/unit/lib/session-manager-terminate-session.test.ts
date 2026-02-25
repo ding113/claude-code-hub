@@ -112,8 +112,6 @@ describe("SessionManager.terminateSession", () => {
     });
     redisClientRef.hget.mockResolvedValue(null);
     redisClientRef.scan.mockResolvedValueOnce(["0", [terminatedKey]]);
-    // SCAN 仅返回 terminatedKey 时，不会发出任何 DEL 命令，因此 exec 结果应为空（避免误计 deletedKeys）。
-    deletePipelineRef.exec.mockResolvedValueOnce([]);
 
     const { getUserActiveSessionsKey } = await import("@/lib/redis/active-session-keys");
     const { SessionManager } = await import("@/lib/session-manager");
@@ -121,6 +119,8 @@ describe("SessionManager.terminateSession", () => {
     const result = await SessionManager.terminateSession(sessionId);
     expect(result.markerOk).toBe(true);
 
+    // SCAN 仅返回 terminatedKey 时，不会发出任何 DEL 命令，因此不应执行 delete pipeline（避免不必要的网络开销）。
+    expect(deletePipelineRef.exec).not.toHaveBeenCalled();
     expect(pipelineRef.zrem).not.toHaveBeenCalledWith(getUserActiveSessionsKey(123), sessionId);
   });
 
@@ -134,5 +134,17 @@ describe("SessionManager.terminateSession", () => {
 
     expect(result.markerOk).toBe(false);
     expect(deletePipelineRef.del).toHaveBeenCalledWith(`session:${sessionId}:provider`);
+  });
+
+  it("当清理过程抛错时，应尽量保留 markerOk=true（如果终止标记已写入）", async () => {
+    const sessionId = "sess_cleanup_fail";
+    const terminatedKey = `session:${sessionId}:terminated`;
+    redisClientRef.scan.mockRejectedValueOnce(new Error("scan failed"));
+
+    const { SessionManager } = await import("@/lib/session-manager");
+    const result = await SessionManager.terminateSession(sessionId);
+
+    expect(redisClientRef.set).toHaveBeenCalledWith(terminatedKey, expect.any(String), "EX", 86400);
+    expect(result.markerOk).toBe(true);
   });
 });

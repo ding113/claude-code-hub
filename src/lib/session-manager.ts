@@ -2052,6 +2052,9 @@ export class SessionManager {
       return { markerOk: false, deletedKeys: 0 };
     }
 
+    let markerOk = false;
+    let deletedKeys = 0;
+
     try {
       const terminatedKey = SessionManager.getTerminationMarkerKey(sessionId);
       const terminatedAt = Date.now().toString();
@@ -2060,7 +2063,7 @@ export class SessionManager {
       // 0. 标记终止（优先写入，避免并发请求在清理窗口内复活）
       // 说明：这里允许覆盖旧值，用于刷新 TTL（多次终止时延长阻断窗口）。
       const markerResult = await redis.set(terminatedKey, terminatedAt, "EX", ttlSeconds);
-      const markerOk = markerResult === "OK";
+      markerOk = markerResult === "OK";
 
       if (!markerOk) {
         logger.warn(
@@ -2165,37 +2168,52 @@ export class SessionManager {
       }
 
       // 3. 删除 session:* 相关 key（包含 req:* 新格式；保留 terminated 标记）
-      let deletedKeys = 0;
-      let cursor = "0";
       const escapedSessionId = SessionManager.escapeRedisMatchPatternLiteral(sessionId);
       const matchPattern = `session:${escapedSessionId}:*`;
 
-      do {
-        const scanResult = (await redis.scan(cursor, "MATCH", matchPattern, "COUNT", 200)) as [
-          string,
-          string[],
-        ];
-        const nextCursor = scanResult[0];
-        const keys = scanResult[1] ?? [];
-        cursor = nextCursor;
+      // 说明：Redis SCAN 不提供快照语义；为了减少并发窗口下的遗漏，这里最多执行两轮全量扫描清理。
+      const MAX_SCAN_ROUNDS = 2;
+      for (let round = 0; round < MAX_SCAN_ROUNDS; round++) {
+        let cursor = "0";
+        let deletedInRound = 0;
 
-        if (keys.length === 0) continue;
+        do {
+          const scanResult = (await redis.scan(cursor, "MATCH", matchPattern, "COUNT", 200)) as [
+            string,
+            string[],
+          ];
+          const nextCursor = scanResult[0];
+          const keys = scanResult[1] ?? [];
+          cursor = nextCursor;
 
-        const deletePipeline = redis.pipeline();
-        for (const key of keys) {
-          if (key === terminatedKey) continue;
-          deletePipeline.del(key);
-        }
+          if (keys.length === 0) continue;
 
-        const deleteResults = await deletePipeline.exec();
-        if (!deleteResults) continue;
-
-        for (const [err, result] of deleteResults) {
-          if (!err && typeof result === "number" && result > 0) {
-            deletedKeys += result;
+          const deletePipeline = redis.pipeline();
+          let hasDeletes = false;
+          for (const key of keys) {
+            if (key === terminatedKey) continue;
+            deletePipeline.del(key);
+            hasDeletes = true;
           }
+
+          // 如果这一页 SCAN 只返回了 terminatedKey，则无需发起空 pipeline.exec()。
+          if (!hasDeletes) continue;
+
+          const deleteResults = await deletePipeline.exec();
+          if (!deleteResults) continue;
+
+          for (const [err, result] of deleteResults) {
+            if (!err && typeof result === "number" && result > 0) {
+              deletedInRound += result;
+            }
+          }
+        } while (cursor !== "0");
+
+        deletedKeys += deletedInRound;
+        if (deletedInRound === 0) {
+          break;
         }
-      } while (cursor !== "0");
+      }
 
       logger.info("SessionManager: Terminated session", {
         sessionId,
@@ -2213,7 +2231,7 @@ export class SessionManager {
         error,
         sessionId,
       });
-      return { markerOk: false, deletedKeys: 0 };
+      return { markerOk, deletedKeys };
     }
   }
 
