@@ -2,6 +2,8 @@
 
 import { formatInTimeZone } from "date-fns-tz";
 import { useTimeZone, useTranslations } from "next-intl";
+import { useCallback } from "react";
+import { toast } from "sonner";
 import type { MyUsageLogEntry } from "@/actions/my-usage";
 import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CURRENCY_CONFIG, type CurrencyCode } from "@/lib/utils";
+import { copyTextToClipboard } from "@/lib/utils/clipboard";
 
 interface UsageLogsTableProps {
   logs: MyUsageLogEntry[];
@@ -39,6 +42,7 @@ export function UsageLogsTable({
   loadingLabel,
 }: UsageLogsTableProps) {
   const t = useTranslations("myUsage.logs");
+  const tCommon = useTranslations("common");
   const timeZone = useTimeZone() ?? "UTC";
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -46,6 +50,15 @@ export function UsageLogsTable({
     if (value == null || value === 0) return "-";
     return value.toLocaleString();
   };
+
+  const handleCopyModel = useCallback(
+    (modelId: string) => {
+      void copyTextToClipboard(modelId).then((ok) => {
+        if (ok) toast.success(tCommon("copySuccess"));
+      });
+    },
+    [tCommon]
+  );
 
   return (
     <div className="space-y-3">
@@ -90,7 +103,16 @@ export function UsageLogsTable({
                   <TableCell className="space-y-1">
                     <div className="flex items-center gap-1.5 text-sm">
                       {log.model ? <ModelVendorIcon modelId={log.model} /> : null}
-                      <span>{log.model ?? t("unknownModel")}</span>
+                      {log.model ? (
+                        <span
+                          className="cursor-pointer hover:underline truncate"
+                          onClick={() => handleCopyModel(log.model!)}
+                        >
+                          {log.model}
+                        </span>
+                      ) : (
+                        <span>{t("unknownModel")}</span>
+                      )}
                     </div>
                     {log.modelRedirect ? (
                       <div className="text-xs text-muted-foreground">{log.modelRedirect}</div>
