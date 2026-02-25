@@ -101,7 +101,7 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
       return 1;
     },
     isWarmupRequest() {
-      return true;
+      return false;
     },
   } satisfies Partial<ProxySession>;
 
@@ -110,31 +110,31 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
 
 beforeEach(() => {
   vi.clearAllMocks();
-  extractClientSessionIdMock.mockReturnValue(null);
-  getOrCreateSessionIdMock.mockResolvedValue("session_assigned");
+  getCachedSystemSettingsMock.mockResolvedValue({
+    interceptAnthropicWarmupRequests: false,
+    enableCodexSessionIdCompletion: false,
+  });
+  extractClientSessionIdMock.mockReturnValue("sess_terminated");
   getNextRequestSequenceMock.mockResolvedValue(1);
-  getCachedSystemSettingsMock.mockResolvedValue({ interceptAnthropicWarmupRequests: true });
 });
 
-describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
-  test("当 warmup 且开关开启时，不应调用 SessionTracker.trackSession", async () => {
+describe("ProxySessionGuard - terminated session", () => {
+  test("当 clientSessionId 已终止时应阻断请求并抛出 ProxyError(410)", async () => {
     const ProxySessionGuard = await loadGuard();
-    const session = createMockSession({ isWarmupRequest: () => true });
+    const session = createMockSession();
 
-    await ProxySessionGuard.ensure(session);
+    getOrCreateSessionIdMock.mockRejectedValueOnce(
+      new TerminatedSessionError("sess_terminated", "1")
+    );
 
+    await expect(ProxySessionGuard.ensure(session)).rejects.toMatchObject({
+      name: "ProxyError",
+      statusCode: 410,
+      message: "Session 已被终止，请创建新的会话后重试",
+    });
+
+    expect(generateSessionIdMock).not.toHaveBeenCalled();
     expect(trackSessionMock).not.toHaveBeenCalled();
-    expect(session.sessionId).toBe("session_assigned");
-  });
-
-  test("当 warmup 但开关关闭时，应正常调用 SessionTracker.trackSession", async () => {
-    const ProxySessionGuard = await loadGuard();
-    getCachedSystemSettingsMock.mockResolvedValueOnce({ interceptAnthropicWarmupRequests: false });
-    const session = createMockSession({ isWarmupRequest: () => true });
-
-    await ProxySessionGuard.ensure(session);
-
-    expect(trackSessionMock).toHaveBeenCalledTimes(1);
-    expect(trackSessionMock).toHaveBeenCalledWith("session_assigned", 1, 1);
+    expect(session.sessionId).toBeNull();
   });
 });

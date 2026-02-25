@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let redisClientRef: any;
-const pipelineCalls: Array<unknown[]> = [];
 
 vi.mock("server-only", () => ({}));
 
@@ -32,31 +31,20 @@ vi.mock("@/lib/redis", () => ({
 
 function makePipeline() {
   const pipeline = {
-    setex: vi.fn((...args: unknown[]) => {
-      pipelineCalls.push(["setex", ...args]);
-      return pipeline;
-    }),
-    expire: vi.fn((...args: unknown[]) => {
-      pipelineCalls.push(["expire", ...args]);
-      return pipeline;
-    }),
-    exec: vi.fn(async () => {
-      pipelineCalls.push(["exec"]);
-      return [];
-    }),
+    setex: vi.fn(() => pipeline),
+    exec: vi.fn(async () => []),
   };
   return pipeline;
 }
 
-describe("SessionManager.getOrCreateSessionId - terminated remap", () => {
+describe("SessionManager.getOrCreateSessionId - terminated blocking", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.resetModules();
-    pipelineCalls.length = 0;
 
     redisClientRef = {
       status: "ready",
-      mget: vi.fn(async () => [null, null]),
+      get: vi.fn(async () => null),
       pipeline: vi.fn(() => makePipeline()),
     };
   });
@@ -66,65 +54,50 @@ describe("SessionManager.getOrCreateSessionId - terminated remap", () => {
 
     const keyId = 1;
     const oldSessionId = "sess_old";
-    const messages = [{ role: "user", content: "hi" }, { role: "assistant", content: "ok" }, {}];
+    const messages = [{ role: "user", content: "hi" }];
 
     const sessionId = await SessionManager.getOrCreateSessionId(keyId, messages, oldSessionId);
 
     expect(sessionId).toBe(oldSessionId);
-    expect(redisClientRef.mget).toHaveBeenCalledWith(
-      `session:${oldSessionId}:terminated`,
-      `session:${oldSessionId}:terminated_replacement`
-    );
-    expect(
-      pipelineCalls.some(
-        (c) => c[0] === "setex" && c[1] === `session:${oldSessionId}:terminated_replacement`
-      )
-    ).toBe(false);
+    expect(redisClientRef.get).toHaveBeenCalledWith(`session:${oldSessionId}:terminated`);
   });
 
-  it("已终止且存在 replacement 时应返回 replacement sessionId", async () => {
+  it("已终止时应拒绝复用并抛出 TerminatedSessionError", async () => {
     const keyId = 1;
     const oldSessionId = "sess_old";
-    const replacementSessionId = "sess_new";
-    redisClientRef.mget.mockResolvedValueOnce(["1", replacementSessionId]);
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key === `session:${oldSessionId}:terminated`) return "1";
+      return null;
+    });
 
-    const { SessionManager } = await import("@/lib/session-manager");
+    const { SessionManager, TerminatedSessionError } = await import("@/lib/session-manager");
 
-    const sessionId = await SessionManager.getOrCreateSessionId(keyId, [], oldSessionId);
-
-    expect(sessionId).toBe(replacementSessionId);
-    expect(
-      pipelineCalls.some(
-        (c) => c[0] === "setex" && c[1] === `session:${oldSessionId}:terminated_replacement`
-      )
-    ).toBe(false);
+    await expect(
+      SessionManager.getOrCreateSessionId(keyId, [], oldSessionId)
+    ).rejects.toBeInstanceOf(TerminatedSessionError);
   });
 
-  it("已终止但无 replacement 时应生成并持久化 replacement", async () => {
+  it("hash 命中已终止 session 时应创建新 session", async () => {
     const keyId = 1;
-    const oldSessionId = "sess_old";
-    redisClientRef.mget.mockResolvedValueOnce(["1", null]);
+    const terminatedSessionId = "sess_terminated";
 
     const { SessionManager } = await import("@/lib/session-manager");
+    vi.spyOn(SessionManager, "generateSessionId").mockReturnValue("sess_new");
 
-    const sessionId = await SessionManager.getOrCreateSessionId(keyId, [], oldSessionId);
+    redisClientRef.get.mockImplementation(async (key: string) => {
+      if (key.startsWith("hash:") && key.endsWith(":session")) return terminatedSessionId;
+      if (key === `session:${terminatedSessionId}:terminated`) return "1";
+      return null;
+    });
 
-    expect(sessionId).not.toBe(oldSessionId);
-    expect(sessionId).toMatch(/^sess_/);
+    const messages = [
+      { role: "user", content: "hi" },
+      { role: "assistant", content: "ok" },
+    ];
 
-    expect(
-      pipelineCalls.some(
-        (c) =>
-          c[0] === "setex" &&
-          c[1] === `session:${oldSessionId}:terminated_replacement` &&
-          c[2] === 86400 &&
-          c[3] === sessionId
-      )
-    ).toBe(true);
-    expect(
-      pipelineCalls.some(
-        (c) => c[0] === "expire" && c[1] === `session:${oldSessionId}:terminated` && c[2] === 86400
-      )
-    ).toBe(true);
+    const sessionId = await SessionManager.getOrCreateSessionId(keyId, messages, null);
+
+    expect(sessionId).toBe("sess_new");
+    expect(redisClientRef.get).toHaveBeenCalledWith(`session:${terminatedSessionId}:terminated`);
   });
 });

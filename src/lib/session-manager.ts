@@ -78,6 +78,16 @@ function parseHeaderRecord(value: string): Record<string, string> | null {
   }
 }
 
+export class TerminatedSessionError extends Error {
+  constructor(
+    public readonly sessionId: string,
+    public readonly terminatedAt: string | null = null
+  ) {
+    super("Session has been terminated");
+    this.name = "TerminatedSessionError";
+  }
+}
+
 type SessionRequestMeta = {
   url: string;
   method: string;
@@ -122,52 +132,23 @@ export class SessionManager {
     return `session:${sessionId}:terminated`;
   }
 
-  private static getTerminationReplacementKey(sessionId: string): string {
-    return `session:${sessionId}:terminated_replacement`;
-  }
-
-  private static async resolveSessionIdIfTerminated(sessionId: string): Promise<{
-    sessionId: string;
-    remapped: boolean;
-    terminatedSessionId: string;
-  }> {
-    const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") {
-      return { sessionId, remapped: false, terminatedSessionId: sessionId };
-    }
-
+  private static async readTerminationMarker(
+    redis: any,
+    sessionId: string
+  ): Promise<string | null> {
     const terminatedKey = SessionManager.getTerminationMarkerKey(sessionId);
-    const replacementKey = SessionManager.getTerminationReplacementKey(sessionId);
-
     try {
-      const values = await redis.mget(terminatedKey, replacementKey);
-      const terminatedAt = values?.[0] ?? null;
-      const replacement = values?.[1] ?? null;
-
-      if (!terminatedAt) {
-        return { sessionId, remapped: false, terminatedSessionId: sessionId };
+      const value = await redis.get(terminatedKey);
+      if (typeof value !== "string" || value.length === 0) {
+        return null;
       }
-
-      if (replacement && typeof replacement === "string" && replacement.length > 0) {
-        return { sessionId: replacement, remapped: true, terminatedSessionId: sessionId };
-      }
-
-      const newSessionId = SessionManager.generateSessionId();
-      const ttlSeconds = SessionManager.TERMINATED_SESSION_TTL;
-
-      await redis
-        .pipeline()
-        .setex(replacementKey, ttlSeconds, newSessionId)
-        .expire(terminatedKey, ttlSeconds)
-        .exec();
-
-      return { sessionId: newSessionId, remapped: true, terminatedSessionId: sessionId };
+      return value;
     } catch (error) {
-      logger.error("SessionManager: Failed to resolve terminated session", {
+      logger.error("SessionManager: Failed to read termination marker", {
         error,
         sessionId,
       });
-      return { sessionId, remapped: false, terminatedSessionId: sessionId };
+      return null;
     }
   }
 
@@ -423,15 +404,20 @@ export class SessionManager {
 
     // 1. 优先使用客户端传递的 session_id (来自 metadata.user_id 或 metadata.session_id)
     if (clientSessionId) {
-      const resolved = await SessionManager.resolveSessionIdIfTerminated(clientSessionId);
-      const effectiveSessionId = resolved.sessionId;
-
-      if (resolved.remapped) {
-        logger.info("SessionManager: Remapped terminated session", {
-          terminatedSessionId: resolved.terminatedSessionId,
-          sessionId: effectiveSessionId,
-        });
+      if (redis && redis.status === "ready") {
+        const terminatedAt = await SessionManager.readTerminationMarker(redis, clientSessionId);
+        if (terminatedAt) {
+          logger.info("SessionManager: Rejected terminated client session", {
+            keyId,
+            sessionId: clientSessionId,
+            terminatedAt,
+            messagesLength,
+          });
+          throw new TerminatedSessionError(clientSessionId, terminatedAt);
+        }
       }
+
+      const effectiveSessionId = clientSessionId;
 
       // 2. 短上下文并发检测（方案E）
       if (
@@ -498,18 +484,28 @@ export class SessionManager {
         let existingSessionId = await redis.get(hashKey);
 
         if (existingSessionId) {
-          const resolved = await SessionManager.resolveSessionIdIfTerminated(existingSessionId);
-          if (resolved.remapped) {
-            existingSessionId = resolved.sessionId;
-            await redis.setex(hashKey, SessionManager.SESSION_TTL, existingSessionId);
+          const terminatedAt = await SessionManager.readTerminationMarker(redis, existingSessionId);
+          if (terminatedAt) {
+            logger.info(
+              "SessionManager: Hash hit but session was terminated, creating new session",
+              {
+                existingSessionId,
+                terminatedAt,
+                hash: contentHash,
+              }
+            );
+            existingSessionId = null;
           }
-          // 找到已有 session，刷新 TTL
-          await SessionManager.refreshSessionTTL(existingSessionId);
-          logger.trace("SessionManager: Reusing session via hash", {
-            sessionId: existingSessionId,
-            hash: contentHash,
-          });
-          return existingSessionId;
+
+          if (existingSessionId) {
+            // 找到已有 session，刷新 TTL
+            await SessionManager.refreshSessionTTL(existingSessionId);
+            logger.trace("SessionManager: Reusing session via hash", {
+              sessionId: existingSessionId,
+              hash: contentHash,
+            });
+            return existingSessionId;
+          }
         }
 
         // 未找到：创建新 session
@@ -2007,8 +2003,8 @@ export class SessionManager {
   /**
    * 终止 Session（主动打断）
    *
-   * 功能：删除 Session 在 Redis 中的所有绑定关系，强制下次请求重新选择供应商
-   * 用途：管理员主动打断长时间占用同一供应商的 Session
+   * 功能：写入“终止标记”并清理 Redis 中所有 session:{id}:* 相关 key
+   * 影响：客户端后续继续携带同一 sessionId 时，将被阻断（getOrCreateSessionId 抛出 TerminatedSessionError）
    *
    * @param sessionId - Session ID
    * @returns 是否成功删除
