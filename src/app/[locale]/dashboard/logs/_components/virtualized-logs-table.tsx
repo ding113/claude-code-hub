@@ -248,7 +248,7 @@ export function VirtualizedLogsTable({
                 </div>
               )}
               <div
-                className="flex-[1] min-w-[80px] px-1.5 truncate"
+                className="flex-[1.3] min-w-[100px] px-1.5 truncate"
                 title={t("logs.columns.model")}
               >
                 {t("logs.columns.model")}
@@ -271,7 +271,7 @@ export function VirtualizedLogsTable({
               )}
               {hideCostColumn ? null : (
                 <div
-                  className="flex-[0.7] min-w-[60px] text-right px-1.5 truncate"
+                  className="flex-[0.6] min-w-[50px] text-right px-1.5 truncate"
                   title={t("logs.columns.cost")}
                 >
                   {t("logs.columns.cost")}
@@ -502,7 +502,7 @@ export function VirtualizedLogsTable({
                     )}
 
                     {/* Model */}
-                    <div className="flex-[1] min-w-[80px] font-mono text-xs px-1.5">
+                    <div className="flex-[1.3] min-w-[100px] font-mono text-xs px-1.5">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -622,7 +622,7 @@ export function VirtualizedLogsTable({
 
                     {/* Cost */}
                     {hideCostColumn ? null : (
-                      <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.6] min-w-[50px] text-right font-mono text-xs px-1.5">
                         {isNonBilling ? (
                           "-"
                         ) : log.costUsd != null ? (
