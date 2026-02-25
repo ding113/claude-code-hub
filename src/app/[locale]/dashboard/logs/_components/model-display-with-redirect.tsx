@@ -45,10 +45,7 @@ export function ModelDisplayWithRedirect({
     return (
       <div className="flex items-center gap-1.5 min-w-0">
         {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
-        <span
-          className="truncate cursor-pointer hover:underline"
-          onClick={handleCopyModel}
-        >
+        <span className="truncate cursor-pointer hover:underline" onClick={handleCopyModel}>
           {billingModel || "-"}
         </span>
       </div>
@@ -59,10 +56,7 @@ export function ModelDisplayWithRedirect({
   return (
     <div className="flex items-center gap-1.5 min-w-0">
       {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
-      <span
-        className="truncate cursor-pointer hover:underline"
-        onClick={handleCopyModel}
-      >
+      <span className="truncate cursor-pointer hover:underline" onClick={handleCopyModel}>
         {billingModel}
       </span>
       <Badge
