@@ -153,6 +153,20 @@ export class SessionManager {
   }
 
   /**
+   * 将用户可控的字符串安全地嵌入 Redis `SCAN MATCH` glob pattern 中（按字面量匹配）。
+   *
+   * Redis glob 语法中 `* ? [] \\` 都具有特殊含义，因此需要转义以避免误匹配/误删。
+   */
+  private static escapeRedisMatchPatternLiteral(value: string): string {
+    return value
+      .replaceAll("\\", "\\\\")
+      .replaceAll("*", "\\*")
+      .replaceAll("?", "\\?")
+      .replaceAll("[", "\\[")
+      .replaceAll("]", "\\]");
+  }
+
+  /**
    * 获取 STORE_SESSION_MESSAGES 配置
    * - true：原样存储 message 内容
    * - false（默认）：存储但对 message 内容脱敏 [REDACTED]
@@ -1408,12 +1422,13 @@ export class SessionManager {
       }
 
       // 2. 检查新格式：使用 SCAN 搜索 session:{sessionId}:req:*:messages
+      const escapedSessionId = SessionManager.escapeRedisMatchPatternLiteral(sessionId);
       let cursor = "0";
       do {
         const [nextCursor, keys] = (await redis.scan(
           cursor,
           "MATCH",
-          `session:${sessionId}:req:*:messages`,
+          `session:${escapedSessionId}:req:*:messages`,
           "COUNT",
           100
         )) as [string, string[]];
@@ -2080,7 +2095,8 @@ export class SessionManager {
       // 3. 删除 session:* 相关 key（包含 req:* 新格式，避免终止后仍能查看/复活）
       let deletedKeys = 0;
       let cursor = "0";
-      const matchPattern = `session:${sessionId}:*`;
+      const escapedSessionId = SessionManager.escapeRedisMatchPatternLiteral(sessionId);
+      const matchPattern = `session:${escapedSessionId}:*`;
 
       do {
         const scanResult = (await redis.scan(cursor, "MATCH", matchPattern, "COUNT", 200)) as [

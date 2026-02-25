@@ -50,7 +50,7 @@ describe("SessionManager.terminateSession", () => {
   });
 
   it("应同时从 global/key/user 的 active_sessions ZSET 中移除 sessionId（若可解析到 userId）", async () => {
-    const sessionId = "sess_test";
+    const sessionId = "sess_te*st?[x]";
     const terminatedKey = `session:${sessionId}:terminated`;
     redisClientRef.get.mockImplementation(async (key: string) => {
       if (key === `session:${sessionId}:provider`) return "42";
@@ -90,6 +90,15 @@ describe("SessionManager.terminateSession", () => {
     expect(deletePipelineRef.del).toHaveBeenCalledWith(`session:${sessionId}:req:1:messages`);
     expect(deletePipelineRef.del).toHaveBeenCalledWith(`session:${sessionId}:req:1:response`);
     expect(deletePipelineRef.del).not.toHaveBeenCalledWith(terminatedKey);
+
+    // 安全性：SCAN MATCH pattern 必须按字面量匹配 sessionId，避免 glob 注入误删其它 key
+    expect(redisClientRef.scan).toHaveBeenCalledWith(
+      "0",
+      "MATCH",
+      "session:sess_te\\*st\\?\\[x\\]:*",
+      "COUNT",
+      200
+    );
   });
 
   it("当 userId 不可用时，不应尝试 zrem user active_sessions key", async () => {
