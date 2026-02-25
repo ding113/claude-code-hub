@@ -163,22 +163,43 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
     ELSE ${ttlFallback.defaultSeconds}
   END`;
 
+  // 重要：swap_cache_ttl_applied 仅用于“计费口径”的 5m/1h 翻转（见 Provider.swapCacheTtlBilling）。
+  // eligible/TTL/gap 属于“缓存语义口径”，这里需要把 5m/1h 还原回真实 TTL，再用于 gap<=TTL 的判断。
+  const cacheCreation5mTokensForTtlExpr = sql<number | null>`CASE
+    WHEN COALESCE(${messageRequest.swapCacheTtlApplied}, false) THEN ${messageRequest.cacheCreation1hInputTokens}
+    ELSE ${messageRequest.cacheCreation5mInputTokens}
+  END`;
+  const cacheCreation1hTokensForTtlExpr = sql<number | null>`CASE
+    WHEN COALESCE(${messageRequest.swapCacheTtlApplied}, false) THEN ${messageRequest.cacheCreation5mInputTokens}
+    ELSE ${messageRequest.cacheCreation1hInputTokens}
+  END`;
+  const cacheTtlAppliedForTtlExpr = sql<string | null>`CASE
+    WHEN COALESCE(${messageRequest.swapCacheTtlApplied}, false) THEN (
+      CASE
+        WHEN ${messageRequest.cacheTtlApplied} = '5m' THEN '1h'
+        WHEN ${messageRequest.cacheTtlApplied} = '1h' THEN '5m'
+        ELSE ${messageRequest.cacheTtlApplied}
+      END
+    )
+    ELSE ${messageRequest.cacheTtlApplied}
+  END`;
+
   // cache_ttl_applied 理论上应是短字符串（例如 5m/1h/3600s），但数据库字段可能被
   // 异常/恶意写入过大的数值，从而导致 ::int 或乘法溢出。本处对纯数字 TTL 做位数与范围
   // 护栏：无效值统一回退到 ttlFallbackSecondsExpr，避免查询直接失败。
-  const ttlAppliedNumberTextExpr = sql<string>`substring(${messageRequest.cacheTtlApplied} from '^[0-9]+')`;
+  const ttlAppliedNumberTextExpr = sql<string>`substring(${cacheTtlAppliedForTtlExpr} from '^[0-9]+')`;
   const ttlAppliedNumberMaxDigits = 9;
   const ttlAppliedNumberMaxSeconds = 7 * 24 * 3600;
   const ttlAppliedNumberMaxHours = Math.floor(ttlAppliedNumberMaxSeconds / 3600);
   const ttlAppliedNumberMaxMinutes = Math.floor(ttlAppliedNumberMaxSeconds / 60);
 
   const ttlSecondsExpr = sql<number>`CASE
-    WHEN COALESCE(${messageRequest.cacheCreation1hInputTokens}, 0) > 0 THEN 3600
-    WHEN COALESCE(${messageRequest.cacheCreation5mInputTokens}, 0) > 0 THEN 300
-    WHEN ${messageRequest.cacheTtlApplied} = '1h' THEN 3600
-    WHEN ${messageRequest.cacheTtlApplied} = '5m' THEN 300
-    WHEN ${messageRequest.cacheTtlApplied} = 'mixed' THEN 3600
-    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+h$' THEN (
+    WHEN COALESCE(${cacheCreation1hTokensForTtlExpr}, 0) > 0 THEN 3600
+    WHEN COALESCE(${cacheCreation5mTokensForTtlExpr}, 0) > 0 THEN 300
+    WHEN ${cacheTtlAppliedForTtlExpr} = '1h' THEN 3600
+    WHEN ${cacheTtlAppliedForTtlExpr} = '5m' THEN 300
+    WHEN ${cacheTtlAppliedForTtlExpr} = 'mixed' THEN 3600
+    WHEN ${cacheTtlAppliedForTtlExpr} ~ '^[0-9]+h$' THEN (
       CASE
         WHEN char_length(${ttlAppliedNumberTextExpr}) > ${ttlAppliedNumberMaxDigits}
           THEN ${ttlFallbackSecondsExpr}
@@ -187,7 +208,7 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
         ELSE (${ttlAppliedNumberTextExpr})::int * 3600
       END
     )
-    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+m$' THEN (
+    WHEN ${cacheTtlAppliedForTtlExpr} ~ '^[0-9]+m$' THEN (
       CASE
         WHEN char_length(${ttlAppliedNumberTextExpr}) > ${ttlAppliedNumberMaxDigits}
           THEN ${ttlFallbackSecondsExpr}
@@ -196,7 +217,7 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
         ELSE (${ttlAppliedNumberTextExpr})::int * 60
       END
     )
-    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+s$' THEN (
+    WHEN ${cacheTtlAppliedForTtlExpr} ~ '^[0-9]+s$' THEN (
       CASE
         WHEN char_length(${ttlAppliedNumberTextExpr}) > ${ttlAppliedNumberMaxDigits}
           THEN ${ttlFallbackSecondsExpr}

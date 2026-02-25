@@ -1308,6 +1308,16 @@ const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHan
   );
 app.openapi(getNotificationSettingsRoute, getNotificationSettingsHandler);
 
+const RatioStringSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .regex(/^\d+(?:\.\d+)?$/)
+  .refine((value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 && n <= 1;
+  });
+
 const { route: updateNotificationSettingsRoute, handler: updateNotificationSettingsHandler } =
   createActionRoute(
     "notifications",
@@ -1334,7 +1344,13 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
           .optional()
           .describe("每日排行榜 Webhook URL（旧版模式）"),
         dailyLeaderboardTime: z.string().optional().describe("每日排行榜发送时间（HH:mm）"),
-        dailyLeaderboardTopN: z.number().int().positive().optional().describe("每日排行榜 TopN"),
+        dailyLeaderboardTopN: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .describe("每日排行榜 TopN"),
 
         costAlertEnabled: z.boolean().optional().describe("是否启用成本预警"),
         costAlertWebhook: z
@@ -1343,14 +1359,14 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
           .nullable()
           .optional()
           .describe("成本预警 Webhook URL（旧版模式）"),
-        costAlertThreshold: z
-          .string()
-          .optional()
-          .describe("成本预警阈值（numeric 字段以 string 表示）"),
+        costAlertThreshold: RatioStringSchema.optional().describe(
+          "成本预警阈值（numeric 字段以 string 表示）"
+        ),
         costAlertCheckInterval: z
           .number()
           .int()
-          .positive()
+          .min(10)
+          .max(1440)
           .optional()
           .describe("成本预警检查间隔（分钟）"),
 
@@ -1368,49 +1384,52 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
         cacheHitRateAlertCheckInterval: z
           .number()
           .int()
-          .positive()
+          .min(1)
+          .max(1440)
           .optional()
           .describe("缓存命中率告警检查间隔（分钟）"),
         cacheHitRateAlertHistoricalLookbackDays: z
           .number()
           .int()
-          .positive()
+          .min(1)
+          .max(90)
           .optional()
           .describe("历史基线回看天数"),
         cacheHitRateAlertMinEligibleRequests: z
           .number()
           .int()
-          .positive()
+          .min(1)
+          .max(100000)
           .optional()
           .describe("最小 eligible 请求数门槛"),
         cacheHitRateAlertMinEligibleTokens: z
           .number()
           .int()
           .min(0)
+          .max(2_147_483_647)
           .optional()
           .describe("最小 eligible tokens 门槛"),
-        cacheHitRateAlertAbsMin: z
-          .string()
-          .optional()
-          .describe("absMin（numeric 字段以 string 表示）"),
-        cacheHitRateAlertDropRel: z
-          .string()
-          .optional()
-          .describe("dropRel（numeric 字段以 string 表示）"),
-        cacheHitRateAlertDropAbs: z
-          .string()
-          .optional()
-          .describe("dropAbs（numeric 字段以 string 表示）"),
+        cacheHitRateAlertAbsMin: RatioStringSchema.optional().describe(
+          "absMin（numeric 字段以 string 表示）"
+        ),
+        cacheHitRateAlertDropRel: RatioStringSchema.optional().describe(
+          "dropRel（numeric 字段以 string 表示）"
+        ),
+        cacheHitRateAlertDropAbs: RatioStringSchema.optional().describe(
+          "dropAbs（numeric 字段以 string 表示）"
+        ),
         cacheHitRateAlertCooldownMinutes: z
           .number()
           .int()
           .min(0)
+          .max(1440)
           .optional()
           .describe("冷却时间（分钟）"),
         cacheHitRateAlertTopN: z
           .number()
           .int()
-          .positive()
+          .min(1)
+          .max(100)
           .optional()
           .describe("TopN（最多返回/推送条数）"),
       }),

@@ -257,8 +257,8 @@ export function decideCacheHitRateAnomalies(
     const baselineValue = baselinePicked.sample.hitRateTokens;
 
     const deltaAbs = currentValue - baselineValue;
-    const dropAbs = baselineValue - currentValue;
-    const deltaRel = baselineValue <= 0 ? null : (currentValue - baselineValue) / baselineValue;
+    const dropAbs = Math.max(baselineValue - currentValue, 0);
+    const deltaRel = baselineValue <= 0 ? null : deltaAbs / baselineValue;
 
     const reasonCodes: string[] = [...currentPicked.reasonCodes];
 
@@ -282,7 +282,7 @@ export function decideCacheHitRateAnomalies(
 
     reasonCodes.push(...triggered);
 
-    const severity = Math.max(baselineValue - currentValue, settings.absMin - currentValue, 0);
+    const severity = Math.max(dropAbs, settings.absMin - currentValue, 0);
 
     anomaliesWithSeverity.push({
       severity,

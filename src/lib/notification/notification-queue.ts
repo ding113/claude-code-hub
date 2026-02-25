@@ -891,6 +891,7 @@ export async function scheduleNotifications() {
         if (bindings.length > 0) {
           // 注意：这里刻意只调度一个共享的 repeat 作业，然后在处理器内 fan-out 到所有 bindings。
           // 这样可以避免对每个 binding 重复计算同一份 payload；代价是 binding 的 scheduleCron/scheduleTimezone 将被忽略。
+          // 另外：interval > 59 分钟会使用 repeat.every（固定间隔，不对齐整点，也不支持 tz），这是 Bull cron 分钟字段的限制。
           // 若未来需要支持 per-binding 的 cron/timezone，需要改为“每个 binding 一个 repeat 作业”或引入更细粒度的调度层。
           await queue.add(
             {

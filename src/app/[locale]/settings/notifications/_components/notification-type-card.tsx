@@ -97,12 +97,31 @@ function LabeledControl({
 
 type SafeNumberOnChange = NonNullable<ComponentProps<"input">["onChange"]>;
 
-function safeNumberOnChange(onValidNumber: (value: number) => void): SafeNumberOnChange {
+type NumberInputConstraints = {
+  min?: number;
+  max?: number;
+  integer?: boolean;
+};
+
+function safeNumberOnChange(
+  onValidNumber: (value: number) => void,
+  constraints: NumberInputConstraints = {}
+): SafeNumberOnChange {
   return (e) => {
     const nextValue = e.currentTarget.valueAsNumber;
-    if (Number.isNaN(nextValue)) return;
+    if (!Number.isFinite(nextValue)) return;
+    if (constraints.integer && !Number.isInteger(nextValue)) return;
+    if (constraints.min !== undefined && nextValue < constraints.min) return;
+    if (constraints.max !== undefined && nextValue > constraints.max) return;
     onValidNumber(nextValue);
   };
+}
+
+function createSettingsPatch<K extends keyof NotificationSettingsState>(
+  key: K,
+  value: NotificationSettingsState[K]
+): Pick<NotificationSettingsState, K> {
+  return { [key]: value } as Pick<NotificationSettingsState, K>;
 }
 
 export function NotificationTypeCard({
@@ -116,7 +135,21 @@ export function NotificationTypeCard({
   const t = useTranslations("settings");
   const typeConfig = getTypeConfig(type);
 
-  const meta = useMemo(() => {
+  type EnabledKey =
+    | "circuitBreakerEnabled"
+    | "dailyLeaderboardEnabled"
+    | "costAlertEnabled"
+    | "cacheHitRateAlertEnabled";
+
+  type TypeMeta = {
+    title: string;
+    description: string;
+    enabled: boolean;
+    enabledKey: EnabledKey;
+    enableLabel: string;
+  };
+
+  const meta = useMemo<TypeMeta>(() => {
     switch (type) {
       case "circuit_breaker":
         return {
@@ -207,7 +240,9 @@ export function NotificationTypeCard({
             id={`${type}-enabled`}
             checked={enabled}
             disabled={!settings.enabled}
-            onCheckedChange={(checked) => onUpdateSettings({ [meta.enabledKey]: checked } as any)}
+            onCheckedChange={(checked) =>
+              onUpdateSettings(createSettingsPatch(meta.enabledKey, checked))
+            }
           />
         </div>
       </div>
@@ -252,9 +287,10 @@ export function NotificationTypeCard({
                   max={20}
                   value={settings.dailyLeaderboardTopN}
                   disabled={!settings.enabled}
-                  onChange={(e) =>
-                    onUpdateSettings({ dailyLeaderboardTopN: Number(e.target.value) })
-                  }
+                  onChange={safeNumberOnChange(
+                    (nextValue) => onUpdateSettings({ dailyLeaderboardTopN: nextValue }),
+                    { integer: true, min: 1, max: 20 }
+                  )}
                   className={cn(
                     "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                     "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
@@ -283,7 +319,10 @@ export function NotificationTypeCard({
                   step={0.05}
                   value={settings.costAlertThreshold}
                   disabled={!settings.enabled}
-                  onChange={(e) => onUpdateSettings({ costAlertThreshold: Number(e.target.value) })}
+                  onChange={safeNumberOnChange(
+                    (nextValue) => onUpdateSettings({ costAlertThreshold: nextValue }),
+                    { min: 0.5, max: 1.0 }
+                  )}
                   className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed accent-primary"
                 />
               </div>
@@ -301,9 +340,10 @@ export function NotificationTypeCard({
                   max={1440}
                   value={settings.costAlertCheckInterval}
                   disabled={!settings.enabled}
-                  onChange={(e) =>
-                    onUpdateSettings({ costAlertCheckInterval: Number(e.target.value) })
-                  }
+                  onChange={safeNumberOnChange(
+                    (nextValue) => onUpdateSettings({ costAlertCheckInterval: nextValue }),
+                    { integer: true, min: 10, max: 1440 }
+                  )}
                   className={cn(
                     "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                     "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
@@ -353,8 +393,10 @@ export function NotificationTypeCard({
                     max={1440}
                     value={settings.cacheHitRateAlertCheckInterval}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) =>
-                      onUpdateSettings({ cacheHitRateAlertCheckInterval: nextValue })
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({ cacheHitRateAlertCheckInterval: nextValue }),
+                      { integer: true, min: 1, max: 1440 }
                     )}
                     className={settingsControlClassName}
                   />
@@ -371,10 +413,12 @@ export function NotificationTypeCard({
                     max={90}
                     value={settings.cacheHitRateAlertHistoricalLookbackDays}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) =>
-                      onUpdateSettings({
-                        cacheHitRateAlertHistoricalLookbackDays: nextValue,
-                      })
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({
+                          cacheHitRateAlertHistoricalLookbackDays: nextValue,
+                        }),
+                      { integer: true, min: 1, max: 90 }
                     )}
                     className={settingsControlClassName}
                   />
@@ -391,8 +435,10 @@ export function NotificationTypeCard({
                     max={1440}
                     value={settings.cacheHitRateAlertCooldownMinutes}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) =>
-                      onUpdateSettings({ cacheHitRateAlertCooldownMinutes: nextValue })
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({ cacheHitRateAlertCooldownMinutes: nextValue }),
+                      { integer: true, min: 0, max: 1440 }
                     )}
                     className={settingsControlClassName}
                   />
@@ -412,10 +458,10 @@ export function NotificationTypeCard({
                     step={0.01}
                     value={settings.cacheHitRateAlertAbsMin}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) => {
-                      if (nextValue < 0 || nextValue > 1) return;
-                      onUpdateSettings({ cacheHitRateAlertAbsMin: nextValue });
-                    })}
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertAbsMin: nextValue }),
+                      { min: 0, max: 1 }
+                    )}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -432,10 +478,10 @@ export function NotificationTypeCard({
                     step={0.01}
                     value={settings.cacheHitRateAlertDropAbs}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) => {
-                      if (nextValue < 0 || nextValue > 1) return;
-                      onUpdateSettings({ cacheHitRateAlertDropAbs: nextValue });
-                    })}
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertDropAbs: nextValue }),
+                      { min: 0, max: 1 }
+                    )}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -452,10 +498,10 @@ export function NotificationTypeCard({
                     step={0.01}
                     value={settings.cacheHitRateAlertDropRel}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) => {
-                      if (nextValue < 0 || nextValue > 1) return;
-                      onUpdateSettings({ cacheHitRateAlertDropRel: nextValue });
-                    })}
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertDropRel: nextValue }),
+                      { min: 0, max: 1 }
+                    )}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -473,10 +519,12 @@ export function NotificationTypeCard({
                     max={100000}
                     value={settings.cacheHitRateAlertMinEligibleRequests}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) =>
-                      onUpdateSettings({
-                        cacheHitRateAlertMinEligibleRequests: nextValue,
-                      })
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({
+                          cacheHitRateAlertMinEligibleRequests: nextValue,
+                        }),
+                      { integer: true, min: 1, max: 100000 }
                     )}
                     className={settingsControlClassName}
                   />
@@ -492,10 +540,12 @@ export function NotificationTypeCard({
                     min={0}
                     value={settings.cacheHitRateAlertMinEligibleTokens}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) =>
-                      onUpdateSettings({
-                        cacheHitRateAlertMinEligibleTokens: nextValue,
-                      })
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({
+                          cacheHitRateAlertMinEligibleTokens: nextValue,
+                        }),
+                      { integer: true, min: 0 }
                     )}
                     className={settingsControlClassName}
                   />
@@ -512,8 +562,9 @@ export function NotificationTypeCard({
                     max={100}
                     value={settings.cacheHitRateAlertTopN}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange((nextValue) =>
-                      onUpdateSettings({ cacheHitRateAlertTopN: nextValue })
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertTopN: nextValue }),
+                      { integer: true, min: 1, max: 100 }
                     )}
                     className={settingsControlClassName}
                   />

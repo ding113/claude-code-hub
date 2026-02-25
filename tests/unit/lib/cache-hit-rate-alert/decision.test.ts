@@ -381,6 +381,21 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies[0].reasonCodes).toContain("abs_min");
   });
 
+  it("dropAbs 在 current 高于 baseline 且仅触发 abs_min 时应 clamp 为 0", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.04 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.01 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.05, dropAbs: 0.1, dropRel: 0.3 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].reasonCodes).toContain("abs_min");
+    expect(anomalies[0].reasonCodes).not.toContain("drop_abs_rel");
+    expect(anomalies[0].dropAbs).toBe(0);
+  });
+
   it("should set deltaRel to null when baseline hit rate is 0", () => {
     const anomalies = decideCacheHitRateAnomalies({
       current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0 })],

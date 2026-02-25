@@ -438,7 +438,8 @@ export async function commitCacheHitRateAlertCooldown(
   const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
   if (!redis) return;
 
-  const ttlSeconds = Math.max(1, cooldownMinutes * 60);
+  // Redis EX 需要整数秒；这里做一次截断，避免配置被写成小数导致提交去重失败。
+  const ttlSeconds = Math.max(1, Math.trunc(cooldownMinutes * 60));
   const pipeline = redis.pipeline();
   for (const key of keys) {
     pipeline.set(key, "1", "EX", ttlSeconds);
