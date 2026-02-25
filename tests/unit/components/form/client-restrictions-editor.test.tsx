@@ -101,4 +101,3 @@ describe("ClientRestrictionsEditor - custom clients", () => {
     unmount();
   });
 });
-
