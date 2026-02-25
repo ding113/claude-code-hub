@@ -55,11 +55,30 @@ export interface ProviderModelCacheHitRateAlertMetric {
   hitRateTokensEligible: number;
 }
 
+function clampRate01(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(Math.max(value, 0), 1);
+}
+
 function normalizeTtlFallbackSeconds(config: CacheHitRateAlertQueryConfig): {
   defaultSeconds: number;
   byType: Record<ProviderType, number>;
 } {
-  const defaultSeconds = config.ttlFallbackSecondsDefault ?? 3600;
+  const TTL_FALLBACK_DEFAULT_SECONDS = 3600;
+  const TTL_FALLBACK_MAX_SECONDS = 2_147_483_647; // int4 max，避免异常配置导致 SQL 参数溢出/无穷大
+
+  const toSafeTtlSeconds = (input: unknown, fallbackSeconds: number): number => {
+    if (typeof input !== "number" || !Number.isFinite(input) || !Number.isInteger(input)) {
+      return fallbackSeconds;
+    }
+    if (input < 0) return fallbackSeconds;
+    return Math.min(input, TTL_FALLBACK_MAX_SECONDS);
+  };
+
+  const defaultSeconds = toSafeTtlSeconds(
+    config.ttlFallbackSecondsDefault,
+    TTL_FALLBACK_DEFAULT_SECONDS
+  );
   const base: Record<ProviderType, number> = {
     claude: defaultSeconds,
     "claude-auth": defaultSeconds,
@@ -69,12 +88,17 @@ function normalizeTtlFallbackSeconds(config: CacheHitRateAlertQueryConfig): {
     "openai-compatible": 6 * 3600,
   };
   const overrides = config.ttlFallbackSecondsByProviderType ?? {};
+  const byType: Record<ProviderType, number> = { ...base };
+
+  for (const [key, rawSeconds] of Object.entries(overrides)) {
+    if (!Object.hasOwn(byType, key)) continue;
+    const providerType = key as ProviderType;
+    byType[providerType] = toSafeTtlSeconds(rawSeconds, byType[providerType]);
+  }
+
   return {
     defaultSeconds,
-    byType: {
-      ...base,
-      ...overrides,
-    },
+    byType,
   };
 }
 
@@ -125,20 +149,28 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
     number | null
   >`EXTRACT(EPOCH FROM (${messageRequest.createdAt} - ${prev.createdAt}))::double precision`;
 
-  // 维护提示：这里的 ttlFallbackSecondsExpr 与 normalizeTtlFallbackSeconds() 内的 base 以及 ProviderType 强耦合。
-  // 如果 ProviderType 新增/调整类型，务必同时更新：
-  // - normalizeTtlFallbackSeconds() 的 base 默认映射
-  // - 本处 ttlFallbackSecondsExpr 的 CASE 分支
-  // 否则 TTL fallback 可能不一致，进而影响 eligible 口径判断。
+  // TTL fallback 映射只在 normalizeTtlFallbackSeconds() 维护一份；
+  // 这里的 SQL CASE 直接由 ttlFallback.byType 生成，避免 TS/SQL 双份维护产生漂移。
+  const ttlFallbackWhenClauses = (
+    Object.entries(ttlFallback.byType) as Array<[ProviderType, number]>
+  ).map(
+    ([providerType, seconds]) =>
+      sql`WHEN ${providers.providerType} = ${providerType} THEN ${seconds}`
+  );
+
   const ttlFallbackSecondsExpr = sql<number>`CASE
-    WHEN ${providers.providerType} = 'claude' THEN ${ttlFallback.byType.claude}
-    WHEN ${providers.providerType} = 'claude-auth' THEN ${ttlFallback.byType["claude-auth"]}
-    WHEN ${providers.providerType} = 'codex' THEN ${ttlFallback.byType.codex}
-    WHEN ${providers.providerType} = 'gemini' THEN ${ttlFallback.byType.gemini}
-    WHEN ${providers.providerType} = 'gemini-cli' THEN ${ttlFallback.byType["gemini-cli"]}
-    WHEN ${providers.providerType} = 'openai-compatible' THEN ${ttlFallback.byType["openai-compatible"]}
+    ${sql.join(ttlFallbackWhenClauses, sql` `)}
     ELSE ${ttlFallback.defaultSeconds}
   END`;
+
+  // cache_ttl_applied 理论上应是短字符串（例如 5m/1h/3600s），但数据库字段可能被
+  // 异常/恶意写入过大的数值，从而导致 ::int 或乘法溢出。本处对纯数字 TTL 做位数与范围
+  // 护栏：无效值统一回退到 ttlFallbackSecondsExpr，避免查询直接失败。
+  const ttlAppliedNumberTextExpr = sql<string>`substring(${messageRequest.cacheTtlApplied} from '^[0-9]+')`;
+  const ttlAppliedNumberMaxDigits = 9;
+  const ttlAppliedNumberMaxSeconds = 7 * 24 * 3600;
+  const ttlAppliedNumberMaxHours = Math.floor(ttlAppliedNumberMaxSeconds / 3600);
+  const ttlAppliedNumberMaxMinutes = Math.floor(ttlAppliedNumberMaxSeconds / 60);
 
   const ttlSecondsExpr = sql<number>`CASE
     WHEN COALESCE(${messageRequest.cacheCreation1hInputTokens}, 0) > 0 THEN 3600
@@ -146,9 +178,33 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
     WHEN ${messageRequest.cacheTtlApplied} = '1h' THEN 3600
     WHEN ${messageRequest.cacheTtlApplied} = '5m' THEN 300
     WHEN ${messageRequest.cacheTtlApplied} = 'mixed' THEN 3600
-    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+h$' THEN (substring(${messageRequest.cacheTtlApplied} from '^[0-9]+')::int * 3600)
-    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+m$' THEN (substring(${messageRequest.cacheTtlApplied} from '^[0-9]+')::int * 60)
-    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+s$' THEN (substring(${messageRequest.cacheTtlApplied} from '^[0-9]+')::int)
+    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+h$' THEN (
+      CASE
+        WHEN char_length(${ttlAppliedNumberTextExpr}) > ${ttlAppliedNumberMaxDigits}
+          THEN ${ttlFallbackSecondsExpr}
+        WHEN (${ttlAppliedNumberTextExpr})::int > ${ttlAppliedNumberMaxHours}
+          THEN ${ttlFallbackSecondsExpr}
+        ELSE (${ttlAppliedNumberTextExpr})::int * 3600
+      END
+    )
+    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+m$' THEN (
+      CASE
+        WHEN char_length(${ttlAppliedNumberTextExpr}) > ${ttlAppliedNumberMaxDigits}
+          THEN ${ttlFallbackSecondsExpr}
+        WHEN (${ttlAppliedNumberTextExpr})::int > ${ttlAppliedNumberMaxMinutes}
+          THEN ${ttlFallbackSecondsExpr}
+        ELSE (${ttlAppliedNumberTextExpr})::int * 60
+      END
+    )
+    WHEN ${messageRequest.cacheTtlApplied} ~ '^[0-9]+s$' THEN (
+      CASE
+        WHEN char_length(${ttlAppliedNumberTextExpr}) > ${ttlAppliedNumberMaxDigits}
+          THEN ${ttlFallbackSecondsExpr}
+        WHEN (${ttlAppliedNumberTextExpr})::int > ${ttlAppliedNumberMaxSeconds}
+          THEN ${ttlFallbackSecondsExpr}
+        ELSE (${ttlAppliedNumberTextExpr})::int
+      END
+    )
     ELSE ${ttlFallbackSecondsExpr}
   END`;
 
@@ -271,11 +327,11 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
     sumCacheCreationTokens: row.sumCacheCreationTokens,
     sumCacheReadTokens: row.sumCacheReadTokens,
     denominatorTokens: row.denominatorTokens,
-    hitRateTokens: Math.min(Math.max(row.hitRateTokens ?? 0, 0), 1),
-    engagementRate: Math.min(Math.max(row.engagementRate ?? 0, 0), 1),
+    hitRateTokens: clampRate01(row.hitRateTokens),
+    engagementRate: clampRate01(row.engagementRate),
     eligibleRequests: row.eligibleRequests,
     eligibleDenominatorTokens: row.eligibleDenominatorTokens,
     eligibleCacheReadTokens: row.eligibleCacheReadTokens,
-    hitRateTokensEligible: Math.min(Math.max(row.hitRateTokensEligible ?? 0, 0), 1),
+    hitRateTokensEligible: clampRate01(row.hitRateTokensEligible),
   }));
 }

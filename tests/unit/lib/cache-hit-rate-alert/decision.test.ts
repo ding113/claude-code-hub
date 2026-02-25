@@ -72,6 +72,62 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies[0].baselineSource).toBe("today");
   });
 
+  it("should fall back to prev baseline when historical/today kind-samples are insufficient", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.1 })],
+      prev: [
+        metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.6, eligibleRequests: 50 }),
+      ],
+      today: [
+        metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.9, eligibleRequests: 1 }),
+      ],
+      historical: [
+        metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.9, eligibleRequests: 1 }),
+      ],
+      settings: { ...defaultSettings, absMin: 0.01 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].baselineSource).toBe("prev");
+  });
+
+  it("should treat baseline as insufficient when eligible tokens below minEligibleTokens", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [
+        metric({
+          providerId: 1,
+          model: "m",
+          eligibleRequests: 50,
+          eligibleDenominatorTokens: 2000,
+          hitRateTokensEligible: 0.1,
+        }),
+      ],
+      prev: [],
+      today: [
+        metric({
+          providerId: 1,
+          model: "m",
+          eligibleRequests: 50,
+          eligibleDenominatorTokens: 2000,
+          hitRateTokensEligible: 0.6,
+        }),
+      ],
+      historical: [
+        metric({
+          providerId: 1,
+          model: "m",
+          eligibleRequests: 50,
+          eligibleDenominatorTokens: 10,
+          hitRateTokensEligible: 0.9,
+        }),
+      ],
+      settings: { ...defaultSettings, absMin: 0.01, minEligibleTokens: 1000 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].baselineSource).toBe("today");
+  });
+
   it("should fall back to overall when eligible sample is insufficient", () => {
     const anomalies = decideCacheHitRateAnomalies({
       current: [
@@ -107,6 +163,44 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies[0].current.kind).toBe("overall");
     expect(anomalies[0].baseline?.kind).toBe("overall");
     expect(anomalies[0].reasonCodes).toContain("eligible_insufficient");
+  });
+
+  it("should fall back to overall when eligible tokens are insufficient", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [
+        metric({
+          providerId: 1,
+          model: "m",
+          totalRequests: 50,
+          denominatorTokens: 2000,
+          hitRateTokens: 0.1,
+          eligibleRequests: 50,
+          eligibleDenominatorTokens: 10,
+          hitRateTokensEligible: 0.9,
+        }),
+      ],
+      prev: [
+        metric({
+          providerId: 1,
+          model: "m",
+          totalRequests: 50,
+          denominatorTokens: 2000,
+          hitRateTokens: 0.6,
+          eligibleRequests: 50,
+          eligibleDenominatorTokens: 10,
+          hitRateTokensEligible: 0.9,
+        }),
+      ],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.01, minEligibleTokens: 1000 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].current.kind).toBe("overall");
+    expect(anomalies[0].baseline?.kind).toBe("overall");
+    expect(anomalies[0].reasonCodes).toContain("eligible_insufficient");
+    expect(anomalies[0].reasonCodes).toContain("use_overall");
   });
 
   it("should not compare eligible current against overall baseline", () => {
@@ -205,26 +299,32 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies[0].dropAbs).toBeCloseTo(0.3, 10);
   });
 
-  it("should not trigger drop_abs_rel when only one threshold is met", () => {
-    // 仅满足 dropAbs，不满足 dropRel
-    const onlyAbs = decideCacheHitRateAnomalies({
-      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.6 })],
-      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.8 })],
+  it("should not trigger drop_abs_rel when only dropAbs is met (AND)", () => {
+    // baseline=0.5, current=0.375
+    // dropAbs=0.125 >= 0.1（满足），dropRel=0.125/0.5=0.25 < 0.3（不满足）
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.375 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.5 })],
       today: [],
       historical: [],
       settings: { ...defaultSettings, absMin: 0.01, dropAbs: 0.1, dropRel: 0.3 },
     });
-    expect(onlyAbs).toHaveLength(0);
 
-    // 仅满足 dropRel，不满足 dropAbs
-    const onlyRel = decideCacheHitRateAnomalies({
-      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.14 })],
-      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.2 })],
+    expect(anomalies).toHaveLength(0);
+  });
+
+  it("should not trigger drop_abs_rel when only dropRel is met (AND)", () => {
+    // baseline=0.25, current=0.15625
+    // dropAbs=0.09375 < 0.1（不满足），dropRel=0.09375/0.25=0.375 >= 0.3（满足）
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.15625 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.25 })],
       today: [],
       historical: [],
       settings: { ...defaultSettings, absMin: 0.01, dropAbs: 0.1, dropRel: 0.3 },
     });
-    expect(onlyRel).toHaveLength(0);
+
+    expect(anomalies).toHaveLength(0);
   });
 
   it("should trigger abs_min when current is below absMin", () => {
@@ -248,6 +348,18 @@ describe("decideCacheHitRateAnomalies", () => {
     });
 
     expect(shouldNotTrigger).toHaveLength(0);
+  });
+
+  it("abs_min should not trigger when current equals absMin", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.05 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.5 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.05, dropAbs: 0.9, dropRel: 0.9 },
+    });
+
+    expect(anomalies).toHaveLength(0);
   });
 
   it("abs_min 在缺失基线时也应触发", () => {
@@ -283,6 +395,48 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies[0].deltaRel).toBeNull();
   });
 
+  it("should trigger drop_abs_rel when thresholds are met exactly (>=)", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.3 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.4 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.01, dropAbs: 0.1, dropRel: 0.25 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].reasonCodes).toContain("drop_abs_rel");
+    expect(anomalies[0].dropAbs).toBeCloseTo(0.1, 10);
+  });
+
+  it("should not add drop_abs_rel when only dropAbs is met (AND) even if abs_min triggers", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.04 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.06 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.05, dropAbs: 0.01, dropRel: 0.5 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].reasonCodes).toContain("abs_min");
+    expect(anomalies[0].reasonCodes).not.toContain("drop_abs_rel");
+  });
+
+  it("should not add drop_abs_rel when only dropRel is met (AND) even if abs_min triggers", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.02 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.04 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.05, dropAbs: 0.03, dropRel: 0.5 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].reasonCodes).toContain("abs_min");
+    expect(anomalies[0].reasonCodes).not.toContain("drop_abs_rel");
+  });
+
   it("should sort by severity and respect topN", () => {
     const anomalies = decideCacheHitRateAnomalies({
       current: [
@@ -301,5 +455,27 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies).toHaveLength(1);
     expect(anomalies[0].providerId).toBe(1);
     expect(anomalies[0].model).toBe("a");
+  });
+
+  it("should break severity ties by providerId/model for deterministic ordering", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [
+        metric({ providerId: 2, model: "b", hitRateTokensEligible: 0.1 }),
+        metric({ providerId: 1, model: "a", hitRateTokensEligible: 0.1 }),
+      ],
+      prev: [
+        metric({ providerId: 2, model: "b", hitRateTokensEligible: 0.6 }),
+        metric({ providerId: 1, model: "a", hitRateTokensEligible: 0.6 }),
+      ],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.01, topN: 2 },
+    });
+
+    expect(anomalies).toHaveLength(2);
+    expect(anomalies[0].providerId).toBe(1);
+    expect(anomalies[0].model).toBe("a");
+    expect(anomalies[1].providerId).toBe(2);
+    expect(anomalies[1].model).toBe("b");
   });
 });

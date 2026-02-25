@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Database, DollarSign, Settings2, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
@@ -68,6 +68,41 @@ function getTypeConfig(type: NotificationType): TypeConfig {
         IconComponent: Database,
       };
   }
+}
+
+const settingsControlClassName = cn(
+  "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+  "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+  "disabled:opacity-50 disabled:cursor-not-allowed"
+);
+
+function LabeledControl({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+type SafeNumberOnChange = NonNullable<ComponentProps<"input">["onChange"]>;
+
+function safeNumberOnChange(onValidNumber: (value: number) => void): SafeNumberOnChange {
+  return (e) => {
+    const nextValue = e.currentTarget.valueAsNumber;
+    if (Number.isNaN(nextValue)) return;
+    onValidNumber(nextValue);
+  };
 }
 
 export function NotificationTypeCard({
@@ -282,29 +317,20 @@ export function NotificationTypeCard({
           {type === "cache_hit_rate_alert" && (
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertWindowMode"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.windowMode")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertWindowMode"
+                  label={t("notifications.cacheHitRateAlert.windowMode")}
+                >
                   <select
                     id="cacheHitRateAlertWindowMode"
                     value={settings.cacheHitRateAlertWindowMode}
                     disabled={!settings.enabled}
                     onChange={(e) => {
                       const nextValue = e.target.value;
-                      if (!isCacheHitRateAlertSettingsWindowMode(nextValue)) {
-                        return;
-                      }
+                      if (!isCacheHitRateAlertSettingsWindowMode(nextValue)) return;
                       onUpdateSettings({ cacheHitRateAlertWindowMode: nextValue });
                     }}
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
-                    )}
+                    className={settingsControlClassName}
                   >
                     <option value="auto">
                       {t("notifications.cacheHitRateAlert.windowModeAuto")}
@@ -314,15 +340,12 @@ export function NotificationTypeCard({
                     <option value="1h">1h</option>
                     <option value="1.5h">1.5h</option>
                   </select>
-                </div>
+                </LabeledControl>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertCheckInterval"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.checkInterval")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertCheckInterval"
+                  label={t("notifications.cacheHitRateAlert.checkInterval")}
+                >
                   <input
                     id="cacheHitRateAlertCheckInterval"
                     type="number"
@@ -330,26 +353,17 @@ export function NotificationTypeCard({
                     max={1440}
                     value={settings.cacheHitRateAlertCheckInterval}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
-                      onUpdateSettings({
-                        cacheHitRateAlertCheckInterval: Number(e.target.value),
-                      })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    onChange={safeNumberOnChange((nextValue) =>
+                      onUpdateSettings({ cacheHitRateAlertCheckInterval: nextValue })
                     )}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertHistoricalLookbackDays"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.historicalLookbackDays")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertHistoricalLookbackDays"
+                  label={t("notifications.cacheHitRateAlert.historicalLookbackDays")}
+                >
                   <input
                     id="cacheHitRateAlertHistoricalLookbackDays"
                     type="number"
@@ -357,26 +371,19 @@ export function NotificationTypeCard({
                     max={90}
                     value={settings.cacheHitRateAlertHistoricalLookbackDays}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
+                    onChange={safeNumberOnChange((nextValue) =>
                       onUpdateSettings({
-                        cacheHitRateAlertHistoricalLookbackDays: Number(e.target.value),
+                        cacheHitRateAlertHistoricalLookbackDays: nextValue,
                       })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertCooldownMinutes"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.cooldownMinutes")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertCooldownMinutes"
+                  label={t("notifications.cacheHitRateAlert.cooldownMinutes")}
+                >
                   <input
                     id="cacheHitRateAlertCooldownMinutes"
                     type="number"
@@ -384,28 +391,19 @@ export function NotificationTypeCard({
                     max={1440}
                     value={settings.cacheHitRateAlertCooldownMinutes}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
-                      onUpdateSettings({
-                        cacheHitRateAlertCooldownMinutes: Number(e.target.value),
-                      })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    onChange={safeNumberOnChange((nextValue) =>
+                      onUpdateSettings({ cacheHitRateAlertCooldownMinutes: nextValue })
                     )}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertAbsMin"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.absMin")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertAbsMin"
+                  label={t("notifications.cacheHitRateAlert.absMin")}
+                >
                   <input
                     id="cacheHitRateAlertAbsMin"
                     type="number"
@@ -414,24 +412,18 @@ export function NotificationTypeCard({
                     step={0.01}
                     value={settings.cacheHitRateAlertAbsMin}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
-                      onUpdateSettings({ cacheHitRateAlertAbsMin: Number(e.target.value) })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
-                    )}
+                    onChange={safeNumberOnChange((nextValue) => {
+                      if (nextValue < 0 || nextValue > 1) return;
+                      onUpdateSettings({ cacheHitRateAlertAbsMin: nextValue });
+                    })}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertDropAbs"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.dropAbs")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertDropAbs"
+                  label={t("notifications.cacheHitRateAlert.dropAbs")}
+                >
                   <input
                     id="cacheHitRateAlertDropAbs"
                     type="number"
@@ -440,24 +432,18 @@ export function NotificationTypeCard({
                     step={0.01}
                     value={settings.cacheHitRateAlertDropAbs}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
-                      onUpdateSettings({ cacheHitRateAlertDropAbs: Number(e.target.value) })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
-                    )}
+                    onChange={safeNumberOnChange((nextValue) => {
+                      if (nextValue < 0 || nextValue > 1) return;
+                      onUpdateSettings({ cacheHitRateAlertDropAbs: nextValue });
+                    })}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertDropRel"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.dropRel")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertDropRel"
+                  label={t("notifications.cacheHitRateAlert.dropRel")}
+                >
                   <input
                     id="cacheHitRateAlertDropRel"
                     type="number"
@@ -466,26 +452,20 @@ export function NotificationTypeCard({
                     step={0.01}
                     value={settings.cacheHitRateAlertDropRel}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
-                      onUpdateSettings({ cacheHitRateAlertDropRel: Number(e.target.value) })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
-                    )}
+                    onChange={safeNumberOnChange((nextValue) => {
+                      if (nextValue < 0 || nextValue > 1) return;
+                      onUpdateSettings({ cacheHitRateAlertDropRel: nextValue });
+                    })}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertMinEligibleRequests"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.minEligibleRequests")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertMinEligibleRequests"
+                  label={t("notifications.cacheHitRateAlert.minEligibleRequests")}
+                >
                   <input
                     id="cacheHitRateAlertMinEligibleRequests"
                     type="number"
@@ -493,52 +473,38 @@ export function NotificationTypeCard({
                     max={100000}
                     value={settings.cacheHitRateAlertMinEligibleRequests}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
+                    onChange={safeNumberOnChange((nextValue) =>
                       onUpdateSettings({
-                        cacheHitRateAlertMinEligibleRequests: Number(e.target.value),
+                        cacheHitRateAlertMinEligibleRequests: nextValue,
                       })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertMinEligibleTokens"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.minEligibleTokens")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertMinEligibleTokens"
+                  label={t("notifications.cacheHitRateAlert.minEligibleTokens")}
+                >
                   <input
                     id="cacheHitRateAlertMinEligibleTokens"
                     type="number"
                     min={0}
                     value={settings.cacheHitRateAlertMinEligibleTokens}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
+                    onChange={safeNumberOnChange((nextValue) =>
                       onUpdateSettings({
-                        cacheHitRateAlertMinEligibleTokens: Number(e.target.value),
+                        cacheHitRateAlertMinEligibleTokens: nextValue,
                       })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="cacheHitRateAlertTopN"
-                    className="text-xs font-medium text-muted-foreground"
-                  >
-                    {t("notifications.cacheHitRateAlert.topN")}
-                  </label>
+                <LabeledControl
+                  id="cacheHitRateAlertTopN"
+                  label={t("notifications.cacheHitRateAlert.topN")}
+                >
                   <input
                     id="cacheHitRateAlertTopN"
                     type="number"
@@ -546,16 +512,12 @@ export function NotificationTypeCard({
                     max={100}
                     value={settings.cacheHitRateAlertTopN}
                     disabled={!settings.enabled}
-                    onChange={(e) =>
-                      onUpdateSettings({ cacheHitRateAlertTopN: Number(e.target.value) })
-                    }
-                    className={cn(
-                      "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
-                      "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    onChange={safeNumberOnChange((nextValue) =>
+                      onUpdateSettings({ cacheHitRateAlertTopN: nextValue })
                     )}
+                    className={settingsControlClassName}
                   />
-                </div>
+                </LabeledControl>
               </div>
             </div>
           )}

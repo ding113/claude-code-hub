@@ -302,7 +302,20 @@ export function decideCacheHitRateAnomalies(
   }
 
   return anomaliesWithSeverity
-    .sort((a, b) => b.severity - a.severity)
+    .sort((a, b) => {
+      const severityDiff = b.severity - a.severity;
+      if (severityDiff !== 0) return severityDiff;
+
+      const providerDiff = a.anomaly.providerId - b.anomaly.providerId;
+      if (providerDiff !== 0) return providerDiff;
+
+      if (a.anomaly.model < b.anomaly.model) return -1;
+      if (a.anomaly.model > b.anomaly.model) return 1;
+
+      if (a.anomaly.key < b.anomaly.key) return -1;
+      if (a.anomaly.key > b.anomaly.key) return 1;
+      return 0;
+    })
     .slice(0, settings.topN)
     .map((x) => x.anomaly);
 }
