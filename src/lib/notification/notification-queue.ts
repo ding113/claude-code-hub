@@ -134,6 +134,9 @@ function isCacheHitRateAlertDataPayload(value: unknown): value is CacheHitRateAl
 
   if (!isFiniteNumber(payload.suppressedCount)) return false;
 
+  if (typeof payload.generatedAt !== "string") return false;
+  if (Number.isNaN(Date.parse(payload.generatedAt))) return false;
+
   return true;
 }
 
