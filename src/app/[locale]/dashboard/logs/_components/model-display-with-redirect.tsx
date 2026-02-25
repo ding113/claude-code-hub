@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight } from "lucide-react";
+import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import type { BillingModelSource } from "@/types/system-config";
 
@@ -24,12 +25,18 @@ export function ModelDisplayWithRedirect({
   const billingModel = billingModelSource === "original" ? originalModel : currentModel;
 
   if (!isRedirected) {
-    return <span className="truncate">{billingModel || "-"}</span>;
+    return (
+      <div className="flex items-center gap-1.5 min-w-0">
+        {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
+        <span className="truncate">{billingModel || "-"}</span>
+      </div>
+    );
   }
 
   // 计费模型 + 重定向标记（只显示图标）
   return (
     <div className="flex items-center gap-1.5 min-w-0">
+      {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
       <span className="truncate">{billingModel}</span>
       <Badge
         variant="outline"

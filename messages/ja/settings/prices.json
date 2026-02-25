@@ -11,7 +11,24 @@
     "local": "ローカル",
     "anthropic": "Anthropic",
     "openai": "OpenAI",
-    "vertex": "Vertex"
+    "vertex": "Vertex",
+    "deepseek": "DeepSeek",
+    "mistral": "Mistral",
+    "meta": "Meta",
+    "cohere": "Cohere",
+    "xai": "xAI",
+    "groq": "Groq",
+    "bedrock": "Bedrock",
+    "azure": "Azure",
+    "together": "Together",
+    "nvidia": "NVIDIA",
+    "zhipuai": "Zhipu",
+    "volcengine": "Volcengine",
+    "minimax": "MiniMax",
+    "qwen": "Qwen",
+    "fireworks": "Fireworks",
+    "ollama": "Ollama",
+    "openrouter": "OpenRouter"
   },
   "badges": {
     "local": "ローカル"

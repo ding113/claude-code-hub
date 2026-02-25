@@ -3,6 +3,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { useTimeZone, useTranslations } from "next-intl";
 import type { MyUsageLogEntry } from "@/actions/my-usage";
+import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -87,7 +88,10 @@ export function UsageLogsTable({
                       : "-"}
                   </TableCell>
                   <TableCell className="space-y-1">
-                    <div className="text-sm">{log.model ?? t("unknownModel")}</div>
+                    <div className="flex items-center gap-1.5 text-sm">
+                      {log.model ? <ModelVendorIcon modelId={log.model} /> : null}
+                      <span>{log.model ?? t("unknownModel")}</span>
+                    </div>
                     {log.modelRedirect ? (
                       <div className="text-xs text-muted-foreground">{log.modelRedirect}</div>
                     ) : null}
