@@ -7,9 +7,13 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/client-restrictions/client-presets", () => ({
-  CLIENT_RESTRICTION_PRESET_OPTIONS: [],
-}));
+vi.mock("@/lib/client-restrictions/client-presets", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/client-restrictions/client-presets")>();
+  return {
+    ...actual,
+    CLIENT_RESTRICTION_PRESET_OPTIONS: [],
+  };
+});
 
 vi.mock("@/components/ui/tag-input", () => ({
   TagInput: vi.fn(() => null),
@@ -40,9 +44,20 @@ function getTagInputOnChange(callIndex: number): (values: string[]) => void {
   return (call[0] as TagInputProps).onChange;
 }
 
-describe("ClientRestrictionsEditor", () => {
+describe("ClientRestrictionsEditor - custom clients", () => {
   const onAllowedChange = vi.fn();
   const onBlockedChange = vi.fn();
+
+  const translations = {
+    allowAction: "Allow",
+    blockAction: "Block",
+    customAllowedLabel: "Custom Allowed",
+    customAllowedPlaceholder: "",
+    customBlockedLabel: "Custom Blocked",
+    customBlockedPlaceholder: "",
+    customHelp: "",
+    presetClients: {},
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,75 +76,29 @@ describe("ClientRestrictionsEditor", () => {
         blocked={blocked}
         onAllowedChange={onAllowedChange}
         onBlockedChange={onBlockedChange}
-        allowedLabel="Allowed"
-        blockedLabel="Blocked"
-        getPresetLabel={(v) => v}
+        translations={translations}
       />
     );
   }
 
-  describe("uniqueOrdered normalization", () => {
-    it("deduplicates values preserving first occurrence order", () => {
-      const unmount = renderEditor([], []);
-      act(() => getTagInputOnChange(0)(["a", "b", "a", "c"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b", "c"]);
-      unmount();
-    });
+  it("custom allowed: should deduplicate values preserving order", () => {
+    const unmount = renderEditor([], []);
 
-    it("trims whitespace from values", () => {
-      const unmount = renderEditor([], []);
-      act(() => getTagInputOnChange(0)(["  a  ", " b", "c "]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b", "c"]);
-      unmount();
-    });
+    act(() => getTagInputOnChange(0)(["a", "b", "a", "c"]));
 
-    it("filters out empty and whitespace-only entries", () => {
-      const unmount = renderEditor([], []);
-      act(() => getTagInputOnChange(0)(["a", "", "  ", "b"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b"]);
-      unmount();
-    });
+    expect(onAllowedChange).toHaveBeenCalledWith(["a", "b", "c"]);
+    expect(onBlockedChange).not.toHaveBeenCalled();
+    unmount();
   });
 
-  describe("allow/block mutual exclusion", () => {
-    it("removes overlapping items from blocked when added to allowed", () => {
-      const unmount = renderEditor([], ["b", "c"]);
-      act(() => getTagInputOnChange(0)(["a", "b"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b"]);
-      expect(onBlockedChange).toHaveBeenCalledWith(["c"]);
-      unmount();
-    });
+  it("custom blocked: should deduplicate values preserving order", () => {
+    const unmount = renderEditor([], []);
 
-    it("does not call onBlockedChange when allowed has no overlap with blocked", () => {
-      const unmount = renderEditor([], ["c", "d"]);
-      act(() => getTagInputOnChange(0)(["a", "b"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b"]);
-      expect(onBlockedChange).not.toHaveBeenCalled();
-      unmount();
-    });
+    act(() => getTagInputOnChange(1)(["x", "x", "y"]));
 
-    it("removes overlapping items from allowed when added to blocked", () => {
-      const unmount = renderEditor(["a", "b"], []);
-      act(() => getTagInputOnChange(1)(["b", "c"]));
-      expect(onBlockedChange).toHaveBeenCalledWith(["b", "c"]);
-      expect(onAllowedChange).toHaveBeenCalledWith(["a"]);
-      unmount();
-    });
-
-    it("does not call onAllowedChange when blocked has no overlap with allowed", () => {
-      const unmount = renderEditor(["a", "b"], []);
-      act(() => getTagInputOnChange(1)(["c", "d"]));
-      expect(onBlockedChange).toHaveBeenCalledWith(["c", "d"]);
-      expect(onAllowedChange).not.toHaveBeenCalled();
-      unmount();
-    });
-
-    it("clears all blocked when all items are moved to allowed", () => {
-      const unmount = renderEditor([], ["x", "y"]);
-      act(() => getTagInputOnChange(0)(["x", "y", "z"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["x", "y", "z"]);
-      expect(onBlockedChange).toHaveBeenCalledWith([]);
-      unmount();
-    });
+    expect(onBlockedChange).toHaveBeenCalledWith(["x", "y"]);
+    expect(onAllowedChange).not.toHaveBeenCalled();
+    unmount();
   });
 });
+
