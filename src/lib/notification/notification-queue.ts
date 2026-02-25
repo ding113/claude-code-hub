@@ -24,6 +24,7 @@ import {
   sendWebhookMessage,
   type WebhookNotificationType,
 } from "@/lib/webhook";
+import { isCacheHitRateAlertSettingsWindowMode } from "@/lib/webhook/types";
 
 /**
  * 通知任务数据
@@ -119,7 +120,7 @@ function isCacheHitRateAlertDataPayload(value: unknown): value is CacheHitRateAl
 
   if (!isPlainObject(payload.window)) return false;
   const window = payload.window as Record<string, unknown>;
-  if (typeof window.mode !== "string") return false;
+  if (!isCacheHitRateAlertSettingsWindowMode(window.mode)) return false;
   if (typeof window.startTime !== "string") return false;
   if (typeof window.endTime !== "string") return false;
   if (!isFiniteNumber(window.durationMinutes)) return false;
