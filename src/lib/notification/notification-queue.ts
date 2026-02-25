@@ -2,6 +2,14 @@ import type { Job } from "bull";
 import Queue from "bull";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
+import {
+  applyCacheHitRateAlertCooldownToPayload,
+  buildCacheHitRateAlertCooldownKey,
+  commitCacheHitRateAlertCooldown,
+  generateCacheHitRateAlertPayload,
+} from "@/lib/notification/tasks/cache-hit-rate-alert";
+import { generateCostAlerts } from "@/lib/notification/tasks/cost-alert";
+import { generateDailyLeaderboard } from "@/lib/notification/tasks/daily-leaderboard";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
   buildCacheHitRateAlertMessage,
@@ -16,14 +24,6 @@ import {
   sendWebhookMessage,
   type WebhookNotificationType,
 } from "@/lib/webhook";
-import {
-  applyCacheHitRateAlertCooldownToPayload,
-  buildCacheHitRateAlertCooldownKey,
-  commitCacheHitRateAlertCooldown,
-  generateCacheHitRateAlertPayload,
-} from "./tasks/cache-hit-rate-alert";
-import { generateCostAlerts } from "./tasks/cost-alert";
-import { generateDailyLeaderboard } from "./tasks/daily-leaderboard";
 
 /**
  * 通知任务数据
@@ -51,14 +51,87 @@ function toWebhookNotificationType(type: NotificationJobType): WebhookNotificati
   }
 }
 
-function isCacheHitRateAlertDataPayload(value: unknown): value is CacheHitRateAlertData {
-  if (!value || typeof value !== "object") return false;
-  const payload = value as CacheHitRateAlertData;
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isCacheHitRateAlertSamplePayload(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  const sample = value as Record<string, unknown>;
   return (
-    typeof payload.window?.mode === "string" &&
-    Array.isArray(payload.anomalies) &&
-    typeof payload.settings?.cooldownMinutes === "number"
+    (sample.kind === "eligible" || sample.kind === "overall") &&
+    isFiniteNumber(sample.requests) &&
+    isFiniteNumber(sample.denominatorTokens) &&
+    isFiniteNumber(sample.hitRateTokens)
   );
+}
+
+function isCacheHitRateAlertAnomalyPayload(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  const anomaly = value as Record<string, unknown>;
+
+  if (!isFiniteNumber(anomaly.providerId)) return false;
+  if (typeof anomaly.model !== "string") return false;
+  if (!isCacheHitRateAlertSamplePayload(anomaly.current)) return false;
+
+  const baseline = anomaly.baseline;
+  if (baseline !== null && baseline !== undefined && !isCacheHitRateAlertSamplePayload(baseline)) {
+    return false;
+  }
+
+  const baselineSource = anomaly.baselineSource;
+  if (
+    baselineSource !== null &&
+    baselineSource !== undefined &&
+    typeof baselineSource !== "string"
+  ) {
+    return false;
+  }
+
+  const dropAbs = anomaly.dropAbs;
+  if (dropAbs !== null && dropAbs !== undefined && !isFiniteNumber(dropAbs)) return false;
+
+  const deltaRel = anomaly.deltaRel;
+  if (deltaRel !== null && deltaRel !== undefined && !isFiniteNumber(deltaRel)) return false;
+
+  const reasonCodes = anomaly.reasonCodes;
+  if (!Array.isArray(reasonCodes) || !reasonCodes.every((code) => typeof code === "string")) {
+    return false;
+  }
+
+  return true;
+}
+
+function isCacheHitRateAlertDataPayload(value: unknown): value is CacheHitRateAlertData {
+  if (!isPlainObject(value)) return false;
+  const payload = value as Record<string, unknown>;
+
+  if (!isPlainObject(payload.window)) return false;
+  const window = payload.window as Record<string, unknown>;
+  if (typeof window.mode !== "string") return false;
+  if (typeof window.startTime !== "string") return false;
+  if (typeof window.endTime !== "string") return false;
+  if (!isFiniteNumber(window.durationMinutes)) return false;
+
+  if (!Array.isArray(payload.anomalies)) return false;
+  if (!payload.anomalies.every(isCacheHitRateAlertAnomalyPayload)) return false;
+
+  if (!isPlainObject(payload.settings)) return false;
+  const settings = payload.settings as Record<string, unknown>;
+  if (!isFiniteNumber(settings.cooldownMinutes)) return false;
+  if (!isFiniteNumber(settings.absMin)) return false;
+  if (!isFiniteNumber(settings.dropAbs)) return false;
+  if (!isFiniteNumber(settings.dropRel)) return false;
+  if (!isFiniteNumber(settings.minEligibleRequests)) return false;
+  if (!isFiniteNumber(settings.minEligibleTokens)) return false;
+
+  if (!isFiniteNumber(payload.suppressedCount)) return false;
+
+  return true;
 }
 
 /**
@@ -188,7 +261,15 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         // 注意：targets 模式的 fan-out 主作业可能会因为 enqueue 失败而触发重试。
         // 因此这里将生成结果写回 job.data，确保重试时使用同一份 payload，避免边界丢失。
         if (data) {
-          payload = data as CacheHitRateAlertData;
+          if (!isCacheHitRateAlertDataPayload(data)) {
+            logger.error({
+              action: "cache_hit_rate_alert_invalid_payload",
+              jobId: job.id,
+              reason: "fanout_data_invalid",
+            });
+            return { success: true, skipped: true };
+          }
+          payload = data;
         } else {
           const dedupMode = settings.useLegacyMode ? "global" : "none";
           const generated = await generateCacheHitRateAlertPayload({ dedupMode });
@@ -242,7 +323,18 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             })
           );
 
-          await commitCacheHitRateAlertCooldown(keys, payload.settings.cooldownMinutes);
+          try {
+            await commitCacheHitRateAlertCooldown(keys, payload.settings.cooldownMinutes);
+          } catch (error) {
+            logger.warn({
+              action: "cache_hit_rate_alert_dedup_commit_failed",
+              jobId: job.id,
+              mode: "legacy",
+              keysCount: keys.length,
+              cooldownMinutes: payload.settings.cooldownMinutes,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
 
           logger.info({
             action: "cache_hit_rate_alert_sent",
@@ -469,7 +561,20 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
       }
 
       if (cooldownCommit) {
-        await commitCacheHitRateAlertCooldown(cooldownCommit.keys, cooldownCommit.cooldownMinutes);
+        try {
+          await commitCacheHitRateAlertCooldown(
+            cooldownCommit.keys,
+            cooldownCommit.cooldownMinutes
+          );
+        } catch (error) {
+          logger.warn({
+            action: "cache_hit_rate_alert_dedup_commit_failed",
+            jobId: job.id,
+            keysCount: cooldownCommit.keys.length,
+            cooldownMinutes: cooldownCommit.cooldownMinutes,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
 
       logger.info({

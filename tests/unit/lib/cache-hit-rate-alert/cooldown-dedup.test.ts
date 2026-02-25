@@ -196,6 +196,52 @@ describe("cache-hit-rate-alert cooldown dedup", () => {
     expect(result.dedupKeysToSet[0]).toContain(":binding:7:");
   });
 
+  it("returns all anomalies when redis.mget throws (best-effort dedup)", async () => {
+    const redis = createRedisMock();
+    redis.mget.mockRejectedValueOnce(new Error("boom"));
+    vi.mocked(getRedisClient).mockReturnValue(
+      redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+    );
+
+    const input = payload([
+      {
+        providerId: 1,
+        model: "m1",
+        baselineSource: "prev",
+        current: sample(0.5),
+        baseline: sample(0.8),
+        deltaAbs: -0.3,
+        deltaRel: -0.375,
+        dropAbs: 0.3,
+        reasonCodes: ["drop_abs_rel"],
+      },
+      {
+        providerId: 2,
+        model: "m2",
+        baselineSource: "prev",
+        current: sample(0.5),
+        baseline: sample(0.8),
+        deltaAbs: -0.3,
+        deltaRel: -0.375,
+        dropAbs: 0.3,
+        reasonCodes: ["drop_abs_rel"],
+      },
+    ]);
+
+    const result = await applyCacheHitRateAlertCooldownToPayload({ payload: input, bindingId: 7 });
+
+    expect(redis.mget).toHaveBeenCalledTimes(1);
+    const passedKeys = redis.mget.mock.calls[0];
+    expect(passedKeys).toHaveLength(2);
+    expect(passedKeys[0]).toContain(":binding:7:");
+    expect(passedKeys[1]).toContain(":binding:7:");
+
+    expect(result.suppressedCount).toBe(0);
+    expect(result.payload.suppressedCount).toBe(0);
+    expect(result.payload.anomalies).toHaveLength(2);
+    expect(result.dedupKeysToSet).toEqual(passedKeys);
+  });
+
   it("handles empty anomalies list", async () => {
     const input = payload([]);
 
