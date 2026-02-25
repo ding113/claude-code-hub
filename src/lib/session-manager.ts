@@ -105,6 +105,71 @@ export class SessionManager {
   ); // 短上下文阈值
   private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
     process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
+  private static readonly TERMINATED_SESSION_TTL = (() => {
+    const raw =
+      process.env.SESSION_TERMINATION_TTL_SECONDS ??
+      process.env.SESSION_TERMINATION_TTL ??
+      process.env.TERMINATED_SESSION_TTL ??
+      "";
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+    return 24 * 60 * 60; // 1 天
+  })();
+
+  private static getTerminationMarkerKey(sessionId: string): string {
+    return `session:${sessionId}:terminated`;
+  }
+
+  private static getTerminationReplacementKey(sessionId: string): string {
+    return `session:${sessionId}:terminated_replacement`;
+  }
+
+  private static async resolveSessionIdIfTerminated(sessionId: string): Promise<{
+    sessionId: string;
+    remapped: boolean;
+    terminatedSessionId: string;
+  }> {
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      return { sessionId, remapped: false, terminatedSessionId: sessionId };
+    }
+
+    const terminatedKey = SessionManager.getTerminationMarkerKey(sessionId);
+    const replacementKey = SessionManager.getTerminationReplacementKey(sessionId);
+
+    try {
+      const values = await redis.mget(terminatedKey, replacementKey);
+      const terminatedAt = values?.[0] ?? null;
+      const replacement = values?.[1] ?? null;
+
+      if (!terminatedAt) {
+        return { sessionId, remapped: false, terminatedSessionId: sessionId };
+      }
+
+      if (replacement && typeof replacement === "string" && replacement.length > 0) {
+        return { sessionId: replacement, remapped: true, terminatedSessionId: sessionId };
+      }
+
+      const newSessionId = SessionManager.generateSessionId();
+      const ttlSeconds = SessionManager.TERMINATED_SESSION_TTL;
+
+      await redis
+        .pipeline()
+        .setex(replacementKey, ttlSeconds, newSessionId)
+        .expire(terminatedKey, ttlSeconds)
+        .exec();
+
+      return { sessionId: newSessionId, remapped: true, terminatedSessionId: sessionId };
+    } catch (error) {
+      logger.error("SessionManager: Failed to resolve terminated session", {
+        error,
+        sessionId,
+      });
+      return { sessionId, remapped: false, terminatedSessionId: sessionId };
+    }
+  }
 
   /**
    * 获取 STORE_SESSION_MESSAGES 配置
@@ -358,19 +423,29 @@ export class SessionManager {
 
     // 1. 优先使用客户端传递的 session_id (来自 metadata.user_id 或 metadata.session_id)
     if (clientSessionId) {
+      const resolved = await SessionManager.resolveSessionIdIfTerminated(clientSessionId);
+      const effectiveSessionId = resolved.sessionId;
+
+      if (resolved.remapped) {
+        logger.info("SessionManager: Remapped terminated session", {
+          terminatedSessionId: resolved.terminatedSessionId,
+          sessionId: effectiveSessionId,
+        });
+      }
+
       // 2. 短上下文并发检测（方案E）
       if (
         SessionManager.ENABLE_SHORT_CONTEXT_DETECTION &&
         messagesLength <= SessionManager.SHORT_CONTEXT_THRESHOLD
       ) {
         // 检查该 session 是否有其他请求正在运行
-        const concurrentCount = await SessionTracker.getConcurrentCount(clientSessionId);
+        const concurrentCount = await SessionTracker.getConcurrentCount(effectiveSessionId);
 
         if (concurrentCount > 0) {
           // 场景B：有并发请求 → 这是并发短任务 → 强制新建 session
           const newId = SessionManager.generateSessionId();
           logger.info("SessionManager: 检测到并发短任务，强制新建 session", {
-            originalSessionId: clientSessionId,
+            originalSessionId: effectiveSessionId,
             newSessionId: newId,
             messagesLength,
             existingConcurrentCount: concurrentCount,
@@ -380,22 +455,22 @@ export class SessionManager {
 
         // 场景A：无并发 → 这可能是长对话的开始 → 允许复用
         logger.debug("SessionManager: 短上下文但 session 空闲，允许复用（长对话开始）", {
-          sessionId: clientSessionId,
+          sessionId: effectiveSessionId,
           messagesLength,
         });
       }
 
       // 3. 长上下文 or 无并发 → 正常复用
       logger.debug("SessionManager: Using client-provided session", {
-        sessionId: clientSessionId,
+        sessionId: effectiveSessionId,
       });
       // 刷新 TTL（滑动窗口）
       if (redis && redis.status === "ready") {
-        await SessionManager.refreshSessionTTL(clientSessionId).catch((err) => {
+        await SessionManager.refreshSessionTTL(effectiveSessionId).catch((err) => {
           logger.error("SessionManager: Failed to refresh TTL", { error: err });
         });
       }
-      return clientSessionId;
+      return effectiveSessionId;
     }
 
     // 2. 降级方案：计算 messages 内容哈希（TC-047 警告：不可靠）
@@ -420,9 +495,14 @@ export class SessionManager {
     if (redis && redis.status === "ready") {
       try {
         const hashKey = `hash:${contentHash}:session`;
-        const existingSessionId = await redis.get(hashKey);
+        let existingSessionId = await redis.get(hashKey);
 
         if (existingSessionId) {
+          const resolved = await SessionManager.resolveSessionIdIfTerminated(existingSessionId);
+          if (resolved.remapped) {
+            existingSessionId = resolved.sessionId;
+            await redis.setex(hashKey, SessionManager.SESSION_TTL, existingSessionId);
+          }
           // 找到已有 session，刷新 TTL
           await SessionManager.refreshSessionTTL(existingSessionId);
           logger.trace("SessionManager: Reusing session via hash", {
@@ -1941,6 +2021,18 @@ export class SessionManager {
     }
 
     try {
+      const terminatedKey = SessionManager.getTerminationMarkerKey(sessionId);
+      const terminatedAt = Date.now().toString();
+      const ttlSeconds = SessionManager.TERMINATED_SESSION_TTL;
+
+      // 0. 标记终止（优先写入，避免并发请求在清理窗口内复活）
+      const markerResult = await redis.set(terminatedKey, terminatedAt, "EX", ttlSeconds);
+      const markerOk = markerResult === "OK";
+
+      if (!markerOk) {
+        logger.warn("SessionManager: Failed to set termination marker", { sessionId });
+      }
+
       // 1. 先查询绑定信息（用于从 ZSET 中移除）
       let providerId: number | null = null;
       let keyId: number | null = null;
@@ -1971,21 +2063,8 @@ export class SessionManager {
         );
       }
 
-      // 2. 删除所有 Session 相关的 key
+      // 2. 从 ZSET 中移除（始终尝试，即使查询失败）
       const pipeline = redis.pipeline();
-
-      // 基础绑定信息
-      pipeline.del(`session:${sessionId}:provider`);
-      pipeline.del(`session:${sessionId}:key`);
-      pipeline.del(`session:${sessionId}:info`);
-      pipeline.del(`session:${sessionId}:last_seen`);
-      pipeline.del(`session:${sessionId}:concurrent_count`);
-
-      // 可选：messages 和 response（如果启用了存储）
-      pipeline.del(`session:${sessionId}:messages`);
-      pipeline.del(`session:${sessionId}:response`);
-
-      // 3. 从 ZSET 中移除（始终尝试，即使查询失败）
       pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);
 
       if (providerId) {
@@ -2000,30 +2079,51 @@ export class SessionManager {
         pipeline.zrem(getUserActiveSessionsKey(userId), sessionId);
       }
 
-      // 4. 删除 hash 映射（如果存在）
-      // 注意：无法直接反查 hash，只能清理已知的 session key
-      // hash 会在 TTL 后自动过期，不影响功能
+      await pipeline.exec();
 
-      const results = await pipeline.exec();
-
-      // 5. 检查结果
+      // 3. 删除 session:* 相关 key（包含 req:* 新格式，避免终止后仍能查看/复活）
       let deletedKeys = 0;
-      if (results) {
-        for (const [err, result] of results) {
+      let cursor = "0";
+      const matchPattern = `session:${sessionId}:*`;
+
+      do {
+        const scanResult = (await redis.scan(cursor, "MATCH", matchPattern, "COUNT", 200)) as [
+          string,
+          string[],
+        ];
+        const nextCursor = scanResult[0];
+        const keys = scanResult[1] ?? [];
+        cursor = nextCursor;
+
+        if (keys.length === 0) continue;
+
+        const deletePipeline = redis.pipeline();
+        for (const key of keys) {
+          if (key === terminatedKey) continue;
+          deletePipeline.del(key);
+        }
+
+        const deleteResults = await deletePipeline.exec();
+        if (!deleteResults) continue;
+
+        for (const [err, result] of deleteResults) {
           if (!err && typeof result === "number" && result > 0) {
             deletedKeys += result;
           }
         }
-      }
+      } while (cursor !== "0");
 
       logger.info("SessionManager: Terminated session", {
         sessionId,
         providerId,
         keyId,
+        userId,
         deletedKeys,
+        terminatedAt,
+        markerOk,
       });
 
-      return deletedKeys > 0;
+      return markerOk || deletedKeys > 0;
     } catch (error) {
       logger.error("SessionManager: Failed to terminate session", {
         error,
