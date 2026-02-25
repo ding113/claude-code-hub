@@ -14,6 +14,17 @@ import {
 import { cn } from "@/lib/utils";
 import type { NotificationType } from "../_lib/schemas";
 
+const TEST_NOTIFICATION_TYPES = [
+  "circuit_breaker",
+  "daily_leaderboard",
+  "cost_alert",
+  "cache_hit_rate_alert",
+] as const satisfies readonly NotificationType[];
+
+function isNotificationType(value: string): value is NotificationType {
+  return (TEST_NOTIFICATION_TYPES as readonly string[]).includes(value);
+}
+
 interface TestWebhookButtonProps {
   targetId: number;
   disabled?: boolean;
@@ -48,7 +59,10 @@ export function TestWebhookButton({ targetId, disabled, onTest }: TestWebhookBut
     <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
       <Select
         value={type}
-        onValueChange={(v) => setType(v as NotificationType)}
+        onValueChange={(v) => {
+          if (!isNotificationType(v)) return;
+          setType(v);
+        }}
         disabled={disabled || isTesting}
       >
         <SelectTrigger
