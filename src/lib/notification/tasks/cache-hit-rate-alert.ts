@@ -23,6 +23,12 @@ export interface CacheHitRateAlertTaskResult {
   cooldownMinutes: number;
 }
 
+export type CacheHitRateAlertDedupMode = "global" | "none";
+
+export interface GenerateCacheHitRateAlertPayloadOptions {
+  dedupMode?: CacheHitRateAlertDedupMode;
+}
+
 function parseNumber(input: string | null | undefined, fallback: number): number {
   if (input === null || input === undefined) return fallback;
   const value = Number(input);
@@ -67,14 +73,122 @@ function buildCooldownKey(params: {
   providerId: number;
   model: string;
   windowMode: string;
+  bindingId?: number;
 }): string {
   return [
     "cache-hit-rate-alert",
     "v1",
+    ...(params.bindingId === undefined ? [] : ["binding", String(params.bindingId)]),
     String(params.providerId),
     buildRedisKeyPart(params.model),
     params.windowMode,
   ].join(":");
+}
+
+export function buildCacheHitRateAlertCooldownKey(params: {
+  providerId: number;
+  model: string;
+  windowMode: string;
+  bindingId?: number;
+}): string {
+  return buildCooldownKey(params);
+}
+
+export interface CacheHitRateAlertCooldownApplyResult {
+  payload: CacheHitRateAlertData;
+  dedupKeysToSet: string[];
+  suppressedCount: number;
+}
+
+export async function applyCacheHitRateAlertCooldownToPayload(params: {
+  payload: CacheHitRateAlertData;
+  bindingId?: number;
+}): Promise<CacheHitRateAlertCooldownApplyResult> {
+  const { payload, bindingId } = params;
+  const cooldownMinutes = payload.settings?.cooldownMinutes ?? 0;
+  if (payload.anomalies.length === 0 || cooldownMinutes <= 0) {
+    return {
+      payload,
+      dedupKeysToSet: payload.anomalies.map((a) =>
+        buildCooldownKey({
+          providerId: a.providerId,
+          model: a.model,
+          windowMode: payload.window.mode,
+          bindingId,
+        })
+      ),
+      suppressedCount: 0,
+    };
+  }
+
+  const redis = getRedisClient({ allowWhenRateLimitDisabled: true });
+  if (!redis) {
+    return {
+      payload,
+      dedupKeysToSet: payload.anomalies.map((a) =>
+        buildCooldownKey({
+          providerId: a.providerId,
+          model: a.model,
+          windowMode: payload.window.mode,
+          bindingId,
+        })
+      ),
+      suppressedCount: 0,
+    };
+  }
+
+  const anomalyPairs = payload.anomalies.map((anomaly) => ({
+    anomaly,
+    key: buildCooldownKey({
+      providerId: anomaly.providerId,
+      model: anomaly.model,
+      windowMode: payload.window.mode,
+      bindingId,
+    }),
+  }));
+
+  const keys = anomalyPairs.map((p) => p.key);
+  let values: Array<string | null>;
+
+  try {
+    values = await redis.mget(...keys);
+  } catch (error) {
+    logger.warn({
+      action: "cache_hit_rate_alert_dedup_read_failed",
+      keysCount: keys.length,
+      windowMode: payload.window.mode,
+      error: error instanceof Error ? error.message : String(error),
+    });
+
+    return {
+      payload,
+      dedupKeysToSet: keys,
+      suppressedCount: 0,
+    };
+  }
+
+  const remainingPairs: typeof anomalyPairs = [];
+  let suppressedCount = 0;
+  for (let i = 0; i < anomalyPairs.length; i++) {
+    if (values[i]) {
+      suppressedCount++;
+      continue;
+    }
+    remainingPairs.push(anomalyPairs[i]);
+  }
+
+  const remaining = remainingPairs.map((p) => p.anomaly);
+  const dedupKeysToSet = remainingPairs.map((p) => p.key);
+
+  return {
+    payload: {
+      ...payload,
+      anomalies: remaining,
+      suppressedCount: (payload.suppressedCount ?? 0) + suppressedCount,
+    },
+    dedupKeysToSet,
+    suppressedCount,
+  };
 }
 
 function toDecisionMetric(
@@ -98,13 +212,17 @@ function getStartOfToday(timezone: string, now: Date): Date {
   return fromZonedTime(zonedStart, timezone);
 }
 
-export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAlertTaskResult | null> {
+export async function generateCacheHitRateAlertPayload(
+  options: GenerateCacheHitRateAlertPayloadOptions = {}
+): Promise<CacheHitRateAlertTaskResult | null> {
   const settings = await getNotificationSettings();
 
   if (!settings.enabled || !settings.cacheHitRateAlertEnabled) {
     logger.info({ action: "cache_hit_rate_alert_disabled" });
     return null;
   }
+
+  const dedupMode: CacheHitRateAlertDedupMode = options.dedupMode ?? "global";
 
   const intervalMinutes = Math.max(1, parseIntNumber(settings.cacheHitRateAlertCheckInterval, 5));
   const lookbackDays = parseIntNumber(settings.cacheHitRateAlertHistoricalLookbackDays, 7);
@@ -198,17 +316,22 @@ export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAl
     return null;
   }
 
-  const redis = cooldownMinutes > 0 ? getRedisClient({ allowWhenRateLimitDisabled: true }) : null;
+  const redis =
+    dedupMode === "global" && cooldownMinutes > 0
+      ? getRedisClient({ allowWhenRateLimitDisabled: true })
+      : null;
   const suppressedKeys = new Set<string>();
+  const anomalyPairs = anomalies.map((anomaly) => ({
+    anomaly,
+    key: buildCooldownKey({
+      providerId: anomaly.providerId,
+      model: anomaly.model,
+      windowMode: resolvedWindowMode,
+    }),
+  }));
 
   if (redis) {
-    const keys = anomalies.map((anomaly) =>
-      buildCooldownKey({
-        providerId: anomaly.providerId,
-        model: anomaly.model,
-        windowMode: resolvedWindowMode,
-      })
-    );
+    const keys = anomalyPairs.map((p) => p.key);
 
     try {
       const values = await redis.mget(...keys);
@@ -228,16 +351,9 @@ export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAl
   }
 
   const suppressedCount = suppressedKeys.size;
-  const remaining = anomalies.filter(
-    (a) =>
-      !suppressedKeys.has(
-        buildCooldownKey({
-          providerId: a.providerId,
-          model: a.model,
-          windowMode: resolvedWindowMode,
-        })
-      )
-  );
+  const remaining = redis
+    ? anomalyPairs.filter((p) => !suppressedKeys.has(p.key)).map((p) => p.anomaly)
+    : anomalies;
 
   if (remaining.length === 0) {
     logger.info({
@@ -296,13 +412,16 @@ export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAl
     generatedAt: new Date().toISOString(),
   };
 
-  const dedupKeysToSet = payload.anomalies.map((a) =>
-    buildCooldownKey({
-      providerId: a.providerId,
-      model: a.model,
-      windowMode: resolvedWindowMode,
-    })
-  );
+  const dedupKeysToSet =
+    dedupMode === "global"
+      ? payload.anomalies.map((a) =>
+          buildCooldownKey({
+            providerId: a.providerId,
+            model: a.model,
+            windowMode: resolvedWindowMode,
+          })
+        )
+      : [];
 
   logger.info({
     action: "cache_hit_rate_alert_generated",

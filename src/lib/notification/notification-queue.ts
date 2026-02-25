@@ -17,6 +17,8 @@ import {
   type WebhookNotificationType,
 } from "@/lib/webhook";
 import {
+  applyCacheHitRateAlertCooldownToPayload,
+  buildCacheHitRateAlertCooldownKey,
   commitCacheHitRateAlertCooldown,
   generateCacheHitRateAlertPayload,
 } from "./tasks/cache-hit-rate-alert";
@@ -34,8 +36,6 @@ export interface NotificationJobData {
   targetId?: number;
   bindingId?: number;
   data?: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | CacheHitRateAlertData; // 可选：定时任务会在执行时动态生成
-  // 缓存命中率异常告警：冷却提交信息（targets fan-out 子任务使用，避免主作业过早提交导致告警静默丢失）
-  cooldownCommit?: { keys: string[]; cooldownMinutes: number };
 }
 
 function toWebhookNotificationType(type: NotificationJobType): WebhookNotificationType {
@@ -139,14 +139,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
    * 处理通知任务
    */
   queue.process(async (job: Job<NotificationJobData>) => {
-    const {
-      type,
-      webhookUrl,
-      targetId,
-      bindingId,
-      data,
-      cooldownCommit: cooldownCommitFromJob,
-    } = job.data;
+    const { type, webhookUrl, targetId, bindingId, data } = job.data;
 
     logger.info({
       action: "notification_job_start",
@@ -181,16 +174,14 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         }
 
         let payload: CacheHitRateAlertData;
-        let fanoutCooldownCommit: { keys: string[]; cooldownMinutes: number };
 
         // 注意：targets 模式的 fan-out 主作业可能会因为 enqueue 失败而触发重试。
-        // 若子任务已成功发送并提交 cooldown，再次生成 payload 可能被抑制（返回 null），导致剩余 target 永久漏发。
-        // 因此这里将生成结果写回 job.data，确保重试时使用同一份 payload/cooldown 信息，避免边界丢失。
-        if (data && cooldownCommitFromJob) {
+        // 因此这里将生成结果写回 job.data，确保重试时使用同一份 payload，避免边界丢失。
+        if (data) {
           payload = data as CacheHitRateAlertData;
-          fanoutCooldownCommit = cooldownCommitFromJob;
         } else {
-          const generated = await generateCacheHitRateAlertPayload();
+          const dedupMode = settings.useLegacyMode ? "global" : "none";
+          const generated = await generateCacheHitRateAlertPayload({ dedupMode });
           if (!generated) {
             logger.info({
               action: "cache_hit_rate_alert_no_data",
@@ -200,15 +191,10 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           }
 
           payload = generated.payload;
-          fanoutCooldownCommit = {
-            keys: generated.dedupKeysToSet,
-            cooldownMinutes: generated.cooldownMinutes,
-          };
 
           await job.update({
             ...job.data,
             data: payload,
-            cooldownCommit: fanoutCooldownCommit,
           });
         }
 
@@ -238,10 +224,15 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             throw new Error(sendResult.error || "Failed to send cache hit rate alert");
           }
 
-          await commitCacheHitRateAlertCooldown(
-            fanoutCooldownCommit.keys,
-            fanoutCooldownCommit.cooldownMinutes
+          const keys = payload.anomalies.map((a) =>
+            buildCacheHitRateAlertCooldownKey({
+              providerId: a.providerId,
+              model: a.model,
+              windowMode: payload.window.mode,
+            })
           );
+
+          await commitCacheHitRateAlertCooldown(keys, payload.settings.cooldownMinutes);
 
           logger.info({
             action: "cache_hit_rate_alert_sent",
@@ -278,7 +269,6 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
               targetId: binding.targetId,
               bindingId: binding.id,
               data: payload,
-              cooldownCommit: fanoutCooldownCommit,
             },
             { jobId: childJobId }
           );
@@ -304,8 +294,7 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         | CostAlertData
         | CacheHitRateAlertData
         | undefined = data;
-      let cooldownCommit: { keys: string[]; cooldownMinutes: number } | undefined =
-        cooldownCommitFromJob;
+      let cooldownCommit: { keys: string[]; cooldownMinutes: number } | undefined;
       switch (type) {
         case "circuit-breaker":
           message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData, timezone);
@@ -353,11 +342,15 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         }
         case "cache-hit-rate-alert": {
           let payload: CacheHitRateAlertData;
+          let dedupKeysToSet: string[] | undefined;
+          let cooldownMinutes: number | undefined;
 
           if (data) {
             payload = data as CacheHitRateAlertData;
           } else {
-            const result = await generateCacheHitRateAlertPayload();
+            // legacy webhook：全局 cooldown 去重；targets：每个 binding 单独去重，避免“一个 target 发送成功后把全局 cooldown 写死”导致其他 target 永久漏发
+            const dedupMode = webhookUrl ? "global" : "none";
+            const result = await generateCacheHitRateAlertPayload({ dedupMode });
 
             if (!result) {
               logger.info({
@@ -368,14 +361,47 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             }
 
             payload = result.payload;
-            cooldownCommit = {
-              keys: result.dedupKeysToSet,
-              cooldownMinutes: result.cooldownMinutes,
-            };
+            if (dedupMode === "global") {
+              dedupKeysToSet = result.dedupKeysToSet;
+              cooldownMinutes = result.cooldownMinutes;
+            }
+          }
+
+          if (targetId && bindingId) {
+            const applied = await applyCacheHitRateAlertCooldownToPayload({
+              payload,
+              bindingId,
+            });
+            payload = applied.payload;
+            if (payload.anomalies.length === 0) {
+              logger.info({
+                action: "cache_hit_rate_alert_all_suppressed",
+                jobId: job.id,
+                bindingId,
+                targetId,
+              });
+              return { success: true, skipped: true };
+            }
+
+            dedupKeysToSet = applied.dedupKeysToSet;
+            cooldownMinutes = payload.settings.cooldownMinutes;
+          } else {
+            dedupKeysToSet ??= payload.anomalies.map((a) =>
+              buildCacheHitRateAlertCooldownKey({
+                providerId: a.providerId,
+                model: a.model,
+                windowMode: payload.window.mode,
+              })
+            );
+            cooldownMinutes ??= payload.settings.cooldownMinutes;
           }
 
           templateData = payload;
           message = buildCacheHitRateAlertMessage(payload, timezone);
+          cooldownCommit = {
+            keys: dedupKeysToSet ?? [],
+            cooldownMinutes: cooldownMinutes ?? payload.settings.cooldownMinutes,
+          };
           break;
         }
         default:
@@ -709,15 +735,22 @@ export async function scheduleNotifications() {
               jobId: "cache-hit-rate-alert-targets-scheduled",
             }
           );
+          logger.info({
+            action: "cache_hit_rate_alert_scheduled",
+            schedule: defaultCron,
+            intervalMinutes: interval,
+            targets: bindings.length,
+            mode: "targets",
+          });
+        } else {
+          logger.info({
+            action: "cache_hit_rate_alert_schedule_skipped",
+            schedule: defaultCron,
+            intervalMinutes: interval,
+            reason: "no_bindings",
+            mode: "targets",
+          });
         }
-
-        logger.info({
-          action: "cache_hit_rate_alert_scheduled",
-          schedule: defaultCron,
-          intervalMinutes: interval,
-          targets: bindings.length,
-          mode: "targets",
-        });
       }
     }
 
