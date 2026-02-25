@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import type Redis from "ioredis";
 import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -115,12 +116,23 @@ export class SessionManager {
   ); // 短上下文阈值
   private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
     process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
+  // 会话终止标记 TTL（单位：秒）
+  // 规范环境变量：SESSION_TERMINATION_TTL_SECONDS
+  // 兼容旧名（计划弃用）：SESSION_TERMINATION_TTL / TERMINATED_SESSION_TTL
   private static readonly TERMINATED_SESSION_TTL = (() => {
-    const raw =
-      process.env.SESSION_TERMINATION_TTL_SECONDS ??
-      process.env.SESSION_TERMINATION_TTL ??
-      process.env.TERMINATED_SESSION_TTL ??
-      "";
+    const rawPrimary = process.env.SESSION_TERMINATION_TTL_SECONDS;
+    const rawLegacyA = process.env.SESSION_TERMINATION_TTL;
+    const rawLegacyB = process.env.TERMINATED_SESSION_TTL;
+
+    if (!rawPrimary && (rawLegacyA || rawLegacyB)) {
+      logger.warn("SessionManager: Deprecated termination TTL env var detected", {
+        SESSION_TERMINATION_TTL: rawLegacyA ? "set" : "unset",
+        TERMINATED_SESSION_TTL: rawLegacyB ? "set" : "unset",
+        preferred: "SESSION_TERMINATION_TTL_SECONDS",
+      });
+    }
+
+    const raw = rawPrimary ?? rawLegacyA ?? rawLegacyB ?? "";
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) {
       return parsed;
@@ -133,7 +145,7 @@ export class SessionManager {
   }
 
   private static async readTerminationMarker(
-    redis: any,
+    redis: Redis,
     sessionId: string
   ): Promise<string | null> {
     const terminatedKey = SessionManager.getTerminationMarkerKey(sessionId);
@@ -418,6 +430,8 @@ export class SessionManager {
 
     // 1. 优先使用客户端传递的 session_id (来自 metadata.user_id 或 metadata.session_id)
     if (clientSessionId) {
+      // Fail-open：Redis 不可用时，不阻断请求（避免因 Redis 故障导致全站请求失败）。
+      // 代价：Redis 故障窗口内无法强制执行 terminated marker，因此 TerminatedSessionError 不会抛出。
       if (redis && redis.status === "ready") {
         const terminatedAt = await SessionManager.readTerminationMarker(redis, clientSessionId);
         if (terminatedAt) {
@@ -431,21 +445,19 @@ export class SessionManager {
         }
       }
 
-      const effectiveSessionId = clientSessionId;
-
       // 2. 短上下文并发检测（方案E）
       if (
         SessionManager.ENABLE_SHORT_CONTEXT_DETECTION &&
         messagesLength <= SessionManager.SHORT_CONTEXT_THRESHOLD
       ) {
         // 检查该 session 是否有其他请求正在运行
-        const concurrentCount = await SessionTracker.getConcurrentCount(effectiveSessionId);
+        const concurrentCount = await SessionTracker.getConcurrentCount(clientSessionId);
 
         if (concurrentCount > 0) {
           // 场景B：有并发请求 → 这是并发短任务 → 强制新建 session
           const newId = SessionManager.generateSessionId();
           logger.info("SessionManager: 检测到并发短任务，强制新建 session", {
-            originalSessionId: effectiveSessionId,
+            originalSessionId: clientSessionId,
             newSessionId: newId,
             messagesLength,
             existingConcurrentCount: concurrentCount,
@@ -455,22 +467,22 @@ export class SessionManager {
 
         // 场景A：无并发 → 这可能是长对话的开始 → 允许复用
         logger.debug("SessionManager: 短上下文但 session 空闲，允许复用（长对话开始）", {
-          sessionId: effectiveSessionId,
+          sessionId: clientSessionId,
           messagesLength,
         });
       }
 
       // 3. 长上下文 or 无并发 → 正常复用
       logger.debug("SessionManager: Using client-provided session", {
-        sessionId: effectiveSessionId,
+        sessionId: clientSessionId,
       });
       // 刷新 TTL（滑动窗口）
       if (redis && redis.status === "ready") {
-        await SessionManager.refreshSessionTTL(effectiveSessionId).catch((err) => {
+        await SessionManager.refreshSessionTTL(clientSessionId).catch((err) => {
           logger.error("SessionManager: Failed to refresh TTL", { error: err });
         });
       }
-      return effectiveSessionId;
+      return clientSessionId;
     }
 
     // 2. 降级方案：计算 messages 内容哈希（TC-047 警告：不可靠）
@@ -2037,6 +2049,7 @@ export class SessionManager {
       const ttlSeconds = SessionManager.TERMINATED_SESSION_TTL;
 
       // 0. 标记终止（优先写入，避免并发请求在清理窗口内复活）
+      // 说明：这里允许覆盖旧值，用于刷新 TTL（多次终止时延长阻断窗口）。
       const markerResult = await redis.set(terminatedKey, terminatedAt, "EX", ttlSeconds);
       const markerOk = markerResult === "OK";
 
@@ -2092,7 +2105,7 @@ export class SessionManager {
 
       await pipeline.exec();
 
-      // 3. 删除 session:* 相关 key（包含 req:* 新格式，避免终止后仍能查看/复活）
+      // 3. 删除 session:* 相关 key（包含 req:* 新格式；保留 terminated 标记）
       let deletedKeys = 0;
       let cursor = "0";
       const escapedSessionId = SessionManager.escapeRedisMatchPatternLiteral(sessionId);

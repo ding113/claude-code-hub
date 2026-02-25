@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let redisClientRef: any;
+const getRedisClientMock = vi.fn();
 
 vi.mock("server-only", () => ({}));
 
@@ -26,7 +27,7 @@ vi.mock("@/lib/session-tracker", () => ({
 }));
 
 vi.mock("@/lib/redis", () => ({
-  getRedisClient: () => redisClientRef,
+  getRedisClient: getRedisClientMock,
 }));
 
 describe("SessionManager.hasAnySessionMessages - scan pattern escaping", () => {
@@ -39,6 +40,8 @@ describe("SessionManager.hasAnySessionMessages - scan pattern escaping", () => {
       exists: vi.fn(async () => 0),
       scan: vi.fn(async () => ["0", []]),
     };
+
+    getRedisClientMock.mockReturnValue(redisClientRef);
   });
 
   it("应对 sessionId 中的 glob 特殊字符进行转义（避免误匹配/误删）", async () => {

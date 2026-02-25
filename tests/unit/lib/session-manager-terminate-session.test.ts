@@ -44,7 +44,9 @@ describe("SessionManager.terminateSession", () => {
       mget: vi.fn(async () => [null, null]),
       pipeline: vi
         .fn()
+        // 第一次 pipeline：用于 ZSET 清理（global/key/provider/user）
         .mockImplementationOnce(() => pipelineRef)
+        // 第二次 pipeline：用于批量删除 session:{id}:* key
         .mockImplementationOnce(() => deletePipelineRef),
     };
   });
@@ -111,6 +113,8 @@ describe("SessionManager.terminateSession", () => {
     });
     redisClientRef.hget.mockResolvedValue(null);
     redisClientRef.scan.mockResolvedValueOnce(["0", [terminatedKey]]);
+    // SCAN 仅返回 terminatedKey 时，不会发出任何 DEL 命令，因此 exec 结果应为空（避免误计 deletedKeys）。
+    deletePipelineRef.exec.mockResolvedValueOnce([]);
 
     const { getUserActiveSessionsKey } = await import("@/lib/redis/active-session-keys");
     const { SessionManager } = await import("@/lib/session-manager");
