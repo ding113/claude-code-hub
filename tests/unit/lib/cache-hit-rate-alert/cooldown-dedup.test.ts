@@ -140,4 +140,116 @@ describe("cache-hit-rate-alert cooldown dedup", () => {
     expect(result.dedupKeysToSet).toHaveLength(1);
     expect(result.dedupKeysToSet[0]).toBe(passedKeys[1]);
   });
+
+  it("returns all anomalies when cooldownMinutes=0 (no Redis)", async () => {
+    const input = {
+      ...payload([
+        {
+          providerId: 1,
+          model: "m1",
+          baselineSource: "prev",
+          current: sample(0.5),
+          baseline: sample(0.8),
+          deltaAbs: -0.3,
+          deltaRel: -0.375,
+          dropAbs: 0.3,
+          reasonCodes: ["drop_abs_rel"],
+        },
+      ]),
+      settings: {
+        ...payload([]).settings,
+        cooldownMinutes: 0,
+      },
+    };
+
+    const result = await applyCacheHitRateAlertCooldownToPayload({ payload: input, bindingId: 7 });
+
+    expect(getRedisClient).not.toHaveBeenCalled();
+    expect(result.suppressedCount).toBe(0);
+    expect(result.payload.anomalies).toHaveLength(1);
+    expect(result.dedupKeysToSet).toHaveLength(0);
+  });
+
+  it("returns all anomalies when Redis is unavailable (null client)", async () => {
+    vi.mocked(getRedisClient).mockReturnValue(null);
+
+    const input = payload([
+      {
+        providerId: 1,
+        model: "m1",
+        baselineSource: "prev",
+        current: sample(0.5),
+        baseline: sample(0.8),
+        deltaAbs: -0.3,
+        deltaRel: -0.375,
+        dropAbs: 0.3,
+        reasonCodes: ["drop_abs_rel"],
+      },
+    ]);
+
+    const result = await applyCacheHitRateAlertCooldownToPayload({ payload: input, bindingId: 7 });
+
+    expect(getRedisClient).toHaveBeenCalledTimes(1);
+    expect(result.suppressedCount).toBe(0);
+    expect(result.payload.anomalies).toHaveLength(1);
+    expect(result.dedupKeysToSet).toHaveLength(1);
+    expect(result.dedupKeysToSet[0]).toContain(":binding:7:");
+  });
+
+  it("handles empty anomalies list", async () => {
+    const input = payload([]);
+
+    const result = await applyCacheHitRateAlertCooldownToPayload({ payload: input, bindingId: 7 });
+
+    expect(getRedisClient).not.toHaveBeenCalled();
+    expect(result.suppressedCount).toBe(0);
+    expect(result.payload.anomalies).toHaveLength(0);
+    expect(result.dedupKeysToSet).toHaveLength(0);
+  });
+
+  it("suppresses all anomalies when Redis reports all keys present", async () => {
+    const redis = createRedisMock();
+    redis.mget.mockResolvedValueOnce(["1", "1"]);
+    vi.mocked(getRedisClient).mockReturnValue(
+      redis as unknown as NonNullable<ReturnType<typeof getRedisClient>>
+    );
+
+    const input = payload([
+      {
+        providerId: 1,
+        model: "m1",
+        baselineSource: "prev",
+        current: sample(0.5),
+        baseline: sample(0.8),
+        deltaAbs: -0.3,
+        deltaRel: -0.375,
+        dropAbs: 0.3,
+        reasonCodes: ["drop_abs_rel"],
+      },
+      {
+        providerId: 2,
+        model: "m2",
+        baselineSource: "prev",
+        current: sample(0.5),
+        baseline: sample(0.8),
+        deltaAbs: -0.3,
+        deltaRel: -0.375,
+        dropAbs: 0.3,
+        reasonCodes: ["drop_abs_rel"],
+      },
+    ]);
+
+    const result = await applyCacheHitRateAlertCooldownToPayload({ payload: input, bindingId: 7 });
+
+    expect(redis.mget).toHaveBeenCalledTimes(1);
+    const passedKeys = redis.mget.mock.calls[0];
+    expect(passedKeys).toHaveLength(2);
+    expect(passedKeys[0]).toContain(":binding:7:");
+    expect(passedKeys[1]).toContain(":binding:7:");
+
+    expect(result.suppressedCount).toBe(2);
+    expect(result.payload.suppressedCount).toBe(2);
+    expect(result.payload.anomalies).toHaveLength(0);
+    expect(result.dedupKeysToSet).toHaveLength(0);
+  });
 });

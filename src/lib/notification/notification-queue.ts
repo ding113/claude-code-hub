@@ -51,6 +51,16 @@ function toWebhookNotificationType(type: NotificationJobType): WebhookNotificati
   }
 }
 
+function isCacheHitRateAlertDataPayload(value: unknown): value is CacheHitRateAlertData {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as CacheHitRateAlertData;
+  return (
+    typeof payload.window?.mode === "string" &&
+    Array.isArray(payload.anomalies) &&
+    typeof payload.settings?.cooldownMinutes === "number"
+  );
+}
+
 /**
  * 队列实例（延迟初始化，避免 Turbopack 编译时加载）
  */
@@ -346,7 +356,16 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           let cooldownMinutes: number | undefined;
 
           if (data) {
-            payload = data as CacheHitRateAlertData;
+            if (!isCacheHitRateAlertDataPayload(data)) {
+              logger.error({
+                action: "cache_hit_rate_alert_invalid_payload",
+                jobId: job.id,
+                targetId,
+                bindingId,
+              });
+              return { success: true, skipped: true };
+            }
+            payload = data;
           } else {
             // legacy webhook：全局 cooldown 去重；targets：每个 binding 单独去重，避免“一个 target 发送成功后把全局 cooldown 写死”导致其他 target 永久漏发
             const dedupMode = webhookUrl ? "global" : "none";

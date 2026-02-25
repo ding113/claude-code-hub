@@ -109,14 +109,7 @@ export async function applyCacheHitRateAlertCooldownToPayload(params: {
   if (payload.anomalies.length === 0 || cooldownMinutes <= 0) {
     return {
       payload,
-      dedupKeysToSet: payload.anomalies.map((a) =>
-        buildCooldownKey({
-          providerId: a.providerId,
-          model: a.model,
-          windowMode: payload.window.mode,
-          bindingId,
-        })
-      ),
+      dedupKeysToSet: [],
       suppressedCount: 0,
     };
   }
@@ -254,7 +247,8 @@ export async function generateCacheHitRateAlertPayload(
   const historicalStart = fromZonedTime(historicalStartZoned, timezone);
   const historicalEnd = todayStart;
 
-  const todayEnd = currentStart;
+  // today 窗口仅用于“当日累计”基线；currentStart 可能在午夜附近早于 todayStart，因此这里做一次 clamp
+  const todayEnd = currentStart < todayStart ? todayStart : currentStart;
 
   logger.info({
     action: "cache_hit_rate_alert_generate_start",
