@@ -106,7 +106,7 @@ export async function generateCacheHitRateAlertPayload(): Promise<CacheHitRateAl
     return null;
   }
 
-  const intervalMinutes = parseIntNumber(settings.cacheHitRateAlertCheckInterval, 5);
+  const intervalMinutes = Math.max(1, parseIntNumber(settings.cacheHitRateAlertCheckInterval, 5));
   const lookbackDays = parseIntNumber(settings.cacheHitRateAlertHistoricalLookbackDays, 7);
   const cooldownMinutes = parseIntNumber(settings.cacheHitRateAlertCooldownMinutes, 30);
 

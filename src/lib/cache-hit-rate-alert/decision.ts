@@ -219,6 +219,9 @@ export function decideCacheHitRateAnomalies(
       continue;
     }
 
+    const currentValue = currentPicked.sample.hitRateTokens;
+    const absMinTriggered = currentValue < settings.absMin;
+
     const baselinePicked = pickBaseline(
       currentPicked.sample.kind,
       key,
@@ -226,11 +229,33 @@ export function decideCacheHitRateAnomalies(
       settings
     );
     if (!baselinePicked) {
+      if (!absMinTriggered) {
+        continue;
+      }
+
+      const reasonCodes: string[] = [...currentPicked.reasonCodes];
+      reasonCodes.push("baseline_missing", "abs_min");
+
+      anomaliesWithSeverity.push({
+        severity: Math.max(settings.absMin - currentValue, 0),
+        anomaly: {
+          key,
+          providerId: currentMetric.providerId,
+          model: currentMetric.model,
+          baselineSource: null,
+          current: currentPicked.sample,
+          baseline: null,
+          deltaAbs: null,
+          deltaRel: null,
+          dropAbs: null,
+          reasonCodes,
+        },
+      });
+
       continue;
     }
     const baselineValue = baselinePicked.sample.hitRateTokens;
 
-    const currentValue = currentPicked.sample.hitRateTokens;
     const deltaAbs = currentValue - baselineValue;
     const dropAbs = baselineValue - currentValue;
     const deltaRel = baselineValue <= 0 ? null : (currentValue - baselineValue) / baselineValue;
@@ -241,7 +266,7 @@ export function decideCacheHitRateAnomalies(
 
     const triggered: string[] = [];
 
-    if (currentValue < settings.absMin) {
+    if (absMinTriggered) {
       triggered.push("abs_min");
     }
 

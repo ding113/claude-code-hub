@@ -34,6 +34,8 @@ export interface NotificationJobData {
   targetId?: number;
   bindingId?: number;
   data?: CircuitBreakerAlertData | DailyLeaderboardData | CostAlertData | CacheHitRateAlertData; // 可选：定时任务会在执行时动态生成
+  // 缓存命中率异常告警：冷却提交信息（targets fan-out 子任务使用，避免主作业过早提交导致告警静默丢失）
+  cooldownCommit?: { keys: string[]; cooldownMinutes: number };
 }
 
 function toWebhookNotificationType(type: NotificationJobType): WebhookNotificationType {
@@ -137,7 +139,14 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
    * 处理通知任务
    */
   queue.process(async (job: Job<NotificationJobData>) => {
-    const { type, webhookUrl, targetId, bindingId, data } = job.data;
+    const {
+      type,
+      webhookUrl,
+      targetId,
+      bindingId,
+      data,
+      cooldownCommit: cooldownCommitFromJob,
+    } = job.data;
 
     logger.info({
       action: "notification_job_start",
@@ -171,8 +180,39 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           return { success: true, skipped: true };
         }
 
-        const result = await generateCacheHitRateAlertPayload();
-        if (!result) {
+        let payload: CacheHitRateAlertData;
+        let fanoutCooldownCommit: { keys: string[]; cooldownMinutes: number };
+
+        // 注意：targets 模式的 fan-out 主作业可能会因为 enqueue 失败而触发重试。
+        // 若子任务已成功发送并提交 cooldown，再次生成 payload 可能被抑制（返回 null），导致剩余 target 永久漏发。
+        // 因此这里将生成结果写回 job.data，确保重试时使用同一份 payload/cooldown 信息，避免边界丢失。
+        if (data && cooldownCommitFromJob) {
+          payload = data as CacheHitRateAlertData;
+          fanoutCooldownCommit = cooldownCommitFromJob;
+        } else {
+          const generated = await generateCacheHitRateAlertPayload();
+          if (!generated) {
+            logger.info({
+              action: "cache_hit_rate_alert_no_data",
+              jobId: job.id,
+            });
+            return { success: true, skipped: true };
+          }
+
+          payload = generated.payload;
+          fanoutCooldownCommit = {
+            keys: generated.dedupKeysToSet,
+            cooldownMinutes: generated.cooldownMinutes,
+          };
+
+          await job.update({
+            ...job.data,
+            data: payload,
+            cooldownCommit: fanoutCooldownCommit,
+          });
+        }
+
+        if (payload.anomalies.length === 0) {
           logger.info({
             action: "cache_hit_rate_alert_no_data",
             jobId: job.id,
@@ -191,21 +231,24 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
             return { success: true, skipped: true };
           }
 
-          const message = buildCacheHitRateAlertMessage(result.payload, timezone);
+          const message = buildCacheHitRateAlertMessage(payload, timezone);
           const sendResult = await sendWebhookMessage(url, message, { timezone });
 
           if (!sendResult.success) {
             throw new Error(sendResult.error || "Failed to send cache hit rate alert");
           }
 
-          await commitCacheHitRateAlertCooldown(result.dedupKeysToSet, result.cooldownMinutes);
+          await commitCacheHitRateAlertCooldown(
+            fanoutCooldownCommit.keys,
+            fanoutCooldownCommit.cooldownMinutes
+          );
 
           logger.info({
             action: "cache_hit_rate_alert_sent",
             jobId: job.id,
             mode: "legacy",
-            anomalies: result.payload.anomalies.length,
-            suppressedCount: result.payload.suppressedCount,
+            anomalies: payload.anomalies.length,
+            suppressedCount: payload.suppressedCount,
           });
 
           return { success: true };
@@ -223,24 +266,31 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
           return { success: true, skipped: true };
         }
 
-        for (const binding of bindings) {
-          await queue.add({
-            type: "cache-hit-rate-alert",
-            targetId: binding.targetId,
-            bindingId: binding.id,
-            data: result.payload,
-          });
-        }
+        const fanoutRunId = String(job.id ?? job.timestamp ?? Date.now());
 
-        await commitCacheHitRateAlertCooldown(result.dedupKeysToSet, result.cooldownMinutes);
+        for (const binding of bindings) {
+          // 使用稳定的 jobId 避免 fan-out 主作业重试时重复 enqueue，造成重复发送
+          const childJobId = `cache-hit-rate-alert:${fanoutRunId}:${binding.id}`;
+
+          await queue.add(
+            {
+              type: "cache-hit-rate-alert",
+              targetId: binding.targetId,
+              bindingId: binding.id,
+              data: payload,
+              cooldownCommit: fanoutCooldownCommit,
+            },
+            { jobId: childJobId }
+          );
+        }
 
         logger.info({
           action: "cache_hit_rate_alert_fanout_enqueued",
           jobId: job.id,
           mode: "targets",
           targets: bindings.length,
-          anomalies: result.payload.anomalies.length,
-          suppressedCount: result.payload.suppressedCount,
+          anomalies: payload.anomalies.length,
+          suppressedCount: payload.suppressedCount,
         });
 
         return { success: true, enqueued: bindings.length };
@@ -254,7 +304,8 @@ function setupQueueProcessor(queue: Queue.Queue<NotificationJobData>): void {
         | CostAlertData
         | CacheHitRateAlertData
         | undefined = data;
-      let cooldownCommit: { keys: string[]; cooldownMinutes: number } | undefined;
+      let cooldownCommit: { keys: string[]; cooldownMinutes: number } | undefined =
+        cooldownCommitFromJob;
       switch (type) {
         case "circuit-breaker":
           message = buildCircuitBreakerMessage(data as CircuitBreakerAlertData, timezone);
@@ -556,7 +607,7 @@ export async function scheduleNotifications() {
       }
 
       if (settings.cacheHitRateAlertEnabled && settings.cacheHitRateAlertWebhook) {
-        const interval = settings.cacheHitRateAlertCheckInterval ?? 5;
+        const interval = Math.max(1, settings.cacheHitRateAlertCheckInterval ?? 5);
         const cron = `*/${interval} * * * *`;
 
         await queue.add(
@@ -645,7 +696,7 @@ export async function scheduleNotifications() {
 
       if (settings.cacheHitRateAlertEnabled) {
         const bindings = await getEnabledBindingsByType("cache_hit_rate_alert");
-        const interval = settings.cacheHitRateAlertCheckInterval ?? 5;
+        const interval = Math.max(1, settings.cacheHitRateAlertCheckInterval ?? 5);
         const defaultCron = `*/${interval} * * * *`;
 
         if (bindings.length > 0) {

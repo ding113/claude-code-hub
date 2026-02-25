@@ -205,6 +205,28 @@ describe("decideCacheHitRateAnomalies", () => {
     expect(anomalies[0].dropAbs).toBeCloseTo(0.3, 10);
   });
 
+  it("should not trigger drop_abs_rel when only one threshold is met", () => {
+    // 仅满足 dropAbs，不满足 dropRel
+    const onlyAbs = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.6 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.8 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.01, dropAbs: 0.1, dropRel: 0.3 },
+    });
+    expect(onlyAbs).toHaveLength(0);
+
+    // 仅满足 dropRel，不满足 dropAbs
+    const onlyRel = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.14 })],
+      prev: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.2 })],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, absMin: 0.01, dropAbs: 0.1, dropRel: 0.3 },
+    });
+    expect(onlyRel).toHaveLength(0);
+  });
+
   it("should trigger abs_min when current is below absMin", () => {
     const shouldTrigger = decideCacheHitRateAnomalies({
       current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.03 })],
@@ -226,6 +248,25 @@ describe("decideCacheHitRateAnomalies", () => {
     });
 
     expect(shouldNotTrigger).toHaveLength(0);
+  });
+
+  it("abs_min 在缺失基线时也应触发", () => {
+    const anomalies = decideCacheHitRateAnomalies({
+      current: [metric({ providerId: 1, model: "m", hitRateTokensEligible: 0.01 })],
+      prev: [],
+      today: [],
+      historical: [],
+      settings: { ...defaultSettings, dropAbs: 0.9, dropRel: 0.9 },
+    });
+
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0].baselineSource).toBeNull();
+    expect(anomalies[0].baseline).toBeNull();
+    expect(anomalies[0].deltaAbs).toBeNull();
+    expect(anomalies[0].deltaRel).toBeNull();
+    expect(anomalies[0].dropAbs).toBeNull();
+    expect(anomalies[0].reasonCodes).toContain("baseline_missing");
+    expect(anomalies[0].reasonCodes).toContain("abs_min");
   });
 
   it("should set deltaRel to null when baseline hit rate is 0", () => {
