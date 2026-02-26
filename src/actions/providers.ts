@@ -1593,6 +1593,12 @@ const GEMINI_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
   "gemini_google_search_preference",
 ]);
 
+const CB_PROVIDER_KEYS: ReadonlySet<string> = new Set([
+  "circuitBreakerFailureThreshold",
+  "circuitBreakerOpenDuration",
+  "circuitBreakerHalfOpenSuccessThreshold",
+]);
+
 function isClaudeProviderType(providerType: ProviderType): boolean {
   return providerType === "claude" || providerType === "claude-auth";
 }
@@ -1914,6 +1920,26 @@ export async function applyProviderBatchPatch(
 
     await publishProviderCacheInvalidation();
 
+    const hasCbFieldChange = changedFields.some(
+      (f) =>
+        f === "circuit_breaker_failure_threshold" ||
+        f === "circuit_breaker_open_duration" ||
+        f === "circuit_breaker_half_open_success_threshold"
+    );
+    if (hasCbFieldChange) {
+      for (const id of effectiveProviderIds) {
+        try {
+          await deleteProviderCircuitConfig(id);
+          clearConfigCache(id);
+        } catch (error) {
+          logger.warn("applyProviderBatchPatch:cb_cache_invalidation_failed", {
+            providerId: id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
     const appliedAt = new Date(nowMs).toISOString();
     const undoToken = createProviderPatchUndoToken();
     const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_SECONDS * 1000;
@@ -2020,6 +2046,23 @@ export async function undoProviderPatch(
 
     if (preimageGroups.size > 0) {
       await publishProviderCacheInvalidation();
+    }
+
+    const hasCbRevert = Object.values(snapshot.preimage).some((fields) =>
+      Object.keys(fields).some((k) => CB_PROVIDER_KEYS.has(k))
+    );
+    if (hasCbRevert) {
+      for (const providerId of snapshot.providerIds) {
+        try {
+          await deleteProviderCircuitConfig(providerId);
+          clearConfigCache(providerId);
+        } catch (error) {
+          logger.warn("undoProviderPatch:cb_cache_invalidation_failed", {
+            providerId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
     }
 
     return {

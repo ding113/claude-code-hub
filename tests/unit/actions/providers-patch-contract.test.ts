@@ -125,6 +125,46 @@ describe("provider patch contract", () => {
     expect(result.error.field).toBe("model_redirects");
   });
 
+  it("accepts allowed_clients with string array", () => {
+    const result = normalizeProviderBatchPatchDraft({
+      allowed_clients: { set: ["client-a", "client-b"] },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects allowed_clients with non-string array", () => {
+    const result = normalizeProviderBatchPatchDraft({
+      allowed_clients: { set: [123] } as never,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
+    expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+    expect(result.error.field).toBe("allowed_clients");
+  });
+
+  it("accepts blocked_clients with string array", () => {
+    const result = normalizeProviderBatchPatchDraft({
+      blocked_clients: { set: ["bad-client"] },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects blocked_clients with non-string array", () => {
+    const result = normalizeProviderBatchPatchDraft({
+      blocked_clients: { set: { not: "array" } } as never,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
+    expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+    expect(result.error.field).toBe("blocked_clients");
+  });
+
   it("rejects invalid thinking budget string values", () => {
     const result = normalizeProviderBatchPatchDraft({
       anthropic_thinking_budget_preference: {

@@ -58,6 +58,20 @@ export function buildPatchDraftFromFormState(
       draft.allowed_models = { set: state.routing.allowedModels };
     }
   }
+  if (dirtyFields.has("routing.allowedClients")) {
+    if (state.routing.allowedClients.length === 0) {
+      draft.allowed_clients = { clear: true };
+    } else {
+      draft.allowed_clients = { set: state.routing.allowedClients };
+    }
+  }
+  if (dirtyFields.has("routing.blockedClients")) {
+    if (state.routing.blockedClients.length === 0) {
+      draft.blocked_clients = { clear: true };
+    } else {
+      draft.blocked_clients = { set: state.routing.blockedClients };
+    }
+  }
   if (dirtyFields.has("routing.groupPriorities")) {
     const entries = Object.keys(state.routing.groupPriorities);
     if (entries.length === 0) {

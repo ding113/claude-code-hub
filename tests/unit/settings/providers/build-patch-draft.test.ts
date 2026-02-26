@@ -15,6 +15,8 @@ function createBatchState(): ProviderFormState {
       preserveClientIp: false,
       modelRedirects: {},
       allowedModels: [],
+      allowedClients: [],
+      blockedClients: [],
       priority: 0,
       groupPriorities: {},
       weight: 1,
@@ -643,5 +645,45 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.limit_concurrent_sessions).toEqual({ set: 20 });
+  });
+
+  // --- Client restrictions ---
+
+  it("clears allowedClients when dirty and empty array", () => {
+    const state = createBatchState();
+    const dirty = new Set(["routing.allowedClients"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.allowed_clients).toEqual({ clear: true });
+  });
+
+  it("sets allowedClients when dirty and non-empty", () => {
+    const state = createBatchState();
+    state.routing.allowedClients = ["client-a", "client-b"];
+    const dirty = new Set(["routing.allowedClients"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.allowed_clients).toEqual({ set: ["client-a", "client-b"] });
+  });
+
+  it("clears blockedClients when dirty and empty array", () => {
+    const state = createBatchState();
+    const dirty = new Set(["routing.blockedClients"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.blocked_clients).toEqual({ clear: true });
+  });
+
+  it("sets blockedClients when dirty and non-empty", () => {
+    const state = createBatchState();
+    state.routing.blockedClients = ["bad-client"];
+    const dirty = new Set(["routing.blockedClients"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.blocked_clients).toEqual({ set: ["bad-client"] });
   });
 });
