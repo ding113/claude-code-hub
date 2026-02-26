@@ -167,12 +167,13 @@ export function StatisticsChartCard({
     return formatInTimeZone(date, timeZone, "yyyy MMMM d", { locale: dateFnsLocale });
   };
 
-  // 图表卡片整体 max-h 为 50vh（用于保持首页更紧凑的布局）。当启用多用户 Legend 时，
-  // 非图表部分（Header + Tabs + Padding + Legend）会占用更多空间；如果图表仍固定高度，
-  // 在小视口下会导致底部内容被裁切。这里用“可用高度估算 + clamp”让图表高度自适应：
+  // 图表卡片整体 max-h 为 50vh，用于保持首页更紧凑。
+  // 当启用多用户 Legend 时，非图表部分（Header/Tabs/Padding/Legend）会占用更多空间。
+  // 如果图表仍固定高度，在小视口下会导致底部内容被裁切。
+  // 这里用“可用高度估算 + clamp”让图表高度自适应：
   // - 248px：Legend 可见时非图表区域的近似高度
   // - 138px：Legend 不可见时非图表区域的近似高度
-  // 由于外层已支持 overflow-y-auto，这里的估算偏差只会影响图表相对大小，不会再导致内容丢失。
+  // 外层已支持 overflow-y-auto，这里的估算偏差只会影响图表相对大小，不会再导致内容丢失。
   const chartContainerClassName = enableUserFilter
     ? "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)_-_248px),240px)] w-full"
     : "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)_-_138px),280px)] w-full";
