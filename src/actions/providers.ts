@@ -1593,6 +1593,12 @@ const GEMINI_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
   "gemini_google_search_preference",
 ]);
 
+const CB_PROVIDER_KEYS: ReadonlySet<string> = new Set([
+  "circuitBreakerFailureThreshold",
+  "circuitBreakerOpenDuration",
+  "circuitBreakerHalfOpenSuccessThreshold",
+]);
+
 function isClaudeProviderType(providerType: ProviderType): boolean {
   return providerType === "claude" || providerType === "claude-auth";
 }
@@ -2042,11 +2048,6 @@ export async function undoProviderPatch(
       await publishProviderCacheInvalidation();
     }
 
-    const CB_PROVIDER_KEYS = new Set([
-      "circuitBreakerFailureThreshold",
-      "circuitBreakerOpenDuration",
-      "circuitBreakerHalfOpenSuccessThreshold",
-    ]);
     const hasCbRevert = Object.values(snapshot.preimage).some((fields) =>
       Object.keys(fields).some((k) => CB_PROVIDER_KEYS.has(k))
     );
