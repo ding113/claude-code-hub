@@ -40,7 +40,14 @@ export const DEFAULT_TEMPLATES = {
     windowStart: "{{window_start}}",
     windowEnd: "{{window_end}}",
     anomalyCount: "{{anomaly_count}}",
+    suppressedCount: "{{suppressed_count}}",
     anomalies: "{{anomalies_json}}",
+    absMin: "{{abs_min}}",
+    dropRel: "{{drop_rel}}",
+    dropAbs: "{{drop_abs}}",
+    cooldownMinutes: "{{cooldown_minutes}}",
+    topN: "{{top_n}}",
+    generatedAt: "{{generated_at}}",
   },
 } as const;
 

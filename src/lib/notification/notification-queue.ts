@@ -764,7 +764,7 @@ export async function scheduleNotifications() {
       }
 
       if (settings.costAlertEnabled && settings.costAlertWebhook) {
-        const interval = settings.costAlertCheckInterval; // 分钟
+        const interval = settings.costAlertCheckInterval ?? 60; // 分钟
         const cron = `*/${interval} * * * *`; // 每 N 分钟
 
         await queue.add(

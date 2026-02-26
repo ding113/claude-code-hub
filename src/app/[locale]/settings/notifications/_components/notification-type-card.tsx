@@ -3,7 +3,7 @@
 import { AlertTriangle, Database, DollarSign, Settings2, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import type { ComponentProps, ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -122,6 +122,53 @@ function createSettingsPatch<K extends keyof NotificationSettingsState>(
   value: NotificationSettingsState[K]
 ): Pick<NotificationSettingsState, K> {
   return { [key]: value } as Pick<NotificationSettingsState, K>;
+}
+
+/**
+ * Controlled number input that allows temporary empty state while editing.
+ *
+ * The standard pattern of `value={state}` + `onChange={guard}` on `<input type="number">`
+ * causes the input to "snap back" when the user clears it (backspace), because `valueAsNumber`
+ * is `NaN` and the guard rejects the update. This component uses local string state to allow
+ * the field to be cleared, then reverts to the last valid value on blur.
+ */
+function NumberInput({
+  value,
+  onValueChange,
+  constraints,
+  ...inputProps
+}: Omit<ComponentProps<"input">, "value" | "onChange" | "type"> & {
+  value: number;
+  onValueChange: (value: number) => void;
+  constraints?: NumberInputConstraints;
+}) {
+  const [localValue, setLocalValue] = useState(String(value));
+
+  useEffect(() => {
+    setLocalValue(String(value));
+  }, [value]);
+
+  return (
+    <input
+      {...inputProps}
+      type="number"
+      value={localValue}
+      onChange={(e) => {
+        const raw = e.currentTarget.value;
+        setLocalValue(raw);
+
+        const num = e.currentTarget.valueAsNumber;
+        if (!Number.isFinite(num)) return;
+        if (constraints?.integer && !Number.isInteger(num)) return;
+        if (constraints?.min !== undefined && num < constraints.min) return;
+        if (constraints?.max !== undefined && num > constraints.max) return;
+        onValueChange(num);
+      }}
+      onBlur={() => {
+        setLocalValue(String(value));
+      }}
+    />
+  );
 }
 
 export function NotificationTypeCard({
@@ -280,17 +327,14 @@ export function NotificationTypeCard({
                 >
                   {t("notifications.dailyLeaderboard.topN")}
                 </label>
-                <input
+                <NumberInput
                   id="dailyLeaderboardTopN"
-                  type="number"
                   min={1}
                   max={20}
                   value={settings.dailyLeaderboardTopN}
                   disabled={!settings.enabled}
-                  onChange={safeNumberOnChange(
-                    (nextValue) => onUpdateSettings({ dailyLeaderboardTopN: nextValue }),
-                    { integer: true, min: 1, max: 20 }
-                  )}
+                  onValueChange={(v) => onUpdateSettings({ dailyLeaderboardTopN: v })}
+                  constraints={{ integer: true, min: 1, max: 20 }}
                   className={cn(
                     "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                     "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
@@ -333,17 +377,14 @@ export function NotificationTypeCard({
                 >
                   {t("notifications.costAlert.interval")}
                 </label>
-                <input
+                <NumberInput
                   id="costAlertCheckInterval"
-                  type="number"
                   min={10}
                   max={1440}
                   value={settings.costAlertCheckInterval}
                   disabled={!settings.enabled}
-                  onChange={safeNumberOnChange(
-                    (nextValue) => onUpdateSettings({ costAlertCheckInterval: nextValue }),
-                    { integer: true, min: 10, max: 1440 }
-                  )}
+                  onValueChange={(v) => onUpdateSettings({ costAlertCheckInterval: v })}
+                  constraints={{ integer: true, min: 10, max: 1440 }}
                   className={cn(
                     "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                     "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
@@ -386,18 +427,14 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertCheckInterval"
                   label={t("notifications.cacheHitRateAlert.checkInterval")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertCheckInterval"
-                    type="number"
                     min={1}
                     max={1440}
                     value={settings.cacheHitRateAlertCheckInterval}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) =>
-                        onUpdateSettings({ cacheHitRateAlertCheckInterval: nextValue }),
-                      { integer: true, min: 1, max: 1440 }
-                    )}
+                    onValueChange={(v) => onUpdateSettings({ cacheHitRateAlertCheckInterval: v })}
+                    constraints={{ integer: true, min: 1, max: 1440 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -406,20 +443,18 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertHistoricalLookbackDays"
                   label={t("notifications.cacheHitRateAlert.historicalLookbackDays")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertHistoricalLookbackDays"
-                    type="number"
                     min={1}
                     max={90}
                     value={settings.cacheHitRateAlertHistoricalLookbackDays}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) =>
-                        onUpdateSettings({
-                          cacheHitRateAlertHistoricalLookbackDays: nextValue,
-                        }),
-                      { integer: true, min: 1, max: 90 }
-                    )}
+                    onValueChange={(v) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertHistoricalLookbackDays: v,
+                      })
+                    }
+                    constraints={{ integer: true, min: 1, max: 90 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -428,18 +463,14 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertCooldownMinutes"
                   label={t("notifications.cacheHitRateAlert.cooldownMinutes")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertCooldownMinutes"
-                    type="number"
                     min={0}
                     max={1440}
                     value={settings.cacheHitRateAlertCooldownMinutes}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) =>
-                        onUpdateSettings({ cacheHitRateAlertCooldownMinutes: nextValue }),
-                      { integer: true, min: 0, max: 1440 }
-                    )}
+                    onValueChange={(v) => onUpdateSettings({ cacheHitRateAlertCooldownMinutes: v })}
+                    constraints={{ integer: true, min: 0, max: 1440 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -450,18 +481,15 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertAbsMin"
                   label={t("notifications.cacheHitRateAlert.absMin")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertAbsMin"
-                    type="number"
                     min={0}
                     max={1}
                     step={0.01}
                     value={settings.cacheHitRateAlertAbsMin}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) => onUpdateSettings({ cacheHitRateAlertAbsMin: nextValue }),
-                      { min: 0, max: 1 }
-                    )}
+                    onValueChange={(v) => onUpdateSettings({ cacheHitRateAlertAbsMin: v })}
+                    constraints={{ min: 0, max: 1 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -470,18 +498,15 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertDropAbs"
                   label={t("notifications.cacheHitRateAlert.dropAbs")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertDropAbs"
-                    type="number"
                     min={0}
                     max={1}
                     step={0.01}
                     value={settings.cacheHitRateAlertDropAbs}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) => onUpdateSettings({ cacheHitRateAlertDropAbs: nextValue }),
-                      { min: 0, max: 1 }
-                    )}
+                    onValueChange={(v) => onUpdateSettings({ cacheHitRateAlertDropAbs: v })}
+                    constraints={{ min: 0, max: 1 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -490,18 +515,15 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertDropRel"
                   label={t("notifications.cacheHitRateAlert.dropRel")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertDropRel"
-                    type="number"
                     min={0}
                     max={1}
                     step={0.01}
                     value={settings.cacheHitRateAlertDropRel}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) => onUpdateSettings({ cacheHitRateAlertDropRel: nextValue }),
-                      { min: 0, max: 1 }
-                    )}
+                    onValueChange={(v) => onUpdateSettings({ cacheHitRateAlertDropRel: v })}
+                    constraints={{ min: 0, max: 1 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -512,20 +534,18 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertMinEligibleRequests"
                   label={t("notifications.cacheHitRateAlert.minEligibleRequests")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertMinEligibleRequests"
-                    type="number"
                     min={1}
                     max={100000}
                     value={settings.cacheHitRateAlertMinEligibleRequests}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) =>
-                        onUpdateSettings({
-                          cacheHitRateAlertMinEligibleRequests: nextValue,
-                        }),
-                      { integer: true, min: 1, max: 100000 }
-                    )}
+                    onValueChange={(v) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertMinEligibleRequests: v,
+                      })
+                    }
+                    constraints={{ integer: true, min: 1, max: 100000 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -534,19 +554,17 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertMinEligibleTokens"
                   label={t("notifications.cacheHitRateAlert.minEligibleTokens")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertMinEligibleTokens"
-                    type="number"
                     min={0}
                     value={settings.cacheHitRateAlertMinEligibleTokens}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) =>
-                        onUpdateSettings({
-                          cacheHitRateAlertMinEligibleTokens: nextValue,
-                        }),
-                      { integer: true, min: 0 }
-                    )}
+                    onValueChange={(v) =>
+                      onUpdateSettings({
+                        cacheHitRateAlertMinEligibleTokens: v,
+                      })
+                    }
+                    constraints={{ integer: true, min: 0 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>
@@ -555,17 +573,14 @@ export function NotificationTypeCard({
                   id="cacheHitRateAlertTopN"
                   label={t("notifications.cacheHitRateAlert.topN")}
                 >
-                  <input
+                  <NumberInput
                     id="cacheHitRateAlertTopN"
-                    type="number"
                     min={1}
                     max={100}
                     value={settings.cacheHitRateAlertTopN}
                     disabled={!settings.enabled}
-                    onChange={safeNumberOnChange(
-                      (nextValue) => onUpdateSettings({ cacheHitRateAlertTopN: nextValue }),
-                      { integer: true, min: 1, max: 100 }
-                    )}
+                    onValueChange={(v) => onUpdateSettings({ cacheHitRateAlertTopN: v })}
+                    constraints={{ integer: true, min: 1, max: 100 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>

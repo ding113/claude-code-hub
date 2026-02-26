@@ -13,6 +13,7 @@ import type {
   CacheHitRateAlertSettingsSnapshot,
   CacheHitRateAlertWindow,
 } from "@/lib/webhook";
+import type { CacheHitRateAlertSettingsWindowMode } from "@/lib/webhook/types";
 import { findProviderModelCacheHitRateMetricsForAlert } from "@/repository/cache-hit-rate-alert";
 import { getNotificationSettings } from "@/repository/notifications";
 import { findAllProviders } from "@/repository/provider";
@@ -44,7 +45,7 @@ function resolveWindowMode(
   mode: string | null | undefined,
   intervalMinutes: number
 ): {
-  mode: string;
+  mode: CacheHitRateAlertSettingsWindowMode;
   durationMinutes: number;
 } {
   switch (mode) {
@@ -218,7 +219,11 @@ export async function generateCacheHitRateAlertPayload(
   const dedupMode: CacheHitRateAlertDedupMode = options.dedupMode ?? "global";
 
   const intervalMinutes = Math.max(1, parseIntNumber(settings.cacheHitRateAlertCheckInterval, 5));
-  const lookbackDays = parseIntNumber(settings.cacheHitRateAlertHistoricalLookbackDays, 7);
+  const MAX_LOOKBACK_DAYS = 90;
+  const lookbackDays = Math.min(
+    parseIntNumber(settings.cacheHitRateAlertHistoricalLookbackDays, 7),
+    MAX_LOOKBACK_DAYS
+  );
   const cooldownMinutes = parseIntNumber(settings.cacheHitRateAlertCooldownMinutes, 30);
 
   const decisionSettings: CacheHitRateAlertDecisionSettings = {

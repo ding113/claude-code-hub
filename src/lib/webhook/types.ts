@@ -125,7 +125,7 @@ export interface CacheHitRateAlertAnomaly {
 }
 
 export interface CacheHitRateAlertWindow {
-  mode: string;
+  mode: CacheHitRateAlertSettingsWindowMode;
   startTime: string;
   endTime: string;
   durationMinutes: number;
