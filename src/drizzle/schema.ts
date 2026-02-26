@@ -31,6 +31,7 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'circuit_breaker',
   'daily_leaderboard',
   'cost_alert',
+  'cache_hit_rate_alert',
 ]);
 
 // Users table
@@ -772,6 +773,20 @@ export const notificationSettings = pgTable('notification_settings', {
   costAlertWebhook: varchar('cost_alert_webhook', { length: 512 }),
   costAlertThreshold: numeric('cost_alert_threshold', { precision: 5, scale: 2 }).default('0.80'), // 阈值 0-1 (80% = 0.80)
   costAlertCheckInterval: integer('cost_alert_check_interval').default(60), // 检查间隔（分钟）
+
+  // 缓存命中率异常告警配置（provider × model）
+  cacheHitRateAlertEnabled: boolean('cache_hit_rate_alert_enabled').notNull().default(false),
+  cacheHitRateAlertWebhook: varchar('cache_hit_rate_alert_webhook', { length: 512 }),
+  cacheHitRateAlertWindowMode: varchar('cache_hit_rate_alert_window_mode', { length: 10 }).default('auto'),
+  cacheHitRateAlertCheckInterval: integer('cache_hit_rate_alert_check_interval').default(5), // 检查间隔（分钟）
+  cacheHitRateAlertHistoricalLookbackDays: integer('cache_hit_rate_alert_historical_lookback_days').default(7),
+  cacheHitRateAlertMinEligibleRequests: integer('cache_hit_rate_alert_min_eligible_requests').default(20),
+  cacheHitRateAlertMinEligibleTokens: integer('cache_hit_rate_alert_min_eligible_tokens').default(0),
+  cacheHitRateAlertAbsMin: numeric('cache_hit_rate_alert_abs_min', { precision: 5, scale: 4 }).default('0.05'),
+  cacheHitRateAlertDropRel: numeric('cache_hit_rate_alert_drop_rel', { precision: 5, scale: 4 }).default('0.3'),
+  cacheHitRateAlertDropAbs: numeric('cache_hit_rate_alert_drop_abs', { precision: 5, scale: 4 }).default('0.1'),
+  cacheHitRateAlertCooldownMinutes: integer('cache_hit_rate_alert_cooldown_minutes').default(30),
+  cacheHitRateAlertTopN: integer('cache_hit_rate_alert_top_n').default(10),
 
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),

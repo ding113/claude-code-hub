@@ -3,6 +3,7 @@
  */
 export const NOTIFICATION_JOB_TYPES = [
   "circuit-breaker",
+  "cache-hit-rate-alert",
   "cost-alert",
   "daily-leaderboard",
 ] as const;

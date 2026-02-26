@@ -1,12 +1,13 @@
 "use client";
 
-import { AlertTriangle, DollarSign, Settings2, TrendingUp } from "lucide-react";
+import { AlertTriangle, Database, DollarSign, Settings2, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { isCacheHitRateAlertSettingsWindowMode } from "@/lib/webhook/types";
 import type {
   ClientActionResult,
   NotificationBindingState,
@@ -33,7 +34,7 @@ interface TypeConfig {
   iconColor: string;
   iconBgColor: string;
   borderColor: string;
-  IconComponent: typeof AlertTriangle | typeof TrendingUp | typeof DollarSign;
+  IconComponent: typeof AlertTriangle | typeof TrendingUp | typeof DollarSign | typeof Database;
 }
 
 function getTypeConfig(type: NotificationType): TypeConfig {
@@ -59,7 +60,68 @@ function getTypeConfig(type: NotificationType): TypeConfig {
         borderColor: "border-border/50 hover:border-border",
         IconComponent: DollarSign,
       };
+    case "cache_hit_rate_alert":
+      return {
+        iconColor: "text-blue-400",
+        iconBgColor: "bg-blue-500/10",
+        borderColor: "border-blue-500/20 hover:border-blue-500/30",
+        IconComponent: Database,
+      };
   }
+}
+
+const settingsControlClassName = cn(
+  "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
+  "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
+  "disabled:opacity-50 disabled:cursor-not-allowed"
+);
+
+function LabeledControl({
+  id,
+  label,
+  children,
+}: {
+  id: string;
+  label: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label htmlFor={id} className="text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+type SafeNumberOnChange = NonNullable<ComponentProps<"input">["onChange"]>;
+
+type NumberInputConstraints = {
+  min?: number;
+  max?: number;
+  integer?: boolean;
+};
+
+function safeNumberOnChange(
+  onValidNumber: (value: number) => void,
+  constraints: NumberInputConstraints = {}
+): SafeNumberOnChange {
+  return (e) => {
+    const nextValue = e.currentTarget.valueAsNumber;
+    if (!Number.isFinite(nextValue)) return;
+    if (constraints.integer && !Number.isInteger(nextValue)) return;
+    if (constraints.min !== undefined && nextValue < constraints.min) return;
+    if (constraints.max !== undefined && nextValue > constraints.max) return;
+    onValidNumber(nextValue);
+  };
+}
+
+function createSettingsPatch<K extends keyof NotificationSettingsState>(
+  key: K,
+  value: NotificationSettingsState[K]
+): Pick<NotificationSettingsState, K> {
+  return { [key]: value } as Pick<NotificationSettingsState, K>;
 }
 
 export function NotificationTypeCard({
@@ -73,7 +135,21 @@ export function NotificationTypeCard({
   const t = useTranslations("settings");
   const typeConfig = getTypeConfig(type);
 
-  const meta = useMemo(() => {
+  type EnabledKey =
+    | "circuitBreakerEnabled"
+    | "dailyLeaderboardEnabled"
+    | "costAlertEnabled"
+    | "cacheHitRateAlertEnabled";
+
+  type TypeMeta = {
+    title: string;
+    description: string;
+    enabled: boolean;
+    enabledKey: EnabledKey;
+    enableLabel: string;
+  };
+
+  const meta = useMemo<TypeMeta>(() => {
     switch (type) {
       case "circuit_breaker":
         return {
@@ -98,6 +174,14 @@ export function NotificationTypeCard({
           enabled: settings.costAlertEnabled,
           enabledKey: "costAlertEnabled" as const,
           enableLabel: t("notifications.costAlert.enable"),
+        };
+      case "cache_hit_rate_alert":
+        return {
+          title: t("notifications.cacheHitRateAlert.title"),
+          description: t("notifications.cacheHitRateAlert.description"),
+          enabled: settings.cacheHitRateAlertEnabled,
+          enabledKey: "cacheHitRateAlertEnabled" as const,
+          enableLabel: t("notifications.cacheHitRateAlert.enable"),
         };
     }
   }, [settings, t, type]);
@@ -156,7 +240,9 @@ export function NotificationTypeCard({
             id={`${type}-enabled`}
             checked={enabled}
             disabled={!settings.enabled}
-            onCheckedChange={(checked) => onUpdateSettings({ [meta.enabledKey]: checked } as any)}
+            onCheckedChange={(checked) =>
+              onUpdateSettings(createSettingsPatch(meta.enabledKey, checked))
+            }
           />
         </div>
       </div>
@@ -201,9 +287,10 @@ export function NotificationTypeCard({
                   max={20}
                   value={settings.dailyLeaderboardTopN}
                   disabled={!settings.enabled}
-                  onChange={(e) =>
-                    onUpdateSettings({ dailyLeaderboardTopN: Number(e.target.value) })
-                  }
+                  onChange={safeNumberOnChange(
+                    (nextValue) => onUpdateSettings({ dailyLeaderboardTopN: nextValue }),
+                    { integer: true, min: 1, max: 20 }
+                  )}
                   className={cn(
                     "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                     "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
@@ -232,7 +319,10 @@ export function NotificationTypeCard({
                   step={0.05}
                   value={settings.costAlertThreshold}
                   disabled={!settings.enabled}
-                  onChange={(e) => onUpdateSettings({ costAlertThreshold: Number(e.target.value) })}
+                  onChange={safeNumberOnChange(
+                    (nextValue) => onUpdateSettings({ costAlertThreshold: nextValue }),
+                    { min: 0.5, max: 1.0 }
+                  )}
                   className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed accent-primary"
                 />
               </div>
@@ -250,15 +340,235 @@ export function NotificationTypeCard({
                   max={1440}
                   value={settings.costAlertCheckInterval}
                   disabled={!settings.enabled}
-                  onChange={(e) =>
-                    onUpdateSettings({ costAlertCheckInterval: Number(e.target.value) })
-                  }
+                  onChange={safeNumberOnChange(
+                    (nextValue) => onUpdateSettings({ costAlertCheckInterval: nextValue }),
+                    { integer: true, min: 10, max: 1440 }
+                  )}
                   className={cn(
                     "w-full bg-muted/50 border border-border rounded-lg py-2 px-3 text-sm text-foreground",
                     "focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all",
                     "disabled:opacity-50 disabled:cursor-not-allowed"
                   )}
                 />
+              </div>
+            </div>
+          )}
+
+          {type === "cache_hit_rate_alert" && (
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <LabeledControl
+                  id="cacheHitRateAlertWindowMode"
+                  label={t("notifications.cacheHitRateAlert.windowMode")}
+                >
+                  <select
+                    id="cacheHitRateAlertWindowMode"
+                    value={settings.cacheHitRateAlertWindowMode}
+                    disabled={!settings.enabled}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      if (!isCacheHitRateAlertSettingsWindowMode(nextValue)) return;
+                      onUpdateSettings({ cacheHitRateAlertWindowMode: nextValue });
+                    }}
+                    className={settingsControlClassName}
+                  >
+                    <option value="auto">
+                      {t("notifications.cacheHitRateAlert.windowModeAuto")}
+                    </option>
+                    <option value="5m">5m</option>
+                    <option value="30m">30m</option>
+                    <option value="1h">1h</option>
+                    <option value="1.5h">1.5h</option>
+                  </select>
+                </LabeledControl>
+
+                <LabeledControl
+                  id="cacheHitRateAlertCheckInterval"
+                  label={t("notifications.cacheHitRateAlert.checkInterval")}
+                >
+                  <input
+                    id="cacheHitRateAlertCheckInterval"
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={settings.cacheHitRateAlertCheckInterval}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({ cacheHitRateAlertCheckInterval: nextValue }),
+                      { integer: true, min: 1, max: 1440 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+
+                <LabeledControl
+                  id="cacheHitRateAlertHistoricalLookbackDays"
+                  label={t("notifications.cacheHitRateAlert.historicalLookbackDays")}
+                >
+                  <input
+                    id="cacheHitRateAlertHistoricalLookbackDays"
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={settings.cacheHitRateAlertHistoricalLookbackDays}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({
+                          cacheHitRateAlertHistoricalLookbackDays: nextValue,
+                        }),
+                      { integer: true, min: 1, max: 90 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+
+                <LabeledControl
+                  id="cacheHitRateAlertCooldownMinutes"
+                  label={t("notifications.cacheHitRateAlert.cooldownMinutes")}
+                >
+                  <input
+                    id="cacheHitRateAlertCooldownMinutes"
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={settings.cacheHitRateAlertCooldownMinutes}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({ cacheHitRateAlertCooldownMinutes: nextValue }),
+                      { integer: true, min: 0, max: 1440 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <LabeledControl
+                  id="cacheHitRateAlertAbsMin"
+                  label={t("notifications.cacheHitRateAlert.absMin")}
+                >
+                  <input
+                    id="cacheHitRateAlertAbsMin"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={settings.cacheHitRateAlertAbsMin}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertAbsMin: nextValue }),
+                      { min: 0, max: 1 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+
+                <LabeledControl
+                  id="cacheHitRateAlertDropAbs"
+                  label={t("notifications.cacheHitRateAlert.dropAbs")}
+                >
+                  <input
+                    id="cacheHitRateAlertDropAbs"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={settings.cacheHitRateAlertDropAbs}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertDropAbs: nextValue }),
+                      { min: 0, max: 1 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+
+                <LabeledControl
+                  id="cacheHitRateAlertDropRel"
+                  label={t("notifications.cacheHitRateAlert.dropRel")}
+                >
+                  <input
+                    id="cacheHitRateAlertDropRel"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={settings.cacheHitRateAlertDropRel}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertDropRel: nextValue }),
+                      { min: 0, max: 1 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <LabeledControl
+                  id="cacheHitRateAlertMinEligibleRequests"
+                  label={t("notifications.cacheHitRateAlert.minEligibleRequests")}
+                >
+                  <input
+                    id="cacheHitRateAlertMinEligibleRequests"
+                    type="number"
+                    min={1}
+                    max={100000}
+                    value={settings.cacheHitRateAlertMinEligibleRequests}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({
+                          cacheHitRateAlertMinEligibleRequests: nextValue,
+                        }),
+                      { integer: true, min: 1, max: 100000 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+
+                <LabeledControl
+                  id="cacheHitRateAlertMinEligibleTokens"
+                  label={t("notifications.cacheHitRateAlert.minEligibleTokens")}
+                >
+                  <input
+                    id="cacheHitRateAlertMinEligibleTokens"
+                    type="number"
+                    min={0}
+                    value={settings.cacheHitRateAlertMinEligibleTokens}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) =>
+                        onUpdateSettings({
+                          cacheHitRateAlertMinEligibleTokens: nextValue,
+                        }),
+                      { integer: true, min: 0 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
+
+                <LabeledControl
+                  id="cacheHitRateAlertTopN"
+                  label={t("notifications.cacheHitRateAlert.topN")}
+                >
+                  <input
+                    id="cacheHitRateAlertTopN"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={settings.cacheHitRateAlertTopN}
+                    disabled={!settings.enabled}
+                    onChange={safeNumberOnChange(
+                      (nextValue) => onUpdateSettings({ cacheHitRateAlertTopN: nextValue }),
+                      { integer: true, min: 1, max: 100 }
+                    )}
+                    className={settingsControlClassName}
+                  />
+                </LabeledControl>
               </div>
             </div>
           )}

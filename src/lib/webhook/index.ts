@@ -6,11 +6,18 @@ export { sendWebhookMessage, WebhookNotifier } from "./notifier";
 export { createRenderer, type Renderer } from "./renderers";
 // Templates
 export {
+  buildCacheHitRateAlertMessage,
   buildCircuitBreakerMessage,
   buildCostAlertMessage,
   buildDailyLeaderboardMessage,
 } from "./templates";
 export type {
+  CacheHitRateAlertAnomaly,
+  CacheHitRateAlertBaselineSource,
+  CacheHitRateAlertData,
+  CacheHitRateAlertSample,
+  CacheHitRateAlertSettingsSnapshot,
+  CacheHitRateAlertWindow,
   CircuitBreakerAlertData,
   CostAlertData,
   DailyLeaderboardData,

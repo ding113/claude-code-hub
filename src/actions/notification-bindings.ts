@@ -13,7 +13,12 @@ import {
 } from "@/repository/notification-bindings";
 import type { ActionResult } from "./types";
 
-const NotificationTypeSchema = z.enum(["circuit_breaker", "daily_leaderboard", "cost_alert"]);
+const NotificationTypeSchema = z.enum([
+  "circuit_breaker",
+  "daily_leaderboard",
+  "cost_alert",
+  "cache_hit_rate_alert",
+]);
 
 const BindingInputSchema: z.ZodType<BindingInput> = z.object({
   targetId: z.number().int().positive(),

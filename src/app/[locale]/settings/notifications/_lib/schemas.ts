@@ -6,6 +6,7 @@ export const NotificationTypeSchema = z.enum([
   "circuit_breaker",
   "daily_leaderboard",
   "cost_alert",
+  "cache_hit_rate_alert",
 ]);
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 

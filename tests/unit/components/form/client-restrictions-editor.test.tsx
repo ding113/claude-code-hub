@@ -7,9 +7,13 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/client-restrictions/client-presets", () => ({
-  CLIENT_RESTRICTION_PRESET_OPTIONS: [],
-}));
+vi.mock("@/lib/client-restrictions/client-presets", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/client-restrictions/client-presets")>();
+  return {
+    ...actual,
+    CLIENT_RESTRICTION_PRESET_OPTIONS: [],
+  };
+});
 
 vi.mock("@/components/ui/tag-input", () => ({
   TagInput: vi.fn(() => null),
@@ -33,11 +37,15 @@ function render(node: ReactNode) {
 
 type TagInputProps = { onChange: (v: string[]) => void; value: string[] };
 
-function getTagInputOnChange(callIndex: number): (values: string[]) => void {
+function getTagInputProps(callIndex: number): TagInputProps {
   const calls = vi.mocked(TagInput).mock.calls;
   const call = calls[callIndex];
   if (!call) throw new Error(`TagInput call ${callIndex} not found (got ${calls.length} calls)`);
-  return (call[0] as TagInputProps).onChange;
+  return call[0] as TagInputProps;
+}
+
+function getTagInputOnChange(callIndex: number): (values: string[]) => void {
+  return getTagInputProps(callIndex).onChange;
 }
 
 describe("ClientRestrictionsEditor", () => {
@@ -61,9 +69,16 @@ describe("ClientRestrictionsEditor", () => {
         blocked={blocked}
         onAllowedChange={onAllowedChange}
         onBlockedChange={onBlockedChange}
-        allowedLabel="Allowed"
-        blockedLabel="Blocked"
-        getPresetLabel={(v) => v}
+        translations={{
+          allowAction: "允许",
+          blockAction: "阻止",
+          customAllowedLabel: "自定义允许",
+          customAllowedPlaceholder: "",
+          customBlockedLabel: "自定义阻止",
+          customBlockedPlaceholder: "",
+          customHelp: "",
+          presetClients: {},
+        }}
       />
     );
   }
@@ -76,59 +91,34 @@ describe("ClientRestrictionsEditor", () => {
       unmount();
     });
 
-    it("trims whitespace from values", () => {
-      const unmount = renderEditor([], []);
-      act(() => getTagInputOnChange(0)(["  a  ", " b", "c "]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b", "c"]);
+    it("preserves preset aliases and filters them out from custom input", () => {
+      const unmount = renderEditor(["claude-code-cli", "my-ide"], []);
+      expect(getTagInputProps(0).value).toEqual(["my-ide"]);
+
+      act(() => getTagInputOnChange(0)(["next-ide", "claude-code-cli"]));
+      expect(onAllowedChange).toHaveBeenCalledWith(["claude-code-cli", "next-ide"]);
+
       unmount();
     });
 
-    it("filters out empty and whitespace-only entries", () => {
-      const unmount = renderEditor([], []);
-      act(() => getTagInputOnChange(0)(["a", "", "  ", "b"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b"]);
-      unmount();
-    });
-  });
-
-  describe("allow/block mutual exclusion", () => {
-    it("removes overlapping items from blocked when added to allowed", () => {
+    it("does not change blocked values when editing allowed custom values", () => {
       const unmount = renderEditor([], ["b", "c"]);
-      act(() => getTagInputOnChange(0)(["a", "b"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["a", "b"]);
-      expect(onBlockedChange).toHaveBeenCalledWith(["c"]);
-      unmount();
-    });
-
-    it("does not call onBlockedChange when allowed has no overlap with blocked", () => {
-      const unmount = renderEditor([], ["c", "d"]);
       act(() => getTagInputOnChange(0)(["a", "b"]));
       expect(onAllowedChange).toHaveBeenCalledWith(["a", "b"]);
       expect(onBlockedChange).not.toHaveBeenCalled();
       unmount();
     });
+  });
 
-    it("removes overlapping items from allowed when added to blocked", () => {
-      const unmount = renderEditor(["a", "b"], []);
-      act(() => getTagInputOnChange(1)(["b", "c"]));
-      expect(onBlockedChange).toHaveBeenCalledWith(["b", "c"]);
-      expect(onAllowedChange).toHaveBeenCalledWith(["a"]);
-      unmount();
-    });
+  describe("custom blocked field", () => {
+    it("preserves preset aliases and filters them out from custom input", () => {
+      const unmount = renderEditor([], ["claude-code-vscode", "blocked-ide"]);
+      expect(getTagInputProps(1).value).toEqual(["blocked-ide"]);
 
-    it("does not call onAllowedChange when blocked has no overlap with allowed", () => {
-      const unmount = renderEditor(["a", "b"], []);
-      act(() => getTagInputOnChange(1)(["c", "d"]));
-      expect(onBlockedChange).toHaveBeenCalledWith(["c", "d"]);
+      act(() => getTagInputOnChange(1)(["next-blocked", "claude-code-vscode"]));
+      expect(onBlockedChange).toHaveBeenCalledWith(["claude-code-vscode", "next-blocked"]);
       expect(onAllowedChange).not.toHaveBeenCalled();
-      unmount();
-    });
 
-    it("clears all blocked when all items are moved to allowed", () => {
-      const unmount = renderEditor([], ["x", "y"]);
-      act(() => getTagInputOnChange(0)(["x", "y", "z"]));
-      expect(onAllowedChange).toHaveBeenCalledWith(["x", "y", "z"]);
-      expect(onBlockedChange).toHaveBeenCalledWith([]);
       unmount();
     });
   });
