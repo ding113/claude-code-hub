@@ -27,6 +27,15 @@ const USER_COLOR_PALETTE = [
 
 const getUserColor = (index: number) => USER_COLOR_PALETTE[index % USER_COLOR_PALETTE.length];
 
+const CHART_HEIGHT_MIN_PX = 140;
+const CHART_HEIGHT_MAX_PX_WITH_LEGEND = 240;
+const CHART_HEIGHT_MAX_PX_NO_LEGEND = 280;
+
+// Legend 可见时，非图表区域（Header/Tabs/Padding/Legend）占用的近似高度。
+const CHART_NON_GRAPH_HEIGHT_WITH_LEGEND_PX = 248;
+// Legend 不可见时，非图表区域（Header/Tabs/Padding）占用的近似高度。
+const CHART_NON_GRAPH_HEIGHT_NO_LEGEND_PX = 138;
+
 export interface StatisticsChartCardProps {
   data: UserStatisticsData;
   onTimeRangeChange?: (timeRange: TimeRange) => void;
@@ -174,9 +183,9 @@ export function StatisticsChartCard({
   // - 248px：Legend 可见时非图表区域的近似高度
   // - 138px：Legend 不可见时非图表区域的近似高度
   // 外层已支持 overflow-y-auto，这里的估算偏差只会影响图表相对大小，不会再导致内容丢失。
-  const chartContainerClassName = enableUserFilter
-    ? "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)_-_248px),240px)] w-full"
-    : "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)_-_138px),280px)] w-full";
+  const chartContainerHeight = enableUserFilter
+    ? `clamp(${CHART_HEIGHT_MIN_PX}px, calc(var(--cch-viewport-height-50) - ${CHART_NON_GRAPH_HEIGHT_WITH_LEGEND_PX}px), ${CHART_HEIGHT_MAX_PX_WITH_LEGEND}px)`
+    : `clamp(${CHART_HEIGHT_MIN_PX}px, calc(var(--cch-viewport-height-50) - ${CHART_NON_GRAPH_HEIGHT_NO_LEGEND_PX}px), ${CHART_HEIGHT_MAX_PX_NO_LEGEND}px)`;
 
   return (
     <BentoCard
@@ -271,7 +280,11 @@ export function StatisticsChartCard({
 
       {/* Chart */}
       <div className="px-4 py-3">
-        <ChartContainer config={chartConfig} className={chartContainerClassName}>
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto w-full"
+          style={{ height: chartContainerHeight }}
+        >
           <AreaChart data={numericChartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
             <defs>
               {data.users.map((user, index) => {

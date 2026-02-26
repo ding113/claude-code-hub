@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Hoist mocks before imports -- mock transitive dependencies to avoid
 // next-intl pulling in next/navigation (not resolvable in vitest)
@@ -35,6 +35,11 @@ function makeRequest(pathname: string, cookies: Record<string, string> = {}) {
 }
 
 describe("proxy dev public paths", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockIntlMiddleware.mockReset();
+  });
+
   it("allows /internal/ui-preview/* without any cookie in development", async () => {
     const localeResponse = new Response(null, {
       status: 200,
