@@ -55,7 +55,7 @@ function proxyHandler(request: NextRequest) {
   const isDevPublicPath =
     isDevelopment() &&
     DEV_PUBLIC_PATH_PATTERNS.some(
-      (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(pattern)
+      (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(`${pattern}/`)
     );
 
   // Public paths don't require authentication
