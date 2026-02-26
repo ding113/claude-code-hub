@@ -181,7 +181,6 @@ export function StatisticsChartCard({
     <BentoCard
       className={cn(
         "p-0 overflow-x-hidden overflow-y-auto max-h-[var(--cch-viewport-height-50)]",
-        "scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent",
         className
       )}
     >
@@ -437,7 +436,7 @@ export function StatisticsChartCard({
             </button>
           </div>
           {/* User list with max 3 rows and scroll - only show users with non-zero usage */}
-          <div className="max-h-[72px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+          <div className="max-h-[72px] overflow-y-auto">
             <div className="flex flex-wrap gap-1.5 justify-center">
               {data.users
                 .map((user, originalIndex) => ({ user, originalIndex }))

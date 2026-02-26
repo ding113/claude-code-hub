@@ -43,7 +43,7 @@ describe("proxy dev public paths", () => {
     mockIntlMiddleware.mockReturnValue(localeResponse);
 
     const { default: proxyHandler } = await import("@/proxy");
-    const response = proxyHandler(makeRequest("/zh-CN/internal/ui-preview/statistics-chart"));
+    const response = await proxyHandler(makeRequest("/zh-CN/internal/ui-preview/statistics-chart"));
 
     expect(response.headers.get("x-test")).toBe("dev-public-ok");
   });
@@ -53,7 +53,7 @@ describe("proxy dev public paths", () => {
     mockIntlMiddleware.mockReturnValue(localeResponse);
 
     const { default: proxyHandler } = await import("@/proxy");
-    const response = proxyHandler(makeRequest("/zh-CN/internal/ui-preview-xxx"));
+    const response = await proxyHandler(makeRequest("/zh-CN/internal/ui-preview-xxx"));
 
     expect(response.status).toBeGreaterThanOrEqual(300);
     expect(response.status).toBeLessThan(400);
