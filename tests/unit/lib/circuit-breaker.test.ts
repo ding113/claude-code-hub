@@ -248,10 +248,6 @@ describe("circuit-breaker", () => {
     // recordFailure 在达到阈值后会触发异步告警（dynamic import + non-blocking）。
     // 切回真实计时器推进事件循环，避免任务悬挂导致后续用例 mock 串台。
     vi.useRealTimers();
-    const startedAt = Date.now();
-    while (sendAlertMock.mock.calls.length === 0 && Date.now() - startedAt < 1000) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }
-    expect(sendAlertMock).toHaveBeenCalledTimes(1);
+    await expect.poll(() => sendAlertMock.mock.calls.length, { timeout: 1000 }).toBe(1);
   });
 });

@@ -68,6 +68,42 @@ function isCircuitStateOpen(health: ProviderHealth): boolean {
   return health.circuitState === "open";
 }
 
+function needsHealthResetToClosed(health: ProviderHealth): boolean {
+  return (
+    health.circuitState !== "closed" ||
+    health.failureCount !== 0 ||
+    health.lastFailureTime !== null ||
+    health.circuitOpenUntil !== null ||
+    health.halfOpenSuccessCount !== 0
+  );
+}
+
+function handleDisabledCircuitBreaker(
+  providerId: number,
+  health: ProviderHealth,
+  config: CircuitBreakerConfig
+): boolean {
+  if (!isCircuitBreakerDisabled(config)) {
+    return false;
+  }
+
+  if (!needsHealthResetToClosed(health)) {
+    return true;
+  }
+
+  const previousState = health.circuitState;
+  resetHealthToClosed(health);
+  logger.info(
+    `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
+    {
+      providerId,
+      previousState,
+    }
+  );
+  persistStateToRedis(providerId, health);
+  return true;
+}
+
 /**
  * 获取或创建供应商的健康状态（同步版本，用于内部）
  */
@@ -240,17 +276,7 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
       health.configLoadedAt === null ||
       now - health.configLoadedAt > NON_CLOSED_CONFIG_FORCE_RELOAD_INTERVAL_MS,
   });
-  if (isCircuitBreakerDisabled(config)) {
-    const previousState = health.circuitState;
-    resetHealthToClosed(health);
-    logger.info(
-      `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
-      {
-        providerId,
-        previousState,
-      }
-    );
-    persistStateToRedis(providerId, health);
+  if (handleDisabledCircuitBreaker(providerId, health, config)) {
     return false;
   }
 
@@ -278,25 +304,7 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
   const health = await getOrCreateHealth(providerId);
   const config = await getProviderConfigForHealth(providerId, health);
 
-  if (isCircuitBreakerDisabled(config)) {
-    if (
-      health.circuitState !== "closed" ||
-      health.failureCount !== 0 ||
-      health.lastFailureTime !== null ||
-      health.circuitOpenUntil !== null ||
-      health.halfOpenSuccessCount !== 0
-    ) {
-      const previousState = health.circuitState;
-      resetHealthToClosed(health);
-      logger.info(
-        `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
-        {
-          providerId,
-          previousState,
-        }
-      );
-      persistStateToRedis(providerId, health);
-    }
+  if (handleDisabledCircuitBreaker(providerId, health, config)) {
     return;
   }
 
@@ -325,17 +333,7 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
     const latestConfig = await getProviderConfigForHealth(providerId, health, {
       forceReload: true,
     });
-    if (isCircuitBreakerDisabled(latestConfig)) {
-      const previousState = health.circuitState;
-      resetHealthToClosed(health);
-      logger.info(
-        `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
-        {
-          providerId,
-          previousState,
-        }
-      );
-      persistStateToRedis(providerId, health);
+    if (handleDisabledCircuitBreaker(providerId, health, latestConfig)) {
       return;
     }
 
@@ -435,25 +433,7 @@ export async function recordSuccess(providerId: number): Promise<void> {
   const config = await getProviderConfigForHealth(providerId, health);
   let stateChanged = false;
 
-  if (isCircuitBreakerDisabled(config)) {
-    if (
-      health.circuitState !== "closed" ||
-      health.failureCount !== 0 ||
-      health.lastFailureTime !== null ||
-      health.circuitOpenUntil !== null ||
-      health.halfOpenSuccessCount !== 0
-    ) {
-      const previousState = health.circuitState;
-      resetHealthToClosed(health);
-      logger.info(
-        `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
-        {
-          providerId,
-          previousState,
-        }
-      );
-      persistStateToRedis(providerId, health);
-    }
+  if (handleDisabledCircuitBreaker(providerId, health, config)) {
     return;
   }
 
@@ -652,17 +632,7 @@ export async function getAllHealthStatusAsync(
 
     if (health.circuitState !== "closed") {
       const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
-      if (isCircuitBreakerDisabled(config)) {
-        const previousState = health.circuitState;
-        resetHealthToClosed(health);
-        logger.info(
-          `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
-          {
-            providerId,
-            previousState,
-          }
-        );
-        persistStateToRedis(providerId, health);
+      if (handleDisabledCircuitBreaker(providerId, health, config)) {
         status[providerId] = { ...health };
         continue;
       }
