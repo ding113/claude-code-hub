@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { StatisticsChartPreview } from "./_components/statistics-chart-preview";
+import { StatisticsChartPreview } from "@/app/[locale]/internal/ui-preview/statistics-chart/_components/statistics-chart-preview";
 
 export const dynamic = "force-dynamic";
 
