@@ -33,6 +33,22 @@ export const DEFAULT_TEMPLATES = {
     quotaLimit: "{{quota_limit}}",
     usagePercent: "{{usage_percent}}",
   },
+
+  cache_hit_rate_alert: {
+    title: "{{title}}",
+    windowMode: "{{window_mode}}",
+    windowStart: "{{window_start}}",
+    windowEnd: "{{window_end}}",
+    anomalyCount: "{{anomaly_count}}",
+    suppressedCount: "{{suppressed_count}}",
+    anomalies: "{{anomalies_json}}",
+    absMin: "{{abs_min}}",
+    dropRel: "{{drop_rel}}",
+    dropAbs: "{{drop_abs}}",
+    cooldownMinutes: "{{cooldown_minutes}}",
+    topN: "{{top_n}}",
+    generatedAt: "{{generated_at}}",
+  },
 } as const;
 
 export const DEFAULT_TEMPLATE_BY_NOTIFICATION_TYPE: Record<
@@ -42,4 +58,5 @@ export const DEFAULT_TEMPLATE_BY_NOTIFICATION_TYPE: Record<
   circuit_breaker: DEFAULT_TEMPLATES.circuit_breaker,
   daily_leaderboard: DEFAULT_TEMPLATES.daily_leaderboard,
   cost_alert: DEFAULT_TEMPLATES.cost_alert,
+  cache_hit_rate_alert: DEFAULT_TEMPLATES.cache_hit_rate_alert,
 };

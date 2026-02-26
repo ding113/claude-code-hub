@@ -38,6 +38,22 @@
     "webhookTypeUnknown": "不明なプラットフォームです。WeComまたはFeishuのWebhook URLを使用してください",
     "webhookTypeWeCom": "WeCom"
   },
+  "cacheHitRateAlert": {
+    "absMin": "絶対下限（absMin）",
+    "checkInterval": "チェック間隔（分）",
+    "cooldownMinutes": "クールダウン（分）",
+    "description": "キャッシュヒット率（provider × model）が異常に低下した場合に通知します",
+    "dropAbs": "絶対低下幅（dropAbs）",
+    "dropRel": "相対低下幅（dropRel）",
+    "enable": "キャッシュヒット率アラートを有効にする",
+    "historicalLookbackDays": "履歴参照（日）",
+    "minEligibleRequests": "最小 eligible リクエスト数",
+    "minEligibleTokens": "最小 eligible トークン数",
+    "title": "キャッシュヒット率アラート",
+    "topN": "Top N",
+    "windowMode": "ウィンドウ",
+    "windowModeAuto": "自動"
+  },
   "dailyLeaderboard": {
     "description": "毎日定時でユーザー消費トップNランキングを送信",
     "enable": "日次ランキングを有効にする",

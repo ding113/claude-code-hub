@@ -1,6 +1,6 @@
 "use client";
 
-import { Braces, Info } from "lucide-react";
+import { Braces, Info, RotateCcw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo, useRef } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,13 +8,17 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  DEFAULT_TEMPLATE_BY_NOTIFICATION_TYPE,
+  DEFAULT_TEMPLATES,
+} from "@/lib/webhook/templates/defaults";
 import { getTemplatePlaceholders } from "@/lib/webhook/templates/placeholders";
-import type { NotificationType } from "../_lib/schemas";
+import type { WebhookNotificationType } from "@/lib/webhook/types";
 
 interface TemplateEditorProps {
   value: string;
   onChange: (value: string) => void;
-  notificationType?: NotificationType;
+  notificationType?: WebhookNotificationType;
   className?: string;
 }
 
@@ -26,6 +30,15 @@ export function TemplateEditor({
 }: TemplateEditorProps) {
   const t = useTranslations("settings");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const defaultTemplate = useMemo(() => {
+    if (!notificationType) {
+      return DEFAULT_TEMPLATES.custom_generic;
+    }
+    return (
+      DEFAULT_TEMPLATE_BY_NOTIFICATION_TYPE[notificationType] ?? DEFAULT_TEMPLATES.custom_generic
+    );
+  }, [notificationType]);
 
   const placeholders = useMemo(() => {
     return getTemplatePlaceholders(notificationType);
@@ -65,10 +78,21 @@ export function TemplateEditor({
   return (
     <div className={cn("grid gap-4 md:grid-cols-2", className)}>
       <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <Braces className="h-4 w-4" />
-          {t("notifications.templateEditor.title")}
-        </Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label className="flex items-center gap-2">
+            <Braces className="h-4 w-4" />
+            {t("notifications.templateEditor.title")}
+          </Label>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => onChange(JSON.stringify(defaultTemplate, null, 2))}
+          >
+            <RotateCcw className="mr-2 h-4 w-4" />
+            {t("common.reset")}
+          </Button>
+        </div>
         <Textarea
           ref={textareaRef}
           value={value}
