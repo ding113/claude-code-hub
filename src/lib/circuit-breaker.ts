@@ -49,6 +49,18 @@ const CONFIG_CACHE_TTL = 5 * 60 * 1000;
 // 标记已从 Redis 加载过状态的供应商（避免重复加载）
 const loadedFromRedis = new Set<number>();
 
+function isCircuitBreakerDisabled(config: CircuitBreakerConfig): boolean {
+  return !Number.isFinite(config.failureThreshold) || config.failureThreshold <= 0;
+}
+
+function resetHealthToClosed(health: ProviderHealth): void {
+  health.circuitState = "closed";
+  health.failureCount = 0;
+  health.lastFailureTime = null;
+  health.circuitOpenUntil = null;
+  health.halfOpenSuccessCount = 0;
+}
+
 /**
  * 获取或创建供应商的健康状态（同步版本，用于内部）
  */
@@ -159,12 +171,20 @@ function persistStateToRedis(providerId: number, health: ProviderHealth): void {
  * 获取供应商的熔断器配置（带缓存）
  * 缓存策略：内存缓存 5 分钟，避免频繁查询 Redis
  */
-async function getProviderConfig(providerId: number): Promise<CircuitBreakerConfig> {
-  const health = await getOrCreateHealth(providerId);
-
+async function getProviderConfigForHealth(
+  providerId: number,
+  health: ProviderHealth,
+  options?: { forceReload?: boolean }
+): Promise<CircuitBreakerConfig> {
+  const forceReload = options?.forceReload ?? false;
   // 检查内存缓存是否有效
   const now = Date.now();
-  if (health.config && health.configLoadedAt && now - health.configLoadedAt < CONFIG_CACHE_TTL) {
+  if (
+    !forceReload &&
+    health.config &&
+    health.configLoadedAt &&
+    now - health.configLoadedAt < CONFIG_CACHE_TTL
+  ) {
     return health.config;
   }
 
@@ -193,7 +213,7 @@ export async function getProviderHealthInfo(providerId: number): Promise<{
   config: CircuitBreakerConfig;
 }> {
   const health = await getOrCreateHealth(providerId);
-  const config = await getProviderConfig(providerId);
+  const config = await getProviderConfigForHealth(providerId, health);
   return { health, config };
 }
 
@@ -204,6 +224,21 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
   const health = await getOrCreateHealth(providerId);
 
   if (health.circuitState === "closed") {
+    return false;
+  }
+
+  const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
+  if (isCircuitBreakerDisabled(config)) {
+    const previousState = health.circuitState;
+    resetHealthToClosed(health);
+    logger.info(
+      `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
+      {
+        providerId,
+        previousState,
+      }
+    );
+    persistStateToRedis(providerId, health);
     return false;
   }
 
@@ -229,7 +264,29 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
  */
 export async function recordFailure(providerId: number, error: Error): Promise<void> {
   const health = await getOrCreateHealth(providerId);
-  const config = await getProviderConfig(providerId);
+  const config = await getProviderConfigForHealth(providerId, health);
+
+  if (isCircuitBreakerDisabled(config)) {
+    if (
+      health.circuitState !== "closed" ||
+      health.failureCount !== 0 ||
+      health.lastFailureTime !== null ||
+      health.circuitOpenUntil !== null ||
+      health.halfOpenSuccessCount !== 0
+    ) {
+      const previousState = health.circuitState;
+      resetHealthToClosed(health);
+      logger.info(
+        `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
+        {
+          providerId,
+          previousState,
+        }
+      );
+      persistStateToRedis(providerId, health);
+    }
+    return;
+  }
 
   health.failureCount++;
   health.lastFailureTime = Date.now();
@@ -246,33 +303,57 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
 
   // 检查是否需要打开熔断器
   // failureThreshold = 0 表示禁用熔断器
-  if (config.failureThreshold > 0 && health.failureCount >= config.failureThreshold) {
-    health.circuitState = "open";
-    health.circuitOpenUntil = Date.now() + config.openDuration;
-    health.halfOpenSuccessCount = 0;
-
-    const retryAt = new Date(health.circuitOpenUntil).toISOString();
-
-    logger.error(
-      `[CircuitBreaker] Provider ${providerId} circuit opened after ${health.failureCount} failures, will retry at ${retryAt}`,
-      {
-        providerId,
-        failureCount: health.failureCount,
-        openDuration: config.openDuration,
-        retryAt,
-      }
-    );
-
-    // 异步发送熔断器告警（不阻塞主流程）
-    triggerCircuitBreakerAlert(providerId, health.failureCount, retryAt, error.message).catch(
-      (err) => {
-        logger.error({
-          action: "trigger_circuit_breaker_alert_error",
+  if (health.failureCount >= config.failureThreshold) {
+    const latestConfig = await getProviderConfigForHealth(providerId, health, {
+      forceReload: true,
+    });
+    if (isCircuitBreakerDisabled(latestConfig)) {
+      const previousState = health.circuitState;
+      resetHealthToClosed(health);
+      logger.info(
+        `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
+        {
           providerId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    );
+          previousState,
+        }
+      );
+      persistStateToRedis(providerId, health);
+      return;
+    }
+
+    if (health.failureCount < latestConfig.failureThreshold) {
+      persistStateToRedis(providerId, health);
+      return;
+    }
+
+    if (health.circuitState !== "open") {
+      health.circuitState = "open";
+      health.circuitOpenUntil = Date.now() + latestConfig.openDuration;
+      health.halfOpenSuccessCount = 0;
+
+      const retryAt = new Date(health.circuitOpenUntil).toISOString();
+
+      logger.error(
+        `[CircuitBreaker] Provider ${providerId} circuit opened after ${health.failureCount} failures, will retry at ${retryAt}`,
+        {
+          providerId,
+          failureCount: health.failureCount,
+          openDuration: latestConfig.openDuration,
+          retryAt,
+        }
+      );
+
+      // 异步发送熔断器告警（不阻塞主流程）
+      triggerCircuitBreakerAlert(providerId, health.failureCount, retryAt, error.message).catch(
+        (err) => {
+          logger.error({
+            action: "trigger_circuit_breaker_alert_error",
+            providerId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      );
+    }
   }
 
   // 持久化状态变更到 Redis
@@ -333,8 +414,30 @@ async function triggerCircuitBreakerAlert(
  */
 export async function recordSuccess(providerId: number): Promise<void> {
   const health = await getOrCreateHealth(providerId);
-  const config = await getProviderConfig(providerId);
+  const config = await getProviderConfigForHealth(providerId, health);
   let stateChanged = false;
+
+  if (isCircuitBreakerDisabled(config)) {
+    if (
+      health.circuitState !== "closed" ||
+      health.failureCount !== 0 ||
+      health.lastFailureTime !== null ||
+      health.circuitOpenUntil !== null ||
+      health.halfOpenSuccessCount !== 0
+    ) {
+      const previousState = health.circuitState;
+      resetHealthToClosed(health);
+      logger.info(
+        `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
+        {
+          providerId,
+          previousState,
+        }
+      );
+      persistStateToRedis(providerId, health);
+    }
+    return;
+  }
 
   if (health.circuitState === "half-open") {
     // 半开状态下成功
@@ -513,6 +616,24 @@ export async function getAllHealthStatusAsync(
         configLoadedAt: null,
       };
       healthMap.set(providerId, health);
+    }
+
+    if (health.circuitState !== "closed") {
+      const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
+      if (isCircuitBreakerDisabled(config)) {
+        const previousState = health.circuitState;
+        resetHealthToClosed(health);
+        logger.info(
+          `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
+          {
+            providerId,
+            previousState,
+          }
+        );
+        persistStateToRedis(providerId, health);
+        status[providerId] = { ...health };
+        continue;
+      }
     }
 
     // Check and update expired circuit breaker status
