@@ -46,6 +46,9 @@ const healthMap = new Map<number, ProviderHealth>();
 // 配置缓存 TTL（5 分钟）
 const CONFIG_CACHE_TTL = 5 * 60 * 1000;
 
+// 非 closed 状态下，为了及时响应管理员禁用配置，最小间隔强制刷新一次配置（避免每次调用都打 Redis）
+const NON_CLOSED_CONFIG_FORCE_RELOAD_INTERVAL_MS = 2_000;
+
 // 标记已从 Redis 加载过状态的供应商（避免重复加载）
 const loadedFromRedis = new Set<number>();
 
@@ -59,6 +62,10 @@ function resetHealthToClosed(health: ProviderHealth): void {
   health.lastFailureTime = null;
   health.circuitOpenUntil = null;
   health.halfOpenSuccessCount = 0;
+}
+
+function isCircuitStateOpen(health: ProviderHealth): boolean {
+  return health.circuitState === "open";
 }
 
 /**
@@ -227,7 +234,12 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
     return false;
   }
 
-  const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
+  const now = Date.now();
+  const config = await getProviderConfigForHealth(providerId, health, {
+    forceReload:
+      health.configLoadedAt === null ||
+      now - health.configLoadedAt > NON_CLOSED_CONFIG_FORCE_RELOAD_INTERVAL_MS,
+  });
   if (isCircuitBreakerDisabled(config)) {
     const previousState = health.circuitState;
     resetHealthToClosed(health);
@@ -244,7 +256,7 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
 
   if (health.circuitState === "open") {
     // 检查是否可以转为半开状态
-    if (health.circuitOpenUntil && Date.now() > health.circuitOpenUntil) {
+    if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
       health.circuitState = "half-open";
       health.halfOpenSuccessCount = 0;
       logger.info(`[CircuitBreaker] Provider ${providerId} transitioned to half-open`);
@@ -301,6 +313,12 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
     }
   );
 
+  if (health.circuitState === "open") {
+    // 已经 OPEN：不应重复开闸/重置 openUntil；只记录计数并持久化（避免失败风暴下重复拉取配置）
+    persistStateToRedis(providerId, health);
+    return;
+  }
+
   // 检查是否需要打开熔断器
   // failureThreshold = 0 表示禁用熔断器
   if (health.failureCount >= config.failureThreshold) {
@@ -326,7 +344,7 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
       return;
     }
 
-    if (health.circuitState !== "open") {
+    if (!isCircuitStateOpen(health)) {
       health.circuitState = "open";
       health.circuitOpenUntil = Date.now() + latestConfig.openDuration;
       health.halfOpenSuccessCount = 0;
