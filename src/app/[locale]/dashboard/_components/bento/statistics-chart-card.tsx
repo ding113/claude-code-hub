@@ -168,8 +168,8 @@ export function StatisticsChartCard({
   };
 
   const chartContainerClassName = enableUserFilter
-    ? "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)-248px),240px)] w-full"
-    : "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)-138px),280px)] w-full";
+    ? "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)_-_248px),240px)] w-full"
+    : "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)_-_138px),280px)] w-full";
 
   return (
     <BentoCard
