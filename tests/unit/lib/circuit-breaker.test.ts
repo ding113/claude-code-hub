@@ -127,6 +127,59 @@ describe("circuit-breaker", () => {
     expect(savedState?.halfOpenSuccessCount).toBe(0);
   });
 
+  test("getAllHealthStatusAsync: Redis 无状态时应清理内存中的非 CLOSED 状态（避免展示/筛选残留）", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    vi.resetModules();
+
+    const openState: SavedCircuitState = {
+      failureCount: 10,
+      lastFailureTime: Date.now() - 1000,
+      circuitState: "open",
+      circuitOpenUntil: Date.now() + 300000,
+      halfOpenSuccessCount: 0,
+    };
+
+    let loadCalls = 0;
+    const loadAllCircuitStatesMock = vi.fn(async () => {
+      loadCalls++;
+      if (loadCalls === 1) {
+        return new Map([[1, openState]]);
+      }
+      return new Map();
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
+      loadCircuitState: vi.fn(async () => null),
+      loadAllCircuitStates: loadAllCircuitStatesMock,
+      saveCircuitState: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
+      DEFAULT_CIRCUIT_BREAKER_CONFIG: {
+        failureThreshold: 5,
+        openDuration: 1800000,
+        halfOpenSuccessThreshold: 2,
+      },
+      loadProviderCircuitConfig: vi.fn(async () => ({
+        failureThreshold: 5,
+        openDuration: 1800000,
+        halfOpenSuccessThreshold: 2,
+      })),
+    }));
+
+    const { getAllHealthStatusAsync, getCircuitState } = await import("@/lib/circuit-breaker");
+
+    const first = await getAllHealthStatusAsync([1], { forceRefresh: true });
+    expect(first[1]?.circuitState).toBe("open");
+    expect(getCircuitState(1)).toBe("open");
+
+    const second = await getAllHealthStatusAsync([1], { forceRefresh: true });
+    expect(second[1]?.circuitState).toBe("closed");
+    expect(getCircuitState(1)).toBe("closed");
+  });
+
   test("recordFailure: 已处于 OPEN 时不应重置 circuitOpenUntil（避免延长熔断时间）", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));

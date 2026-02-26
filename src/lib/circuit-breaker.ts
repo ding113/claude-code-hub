@@ -607,8 +607,22 @@ export async function getAllHealthStatusAsync(
         });
       }
 
-      // Mark IDs without Redis state as "loaded" to prevent repeated queries
+      // Mark IDs without Redis state as "loaded" to prevent repeated queries.
+      // If Redis has no state but memory is non-closed, force-reset to avoid stale states.
       for (const id of needsRefresh) {
+        if (!redisStates.has(id)) {
+          const health = healthMap.get(id);
+          if (health && health.circuitState !== "closed") {
+            resetHealthToClosed(health);
+            logger.info(
+              `[CircuitBreaker] Provider ${id} reset to closed (Redis state missing on batch load)`,
+              {
+                providerId: id,
+              }
+            );
+          }
+        }
+
         loadedFromRedis.add(id);
       }
     } catch (error) {
