@@ -268,6 +268,9 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
       return isStringRecord(value);
     case "allowed_models":
       return Array.isArray(value) && value.every((model) => typeof model === "string");
+    case "allowed_clients":
+    case "blocked_clients":
+      return Array.isArray(value) && value.every((v) => typeof v === "string");
     case "anthropic_adaptive_thinking":
       return isAdaptiveThinkingConfig(value);
     default:

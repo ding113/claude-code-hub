@@ -742,4 +742,47 @@ describe("ProxyForwarder - endpoint audit", () => {
     // endpointFilterStats should be undefined when stats call fails
     expect(exhaustedItem!.endpointFilterStats).toBeUndefined();
   });
+
+  test("/v1/responses/compact should use endpoint pool (not MCP path)", async () => {
+    const session = createSession(new URL("https://example.com/v1/responses/compact"));
+    const provider = createProvider({ providerType: "claude", providerVendorId: 123 });
+    session.setProvider(provider);
+
+    mocks.getPreferredProviderEndpoints.mockResolvedValue([
+      makeEndpoint({
+        id: 77,
+        vendorId: 123,
+        providerType: provider.providerType,
+        url: "https://api.example.com/v1/responses/compact",
+      }),
+    ]);
+
+    const doForward = vi.spyOn(
+      ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+      "doForward"
+    );
+    doForward.mockResolvedValueOnce(
+      new Response("{}", {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-length": "2",
+        },
+      })
+    );
+
+    const response = await ProxyForwarder.send(session);
+    expect(response.status).toBe(200);
+
+    expect(mocks.getPreferredProviderEndpoints).toHaveBeenCalled();
+
+    const chain = session.getProviderChain();
+    expect(chain).toHaveLength(1);
+    expect(chain[0]).toEqual(
+      expect.objectContaining({
+        reason: "request_success",
+        endpointId: 77,
+      })
+    );
+  });
 });

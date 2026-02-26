@@ -253,4 +253,69 @@ describe("batchUpdateProviders - advanced field mapping", () => {
     expect(result.ok).toBe(true);
     expect(updateProvidersBatchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("should map allowed_clients with values correctly", async () => {
+    const { batchUpdateProviders } = await import("@/actions/providers");
+    const result = await batchUpdateProviders({
+      providerIds: [1, 2],
+      updates: { allowed_clients: ["client-a", "client-b"] },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateProvidersBatchMock).toHaveBeenCalledWith([1, 2], {
+      allowedClients: ["client-a", "client-b"],
+    });
+  });
+
+  it("should map allowed_clients=null to repository allowedClients=null", async () => {
+    const { batchUpdateProviders } = await import("@/actions/providers");
+    const result = await batchUpdateProviders({
+      providerIds: [3],
+      updates: { allowed_clients: null },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateProvidersBatchMock).toHaveBeenCalledWith([3], {
+      allowedClients: null,
+    });
+  });
+
+  it("should pass allowed_clients=[] as empty array", async () => {
+    const { batchUpdateProviders } = await import("@/actions/providers");
+    const result = await batchUpdateProviders({
+      providerIds: [1],
+      updates: { allowed_clients: [] },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateProvidersBatchMock).toHaveBeenCalledWith([1], {
+      allowedClients: [],
+    });
+  });
+
+  it("should map blocked_clients with values correctly", async () => {
+    const { batchUpdateProviders } = await import("@/actions/providers");
+    const result = await batchUpdateProviders({
+      providerIds: [1, 2],
+      updates: { blocked_clients: ["bad-client"] },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateProvidersBatchMock).toHaveBeenCalledWith([1, 2], {
+      blockedClients: ["bad-client"],
+    });
+  });
+
+  it("should map blocked_clients=null to repository blockedClients=null", async () => {
+    const { batchUpdateProviders } = await import("@/actions/providers");
+    const result = await batchUpdateProviders({
+      providerIds: [5],
+      updates: { blocked_clients: null },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateProvidersBatchMock).toHaveBeenCalledWith([5], {
+      blockedClients: null,
+    });
+  });
 });
