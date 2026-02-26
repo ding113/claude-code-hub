@@ -167,10 +167,15 @@ export function StatisticsChartCard({
     return formatInTimeZone(date, timeZone, "yyyy MMMM d", { locale: dateFnsLocale });
   };
 
+  const chartContainerClassName = enableUserFilter
+    ? "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)-248px),240px)] w-full"
+    : "aspect-auto h-[clamp(140px,calc(var(--cch-viewport-height-50)-138px),280px)] w-full";
+
   return (
     <BentoCard
       className={cn(
-        "flex flex-col p-0 overflow-hidden max-h-[var(--cch-viewport-height-50)]",
+        "p-0 md:p-0 overflow-x-hidden overflow-y-auto max-h-[var(--cch-viewport-height-50)]",
+        "scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent",
         className
       )}
     >
@@ -259,8 +264,8 @@ export function StatisticsChartCard({
       </div>
 
       {/* Chart */}
-      <div className="p-4">
-        <ChartContainer config={chartConfig} className="aspect-auto h-[280px] w-full">
+      <div className="px-4 py-3">
+        <ChartContainer config={chartConfig} className={chartContainerClassName}>
           <AreaChart data={numericChartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
             <defs>
               {data.users.map((user, index) => {
@@ -392,7 +397,7 @@ export function StatisticsChartCard({
 
       {/* Legend */}
       {enableUserFilter && (
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-3">
           {/* Control buttons */}
           <div className="flex items-center justify-center gap-2 mb-2">
             <button
