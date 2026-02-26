@@ -1,6 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import type Redis from "ioredis";
 import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -78,6 +79,22 @@ function parseHeaderRecord(value: string): Record<string, string> | null {
   }
 }
 
+export class TerminatedSessionError extends Error {
+  constructor(
+    public readonly sessionId: string,
+    public readonly terminatedAt: string | null = null
+  ) {
+    // 注意：此错误的 message 不应作为用户可见文案；用户提示由 HTTP 层/ProxySessionGuard 统一映射。
+    super("ERR_TERMINATED_SESSION");
+    this.name = "TerminatedSessionError";
+  }
+}
+
+export type TerminateSessionResult = {
+  markerOk: boolean;
+  deletedKeys: number;
+};
+
 type SessionRequestMeta = {
   url: string;
   method: string;
@@ -105,6 +122,76 @@ export class SessionManager {
   ); // 短上下文阈值
   private static readonly ENABLE_SHORT_CONTEXT_DETECTION =
     process.env.ENABLE_SHORT_CONTEXT_DETECTION !== "false"; // 默认启用
+  // 会话终止标记 TTL（单位：秒）
+  // 规范环境变量：SESSION_TERMINATION_TTL_SECONDS
+  // 兼容旧名（计划弃用）：SESSION_TERMINATION_TTL / TERMINATED_SESSION_TTL
+  private static readonly TERMINATED_SESSION_TTL = (() => {
+    const normalize = (value: string | undefined): string | undefined => {
+      if (typeof value !== "string") return undefined;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    };
+
+    const rawPrimary = normalize(process.env.SESSION_TERMINATION_TTL_SECONDS);
+    const rawLegacyA = normalize(process.env.SESSION_TERMINATION_TTL);
+    const rawLegacyB = normalize(process.env.TERMINATED_SESSION_TTL);
+
+    if (!rawPrimary && (rawLegacyA || rawLegacyB)) {
+      logger.warn("SessionManager: Deprecated termination TTL env var detected", {
+        SESSION_TERMINATION_TTL: rawLegacyA ? "set" : "unset",
+        TERMINATED_SESSION_TTL: rawLegacyB ? "set" : "unset",
+        preferred: "SESSION_TERMINATION_TTL_SECONDS",
+      });
+    }
+
+    const raw = rawPrimary ?? rawLegacyA ?? rawLegacyB;
+    const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+    return 24 * 60 * 60; // 1 天
+  })();
+
+  private static readonly SCAN_COUNT = 100;
+  private static readonly TERMINATE_SCAN_COUNT = 200;
+
+  private static getTerminationMarkerKey(sessionId: string): string {
+    return `session:${sessionId}:terminated`;
+  }
+
+  private static async readTerminationMarker(
+    redis: Redis,
+    sessionId: string
+  ): Promise<string | null> {
+    const terminatedKey = SessionManager.getTerminationMarkerKey(sessionId);
+    try {
+      const value = await redis.get(terminatedKey);
+      if (typeof value !== "string" || value.length === 0) {
+        return null;
+      }
+      return value;
+    } catch (error) {
+      logger.error("SessionManager: Failed to read termination marker", {
+        error,
+        sessionId,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * 将用户可控的字符串安全地嵌入 Redis `SCAN MATCH` glob pattern 中（按字面量匹配）。
+   *
+   * Redis glob 语法中 `* ? [] \\` 都具有特殊含义，因此需要转义以避免误匹配/误删。
+   */
+  private static escapeRedisMatchPatternLiteral(value: string): string {
+    return value
+      .replaceAll("\\", "\\\\")
+      .replaceAll("*", "\\*")
+      .replaceAll("?", "\\?")
+      .replaceAll("[", "\\[")
+      .replaceAll("]", "\\]");
+  }
 
   /**
    * 获取 STORE_SESSION_MESSAGES 配置
@@ -358,6 +445,21 @@ export class SessionManager {
 
     // 1. 优先使用客户端传递的 session_id (来自 metadata.user_id 或 metadata.session_id)
     if (clientSessionId) {
+      // Fail-open：Redis 不可用时，不阻断请求（避免因 Redis 故障导致全站请求失败）。
+      // 代价：Redis 故障窗口内无法强制执行 terminated marker，因此 TerminatedSessionError 不会抛出。
+      if (redis && redis.status === "ready") {
+        const terminatedAt = await SessionManager.readTerminationMarker(redis, clientSessionId);
+        if (terminatedAt) {
+          logger.info("SessionManager: Rejected terminated client session", {
+            keyId,
+            sessionId: clientSessionId,
+            terminatedAt,
+            messagesLength,
+          });
+          throw new TerminatedSessionError(clientSessionId, terminatedAt);
+        }
+      }
+
       // 2. 短上下文并发检测（方案E）
       if (
         SessionManager.ENABLE_SHORT_CONTEXT_DETECTION &&
@@ -423,13 +525,25 @@ export class SessionManager {
         const existingSessionId = await redis.get(hashKey);
 
         if (existingSessionId) {
-          // 找到已有 session，刷新 TTL
-          await SessionManager.refreshSessionTTL(existingSessionId);
-          logger.trace("SessionManager: Reusing session via hash", {
-            sessionId: existingSessionId,
-            hash: contentHash,
-          });
-          return existingSessionId;
+          const terminatedAt = await SessionManager.readTerminationMarker(redis, existingSessionId);
+          if (terminatedAt) {
+            logger.info(
+              "SessionManager: Hash hit but session was terminated, creating new session",
+              {
+                existingSessionId,
+                terminatedAt,
+                hash: contentHash,
+              }
+            );
+          } else {
+            // 找到已有 session，刷新 TTL
+            await SessionManager.refreshSessionTTL(existingSessionId);
+            logger.trace("SessionManager: Reusing session via hash", {
+              sessionId: existingSessionId,
+              hash: contentHash,
+            });
+            return existingSessionId;
+          }
         }
 
         // 未找到：创建新 session
@@ -1154,7 +1268,7 @@ export class SessionManager {
           "MATCH",
           "session:*:info",
           "COUNT",
-          100
+          SessionManager.SCAN_COUNT
         )) as [string, string[]];
 
         cursor = nextCursor;
@@ -1249,7 +1363,7 @@ export class SessionManager {
           "MATCH",
           "session:*:info",
           "COUNT",
-          100
+          SessionManager.SCAN_COUNT
         )) as [string, string[]];
 
         cursor = nextCursor;
@@ -1332,14 +1446,15 @@ export class SessionManager {
       }
 
       // 2. 检查新格式：使用 SCAN 搜索 session:{sessionId}:req:*:messages
+      const escapedSessionId = SessionManager.escapeRedisMatchPatternLiteral(sessionId);
       let cursor = "0";
       do {
         const [nextCursor, keys] = (await redis.scan(
           cursor,
           "MATCH",
-          `session:${sessionId}:req:*:messages`,
+          `session:${escapedSessionId}:req:*:messages`,
           "COUNT",
-          100
+          SessionManager.SCAN_COUNT
         )) as [string, string[]];
 
         cursor = nextCursor;
@@ -1927,20 +2042,44 @@ export class SessionManager {
   /**
    * 终止 Session（主动打断）
    *
-   * 功能：删除 Session 在 Redis 中的所有绑定关系，强制下次请求重新选择供应商
-   * 用途：管理员主动打断长时间占用同一供应商的 Session
+   * 功能：写入“终止标记”并清理 Redis 中所有 session:{id}:* 相关 key
+   * 影响：客户端后续继续携带同一 sessionId 时，将被阻断（getOrCreateSessionId 抛出 TerminatedSessionError）
    *
    * @param sessionId - Session ID
-   * @returns 是否成功删除
+   * @returns markerOk: 是否成功写入终止标记; deletedKeys: 清理掉的 key 数量（不含 terminated 标记）
    */
-  static async terminateSession(sessionId: string): Promise<boolean> {
+  static async terminateSession(sessionId: string): Promise<TerminateSessionResult> {
     const redis = getRedisClient();
     if (!redis || redis.status !== "ready") {
       logger.warn("SessionManager: Redis not ready, cannot terminate session");
-      return false;
+      return { markerOk: false, deletedKeys: 0 };
     }
 
+    let markerOk = false;
+    let deletedKeys = 0;
+
     try {
+      const terminatedKey = SessionManager.getTerminationMarkerKey(sessionId);
+      const terminatedAt = Date.now().toString();
+      const ttlSeconds = SessionManager.TERMINATED_SESSION_TTL;
+
+      // 0. 标记终止（优先写入，避免并发请求在清理窗口内复活）
+      // 说明：这里允许覆盖旧值，用于刷新 TTL（多次终止时延长阻断窗口）。
+      const markerResult = await redis.set(terminatedKey, terminatedAt, "EX", ttlSeconds);
+      markerOk = markerResult === "OK";
+
+      if (!markerOk) {
+        logger.warn(
+          "SessionManager: Failed to set termination marker; cleanup will still proceed (session may be reusable)",
+          {
+            sessionId,
+            terminatedKey,
+            terminatedAt,
+            ttlSeconds,
+          }
+        );
+      }
+
       // 1. 先查询绑定信息（用于从 ZSET 中移除）
       let providerId: number | null = null;
       let keyId: number | null = null;
@@ -1957,6 +2096,14 @@ export class SessionManager {
         keyId = keyIdStr ? parseInt(keyIdStr, 10) : null;
         userId = userIdStr ? parseInt(userIdStr, 10) : null;
 
+        if (!Number.isFinite(providerId)) {
+          providerId = null;
+        }
+
+        if (!Number.isFinite(keyId)) {
+          keyId = null;
+        }
+
         if (!Number.isFinite(userId)) {
           userId = null;
         }
@@ -1971,48 +2118,106 @@ export class SessionManager {
         );
       }
 
-      // 2. 删除所有 Session 相关的 key
+      // 2. 从 ZSET 中移除（始终尝试，即使查询失败）
       const pipeline = redis.pipeline();
+      const zremKeys: string[] = [];
 
-      // 基础绑定信息
-      pipeline.del(`session:${sessionId}:provider`);
-      pipeline.del(`session:${sessionId}:key`);
-      pipeline.del(`session:${sessionId}:info`);
-      pipeline.del(`session:${sessionId}:last_seen`);
-      pipeline.del(`session:${sessionId}:concurrent_count`);
+      const globalKey = getGlobalActiveSessionsKey();
+      pipeline.zrem(globalKey, sessionId);
+      zremKeys.push(globalKey);
 
-      // 可选：messages 和 response（如果启用了存储）
-      pipeline.del(`session:${sessionId}:messages`);
-      pipeline.del(`session:${sessionId}:response`);
-
-      // 3. 从 ZSET 中移除（始终尝试，即使查询失败）
-      pipeline.zrem(getGlobalActiveSessionsKey(), sessionId);
-
-      if (providerId) {
-        pipeline.zrem(`provider:${providerId}:active_sessions`, sessionId);
+      if (providerId !== null) {
+        const key = `provider:${providerId}:active_sessions`;
+        pipeline.zrem(key, sessionId);
+        zremKeys.push(key);
       }
 
-      if (keyId) {
-        pipeline.zrem(getKeyActiveSessionsKey(keyId), sessionId);
+      if (keyId !== null) {
+        const key = getKeyActiveSessionsKey(keyId);
+        pipeline.zrem(key, sessionId);
+        zremKeys.push(key);
       }
 
-      if (userId) {
-        pipeline.zrem(getUserActiveSessionsKey(userId), sessionId);
+      if (userId !== null) {
+        const key = getUserActiveSessionsKey(userId);
+        pipeline.zrem(key, sessionId);
+        zremKeys.push(key);
       }
 
-      // 4. 删除 hash 映射（如果存在）
-      // 注意：无法直接反查 hash，只能清理已知的 session key
-      // hash 会在 TTL 后自动过期，不影响功能
-
-      const results = await pipeline.exec();
-
-      // 5. 检查结果
-      let deletedKeys = 0;
-      if (results) {
-        for (const [err, result] of results) {
-          if (!err && typeof result === "number" && result > 0) {
-            deletedKeys += result;
+      try {
+        const results = await pipeline.exec();
+        if (results) {
+          for (let i = 0; i < results.length; i++) {
+            const [err] = results[i];
+            if (!err) continue;
+            logger.warn("SessionManager: Failed to remove session from active_sessions ZSET", {
+              sessionId,
+              zsetKey: zremKeys[i],
+              providerId,
+              keyId,
+              userId,
+              error: err,
+            });
           }
+        }
+      } catch (zremError) {
+        logger.warn("SessionManager: Failed to cleanup active_sessions ZSET, continuing", {
+          sessionId,
+          providerId,
+          keyId,
+          userId,
+          error: zremError,
+        });
+      }
+
+      // 3. 删除 session:* 相关 key（包含 req:* 新格式；保留 terminated 标记）
+      const escapedSessionId = SessionManager.escapeRedisMatchPatternLiteral(sessionId);
+      const matchPattern = `session:${escapedSessionId}:*`;
+
+      // 说明：Redis SCAN 不提供快照语义；为了减少并发窗口下的遗漏，这里最多执行两轮全量扫描清理。
+      const MAX_SCAN_ROUNDS = 2;
+      for (let round = 0; round < MAX_SCAN_ROUNDS; round++) {
+        let cursor = "0";
+        let deletedInRound = 0;
+
+        do {
+          const scanResult = (await redis.scan(
+            cursor,
+            "MATCH",
+            matchPattern,
+            "COUNT",
+            SessionManager.TERMINATE_SCAN_COUNT
+          )) as [string, string[]];
+          const nextCursor = scanResult[0];
+          const keys = scanResult[1] ?? [];
+          cursor = nextCursor;
+
+          if (keys.length === 0) continue;
+
+          const deletePipeline = redis.pipeline();
+          let hasDeletes = false;
+          for (const key of keys) {
+            if (key === terminatedKey) continue;
+            deletePipeline.del(key);
+            hasDeletes = true;
+          }
+
+          // 如果这一页 SCAN 只返回了 terminatedKey，则无需发起空 pipeline.exec()。
+          if (!hasDeletes) continue;
+
+          const deleteResults = await deletePipeline.exec();
+          if (!deleteResults) continue;
+
+          for (const [err, result] of deleteResults) {
+            if (!err && typeof result === "number" && result > 0) {
+              deletedInRound += result;
+            }
+          }
+        } while (cursor !== "0");
+
+        deletedKeys += deletedInRound;
+        if (deletedInRound === 0) {
+          break;
         }
       }
 
@@ -2020,16 +2225,19 @@ export class SessionManager {
         sessionId,
         providerId,
         keyId,
+        userId,
         deletedKeys,
+        terminatedAt,
+        markerOk,
       });
 
-      return deletedKeys > 0;
+      return { markerOk, deletedKeys };
     } catch (error) {
       logger.error("SessionManager: Failed to terminate session", {
         error,
         sessionId,
       });
-      return false;
+      return { markerOk, deletedKeys };
     }
   }
 
@@ -2061,8 +2269,8 @@ export class SessionManager {
         const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
         const results = await Promise.all(
           chunk.map(async (sessionId) => {
-            const success = await SessionManager.terminateSession(sessionId);
-            return success ? 1 : 0;
+            const result = await SessionManager.terminateSession(sessionId);
+            return result.markerOk ? 1 : 0;
           })
         );
         successCount += results.reduce<number>((sum, value) => sum + value, 0);

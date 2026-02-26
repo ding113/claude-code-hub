@@ -51,7 +51,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("returns 0 and does not execute SQL when updates is empty", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 0 }));
+    const executeMock = vi.fn(async () => ({ count: 0 }));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -69,7 +69,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("generates CASE batch update SQL and returns affected rows", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 2 }));
+    const executeMock = vi.fn(async () => ({ count: 2 }));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -101,7 +101,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("deduplicates provider ids (last update wins)", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 1 }));
+    const executeMock = vi.fn(async () => ({ count: 1 }));
 
     vi.doMock("@/drizzle/db", () => ({
       db: {

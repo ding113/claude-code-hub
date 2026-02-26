@@ -854,9 +854,9 @@ export async function terminateActiveSession(sessionId: string): Promise<ActionR
 
     // 3. 终止 Session
     const { SessionManager } = await import("@/lib/session-manager");
-    const success = await SessionManager.terminateSession(sessionId);
+    const result = await SessionManager.terminateSession(sessionId);
 
-    if (!success) {
+    if (!result.markerOk) {
       return {
         ok: false,
         error: "终止 Session 失败（Redis 不可用或 Session 已过期）",

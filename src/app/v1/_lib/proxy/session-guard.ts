@@ -1,9 +1,10 @@
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
-import { SessionManager } from "@/lib/session-manager";
+import { SessionManager, TerminatedSessionError } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import { completeCodexSessionIdentifiers } from "../codex/session-completer";
+import { ProxyError } from "./errors";
 import type { ProxySession } from "./session";
 
 /**
@@ -178,6 +179,14 @@ export class ProxySessionGuard {
         `[ProxySessionGuard] Session assigned: ${sessionId}:${requestSequence} (key=${keyId}, messagesLength=${session.getMessagesLength()}, clientProvided=${!!clientSessionId})`
       );
     } catch (error) {
+      if (error instanceof TerminatedSessionError) {
+        logger.info("[ProxySessionGuard] Client session was terminated, blocking request", {
+          sessionId: error.sessionId,
+          terminatedAt: error.terminatedAt,
+        });
+        throw new ProxyError("Session 已被终止，请创建新的会话后重试", 410);
+      }
+
       logger.error("[ProxySessionGuard] Failed to assign session:", error);
       // 降级：生成新 session（不阻塞请求）
       const fallbackSessionId = SessionManager.generateSessionId();
