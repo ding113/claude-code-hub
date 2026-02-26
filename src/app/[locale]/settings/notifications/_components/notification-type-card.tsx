@@ -557,6 +557,7 @@ export function NotificationTypeCard({
                   <NumberInput
                     id="cacheHitRateAlertMinEligibleTokens"
                     min={0}
+                    max={2147483647}
                     value={settings.cacheHitRateAlertMinEligibleTokens}
                     disabled={!settings.enabled}
                     onValueChange={(v) =>
@@ -564,7 +565,7 @@ export function NotificationTypeCard({
                         cacheHitRateAlertMinEligibleTokens: v,
                       })
                     }
-                    constraints={{ integer: true, min: 0 }}
+                    constraints={{ integer: true, min: 0, max: 2147483647 }}
                     className={settingsControlClassName}
                   />
                 </LabeledControl>

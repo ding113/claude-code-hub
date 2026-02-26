@@ -4,9 +4,9 @@ import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
+import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderType } from "@/types/provider";
-import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 export interface TimeRange {
   start: Date;
@@ -115,7 +115,9 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
   providerType?: ProviderType,
   config: CacheHitRateAlertQueryConfig = {}
 ): Promise<ProviderModelCacheHitRateAlertMetric[]> {
-  if (timeRange.start >= timeRange.end) {
+  const startMs = timeRange.start.getTime();
+  const endMs = timeRange.end.getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) {
     return [];
   }
 
