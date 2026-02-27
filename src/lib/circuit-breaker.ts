@@ -49,6 +49,9 @@ const CONFIG_CACHE_TTL = 5 * 60 * 1000;
 // 非 closed 状态下，为了及时响应管理员禁用配置，最小间隔强制刷新一次配置（避免每次调用都打 Redis）
 const NON_CLOSED_CONFIG_FORCE_RELOAD_INTERVAL_MS = 2_000;
 
+// getAllHealthStatusAsync 中批量强制刷新配置时的并发批大小（避免瞬时放大 Redis/配置存储压力）
+const CONFIG_FORCE_RELOAD_BATCH_SIZE = 20;
+
 // 标记已从 Redis 加载过状态的供应商（避免重复加载）
 const loadedFromRedis = new Set<number>();
 
@@ -620,14 +623,17 @@ export async function getAllHealthStatusAsync(
     return health && health.circuitState !== "closed";
   });
   const forcedConfigMap = new Map<number, CircuitBreakerConfig>();
-  await Promise.all(
-    nonClosedIds.map(async (providerId) => {
-      const health = healthMap.get(providerId);
-      if (!health) return;
-      const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
-      forcedConfigMap.set(providerId, config);
-    })
-  );
+  for (let i = 0; i < nonClosedIds.length; i += CONFIG_FORCE_RELOAD_BATCH_SIZE) {
+    const batch = nonClosedIds.slice(i, i + CONFIG_FORCE_RELOAD_BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (providerId) => {
+        const health = healthMap.get(providerId);
+        if (!health) return;
+        const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
+        forcedConfigMap.set(providerId, config);
+      })
+    );
+  }
 
   // Only include status for requested providers (not all in healthMap)
   for (const providerId of providerIds) {
