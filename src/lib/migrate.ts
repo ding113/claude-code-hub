@@ -31,8 +31,16 @@ async function runEmbeddedDbMigrations(input: {
     | undefined
     | {
         exec: (query: string) => Promise<unknown>;
-        query: (query: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
-        transaction: <T>(fn: (tx: { exec: (query: string) => Promise<unknown>; query: (query: string, params?: unknown[]) => Promise<unknown> }) => Promise<T>) => Promise<T>;
+        query: (
+          query: string,
+          params?: unknown[]
+        ) => Promise<{ rows: Array<Record<string, unknown>> }>;
+        transaction: <T>(
+          fn: (tx: {
+            exec: (query: string) => Promise<unknown>;
+            query: (query: string, params?: unknown[]) => Promise<unknown>;
+          }) => Promise<T>
+        ) => Promise<T>;
       };
 
   if (!client) {
@@ -47,13 +55,15 @@ async function runEmbeddedDbMigrations(input: {
   const migrations = readMigrationFiles({ migrationsFolder: input.migrationsFolder });
 
   await client.exec('CREATE SCHEMA IF NOT EXISTS "drizzle"');
-  await client.exec(`
+  await client.exec(
+    `
 CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
   id SERIAL PRIMARY KEY,
   hash text NOT NULL,
   created_at numeric
 )
-`.trim());
+`.trim()
+  );
 
   const lastDbMigrationResult = await client.query(
     'select id, hash, created_at from "drizzle"."__drizzle_migrations" order by created_at desc limit 1'

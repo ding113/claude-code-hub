@@ -102,17 +102,23 @@ describe("demo: embedded db + seed", () => {
     expect(toInt(vendorRow.count)).toBe(1);
 
     const providerRow = requireSingleRow<{ count: unknown }>(
-      await db.execute(sql`SELECT COUNT(*)::int AS count FROM providers WHERE name = 'demo-provider'`)
+      await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM providers WHERE name = 'demo-provider'`
+      )
     );
     expect(toInt(providerRow.count)).toBe(1);
 
     const usageRow = requireSingleRow<{ count: unknown }>(
-      await db.execute(sql`SELECT COUNT(*)::int AS count FROM usage_ledger WHERE model = 'demo-model'`)
+      await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM usage_ledger WHERE model = 'demo-model'`
+      )
     );
     expect(toInt(usageRow.count)).toBeGreaterThan(0);
 
     const priceRow = requireSingleRow<{ count: unknown }>(
-      await db.execute(sql`SELECT COUNT(*)::int AS count FROM model_prices WHERE model_name = 'demo-model'`)
+      await db.execute(
+        sql`SELECT COUNT(*)::int AS count FROM model_prices WHERE model_name = 'demo-model'`
+      )
     );
     expect(toInt(priceRow.count)).toBe(1);
 
