@@ -8,6 +8,12 @@ type SavedCircuitState = {
   halfOpenSuccessCount: number;
 };
 
+type CircuitBreakerConfig = {
+  failureThreshold: number;
+  openDuration: number;
+  halfOpenSuccessThreshold: number;
+};
+
 function createLoggerMock() {
   return {
     debug: vi.fn(),
@@ -19,14 +25,48 @@ function createLoggerMock() {
   };
 }
 
+function setupFakeTime(): void {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+}
+
+function setupCircuitBreakerMocks(options?: {
+  redis?: {
+    loadCircuitState?: (providerId: number) => Promise<SavedCircuitState | null>;
+    loadAllCircuitStates?: (providerIds: number[]) => Promise<Map<number, SavedCircuitState>>;
+    saveCircuitState?: (providerId: number, state: SavedCircuitState) => Promise<void>;
+  };
+  config?: {
+    defaultConfig?: CircuitBreakerConfig;
+    loadProviderCircuitConfig?: (providerId: number) => Promise<CircuitBreakerConfig>;
+  };
+}): void {
+  const defaultConfig: CircuitBreakerConfig = options?.config?.defaultConfig ?? {
+    failureThreshold: 5,
+    openDuration: 1800000,
+    halfOpenSuccessThreshold: 2,
+  };
+
+  vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+  vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
+    loadCircuitState: options?.redis?.loadCircuitState ?? vi.fn(async () => null),
+    loadAllCircuitStates: options?.redis?.loadAllCircuitStates ?? vi.fn(async () => new Map()),
+    saveCircuitState: options?.redis?.saveCircuitState ?? vi.fn(async () => {}),
+  }));
+  vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
+    DEFAULT_CIRCUIT_BREAKER_CONFIG: defaultConfig,
+    loadProviderCircuitConfig:
+      options?.config?.loadProviderCircuitConfig ?? vi.fn(async () => defaultConfig),
+  }));
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe("circuit-breaker", () => {
   test("failureThreshold=0 时应视为禁用：即便 Redis 为 OPEN 也不应阻止请求，并自动复位为 CLOSED", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    setupFakeTime();
 
     vi.resetModules();
 
@@ -43,24 +83,19 @@ describe("circuit-breaker", () => {
       redisState = state;
     });
 
-    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
-    vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
-      loadCircuitState: loadStateMock,
-      loadAllCircuitStates: vi.fn(async () => new Map()),
-      saveCircuitState: saveStateMock,
-    }));
-    vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
-      DEFAULT_CIRCUIT_BREAKER_CONFIG: {
-        failureThreshold: 5,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
+    setupCircuitBreakerMocks({
+      redis: {
+        loadCircuitState: loadStateMock,
+        saveCircuitState: saveStateMock,
       },
-      loadProviderCircuitConfig: vi.fn(async () => ({
-        failureThreshold: 0,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
-      })),
-    }));
+      config: {
+        loadProviderCircuitConfig: vi.fn(async () => ({
+          failureThreshold: 0,
+          openDuration: 1800000,
+          halfOpenSuccessThreshold: 2,
+        })),
+      },
+    });
 
     const { getCircuitState, isCircuitOpen } = await import("@/lib/circuit-breaker");
 
@@ -78,8 +113,7 @@ describe("circuit-breaker", () => {
   });
 
   test("getAllHealthStatusAsync: failureThreshold=0 时应强制返回 CLOSED 并写回 Redis", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    setupFakeTime();
 
     vi.resetModules();
 
@@ -96,24 +130,20 @@ describe("circuit-breaker", () => {
       savedState = state;
     });
 
-    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
-    vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
-      loadCircuitState: vi.fn(async () => null),
-      loadAllCircuitStates: vi.fn(async () => new Map([[1, openState]])),
-      saveCircuitState: saveStateMock,
-    }));
-    vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
-      DEFAULT_CIRCUIT_BREAKER_CONFIG: {
-        failureThreshold: 5,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
+    setupCircuitBreakerMocks({
+      redis: {
+        loadCircuitState: vi.fn(async () => null),
+        loadAllCircuitStates: vi.fn(async () => new Map([[1, openState]])),
+        saveCircuitState: saveStateMock,
       },
-      loadProviderCircuitConfig: vi.fn(async () => ({
-        failureThreshold: 0,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
-      })),
-    }));
+      config: {
+        loadProviderCircuitConfig: vi.fn(async () => ({
+          failureThreshold: 0,
+          openDuration: 1800000,
+          halfOpenSuccessThreshold: 2,
+        })),
+      },
+    });
 
     const { getAllHealthStatusAsync } = await import("@/lib/circuit-breaker");
 
@@ -128,8 +158,7 @@ describe("circuit-breaker", () => {
   });
 
   test("getAllHealthStatusAsync: Redis 无状态时应清理内存中的非 CLOSED 状态（避免展示/筛选残留）", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    setupFakeTime();
 
     vi.resetModules();
 
@@ -150,24 +179,20 @@ describe("circuit-breaker", () => {
       return new Map();
     });
 
-    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
-    vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
-      loadCircuitState: vi.fn(async () => null),
-      loadAllCircuitStates: loadAllCircuitStatesMock,
-      saveCircuitState: vi.fn(async () => {}),
-    }));
-    vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
-      DEFAULT_CIRCUIT_BREAKER_CONFIG: {
-        failureThreshold: 5,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
+    setupCircuitBreakerMocks({
+      redis: {
+        loadCircuitState: vi.fn(async () => null),
+        loadAllCircuitStates: loadAllCircuitStatesMock,
+        saveCircuitState: vi.fn(async () => {}),
       },
-      loadProviderCircuitConfig: vi.fn(async () => ({
-        failureThreshold: 5,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
-      })),
-    }));
+      config: {
+        loadProviderCircuitConfig: vi.fn(async () => ({
+          failureThreshold: 5,
+          openDuration: 1800000,
+          halfOpenSuccessThreshold: 2,
+        })),
+      },
+    });
 
     const { getAllHealthStatusAsync, getCircuitState } = await import("@/lib/circuit-breaker");
 
@@ -181,8 +206,7 @@ describe("circuit-breaker", () => {
   });
 
   test("recordFailure: 已处于 OPEN 时不应重置 circuitOpenUntil（避免延长熔断时间）", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    setupFakeTime();
 
     vi.resetModules();
 
@@ -194,7 +218,6 @@ describe("circuit-breaker", () => {
 
     const sendAlertMock = vi.fn(async () => {});
 
-    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
     vi.doMock("@/lib/notification/notifier", () => ({
       sendCircuitBreakerAlert: sendAlertMock,
     }));
@@ -213,23 +236,20 @@ describe("circuit-breaker", () => {
         })),
       },
     }));
-    vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
-      loadCircuitState: loadStateMock,
-      loadAllCircuitStates: vi.fn(async () => new Map()),
-      saveCircuitState: saveStateMock,
-    }));
-    vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
-      DEFAULT_CIRCUIT_BREAKER_CONFIG: {
-        failureThreshold: 5,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
+
+    setupCircuitBreakerMocks({
+      redis: {
+        loadCircuitState: loadStateMock,
+        saveCircuitState: saveStateMock,
       },
-      loadProviderCircuitConfig: vi.fn(async () => ({
-        failureThreshold: 2,
-        openDuration: 300000,
-        halfOpenSuccessThreshold: 2,
-      })),
-    }));
+      config: {
+        loadProviderCircuitConfig: vi.fn(async () => ({
+          failureThreshold: 2,
+          openDuration: 300000,
+          halfOpenSuccessThreshold: 2,
+        })),
+      },
+    });
 
     const { recordFailure } = await import("@/lib/circuit-breaker");
 
@@ -252,8 +272,7 @@ describe("circuit-breaker", () => {
   });
 
   test("配置加载失败时应缓存默认配置，避免重复请求配置存储", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    setupFakeTime();
 
     vi.resetModules();
 
@@ -261,20 +280,16 @@ describe("circuit-breaker", () => {
       throw new Error("redis down");
     });
 
-    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
-    vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
-      loadCircuitState: vi.fn(async () => null),
-      loadAllCircuitStates: vi.fn(async () => new Map()),
-      saveCircuitState: vi.fn(async () => {}),
-    }));
-    vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
-      DEFAULT_CIRCUIT_BREAKER_CONFIG: {
-        failureThreshold: 100,
-        openDuration: 1800000,
-        halfOpenSuccessThreshold: 2,
+    setupCircuitBreakerMocks({
+      config: {
+        defaultConfig: {
+          failureThreshold: 100,
+          openDuration: 1800000,
+          halfOpenSuccessThreshold: 2,
+        },
+        loadProviderCircuitConfig: loadProviderCircuitConfigMock,
       },
-      loadProviderCircuitConfig: loadProviderCircuitConfigMock,
-    }));
+    });
 
     const { recordFailure } = await import("@/lib/circuit-breaker");
 
