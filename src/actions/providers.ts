@@ -12,7 +12,9 @@ import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
   clearConfigCache,
   clearProviderState,
+  forceCloseCircuitState,
   getAllHealthStatusAsync,
+  publishCircuitBreakerConfigInvalidation,
   resetCircuit,
 } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
@@ -777,9 +779,14 @@ export async function editProvider(
           openDuration: provider.circuitBreakerOpenDuration,
           halfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         });
-        // 清除内存缓存，强制下次读取最新配置
-        clearConfigCache(providerId);
+        // 清除配置缓存并广播（跨实例立即生效）
+        await publishCircuitBreakerConfigInvalidation(providerId);
         logger.debug("editProvider:config_synced_to_redis", { providerId });
+
+        // 若管理员禁用熔断器（threshold<=0），则应立即解除 OPEN/HALF-OPEN 拦截（跨实例）
+        if (provider.circuitBreakerFailureThreshold <= 0) {
+          await forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" });
+        }
       } catch (error) {
         logger.warn("editProvider:redis_sync_failed", {
           providerId,
@@ -1930,12 +1937,28 @@ export async function applyProviderBatchPatch(
       for (const id of effectiveProviderIds) {
         try {
           await deleteProviderCircuitConfig(id);
-          clearConfigCache(id);
         } catch (error) {
           logger.warn("applyProviderBatchPatch:cb_cache_invalidation_failed", {
             providerId: id,
             error: error instanceof Error ? error.message : String(error),
           });
+        }
+      }
+
+      // 清除配置缓存并广播（跨实例立即生效）
+      await publishCircuitBreakerConfigInvalidation(effectiveProviderIds);
+
+      // 若本次补丁将熔断器禁用（threshold<=0），则应立即解除 OPEN/HALF-OPEN 拦截（跨实例）
+      const nextFailureThreshold = updatesResult.data.circuit_breaker_failure_threshold;
+      if (typeof nextFailureThreshold === "number" && nextFailureThreshold <= 0) {
+        const batchSize = 20;
+        for (let i = 0; i < effectiveProviderIds.length; i += batchSize) {
+          const batch = effectiveProviderIds.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map((providerId) =>
+              forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" })
+            )
+          );
         }
       }
     }
@@ -2055,12 +2078,34 @@ export async function undoProviderPatch(
       for (const providerId of snapshot.providerIds) {
         try {
           await deleteProviderCircuitConfig(providerId);
-          clearConfigCache(providerId);
         } catch (error) {
           logger.warn("undoProviderPatch:cb_cache_invalidation_failed", {
             providerId,
             error: error instanceof Error ? error.message : String(error),
           });
+        }
+      }
+
+      // 清除配置缓存并广播（跨实例立即生效）
+      await publishCircuitBreakerConfigInvalidation(snapshot.providerIds);
+
+      // 若撤销后变为禁用（threshold<=0），则应立即解除 OPEN/HALF-OPEN 拦截（跨实例）
+      const disabledProviderIds = snapshot.providerIds.filter((providerId) => {
+        const preimage = snapshot.preimage[providerId];
+        if (!preimage) return false;
+        const nextFailureThreshold = preimage.circuitBreakerFailureThreshold;
+        return typeof nextFailureThreshold === "number" && nextFailureThreshold <= 0;
+      });
+
+      if (disabledProviderIds.length > 0) {
+        const batchSize = 20;
+        for (let i = 0; i < disabledProviderIds.length; i += batchSize) {
+          const batch = disabledProviderIds.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map((providerId) =>
+              forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" })
+            )
+          );
         }
       }
     }

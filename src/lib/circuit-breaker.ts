@@ -27,6 +27,7 @@ import {
   loadCircuitState,
   saveCircuitState,
 } from "@/lib/redis/circuit-breaker-state";
+import { publishCacheInvalidation, subscribeCacheInvalidation } from "@/lib/redis/pubsub";
 
 // 修复：导出 ProviderHealth 类型，供其他模块使用
 export interface ProviderHealth {
@@ -46,8 +47,214 @@ const healthMap = new Map<number, ProviderHealth>();
 // 配置缓存 TTL（5 分钟）
 const CONFIG_CACHE_TTL = 5 * 60 * 1000;
 
+// 非 closed 状态下，为了及时响应管理员禁用配置，最小间隔强制刷新一次配置（避免每次调用都打 Redis）
+const NON_CLOSED_CONFIG_FORCE_RELOAD_INTERVAL_MS = 60_000;
+
+export const CHANNEL_CIRCUIT_BREAKER_CONFIG_UPDATED = "cch:cache:circuit_breaker_config:updated";
+
+// getAllHealthStatusAsync 中批量强制刷新配置时的并发批大小（避免瞬时放大 Redis/配置存储压力）
+const CONFIG_FORCE_RELOAD_BATCH_SIZE = 20;
+
 // 标记已从 Redis 加载过状态的供应商（避免重复加载）
 const loadedFromRedis = new Set<number>();
+
+// 配置加载去抖：同一 provider 同时只允许一个配置加载任务
+const configLoadInFlight = new Map<number, Promise<CircuitBreakerConfig>>();
+
+// 配置缓存版本号：用于避免“失效事件”被 in-flight 旧结果覆盖
+const configCacheVersion = new Map<number, number>();
+
+let configInvalidationSubscriptionInitialized = false;
+let configInvalidationSubscriptionPromise: Promise<void> | null = null;
+
+function bumpConfigCacheVersion(providerId: number): number {
+  const next = (configCacheVersion.get(providerId) ?? 0) + 1;
+  configCacheVersion.set(providerId, next);
+  return next;
+}
+
+function getConfigCacheVersion(providerId: number): number {
+  return configCacheVersion.get(providerId) ?? 0;
+}
+
+function parseConfigInvalidationProviderIds(message: string): number[] | null {
+  // 兼容：纯数字字符串（做上限保护，避免误把时间戳当作 providerId 导致内存膨胀）
+  const trimmed = message.trim();
+  const asNumber = Number.parseInt(trimmed, 10);
+  if (
+    Number.isFinite(asNumber) &&
+    `${asNumber}` === trimmed &&
+    asNumber > 0 &&
+    asNumber <= 1_000_000_000
+  ) {
+    return [asNumber];
+  }
+
+  try {
+    const parsed = JSON.parse(message) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const obj = parsed as {
+      providerId?: unknown;
+      providerIds?: unknown;
+    };
+
+    if (
+      typeof obj.providerId === "number" &&
+      Number.isFinite(obj.providerId) &&
+      Number.isInteger(obj.providerId) &&
+      obj.providerId > 0 &&
+      obj.providerId <= 1_000_000_000
+    ) {
+      return [obj.providerId];
+    }
+
+    if (Array.isArray(obj.providerIds)) {
+      const ids = obj.providerIds
+        .map((v) => (typeof v === "number" ? v : Number.NaN))
+        .filter((v) => Number.isFinite(v) && Number.isInteger(v) && v > 0 && v <= 1_000_000_000);
+      return ids.length > 0 ? ids : null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureConfigInvalidationSubscription(): Promise<void> {
+  if (configInvalidationSubscriptionInitialized) return;
+  if (configInvalidationSubscriptionPromise) return configInvalidationSubscriptionPromise;
+
+  configInvalidationSubscriptionPromise = (async () => {
+    // CI/build 阶段跳过，避免订阅超时拖慢检查
+    if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
+      configInvalidationSubscriptionInitialized = true;
+      return;
+    }
+
+    // Edge runtime 跳过（不支持 ioredis）
+    if (typeof process !== "undefined" && process.env.NEXT_RUNTIME === "edge") {
+      configInvalidationSubscriptionInitialized = true;
+      return;
+    }
+
+    const cleanup = await subscribeCacheInvalidation(
+      CHANNEL_CIRCUIT_BREAKER_CONFIG_UPDATED,
+      (message) => {
+        const ids = parseConfigInvalidationProviderIds(message);
+        if (!ids) return;
+
+        for (const providerId of ids) {
+          clearConfigCache(providerId);
+        }
+
+        logger.debug("[CircuitBreaker] Config cache invalidated via pub/sub", {
+          count: ids.length,
+        });
+      }
+    );
+
+    if (!cleanup) return;
+    configInvalidationSubscriptionInitialized = true;
+  })().finally(() => {
+    configInvalidationSubscriptionPromise = null;
+  });
+
+  return configInvalidationSubscriptionPromise;
+}
+
+async function loadProviderConfigDeduped(providerId: number): Promise<CircuitBreakerConfig> {
+  const existing = configLoadInFlight.get(providerId);
+  if (existing) return existing;
+
+  const promise = loadProviderCircuitConfig(providerId);
+  configLoadInFlight.set(providerId, promise);
+
+  promise.then(
+    () => {
+      if (configLoadInFlight.get(providerId) === promise) {
+        configLoadInFlight.delete(providerId);
+      }
+    },
+    () => {
+      if (configLoadInFlight.get(providerId) === promise) {
+        configLoadInFlight.delete(providerId);
+      }
+    }
+  );
+
+  return promise;
+}
+
+export async function publishCircuitBreakerConfigInvalidation(
+  providerIds: number | number[]
+): Promise<void> {
+  const ids = Array.isArray(providerIds) ? providerIds : [providerIds];
+  if (ids.length === 0) return;
+
+  for (const providerId of ids) {
+    clearConfigCache(providerId);
+  }
+
+  await publishCacheInvalidation(
+    CHANNEL_CIRCUIT_BREAKER_CONFIG_UPDATED,
+    JSON.stringify({ providerIds: ids })
+  );
+  logger.debug("[CircuitBreaker] Published config cache invalidation", { count: ids.length });
+}
+
+function isCircuitBreakerDisabled(config: CircuitBreakerConfig): boolean {
+  return !Number.isFinite(config.failureThreshold) || config.failureThreshold <= 0;
+}
+
+function resetHealthToClosed(health: ProviderHealth): void {
+  health.circuitState = "closed";
+  health.failureCount = 0;
+  health.lastFailureTime = null;
+  health.circuitOpenUntil = null;
+  health.halfOpenSuccessCount = 0;
+}
+
+function isCircuitStateOpen(health: ProviderHealth): boolean {
+  return health.circuitState === "open";
+}
+
+function needsHealthResetToClosed(health: ProviderHealth): boolean {
+  return (
+    health.circuitState !== "closed" ||
+    health.failureCount !== 0 ||
+    health.lastFailureTime !== null ||
+    health.circuitOpenUntil !== null ||
+    health.halfOpenSuccessCount !== 0
+  );
+}
+
+function handleDisabledCircuitBreaker(
+  providerId: number,
+  health: ProviderHealth,
+  config: CircuitBreakerConfig
+): boolean {
+  if (!isCircuitBreakerDisabled(config)) {
+    return false;
+  }
+
+  if (!needsHealthResetToClosed(health)) {
+    return true;
+  }
+
+  const previousState = health.circuitState;
+  resetHealthToClosed(health);
+  logger.info(
+    `[CircuitBreaker] Provider ${providerId} circuit forced closed because circuit breaker is disabled`,
+    {
+      providerId,
+      previousState,
+    }
+  );
+  persistStateToRedis(providerId, health);
+  return true;
+}
 
 /**
  * 获取或创建供应商的健康状态（同步版本，用于内部）
@@ -159,30 +366,67 @@ function persistStateToRedis(providerId: number, health: ProviderHealth): void {
  * 获取供应商的熔断器配置（带缓存）
  * 缓存策略：内存缓存 5 分钟，避免频繁查询 Redis
  */
-async function getProviderConfig(providerId: number): Promise<CircuitBreakerConfig> {
-  const health = await getOrCreateHealth(providerId);
+async function getProviderConfigForHealth(
+  providerId: number,
+  health: ProviderHealth,
+  options?: { forceReload?: boolean }
+): Promise<CircuitBreakerConfig> {
+  // 异步初始化订阅（不阻塞主流程）
+  void ensureConfigInvalidationSubscription();
 
+  const forceReload = options?.forceReload ?? false;
   // 检查内存缓存是否有效
   const now = Date.now();
-  if (health.config && health.configLoadedAt && now - health.configLoadedAt < CONFIG_CACHE_TTL) {
+  if (
+    !forceReload &&
+    health.config &&
+    health.configLoadedAt &&
+    now - health.configLoadedAt < CONFIG_CACHE_TTL
+  ) {
     return health.config;
   }
 
-  // 从 Redis/数据库加载配置
-  try {
-    const config = await loadProviderCircuitConfig(providerId);
-    health.config = config;
-    health.configLoadedAt = now;
-    return config;
-  } catch (error) {
-    logger.warn(
-      `[CircuitBreaker] Failed to load config for provider ${providerId}, using default`,
-      {
-        error: error instanceof Error ? error.message : String(error),
+  // 从 Redis/数据库加载配置（in-flight 合并 + 版本号防止失效竞态）
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const startedAt = Date.now();
+    const versionAtStart = getConfigCacheVersion(providerId);
+
+    try {
+      const config = await loadProviderConfigDeduped(providerId);
+
+      if (getConfigCacheVersion(providerId) !== versionAtStart) {
+        // 失效事件在加载期间发生，重试一次（避免把旧结果写回缓存）
+        if (attempt < 1) continue;
+        return config;
       }
-    );
-    return DEFAULT_CIRCUIT_BREAKER_CONFIG;
+
+      health.config = config;
+      health.configLoadedAt = startedAt;
+      return config;
+    } catch (error) {
+      // 如果加载期间发生失效事件，允许重试一次再降级
+      if (getConfigCacheVersion(providerId) !== versionAtStart && attempt < 1) {
+        continue;
+      }
+
+      logger.warn(
+        `[CircuitBreaker] Failed to load config for provider ${providerId}, using default`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+        }
+      );
+
+      // 缓存默认配置，避免配置读取失败时在高频路径反复打 Redis/数据库
+      health.config = DEFAULT_CIRCUIT_BREAKER_CONFIG;
+      health.configLoadedAt = startedAt;
+      return health.config;
+    }
   }
+
+  // 理论上不应到达这里，兜底返回默认配置
+  health.config = DEFAULT_CIRCUIT_BREAKER_CONFIG;
+  health.configLoadedAt = Date.now();
+  return health.config;
 }
 
 /**
@@ -193,7 +437,7 @@ export async function getProviderHealthInfo(providerId: number): Promise<{
   config: CircuitBreakerConfig;
 }> {
   const health = await getOrCreateHealth(providerId);
-  const config = await getProviderConfig(providerId);
+  const config = await getProviderConfigForHealth(providerId, health);
   return { health, config };
 }
 
@@ -207,9 +451,19 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
     return false;
   }
 
+  const now = Date.now();
+  const config = await getProviderConfigForHealth(providerId, health, {
+    forceReload:
+      health.configLoadedAt === null ||
+      now - health.configLoadedAt > NON_CLOSED_CONFIG_FORCE_RELOAD_INTERVAL_MS,
+  });
+  if (handleDisabledCircuitBreaker(providerId, health, config)) {
+    return false;
+  }
+
   if (health.circuitState === "open") {
     // 检查是否可以转为半开状态
-    if (health.circuitOpenUntil && Date.now() > health.circuitOpenUntil) {
+    if (health.circuitOpenUntil && now > health.circuitOpenUntil) {
       health.circuitState = "half-open";
       health.halfOpenSuccessCount = 0;
       logger.info(`[CircuitBreaker] Provider ${providerId} transitioned to half-open`);
@@ -229,7 +483,11 @@ export async function isCircuitOpen(providerId: number): Promise<boolean> {
  */
 export async function recordFailure(providerId: number, error: Error): Promise<void> {
   const health = await getOrCreateHealth(providerId);
-  const config = await getProviderConfig(providerId);
+  const config = await getProviderConfigForHealth(providerId, health);
+
+  if (handleDisabledCircuitBreaker(providerId, health, config)) {
+    return;
+  }
 
   health.failureCount++;
   health.lastFailureTime = Date.now();
@@ -244,35 +502,55 @@ export async function recordFailure(providerId: number, error: Error): Promise<v
     }
   );
 
+  if (health.circuitState === "open") {
+    // 已经 OPEN：不应重复开闸/重置 openUntil；只记录计数并持久化（避免失败风暴下重复拉取配置）
+    persistStateToRedis(providerId, health);
+    return;
+  }
+
   // 检查是否需要打开熔断器
   // failureThreshold = 0 表示禁用熔断器
-  if (config.failureThreshold > 0 && health.failureCount >= config.failureThreshold) {
-    health.circuitState = "open";
-    health.circuitOpenUntil = Date.now() + config.openDuration;
-    health.halfOpenSuccessCount = 0;
+  if (health.failureCount >= config.failureThreshold) {
+    const latestConfig = await getProviderConfigForHealth(providerId, health, {
+      forceReload: true,
+    });
+    if (handleDisabledCircuitBreaker(providerId, health, latestConfig)) {
+      return;
+    }
 
-    const retryAt = new Date(health.circuitOpenUntil).toISOString();
+    if (health.failureCount < latestConfig.failureThreshold) {
+      persistStateToRedis(providerId, health);
+      return;
+    }
 
-    logger.error(
-      `[CircuitBreaker] Provider ${providerId} circuit opened after ${health.failureCount} failures, will retry at ${retryAt}`,
-      {
-        providerId,
-        failureCount: health.failureCount,
-        openDuration: config.openDuration,
-        retryAt,
-      }
-    );
+    if (!isCircuitStateOpen(health)) {
+      health.circuitState = "open";
+      health.circuitOpenUntil = Date.now() + latestConfig.openDuration;
+      health.halfOpenSuccessCount = 0;
 
-    // 异步发送熔断器告警（不阻塞主流程）
-    triggerCircuitBreakerAlert(providerId, health.failureCount, retryAt, error.message).catch(
-      (err) => {
-        logger.error({
-          action: "trigger_circuit_breaker_alert_error",
+      const retryAt = new Date(health.circuitOpenUntil).toISOString();
+
+      logger.error(
+        `[CircuitBreaker] Provider ${providerId} circuit opened after ${health.failureCount} failures, will retry at ${retryAt}`,
+        {
           providerId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    );
+          failureCount: health.failureCount,
+          openDuration: latestConfig.openDuration,
+          retryAt,
+        }
+      );
+
+      // 异步发送熔断器告警（不阻塞主流程）
+      triggerCircuitBreakerAlert(providerId, health.failureCount, retryAt, error.message).catch(
+        (err) => {
+          logger.error({
+            action: "trigger_circuit_breaker_alert_error",
+            providerId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      );
+    }
   }
 
   // 持久化状态变更到 Redis
@@ -333,8 +611,12 @@ async function triggerCircuitBreakerAlert(
  */
 export async function recordSuccess(providerId: number): Promise<void> {
   const health = await getOrCreateHealth(providerId);
-  const config = await getProviderConfig(providerId);
+  const config = await getProviderConfigForHealth(providerId, health);
   let stateChanged = false;
+
+  if (handleDisabledCircuitBreaker(providerId, health, config)) {
+    return;
+  }
 
   if (health.circuitState === "half-open") {
     // 半开状态下成功
@@ -486,8 +768,22 @@ export async function getAllHealthStatusAsync(
         });
       }
 
-      // Mark IDs without Redis state as "loaded" to prevent repeated queries
+      // Mark IDs without Redis state as "loaded" to prevent repeated queries.
+      // If Redis has no state but memory is non-closed, force-reset to avoid stale states.
       for (const id of needsRefresh) {
+        if (!redisStates.has(id)) {
+          const health = healthMap.get(id);
+          if (health && health.circuitState !== "closed") {
+            resetHealthToClosed(health);
+            logger.info(
+              `[CircuitBreaker] Provider ${id} reset to closed (Redis state missing on batch load)`,
+              {
+                providerId: id,
+              }
+            );
+          }
+        }
+
         loadedFromRedis.add(id);
       }
     } catch (error) {
@@ -495,6 +791,23 @@ export async function getAllHealthStatusAsync(
         error: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  const nonClosedIds = providerIds.filter((providerId) => {
+    const health = healthMap.get(providerId);
+    return health && health.circuitState !== "closed";
+  });
+  const forcedConfigMap = new Map<number, CircuitBreakerConfig>();
+  for (let i = 0; i < nonClosedIds.length; i += CONFIG_FORCE_RELOAD_BATCH_SIZE) {
+    const batch = nonClosedIds.slice(i, i + CONFIG_FORCE_RELOAD_BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (providerId) => {
+        const health = healthMap.get(providerId);
+        if (!health) return;
+        const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
+        forcedConfigMap.set(providerId, config);
+      })
+    );
   }
 
   // Only include status for requested providers (not all in healthMap)
@@ -513,6 +826,16 @@ export async function getAllHealthStatusAsync(
         configLoadedAt: null,
       };
       healthMap.set(providerId, health);
+    }
+
+    if (health.circuitState !== "closed") {
+      const config =
+        forcedConfigMap.get(providerId) ??
+        (await getProviderConfigForHealth(providerId, health, { forceReload: true }));
+      if (handleDisabledCircuitBreaker(providerId, health, config)) {
+        status[providerId] = { ...health };
+        continue;
+      }
     }
 
     // Check and update expired circuit breaker status
@@ -561,6 +884,36 @@ export function resetCircuit(providerId: number): void {
 }
 
 /**
+ * 强制将熔断器状态关闭并写回 Redis（跨实例立即生效）
+ * 典型使用场景：管理员禁用熔断器配置后，应立即解除 OPEN/HALF-OPEN 拦截。
+ */
+export async function forceCloseCircuitState(
+  providerId: number,
+  options?: { reason?: string }
+): Promise<void> {
+  const health = healthMap.get(providerId);
+  const previousState = health?.circuitState ?? null;
+
+  if (health) {
+    resetHealthToClosed(health);
+  }
+
+  await saveCircuitState(providerId, {
+    failureCount: 0,
+    lastFailureTime: null,
+    circuitState: "closed",
+    circuitOpenUntil: null,
+    halfOpenSuccessCount: 0,
+  });
+
+  logger.info(`[CircuitBreaker] Provider ${providerId} circuit forced closed`, {
+    providerId,
+    previousState,
+    reason: options?.reason,
+  });
+}
+
+/**
  * 将熔断器从 OPEN 状态转换到 HALF_OPEN 状态（用于智能探测）
  * 比直接 resetCircuit 更安全，允许通过 HALF_OPEN 阶段验证恢复
  */
@@ -605,12 +958,15 @@ export function tripToHalfOpen(providerId: number): boolean {
  * 清除供应商的配置缓存（供应商更新后调用）
  */
 export function clearConfigCache(providerId: number): void {
+  bumpConfigCacheVersion(providerId);
+  configLoadInFlight.delete(providerId);
+
   const health = healthMap.get(providerId);
   if (health) {
     health.config = null;
     health.configLoadedAt = null;
-    logger.debug(`[CircuitBreaker] Cleared config cache for provider ${providerId}`);
   }
+  logger.debug(`[CircuitBreaker] Cleared config cache for provider ${providerId}`);
 }
 
 /**
@@ -621,6 +977,8 @@ export async function clearProviderState(providerId: number): Promise<void> {
   // 清除内存状态
   healthMap.delete(providerId);
   loadedFromRedis.delete(providerId);
+  configLoadInFlight.delete(providerId);
+  configCacheVersion.delete(providerId);
 
   // 清除 Redis 状态
   const { deleteCircuitState } = await import("@/lib/redis/circuit-breaker-state");
