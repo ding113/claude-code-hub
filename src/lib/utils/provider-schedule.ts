@@ -53,9 +53,14 @@ export function isProviderActiveNow(
   return nowMinutes >= startMinutes || nowMinutes < endMinutes;
 }
 
+const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 function parseHHMM(time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return h * 60 + m;
+  const match = HHMM_RE.exec(time);
+  if (!match) {
+    return Number.NaN;
+  }
+  return Number.parseInt(match[1], 10) * 60 + Number.parseInt(match[2], 10);
 }
 
 function getCurrentMinutesInTimezone(now: Date, timezone: string): number {

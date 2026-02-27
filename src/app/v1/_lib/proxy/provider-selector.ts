@@ -538,6 +538,20 @@ export class ProxyProviderResolver {
       return null;
     }
 
+    // 调度时间窗口检查：防止会话复用绕过时间调度
+    const systemTimezone = await resolveSystemTimezone();
+    if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
+      logger.debug("ProviderSelector: Session provider outside active schedule", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        activeTimeStart: provider.activeTimeStart,
+        activeTimeEnd: provider.activeTimeEnd,
+        timezone: systemTimezone,
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
+      return null;
+    }
+
     // 临时熔断（vendor+type）：防止会话复用绕过故障隔离
     if (
       provider.providerVendorId &&

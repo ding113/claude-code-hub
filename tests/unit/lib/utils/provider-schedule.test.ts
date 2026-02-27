@@ -159,5 +159,20 @@ describe("isProviderActiveNow", () => {
       const now = makeDate(12, 0, "UTC");
       expect(isProviderActiveNow("bad", "worse", "UTC", now)).toBe(true);
     });
+
+    it("returns true (fail-open) for out-of-range hour (24:00)", () => {
+      const now = makeDate(12, 0, "UTC");
+      expect(isProviderActiveNow("24:00", "17:00", "UTC", now)).toBe(true);
+    });
+
+    it("returns true (fail-open) for single-digit hour (9:00)", () => {
+      const now = makeDate(12, 0, "UTC");
+      expect(isProviderActiveNow("9:00", "17:00", "UTC", now)).toBe(true);
+    });
+
+    it("returns true (fail-open) for out-of-range minutes (99:99)", () => {
+      const now = makeDate(12, 0, "UTC");
+      expect(isProviderActiveNow("99:99", "17:00", "UTC", now)).toBe(true);
+    });
   });
 });
