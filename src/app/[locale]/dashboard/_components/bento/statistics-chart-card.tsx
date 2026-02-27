@@ -275,7 +275,7 @@ export function StatisticsChartCard({
   return (
     <BentoCard
       ref={cardRef}
-      className={cn("p-0 md:p-0 max-h-[var(--cch-viewport-height-50)]", className)}
+      className={cn("p-0 md:p-1 max-h-[var(--cch-viewport-height-50)]", className)}
     >
       {/* Header */}
       <div
