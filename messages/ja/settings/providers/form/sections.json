@@ -369,6 +369,16 @@
         "placeholder": "1"
       }
     },
+    "activeTime": {
+      "title": "スケジュール有効時間",
+      "description": "指定した時間帯に自動的にプロバイダーを有効化します",
+      "toggleLabel": "スケジュールを有効化",
+      "toggleDescription": "有効にすると、指定した時間帯のみプロバイダーがアクティブになります",
+      "startLabel": "開始時刻",
+      "endLabel": "終了時刻",
+      "timezoneNote": "時刻はシステムのタイムゾーンに基づきます",
+      "crossDayHint": "日跨ぎスケジュール: {start} から翌日 {end} まで有効"
+    },
     "summary": {
       "models": "許可モデル {count} 件",
       "none": "未設定",

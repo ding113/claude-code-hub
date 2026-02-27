@@ -274,6 +274,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         providerVendorId: provider.providerVendorId,
         preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
+        activeTimeStart: provider.activeTimeStart,
+        activeTimeEnd: provider.activeTimeEnd,
         allowedModels: provider.allowedModels,
         allowedClients: provider.allowedClients,
         blockedClients: provider.blockedClients,
@@ -480,6 +482,8 @@ export async function addProvider(data: {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
+  active_time_start?: string | null;
+  active_time_end?: string | null;
   allowed_models?: string[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
@@ -653,6 +657,8 @@ export async function editProvider(
     provider_type?: ProviderType;
     preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;
+    active_time_start?: string | null;
+    active_time_end?: string | null;
     allowed_models?: string[] | null;
     allowed_clients?: string[] | null;
     blocked_clients?: string[] | null;
@@ -1266,6 +1272,8 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   group_priorities: "groupPriorities",
   provider_type: "providerType",
   preserve_client_ip: "preserveClientIp",
+  active_time_start: "activeTimeStart",
+  active_time_end: "activeTimeEnd",
   model_redirects: "modelRedirects",
   allowed_models: "allowedModels",
   limit_5h_usd: "limit5hUsd",
@@ -1427,6 +1435,12 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.preserve_client_ip !== undefined) {
     result.preserveClientIp = applyUpdates.preserve_client_ip;
   }
+  if (applyUpdates.active_time_start !== undefined) {
+    result.activeTimeStart = applyUpdates.active_time_start;
+  }
+  if (applyUpdates.active_time_end !== undefined) {
+    result.activeTimeEnd = applyUpdates.active_time_end;
+  }
   if (applyUpdates.group_priorities !== undefined) {
     result.groupPriorities = applyUpdates.group_priorities;
   }
@@ -1536,6 +1550,8 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
   anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
   preserve_client_ip: "preserveClientIp",
+  active_time_start: "activeTimeStart",
+  active_time_end: "activeTimeEnd",
   group_priorities: "groupPriorities",
   cache_ttl_preference: "cacheTtlPreference",
   swap_cache_ttl_billing: "swapCacheTtlBilling",

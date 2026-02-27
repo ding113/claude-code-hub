@@ -69,7 +69,9 @@ export type ProviderBatchPatchField =
   | "blocked_clients"
   | "anthropic_thinking_budget_preference"
   | "anthropic_adaptive_thinking"
-  // Routing
+  // Routing / Schedule
+  | "active_time_start"
+  | "active_time_end"
   | "preserve_client_ip"
   | "group_priorities"
   | "cache_ttl_preference"
@@ -118,7 +120,9 @@ export interface ProviderBatchPatchDraft {
   blocked_clients?: ProviderPatchDraftInput<string[]>;
   anthropic_thinking_budget_preference?: ProviderPatchDraftInput<AnthropicThinkingBudgetPreference>;
   anthropic_adaptive_thinking?: ProviderPatchDraftInput<AnthropicAdaptiveThinkingConfig>;
-  // Routing
+  // Routing / Schedule
+  active_time_start?: ProviderPatchDraftInput<string>;
+  active_time_end?: ProviderPatchDraftInput<string>;
   preserve_client_ip?: ProviderPatchDraftInput<boolean>;
   group_priorities?: ProviderPatchDraftInput<Record<string, number>>;
   cache_ttl_preference?: ProviderPatchDraftInput<CacheTtlPreference>;
@@ -168,7 +172,9 @@ export interface ProviderBatchPatch {
   blocked_clients: ProviderPatchOperation<string[]>;
   anthropic_thinking_budget_preference: ProviderPatchOperation<AnthropicThinkingBudgetPreference>;
   anthropic_adaptive_thinking: ProviderPatchOperation<AnthropicAdaptiveThinkingConfig>;
-  // Routing
+  // Routing / Schedule
+  active_time_start: ProviderPatchOperation<string>;
+  active_time_end: ProviderPatchOperation<string>;
   preserve_client_ip: ProviderPatchOperation<boolean>;
   group_priorities: ProviderPatchOperation<Record<string, number>>;
   cache_ttl_preference: ProviderPatchOperation<CacheTtlPreference>;
@@ -218,7 +224,9 @@ export interface ProviderBatchApplyUpdates {
   blocked_clients?: string[];
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
-  // Routing
+  // Routing / Schedule
+  active_time_start?: string | null;
+  active_time_end?: string | null;
   preserve_client_ip?: boolean;
   group_priorities?: Record<string, number> | null;
   cache_ttl_preference?: CacheTtlPreference | null;
@@ -287,6 +295,10 @@ export interface Provider {
   // 是否透传客户端 IP
   preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;
+
+  // Scheduled active time window (HH:mm format, null = always active)
+  activeTimeStart: string | null;
+  activeTimeEnd: string | null;
 
   // 模型列表：双重语义
   // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
@@ -398,6 +410,9 @@ export interface ProviderDisplay {
   // 是否透传客户端 IP
   preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;
+  // Scheduled active time window
+  activeTimeStart: string | null;
+  activeTimeEnd: string | null;
   // 模型列表（双重语义）
   allowedModels: string[] | null;
   allowedClients: string[]; // Allowed client patterns (empty = no restriction)
@@ -490,6 +505,8 @@ export interface CreateProviderData {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
+  active_time_start?: string | null;
+  active_time_end?: string | null;
   allowed_models?: string[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;
@@ -566,6 +583,8 @@ export interface UpdateProviderData {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
+  active_time_start?: string | null;
+  active_time_end?: string | null;
   allowed_models?: string[] | null;
   allowed_clients?: string[] | null;
   blocked_clients?: string[] | null;

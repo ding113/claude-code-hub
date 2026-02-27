@@ -45,6 +45,8 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_ADAPTIVE_THINKING_MODEL_MATCH_MODE: "routing.anthropicAdaptiveThinking",
   SET_ADAPTIVE_THINKING_MODELS: "routing.anthropicAdaptiveThinking",
   SET_GEMINI_GOOGLE_SEARCH: "routing.geminiGoogleSearchPreference",
+  SET_ACTIVE_TIME_START: "routing.activeTimeStart",
+  SET_ACTIVE_TIME_END: "routing.activeTimeEnd",
   SET_LIMIT_5H_USD: "rateLimit.limit5hUsd",
   SET_LIMIT_DAILY_USD: "rateLimit.limitDailyUsd",
   SET_DAILY_RESET_MODE: "rateLimit.dailyResetMode",
@@ -110,6 +112,8 @@ export function createInitialState(
         anthropicThinkingBudgetPreference: "inherit",
         anthropicAdaptiveThinking: null,
         geminiGoogleSearchPreference: "inherit",
+        activeTimeStart: null,
+        activeTimeEnd: null,
       },
       rateLimit: {
         limit5hUsd: null,
@@ -190,6 +194,8 @@ export function createInitialState(
         sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
       anthropicAdaptiveThinking: sourceProvider?.anthropicAdaptiveThinking ?? null,
       geminiGoogleSearchPreference: sourceProvider?.geminiGoogleSearchPreference ?? "inherit",
+      activeTimeStart: sourceProvider?.activeTimeStart ?? null,
+      activeTimeEnd: sourceProvider?.activeTimeEnd ?? null,
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
@@ -374,6 +380,16 @@ export function providerFormReducer(
       return {
         ...state,
         routing: { ...state.routing, geminiGoogleSearchPreference: action.payload },
+      };
+    case "SET_ACTIVE_TIME_START":
+      return {
+        ...state,
+        routing: { ...state.routing, activeTimeStart: action.payload },
+      };
+    case "SET_ACTIVE_TIME_END":
+      return {
+        ...state,
+        routing: { ...state.routing, activeTimeEnd: action.payload },
       };
 
     // Rate limit

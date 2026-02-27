@@ -46,7 +46,9 @@
     "modelRedirects": "モデルリダイレクト",
     "allowedModels": "許可モデル",
     "thinkingBudget": "思考バジェット",
-    "adaptiveThinking": "アダプティブ思考"
+    "adaptiveThinking": "アダプティブ思考",
+    "activeTimeStart": "スケジュール開始時刻",
+    "activeTimeEnd": "スケジュール終了時刻"
   },
   "affectedProviders": {
     "title": "影響を受けるプロバイダー",

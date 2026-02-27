@@ -369,6 +369,16 @@
         "placeholder": "1"
       }
     },
+    "activeTime": {
+      "title": "排程時間窗口",
+      "description": "在指定時間窗口內自動啟用供應商",
+      "toggleLabel": "啟用時間排程",
+      "toggleDescription": "啟用後，此供應商僅在指定時間窗口內處於活躍狀態",
+      "startLabel": "開始時間",
+      "endLabel": "結束時間",
+      "timezoneNote": "時間依據系統時區",
+      "crossDayHint": "跨天排程: 從 {start} 到隔日 {end}"
+    },
     "summary": {
       "models": "{count} 個允許模型",
       "none": "未設定",

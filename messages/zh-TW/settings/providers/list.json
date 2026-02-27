@@ -41,5 +41,6 @@
   "actionResetCircuit": "重置熔斷",
   "actionResetUsage": "重設用量",
   "actionDelete": "刪除",
-  "selectProvider": "選擇 {name}"
+  "selectProvider": "選擇 {name}",
+  "schedule": "排程"
 }

@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle,
+  Clock,
   Copy,
   Edit,
   Globe,
@@ -539,6 +540,13 @@ export function ProviderRichListItem({
               {tList("endpointCircuitBroken")}
             </Badge>
           )}
+          {/* Schedule badge */}
+          {provider.activeTimeStart && provider.activeTimeEnd && (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {provider.activeTimeStart}-{provider.activeTimeEnd}
+            </Badge>
+          )}
         </div>
 
         {/* Mobile: metrics row */}
@@ -736,6 +744,13 @@ export function ProviderRichListItem({
               >
                 <AlertTriangle className="h-3 w-3" />
                 {tList("endpointCircuitBroken")}
+              </Badge>
+            )}
+            {/* Schedule badge */}
+            {provider.activeTimeStart && provider.activeTimeEnd && (
+              <Badge variant="outline" className="flex items-center gap-1 flex-shrink-0">
+                <Clock className="h-3 w-3" />
+                {provider.activeTimeStart}-{provider.activeTimeEnd}
               </Badge>
             )}
           </div>

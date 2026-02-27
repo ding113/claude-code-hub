@@ -46,7 +46,9 @@
     "modelRedirects": "模型重定向",
     "allowedModels": "允许的模型",
     "thinkingBudget": "思维预算",
-    "adaptiveThinking": "自适应思维"
+    "adaptiveThinking": "自适应思维",
+    "activeTimeStart": "调度开始时间",
+    "activeTimeEnd": "调度结束时间"
   },
   "affectedProviders": {
     "title": "受影响的供应商",

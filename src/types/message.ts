@@ -172,6 +172,7 @@ export interface ProviderChainItem {
         | "type_mismatch"
         | "model_not_allowed"
         | "context_1m_disabled" // 供应商禁用了 1M 上下文功能
+        | "schedule_inactive" // 供应商不在调度时间窗口内
         | "disabled"
         | "client_restriction"; // Provider filtered due to client restriction
       details?: string; // 额外信息（如费用：$15.2/$15）

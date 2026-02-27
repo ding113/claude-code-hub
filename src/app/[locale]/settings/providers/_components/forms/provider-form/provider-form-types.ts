@@ -62,6 +62,9 @@ export interface RoutingState {
   anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   // Gemini-specific
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference;
+  // Scheduled active time window (HH:mm format, null = always active)
+  activeTimeStart: string | null;
+  activeTimeEnd: string | null;
 }
 
 export interface RateLimitState {
@@ -153,6 +156,8 @@ export type ProviderFormAction =
   | { type: "SET_ADAPTIVE_THINKING_MODELS"; payload: string[] }
   | { type: "SET_ADAPTIVE_THINKING_ENABLED"; payload: boolean }
   | { type: "SET_GEMINI_GOOGLE_SEARCH"; payload: GeminiGoogleSearchPreference }
+  | { type: "SET_ACTIVE_TIME_START"; payload: string | null }
+  | { type: "SET_ACTIVE_TIME_END"; payload: string | null }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }
   | { type: "SET_LIMIT_DAILY_USD"; payload: number | null }

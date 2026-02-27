@@ -339,6 +339,8 @@ function ProviderFormContent({
           anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
           anthropic_adaptive_thinking: state.routing.anthropicAdaptiveThinking,
           gemini_google_search_preference: state.routing.geminiGoogleSearchPreference,
+          active_time_start: state.routing.activeTimeStart || null,
+          active_time_end: state.routing.activeTimeEnd || null,
           limit_5h_usd: state.rateLimit.limit5hUsd,
           limit_daily_usd: state.rateLimit.limitDailyUsd,
           daily_reset_mode: state.rateLimit.dailyResetMode,
