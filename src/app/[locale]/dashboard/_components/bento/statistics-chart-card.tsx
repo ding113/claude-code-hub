@@ -97,7 +97,7 @@ export function StatisticsChartCard({
     const compute = () => {
       const cardStyle = getComputedStyle(card);
       const viewportHeightPx = window.visualViewport?.height ?? window.innerHeight;
-      const fallbackMaxHeightPx = Math.floor(Math.min(viewportHeightPx * 0.6, 720));
+      const fallbackMaxHeightPx = Math.min(Math.floor(viewportHeightPx * 0.6), 720);
       const maxHeightPx = parsePx(cardStyle.maxHeight) ?? fallbackMaxHeightPx;
       const minHeightPx = parsePx(cardStyle.minHeight) ?? 0;
       const effectiveMaxHeightPx = Math.max(maxHeightPx, minHeightPx);
@@ -155,10 +155,8 @@ export function StatisticsChartCard({
     visualViewport?.addEventListener("resize", compute);
 
     const observer = new ResizeObserver(compute);
-    observer.observe(card);
     observer.observe(header);
     observer.observe(metricTabs);
-    observer.observe(chartWrapper);
     if (enableUserFilter && legendRef.current) {
       observer.observe(legendRef.current);
     }
