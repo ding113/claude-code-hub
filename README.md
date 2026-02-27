@@ -278,6 +278,8 @@ bun install
 bun run demo
 ```
 
+如端口冲突，可通过环境变量 `DEMO_PORT` 覆盖端口（示例见 `docs/demo.md`）。
+
 更多说明见 `docs/demo.md`。
 
 ### 手动部署（bun build + start）

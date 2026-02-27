@@ -19,33 +19,49 @@ function isEmbeddedDbEnabled(): boolean {
 
 function getEmbeddedDbDir(): string {
   const env = getEnvConfig();
-  return env.CCH_EMBEDDED_DB_DIR ?? path.join(process.cwd(), "data", "pglite");
+  return env.CCH_EMBEDDED_DB_DIR ?? "data/pglite";
 }
+
+type EmbeddedDbTx = {
+  exec: (query: string) => Promise<unknown>;
+  query: (query: string, params?: unknown[]) => Promise<unknown>;
+};
+
+type EmbeddedDbClient = {
+  exec: (query: string) => Promise<unknown>;
+  query: (query: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
+  transaction: <T>(fn: (tx: EmbeddedDbTx) => Promise<T>) => Promise<T>;
+};
 
 async function runEmbeddedDbMigrations(input: {
   migrationsFolder: string;
   dataDir: string;
 }): Promise<void> {
   const db = drizzlePglite({ connection: { dataDir: input.dataDir } });
-  const client = (db as unknown as { $client?: unknown }).$client as
-    | undefined
-    | {
-        exec: (query: string) => Promise<unknown>;
-        query: (
-          query: string,
-          params?: unknown[]
-        ) => Promise<{ rows: Array<Record<string, unknown>> }>;
-        transaction: <T>(
-          fn: (tx: {
-            exec: (query: string) => Promise<unknown>;
-            query: (query: string, params?: unknown[]) => Promise<unknown>;
-          }) => Promise<T>
-        ) => Promise<T>;
-      };
+  const clientRaw = (db as unknown as { $client?: unknown }).$client;
 
-  if (!client) {
+  // NOTE: 这里依赖 drizzle-orm/pglite 将底层 PGlite 实例挂在 `db.$client` 上。
+  // 已在 drizzle-orm ^0.44 与 @electric-sql/pglite ^0.3.15 上验证。
+  if (!clientRaw) {
     throw new Error("Embedded DB client is not available");
   }
+
+  const clientObject = clientRaw as Record<string, unknown>;
+  const execType = typeof clientObject.exec;
+  const queryType = typeof clientObject.query;
+  const transactionType = typeof clientObject.transaction;
+
+  const missingMethods = [
+    execType === "function" ? null : `exec (${execType})`,
+    queryType === "function" ? null : `query (${queryType})`,
+    transactionType === "function" ? null : `transaction (${transactionType})`,
+  ].filter((v): v is string => v !== null);
+
+  if (missingMethods.length > 0) {
+    throw new Error(`Invalid embedded DB client: missing methods: ${missingMethods.join(", ")}`);
+  }
+
+  const client = clientRaw as EmbeddedDbClient;
 
   // drizzle-orm migrator expects migration.sql[] to already be split into single statements.
   // Some historical migrations in this repo contain multiple SQL commands in one file without
@@ -285,6 +301,9 @@ export async function runMigrations() {
 export async function checkDatabaseConnection(retries = 30, delay = 2000): Promise<boolean> {
   if (isEmbeddedDbEnabled()) {
     try {
+      // Startup readiness check: create a fresh drizzlePglite instance with getEmbeddedDbDir()
+      // and validate it via a simple `SELECT 1`. If this is ever called frequently at runtime,
+      // consider caching/reusing a single drizzlePglite instance to avoid repeated initialization.
       const db = drizzlePglite({ connection: { dataDir: getEmbeddedDbDir() } });
       await db.execute(sql`SELECT 1`);
       logger.info("Embedded database ready");

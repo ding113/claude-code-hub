@@ -40,9 +40,9 @@
     "i18n:audit-messages-no-emoji:fail": "node scripts/audit-messages-no-emoji.js --format=tsv --fail"
   },
   "dependencies": {
-    "@electric-sql/pglite": "^0.3.15",
     "@bull-board/api": "^6",
     "@bull-board/express": "^6",
+    "@electric-sql/pglite": "^0.3.15",
     "@hono/swagger-ui": "^0.5",
     "@hono/zod-openapi": "^1",
     "@hookform/resolvers": "^5",

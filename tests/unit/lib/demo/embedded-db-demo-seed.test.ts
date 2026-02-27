@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { mkdtemp, rm } from "node:fs/promises";
-import { afterAll, describe, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 function toInt(value: unknown): number {
   if (typeof value === "number") return value;
@@ -41,8 +41,30 @@ function requireSingleRow<T>(result: unknown): T {
 
 describe("demo: embedded db + seed", () => {
   let dataDir: string | null = null;
+  const envKeys = [
+    "NODE_ENV",
+    "DSN",
+    "CCH_EMBEDDED_DB",
+    "CCH_EMBEDDED_DB_DIR",
+    "CCH_DEMO_SEED",
+    "ENABLE_RATE_LIMIT",
+    "ADMIN_TOKEN",
+  ];
+  let originalEnv: Partial<Record<string, string | undefined>> = {};
+
+  beforeAll(() => {
+    originalEnv = Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
+  });
 
   afterAll(async () => {
+    for (const [key, value] of Object.entries(originalEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+
     if (!dataDir) return;
     try {
       await rm(dataDir, { recursive: true, force: true });

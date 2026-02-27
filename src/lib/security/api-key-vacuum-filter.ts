@@ -308,10 +308,12 @@ class ApiKeyVacuumFilter {
   private async reloadFromDatabase(options: ReloadOptions): Promise<void> {
     // CI / 测试环境通常不接 DB；避免大量告警日志
     const dsn = process.env.DSN || "";
+    const embeddedDbRaw = (process.env.CCH_EMBEDDED_DB || "").trim().toLowerCase();
     const embeddedDbEnabled =
-      process.env.CCH_EMBEDDED_DB === "true" ||
-      process.env.CCH_EMBEDDED_DB === "1" ||
-      process.env.CCH_EMBEDDED_DB === "yes";
+      embeddedDbRaw === "true" ||
+      embeddedDbRaw === "1" ||
+      embeddedDbRaw === "yes" ||
+      embeddedDbRaw === "on";
     if (
       process.env.CI === "true" ||
       process.env.NODE_ENV === "test" ||

@@ -11,6 +11,11 @@ bun install
 bun run demo
 ```
 
+如果端口冲突，可通过环境变量覆盖：
+
+- macOS/Linux：`DEMO_PORT=13501 bun run demo`
+- PowerShell：`$env:DEMO_PORT="13501"; bun run demo`
+
 启动后会在控制台打印：
 
 - 访问地址（`/zh-CN/login`、`/zh-CN/dashboard`）
@@ -26,4 +31,3 @@ bun run demo
 
 - 内置数据库仅用于本地 Demo/开发体验，不建议用于生产部署。
 - 生产环境仍需配置 `DSN`（Postgres）与 `REDIS_URL`（可选，用于限流与 Session 追踪）。
-
