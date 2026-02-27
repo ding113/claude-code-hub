@@ -417,6 +417,11 @@ export function StatisticsChartCard({
             />
             <ChartTooltip
               cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1, strokeDasharray: "4 4" }}
+              wrapperStyle={{
+                transform: "translateY(-100%)",
+                marginTop: "-20px",
+                zIndex: 1000,
+              }}
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
                 const filteredPayload = payload.filter((entry) => {
@@ -427,7 +432,7 @@ export function StatisticsChartCard({
                 if (!filteredPayload.length) return null;
 
                 return (
-                  <div className="rounded-lg border bg-card/95 backdrop-blur-sm p-3 shadow-lg min-w-[180px]">
+                  <div className="rounded-lg border bg-background p-3 shadow-sm min-w-[180px]">
                     <div className="text-xs font-medium text-center mb-2 pb-2 border-b border-border/50">
                       {formatTooltipDate(String(label ?? ""))}
                     </div>
