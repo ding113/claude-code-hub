@@ -448,6 +448,17 @@ export const CreateProviderSchema = z
       .default("claude"),
     preserve_client_ip: z.boolean().optional().default(false),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    // Scheduled active time window (HH:mm format)
+    active_time_start: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_start must be HH:mm format")
+      .nullable()
+      .optional(),
+    active_time_end: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_end must be HH:mm format")
+      .nullable()
+      .optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
     allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
     blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
@@ -621,6 +632,23 @@ export const CreateProviderSchema = z
         });
       }
     }
+    // active_time_start and active_time_end must be both set or both null
+    const hasStart = data.active_time_start != null;
+    const hasEnd = data.active_time_end != null;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must be both set or both cleared",
+        path: [hasStart ? "active_time_end" : "active_time_start"],
+      });
+    }
+    if (hasStart && hasEnd && data.active_time_start === data.active_time_end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must not be the same",
+        path: ["active_time_end"],
+      });
+    }
   });
 
 /**
@@ -656,6 +684,16 @@ export const UpdateProviderSchema = z
       .optional(),
     preserve_client_ip: z.boolean().optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    active_time_start: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_start must be HH:mm format")
+      .nullable()
+      .optional(),
+    active_time_end: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_end must be HH:mm format")
+      .nullable()
+      .optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
     allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
     blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
@@ -823,6 +861,23 @@ export const UpdateProviderSchema = z
           path: ["anthropic_thinking_budget_preference"],
         });
       }
+    }
+    // active_time_start and active_time_end must be both set or both null
+    const hasStart = data.active_time_start != null;
+    const hasEnd = data.active_time_end != null;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must be both set or both cleared",
+        path: [hasStart ? "active_time_end" : "active_time_start"],
+      });
+    }
+    if (hasStart && hasEnd && data.active_time_start === data.active_time_end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must not be the same",
+        path: ["active_time_end"],
+      });
     }
   });
 

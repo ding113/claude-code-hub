@@ -909,6 +909,122 @@ describe("provider patch contract", () => {
 
       expect(hasProviderBatchPatchChanges(normalized.data)).toBe(false);
     });
+
+    it("detects change on active_time_start", () => {
+      const normalized = normalizeProviderBatchPatchDraft({
+        active_time_start: { set: "09:00" },
+      });
+
+      expect(normalized.ok).toBe(true);
+      if (!normalized.ok) return;
+
+      expect(hasProviderBatchPatchChanges(normalized.data)).toBe(true);
+    });
+
+    it("detects change on active_time_end", () => {
+      const normalized = normalizeProviderBatchPatchDraft({
+        active_time_end: { set: "17:00" },
+      });
+
+      expect(normalized.ok).toBe(true);
+      if (!normalized.ok) return;
+
+      expect(hasProviderBatchPatchChanges(normalized.data)).toBe(true);
+    });
+  });
+
+  describe("active_time_start / active_time_end batch patch", () => {
+    it("accepts active_time_start as string and maps to apply payload", () => {
+      const result = prepareProviderBatchApplyUpdates({
+        active_time_start: { set: "09:00" },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.active_time_start).toBe("09:00");
+    });
+
+    it("clears active_time_start to null", () => {
+      const result = prepareProviderBatchApplyUpdates({
+        active_time_start: { clear: true },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.active_time_start).toBeNull();
+    });
+
+    it("accepts active_time_end as string and maps to apply payload", () => {
+      const result = prepareProviderBatchApplyUpdates({
+        active_time_end: { set: "17:00" },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.active_time_end).toBe("17:00");
+    });
+
+    it("clears active_time_end to null", () => {
+      const result = prepareProviderBatchApplyUpdates({
+        active_time_end: { clear: true },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      expect(result.data.active_time_end).toBeNull();
+    });
+
+    it("rejects non-string value for active_time_start", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        active_time_start: { set: 900 } as never,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+      expect(result.error.field).toBe("active_time_start");
+    });
+
+    it("rejects non-string value for active_time_end", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        active_time_end: { set: 900 } as never,
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+      expect(result.error.field).toBe("active_time_end");
+    });
+
+    it("rejects invalid HH:mm format for active_time_start", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        active_time_start: { set: "9:00" },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+      expect(result.error.field).toBe("active_time_start");
+    });
+
+    it("rejects out-of-range time for active_time_end", () => {
+      const result = normalizeProviderBatchPatchDraft({
+        active_time_end: { set: "25:00" },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+
+      expect(result.error.code).toBe(PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE);
+      expect(result.error.field).toBe("active_time_end");
+    });
   });
 
   describe("combined set across all categories", () => {
@@ -936,6 +1052,9 @@ describe("provider patch contract", () => {
         // mcp
         mcp_passthrough_type: { set: "minimax" },
         mcp_passthrough_url: { set: "https://api.minimaxi.com" },
+        // schedule
+        active_time_start: { set: "09:00" },
+        active_time_end: { set: "17:00" },
       });
 
       expect(result.ok).toBe(true);
@@ -957,6 +1076,8 @@ describe("provider patch contract", () => {
       expect(result.data.first_byte_timeout_streaming_ms).toBe(15000);
       expect(result.data.mcp_passthrough_type).toBe("minimax");
       expect(result.data.mcp_passthrough_url).toBe("https://api.minimaxi.com");
+      expect(result.data.active_time_start).toBe("09:00");
+      expect(result.data.active_time_end).toBe("17:00");
     });
   });
 });

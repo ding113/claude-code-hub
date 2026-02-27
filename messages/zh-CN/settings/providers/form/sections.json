@@ -100,6 +100,16 @@
         "noGroups": "请先设置分组标签，才能配置分组优先级"
       }
     },
+    "activeTime": {
+      "title": "调度时间窗口",
+      "description": "在指定时间窗口内自动激活供应商",
+      "toggleLabel": "启用时间调度",
+      "toggleDescription": "启用后，此供应商仅在指定时间窗口内处于活跃状态",
+      "startLabel": "开始时间",
+      "endLabel": "结束时间",
+      "timezoneNote": "时间基于系统时区",
+      "crossDayHint": "跨天调度: 从 {start} 到次日 {end}"
+    },
     "cacheTtl": {
       "label": "Cache TTL 覆写",
       "options": {

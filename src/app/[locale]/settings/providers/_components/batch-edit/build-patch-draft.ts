@@ -43,6 +43,20 @@ export function buildPatchDraftFromFormState(
   if (dirtyFields.has("routing.preserveClientIp")) {
     draft.preserve_client_ip = { set: state.routing.preserveClientIp };
   }
+  if (dirtyFields.has("routing.activeTimeStart")) {
+    if (state.routing.activeTimeStart === null) {
+      draft.active_time_start = { clear: true };
+    } else {
+      draft.active_time_start = { set: state.routing.activeTimeStart };
+    }
+  }
+  if (dirtyFields.has("routing.activeTimeEnd")) {
+    if (state.routing.activeTimeEnd === null) {
+      draft.active_time_end = { clear: true };
+    } else {
+      draft.active_time_end = { set: state.routing.activeTimeEnd };
+    }
+  }
   if (dirtyFields.has("routing.modelRedirects")) {
     const entries = Object.keys(state.routing.modelRedirects);
     if (entries.length === 0) {

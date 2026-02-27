@@ -46,7 +46,9 @@
     "modelRedirects": "模型重新導向",
     "allowedModels": "允許的模型",
     "thinkingBudget": "思維預算",
-    "adaptiveThinking": "自適應思維"
+    "adaptiveThinking": "自適應思維",
+    "activeTimeStart": "排程開始時間",
+    "activeTimeEnd": "排程結束時間"
   },
   "affectedProviders": {
     "title": "受影響的供應商",

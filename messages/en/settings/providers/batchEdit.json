@@ -46,7 +46,9 @@
     "modelRedirects": "Model Redirects",
     "allowedModels": "Allowed Models",
     "thinkingBudget": "Thinking Budget",
-    "adaptiveThinking": "Adaptive Thinking"
+    "adaptiveThinking": "Adaptive Thinking",
+    "activeTimeStart": "Active Start Time",
+    "activeTimeEnd": "Active End Time"
   },
   "affectedProviders": {
     "title": "Affected Providers",

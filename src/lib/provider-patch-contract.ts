@@ -36,6 +36,8 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "anthropic_thinking_budget_preference",
   "anthropic_adaptive_thinking",
   // Routing
+  "active_time_start",
+  "active_time_end",
   "preserve_client_ip",
   "group_priorities",
   "cache_ttl_preference",
@@ -86,6 +88,8 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   anthropic_thinking_budget_preference: true,
   anthropic_adaptive_thinking: true,
   // Routing
+  active_time_start: true,
+  active_time_end: true,
   preserve_client_ip: false,
   group_priorities: true,
   cache_ttl_preference: true,
@@ -232,6 +236,9 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "proxy_url":
     case "mcp_passthrough_url":
       return typeof value === "string";
+    case "active_time_start":
+    case "active_time_end":
+      return typeof value === "string" && /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(value);
     case "group_priorities":
       return isNumberRecord(value);
     case "cache_ttl_preference":
@@ -421,6 +428,12 @@ export function normalizeProviderBatchPatchDraft(
   if (!adaptiveThinking.ok) return adaptiveThinking;
 
   // Routing
+  const activeTimeStart = normalizePatchField("active_time_start", typedDraft.active_time_start);
+  if (!activeTimeStart.ok) return activeTimeStart;
+
+  const activeTimeEnd = normalizePatchField("active_time_end", typedDraft.active_time_end);
+  if (!activeTimeEnd.ok) return activeTimeEnd;
+
   const preserveClientIp = normalizePatchField("preserve_client_ip", typedDraft.preserve_client_ip);
   if (!preserveClientIp.ok) return preserveClientIp;
 
@@ -584,6 +597,8 @@ export function normalizeProviderBatchPatchDraft(
       anthropic_thinking_budget_preference: thinkingBudget.data,
       anthropic_adaptive_thinking: adaptiveThinking.data,
       // Routing
+      active_time_start: activeTimeStart.data,
+      active_time_end: activeTimeEnd.data,
       preserve_client_ip: preserveClientIp.data,
       group_priorities: groupPriorities.data,
       cache_ttl_preference: cacheTtlPref.data,
@@ -672,6 +687,12 @@ function applyPatchField<T>(
           patch.value as ProviderBatchApplyUpdates["anthropic_adaptive_thinking"];
         return { ok: true, data: undefined };
       // Routing
+      case "active_time_start":
+        updates.active_time_start = patch.value as ProviderBatchApplyUpdates["active_time_start"];
+        return { ok: true, data: undefined };
+      case "active_time_end":
+        updates.active_time_end = patch.value as ProviderBatchApplyUpdates["active_time_end"];
+        return { ok: true, data: undefined };
       case "preserve_client_ip":
         updates.preserve_client_ip = patch.value as ProviderBatchApplyUpdates["preserve_client_ip"];
         return { ok: true, data: undefined };
@@ -813,6 +834,13 @@ function applyPatchField<T>(
     case "anthropic_adaptive_thinking":
       updates.anthropic_adaptive_thinking = null;
       return { ok: true, data: undefined };
+    // Routing - active time clear to null
+    case "active_time_start":
+      updates.active_time_start = null;
+      return { ok: true, data: undefined };
+    case "active_time_end":
+      updates.active_time_end = null;
+      return { ok: true, data: undefined };
     // Routing - preference fields clear to "inherit"
     case "cache_ttl_preference":
       updates.cache_ttl_preference = "inherit";
@@ -893,6 +921,8 @@ export function buildProviderBatchApplyUpdates(
     ["anthropic_thinking_budget_preference", patch.anthropic_thinking_budget_preference],
     ["anthropic_adaptive_thinking", patch.anthropic_adaptive_thinking],
     // Routing
+    ["active_time_start", patch.active_time_start],
+    ["active_time_end", patch.active_time_end],
     ["preserve_client_ip", patch.preserve_client_ip],
     ["group_priorities", patch.group_priorities],
     ["cache_ttl_preference", patch.cache_ttl_preference],
@@ -956,6 +986,8 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.anthropic_thinking_budget_preference.mode !== "no_change" ||
     patch.anthropic_adaptive_thinking.mode !== "no_change" ||
     // Routing
+    patch.active_time_start.mode !== "no_change" ||
+    patch.active_time_end.mode !== "no_change" ||
     patch.preserve_client_ip.mode !== "no_change" ||
     patch.group_priorities.mode !== "no_change" ||
     patch.cache_ttl_preference.mode !== "no_change" ||

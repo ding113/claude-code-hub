@@ -187,6 +187,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     allowedModels: providerData.allowed_models,
     allowedClients: providerData.allowed_clients ?? [],
     blockedClients: providerData.blocked_clients ?? [],
+    activeTimeStart: providerData.active_time_start ?? null,
+    activeTimeEnd: providerData.active_time_end ?? null,
     mcpPassthroughType: providerData.mcp_passthrough_type ?? "none",
     mcpPassthroughUrl: providerData.mcp_passthrough_url ?? null,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
@@ -264,6 +266,8 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         allowedModels: providers.allowedModels,
         allowedClients: providers.allowedClients,
         blockedClients: providers.blockedClients,
+        activeTimeStart: providers.activeTimeStart,
+        activeTimeEnd: providers.activeTimeEnd,
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
@@ -346,6 +350,8 @@ export async function findProviderList(
       allowedModels: providers.allowedModels,
       allowedClients: providers.allowedClients,
       blockedClients: providers.blockedClients,
+      activeTimeStart: providers.activeTimeStart,
+      activeTimeEnd: providers.activeTimeEnd,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -428,6 +434,8 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       allowedModels: providers.allowedModels,
       allowedClients: providers.allowedClients,
       blockedClients: providers.blockedClients,
+      activeTimeStart: providers.activeTimeStart,
+      activeTimeEnd: providers.activeTimeEnd,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -514,6 +522,8 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       allowedModels: providers.allowedModels,
       allowedClients: providers.allowedClients,
       blockedClients: providers.blockedClients,
+      activeTimeStart: providers.activeTimeStart,
+      activeTimeEnd: providers.activeTimeEnd,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -596,6 +606,10 @@ export async function updateProvider(
     dbData.allowedClients = providerData.allowed_clients ?? [];
   if (providerData.blocked_clients !== undefined)
     dbData.blockedClients = providerData.blocked_clients ?? [];
+  if (providerData.active_time_start !== undefined)
+    dbData.activeTimeStart = providerData.active_time_start ?? null;
+  if (providerData.active_time_end !== undefined)
+    dbData.activeTimeEnd = providerData.active_time_end ?? null;
   if (providerData.mcp_passthrough_type !== undefined)
     dbData.mcpPassthroughType = providerData.mcp_passthrough_type;
   if (providerData.mcp_passthrough_url !== undefined)
@@ -743,6 +757,8 @@ export async function updateProvider(
         allowedModels: providers.allowedModels,
         allowedClients: providers.allowedClients,
         blockedClients: providers.blockedClients,
+        activeTimeStart: providers.activeTimeStart,
+        activeTimeEnd: providers.activeTimeEnd,
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
@@ -998,6 +1014,8 @@ export interface BatchProviderUpdates {
   anthropicAdaptiveThinking?: AnthropicAdaptiveThinkingConfig | null;
   // Routing
   preserveClientIp?: boolean;
+  activeTimeStart?: string | null;
+  activeTimeEnd?: string | null;
   groupPriorities?: Record<string, number> | null;
   cacheTtlPreference?: string | null;
   swapCacheTtlBilling?: boolean;
@@ -1081,6 +1099,12 @@ export async function updateProvidersBatch(
   // Routing
   if (updates.preserveClientIp !== undefined) {
     setClauses.preserveClientIp = updates.preserveClientIp;
+  }
+  if (updates.activeTimeStart !== undefined) {
+    setClauses.activeTimeStart = updates.activeTimeStart;
+  }
+  if (updates.activeTimeEnd !== undefined) {
+    setClauses.activeTimeEnd = updates.activeTimeEnd;
   }
   if (updates.groupPriorities !== undefined) {
     setClauses.groupPriorities = updates.groupPriorities;

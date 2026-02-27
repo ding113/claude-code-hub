@@ -92,6 +92,8 @@ export function toProvider(dbProvider: any): Provider {
     providerType: dbProvider?.providerType ?? "claude",
     preserveClientIp: dbProvider?.preserveClientIp ?? false,
     modelRedirects: dbProvider?.modelRedirects ?? null,
+    activeTimeStart: dbProvider?.activeTimeStart ?? null,
+    activeTimeEnd: dbProvider?.activeTimeEnd ?? null,
     mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",
     mcpPassthroughUrl: dbProvider?.mcpPassthroughUrl ?? null,
     limit5hUsd: dbProvider?.limit5hUsd ? parseFloat(dbProvider.limit5hUsd) : null,

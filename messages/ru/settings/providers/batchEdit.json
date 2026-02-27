@@ -46,7 +46,9 @@
     "modelRedirects": "Перенаправление моделей",
     "allowedModels": "Разрешённые модели",
     "thinkingBudget": "Бюджет мышления",
-    "adaptiveThinking": "Адаптивное мышление"
+    "adaptiveThinking": "Адаптивное мышление",
+    "activeTimeStart": "Время начала расписания",
+    "activeTimeEnd": "Время окончания расписания"
   },
   "affectedProviders": {
     "title": "Затронутые поставщики",

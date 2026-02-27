@@ -204,9 +204,10 @@ export const providers = pgTable('providers', {
   allowedClients: jsonb('allowed_clients').$type<string[]>().notNull().default([]),
   blockedClients: jsonb('blocked_clients').$type<string[]>().notNull().default([]),
 
-  // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
-  // 启用后，如果该提供商配置了重定向到 claude-* 模型，可以加入 claude 调度池
-  joinClaudePool: boolean('join_claude_pool').default(false),
+  // Scheduled active time window (HH:mm format)
+  // Both null = always active; both set = active during window only
+  activeTimeStart: varchar('active_time_start', { length: 5 }),
+  activeTimeEnd: varchar('active_time_end', { length: 5 }),
 
   // Codex instructions 策略（已废弃）：历史字段保留以兼容旧数据
   // 当前运行时对 Codex 请求的 instructions 一律透传，不再读取/生效此配置
