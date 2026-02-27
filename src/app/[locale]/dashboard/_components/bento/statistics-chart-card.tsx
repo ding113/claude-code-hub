@@ -125,6 +125,7 @@ export function StatisticsChartCard({
       // - DOM 计算高度可能带小数（浏览器缩放 / 子像素）
       // - 卡片自身 border 也会占用 max-h 的可用空间
       const reservedHeightRounded = Math.ceil(reservedHeight);
+      // 额外留 4px 兜底空间，覆盖不同浏览器/缩放下的 rounding、边框与子像素误差，避免底部内容露半截。
       const safetyGapPx = 4;
       const availableHeight = Math.max(
         0,
@@ -380,7 +381,7 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCost")}
           </span>
-          <span className="text-[17px] leading-tight font-bold tabular-nums">
+          <span className="text-base font-bold tabular-nums">
             {formatCurrency(visibleTotals.cost, currencyCode)}
           </span>
         </button>
@@ -396,7 +397,7 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCalls")}
           </span>
-          <span className="text-[17px] leading-tight font-bold tabular-nums">
+          <span className="text-base font-bold tabular-nums">
             {visibleTotals.calls.toLocaleString()}
           </span>
         </button>
@@ -586,7 +587,7 @@ export function StatisticsChartCard({
               {t("legend.deselectAll")}
             </button>
           </div>
-          {/* User list with max 3 rows and scroll - only show users with non-zero usage */}
+          {/* User list with max 3 rows (3 * 24px = 72px) and scroll - only show users with non-zero usage */}
           <div className="max-h-[72px] overflow-y-auto pr-24">
             <div className="flex flex-wrap gap-1.5 justify-center">
               {data.users
