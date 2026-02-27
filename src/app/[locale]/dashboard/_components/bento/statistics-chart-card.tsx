@@ -94,9 +94,15 @@ export function StatisticsChartCard({
     }
 
     const compute = () => {
+      const cardStyle = getComputedStyle(card);
       const maxHeightPx =
-        parsePx(getComputedStyle(card).maxHeight) ??
+        parsePx(cardStyle.maxHeight) ??
         Math.floor((window.visualViewport?.height ?? window.innerHeight) * 0.5);
+
+      const cardPadding =
+        (parsePx(cardStyle.paddingTop) ?? 0) + (parsePx(cardStyle.paddingBottom) ?? 0);
+      const cardBorder =
+        (parsePx(cardStyle.borderTopWidth) ?? 0) + (parsePx(cardStyle.borderBottomWidth) ?? 0);
 
       const headerHeight = header.getBoundingClientRect().height;
       const metricTabsHeight = metricTabs.getBoundingClientRect().height;
@@ -109,8 +115,18 @@ export function StatisticsChartCard({
         (parsePx(chartWrapperStyle.paddingTop) ?? 0) +
         (parsePx(chartWrapperStyle.paddingBottom) ?? 0);
 
-      const reservedHeight = headerHeight + metricTabsHeight + legendHeight + chartWrapperPadding;
-      const availableHeight = Math.max(0, Math.floor(maxHeightPx - reservedHeight - 1));
+      const reservedHeight =
+        cardPadding + headerHeight + metricTabsHeight + legendHeight + chartWrapperPadding;
+
+      // 避免 1px 级的裁切：
+      // - DOM 计算高度可能带小数（浏览器缩放 / 子像素）
+      // - 卡片自身 border 也会占用 max-h 的可用空间
+      const reservedHeightRounded = Math.ceil(reservedHeight);
+      const safetyGapPx = 4;
+      const availableHeight = Math.max(
+        0,
+        Math.floor(maxHeightPx - reservedHeightRounded - cardBorder - safetyGapPx)
+      );
 
       const maxChartHeight = enableUserFilter
         ? CHART_HEIGHT_MAX_PX_WITH_LEGEND
@@ -257,13 +273,16 @@ export function StatisticsChartCard({
   // 这里使用 DOM 实测（Header/MetricTabs/Legend/ChartPadding）来计算可用高度，避免硬编码误差。
 
   return (
-    <BentoCard ref={cardRef} className={cn("p-0 max-h-[var(--cch-viewport-height-50)]", className)}>
+    <BentoCard
+      ref={cardRef}
+      className={cn("p-0 md:p-0 max-h-[var(--cch-viewport-height-50)]", className)}
+    >
       {/* Header */}
       <div
         ref={headerRef}
         className="flex items-center justify-between border-b border-border/50 dark:border-white/[0.06]"
       >
-        <div className="flex items-center gap-4 px-4 py-3">
+        <div className="flex items-center gap-4 px-4 py-2">
           <h4 className="text-sm font-semibold">{t("title")}</h4>
           {/* Chart Mode Toggle */}
           {visibleUsers.length > 1 && (
@@ -295,7 +314,7 @@ export function StatisticsChartCard({
                 data-active={data.timeRange === option.key}
                 onClick={() => onTimeRangeChange(option.key)}
                 className={cn(
-                  "px-3 py-2 text-xs font-medium transition-colors cursor-pointer",
+                  "px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   "border-l border-border/50 dark:border-white/[0.06] first:border-l-0",
                   "hover:bg-muted/50 dark:hover:bg-white/[0.03]",
                   "data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
@@ -314,7 +333,7 @@ export function StatisticsChartCard({
           data-active={activeChart === "cost"}
           onClick={() => setActiveChart("cost")}
           className={cn(
-            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2.5 transition-colors cursor-pointer",
+            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2 transition-colors cursor-pointer",
             "border-r border-border/50 dark:border-white/[0.06]",
             "hover:bg-muted/30 dark:hover:bg-white/[0.02]",
             "data-[active=true]:bg-muted/50 dark:data-[active=true]:bg-white/[0.04]"
@@ -331,7 +350,7 @@ export function StatisticsChartCard({
           data-active={activeChart === "calls"}
           onClick={() => setActiveChart("calls")}
           className={cn(
-            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2.5 transition-colors cursor-pointer",
+            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2 transition-colors cursor-pointer",
             "hover:bg-muted/30 dark:hover:bg-white/[0.02]",
             "data-[active=true]:bg-muted/50 dark:data-[active=true]:bg-white/[0.04]"
           )}
