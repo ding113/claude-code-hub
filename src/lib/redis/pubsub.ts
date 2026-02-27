@@ -10,7 +10,7 @@ export const CHANNEL_SENSITIVE_WORDS_UPDATED = "cch:cache:sensitive_words:update
 // API Key 集合发生变化（典型：创建新 key）时，通知各实例重建 Vacuum Filter，避免误拒绝
 export const CHANNEL_API_KEYS_UPDATED = "cch:cache:api_keys:updated";
 
-type CacheInvalidationCallback = () => void;
+type CacheInvalidationCallback = (message: string) => void;
 
 let subscriberClient: Redis | null = null;
 let subscriberReady: Promise<Redis> | null = null;
@@ -99,12 +99,12 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
       sub.on("end", () => subscribedChannels.clear());
       sub.on("ready", () => void resubscribeAll(sub));
 
-      sub.on("message", (channel: string) => {
+      sub.on("message", (channel: string, message: string) => {
         const callbacks = subscriptions.get(channel);
         if (!callbacks || callbacks.size === 0) return;
         for (const cb of callbacks) {
           try {
-            cb();
+            cb(message);
           } catch (error) {
             logger.error("[RedisPubSub] Callback error", { channel, error });
           }
@@ -137,12 +137,12 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
 /**
  * Publish cache invalidation (silent fail, auto-degrade)
  */
-export async function publishCacheInvalidation(channel: string): Promise<void> {
+export async function publishCacheInvalidation(channel: string, message?: string): Promise<void> {
   const redis = getRedisClient();
   if (!redis) return;
 
   try {
-    await redis.publish(channel, Date.now().toString());
+    await redis.publish(channel, message ?? Date.now().toString());
   } catch (error) {
     logger.warn("[RedisPubSub] Failed to publish cache invalidation", { channel, error });
   }

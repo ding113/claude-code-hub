@@ -80,8 +80,10 @@ describe("Redis Pub/Sub cache invalidation", () => {
     expect(base.duplicate).toHaveBeenCalledTimes(1);
     expect(subscriber.subscribe).toHaveBeenCalledWith("test-channel");
 
-    subscriber.emit("message", "test-channel", Date.now().toString());
+    const message = Date.now().toString();
+    subscriber.emit("message", "test-channel", message);
     expect(onInvalidate).toHaveBeenCalledTimes(1);
+    expect(onInvalidate).toHaveBeenCalledWith(message);
 
     cleanup!();
     subscriber.emit("message", "test-channel", Date.now().toString());

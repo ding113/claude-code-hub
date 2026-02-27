@@ -40,6 +40,13 @@ function setupCircuitBreakerMocks(options?: {
     defaultConfig?: CircuitBreakerConfig;
     loadProviderCircuitConfig?: (providerId: number) => Promise<CircuitBreakerConfig>;
   };
+  pubsub?: {
+    publishCacheInvalidation?: (channel: string, message?: string) => Promise<void>;
+    subscribeCacheInvalidation?: (
+      channel: string,
+      callback: (message: string) => void
+    ) => Promise<(() => void) | null>;
+  };
 }): void {
   const defaultConfig: CircuitBreakerConfig = options?.config?.defaultConfig ?? {
     failureThreshold: 5,
@@ -57,6 +64,11 @@ function setupCircuitBreakerMocks(options?: {
     DEFAULT_CIRCUIT_BREAKER_CONFIG: defaultConfig,
     loadProviderCircuitConfig:
       options?.config?.loadProviderCircuitConfig ?? vi.fn(async () => defaultConfig),
+  }));
+  vi.doMock("@/lib/redis/pubsub", () => ({
+    publishCacheInvalidation: options?.pubsub?.publishCacheInvalidation ?? vi.fn(async () => {}),
+    subscribeCacheInvalidation:
+      options?.pubsub?.subscribeCacheInvalidation ?? vi.fn(async () => null),
   }));
 }
 
@@ -297,5 +309,168 @@ describe("circuit-breaker", () => {
     await recordFailure(1, new Error("boom"));
 
     expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("并发加载配置时应进行 in-flight 合并，避免重复请求配置存储", async () => {
+    setupFakeTime();
+
+    vi.resetModules();
+
+    const loadProviderCircuitConfigMock = vi.fn(
+      async () =>
+        await new Promise<CircuitBreakerConfig>((resolve) => {
+          setTimeout(() => {
+            resolve({
+              failureThreshold: 100,
+              openDuration: 1800000,
+              halfOpenSuccessThreshold: 2,
+            });
+          }, 50);
+        })
+    );
+
+    setupCircuitBreakerMocks({
+      config: {
+        loadProviderCircuitConfig: loadProviderCircuitConfigMock,
+      },
+    });
+
+    const { recordFailure } = await import("@/lib/circuit-breaker");
+
+    const p1 = recordFailure(1, new Error("boom"));
+    const p2 = recordFailure(1, new Error("boom"));
+
+    await vi.advanceTimersByTimeAsync(50);
+    await Promise.all([p1, p2]);
+
+    expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("收到配置失效通知后应清除配置缓存并触发重新加载（跨实例一致性）", async () => {
+    setupFakeTime();
+
+    vi.resetModules();
+
+    let onInvalidation: ((message: string) => void) | null = null;
+
+    const loadProviderCircuitConfigMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        failureThreshold: 5,
+        openDuration: 1800000,
+        halfOpenSuccessThreshold: 2,
+      })
+      .mockResolvedValueOnce({
+        failureThreshold: 0,
+        openDuration: 1800000,
+        halfOpenSuccessThreshold: 2,
+      });
+
+    const subscribeCacheInvalidationMock = vi.fn(
+      async (_channel: string, cb: (message: string) => void) => {
+        onInvalidation = cb;
+        return () => {};
+      }
+    );
+
+    setupCircuitBreakerMocks({
+      config: {
+        loadProviderCircuitConfig: loadProviderCircuitConfigMock,
+      },
+      pubsub: {
+        subscribeCacheInvalidation: subscribeCacheInvalidationMock,
+      },
+    });
+
+    const { recordFailure } = await import("@/lib/circuit-breaker");
+
+    await recordFailure(1, new Error("boom"));
+    expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(1);
+
+    expect(subscribeCacheInvalidationMock).toHaveBeenCalledTimes(1);
+    expect(onInvalidation).not.toBeNull();
+
+    onInvalidation!(JSON.stringify({ providerIds: [1] }));
+
+    await recordFailure(1, new Error("boom"));
+    expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("失效通知发生在配置加载期间时应重试，避免把旧配置写回缓存", async () => {
+    setupFakeTime();
+
+    vi.resetModules();
+
+    let onInvalidation: ((message: string) => void) | null = null;
+
+    const deferred = <T>() => {
+      let resolve!: (value: T) => void;
+      let reject!: (reason?: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+
+    const first = deferred<CircuitBreakerConfig>();
+    const second = deferred<CircuitBreakerConfig>();
+
+    const loadProviderCircuitConfigMock = vi
+      .fn()
+      .mockImplementationOnce(async () => await first.promise)
+      .mockImplementationOnce(async () => await second.promise);
+
+    const subscribeCacheInvalidationMock = vi.fn(
+      async (_channel: string, cb: (message: string) => void) => {
+        onInvalidation = cb;
+        return () => {};
+      }
+    );
+
+    setupCircuitBreakerMocks({
+      config: {
+        loadProviderCircuitConfig: loadProviderCircuitConfigMock,
+      },
+      pubsub: {
+        subscribeCacheInvalidation: subscribeCacheInvalidationMock,
+      },
+    });
+
+    const { getProviderHealthInfo, recordFailure } = await import("@/lib/circuit-breaker");
+
+    const failurePromise = recordFailure(1, new Error("boom"));
+
+    // recordFailure 会先 await getOrCreateHealth（包含 Redis 同步），这里让出若干微任务以触发配置加载
+    for (let i = 0; i < 5 && loadProviderCircuitConfigMock.mock.calls.length === 0; i++) {
+      await Promise.resolve();
+    }
+
+    expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(1);
+    expect(onInvalidation).not.toBeNull();
+
+    onInvalidation!(JSON.stringify({ providerIds: [1] }));
+
+    first.resolve({
+      failureThreshold: 5,
+      openDuration: 1800000,
+      halfOpenSuccessThreshold: 2,
+    });
+
+    for (let i = 0; i < 5 && loadProviderCircuitConfigMock.mock.calls.length < 2; i++) {
+      await Promise.resolve();
+    }
+    expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(2);
+
+    second.resolve({
+      failureThreshold: 0,
+      openDuration: 1800000,
+      halfOpenSuccessThreshold: 2,
+    });
+
+    await failurePromise;
+
+    const { health } = await getProviderHealthInfo(1);
+    expect(health.failureCount).toBe(0);
   });
 });
