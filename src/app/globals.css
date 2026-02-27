@@ -47,6 +47,7 @@
   --radius: 0.65rem;
   --cch-viewport-height: 100vh;
   --cch-viewport-height-50: 50vh;
+  --cch-viewport-height-60: 60vh;
   --cch-viewport-height-70: 70vh;
   --cch-viewport-height-80: 80vh;
   --cch-viewport-height-85: 85vh;
@@ -89,6 +90,7 @@
   :root {
     --cch-viewport-height: 100dvh;
     --cch-viewport-height-50: 50dvh;
+    --cch-viewport-height-60: 60dvh;
     --cch-viewport-height-70: 70dvh;
     --cch-viewport-height-80: 80dvh;
     --cch-viewport-height-85: 85dvh;

@@ -96,9 +96,11 @@ export function StatisticsChartCard({
 
     const compute = () => {
       const cardStyle = getComputedStyle(card);
-      const maxHeightPx =
-        parsePx(cardStyle.maxHeight) ??
-        Math.floor((window.visualViewport?.height ?? window.innerHeight) * 0.5);
+      const viewportHeightPx = window.visualViewport?.height ?? window.innerHeight;
+      const fallbackMaxHeightPx = Math.floor(Math.min(viewportHeightPx * 0.6, 720));
+      const maxHeightPx = parsePx(cardStyle.maxHeight) ?? fallbackMaxHeightPx;
+      const minHeightPx = parsePx(cardStyle.minHeight) ?? 0;
+      const effectiveMaxHeightPx = Math.max(maxHeightPx, minHeightPx);
 
       const cardPadding =
         (parsePx(cardStyle.paddingTop) ?? 0) + (parsePx(cardStyle.paddingBottom) ?? 0);
@@ -126,7 +128,7 @@ export function StatisticsChartCard({
       const safetyGapPx = 4;
       const availableHeight = Math.max(
         0,
-        Math.floor(maxHeightPx - reservedHeightRounded - cardBorder - safetyGapPx)
+        Math.floor(effectiveMaxHeightPx - reservedHeightRounded - cardBorder - safetyGapPx)
       );
 
       const maxChartHeight = enableUserFilter
@@ -300,7 +302,8 @@ export function StatisticsChartCard({
     return formatInTimeZone(date, timeZone, "yyyy MMMM d", { locale: dateFnsLocale });
   };
 
-  // 图表卡片整体 max-h 为 50vh，用于保持首页更紧凑。
+  // 图表卡片整体 max-h 为 min(60vh, 720px)，用于保持首页更紧凑且避免大屏过高。
+  // 同时设置 min-h 300px（优先级最高），保证最小可读性。
   // 关键目标：不让卡片本身滚动，在小视口下通过收缩图表高度，确保底部 Legend/按钮不被裁切。
   // 这里使用 DOM 实测（Header/MetricTabs/Legend/ChartPadding）来计算可用高度，避免硬编码误差。
 
@@ -308,7 +311,7 @@ export function StatisticsChartCard({
     <BentoCard
       ref={cardRef}
       className={cn(
-        "p-0 md:p-1 max-h-[var(--cch-viewport-height-50)] overflow-visible hover:z-20",
+        "p-0 md:p-1 min-h-[300px] max-h-[min(var(--cch-viewport-height-60),720px)] overflow-visible hover:z-20",
         className
       )}
     >
@@ -466,7 +469,7 @@ export function StatisticsChartCard({
                 return (
                   <div
                     className="rounded-lg border bg-background shadow-sm min-w-[180px] overflow-y-auto"
-                    style={{ maxHeight: "min(var(--cch-viewport-height-80), 560px)" }}
+                    style={{ maxHeight: "min(var(--cch-viewport-height-80), 720px)" }}
                     ref={tooltipScrollRef}
                   >
                     <div className="sticky top-0 z-10 bg-background text-xs font-medium text-center px-3 py-2 border-b border-border/50">
