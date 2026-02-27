@@ -31,7 +31,14 @@ const CHART_HEIGHT_MAX_PX_WITH_LEGEND = 240;
 const CHART_HEIGHT_MAX_PX_NO_LEGEND = 280;
 
 function parsePx(value: string): number | null {
-  const parsed = Number.parseFloat(value);
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed === "0") return 0;
+
+  // 避免误把 50vh/50dvh 之类的相对单位当作 px（会导致高度计算错误）。
+  if (!trimmed.endsWith("px")) return null;
+
+  const parsed = Number.parseFloat(trimmed.slice(0, -2));
   return Number.isFinite(parsed) ? parsed : null;
 }
 
