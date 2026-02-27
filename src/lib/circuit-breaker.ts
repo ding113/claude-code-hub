@@ -244,7 +244,10 @@ async function getProviderConfigForHealth(
         error: error instanceof Error ? error.message : String(error),
       }
     );
-    return DEFAULT_CIRCUIT_BREAKER_CONFIG;
+    // 缓存默认配置，避免配置读取失败时在高频路径反复打 Redis/数据库
+    health.config = DEFAULT_CIRCUIT_BREAKER_CONFIG;
+    health.configLoadedAt = now;
+    return health.config;
   }
 }
 
@@ -612,6 +615,20 @@ export async function getAllHealthStatusAsync(
     }
   }
 
+  const nonClosedIds = providerIds.filter((providerId) => {
+    const health = healthMap.get(providerId);
+    return health && health.circuitState !== "closed";
+  });
+  const forcedConfigMap = new Map<number, CircuitBreakerConfig>();
+  await Promise.all(
+    nonClosedIds.map(async (providerId) => {
+      const health = healthMap.get(providerId);
+      if (!health) return;
+      const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
+      forcedConfigMap.set(providerId, config);
+    })
+  );
+
   // Only include status for requested providers (not all in healthMap)
   for (const providerId of providerIds) {
     let health = healthMap.get(providerId);
@@ -631,7 +648,9 @@ export async function getAllHealthStatusAsync(
     }
 
     if (health.circuitState !== "closed") {
-      const config = await getProviderConfigForHealth(providerId, health, { forceReload: true });
+      const config =
+        forcedConfigMap.get(providerId) ??
+        (await getProviderConfigForHealth(providerId, health, { forceReload: true }));
       if (handleDisabledCircuitBreaker(providerId, health, config)) {
         status[providerId] = { ...health };
         continue;

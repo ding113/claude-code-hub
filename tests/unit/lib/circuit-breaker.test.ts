@@ -250,4 +250,37 @@ describe("circuit-breaker", () => {
     vi.useRealTimers();
     await expect.poll(() => sendAlertMock.mock.calls.length, { timeout: 1000 }).toBe(1);
   });
+
+  test("配置加载失败时应缓存默认配置，避免重复请求配置存储", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    vi.resetModules();
+
+    const loadProviderCircuitConfigMock = vi.fn(async () => {
+      throw new Error("redis down");
+    });
+
+    vi.doMock("@/lib/logger", () => ({ logger: createLoggerMock() }));
+    vi.doMock("@/lib/redis/circuit-breaker-state", () => ({
+      loadCircuitState: vi.fn(async () => null),
+      loadAllCircuitStates: vi.fn(async () => new Map()),
+      saveCircuitState: vi.fn(async () => {}),
+    }));
+    vi.doMock("@/lib/redis/circuit-breaker-config", () => ({
+      DEFAULT_CIRCUIT_BREAKER_CONFIG: {
+        failureThreshold: 100,
+        openDuration: 1800000,
+        halfOpenSuccessThreshold: 2,
+      },
+      loadProviderCircuitConfig: loadProviderCircuitConfigMock,
+    }));
+
+    const { recordFailure } = await import("@/lib/circuit-breaker");
+
+    await recordFailure(1, new Error("boom"));
+    await recordFailure(1, new Error("boom"));
+
+    expect(loadProviderCircuitConfigMock).toHaveBeenCalledTimes(1);
+  });
 });
