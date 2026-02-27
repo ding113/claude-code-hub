@@ -78,6 +78,7 @@ export function StatisticsChartCard({
   const metricTabsRef = React.useRef<HTMLDivElement>(null);
   const chartWrapperRef = React.useRef<HTMLDivElement>(null);
   const legendRef = React.useRef<HTMLDivElement>(null);
+  const tooltipScrollRef = React.useRef<HTMLDivElement>(null);
 
   const [chartHeightPx, setChartHeightPx] = React.useState<number>(() =>
     enableUserFilter ? CHART_HEIGHT_MAX_PX_WITH_LEGEND : CHART_HEIGHT_MAX_PX_NO_LEGEND
@@ -158,6 +159,37 @@ export function StatisticsChartCard({
       observer.disconnect();
     };
   }, [enableUserFilter]);
+
+  React.useEffect(() => {
+    const chartWrapper = chartWrapperRef.current;
+    if (!chartWrapper) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      const scrollContainer = tooltipScrollRef.current;
+      if (!scrollContainer) return;
+
+      const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      if (maxScrollTop <= 0) return;
+
+      const deltaY =
+        event.deltaMode === 1
+          ? event.deltaY * 16
+          : event.deltaMode === 2
+            ? event.deltaY * 240
+            : event.deltaY;
+      if (!Number.isFinite(deltaY) || deltaY === 0) return;
+
+      const current = scrollContainer.scrollTop;
+      const next = Math.min(maxScrollTop, Math.max(0, current + deltaY));
+      if (next === current) return;
+
+      scrollContainer.scrollTop = next;
+      event.preventDefault();
+    };
+
+    chartWrapper.addEventListener("wheel", handleWheel, { passive: false });
+    return () => chartWrapper.removeEventListener("wheel", handleWheel);
+  }, []);
 
   const toggleUserSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
@@ -275,7 +307,10 @@ export function StatisticsChartCard({
   return (
     <BentoCard
       ref={cardRef}
-      className={cn("p-0 md:p-1 max-h-[var(--cch-viewport-height-50)]", className)}
+      className={cn(
+        "p-0 md:p-1 max-h-[var(--cch-viewport-height-50)] overflow-visible hover:z-20",
+        className
+      )}
     >
       {/* Header */}
       <div
@@ -417,11 +452,8 @@ export function StatisticsChartCard({
             />
             <ChartTooltip
               cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1, strokeDasharray: "4 4" }}
-              wrapperStyle={{
-                transform: "translateY(-100%)",
-                marginTop: "-20px",
-                zIndex: 1000,
-              }}
+              reverseDirection={{ x: false, y: true }}
+              wrapperStyle={{ zIndex: 1000 }}
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
                 const filteredPayload = payload.filter((entry) => {
@@ -432,45 +464,51 @@ export function StatisticsChartCard({
                 if (!filteredPayload.length) return null;
 
                 return (
-                  <div className="rounded-lg border bg-background p-3 shadow-sm min-w-[180px]">
-                    <div className="text-xs font-medium text-center mb-2 pb-2 border-b border-border/50">
+                  <div
+                    className="rounded-lg border bg-background shadow-sm min-w-[180px] overflow-y-auto"
+                    style={{ maxHeight: "min(var(--cch-viewport-height-80), 560px)" }}
+                    ref={tooltipScrollRef}
+                  >
+                    <div className="sticky top-0 z-10 bg-background text-xs font-medium text-center px-3 py-2 border-b border-border/50">
                       {formatTooltipDate(String(label ?? ""))}
                     </div>
-                    <div className="space-y-1.5">
-                      {[...filteredPayload]
-                        .sort((a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0))
-                        .map((entry, index) => {
-                          const baseKey =
-                            entry.dataKey?.toString().replace(`_${activeChart}`, "") || "";
-                          const displayUser = userMap.get(baseKey);
-                          const value =
-                            typeof entry.value === "number"
-                              ? entry.value
-                              : Number(entry.value ?? 0);
-                          return (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between gap-3 text-xs"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div
-                                  className="h-2 w-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: entry.color }}
-                                />
-                                <span className="truncate">
-                                  {displayUser?.name === "__others__"
-                                    ? t("othersAggregate")
-                                    : displayUser?.name || baseKey}
+                    <div className="p-3">
+                      <div className="space-y-1.5">
+                        {[...filteredPayload]
+                          .sort((a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0))
+                          .map((entry, index) => {
+                            const baseKey =
+                              entry.dataKey?.toString().replace(`_${activeChart}`, "") || "";
+                            const displayUser = userMap.get(baseKey);
+                            const value =
+                              typeof entry.value === "number"
+                                ? entry.value
+                                : Number(entry.value ?? 0);
+                            return (
+                              <div
+                                key={index}
+                                className="flex items-center justify-between gap-3 text-xs"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div
+                                    className="h-2 w-2 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: entry.color }}
+                                  />
+                                  <span className="truncate">
+                                    {displayUser?.name === "__others__"
+                                      ? t("othersAggregate")
+                                      : displayUser?.name || baseKey}
+                                  </span>
+                                </div>
+                                <span className="font-mono font-medium">
+                                  {activeChart === "cost"
+                                    ? formatCurrency(value, currencyCode)
+                                    : value.toLocaleString()}
                                 </span>
                               </div>
-                              <span className="font-mono font-medium">
-                                {activeChart === "cost"
-                                  ? formatCurrency(value, currencyCode)
-                                  : value.toLocaleString()}
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                      </div>
                     </div>
                   </div>
                 );
@@ -524,8 +562,14 @@ export function StatisticsChartCard({
             </button>
             <button
               onClick={() => {
-                if (data.users.length > 0) {
-                  setSelectedUserIds(new Set([data.users[0].id]));
+                const firstUserWithUsageId =
+                  data.users.find((u) => {
+                    const total = userTotals[u.dataKey];
+                    return total.cost.greaterThan(0) || total.calls > 0;
+                  })?.id ?? data.users[0]?.id;
+
+                if (firstUserWithUsageId != null) {
+                  setSelectedUserIds(new Set([firstUserWithUsageId]));
                 }
               }}
               disabled={selectedUserIds.size === 1}
