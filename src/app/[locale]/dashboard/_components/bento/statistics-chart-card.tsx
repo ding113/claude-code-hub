@@ -562,7 +562,10 @@ export function StatisticsChartCard({
                         className="h-2 w-2 rounded-full flex-shrink-0"
                         style={{ backgroundColor: color }}
                       />
-                      <span className="font-medium truncate max-w-[80px]">
+                      <span
+                        className="font-medium truncate max-w-[80px]"
+                        title={user.name === "__others__" ? t("othersAggregate") : user.name}
+                      >
                         {user.name === "__others__" ? t("othersAggregate") : user.name}
                       </span>
                       <span className="text-muted-foreground">
