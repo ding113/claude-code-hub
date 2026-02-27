@@ -32,6 +32,17 @@ export const EnvSchema = z.object({
     if (val.includes("user:password@host:port")) return undefined; // 占位符模板
     return val;
   }, z.string().url("数据库URL格式无效").optional()),
+  // Demo/Dev: 内置数据库（PGlite）
+  // - 适用于没有 Docker/Postgres 的环境，便于开箱即用运行 Demo
+  // - 生产环境仍建议使用真实 Postgres（DSN）
+  CCH_EMBEDDED_DB: z.string().default("false").transform(booleanTransform),
+  CCH_EMBEDDED_DB_DIR: z.preprocess((val) => {
+    if (val === undefined || val === null) return undefined;
+    if (typeof val !== "string") return val;
+    const trimmed = val.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }, z.string().optional()),
+  CCH_DEMO_SEED: z.string().default("true").transform(booleanTransform),
   // PostgreSQL 连接池配置（postgres.js）
   // - 多副本部署（k8s）需要结合数据库 max_connections 分摊配置
   // - 这些值为“每个应用进程”的连接池上限

@@ -308,12 +308,15 @@ class ApiKeyVacuumFilter {
   private async reloadFromDatabase(options: ReloadOptions): Promise<void> {
     // CI / 测试环境通常不接 DB；避免大量告警日志
     const dsn = process.env.DSN || "";
+    const embeddedDbEnabled =
+      process.env.CCH_EMBEDDED_DB === "true" ||
+      process.env.CCH_EMBEDDED_DB === "1" ||
+      process.env.CCH_EMBEDDED_DB === "yes";
     if (
       process.env.CI === "true" ||
       process.env.NODE_ENV === "test" ||
       process.env.VITEST === "true" ||
-      !dsn ||
-      dsn.includes("user:password@host:port")
+      ((!dsn || dsn.includes("user:password@host:port")) && !embeddedDbEnabled)
     ) {
       logger.debug("[ApiKeyVacuumFilter] Skip reload (test env or DB not configured)");
       return;

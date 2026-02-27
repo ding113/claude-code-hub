@@ -1,19 +1,93 @@
 import "server-only";
 
 import path from "node:path";
+import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import postgres from "postgres";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 
 const MIGRATION_ADVISORY_LOCK_NAME = "claude-code-hub:migrations";
+
+function isEmbeddedDbEnabled(): boolean {
+  const env = getEnvConfig();
+  return env.NODE_ENV !== "production" && env.CCH_EMBEDDED_DB === true;
+}
+
+function getEmbeddedDbDir(): string {
+  const env = getEnvConfig();
+  return env.CCH_EMBEDDED_DB_DIR ?? path.join(process.cwd(), "data", "pglite");
+}
+
+async function runEmbeddedDbMigrations(input: {
+  migrationsFolder: string;
+  dataDir: string;
+}): Promise<void> {
+  const db = drizzlePglite({ connection: { dataDir: input.dataDir } });
+  const client = (db as unknown as { $client?: unknown }).$client as
+    | undefined
+    | {
+        exec: (query: string) => Promise<unknown>;
+        query: (query: string, params?: unknown[]) => Promise<{ rows: Array<Record<string, unknown>> }>;
+        transaction: <T>(fn: (tx: { exec: (query: string) => Promise<unknown>; query: (query: string, params?: unknown[]) => Promise<unknown> }) => Promise<T>) => Promise<T>;
+      };
+
+  if (!client) {
+    throw new Error("Embedded DB client is not available");
+  }
+
+  // drizzle-orm migrator expects migration.sql[] to already be split into single statements.
+  // Some historical migrations in this repo contain multiple SQL commands in one file without
+  // `--> statement-breakpoint`. PGlite's prepared query path rejects multi-command statements.
+  //
+  // Use PGlite's simple-query exec() to support multi-command migration chunks safely.
+  const migrations = readMigrationFiles({ migrationsFolder: input.migrationsFolder });
+
+  await client.exec('CREATE SCHEMA IF NOT EXISTS "drizzle"');
+  await client.exec(`
+CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
+  id SERIAL PRIMARY KEY,
+  hash text NOT NULL,
+  created_at numeric
+)
+`.trim());
+
+  const lastDbMigrationResult = await client.query(
+    'select id, hash, created_at from "drizzle"."__drizzle_migrations" order by created_at desc limit 1'
+  );
+  const lastDbMigration = lastDbMigrationResult.rows?.[0] as
+    | undefined
+    | { created_at?: string | number | null };
+
+  await client.transaction(async (tx) => {
+    for await (const migration of migrations) {
+      if (!lastDbMigration || Number(lastDbMigration.created_at) < migration.folderMillis) {
+        for (const stmt of migration.sql) {
+          await tx.exec(stmt);
+        }
+        await tx.query(
+          'insert into "drizzle"."__drizzle_migrations" ("hash", "created_at") values($1, $2)',
+          [migration.hash, migration.folderMillis]
+        );
+      }
+    }
+  });
+}
 
 export async function withAdvisoryLock<T>(
   lockName: string,
   fn: () => Promise<T>,
   options?: { skipIfLocked?: boolean }
 ): Promise<{ ran: boolean; result?: T }> {
+  if (isEmbeddedDbEnabled()) {
+    // Embedded DB runs in-process; advisory lock is unnecessary for demo/dev.
+    const result = await fn();
+    return { ran: true, result };
+  }
+
   if (!process.env.DSN) {
     logger.error("DSN environment variable is not set");
     process.exit(1);
@@ -145,6 +219,16 @@ async function repairDrizzleMigrationsCreatedAt(input: {
  * 在生产环境启动时自动运行
  */
 export async function runMigrations() {
+  if (isEmbeddedDbEnabled()) {
+    logger.info("Starting database migrations (embedded DB)...");
+    const migrationsFolder = path.join(process.cwd(), "drizzle");
+    const dataDir = getEmbeddedDbDir();
+
+    await runEmbeddedDbMigrations({ migrationsFolder, dataDir });
+    logger.info("Database migrations completed successfully (embedded DB)");
+    return;
+  }
+
   if (!process.env.DSN) {
     logger.error("DSN environment variable is not set");
     process.exit(1);
@@ -189,6 +273,18 @@ export async function runMigrations() {
  * 检查数据库连接
  */
 export async function checkDatabaseConnection(retries = 30, delay = 2000): Promise<boolean> {
+  if (isEmbeddedDbEnabled()) {
+    try {
+      const db = drizzlePglite({ connection: { dataDir: getEmbeddedDbDir() } });
+      await db.execute(sql`SELECT 1`);
+      logger.info("Embedded database ready");
+      return true;
+    } catch (error) {
+      logger.error("Embedded database initialization failed", error);
+      return false;
+    }
+  }
+
   if (!process.env.DSN) {
     logger.error("DSN environment variable is not set");
     return false;

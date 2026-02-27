@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 13500",
+    "demo": "node scripts/demo-dev.cjs",
     "build": "next build && (node scripts/copy-version-to-standalone.cjs || bun scripts/copy-version-to-standalone.cjs)",
     "start": "next start",
     "lint": "biome check .",
@@ -39,6 +40,7 @@
     "i18n:audit-messages-no-emoji:fail": "node scripts/audit-messages-no-emoji.js --format=tsv --fail"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.3.15",
     "@bull-board/api": "^6",
     "@bull-board/express": "^6",
     "@hono/swagger-ui": "^0.5",

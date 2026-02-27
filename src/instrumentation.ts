@@ -440,6 +440,16 @@ export async function register() {
       if (isConnected) {
         await runMigrations();
 
+        // Demo: seed minimal data for a healthy out-of-box experience when using embedded DB.
+        try {
+          const { seedDemoDataIfNeeded } = await import("@/lib/demo/seed");
+          await seedDemoDataIfNeeded();
+        } catch (error) {
+          logger.warn("[Instrumentation] Demo seed skipped (non-fatal)", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
         // Ledger backfill: fire-and-forget after migration (non-blocking, idempotent)
         import("@/lib/ledger-backfill")
           .then(({ backfillUsageLedger }) =>
