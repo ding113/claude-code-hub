@@ -555,7 +555,7 @@ export function StatisticsChartCard({
               onClick={() => setSelectedUserIds(new Set(data.users.map((u) => u.id)))}
               disabled={selectedUserIds.size === data.users.length}
               className={cn(
-                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
+                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer whitespace-nowrap",
                 selectedUserIds.size === data.users.length
                   ? "text-muted-foreground/50 cursor-not-allowed"
                   : "text-primary hover:text-primary/80 hover:bg-primary/10"
@@ -577,7 +577,7 @@ export function StatisticsChartCard({
               }}
               disabled={selectedUserIds.size === 1}
               className={cn(
-                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
+                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer whitespace-nowrap",
                 selectedUserIds.size === 1
                   ? "text-muted-foreground/50 cursor-not-allowed"
                   : "text-primary hover:text-primary/80 hover:bg-primary/10"
