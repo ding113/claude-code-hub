@@ -342,7 +342,7 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCost")}
           </span>
-          <span className="text-lg leading-tight font-bold tabular-nums">
+          <span className="text-[17px] leading-tight font-bold tabular-nums">
             {formatCurrency(visibleTotals.cost, currencyCode)}
           </span>
         </button>
@@ -358,7 +358,7 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCalls")}
           </span>
-          <span className="text-lg leading-tight font-bold tabular-nums">
+          <span className="text-[17px] leading-tight font-bold tabular-nums">
             {visibleTotals.calls.toLocaleString()}
           </span>
         </button>
