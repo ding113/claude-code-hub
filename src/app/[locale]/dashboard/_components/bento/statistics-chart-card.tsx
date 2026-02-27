@@ -27,14 +27,13 @@ const USER_COLOR_PALETTE = [
 
 const getUserColor = (index: number) => USER_COLOR_PALETTE[index % USER_COLOR_PALETTE.length];
 
-const CHART_HEIGHT_MIN_PX = 140;
 const CHART_HEIGHT_MAX_PX_WITH_LEGEND = 240;
 const CHART_HEIGHT_MAX_PX_NO_LEGEND = 280;
 
-// Legend 可见时，非图表区域（Header/Tabs/Padding/Legend）占用的近似高度。
-const CHART_NON_GRAPH_HEIGHT_WITH_LEGEND_PX = 248;
-// Legend 不可见时，非图表区域（Header/Tabs/Padding）占用的近似高度。
-const CHART_NON_GRAPH_HEIGHT_NO_LEGEND_PX = 138;
+function parsePx(value: string): number | null {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 export interface StatisticsChartCardProps {
   data: UserStatisticsData;
@@ -66,6 +65,76 @@ export function StatisticsChartCard({
 
   const isAdminMode = data.mode === "users";
   const enableUserFilter = isAdminMode && data.users.length > 1;
+
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const headerRef = React.useRef<HTMLDivElement>(null);
+  const metricTabsRef = React.useRef<HTMLDivElement>(null);
+  const chartWrapperRef = React.useRef<HTMLDivElement>(null);
+  const legendRef = React.useRef<HTMLDivElement>(null);
+
+  const [chartHeightPx, setChartHeightPx] = React.useState<number>(() =>
+    enableUserFilter ? CHART_HEIGHT_MAX_PX_WITH_LEGEND : CHART_HEIGHT_MAX_PX_NO_LEGEND
+  );
+
+  React.useLayoutEffect(() => {
+    const card = cardRef.current;
+    const header = headerRef.current;
+    const metricTabs = metricTabsRef.current;
+    const chartWrapper = chartWrapperRef.current;
+
+    if (!card || !header || !metricTabs || !chartWrapper) {
+      return;
+    }
+
+    const compute = () => {
+      const maxHeightPx =
+        parsePx(getComputedStyle(card).maxHeight) ??
+        Math.floor((window.visualViewport?.height ?? window.innerHeight) * 0.5);
+
+      const headerHeight = header.getBoundingClientRect().height;
+      const metricTabsHeight = metricTabs.getBoundingClientRect().height;
+      const legendHeight = enableUserFilter
+        ? (legendRef.current?.getBoundingClientRect().height ?? 0)
+        : 0;
+
+      const chartWrapperStyle = getComputedStyle(chartWrapper);
+      const chartWrapperPadding =
+        (parsePx(chartWrapperStyle.paddingTop) ?? 0) +
+        (parsePx(chartWrapperStyle.paddingBottom) ?? 0);
+
+      const reservedHeight = headerHeight + metricTabsHeight + legendHeight + chartWrapperPadding;
+      const availableHeight = Math.max(0, Math.floor(maxHeightPx - reservedHeight - 1));
+
+      const maxChartHeight = enableUserFilter
+        ? CHART_HEIGHT_MAX_PX_WITH_LEGEND
+        : CHART_HEIGHT_MAX_PX_NO_LEGEND;
+
+      const nextHeight = Math.max(0, Math.min(maxChartHeight, availableHeight));
+      setChartHeightPx((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    compute();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", compute);
+      return () => window.removeEventListener("resize", compute);
+    }
+
+    const observer = new ResizeObserver(compute);
+    observer.observe(card);
+    observer.observe(header);
+    observer.observe(metricTabs);
+    observer.observe(chartWrapper);
+    if (enableUserFilter && legendRef.current) {
+      observer.observe(legendRef.current);
+    }
+    window.addEventListener("resize", compute);
+
+    return () => {
+      window.removeEventListener("resize", compute);
+      observer.disconnect();
+    };
+  }, [enableUserFilter]);
 
   const toggleUserSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
@@ -177,26 +246,17 @@ export function StatisticsChartCard({
   };
 
   // 图表卡片整体 max-h 为 50vh，用于保持首页更紧凑。
-  // 当启用多用户 Legend 时，非图表部分（Header/Tabs/Padding/Legend）会占用更多空间。
-  // 如果图表仍固定高度，在小视口下会导致底部内容被裁切。
-  // 这里用“可用高度估算 + clamp”让图表高度自适应：
-  // - 248px：Legend 可见时非图表区域的近似高度
-  // - 138px：Legend 不可见时非图表区域的近似高度
-  // 外层已支持 overflow-y-auto，这里的估算偏差只会影响图表相对大小，不会再导致内容丢失。
-  const chartContainerHeight = enableUserFilter
-    ? `clamp(${CHART_HEIGHT_MIN_PX}px, calc(var(--cch-viewport-height-50) - ${CHART_NON_GRAPH_HEIGHT_WITH_LEGEND_PX}px), ${CHART_HEIGHT_MAX_PX_WITH_LEGEND}px)`
-    : `clamp(${CHART_HEIGHT_MIN_PX}px, calc(var(--cch-viewport-height-50) - ${CHART_NON_GRAPH_HEIGHT_NO_LEGEND_PX}px), ${CHART_HEIGHT_MAX_PX_NO_LEGEND}px)`;
+  // 关键目标：不让卡片本身滚动，在小视口下通过收缩图表高度，确保底部 Legend/按钮不被裁切。
+  // 这里使用 DOM 实测（Header/MetricTabs/Legend/ChartPadding）来计算可用高度，避免硬编码误差。
 
   return (
-    <BentoCard
-      className={cn(
-        "p-0 overflow-x-hidden overflow-y-auto max-h-[var(--cch-viewport-height-50)]",
-        className
-      )}
-    >
+    <BentoCard ref={cardRef} className={cn("p-0 max-h-[var(--cch-viewport-height-50)]", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 dark:border-white/[0.06]">
-        <div className="flex items-center gap-4 p-4">
+      <div
+        ref={headerRef}
+        className="flex items-center justify-between border-b border-border/50 dark:border-white/[0.06]"
+      >
+        <div className="flex items-center gap-4 px-4 py-3">
           <h4 className="text-sm font-semibold">{t("title")}</h4>
           {/* Chart Mode Toggle */}
           {visibleUsers.length > 1 && (
@@ -228,7 +288,7 @@ export function StatisticsChartCard({
                 data-active={data.timeRange === option.key}
                 onClick={() => onTimeRangeChange(option.key)}
                 className={cn(
-                  "px-3 py-3 text-xs font-medium transition-colors cursor-pointer",
+                  "px-3 py-2 text-xs font-medium transition-colors cursor-pointer",
                   "border-l border-border/50 dark:border-white/[0.06] first:border-l-0",
                   "hover:bg-muted/50 dark:hover:bg-white/[0.03]",
                   "data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
@@ -242,12 +302,12 @@ export function StatisticsChartCard({
       </div>
 
       {/* Metric Tabs */}
-      <div className="flex border-b border-border/50 dark:border-white/[0.06]">
+      <div ref={metricTabsRef} className="flex border-b border-border/50 dark:border-white/[0.06]">
         <button
           data-active={activeChart === "cost"}
           onClick={() => setActiveChart("cost")}
           className={cn(
-            "flex-1 flex flex-col items-start gap-0.5 px-4 py-3 transition-colors cursor-pointer",
+            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2.5 transition-colors cursor-pointer",
             "border-r border-border/50 dark:border-white/[0.06]",
             "hover:bg-muted/30 dark:hover:bg-white/[0.02]",
             "data-[active=true]:bg-muted/50 dark:data-[active=true]:bg-white/[0.04]"
@@ -256,7 +316,7 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCost")}
           </span>
-          <span className="text-lg font-bold tabular-nums">
+          <span className="text-lg leading-tight font-bold tabular-nums">
             {formatCurrency(visibleTotals.cost, currencyCode)}
           </span>
         </button>
@@ -264,7 +324,7 @@ export function StatisticsChartCard({
           data-active={activeChart === "calls"}
           onClick={() => setActiveChart("calls")}
           className={cn(
-            "flex-1 flex flex-col items-start gap-0.5 px-4 py-3 transition-colors cursor-pointer",
+            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2.5 transition-colors cursor-pointer",
             "hover:bg-muted/30 dark:hover:bg-white/[0.02]",
             "data-[active=true]:bg-muted/50 dark:data-[active=true]:bg-white/[0.04]"
           )}
@@ -272,18 +332,18 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCalls")}
           </span>
-          <span className="text-lg font-bold tabular-nums">
+          <span className="text-lg leading-tight font-bold tabular-nums">
             {visibleTotals.calls.toLocaleString()}
           </span>
         </button>
       </div>
 
       {/* Chart */}
-      <div className="px-4 py-3">
+      <div ref={chartWrapperRef} className="px-4 py-2">
         <ChartContainer
           config={chartConfig}
           className="aspect-auto w-full"
-          style={{ height: chartContainerHeight }}
+          style={{ height: chartHeightPx }}
         >
           <AreaChart data={numericChartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
             <defs>
@@ -416,7 +476,7 @@ export function StatisticsChartCard({
 
       {/* Legend */}
       {enableUserFilter && (
-        <div className="px-4 pb-3">
+        <div ref={legendRef} className="px-4 pb-2">
           {/* Control buttons */}
           <div className="flex items-center justify-center gap-2 mb-2">
             <button
