@@ -147,6 +147,14 @@ export function StatisticsChartCard({
       return () => window.removeEventListener("resize", compute);
     }
 
+    const visualViewport = window.visualViewport;
+    // 即使有 ResizeObserver，也需要监听 viewport 变化：
+    // - 当内容高度小于 max-h 时，卡片本身不会因为视口变高而触发 RO
+    // - 但 vh/dvh 上限变大后，需要让图表高度回弹
+    // 同时监听 visualViewport，覆盖移动端地址栏/键盘导致的可视区域变化。
+    visualViewport?.addEventListener("resize", compute);
+    visualViewport?.addEventListener("scroll", compute);
+
     const observer = new ResizeObserver(compute);
     observer.observe(card);
     observer.observe(header);
@@ -159,6 +167,8 @@ export function StatisticsChartCard({
 
     return () => {
       window.removeEventListener("resize", compute);
+      visualViewport?.removeEventListener("resize", compute);
+      visualViewport?.removeEventListener("scroll", compute);
       observer.disconnect();
     };
   }, [enableUserFilter]);
