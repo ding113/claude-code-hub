@@ -161,7 +161,6 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
-    placeholderData: (previousData) => previousData,
   });
 
   // Independent tag query - breaks circular dependency
