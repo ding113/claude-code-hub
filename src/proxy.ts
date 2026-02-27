@@ -9,7 +9,6 @@ import { logger } from "@/lib/logger";
 // Public paths that don't require authentication
 // Note: These paths will be automatically prefixed with locale by next-intl middleware
 const PUBLIC_PATH_PATTERNS = ["/login", "/usage-doc", "/api/auth/login", "/api/auth/logout"];
-const DEV_PUBLIC_PATH_PATTERNS = ["/internal/ui-preview"];
 
 const API_PROXY_PATH = "/v1";
 
@@ -52,14 +51,9 @@ function proxyHandler(request: NextRequest) {
   const isPublicPath = PUBLIC_PATH_PATTERNS.some(
     (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(pattern)
   );
-  const isDevPublicPath =
-    isDevelopment() &&
-    DEV_PUBLIC_PATH_PATTERNS.some(
-      (pattern) => pathWithoutLocale === pattern || pathWithoutLocale.startsWith(`${pattern}/`)
-    );
 
   // Public paths don't require authentication
-  if (isPublicPath || isDevPublicPath) {
+  if (isPublicPath) {
     return localeResponse;
   }
 
