@@ -551,7 +551,7 @@ export function StatisticsChartCard({
       {enableUserFilter && (
         <div ref={legendRef} className="relative px-4 pb-2">
           {/* Control buttons (floating, does not take extra vertical space) */}
-          <div className="absolute right-4 top-0.5 z-10 w-24 flex flex-wrap justify-end gap-x-2 gap-y-0.5">
+          <div className="absolute right-4 rtl:right-auto rtl:left-4 top-0.5 z-10 w-24 flex flex-wrap justify-end gap-x-2 gap-y-0.5">
             <button
               onClick={() => setSelectedUserIds(new Set(data.users.map((u) => u.id)))}
               disabled={selectedUserIds.size === data.users.length}
@@ -588,7 +588,7 @@ export function StatisticsChartCard({
             </button>
           </div>
           {/* User list with max 3 rows (3 * 24px = 72px) and scroll - only show users with non-zero usage */}
-          <div className="max-h-[72px] overflow-y-auto pr-24">
+          <div className="max-h-[72px] overflow-y-auto pr-24 rtl:pr-0 rtl:pl-24">
             <div className="flex flex-wrap gap-1.5 justify-center">
               {data.users
                 .map((user, originalIndex) => ({ user, originalIndex }))
