@@ -34,7 +34,7 @@ function isDevelopmentRuntime(): boolean {
  */
 function resolveEffectiveHost(
   request: CsrfGuardRequest,
-  trustForwardedHost: boolean,
+  trustForwardedHost: boolean
 ): string | null {
   if (trustForwardedHost) {
     const forwarded = request.headers.get("x-forwarded-host")?.trim().toLowerCase();
