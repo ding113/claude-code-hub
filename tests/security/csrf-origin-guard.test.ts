@@ -154,6 +154,7 @@ describe("createCsrfOriginGuard", () => {
         allowedOrigins: [],
         allowSameOrigin: true,
         enforceInDevelopment: true,
+        trustForwardedHost: true,
       });
 
       const result = guard.check(
@@ -172,6 +173,7 @@ describe("createCsrfOriginGuard", () => {
         allowedOrigins: [],
         allowSameOrigin: true,
         enforceInDevelopment: true,
+        trustForwardedHost: true,
       });
 
       const result = guard.check(
@@ -183,6 +185,24 @@ describe("createCsrfOriginGuard", () => {
       );
 
       expect(result).toEqual({ allowed: true });
+    });
+
+    it("ignores x-forwarded-host when trustForwardedHost is false (default)", () => {
+      const guard = createCsrfOriginGuard({
+        allowedOrigins: [],
+        allowSameOrigin: true,
+        enforceInDevelopment: true,
+      });
+
+      const result = guard.check(
+        createRequest({
+          origin: "http://myapp.example.com",
+          host: "localhost:13500",
+          "x-forwarded-host": "myapp.example.com",
+        })
+      );
+
+      expect(result.allowed).toBe(false);
     });
 
     it("rejects request when origin does not match host", () => {
