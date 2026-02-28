@@ -47,6 +47,7 @@ DIR_ARG=""
 DOMAIN_ARG=""
 ENABLE_CADDY=false
 NON_INTERACTIVE=false
+FORCE_REINSTALL=false
 
 show_help() {
     cat << EOF
@@ -62,6 +63,7 @@ Options:
       --domain <domain>      Domain for Caddy HTTPS (enables Caddy automatically)
       --enable-caddy         Enable Caddy reverse proxy without HTTPS (HTTP only)
   -y, --yes                  Non-interactive mode (skip prompts, use defaults)
+  -f, --force                Force reinstall (remove existing installation)
   -h, --help                 Show this help message
 
 Examples:
@@ -126,6 +128,10 @@ parse_args() {
                 ;;
             -y|--yes)
                 NON_INTERACTIVE=true
+                shift
+                ;;
+            -f|--force)
+                FORCE_REINSTALL=true
                 shift
                 ;;
             -h|--help)
@@ -216,6 +222,90 @@ detect_os() {
         exit 1
     fi
     log_info "Detected OS: $OS_TYPE"
+}
+
+check_existing_installation() {
+    log_info "Checking for existing installation..."
+
+    local installation_found=false
+    local existing_containers=()
+
+    # Check if deployment directory exists with key files
+    if [[ -d "$DEPLOY_DIR" ]]; then
+        if [[ -f "$DEPLOY_DIR/docker-compose.yaml" ]] || [[ -f "$DEPLOY_DIR/.env" ]]; then
+            installation_found=true
+            log_warning "Found existing installation at: $DEPLOY_DIR"
+        fi
+    fi
+
+    # Check for running containers with our naming pattern
+    if command -v docker &> /dev/null; then
+        while IFS= read -r container; do
+            existing_containers+=("$container")
+        done < <(docker ps -a --filter "name=claude-code-hub-" --format "{{.Names}}" 2>/dev/null)
+
+        if [[ ${#existing_containers[@]} -gt 0 ]]; then
+            installation_found=true
+            log_warning "Found existing Docker containers:"
+            for container in "${existing_containers[@]}"; do
+                echo "   - $container"
+            done
+        fi
+    fi
+
+    # If installation found and not forcing reinstall, abort
+    if [[ "$installation_found" == true ]] && [[ "$FORCE_REINSTALL" != true ]]; then
+        echo ""
+        log_error "Claude Code Hub is already installed on this system!"
+        echo ""
+        echo -e "${YELLOW}To manage your existing installation:${NC}"
+        echo -e "   View logs:    ${BLUE}cd $DEPLOY_DIR && docker compose logs -f${NC}"
+        echo -e "   Stop:         ${BLUE}cd $DEPLOY_DIR && docker compose down${NC}"
+        echo -e "   Restart:      ${BLUE}cd $DEPLOY_DIR && docker compose restart${NC}"
+        echo ""
+        echo -e "${YELLOW}To completely remove and reinstall:${NC}"
+        echo -e "   1. Stop services:  ${BLUE}cd $DEPLOY_DIR && docker compose down -v${NC}"
+        echo -e "   2. Remove directory: ${BLUE}rm -rf $DEPLOY_DIR${NC}"
+        echo -e "   3. Re-run this script"
+        echo ""
+        echo -e "${YELLOW}Or use the --force flag to automatically remove and reinstall:${NC}"
+        echo -e "   ${BLUE}$0 --force${NC}"
+        echo ""
+        exit 1
+    fi
+
+    # If forcing reinstall, clean up existing installation
+    if [[ "$installation_found" == true ]] && [[ "$FORCE_REINSTALL" == true ]]; then
+        log_warning "Force reinstall enabled. Removing existing installation..."
+
+        # Stop and remove containers
+        if [[ ${#existing_containers[@]} -gt 0 ]]; then
+            log_info "Stopping and removing existing containers..."
+            if [[ -d "$DEPLOY_DIR" ]] && [[ -f "$DEPLOY_DIR/docker-compose.yaml" ]]; then
+                cd "$DEPLOY_DIR"
+                if docker compose version &> /dev/null; then
+                    docker compose down -v 2>/dev/null || true
+                else
+                    docker-compose down -v 2>/dev/null || true
+                fi
+            fi
+
+            # Force remove any remaining containers
+            for container in "${existing_containers[@]}"; do
+                docker rm -f "$container" 2>/dev/null || true
+            done
+        fi
+
+        # Remove deployment directory
+        if [[ -d "$DEPLOY_DIR" ]]; then
+            log_info "Removing deployment directory: $DEPLOY_DIR"
+            rm -rf "$DEPLOY_DIR"
+        fi
+
+        log_success "Existing installation removed successfully"
+    else
+        log_success "No existing installation found. Proceeding with fresh installation..."
+    fi
 }
 
 select_branch() {
@@ -750,10 +840,13 @@ main() {
     print_header
     
     detect_os
-    
+
     # Apply CLI overrides after OS detection (for deploy dir)
     validate_inputs
-    
+
+    # Check for existing installation before proceeding
+    check_existing_installation
+
     if ! check_docker; then
         log_warning "Docker is not installed. Attempting to install..."
         install_docker
