@@ -2,6 +2,10 @@ export interface CsrfGuardConfig {
   allowedOrigins: string[];
   allowSameOrigin: boolean;
   enforceInDevelopment: boolean;
+  /** Trust X-Forwarded-Host header for origin comparison (default: false).
+   *  Only enable when deployed behind a trusted reverse proxy that strips
+   *  client-provided X-Forwarded-Host before setting its own. */
+  trustForwardedHost?: boolean;
 }
 
 export interface CsrfGuardResult {
@@ -24,9 +28,41 @@ function isDevelopmentRuntime(): boolean {
   return process.env.NODE_ENV === "development";
 }
 
+/**
+ * Extract the effective host from request headers.
+ * Only uses X-Forwarded-Host when explicitly trusted; otherwise falls back to Host.
+ */
+function resolveEffectiveHost(
+  request: CsrfGuardRequest,
+  trustForwardedHost: boolean
+): string | null {
+  if (trustForwardedHost) {
+    const forwarded = request.headers.get("x-forwarded-host")?.trim().toLowerCase();
+    if (forwarded) {
+      const first = forwarded.split(",")[0]?.trim();
+      if (first) return first;
+    }
+  }
+  return request.headers.get("host")?.trim().toLowerCase() ?? null;
+}
+
+/**
+ * Compare Origin header against Host header (standard CSRF fallback).
+ * Extracts host:port from the Origin URL and compares with the request host.
+ */
+function isOriginMatchingHost(origin: string, host: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.host === host;
+  } catch {
+    return false;
+  }
+}
+
 export function createCsrfOriginGuard(config: CsrfGuardConfig) {
   const allowSameOrigin = config.allowSameOrigin ?? true;
   const enforceInDevelopment = config.enforceInDevelopment ?? false;
+  const trustForwardedHost = config.trustForwardedHost ?? false;
   const allowedOrigins = new Set(
     (config.allowedOrigins ?? []).map(normalizeOrigin).filter((origin) => origin.length > 0)
   );
@@ -54,6 +90,16 @@ export function createCsrfOriginGuard(config: CsrfGuardConfig) {
         }
 
         return { allowed: true };
+      }
+
+      // Fallback: compare Origin against Host header (standard CSRF technique).
+      // Handles cases where sec-fetch-site is absent (reverse proxy stripping,
+      // older browsers) but the request is genuinely same-origin.
+      if (allowSameOrigin) {
+        const host = resolveEffectiveHost(request, trustForwardedHost);
+        if (host && isOriginMatchingHost(origin, host)) {
+          return { allowed: true };
+        }
       }
 
       if (allowedOrigins.has(origin)) {
