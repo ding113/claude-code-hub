@@ -67,7 +67,7 @@
       "searchSessionId": "搜尋 Session ID...",
       "noUserFound": "未找到匹配的使用者",
       "noProviderFound": "未找到匹配的供應商",
-      "noSessionFound": "未找到匹配的 Session ID",
+      "noSessionFound": "未找到符合的 Session ID",
       "model": "Model",
       "endpoint": "端點",
       "status": "狀態",
@@ -244,6 +244,18 @@
       },
       "errorMessage": "錯誤訊息",
       "fake200ForwardedNotice": "提示：對於串流請求，此失敗可能在串流結束後才被識別；回應內容可能已原樣透傳給用戶端。",
+      "fake200DetectedReason": "檢測原因：{reason}",
+      "fake200Reasons": {
+        "emptyBody": "回應本文為空",
+        "htmlBody": "回傳了 HTML 文件（可能是錯誤頁）",
+        "jsonErrorNonEmpty": "JSON 頂層 error 欄位非空",
+        "jsonErrorMessageNonEmpty": "JSON 中 error.message 非空",
+        "jsonMessageKeywordMatch": "JSON message 欄位包含 \"error\"（啟發式）",
+        "unknown": "回應本文內容顯示錯誤"
+      },
+      "statusCodeInferredBadge": "推測",
+      "statusCodeInferredTooltip": "此狀態碼係根據回應內容推測（例如假200），可能與上游真實 HTTP 狀態碼不同。",
+      "statusCodeInferredSuffix": "（推測）",
       "filteredProviders": "被過濾的供應商",
       "providerChain": {
         "title": "供應商決策鏈時間軸",
@@ -268,6 +280,7 @@
         "cacheWrite1h": "快取寫入（1h）",
         "cacheRead": "快取讀取",
         "cacheTtl": "快取 TTL",
+        "cacheTtlSwapped": "計費 TTL（已互換）",
         "multiplier": "供應商倍率",
         "totalCost": "總費用",
         "context1m": "1M 上下文",
@@ -315,6 +328,7 @@
         "prioritySelection": "優先順序選擇",
         "attemptProvider": "嘗試: {provider}",
         "retryAttempt": "重試 #{number}",
+        "httpStatus": "HTTP {code}{inferredSuffix}",
         "sessionReuse": "會話複用",
         "sessionReuseDesc": "從會話快取複用供應商",
         "sessionReuseTitle": "會話綁定",
@@ -326,7 +340,12 @@
         "sessionAge": "會話年齡",
         "reusedProvider": "複用的供應商",
         "executeRequest": "執行請求",
-        "cacheOptimizationHint": "會話複用通過在同一對話中保持供應商親和性來優化效能，減少選擇開銷並提高快取命中率。"
+        "cacheOptimizationHint": "會話複用通過在同一對話中保持供應商親和性來優化效能，減少選擇開銷並提高快取命中率。",
+        "originDecisionTitle": "原始選擇決策",
+        "originDecisionDesc": "此會話中供應商最初被選擇的原因",
+        "originDecisionLoading": "正在載入原始決策...",
+        "originDecisionUnavailable": "原始決策記錄不可用",
+        "originDecisionExpand": "查看原始選擇"
       }
     },
     "providerChain": {
@@ -352,6 +371,7 @@
       "cacheWrite1h": "快取寫入（1h）",
       "cacheRead": "快取讀取",
       "cacheTtl": "快取 TTL",
+      "cacheTtlSwapped": "計費 TTL（已互換）",
       "multiplier": "供應商倍率",
       "totalCost": "總費用",
       "context1m": "1M 上下文長度",
@@ -689,7 +709,8 @@
     "states": {
       "noData": "暫無統計資料",
       "fetchFailed": "取得統計資料失敗"
-    }
+    },
+    "othersAggregate": "其他使用者"
   },
   "errors": {
     "fetchSystemSettingsFailed": "取得系統設定失敗",
@@ -761,6 +782,12 @@
   },
   "keyListHeader": {
     "todayUsage": "今日使用量",
+    "userStatus": {
+      "disabled": "已禁用",
+      "expired": "已過期",
+      "expiringSoon": "即將過期",
+      "active": "已啟用"
+    },
     "allowedModels": {
       "label": "允許的模型",
       "noRestrictions": "允許的模型：無限制"
@@ -1104,8 +1131,16 @@
       "highTooltip": "請求量充足，資料可靠。"
     },
     "actions": {
+      "refresh": "重新整理",
+      "refreshing": "重新整理中...",
+      "autoRefresh": "自動重新整理",
+      "stopAutoRefresh": "停止自動重新整理",
+      "viewDetails": "檢視詳情",
+      "testProvider": "測試供應商",
+      "retry": "重試",
       "probeNow": "立即探測",
       "probing": "探測中...",
+      "probeAll": "探測全部",
       "probeSuccess": "探測成功",
       "probeFailed": "探測失敗"
     },
@@ -1166,20 +1201,6 @@
       "timeBuckets": "時間分段",
       "greenCount": "成功請求",
       "redCount": "失敗請求"
-    },
-    "actions": {
-      "refresh": "重新整理",
-      "refreshing": "重新整理中...",
-      "autoRefresh": "自動重新整理",
-      "stopAutoRefresh": "停止自動重新整理",
-      "viewDetails": "檢視詳情",
-      "testProvider": "測試供應商",
-      "retry": "重試",
-      "probeNow": "立即探測",
-      "probing": "探測中...",
-      "probeAll": "探測全部",
-      "probeSuccess": "探測成功",
-      "probeFailed": "探測失敗"
     },
     "states": {
       "loading": "載入中...",
@@ -1361,7 +1382,7 @@
         "group": "分組",
         "todayUsage": "今日請求",
         "todayCost": "今日花費",
-        "todayTokens": "今日Token",
+        "todayTokens": "今日 Token",
         "lastUsed": "最後使用",
         "actions": "動作",
         "quotaButton": "查看限額用量",
@@ -1487,8 +1508,8 @@
         "button": "重置統計",
         "confirmTitle": "重置所有統計？",
         "confirmDescription": "這將永久刪除該使用者的所有請求日誌和使用統計。此操作無法撤銷。",
-        "confirm": "是的，重置全部",
-        "loading": "重置中...",
+        "confirm": "是的，重設全部",
+        "loading": "重設中...",
         "success": "所有統計已重置"
       }
     },
@@ -1753,7 +1774,15 @@
           "label": "用戶端限制",
           "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
           "customLabel": "自訂用戶端模式",
-          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）",
+          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
+        },
+        "blockedClients": {
+          "label": "黑名單客戶端",
+          "description": "符合這些模式的客戶端將被拒絕，即使它們也符合白名單。",
+          "customLabel": "自訂黑名單模式",
+          "customPlaceholder": "輸入模式（如 'xcode'、'my-ide'）",
+          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
         },
         "allowedModels": {
           "label": "Model 限制",
@@ -1774,11 +1803,22 @@
           "processing": "處理中..."
         }
       },
+      "actions": {
+        "allow": "允許",
+        "block": "封鎖"
+      },
       "presetClients": {
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code（全部）",
+        "claude-code-cli": "Claude Code CLI （精確檢測）",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK（TypeScript）",
+        "claude-code-sdk-py": "Claude Code SDK（Python）",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {

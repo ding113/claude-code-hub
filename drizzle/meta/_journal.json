@@ -477,6 +477,76 @@
       "when": 1771045274665,
       "tag": "0067_gorgeous_mulholland_black",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1771164248361,
+      "tag": "0068_flaky_swarm",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1771188568762,
+      "tag": "0069_special_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1771233193254,
+      "tag": "0070_stormy_exiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1771491614848,
+      "tag": "0071_purple_captain_midlands",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1771519353657,
+      "tag": "0072_dark_gwen_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1771527016184,
+      "tag": "0073_magical_manta",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1771600203231,
+      "tag": "0074_wide_retro_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1771688588623,
+      "tag": "0075_faithful_speed_demon",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1771954926766,
+      "tag": "0076_mighty_lionheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1772219877045,
+      "tag": "0077_nappy_giant_man",
+      "breakpoints": true
     }
   ]
 }

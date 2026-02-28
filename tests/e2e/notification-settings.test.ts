@@ -11,17 +11,26 @@
  * - 已配置 ADMIN_TOKEN（或 TEST_ADMIN_TOKEN）
  */
 
-import { afterAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { loginAndGetAuthToken } from "./_helpers/auth";
 
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/api/actions";
-const ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
+const ADMIN_KEY = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
+const run = ADMIN_KEY ? describe : describe.skip;
+
+let authToken: string | undefined;
 
 async function callApi(module: string, action: string, body: Record<string, unknown> = {}) {
+  if (!authToken) {
+    throw new Error("E2E tests require ADMIN_TOKEN/TEST_ADMIN_TOKEN (used to login)");
+  }
+
   const response = await fetch(`${API_BASE_URL}/${module}/${action}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Cookie: `auth-token=${ADMIN_TOKEN}`,
+      Authorization: `Bearer ${authToken}`,
+      Cookie: `auth-token=${authToken}`,
     },
     body: JSON.stringify(body),
   });
@@ -47,7 +56,14 @@ const testState = {
   targetIds: [] as number[],
 };
 
+beforeAll(async () => {
+  if (!ADMIN_KEY) return;
+  authToken = await loginAndGetAuthToken(API_BASE_URL, ADMIN_KEY);
+});
+
 afterAll(async () => {
+  if (!authToken) return;
+
   // 尽量清理测试数据（忽略失败）
   for (const id of testState.targetIds) {
     try {
@@ -57,8 +73,6 @@ afterAll(async () => {
     }
   }
 });
-
-const run = ADMIN_TOKEN ? describe : describe.skip;
 
 run("通知设置 - Webhook 目标与绑定（E2E）", () => {
   let targetId: number;

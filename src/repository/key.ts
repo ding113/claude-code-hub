@@ -2,7 +2,7 @@
 
 import { and, count, desc, eq, gt, gte, inArray, isNull, lt, or, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import { keys, providers, usageLedger, users } from "@/drizzle/schema";
 import { CHANNEL_API_KEYS_UPDATED, publishCacheInvalidation } from "@/lib/redis/pubsub";
 import {
   cacheActiveKey,
@@ -16,7 +16,7 @@ import { apiKeyVacuumFilter } from "@/lib/security/api-key-vacuum-filter";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import type { CreateKeyData, Key, UpdateKeyData } from "@/types/key";
 import type { User } from "@/types/user";
-import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
+import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { toKey, toUser } from "./_shared/transformers";
 
 export async function findKeyById(id: number): Promise<Key | null> {
@@ -337,17 +337,16 @@ export async function findKeyUsageToday(
   const rows = await db
     .select({
       keyId: keys.id,
-      totalCost: sum(messageRequest.costUsd),
+      totalCost: sum(usageLedger.costUsd),
     })
     .from(keys)
     .leftJoin(
-      messageRequest,
+      usageLedger,
       and(
-        eq(messageRequest.key, keys.key),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, today),
-        lt(messageRequest.createdAt, tomorrow)
+        eq(usageLedger.key, keys.key),
+        LEDGER_BILLING_CONDITION,
+        gte(usageLedger.createdAt, today),
+        lt(usageLedger.createdAt, tomorrow)
       )
     )
     .where(and(eq(keys.userId, userId), isNull(keys.deletedAt)))
@@ -382,23 +381,22 @@ export async function findKeyUsageTodayBatch(
     .select({
       userId: keys.userId,
       keyId: keys.id,
-      totalCost: sum(messageRequest.costUsd),
+      totalCost: sum(usageLedger.costUsd),
       totalTokens: sql<number>`COALESCE(SUM(
-        COALESCE(${messageRequest.inputTokens}, 0)::double precision +
-        COALESCE(${messageRequest.outputTokens}, 0)::double precision +
-        COALESCE(${messageRequest.cacheCreationInputTokens}, 0)::double precision +
-        COALESCE(${messageRequest.cacheReadInputTokens}, 0)::double precision
+        COALESCE(${usageLedger.inputTokens}, 0)::double precision +
+        COALESCE(${usageLedger.outputTokens}, 0)::double precision +
+        COALESCE(${usageLedger.cacheCreationInputTokens}, 0)::double precision +
+        COALESCE(${usageLedger.cacheReadInputTokens}, 0)::double precision
       ), 0::double precision)`,
     })
     .from(keys)
     .leftJoin(
-      messageRequest,
+      usageLedger,
       and(
-        eq(messageRequest.key, keys.key),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, today),
-        lt(messageRequest.createdAt, tomorrow)
+        eq(usageLedger.key, keys.key),
+        LEDGER_BILLING_CONDITION,
+        gte(usageLedger.createdAt, today),
+        lt(usageLedger.createdAt, tomorrow)
       )
     )
     .where(and(inArray(keys.userId, userIds), isNull(keys.deletedAt)))
@@ -725,58 +723,50 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
     // 查询今日调用次数
     const [todayCount] = await db
       .select({ count: count() })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          eq(messageRequest.key, key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          gte(messageRequest.createdAt, today),
-          lt(messageRequest.createdAt, tomorrow)
+          eq(usageLedger.key, key.key),
+          LEDGER_BILLING_CONDITION,
+          gte(usageLedger.createdAt, today),
+          lt(usageLedger.createdAt, tomorrow)
         )
       );
 
     // 查询最后使用时间和供应商
     const [lastUsage] = await db
       .select({
-        createdAt: messageRequest.createdAt,
+        createdAt: usageLedger.createdAt,
         providerName: providers.name,
       })
-      .from(messageRequest)
-      .innerJoin(providers, eq(messageRequest.providerId, providers.id))
-      .where(
-        and(
-          eq(messageRequest.key, key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION
-        )
-      )
-      .orderBy(desc(messageRequest.createdAt))
+      .from(usageLedger)
+      .innerJoin(providers, eq(usageLedger.finalProviderId, providers.id))
+      .where(and(eq(usageLedger.key, key.key), LEDGER_BILLING_CONDITION))
+      .orderBy(desc(usageLedger.createdAt))
       .limit(1);
 
     // 查询分模型统计（仅统计当天）
     const modelStatsRows = await db
       .select({
-        model: messageRequest.model,
+        model: usageLedger.model,
         callCount: sql<number>`count(*)::int`,
-        totalCost: sum(messageRequest.costUsd),
-        inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-        outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-        cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-        cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+        totalCost: sum(usageLedger.costUsd),
+        inputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
+        outputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
+        cacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}), 0)::double precision`,
+        cacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}), 0)::double precision`,
       })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          eq(messageRequest.key, key.key),
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
-          gte(messageRequest.createdAt, today),
-          lt(messageRequest.createdAt, tomorrow),
-          sql`${messageRequest.model} IS NOT NULL`
+          eq(usageLedger.key, key.key),
+          LEDGER_BILLING_CONDITION,
+          gte(usageLedger.createdAt, today),
+          lt(usageLedger.createdAt, tomorrow),
+          sql`${usageLedger.model} IS NOT NULL`
         )
       )
-      .groupBy(messageRequest.model)
+      .groupBy(usageLedger.model)
       .orderBy(desc(sql`count(*)`));
 
     const modelStats = modelStatsRows.map((row) => ({
@@ -805,6 +795,21 @@ export async function findKeysWithStatistics(userId: number): Promise<KeyStatist
 }
 
 /**
+ * Batch version of findKeysWithStatistics using a pre-fetched keysMap.
+ * Eliminates the redundant findKeyListBatch call when the caller already has keys.
+ *
+ * Queries: 3 (today call counts, last usage via LATERAL, model statistics).
+ * Callers typically also run findKeyListBatch + findKeyUsageTodayBatch
+ * for a grand total of 5 DB roundtrips.
+ */
+export async function findKeysStatisticsBatchFromKeys(
+  keysMap: Map<number, Key[]>
+): Promise<Map<number, KeyStatistics[]>> {
+  const userIds = Array.from(keysMap.keys());
+  return _findKeysStatisticsBatchInternal(userIds, keysMap);
+}
+
+/**
  * Batch version of findKeysWithStatistics - fetches statistics for multiple users in optimized queries
  * Returns a Map<userId, KeyStatistics[]> for efficient lookup
  *
@@ -823,6 +828,17 @@ export async function findKeysWithStatisticsBatch(
 
   // Step 1: Get all keys for all users
   const keyMap = await findKeyListBatch(userIds);
+
+  return _findKeysStatisticsBatchInternal(userIds, keyMap);
+}
+
+async function _findKeysStatisticsBatchInternal(
+  userIds: number[],
+  keyMap: Map<number, Key[]>
+): Promise<Map<number, KeyStatistics[]>> {
+  if (userIds.length === 0) {
+    return new Map();
+  }
 
   // Collect all keys and create a keyString -> (userId, keyId) lookup
   const allKeys: Key[] = [];
@@ -852,20 +868,19 @@ export async function findKeysWithStatisticsBatch(
   // Step 2: Query today's call counts for all keys at once
   const todayCountRows = await db
     .select({
-      key: messageRequest.key,
+      key: usageLedger.key,
       count: count(),
     })
-    .from(messageRequest)
+    .from(usageLedger)
     .where(
       and(
-        inArray(messageRequest.key, keyStrings),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, today),
-        lt(messageRequest.createdAt, tomorrow)
+        inArray(usageLedger.key, keyStrings),
+        LEDGER_BILLING_CONDITION,
+        gte(usageLedger.createdAt, today),
+        lt(usageLedger.createdAt, tomorrow)
       )
     )
-    .groupBy(messageRequest.key);
+    .groupBy(usageLedger.key);
 
   const todayCountMap = new Map<string, number>();
   for (const row of todayCountRows) {
@@ -874,30 +889,35 @@ export async function findKeysWithStatisticsBatch(
     }
   }
 
-  // Step 3: Query last usage for all keys at once using DISTINCT ON
-  const lastUsageRows = await db
-    .selectDistinctOn([messageRequest.key], {
-      key: messageRequest.key,
-      createdAt: messageRequest.createdAt,
-      providerName: providers.name,
-    })
-    .from(messageRequest)
-    .innerJoin(providers, eq(messageRequest.providerId, providers.id))
-    .where(
-      and(
-        inArray(messageRequest.key, keyStrings),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
-      )
-    )
-    .orderBy(messageRequest.key, desc(messageRequest.createdAt));
+  // Step 3: Query last usage for all keys via LATERAL JOIN (1 index probe per key)
+  const keyParams = sql.join(
+    keyStrings.map((k) => sql`${k}`),
+    sql.raw(", ")
+  );
+  const lastUsageResult = await db.execute(sql`
+    SELECT k.key_val AS key, lr.created_at, p.name AS provider_name
+    FROM unnest(ARRAY[${keyParams}]::varchar[]) AS k(key_val)
+    LEFT JOIN LATERAL (
+      SELECT ul.created_at, ul.final_provider_id
+      FROM usage_ledger ul
+      WHERE ul.key = k.key_val
+        AND ul.blocked_by IS NULL
+      ORDER BY ul.created_at DESC NULLS LAST
+      LIMIT 1
+    ) lr ON true
+    LEFT JOIN providers p ON lr.final_provider_id = p.id
+  `);
 
   const lastUsageMap = new Map<string, { createdAt: Date | null; providerName: string | null }>();
-  for (const row of lastUsageRows) {
+  for (const row of Array.from(lastUsageResult) as Array<{
+    key: string | null;
+    created_at: Date | null;
+    provider_name: string | null;
+  }>) {
     if (row.key) {
       lastUsageMap.set(row.key, {
-        createdAt: row.createdAt,
-        providerName: row.providerName,
+        createdAt: row.created_at ?? null,
+        providerName: row.provider_name ?? null,
       });
     }
   }
@@ -905,28 +925,27 @@ export async function findKeysWithStatisticsBatch(
   // Step 4: Query model statistics for all keys at once
   const modelStatsRows = await db
     .select({
-      key: messageRequest.key,
-      model: messageRequest.model,
+      key: usageLedger.key,
+      model: usageLedger.model,
       callCount: sql<number>`count(*)::int`,
-      totalCost: sum(messageRequest.costUsd),
-      inputTokens: sql<number>`COALESCE(sum(${messageRequest.inputTokens}), 0)::double precision`,
-      outputTokens: sql<number>`COALESCE(sum(${messageRequest.outputTokens}), 0)::double precision`,
-      cacheCreationTokens: sql<number>`COALESCE(sum(${messageRequest.cacheCreationInputTokens}), 0)::double precision`,
-      cacheReadTokens: sql<number>`COALESCE(sum(${messageRequest.cacheReadInputTokens}), 0)::double precision`,
+      totalCost: sum(usageLedger.costUsd),
+      inputTokens: sql<number>`COALESCE(sum(${usageLedger.inputTokens}), 0)::double precision`,
+      outputTokens: sql<number>`COALESCE(sum(${usageLedger.outputTokens}), 0)::double precision`,
+      cacheCreationTokens: sql<number>`COALESCE(sum(${usageLedger.cacheCreationInputTokens}), 0)::double precision`,
+      cacheReadTokens: sql<number>`COALESCE(sum(${usageLedger.cacheReadInputTokens}), 0)::double precision`,
     })
-    .from(messageRequest)
+    .from(usageLedger)
     .where(
       and(
-        inArray(messageRequest.key, keyStrings),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        gte(messageRequest.createdAt, today),
-        lt(messageRequest.createdAt, tomorrow),
-        sql`${messageRequest.model} IS NOT NULL`
+        inArray(usageLedger.key, keyStrings),
+        LEDGER_BILLING_CONDITION,
+        gte(usageLedger.createdAt, today),
+        lt(usageLedger.createdAt, tomorrow),
+        sql`${usageLedger.model} IS NOT NULL`
       )
     )
-    .groupBy(messageRequest.key, messageRequest.model)
-    .orderBy(messageRequest.key, desc(sql`count(*)`));
+    .groupBy(usageLedger.key, usageLedger.model)
+    .orderBy(usageLedger.key, desc(sql`count(*)`));
 
   // Group model stats by key
   const modelStatsMap = new Map<

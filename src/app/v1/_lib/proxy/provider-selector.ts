@@ -3,11 +3,14 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
+import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
 import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
+import { isClientAllowedDetailed } from "./client-detector";
 import type { ClientFormat } from "./format-mapper";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
@@ -423,10 +426,15 @@ export class ProxyProviderResolver {
         const circuitOpen = filteredProviders.filter((p) => p.reason === "circuit_open");
         const disabled = filteredProviders.filter((p) => p.reason === "disabled");
         const modelNotAllowed = filteredProviders.filter((p) => p.reason === "model_not_allowed");
+        const clientRestricted = filteredProviders.filter((p) => p.reason === "client_restriction");
 
         // 计算可用供应商数量（排除禁用和模型不支持的）
         const unavailableCount = rateLimited.length + circuitOpen.length;
-        const totalEnabled = filteredProviders.length - disabled.length - modelNotAllowed.length;
+        const totalEnabled =
+          filteredProviders.length -
+          disabled.length -
+          modelNotAllowed.length -
+          clientRestricted.length;
 
         if (
           rateLimited.length > 0 &&
@@ -473,11 +481,20 @@ export class ProxyProviderResolver {
 
     const filteredProviders = session.getLastSelectionContext()?.filteredProviders;
     if (filteredProviders) {
+      const clientRestricted = filteredProviders.filter((p) => p.reason === "client_restriction");
+
       // C-001: 脱敏供应商名称，仅暴露 id 和 reason
       details.filteredProviders = filteredProviders.map((p) => ({
         id: p.id,
         reason: p.reason,
       }));
+
+      if (clientRestricted.length > 0) {
+        details.clientRestrictedProviders = clientRestricted.map((p) => ({
+          id: p.id,
+          reason: p.reason,
+        }));
+      }
     }
 
     return ProxyResponses.buildError(status, message, errorType, details);
@@ -518,6 +535,20 @@ export class ProxyProviderResolver {
         sessionId: session.sessionId,
         providerId,
       });
+      return null;
+    }
+
+    // 调度时间窗口检查：防止会话复用绕过时间调度
+    const systemTimezone = await resolveSystemTimezone();
+    if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
+      logger.debug("ProviderSelector: Session provider outside active schedule", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        activeTimeStart: provider.activeTimeStart,
+        activeTimeEnd: provider.activeTimeEnd,
+        timezone: systemTimezone,
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
       return null;
     }
 
@@ -570,6 +601,55 @@ export class ProxyProviderResolver {
         requestedModel,
       });
 
+      return null;
+    }
+
+    // Check provider-level client restrictions on session reuse
+    const providerAllowed = provider.allowedClients ?? [];
+    const providerBlocked = provider.blockedClients ?? [];
+    const clientResult = isClientAllowedDetailed(session, providerAllowed, providerBlocked);
+    if (!clientResult.allowed) {
+      logger.debug("ProviderSelector: Session provider blocked by client restrictions", {
+        sessionId: session.sessionId,
+        providerId: provider.id,
+        matchType: clientResult.matchType,
+        matchedPattern: clientResult.matchedPattern,
+        detectedClient: clientResult.detectedClient,
+      });
+      session.addProviderToChain(provider, {
+        reason: "client_restriction_filtered",
+        decisionContext: {
+          totalProviders: 0,
+          enabledProviders: 0,
+          targetType: provider.providerType as NonNullable<
+            ProviderChainItem["decisionContext"]
+          >["targetType"],
+          requestedModel: session.getOriginalModel() || "",
+          groupFilterApplied: false,
+          beforeHealthCheck: 0,
+          afterHealthCheck: 0,
+          priorityLevels: [],
+          selectedPriority: 0,
+          candidatesAtPriority: [],
+          filteredProviders: [
+            {
+              id: provider.id,
+              name: provider.name,
+              reason: "client_restriction",
+              details:
+                clientResult.matchType === "blocklist_hit" ? "blocklist_hit" : "allowlist_miss",
+              clientRestrictionContext: {
+                matchType: clientResult.matchType as "blocklist_hit" | "allowlist_miss",
+                matchedPattern: clientResult.matchedPattern,
+                detectedClient: clientResult.detectedClient,
+                providerAllowlist: clientResult.checkedAllowlist,
+                providerBlocklist: clientResult.checkedBlocklist,
+              },
+            },
+          ],
+        },
+      });
+      await SessionManager.clearSessionProvider(session.sessionId);
       return null;
     }
 
@@ -749,10 +829,49 @@ export class ProxyProviderResolver {
       excludedProviderIds: excludeIds.length > 0 ? excludeIds : undefined,
     };
 
+    if (session) {
+      const clientFilteredProviders: typeof visibleProviders = [];
+      for (const p of visibleProviders) {
+        const providerAllowed = p.allowedClients ?? [];
+        const providerBlocked = p.blockedClients ?? [];
+        if (providerAllowed.length === 0 && providerBlocked.length === 0) {
+          clientFilteredProviders.push(p);
+          continue;
+        }
+        const result = isClientAllowedDetailed(session, providerAllowed, providerBlocked);
+        if (!result.allowed) {
+          context.filteredProviders?.push({
+            id: p.id,
+            name: p.name,
+            reason: "client_restriction",
+            details: result.matchType === "blocklist_hit" ? "blocklist_hit" : "allowlist_miss",
+            clientRestrictionContext: {
+              matchType: result.matchType as "blocklist_hit" | "allowlist_miss",
+              matchedPattern: result.matchedPattern,
+              detectedClient: result.detectedClient,
+              providerAllowlist: result.checkedAllowlist,
+              providerBlocklist: result.checkedBlocklist,
+            },
+          });
+          continue;
+        }
+        clientFilteredProviders.push(p);
+      }
+      visibleProviders = clientFilteredProviders;
+    }
+
+    // Resolve system timezone once for active time checks
+    const systemTimezone = await resolveSystemTimezone();
+
     // Step 2: 基础过滤 + 格式/模型匹配（使用 visibleProviders）
     const enabledProviders = visibleProviders.filter((provider) => {
       // 2a. 基础过滤
       if (!provider.isEnabled || excludeIds.includes(provider.id)) {
+        return false;
+      }
+
+      // 2a-2. 调度时间窗口过滤
+      if (!isProviderActiveNow(provider.activeTimeStart, provider.activeTimeEnd, systemTimezone)) {
         return false;
       }
 
@@ -790,6 +909,7 @@ export class ProxyProviderResolver {
           | "type_mismatch"
           | "model_not_allowed"
           | "context_1m_disabled"
+          | "schedule_inactive"
           | "disabled" = "disabled";
         let details = "";
 
@@ -799,6 +919,9 @@ export class ProxyProviderResolver {
         } else if (excludeIds.includes(p.id)) {
           reason = "excluded";
           details = "已在前序尝试中失败";
+        } else if (!isProviderActiveNow(p.activeTimeStart, p.activeTimeEnd, systemTimezone)) {
+          reason = "schedule_inactive";
+          details = `outside active window ${p.activeTimeStart}-${p.activeTimeEnd}`;
         } else if (
           session?.originalFormat &&
           !checkFormatProviderTypeCompatibility(session.originalFormat, p.providerType)
@@ -1157,9 +1280,13 @@ export class ProxyProviderResolver {
       );
     }
 
-    // 按 providerType 精确过滤
+    // 按 providerType 精确过滤 + 调度时间窗口
+    const systemTimezone = await resolveSystemTimezone();
     const typeFiltered = visibleProviders.filter(
-      (p) => p.isEnabled && p.providerType === providerType
+      (p) =>
+        p.isEnabled &&
+        p.providerType === providerType &&
+        isProviderActiveNow(p.activeTimeStart, p.activeTimeEnd, systemTimezone)
     );
 
     // 将 providerType 映射为 decisionContext 允许的 targetType

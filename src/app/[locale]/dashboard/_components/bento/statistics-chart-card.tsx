@@ -27,6 +27,21 @@ const USER_COLOR_PALETTE = [
 
 const getUserColor = (index: number) => USER_COLOR_PALETTE[index % USER_COLOR_PALETTE.length];
 
+const CHART_HEIGHT_MAX_PX_WITH_LEGEND = 240;
+const CHART_HEIGHT_MAX_PX_NO_LEGEND = 280;
+
+function parsePx(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed === "0") return 0;
+
+  // 避免误把 50vh/50dvh 之类的相对单位当作 px（会导致高度计算错误）。
+  if (!trimmed.endsWith("px")) return null;
+
+  const parsed = Number.parseFloat(trimmed.slice(0, -2));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 export interface StatisticsChartCardProps {
   data: UserStatisticsData;
   onTimeRangeChange?: (timeRange: TimeRange) => void;
@@ -58,6 +73,133 @@ export function StatisticsChartCard({
   const isAdminMode = data.mode === "users";
   const enableUserFilter = isAdminMode && data.users.length > 1;
 
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const headerRef = React.useRef<HTMLDivElement>(null);
+  const metricTabsRef = React.useRef<HTMLDivElement>(null);
+  const chartWrapperRef = React.useRef<HTMLDivElement>(null);
+  const legendRef = React.useRef<HTMLDivElement>(null);
+  const tooltipScrollRef = React.useRef<HTMLDivElement>(null);
+
+  const [chartHeightPx, setChartHeightPx] = React.useState<number>(() =>
+    enableUserFilter ? CHART_HEIGHT_MAX_PX_WITH_LEGEND : CHART_HEIGHT_MAX_PX_NO_LEGEND
+  );
+
+  React.useLayoutEffect(() => {
+    const card = cardRef.current;
+    const header = headerRef.current;
+    const metricTabs = metricTabsRef.current;
+    const chartWrapper = chartWrapperRef.current;
+
+    if (!card || !header || !metricTabs || !chartWrapper) {
+      return;
+    }
+
+    const compute = () => {
+      const cardStyle = getComputedStyle(card);
+      const viewportHeightPx = window.visualViewport?.height ?? window.innerHeight;
+      const fallbackMaxHeightPx = Math.min(Math.floor(viewportHeightPx * 0.6), 720);
+      const maxHeightPx = parsePx(cardStyle.maxHeight) ?? fallbackMaxHeightPx;
+      const minHeightPx = parsePx(cardStyle.minHeight) ?? 0;
+      const effectiveMaxHeightPx = Math.max(maxHeightPx, minHeightPx);
+
+      const cardPadding =
+        (parsePx(cardStyle.paddingTop) ?? 0) + (parsePx(cardStyle.paddingBottom) ?? 0);
+      const cardBorder =
+        (parsePx(cardStyle.borderTopWidth) ?? 0) + (parsePx(cardStyle.borderBottomWidth) ?? 0);
+
+      const headerHeight = header.getBoundingClientRect().height;
+      const metricTabsHeight = metricTabs.getBoundingClientRect().height;
+      const legendHeight = enableUserFilter
+        ? (legendRef.current?.getBoundingClientRect().height ?? 0)
+        : 0;
+
+      const chartWrapperStyle = getComputedStyle(chartWrapper);
+      const chartWrapperPadding =
+        (parsePx(chartWrapperStyle.paddingTop) ?? 0) +
+        (parsePx(chartWrapperStyle.paddingBottom) ?? 0);
+
+      const reservedHeight =
+        cardPadding + headerHeight + metricTabsHeight + legendHeight + chartWrapperPadding;
+
+      // 避免 1px 级的裁切：
+      // - DOM 计算高度可能带小数（浏览器缩放 / 子像素）
+      // - 卡片自身 border 也会占用 max-h 的可用空间
+      const reservedHeightRounded = Math.ceil(reservedHeight);
+      // 额外留 4px 兜底空间，覆盖不同浏览器/缩放下的 rounding、边框与子像素误差，避免底部内容露半截。
+      const safetyGapPx = 4;
+      const availableHeight = Math.max(
+        0,
+        Math.floor(effectiveMaxHeightPx - reservedHeightRounded - cardBorder - safetyGapPx)
+      );
+
+      const maxChartHeight = enableUserFilter
+        ? CHART_HEIGHT_MAX_PX_WITH_LEGEND
+        : CHART_HEIGHT_MAX_PX_NO_LEGEND;
+
+      const nextHeight = Math.max(0, Math.min(maxChartHeight, availableHeight));
+      setChartHeightPx((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    compute();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", compute);
+      return () => window.removeEventListener("resize", compute);
+    }
+
+    const visualViewport = window.visualViewport;
+    // 即使有 ResizeObserver，也需要监听 viewport 变化：
+    // - 当内容高度小于 max-h 时，卡片本身不会因为视口变高而触发 RO
+    // - 但 vh/dvh 上限变大后，需要让图表高度回弹
+    // 同时监听 visualViewport resize，覆盖移动端地址栏/键盘导致的可视区域变化。
+    visualViewport?.addEventListener("resize", compute);
+
+    const observer = new ResizeObserver(compute);
+    observer.observe(header);
+    observer.observe(metricTabs);
+    if (enableUserFilter && legendRef.current) {
+      observer.observe(legendRef.current);
+    }
+    window.addEventListener("resize", compute);
+
+    return () => {
+      window.removeEventListener("resize", compute);
+      visualViewport?.removeEventListener("resize", compute);
+      observer.disconnect();
+    };
+  }, [enableUserFilter]);
+
+  React.useEffect(() => {
+    const chartWrapper = chartWrapperRef.current;
+    if (!chartWrapper) return;
+
+    const handleWheel = (event: WheelEvent) => {
+      const scrollContainer = tooltipScrollRef.current;
+      if (!scrollContainer) return;
+
+      const maxScrollTop = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      if (maxScrollTop <= 0) return;
+
+      const deltaY =
+        event.deltaMode === 1
+          ? event.deltaY * 16
+          : event.deltaMode === 2
+            ? event.deltaY * 240
+            : event.deltaY;
+      if (!Number.isFinite(deltaY) || deltaY === 0) return;
+
+      const current = scrollContainer.scrollTop;
+      const next = Math.min(maxScrollTop, Math.max(0, current + deltaY));
+      if (next === current) return;
+
+      scrollContainer.scrollTop = next;
+      event.preventDefault();
+    };
+
+    chartWrapper.addEventListener("wheel", handleWheel, { passive: false });
+    return () => chartWrapper.removeEventListener("wheel", handleWheel);
+  }, []);
+
   const toggleUserSelection = (userId: number) => {
     setSelectedUserIds((prev) => {
       const next = new Set(prev);
@@ -79,7 +221,7 @@ export function StatisticsChartCard({
     };
     data.users.forEach((user, index) => {
       config[user.dataKey] = {
-        label: user.name,
+        label: user.name === "__others__" ? t("othersAggregate") : user.name,
         color: getUserColor(index),
       };
     });
@@ -167,11 +309,25 @@ export function StatisticsChartCard({
     return formatInTimeZone(date, timeZone, "yyyy MMMM d", { locale: dateFnsLocale });
   };
 
+  // 图表卡片整体 max-h 为 min(60vh, 720px)，用于保持首页更紧凑且避免大屏过高。
+  // 同时设置 min-h 300px（优先级最高），保证最小可读性。
+  // 关键目标：不让卡片本身滚动，在小视口下通过收缩图表高度，确保底部 Legend/按钮不被裁切。
+  // 这里使用 DOM 实测（Header/MetricTabs/Legend/ChartPadding）来计算可用高度，避免硬编码误差。
+
   return (
-    <BentoCard className={cn("flex flex-col p-0 overflow-hidden", className)}>
+    <BentoCard
+      ref={cardRef}
+      className={cn(
+        "p-0 md:p-1 min-h-[300px] max-h-[min(var(--cch-viewport-height-60),720px)] overflow-visible hover:z-20",
+        className
+      )}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 dark:border-white/[0.06]">
-        <div className="flex items-center gap-4 p-4">
+      <div
+        ref={headerRef}
+        className="flex items-center justify-between border-b border-border/50 dark:border-white/[0.06]"
+      >
+        <div className="flex items-center gap-4 px-4 py-2">
           <h4 className="text-sm font-semibold">{t("title")}</h4>
           {/* Chart Mode Toggle */}
           {visibleUsers.length > 1 && (
@@ -203,7 +359,7 @@ export function StatisticsChartCard({
                 data-active={data.timeRange === option.key}
                 onClick={() => onTimeRangeChange(option.key)}
                 className={cn(
-                  "px-3 py-3 text-xs font-medium transition-colors cursor-pointer",
+                  "px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer",
                   "border-l border-border/50 dark:border-white/[0.06] first:border-l-0",
                   "hover:bg-muted/50 dark:hover:bg-white/[0.03]",
                   "data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
@@ -217,12 +373,12 @@ export function StatisticsChartCard({
       </div>
 
       {/* Metric Tabs */}
-      <div className="flex border-b border-border/50 dark:border-white/[0.06]">
+      <div ref={metricTabsRef} className="flex border-b border-border/50 dark:border-white/[0.06]">
         <button
           data-active={activeChart === "cost"}
           onClick={() => setActiveChart("cost")}
           className={cn(
-            "flex-1 flex flex-col items-start gap-0.5 px-4 py-3 transition-colors cursor-pointer",
+            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2 transition-colors cursor-pointer",
             "border-r border-border/50 dark:border-white/[0.06]",
             "hover:bg-muted/30 dark:hover:bg-white/[0.02]",
             "data-[active=true]:bg-muted/50 dark:data-[active=true]:bg-white/[0.04]"
@@ -231,7 +387,7 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCost")}
           </span>
-          <span className="text-lg font-bold tabular-nums">
+          <span className="text-base font-bold tabular-nums">
             {formatCurrency(visibleTotals.cost, currencyCode)}
           </span>
         </button>
@@ -239,7 +395,7 @@ export function StatisticsChartCard({
           data-active={activeChart === "calls"}
           onClick={() => setActiveChart("calls")}
           className={cn(
-            "flex-1 flex flex-col items-start gap-0.5 px-4 py-3 transition-colors cursor-pointer",
+            "flex-1 flex flex-col items-start gap-0.5 px-4 py-2 transition-colors cursor-pointer",
             "hover:bg-muted/30 dark:hover:bg-white/[0.02]",
             "data-[active=true]:bg-muted/50 dark:data-[active=true]:bg-white/[0.04]"
           )}
@@ -247,15 +403,19 @@ export function StatisticsChartCard({
           <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
             {t("totalCalls")}
           </span>
-          <span className="text-lg font-bold tabular-nums">
+          <span className="text-base font-bold tabular-nums">
             {visibleTotals.calls.toLocaleString()}
           </span>
         </button>
       </div>
 
       {/* Chart */}
-      <div className="flex-1 p-4">
-        <ChartContainer config={chartConfig} className="h-full w-full min-h-[200px]">
+      <div ref={chartWrapperRef} className="px-4 py-2">
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto w-full"
+          style={{ height: chartHeightPx }}
+        >
           <AreaChart data={numericChartData} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
             <defs>
               {data.users.map((user, index) => {
@@ -302,6 +462,8 @@ export function StatisticsChartCard({
             />
             <ChartTooltip
               cursor={{ stroke: "hsl(var(--primary))", strokeWidth: 1, strokeDasharray: "4 4" }}
+              reverseDirection={{ x: false, y: true }}
+              wrapperStyle={{ zIndex: 1000 }}
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
                 const filteredPayload = payload.filter((entry) => {
@@ -312,41 +474,51 @@ export function StatisticsChartCard({
                 if (!filteredPayload.length) return null;
 
                 return (
-                  <div className="rounded-lg border bg-card/95 backdrop-blur-sm p-3 shadow-lg min-w-[180px]">
-                    <div className="text-xs font-medium text-center mb-2 pb-2 border-b border-border/50">
+                  <div
+                    className="rounded-lg border bg-background shadow-sm min-w-[180px] overflow-y-auto"
+                    style={{ maxHeight: "min(var(--cch-viewport-height-80), 720px)" }}
+                    ref={tooltipScrollRef}
+                  >
+                    <div className="sticky top-0 z-10 bg-background text-xs font-medium text-center px-3 py-2 border-b border-border/50">
                       {formatTooltipDate(String(label ?? ""))}
                     </div>
-                    <div className="space-y-1.5">
-                      {[...filteredPayload]
-                        .sort((a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0))
-                        .map((entry, index) => {
-                          const baseKey =
-                            entry.dataKey?.toString().replace(`_${activeChart}`, "") || "";
-                          const displayUser = userMap.get(baseKey);
-                          const value =
-                            typeof entry.value === "number"
-                              ? entry.value
-                              : Number(entry.value ?? 0);
-                          return (
-                            <div
-                              key={index}
-                              className="flex items-center justify-between gap-3 text-xs"
-                            >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div
-                                  className="h-2 w-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: entry.color }}
-                                />
-                                <span className="truncate">{displayUser?.name || baseKey}</span>
+                    <div className="p-3">
+                      <div className="space-y-1.5">
+                        {[...filteredPayload]
+                          .sort((a, b) => (Number(b.value ?? 0) || 0) - (Number(a.value ?? 0) || 0))
+                          .map((entry, index) => {
+                            const baseKey =
+                              entry.dataKey?.toString().replace(`_${activeChart}`, "") || "";
+                            const displayUser = userMap.get(baseKey);
+                            const value =
+                              typeof entry.value === "number"
+                                ? entry.value
+                                : Number(entry.value ?? 0);
+                            return (
+                              <div
+                                key={index}
+                                className="flex items-center justify-between gap-3 text-xs"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div
+                                    className="h-2 w-2 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: entry.color }}
+                                  />
+                                  <span className="truncate">
+                                    {displayUser?.name === "__others__"
+                                      ? t("othersAggregate")
+                                      : displayUser?.name || baseKey}
+                                  </span>
+                                </div>
+                                <span className="font-mono font-medium">
+                                  {activeChart === "cost"
+                                    ? formatCurrency(value, currencyCode)
+                                    : value.toLocaleString()}
+                                </span>
                               </div>
-                              <span className="font-mono font-medium">
-                                {activeChart === "cost"
-                                  ? formatCurrency(value, currencyCode)
-                                  : value.toLocaleString()}
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                      </div>
                     </div>
                   </div>
                 );
@@ -383,14 +555,14 @@ export function StatisticsChartCard({
 
       {/* Legend */}
       {enableUserFilter && (
-        <div className="px-4 pb-4">
-          {/* Control buttons */}
-          <div className="flex items-center justify-center gap-2 mb-2">
+        <div ref={legendRef} className="relative px-4 pb-2">
+          {/* Control buttons (floating, does not take extra vertical space) */}
+          <div className="absolute right-4 rtl:right-auto rtl:left-4 top-0.5 z-10 w-24 flex flex-wrap justify-end gap-x-2 gap-y-0.5">
             <button
               onClick={() => setSelectedUserIds(new Set(data.users.map((u) => u.id)))}
               disabled={selectedUserIds.size === data.users.length}
               className={cn(
-                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
+                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer whitespace-nowrap",
                 selectedUserIds.size === data.users.length
                   ? "text-muted-foreground/50 cursor-not-allowed"
                   : "text-primary hover:text-primary/80 hover:bg-primary/10"
@@ -398,16 +570,21 @@ export function StatisticsChartCard({
             >
               {t("legend.selectAll")}
             </button>
-            <span className="text-muted-foreground/30">|</span>
             <button
               onClick={() => {
-                if (data.users.length > 0) {
-                  setSelectedUserIds(new Set([data.users[0].id]));
+                const firstUserWithUsageId =
+                  data.users.find((u) => {
+                    const total = userTotals[u.dataKey];
+                    return total.cost.greaterThan(0) || total.calls > 0;
+                  })?.id ?? data.users[0]?.id;
+
+                if (firstUserWithUsageId != null) {
+                  setSelectedUserIds(new Set([firstUserWithUsageId]));
                 }
               }}
               disabled={selectedUserIds.size === 1}
               className={cn(
-                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer",
+                "text-[10px] px-2 py-0.5 rounded transition-colors cursor-pointer whitespace-nowrap",
                 selectedUserIds.size === 1
                   ? "text-muted-foreground/50 cursor-not-allowed"
                   : "text-primary hover:text-primary/80 hover:bg-primary/10"
@@ -416,8 +593,8 @@ export function StatisticsChartCard({
               {t("legend.deselectAll")}
             </button>
           </div>
-          {/* User list with max 3 rows and scroll - only show users with non-zero usage */}
-          <div className="max-h-[72px] overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-transparent">
+          {/* User list with max 3 rows (3 * 24px = 72px) and scroll - only show users with non-zero usage */}
+          <div className="max-h-[72px] overflow-y-auto pr-24 rtl:pr-0 rtl:pl-24">
             <div className="flex flex-wrap gap-1.5 justify-center">
               {data.users
                 .map((user, originalIndex) => ({ user, originalIndex }))
@@ -444,7 +621,12 @@ export function StatisticsChartCard({
                         className="h-2 w-2 rounded-full flex-shrink-0"
                         style={{ backgroundColor: color }}
                       />
-                      <span className="font-medium truncate max-w-[80px]">{user.name}</span>
+                      <span
+                        className="font-medium truncate max-w-[80px]"
+                        title={user.name === "__others__" ? t("othersAggregate") : user.name}
+                      >
+                        {user.name === "__others__" ? t("othersAggregate") : user.name}
+                      </span>
                       <span className="text-muted-foreground">
                         {activeChart === "cost"
                           ? formatCurrency(userTotal?.cost ?? 0, currencyCode)

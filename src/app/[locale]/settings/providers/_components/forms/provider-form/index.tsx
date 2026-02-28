@@ -5,7 +5,13 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getProviderEndpoints, getProviderVendors } from "@/actions/provider-endpoints";
-import { addProvider, editProvider, removeProvider } from "@/actions/providers";
+import {
+  addProvider,
+  editProvider,
+  removeProvider,
+  undoProviderDelete,
+  undoProviderPatch,
+} from "@/actions/providers";
 import { getDistinctProviderGroupsAction } from "@/actions/request-filters";
 import {
   AlertDialog,
@@ -19,6 +25,7 @@ import {
   AlertDialogTitle as AlertTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { isValidUrl } from "@/lib/utils/validation";
 import type {
   ProviderDisplay,
@@ -34,6 +41,8 @@ import { LimitsSection } from "./sections/limits-section";
 import { NetworkSection } from "./sections/network-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
+
+const TAB_ORDER: TabId[] = ["basic", "routing", "limits", "network", "testing"];
 
 function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
@@ -87,6 +96,7 @@ function ProviderFormContent({
   resolvedUrl?: string | null;
 }) {
   const t = useTranslations("settings.providers.form");
+  const tBatchEdit = useTranslations("settings.providers.batchEdit");
   const { state, dispatch, mode, provider, hideUrl } = useProviderForm();
   const [isPending, startTransition] = useTransition();
   const isEdit = mode === "edit";
@@ -95,6 +105,8 @@ function ProviderFormContent({
   const { data: vendors = [] } = useQuery<ProviderVendor[]>({
     queryKey: ["provider-vendors"],
     queryFn: getProviderVendors,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const websiteDomain = useMemo(
@@ -134,6 +146,8 @@ function ProviderFormContent({
         providerType: state.routing.providerType,
       });
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const enabledEndpointPoolEndpoints = useMemo(
@@ -183,9 +197,6 @@ function ProviderFormContent({
   });
   const isScrollingToSection = useRef(false);
 
-  // Tab order for navigation
-  const tabOrder: TabId[] = ["basic", "routing", "limits", "network", "testing"];
-
   // Scroll to section when tab is clicked
   const scrollToSection = useCallback((tab: TabId) => {
     const section = sectionRefs.current[tab];
@@ -213,7 +224,7 @@ function ProviderFormContent({
     let activeSection: TabId = "basic";
     let minDistance = Infinity;
 
-    for (const tab of tabOrder) {
+    for (const tab of TAB_ORDER) {
       const section = sectionRefs.current[tab];
       if (!section) continue;
 
@@ -307,6 +318,8 @@ function ProviderFormContent({
           model_redirects: state.routing.modelRedirects,
           allowed_models:
             state.routing.allowedModels.length > 0 ? state.routing.allowedModels : null,
+          allowed_clients: state.routing.allowedClients,
+          blocked_clients: state.routing.blockedClients,
           priority: state.routing.priority,
           group_priorities:
             Object.keys(state.routing.groupPriorities).length > 0
@@ -316,6 +329,7 @@ function ProviderFormContent({
           cost_multiplier: state.routing.costMultiplier,
           group_tag: state.routing.groupTag.length > 0 ? state.routing.groupTag.join(",") : null,
           cache_ttl_preference: state.routing.cacheTtlPreference,
+          swap_cache_ttl_billing: state.routing.swapCacheTtlBilling,
           context_1m_preference: state.routing.context1mPreference,
           codex_reasoning_effort_preference: state.routing.codexReasoningEffortPreference,
           codex_reasoning_summary_preference: state.routing.codexReasoningSummaryPreference,
@@ -325,6 +339,8 @@ function ProviderFormContent({
           anthropic_thinking_budget_preference: state.routing.anthropicThinkingBudgetPreference,
           anthropic_adaptive_thinking: state.routing.anthropicAdaptiveThinking,
           gemini_google_search_preference: state.routing.geminiGoogleSearchPreference,
+          active_time_start: state.routing.activeTimeStart || null,
+          active_time_end: state.routing.activeTimeEnd || null,
           limit_5h_usd: state.rateLimit.limit5hUsd,
           limit_daily_usd: state.rateLimit.limitDailyUsd,
           daily_reset_mode: state.rateLimit.dailyResetMode,
@@ -359,7 +375,41 @@ function ProviderFormContent({
             toast.error(res.error || t("errors.updateFailed"));
             return;
           }
-          toast.success(t("success.updated"));
+
+          const undoToken = res.data.undoToken;
+          const operationId = res.data.operationId;
+
+          toast.success(tBatchEdit("undo.singleEditSuccess"), {
+            duration: 10000,
+            action: {
+              label: tBatchEdit("undo.button"),
+              onClick: async () => {
+                try {
+                  const undoResult = await undoProviderPatch({ undoToken, operationId });
+                  if (undoResult.ok) {
+                    toast.success(tBatchEdit("undo.singleEditUndone"));
+                    await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+                    await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                  } else if (
+                    undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
+                  ) {
+                    toast.error(tBatchEdit("undo.expired"));
+                  } else {
+                    toast.error(tBatchEdit("undo.failed"));
+                  }
+                } catch {
+                  toast.error(tBatchEdit("undo.failed"));
+                }
+              },
+            },
+          });
+
+          void queryClient.invalidateQueries({ queryKey: ["providers"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+          void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         } else {
           // For create: key is required
           const createFormData = { ...baseFormData, key: trimmedKey };
@@ -369,8 +419,10 @@ function ProviderFormContent({
             return;
           }
 
+          void queryClient.invalidateQueries({ queryKey: ["providers"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
           void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-          void queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
 
           toast.success(t("success.created"));
           dispatch({ type: "RESET_FORM" });
@@ -415,7 +467,39 @@ function ProviderFormContent({
           toast.error(res.error || t("errors.deleteFailed"));
           return;
         }
-        toast.success(t("success.deleted"));
+
+        const undoToken = res.data.undoToken;
+        const operationId = res.data.operationId;
+
+        toast.success(tBatchEdit("undo.singleDeleteSuccess"), {
+          duration: 10000,
+          action: {
+            label: tBatchEdit("undo.button"),
+            onClick: async () => {
+              try {
+                const undoResult = await undoProviderDelete({ undoToken, operationId });
+                if (undoResult.ok) {
+                  toast.success(tBatchEdit("undo.singleDeleteUndone"));
+                  await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                  await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                  await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+                  await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                } else if (undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED) {
+                  toast.error(tBatchEdit("undo.expired"));
+                } else {
+                  toast.error(tBatchEdit("undo.failed"));
+                }
+              } catch {
+                toast.error(tBatchEdit("undo.failed"));
+              }
+            },
+          },
+        });
+
+        void queryClient.invalidateQueries({ queryKey: ["providers"] });
+        void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+        void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+        void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         onSuccess?.();
       } catch (e) {
         console.error("Delete error:", e);
@@ -468,21 +552,26 @@ function ProviderFormContent({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col h-full max-h-[85vh]">
+    <form
+      onSubmit={handleSubmit}
+      className="flex flex-col h-full max-h-[var(--cch-viewport-height-85)]"
+    >
       {/* Form Layout */}
       <div className="flex flex-col lg:flex-row flex-1 min-h-0">
-        {/* Tab Navigation */}
-        <FormTabNav
-          activeTab={state.ui.activeTab}
-          onTabChange={handleTabChange}
-          disabled={isPending}
-          tabStatus={getTabStatus()}
-        />
+        <div className="order-2 md:order-1 shrink-0">
+          {/* Tab Navigation */}
+          <FormTabNav
+            activeTab={state.ui.activeTab}
+            onTabChange={handleTabChange}
+            disabled={isPending}
+            tabStatus={getTabStatus()}
+          />
+        </div>
 
         {/* All Sections Stacked Vertically */}
         <div
           ref={contentRef}
-          className="flex-1 overflow-y-auto p-6 pb-24 md:pb-6 min-h-0 scroll-smooth"
+          className="order-1 md:order-2 flex-1 overflow-y-auto p-6 min-h-0 scroll-smooth"
           onScroll={handleScroll}
         >
           <div className="space-y-8">

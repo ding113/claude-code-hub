@@ -5,6 +5,7 @@ import { cache } from "react";
 import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
 import { DashboardHeader } from "../dashboard/_components/dashboard-header";
+import { UsageDocAuthProvider } from "./_components/usage-doc-auth-context";
 
 type UsageDocParams = { locale: string };
 
@@ -41,7 +42,7 @@ export default async function UsageDocLayout({
   const [session, t] = await Promise.all([getSession(), getUsageTranslations(locale)]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
       {/* 条件渲染头部：已登录显示 DashboardHeader，未登录显示简化版头部 */}
       {session ? (
         <DashboardHeader session={session} />
@@ -63,10 +64,8 @@ export default async function UsageDocLayout({
         </header>
       )}
 
-      {/* 文档内容主体 */}
       <main className="mx-auto w-full max-w-7xl px-6 py-8">
-        {/* 文档容器 */}
-        {children}
+        <UsageDocAuthProvider isLoggedIn={!!session}>{children}</UsageDocAuthProvider>
       </main>
     </div>
   );

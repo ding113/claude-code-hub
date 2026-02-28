@@ -15,21 +15,26 @@ const DEFAULT_CORS_HEADERS: Record<string, string> = {
 /**
  * 动态构建 CORS 响应头
  */
-function buildCorsHeaders(options: { origin?: string | null; requestHeaders?: string | null }) {
+function buildCorsHeaders(options: {
+  origin?: string | null;
+  requestHeaders?: string | null;
+  allowCredentials?: boolean;
+}) {
   const headers = new Headers(DEFAULT_CORS_HEADERS);
 
-  if (options.origin) {
+  // Only reflect specific origin when credentials are explicitly opted-in.
+  // The proxy API uses Bearer tokens; reflecting arbitrary origins with
+  // credentials enabled would let any malicious site make credentialed
+  // cross-origin requests.
+  if (options.allowCredentials && options.origin) {
     headers.set("Access-Control-Allow-Origin", options.origin);
     headers.append("Vary", "Origin");
+    headers.set("Access-Control-Allow-Credentials", "true");
   }
 
   if (options.requestHeaders) {
     headers.set("Access-Control-Allow-Headers", options.requestHeaders);
     headers.append("Vary", "Access-Control-Request-Headers");
-  }
-
-  if (headers.get("Access-Control-Allow-Origin") !== "*") {
-    headers.set("Access-Control-Allow-Credentials", "true");
   }
 
   return headers;
@@ -75,7 +80,7 @@ function mergeVaryHeader(existing: string | null, newValue: string): string {
  */
 export function applyCors(
   res: Response,
-  ctx: { origin?: string | null; requestHeaders?: string | null }
+  ctx: { origin?: string | null; requestHeaders?: string | null; allowCredentials?: boolean }
 ): Response {
   const corsHeaders = buildCorsHeaders(ctx);
 
@@ -138,6 +143,7 @@ export function applyCors(
 export function buildPreflightResponse(options: {
   origin?: string | null;
   requestHeaders?: string | null;
+  allowCredentials?: boolean;
 }): Response {
   return new Response(null, { status: 204, headers: buildCorsHeaders(options) });
 }

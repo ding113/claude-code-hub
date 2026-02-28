@@ -5,6 +5,7 @@
     "routing": "ルーティング",
     "limits": "制限",
     "network": "ネットワーク",
-    "testing": "テスト"
+    "testing": "テスト",
+    "stepProgress": "ステップ進捗"
   }
 }

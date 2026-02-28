@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total}個のプロバイダー、{healthy}個正常 → {provider} ✓",
-    "sessionReuse": "セッション再利用 → {provider} ✓"
+    "sessionReuse": "セッション再利用 → {provider} ✓",
+    "originHint": "セッション再利用 - 元は {method} で選択"
   },
   "description": {
     "noDecisionRecord": "決定記録なし",
@@ -35,6 +36,7 @@
     "candidate": "{name}({probability}%)",
     "requestChain": "リクエストチェーン:",
     "systemError": "システムエラー",
+    "resourceNotFound": "リソースが見つかりません（404）",
     "concurrentLimit": "同時実行制限",
     "http2Fallback": "HTTP/2 フォールバック",
     "clientError": "クライアントエラー",
@@ -46,13 +48,15 @@
     "retry_success": "リトライ成功",
     "retry_failed": "リトライ失敗",
     "system_error": "システムエラー",
+    "resource_not_found": "リソースが見つかりません（404）",
     "client_error_non_retryable": "クライアントエラー",
     "concurrent_limit_failed": "同時実行制限",
     "http2_fallback": "HTTP/2 フォールバック",
     "session_reuse": "セッション再利用",
     "initial_selection": "初期選択",
     "endpoint_pool_exhausted": "エンドポイントプール枯渇",
-    "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト"
+    "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト",
+    "client_restriction_filtered": "クライアント制限"
   },
   "filterReasons": {
     "rate_limited": "レート制限",
@@ -67,13 +71,21 @@
     "group_mismatch": "グループ不一致",
     "health_check_failed": "ヘルスチェック失敗",
     "endpoint_circuit_open": "エンドポイントサーキットオープン",
-    "endpoint_disabled": "エンドポイント無効"
+    "endpoint_disabled": "エンドポイント無効",
+    "client_restriction": "クライアント制限"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "ベンダータイプ一時サーキットブレイク",
     "circuit_open": "サーキットブレーカーオープン",
     "circuit_half_open": "サーキットブレーカーハーフオープン",
-    "rate_limited": "レート制限"
+    "rate_limited": "レート制限",
+    "provider_client_restriction": "クライアント制限によりプロバイダーをスキップ",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "選択方法",
@@ -128,11 +140,13 @@
     "candidateInfo": "  • {name}: 重み={weight} コスト={cost} 確率={probability}%",
     "selected": "✓ 選択: {provider}",
     "requestFailed": "リクエスト失敗（試行{attempt}）",
+    "resourceNotFoundFailed": "リソースが見つかりません（404）（試行{attempt}）",
     "attemptNumber": "試行 {number}",
     "firstAttempt": "初回試行",
     "nthAttempt": "試行{attempt}",
     "provider": "プロバイダー: {provider}",
     "statusCode": "ステータスコード: {code}",
+    "statusCodeInferred": "ステータスコード（推定）: {code}",
     "error": "エラー: {error}",
     "requestDuration": "リクエスト時間: {duration}ms",
     "requestDurationSeconds": "リクエスト時間: {duration}s",
@@ -158,6 +172,7 @@
     "meaning": "意味",
     "notCountedInCircuit": "このエラーはプロバイダーサーキットブレーカーにカウントされません",
     "systemErrorNote": "注記：このエラーはプロバイダーサーキットブレーカーにカウントされません",
+    "resourceNotFoundNote": "注記：このエラーはサーキットブレーカーにカウントされず、リトライ枯渇後にフェイルオーバーします。",
     "reselection": "プロバイダー再選択",
     "reselect": "プロバイダー再選択",
     "excluded": "除外済み: {providers}",
@@ -208,5 +223,11 @@
     "strictBlockSelectorError": "厳格モード：エンドポイントセレクターでエラーが発生したため、フォールバックなしでプロバイダーをスキップ",
     "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト（524）",
     "vendorTypeAllTimeoutNote": "このベンダータイプの全エンドポイントがタイムアウトしました。ベンダータイプサーキットブレーカーが発動しました。"
+  },
+  "selectionMethods": {
+    "session_reuse": "セッション再利用",
+    "weighted_random": "重み付きランダム",
+    "group_filtered": "グループフィルタ",
+    "fail_open_fallback": "フェイルオープンフォールバック"
   }
 }

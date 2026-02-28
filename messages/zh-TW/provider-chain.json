@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total} 個供應商，{healthy} 個健康 → {provider} ✓",
-    "sessionReuse": "會話複用 → {provider} ✓"
+    "sessionReuse": "會話複用 → {provider} ✓",
+    "originHint": "會話複用 - 最初通過 {method} 選擇"
   },
   "description": {
     "noDecisionRecord": "無決策記錄",
@@ -35,6 +36,7 @@
     "candidate": "{name}({probability}%)",
     "requestChain": "請求鏈路:",
     "systemError": "系統錯誤",
+    "resourceNotFound": "資源不存在（404）",
     "concurrentLimit": "並發限制",
     "http2Fallback": "HTTP/2 回退",
     "clientError": "客戶端錯誤",
@@ -46,13 +48,15 @@
     "retry_success": "重試成功",
     "retry_failed": "重試失敗",
     "system_error": "系統錯誤",
+    "resource_not_found": "資源不存在（404）",
     "client_error_non_retryable": "客戶端錯誤",
     "concurrent_limit_failed": "並發限制",
     "http2_fallback": "HTTP/2 回退",
     "session_reuse": "會話複用",
     "initial_selection": "首次選擇",
     "endpoint_pool_exhausted": "端點池耗盡",
-    "vendor_type_all_timeout": "供應商類型全端點逾時"
+    "vendor_type_all_timeout": "供應商類型全端點逾時",
+    "client_restriction_filtered": "客戶端受限"
   },
   "filterReasons": {
     "rate_limited": "速率限制",
@@ -67,13 +71,21 @@
     "group_mismatch": "分組不匹配",
     "health_check_failed": "健康檢查失敗",
     "endpoint_circuit_open": "端點已熔斷",
-    "endpoint_disabled": "端點已停用"
+    "endpoint_disabled": "端點已停用",
+    "client_restriction": "客戶端限制"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "供應商類型臨時熔斷",
     "circuit_open": "熔斷器打開",
     "circuit_half_open": "熔斷器半開",
-    "rate_limited": "速率限制"
+    "rate_limited": "速率限制",
+    "provider_client_restriction": "供應商因客戶端限制被跳過",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "選擇方式",
@@ -128,11 +140,13 @@
     "candidateInfo": "  • {name}: 權重={weight} 成本={cost} 概率={probability}%",
     "selected": "✓ 選擇: {provider}",
     "requestFailed": "請求失敗（第 {attempt} 次嘗試）",
+    "resourceNotFoundFailed": "資源不存在（404，第 {attempt} 次嘗試）",
     "attemptNumber": "第 {number} 次",
     "firstAttempt": "首次嘗試",
     "nthAttempt": "第 {attempt} 次嘗試",
     "provider": "供應商: {provider}",
     "statusCode": "狀態碼: {code}",
+    "statusCodeInferred": "狀態碼（推測）: {code}",
     "error": "錯誤: {error}",
     "requestDuration": "請求耗時: {duration}ms",
     "requestDurationSeconds": "請求耗時: {duration}s",
@@ -158,6 +172,7 @@
     "meaning": "含義",
     "notCountedInCircuit": "此錯誤不計入供應商熔斷器",
     "systemErrorNote": "說明：此錯誤不計入供應商熔斷器",
+    "resourceNotFoundNote": "說明：該錯誤不計入熔斷器；重試耗盡後將觸發故障轉移。",
     "reselection": "重新選擇供應商",
     "reselect": "重新選擇供應商",
     "excluded": "已排除: {providers}",
@@ -208,5 +223,11 @@
     "strictBlockSelectorError": "嚴格模式：端點選擇器發生錯誤，跳過該供應商且不降級",
     "vendorTypeAllTimeout": "供應商類型全端點逾時（524）",
     "vendorTypeAllTimeoutNote": "該供應商類型的所有端點均逾時，已觸發供應商類型臨時熔斷。"
+  },
+  "selectionMethods": {
+    "session_reuse": "會話複用",
+    "weighted_random": "加權隨機",
+    "group_filtered": "分組過濾",
+    "fail_open_fallback": "故障開放回退"
   }
 }

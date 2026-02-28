@@ -39,6 +39,16 @@
     "error": "データベースのエクスポートに失敗しました",
     "exporting": "エクスポート中...",
     "failed": "エクスポート失敗",
+    "mode": {
+      "excludeLogs": "ログを除外",
+      "full": "完全バックアップ",
+      "ledgerOnly": "課金データのみ"
+    },
+    "modeDescription": {
+      "excludeLogs": "ログデータなしでエクスポート（テーブル構造は保持）",
+      "full": "リクエストログを含む全データをエクスポート",
+      "ledgerOnly": "課金台帳のみエクスポート（最小サイズ）"
+    },
     "successMessage": "データベースのエクスポートに成功しました！"
   },
   "guide": {
@@ -128,7 +138,9 @@
     "loading": "読み込み中...",
     "retry": "再試行",
     "tables": "{count} テーブル",
-    "unavailable": "データベース利用不可"
+    "unavailable": "データベース利用不可",
+    "size": "データベースサイズ",
+    "tableCount": "テーブル数"
   },
   "title": "データ管理"
 }

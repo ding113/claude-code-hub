@@ -260,7 +260,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   };
 
   const content = (
-    <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col bg-card/95 backdrop-blur-xl border-border">
+    <DialogContent className="max-w-2xl max-h-[var(--cch-viewport-height-80)] flex flex-col bg-card/95 backdrop-blur-xl border-border">
       <DialogHeader className="flex-shrink-0">
         <DialogTitle className="text-foreground">
           {mode === "create" ? t("dialog.createTitle") : t("dialog.editTitle")}

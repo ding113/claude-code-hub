@@ -151,7 +151,13 @@ export function ProviderManager({
       if (!tags || tags.length === 0) {
         hasDefaultGroup = true;
       } else {
-        tags.forEach((g) => groups.add(g));
+        tags.forEach((g) => {
+          if (g === "default") {
+            hasDefaultGroup = true;
+          } else {
+            groups.add(g);
+          }
+        });
       }
     });
 
@@ -315,6 +321,41 @@ export function ProviderManager({
     setBatchDialogOpen(true);
   }, []);
 
+  const handleSelectByType = useCallback(
+    (type: ProviderType) => {
+      setSelectedProviderIds((prev) => {
+        const next = new Set(prev);
+        for (const p of filteredProviders) {
+          if (p.providerType === type) {
+            next.add(p.id);
+          }
+        }
+        return next;
+      });
+    },
+    [filteredProviders]
+  );
+
+  const handleSelectByGroup = useCallback(
+    (group: string) => {
+      setSelectedProviderIds((prev) => {
+        const next = new Set(prev);
+        for (const p of filteredProviders) {
+          const tags =
+            p.groupTag
+              ?.split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean) ?? [];
+          if (tags.includes(group) || (group === "default" && tags.length === 0)) {
+            next.add(p.id);
+          }
+        }
+        return next;
+      });
+    },
+    [filteredProviders]
+  );
+
   const handleBatchSuccess = useCallback(() => {
     setSelectedProviderIds(new Set());
     setIsMultiSelectMode(false);
@@ -336,6 +377,9 @@ export function ProviderManager({
           onSelectAll={handleSelectAll}
           onInvertSelection={handleInvertSelection}
           onOpenBatchEdit={handleOpenBatchEdit}
+          providers={filteredProviders}
+          onSelectByType={handleSelectByType}
+          onSelectByGroup={handleSelectByGroup}
         />
         {addDialogSlot ? <div className="ml-auto">{addDialogSlot}</div> : null}
       </div>
@@ -642,6 +686,7 @@ export function ProviderManager({
         mode={batchActionMode}
         onOpenChange={setBatchDialogOpen}
         selectedProviderIds={selectedProviderIds}
+        providers={filteredProviders}
         onSuccess={handleBatchSuccess}
       />
     </div>

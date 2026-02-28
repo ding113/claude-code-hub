@@ -1,4 +1,4 @@
-import { describe, expect, test, vi, beforeEach } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { ProxyClientGuard } from "@/app/v1/_lib/proxy/client-guard";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 
@@ -13,14 +13,38 @@ vi.mock("@/app/v1/_lib/proxy/responses", () => ({
 // Helper to create mock session
 function createMockSession(
   userAgent: string | undefined,
-  allowedClients: string[] = []
+  allowedClients: string[] = [],
+  blockedClients: string[] = []
 ): ProxySession {
   return {
     userAgent,
+    headers: new Headers(),
+    request: { message: {} },
     authState: {
       user: {
         allowedClients,
+        blockedClients,
       },
+    },
+  } as unknown as ProxySession;
+}
+
+// Helper for fully-confirmed Claude Code CLI sessions (all 4 signals)
+function createClaudeCodeSession(
+  userAgent: string,
+  allowedClients: string[] = [],
+  blockedClients: string[] = [],
+  betaHeader = "claude-code-test"
+): ProxySession {
+  const headers = new Headers();
+  headers.set("x-app", "cli");
+  headers.set("anthropic-beta", betaHeader);
+  return {
+    userAgent,
+    headers,
+    request: { message: { metadata: { user_id: "user_123" } } },
+    authState: {
+      user: { allowedClients, blockedClients },
     },
   } as unknown as ProxySession;
 }
@@ -52,6 +76,14 @@ describe("ProxyClientGuard", () => {
 
     test("should allow request when allowedClients is undefined", async () => {
       const session = createMockSession("AnyClient/1.0", undefined as unknown as string[]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("when both allowedClients and blockedClients are empty", () => {
+    test("should allow request", async () => {
+      const session = createMockSession("AnyClient/1.0", [], []);
       const result = await ProxyClientGuard.ensure(session);
       expect(result).toBeNull();
     });
@@ -192,6 +224,96 @@ describe("ProxyClientGuard", () => {
 
     test("should allow when at least one pattern is valid after normalization", async () => {
       const session = createMockSession("ValidClient/1.0", ["-", "valid", "_"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("when blockedClients is configured", () => {
+    test("should reject when client matches blocked pattern", async () => {
+      const session = createMockSession("GeminiCLI/1.0", [], ["gemini-cli"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe(400);
+    });
+
+    test("should allow when client does not match blocked pattern", async () => {
+      const session = createMockSession("CodexCLI/1.0", [], ["gemini-cli"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+
+    test("should reject even when allowedClients matches", async () => {
+      const session = createMockSession("gemini-cli/1.0", ["gemini-cli"], ["gemini-cli"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe(400);
+    });
+  });
+
+  describe("when only blockedClients is configured (no allowedClients)", () => {
+    test("should reject matching client", async () => {
+      const session = createMockSession("codex-cli/2.0", [], ["codex-cli"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe(400);
+    });
+
+    test("should allow non-matching client", async () => {
+      const session = createMockSession("claude-cli/1.0", [], ["codex-cli"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+  });
+
+  describe("claude-code builtin keyword with 4-signal detection", () => {
+    test("should allow claude-cli/2.0.70 with non-claude-code beta header (the bug fix)", async () => {
+      // CLI 2.0.70 sends interleaved-thinking-2025-05-14, not a claude-code-* beta
+      const session = createClaudeCodeSession(
+        "claude-cli/2.0.70 (external, cli)",
+        ["claude-code"],
+        [],
+        "interleaved-thinking-2025-05-14"
+      );
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+
+    test("should reject when metadata.user_id is missing (only 3-of-4 signals)", async () => {
+      const headers = new Headers();
+      headers.set("x-app", "cli");
+      headers.set("anthropic-beta", "some-beta");
+      const session = {
+        userAgent: "claude-cli/2.0.70 (external, cli)",
+        headers,
+        request: { message: {} },
+        authState: { user: { allowedClients: ["claude-code"], blockedClients: [] } },
+      } as unknown as import("@/app/v1/_lib/proxy/session").ProxySession;
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe(400);
+      const body = await result!.json();
+      expect(body.error.message).toContain("Signals(3/4)");
+    });
+
+    test("should reject when anthropic-beta header is missing (only 3-of-4 signals)", async () => {
+      const headers = new Headers();
+      headers.set("x-app", "cli");
+      const session = {
+        userAgent: "claude-cli/2.0.70 (external, cli)",
+        headers,
+        request: { message: { metadata: { user_id: "user_abc" } } },
+        authState: { user: { allowedClients: ["claude-code"], blockedClients: [] } },
+      } as unknown as import("@/app/v1/_lib/proxy/session").ProxySession;
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe(400);
+      const body = await result!.json();
+      expect(body.error.message).toContain("Signals(3/4)");
+    });
+
+    test("should allow when all 4 signals present with claude-code allowlist", async () => {
+      const session = createClaudeCodeSession("claude-cli/1.0.0 (external, cli)", ["claude-code"]);
       const result = await ProxyClientGuard.ensure(session);
       expect(result).toBeNull();
     });

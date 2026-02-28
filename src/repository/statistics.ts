@@ -1,8 +1,10 @@
-"use server";
+import "server-only";
 
+import type { SQL } from "drizzle-orm";
 import { and, eq, gte, inArray, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { keys, messageRequest } from "@/drizzle/schema";
+import { keys, messageRequest, usageLedger } from "@/drizzle/schema";
+import { TTLMap } from "@/lib/cache/ttl-map";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type {
   DatabaseKey,
@@ -14,167 +16,284 @@ import type {
   RateLimitType,
   TimeRange,
 } from "@/types/statistics";
+import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 
 /**
- * 根据时间范围获取用户消费和API调用统计
- * 注意：这个函数使用原生SQL，因为涉及到PostgreSQL特定的generate_series函数
+ * Key ID -> key string cache
+ *
+ * Short TTL allows slight staleness (keys rarely change).
+ * Size-bounded to avoid unbounded growth in multi-tenant scenarios.
  */
-export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<DatabaseStatRow[]> {
-  const timezone = await resolveSystemTimezone();
-  let query;
+const keyStringByIdCache = new TTLMap<number, string>({ ttlMs: 5 * 60 * 1000, maxSize: 1000 });
 
+async function getKeyStringByIdCached(keyId: number): Promise<string | null> {
+  const cached = keyStringByIdCache.get(keyId);
+  if (cached !== undefined) return cached;
+
+  const keyRecord = await db
+    .select({ key: keys.key })
+    .from(keys)
+    .where(eq(keys.id, keyId))
+    .limit(1);
+
+  const keyString = keyRecord?.[0]?.key ?? null;
+  if (!keyString) return null;
+
+  keyStringByIdCache.set(keyId, keyString);
+  return keyString;
+}
+
+type SqlTimeRangeConfig = {
+  startTs: ReturnType<typeof sql>;
+  endTs: ReturnType<typeof sql>;
+  bucketExpr: ReturnType<typeof sql>;
+  bucketSeriesQuery: ReturnType<typeof sql>;
+};
+
+type TimeBucketValue = Date | string | null;
+
+type UserBucketStatsRow = {
+  user_id: number;
+  user_name: string;
+  bucket: TimeBucketValue;
+  api_calls: number | string | null;
+  total_cost: string | number | null;
+};
+
+type KeyBucketStatsRow = {
+  key_id: number;
+  key_name: string;
+  bucket: TimeBucketValue;
+  api_calls: number | string | null;
+  total_cost: string | number | null;
+};
+
+type MixedOthersBucketStatsRow = {
+  bucket: TimeBucketValue;
+  api_calls: number | string | null;
+  total_cost: string | number | null;
+};
+
+type RuntimeDatabaseStatRow = Omit<DatabaseStatRow, "date"> & { date: Date };
+type RuntimeDatabaseKeyStatRow = Omit<DatabaseKeyStatRow, "date"> & { date: Date };
+
+function getTimeRangeSqlConfig(timeRange: TimeRange, timezone: string): SqlTimeRangeConfig {
   switch (timeRange) {
     case "today":
-      // 今天（小时分辨率）
-      query = sql`
-        WITH hour_range AS (
+      return {
+        startTs: sql`(DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('hour', usage_ledger.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
+            DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}),
+            DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '23 hours',
             '1 hour'::interval
-          ) AS hour
-        ),
-        hourly_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN hour_range hr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, hr.hour
-        )
-        SELECT
-          user_id,
-          user_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     case "7days":
-      // 过去7天（天分辨率）
-      query = sql`
-        WITH date_range AS (
+      return {
+        startTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '6 days') AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', usage_ledger.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, dr.date
-        )
-        SELECT
-          user_id,
-          user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     case "30days":
-      // 过去 30 天（天分辨率）
-      query = sql`
-        WITH date_range AS (
+      return {
+        startTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '29 days') AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', usage_ledger.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, dr.date
-        )
-        SELECT
-          user_id,
-          user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     case "thisMonth":
-      // 本月（天分辨率，从本月第一天到今天）
-      query = sql`
-        WITH date_range AS (
+      return {
+        startTs: sql`((DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone})`,
+        endTs: sql`((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone})`,
+        bucketExpr: sql`DATE_TRUNC('day', usage_ledger.created_at AT TIME ZONE ${timezone})`,
+        bucketSeriesQuery: sql`
           SELECT generate_series(
             DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
             '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            u.id AS user_id,
-            u.name AS user_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM users u
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON u.id = mr.user_id
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          WHERE u.deleted_at IS NULL
-          GROUP BY u.id, u.name, dr.date
-        )
-        SELECT
-          user_id,
-          user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, user_name ASC
-      `;
-      break;
-
+          ) AS bucket
+        `,
+      };
     default:
       throw new Error(`Unsupported time range: ${timeRange}`);
   }
+}
 
-  const result = await db.execute(query);
-  return Array.from(result) as unknown as DatabaseStatRow[];
+function normalizeBucketDate(value: TimeBucketValue): Date | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function normalizeApiCalls(value: number | string | null): number {
+  const normalized = Number(value ?? 0);
+  return Number.isFinite(normalized) ? normalized : 0;
+}
+
+function normalizeTotalCost(value: string | number | null): string | number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  return value;
+}
+
+async function getTimeBuckets(timeRange: TimeRange, timezone: string): Promise<Date[]> {
+  const { bucketSeriesQuery } = getTimeRangeSqlConfig(timeRange, timezone);
+  const result = await db.execute(bucketSeriesQuery);
+  return (Array.from(result) as Array<{ bucket: TimeBucketValue }>)
+    .map((row) => normalizeBucketDate(row.bucket))
+    .filter((bucket): bucket is Date => bucket !== null)
+    .sort((a, b) => a.getTime() - b.getTime());
+}
+
+function zeroFillUserStats(
+  dbRows: UserBucketStatsRow[],
+  allUsers: Array<{ id: number; name: string }>,
+  buckets: Date[]
+): RuntimeDatabaseStatRow[] {
+  const rowMap = new Map<string, { api_calls: number; total_cost: string | number }>();
+  for (const row of dbRows) {
+    const bucket = normalizeBucketDate(row.bucket);
+    if (!bucket) continue;
+
+    rowMap.set(`${row.user_id}:${bucket.getTime()}`, {
+      api_calls: normalizeApiCalls(row.api_calls),
+      total_cost: normalizeTotalCost(row.total_cost),
+    });
+  }
+
+  const sortedUsers = [...allUsers].sort((a, b) => a.name.localeCompare(b.name));
+  const filledRows: RuntimeDatabaseStatRow[] = [];
+
+  for (const bucket of buckets) {
+    const bucketTime = bucket.getTime();
+    for (const user of sortedUsers) {
+      const row = rowMap.get(`${user.id}:${bucketTime}`);
+      filledRows.push({
+        user_id: user.id,
+        user_name: user.name,
+        date: new Date(bucketTime),
+        api_calls: row?.api_calls ?? 0,
+        total_cost: row?.total_cost ?? 0,
+      });
+    }
+  }
+
+  return filledRows;
+}
+
+function zeroFillKeyStats(
+  dbRows: KeyBucketStatsRow[],
+  allKeys: Array<{ id: number; name: string }>,
+  buckets: Date[]
+): RuntimeDatabaseKeyStatRow[] {
+  const rowMap = new Map<string, { api_calls: number; total_cost: string | number }>();
+  for (const row of dbRows) {
+    const bucket = normalizeBucketDate(row.bucket);
+    if (!bucket) continue;
+
+    rowMap.set(`${row.key_id}:${bucket.getTime()}`, {
+      api_calls: normalizeApiCalls(row.api_calls),
+      total_cost: normalizeTotalCost(row.total_cost),
+    });
+  }
+
+  const sortedKeys = [...allKeys].sort((a, b) => a.name.localeCompare(b.name));
+  const filledRows: RuntimeDatabaseKeyStatRow[] = [];
+
+  for (const bucket of buckets) {
+    const bucketTime = bucket.getTime();
+    for (const key of sortedKeys) {
+      const row = rowMap.get(`${key.id}:${bucketTime}`);
+      filledRows.push({
+        key_id: key.id,
+        key_name: key.name,
+        date: new Date(bucketTime),
+        api_calls: row?.api_calls ?? 0,
+        total_cost: row?.total_cost ?? 0,
+      });
+    }
+  }
+
+  return filledRows;
+}
+
+function zeroFillMixedOthersStats(
+  dbRows: MixedOthersBucketStatsRow[],
+  buckets: Date[]
+): RuntimeDatabaseStatRow[] {
+  const rowMap = new Map<number, { api_calls: number; total_cost: string | number }>();
+  for (const row of dbRows) {
+    const bucket = normalizeBucketDate(row.bucket);
+    if (!bucket) continue;
+
+    rowMap.set(bucket.getTime(), {
+      api_calls: normalizeApiCalls(row.api_calls),
+      total_cost: normalizeTotalCost(row.total_cost),
+    });
+  }
+
+  return buckets.map((bucket) => {
+    const row = rowMap.get(bucket.getTime());
+    return {
+      user_id: -1,
+      user_name: "__others__",
+      date: new Date(bucket.getTime()),
+      api_calls: row?.api_calls ?? 0,
+      total_cost: row?.total_cost ?? 0,
+    };
+  });
+}
+
+/**
+ * 根据时间范围获取用户消费和API调用统计
+ */
+export async function getUserStatisticsFromDB(timeRange: TimeRange): Promise<DatabaseStatRow[]> {
+  const timezone = await resolveSystemTimezone();
+  const { startTs, endTs, bucketExpr } = getTimeRangeSqlConfig(timeRange, timezone);
+
+  const statsQuery = sql`
+    SELECT
+      u.id AS user_id,
+      u.name AS user_name,
+      ${bucketExpr} AS bucket,
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
+    FROM users u
+    LEFT JOIN usage_ledger ON u.id = usage_ledger.user_id
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
+    WHERE u.deleted_at IS NULL
+    GROUP BY u.id, u.name, bucket
+    ORDER BY bucket ASC, u.name ASC
+  `;
+
+  const [users, buckets, statsResult] = await Promise.all([
+    getActiveUsersFromDB(),
+    getTimeBuckets(timeRange, timezone),
+    db.execute(statsQuery),
+  ]);
+
+  const rows = Array.from(statsResult) as UserBucketStatsRow[];
+  return zeroFillUserStats(rows, users, buckets) as unknown as DatabaseStatRow[];
 }
 
 /**
@@ -200,179 +319,35 @@ export async function getKeyStatisticsFromDB(
   timeRange: TimeRange
 ): Promise<DatabaseKeyStatRow[]> {
   const timezone = await resolveSystemTimezone();
-  let query;
+  const { startTs, endTs, bucketExpr } = getTimeRangeSqlConfig(timeRange, timezone);
 
-  switch (timeRange) {
-    case "today":
-      query = sql`
-        WITH hour_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
-            '1 hour'::interval
-          ) AS hour
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        hourly_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN hour_range hr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, hr.hour
-        )
-        SELECT
-          key_id,
-          key_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC, key_name ASC
-      `;
-      break;
+  const statsQuery = sql`
+    SELECT
+      k.id AS key_id,
+      k.name AS key_name,
+      ${bucketExpr} AS bucket,
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
+    FROM keys k
+    LEFT JOIN usage_ledger ON usage_ledger.key = k.key
+      AND usage_ledger.user_id = ${userId}
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
+    WHERE k.user_id = ${userId}
+      AND k.deleted_at IS NULL
+    GROUP BY k.id, k.name, bucket
+    ORDER BY bucket ASC, k.name ASC
+  `;
 
-    case "7days":
-      query = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-      break;
+  const [activeKeys, buckets, statsResult] = await Promise.all([
+    getActiveKeysForUserFromDB(userId),
+    getTimeBuckets(timeRange, timezone),
+    db.execute(statsQuery),
+  ]);
 
-    case "30days":
-      query = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-      break;
-
-    case "thisMonth":
-      query = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-      break;
-
-    default:
-      throw new Error(`Unsupported time range: ${timeRange}`);
-  }
-
-  const result = await db.execute(query);
-  return Array.from(result) as unknown as DatabaseKeyStatRow[];
+  const rows = Array.from(statsResult) as KeyBucketStatsRow[];
+  return zeroFillKeyStats(rows, activeKeys, buckets) as unknown as DatabaseKeyStatRow[];
 }
 
 /**
@@ -403,310 +378,58 @@ export async function getMixedStatisticsFromDB(
   othersAggregate: DatabaseStatRow[];
 }> {
   const timezone = await resolveSystemTimezone();
-  let ownKeysQuery;
-  let othersQuery;
+  const { startTs, endTs, bucketExpr } = getTimeRangeSqlConfig(timeRange, timezone);
 
-  switch (timeRange) {
-    case "today":
-      // 自己的密钥明细（小时分辨率）
-      ownKeysQuery = sql`
-        WITH hour_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
-            '1 hour'::interval
-          ) AS hour
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        hourly_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN hour_range hr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, hr.hour
-        )
-        SELECT
-          key_id,
-          key_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC, key_name ASC
-      `;
+  const ownKeysQuery = sql`
+    SELECT
+      k.id AS key_id,
+      k.name AS key_name,
+      ${bucketExpr} AS bucket,
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
+    FROM keys k
+    LEFT JOIN usage_ledger ON usage_ledger.key = k.key
+      AND usage_ledger.user_id = ${userId}
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
+    WHERE k.user_id = ${userId}
+      AND k.deleted_at IS NULL
+    GROUP BY k.id, k.name, bucket
+    ORDER BY bucket ASC, k.name ASC
+  `;
 
-      // 其他用户汇总（小时分辨率）
-      othersQuery = sql`
-        WITH hour_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())),
-            DATE_TRUNC('day', TIMEZONE(${timezone}, NOW())) + INTERVAL '23 hours',
-            '1 hour'::interval
-          ) AS hour
-        ),
-        hourly_stats AS (
-          SELECT
-            hr.hour,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM hour_range hr
-          LEFT JOIN message_request mr ON DATE_TRUNC('hour', mr.created_at AT TIME ZONE ${timezone}) = hr.hour
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY hr.hour
-        )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          hour AS date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM hourly_stats
-        ORDER BY hour ASC
-      `;
-      break;
+  const othersQuery = sql`
+    SELECT
+      ${bucketExpr} AS bucket,
+      COUNT(usage_ledger.id) AS api_calls,
+      COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
+    FROM usage_ledger
+    WHERE usage_ledger.user_id <> ${userId}
+      AND usage_ledger.created_at >= ${startTs}
+      AND usage_ledger.created_at < ${endTs}
+      AND ${LEDGER_BILLING_CONDITION}
+    GROUP BY bucket
+    ORDER BY bucket ASC
+  `;
 
-    case "7days":
-      // 自己的密钥明细（天分辨率）
-      ownKeysQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-
-      // 其他用户汇总（天分辨率）
-      othersQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '6 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM date_range dr
-          LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY dr.date
-        )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC
-      `;
-      break;
-
-    case "30days":
-      // 自己的密钥明细（天分辨率）
-      ownKeysQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-
-      // 其他用户汇总（天分辨率）
-      othersQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date - INTERVAL '29 days',
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM date_range dr
-          LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY dr.date
-        )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC
-      `;
-      break;
-
-    case "thisMonth":
-      // 自己的密钥明细（天分辨率，本月）
-      ownKeysQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        user_keys AS (
-          SELECT id, name, key
-          FROM keys
-          WHERE user_id = ${userId}
-            AND deleted_at IS NULL
-        ),
-        daily_stats AS (
-          SELECT
-            k.id AS key_id,
-            k.name AS key_name,
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM user_keys k
-          CROSS JOIN date_range dr
-          LEFT JOIN message_request mr ON mr.key = k.key
-            AND mr.user_id = ${userId}
-            AND (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY k.id, k.name, dr.date
-        )
-        SELECT
-          key_id,
-          key_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC, key_name ASC
-      `;
-
-      // 其他用户汇总（天分辨率，本月）
-      othersQuery = sql`
-        WITH date_range AS (
-          SELECT generate_series(
-            DATE_TRUNC('month', CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date,
-            '1 day'::interval
-          )::date AS date
-        ),
-        daily_stats AS (
-          SELECT
-            dr.date,
-            COUNT(mr.id) AS api_calls,
-            COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-          FROM date_range dr
-          LEFT JOIN message_request mr ON (mr.created_at AT TIME ZONE ${timezone})::date = dr.date
-            AND mr.user_id != ${userId}
-            AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          GROUP BY dr.date
-        )
-        SELECT
-          -1 AS user_id,
-          '其他用户' AS user_name,
-          date,
-          api_calls::integer,
-          total_cost::numeric
-        FROM daily_stats
-        ORDER BY date ASC
-      `;
-      break;
-
-    default:
-      throw new Error(`Unsupported time range: ${timeRange}`);
-  }
-
-  const [ownKeysResult, othersResult] = await Promise.all([
+  const [activeKeys, buckets, ownKeysResult, othersResult] = await Promise.all([
+    getActiveKeysForUserFromDB(userId),
+    getTimeBuckets(timeRange, timezone),
     db.execute(ownKeysQuery),
     db.execute(othersQuery),
   ]);
 
   return {
-    ownKeys: Array.from(ownKeysResult) as unknown as DatabaseKeyStatRow[],
-    othersAggregate: Array.from(othersResult) as unknown as DatabaseStatRow[],
+    ownKeys: zeroFillKeyStats(
+      Array.from(ownKeysResult) as KeyBucketStatsRow[],
+      activeKeys,
+      buckets
+    ) as unknown as DatabaseKeyStatRow[],
+    othersAggregate: zeroFillMixedOthersStats(
+      Array.from(othersResult) as MixedOthersBucketStatsRow[],
+      buckets
+    ) as unknown as DatabaseStatRow[],
   };
 }
 
@@ -723,13 +446,11 @@ export async function sumUserCostToday(userId: number): Promise<number> {
   const timezone = await resolveSystemTimezone();
 
   const query = sql`
-    SELECT COALESCE(SUM(mr.cost_usd), 0) AS total_cost
-    FROM message_request mr
-    INNER JOIN keys k ON mr.key = k.key
-    WHERE k.user_id = ${userId}
-      AND (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-      AND mr.deleted_at IS NULL AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-      AND k.deleted_at IS NULL
+    SELECT COALESCE(SUM(usage_ledger.cost_usd), 0) AS total_cost
+    FROM usage_ledger
+    WHERE usage_ledger.user_id = ${userId}
+      AND (usage_ledger.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
+      AND ${LEDGER_BILLING_CONDITION}
   `;
 
   const result = await db.execute(query);
@@ -738,48 +459,22 @@ export async function sumUserCostToday(userId: number): Promise<number> {
 }
 
 /**
- * 查询 Key 历史总消费（通过 Key ID）
- * 用于显示 Key 的历史总消费统计
- * @param keyId - Key 的数据库 ID
- * @param maxAgeDays - 最大查询天数，默认 365 天（避免全表扫描）
- */
-export async function sumKeyTotalCostById(
-  keyId: number,
-  maxAgeDays: number = 365
-): Promise<number> {
-  // 先查询 key 字符串
-  const keyRecord = await db
-    .select({ key: keys.key })
-    .from(keys)
-    .where(eq(keys.id, keyId))
-    .limit(1);
-
-  if (!keyRecord || keyRecord.length === 0) return 0;
-
-  return sumKeyTotalCost(keyRecord[0].key, maxAgeDays);
-}
-
-/**
  * Query Key total cost (with optional time boundary)
  * @param keyHash - API Key hash
  * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365): Promise<number> {
-  const conditions = [
-    eq(messageRequest.key, keyHash),
-    isNull(messageRequest.deletedAt),
-    EXCLUDE_WARMUP_CONDITION,
-  ];
+  const conditions = [eq(usageLedger.key, keyHash), LEDGER_BILLING_CONDITION];
 
   // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
   if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
     const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
   }
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
@@ -791,90 +486,100 @@ export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365)
  * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
 export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365): Promise<number> {
-  const conditions = [
-    eq(messageRequest.userId, userId),
-    isNull(messageRequest.deletedAt),
-    EXCLUDE_WARMUP_CONDITION,
-  ];
+  const conditions = [eq(usageLedger.userId, userId), LEDGER_BILLING_CONDITION];
 
   // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
   if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
     const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(messageRequest.createdAt, cutoffDate));
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
   }
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(and(...conditions));
 
   return Number(result[0]?.total || 0);
 }
 
 /**
- * Batch query: all-time total cost grouped by user_id (single SQL query)
+ * Batch query: total cost grouped by user_id (single SQL query)
  * @param userIds - Array of user IDs
+ * @param maxAgeDays - Only include records newer than this many days (default 365, use Infinity to include all)
  * @returns Map of userId -> totalCost
  */
-export async function sumUserTotalCostBatch(userIds: number[]): Promise<Map<number, number>> {
+export async function sumUserTotalCostBatch(
+  userIds: number[],
+  maxAgeDays: number = 365
+): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (userIds.length === 0) return result;
 
+  const conditions: SQL[] = [inArray(usageLedger.userId, userIds), LEDGER_BILLING_CONDITION];
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+  }
+
   const rows = await db
     .select({
-      userId: messageRequest.userId,
-      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+      userId: usageLedger.userId,
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
     })
-    .from(messageRequest)
-    .where(
-      and(
-        inArray(messageRequest.userId, userIds),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
-      )
-    )
-    .groupBy(messageRequest.userId);
+    .from(usageLedger)
+    .where(and(...conditions))
+    .groupBy(usageLedger.userId);
 
-  for (const id of userIds) {
-    result.set(id, 0);
-  }
-  for (const row of rows) {
-    result.set(row.userId, Number(row.total || 0));
-  }
+  for (const id of userIds) result.set(id, 0);
+  for (const row of rows) result.set(row.userId, Number(row.total || 0));
   return result;
 }
 
 /**
- * Batch query: all-time total cost grouped by key_id (single SQL query via JOIN)
+ * Batch query: total cost grouped by key_id using a two-step PK lookup then aggregate.
+ * Avoids varchar LEFT JOIN by first resolving key strings via PK, then aggregating on
+ * usage_ledger directly (hits idx_usage_ledger_key_cost index).
  * @param keyIds - Array of key IDs
+ * @param maxAgeDays - Only include records newer than this many days (default 365, use Infinity to include all)
  * @returns Map of keyId -> totalCost
  */
-export async function sumKeyTotalCostBatchByIds(keyIds: number[]): Promise<Map<number, number>> {
+export async function sumKeyTotalCostBatchByIds(
+  keyIds: number[],
+  maxAgeDays: number = 365
+): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (keyIds.length === 0) return result;
+  for (const id of keyIds) result.set(id, 0);
+
+  // Step 1: PK lookup -> key strings
+  const keyMappings = await db
+    .select({ id: keys.id, key: keys.key })
+    .from(keys)
+    .where(inArray(keys.id, keyIds));
+
+  const keyStringToId = new Map(keyMappings.map((k) => [k.key, k.id]));
+  const keyStrings = keyMappings.map((k) => k.key);
+  if (keyStrings.length === 0) return result;
+
+  // Step 2: Aggregate on usage_ledger directly (hits idx_usage_ledger_key_cost)
+  const conditions: SQL[] = [inArray(usageLedger.key, keyStrings), LEDGER_BILLING_CONDITION];
+  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+  }
 
   const rows = await db
     .select({
-      keyId: keys.id,
-      total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)`,
+      key: usageLedger.key,
+      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
     })
-    .from(keys)
-    .leftJoin(
-      messageRequest,
-      and(
-        eq(messageRequest.key, keys.key),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
-      )
-    )
-    .where(inArray(keys.id, keyIds))
-    .groupBy(keys.id);
+    .from(usageLedger)
+    .where(and(...conditions))
+    .groupBy(usageLedger.key);
 
-  for (const id of keyIds) {
-    result.set(id, 0);
-  }
   for (const row of rows) {
-    result.set(row.keyId, Number(row.total || 0));
+    const keyId = keyStringToId.get(row.key);
+    if (keyId !== undefined) result.set(keyId, Number(row.total || 0));
   }
   return result;
 }
@@ -897,14 +602,13 @@ export async function sumProviderTotalCost(
     resetAt instanceof Date && !Number.isNaN(resetAt.getTime()) ? resetAt : null;
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.providerId, providerId),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        ...(effectiveStart ? [gte(messageRequest.createdAt, effectiveStart)] : [])
+        eq(usageLedger.finalProviderId, providerId),
+        LEDGER_BILLING_CONDITION,
+        ...(effectiveStart ? [gte(usageLedger.createdAt, effectiveStart)] : [])
       )
     );
 
@@ -921,15 +625,14 @@ export async function sumUserCostInTimeRange(
   endTime: Date
 ): Promise<number> {
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.userId, userId),
-        gte(messageRequest.createdAt, startTime),
-        lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
+        eq(usageLedger.userId, userId),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
       )
     );
 
@@ -945,31 +648,177 @@ export async function sumKeyCostInTimeRange(
   startTime: Date,
   endTime: Date
 ): Promise<number> {
-  // 注意：message_request.key 存储的是 API key 字符串，需要先查询 keys 表获取 key 值
-  const keyRecord = await db
-    .select({ key: keys.key })
-    .from(keys)
-    .where(eq(keys.id, keyId))
-    .limit(1);
-
-  if (!keyRecord || keyRecord.length === 0) return 0;
-
-  const keyString = keyRecord[0].key;
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) return 0;
 
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.key, keyString), // 使用 key 字符串而非 ID
-        gte(messageRequest.createdAt, startTime),
-        lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
+        eq(usageLedger.key, keyString), // 使用 key 字符串而非 ID
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
       )
     );
 
   return Number(result[0]?.total || 0);
+}
+
+export interface QuotaCostRanges {
+  range5h: { startTime: Date; endTime: Date };
+  rangeDaily: { startTime: Date; endTime: Date };
+  rangeWeekly: { startTime: Date; endTime: Date };
+  rangeMonthly: { startTime: Date; endTime: Date };
+}
+
+interface QuotaCostSummary {
+  cost5h: number;
+  costDaily: number;
+  costWeekly: number;
+  costMonthly: number;
+  costTotal: number;
+}
+
+/**
+ * 合并查询：一次 SQL 返回用户各周期消费与总消费
+ *
+ * 说明：
+ * - 通过 FILTER 子句避免多次往返/重复扫描
+ * - scanStart/scanEnd 仅用于缩小扫描范围（不改变语义）
+ * - total 使用 maxAgeDays 做时间截断（与 sumUserTotalCost 语义一致）
+ */
+export async function sumUserQuotaCosts(
+  userId: number,
+  ranges: QuotaCostRanges,
+  maxAgeDays: number = 365
+): Promise<QuotaCostSummary> {
+  const cutoffDate =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+
+  const scanStart = cutoffDate
+    ? new Date(
+        Math.min(
+          ranges.range5h.startTime.getTime(),
+          ranges.rangeDaily.startTime.getTime(),
+          ranges.rangeWeekly.startTime.getTime(),
+          ranges.rangeMonthly.startTime.getTime(),
+          cutoffDate.getTime()
+        )
+      )
+    : null;
+  const scanEnd = new Date(
+    Math.max(
+      ranges.range5h.endTime.getTime(),
+      ranges.rangeDaily.endTime.getTime(),
+      ranges.rangeWeekly.endTime.getTime(),
+      ranges.rangeMonthly.endTime.getTime(),
+      Date.now()
+    )
+  );
+
+  const costTotal = cutoffDate
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()}), 0)`
+    : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
+
+  const [row] = await db
+    .select({
+      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime.toISOString()}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime.toISOString()}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()}), 0)`,
+      costTotal,
+    })
+    .from(usageLedger)
+    .where(
+      and(
+        eq(usageLedger.userId, userId),
+        LEDGER_BILLING_CONDITION,
+        ...(scanStart ? [gte(usageLedger.createdAt, scanStart)] : []),
+        lt(usageLedger.createdAt, scanEnd)
+      )
+    );
+
+  return {
+    cost5h: Number(row?.cost5h ?? 0),
+    costDaily: Number(row?.costDaily ?? 0),
+    costWeekly: Number(row?.costWeekly ?? 0),
+    costMonthly: Number(row?.costMonthly ?? 0),
+    costTotal: Number(row?.costTotal ?? 0),
+  };
+}
+
+/**
+ * 合并查询：一次 SQL 返回 Key 各周期消费与总消费（通过 keyId）
+ */
+export async function sumKeyQuotaCostsById(
+  keyId: number,
+  ranges: QuotaCostRanges,
+  maxAgeDays: number = 365
+): Promise<QuotaCostSummary> {
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) {
+    return { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0, costTotal: 0 };
+  }
+
+  const cutoffDate =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+
+  const scanStart = cutoffDate
+    ? new Date(
+        Math.min(
+          ranges.range5h.startTime.getTime(),
+          ranges.rangeDaily.startTime.getTime(),
+          ranges.rangeWeekly.startTime.getTime(),
+          ranges.rangeMonthly.startTime.getTime(),
+          cutoffDate.getTime()
+        )
+      )
+    : null;
+  const scanEnd = new Date(
+    Math.max(
+      ranges.range5h.endTime.getTime(),
+      ranges.rangeDaily.endTime.getTime(),
+      ranges.rangeWeekly.endTime.getTime(),
+      ranges.rangeMonthly.endTime.getTime(),
+      Date.now()
+    )
+  );
+
+  const costTotal = cutoffDate
+    ? sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${cutoffDate.toISOString()}), 0)`
+    : sql<string>`COALESCE(SUM(${usageLedger.costUsd}), 0)`;
+
+  const [row] = await db
+    .select({
+      cost5h: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.range5h.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.range5h.endTime.toISOString()}), 0)`,
+      costDaily: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeDaily.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeDaily.endTime.toISOString()}), 0)`,
+      costWeekly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeWeekly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeWeekly.endTime.toISOString()}), 0)`,
+      costMonthly: sql<string>`COALESCE(SUM(${usageLedger.costUsd}) FILTER (WHERE ${usageLedger.createdAt} >= ${ranges.rangeMonthly.startTime.toISOString()} AND ${usageLedger.createdAt} < ${ranges.rangeMonthly.endTime.toISOString()}), 0)`,
+      costTotal,
+    })
+    .from(usageLedger)
+    .where(
+      and(
+        eq(usageLedger.key, keyString),
+        LEDGER_BILLING_CONDITION,
+        ...(scanStart ? [gte(usageLedger.createdAt, scanStart)] : []),
+        lt(usageLedger.createdAt, scanEnd)
+      )
+    );
+
+  return {
+    cost5h: Number(row?.cost5h ?? 0),
+    costDaily: Number(row?.costDaily ?? 0),
+    costWeekly: Number(row?.costWeekly ?? 0),
+    costMonthly: Number(row?.costMonthly ?? 0),
+    costTotal: Number(row?.costTotal ?? 0),
+  };
 }
 
 export interface CostEntryInTimeRange {
@@ -1056,16 +905,8 @@ export async function findKeyCostEntriesInTimeRange(
   startTime: Date,
   endTime: Date
 ): Promise<CostEntryInTimeRange[]> {
-  // 注意：message_request.key 存储的是 API key 字符串，需要先查询 keys 表获取 key 值
-  const keyRecord = await db
-    .select({ key: keys.key })
-    .from(keys)
-    .where(eq(keys.id, keyId))
-    .limit(1);
-
-  if (!keyRecord || keyRecord.length === 0) return [];
-
-  const keyString = keyRecord[0].key;
+  const keyString = await getKeyStringByIdCached(keyId);
+  if (!keyString) return [];
 
   const rows = await db
     .select({
@@ -1139,14 +980,8 @@ export async function getRateLimitEventStats(
   // Key ID 过滤需要先查询 key 字符串
   let keyString: string | null = null;
   if (key_id !== undefined) {
-    const keyRecord = await db
-      .select({ key: keys.key })
-      .from(keys)
-      .where(eq(keys.id, key_id))
-      .limit(1);
-
-    if (keyRecord && keyRecord.length > 0) {
-      keyString = keyRecord[0].key;
+    keyString = await getKeyStringByIdCached(key_id);
+    if (keyString) {
       conditions.push(`${messageRequest.key.name} = $${paramIndex++}`);
       params.push(keyString);
     } else {
@@ -1265,15 +1100,14 @@ export async function sumProviderCostInTimeRange(
   endTime: Date
 ): Promise<number> {
   const result = await db
-    .select({ total: sql<number>`COALESCE(SUM(${messageRequest.costUsd}), 0)` })
-    .from(messageRequest)
+    .select({ total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)` })
+    .from(usageLedger)
     .where(
       and(
-        eq(messageRequest.providerId, providerId),
-        gte(messageRequest.createdAt, startTime),
-        lt(messageRequest.createdAt, endTime),
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION
+        eq(usageLedger.finalProviderId, providerId),
+        gte(usageLedger.createdAt, startTime),
+        lt(usageLedger.createdAt, endTime),
+        LEDGER_BILLING_CONDITION
       )
     );
 

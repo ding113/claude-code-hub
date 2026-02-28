@@ -1,5 +1,6 @@
 import { ProxyAuthenticator } from "./auth-guard";
 import { ProxyClientGuard } from "./client-guard";
+import type { EndpointPolicy } from "./endpoint-policy";
 import { ProxyMessageService } from "./message-service";
 import { ProxyModelGuard } from "./model-guard";
 import { ProxyProviderRequestFilter } from "./provider-request-filter";
@@ -157,11 +158,24 @@ export class GuardPipelineBuilder {
     };
   }
 
+  static fromSession(session: Pick<ProxySession, "getEndpointPolicy">): GuardPipeline {
+    return GuardPipelineBuilder.fromEndpointPolicy(session.getEndpointPolicy());
+  }
+
+  static fromEndpointPolicy(policy: Pick<EndpointPolicy, "guardPreset">): GuardPipeline {
+    switch (policy.guardPreset) {
+      case "raw_passthrough":
+        return GuardPipelineBuilder.build(RAW_PASSTHROUGH_PIPELINE);
+      default:
+        return GuardPipelineBuilder.build(CHAT_PIPELINE);
+    }
+  }
+
   // Convenience: build a pipeline from preset request type
   static fromRequestType(type: RequestType): GuardPipeline {
     switch (type) {
       case RequestType.COUNT_TOKENS:
-        return GuardPipelineBuilder.build(COUNT_TOKENS_PIPELINE);
+        return GuardPipelineBuilder.build(RAW_PASSTHROUGH_PIPELINE);
       default:
         return GuardPipelineBuilder.build(CHAT_PIPELINE);
     }
@@ -188,16 +202,8 @@ export const CHAT_PIPELINE: GuardConfig = {
   ],
 };
 
-export const COUNT_TOKENS_PIPELINE: GuardConfig = {
-  // Minimal chain for count_tokens: no session, no sensitive, no rate limit, no message logging
-  steps: [
-    "auth",
-    "client",
-    "model",
-    "version",
-    "probe",
-    "requestFilter",
-    "provider",
-    "providerRequestFilter",
-  ],
+export const RAW_PASSTHROUGH_PIPELINE: GuardConfig = {
+  steps: ["auth", "client", "model", "version", "probe", "provider"],
 };
+
+export const COUNT_TOKENS_PIPELINE: GuardConfig = RAW_PASSTHROUGH_PIPELINE;

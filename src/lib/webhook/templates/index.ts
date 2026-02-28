@@ -1,3 +1,4 @@
+export { buildCacheHitRateAlertMessage } from "./cache-hit-rate-alert";
 export { buildCircuitBreakerMessage } from "./circuit-breaker";
 export { buildCostAlertMessage } from "./cost-alert";
 export { buildDailyLeaderboardMessage } from "./daily-leaderboard";

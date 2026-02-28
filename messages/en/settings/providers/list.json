@@ -41,5 +41,6 @@
   "actionResetCircuit": "Reset Circuit",
   "actionResetUsage": "Reset Usage",
   "actionDelete": "Delete",
-  "selectProvider": "Select {name}"
+  "selectProvider": "Select {name}",
+  "schedule": "Schedule"
 }

@@ -515,6 +515,46 @@ const { route: getProviderEndpointProbeLogsRoute, handler: getProviderEndpointPr
   );
 app.openapi(getProviderEndpointProbeLogsRoute, getProviderEndpointProbeLogsHandler);
 
+const {
+  route: batchGetProviderEndpointProbeLogsRoute,
+  handler: batchGetProviderEndpointProbeLogsHandler,
+} = createActionRoute(
+  "providers",
+  "batchGetProviderEndpointProbeLogs",
+  providerEndpointActions.batchGetProviderEndpointProbeLogs,
+  {
+    requestSchema: z.object({
+      endpointIds: z.array(z.number().int().positive()).max(500),
+      limit: z.number().int().min(1).max(200).optional(),
+    }),
+    description: "批量读取多个端点的测活历史（每端点取最近 N 条） (管理员)",
+    summary: "批量读取测活历史",
+    tags: ["供应商管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(batchGetProviderEndpointProbeLogsRoute, batchGetProviderEndpointProbeLogsHandler);
+
+const {
+  route: batchGetVendorTypeEndpointStatsRoute,
+  handler: batchGetVendorTypeEndpointStatsHandler,
+} = createActionRoute(
+  "providers",
+  "batchGetVendorTypeEndpointStats",
+  providerEndpointActions.batchGetVendorTypeEndpointStats,
+  {
+    requestSchema: z.object({
+      vendorIds: z.array(z.number().int().positive()).max(500),
+      providerType: ProviderTypeSchema,
+    }),
+    description: "批量统计 vendor+type 维度端点数量与健康分布 (管理员)",
+    summary: "批量端点统计",
+    tags: ["供应商管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(batchGetVendorTypeEndpointStatsRoute, batchGetVendorTypeEndpointStatsHandler);
+
 const { route: getEndpointCircuitInfoRoute, handler: getEndpointCircuitInfoHandler } =
   createActionRoute(
     "providers",
@@ -1268,6 +1308,16 @@ const { route: getNotificationSettingsRoute, handler: getNotificationSettingsHan
   );
 app.openapi(getNotificationSettingsRoute, getNotificationSettingsHandler);
 
+const RatioStringSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .regex(/^\d+(?:\.\d+)?$/)
+  .refine((value) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 && n <= 1;
+  });
+
 const { route: updateNotificationSettingsRoute, handler: updateNotificationSettingsHandler } =
   createActionRoute(
     "notifications",
@@ -1294,7 +1344,13 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
           .optional()
           .describe("每日排行榜 Webhook URL（旧版模式）"),
         dailyLeaderboardTime: z.string().optional().describe("每日排行榜发送时间（HH:mm）"),
-        dailyLeaderboardTopN: z.number().int().positive().optional().describe("每日排行榜 TopN"),
+        dailyLeaderboardTopN: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .describe("每日排行榜 TopN"),
 
         costAlertEnabled: z.boolean().optional().describe("是否启用成本预警"),
         costAlertWebhook: z
@@ -1303,16 +1359,79 @@ const { route: updateNotificationSettingsRoute, handler: updateNotificationSetti
           .nullable()
           .optional()
           .describe("成本预警 Webhook URL（旧版模式）"),
-        costAlertThreshold: z
-          .string()
-          .optional()
-          .describe("成本预警阈值（numeric 字段以 string 表示）"),
+        costAlertThreshold: RatioStringSchema.optional().describe(
+          "成本预警阈值（numeric 字段以 string 表示）"
+        ),
         costAlertCheckInterval: z
           .number()
           .int()
-          .positive()
+          .min(10)
+          .max(1440)
           .optional()
           .describe("成本预警检查间隔（分钟）"),
+
+        cacheHitRateAlertEnabled: z.boolean().optional().describe("是否启用缓存命中率异常告警"),
+        cacheHitRateAlertWebhook: z
+          .string()
+          .url()
+          .nullable()
+          .optional()
+          .describe("缓存命中率异常告警 Webhook URL（旧版模式）"),
+        cacheHitRateAlertWindowMode: z
+          .enum(["auto", "5m", "30m", "1h", "1.5h"])
+          .optional()
+          .describe("检测窗口模式（auto/5m/30m/1h/1.5h）"),
+        cacheHitRateAlertCheckInterval: z
+          .number()
+          .int()
+          .min(1)
+          .max(1440)
+          .optional()
+          .describe("缓存命中率告警检查间隔（分钟）"),
+        cacheHitRateAlertHistoricalLookbackDays: z
+          .number()
+          .int()
+          .min(1)
+          .max(90)
+          .optional()
+          .describe("历史基线回看天数"),
+        cacheHitRateAlertMinEligibleRequests: z
+          .number()
+          .int()
+          .min(1)
+          .max(100000)
+          .optional()
+          .describe("最小 eligible 请求数门槛"),
+        cacheHitRateAlertMinEligibleTokens: z
+          .number()
+          .int()
+          .min(0)
+          .max(2_147_483_647)
+          .optional()
+          .describe("最小 eligible tokens 门槛"),
+        cacheHitRateAlertAbsMin: RatioStringSchema.optional().describe(
+          "absMin（numeric 字段以 string 表示）"
+        ),
+        cacheHitRateAlertDropRel: RatioStringSchema.optional().describe(
+          "dropRel（numeric 字段以 string 表示）"
+        ),
+        cacheHitRateAlertDropAbs: RatioStringSchema.optional().describe(
+          "dropAbs（numeric 字段以 string 表示）"
+        ),
+        cacheHitRateAlertCooldownMinutes: z
+          .number()
+          .int()
+          .min(0)
+          .max(1440)
+          .optional()
+          .describe("冷却时间（分钟）"),
+        cacheHitRateAlertTopN: z
+          .number()
+          .int()
+          .min(1)
+          .max(100)
+          .optional()
+          .describe("TopN（最多返回/推送条数）"),
       }),
       summary: "更新通知设置",
       description: "更新通知开关与各类型通知配置（生产环境会触发重新调度定时任务）",
@@ -1350,6 +1469,7 @@ const WebhookNotificationTypeSchema = z.enum([
   "circuit_breaker",
   "daily_leaderboard",
   "cost_alert",
+  "cache_hit_rate_alert",
 ]);
 
 const WebhookTargetSchema = z.object({

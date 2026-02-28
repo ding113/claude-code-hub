@@ -31,6 +31,7 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'circuit_breaker',
   'daily_leaderboard',
   'cost_alert',
+  'cache_hit_rate_alert',
 ]);
 
 // Users table
@@ -72,6 +73,10 @@ export const users = pgTable('users', {
   // Empty array = no restrictions, non-empty = only listed models allowed
   allowedModels: jsonb('allowed_models').$type<string[]>().default([]),
 
+  // Blocked clients (CLI/IDE blocklist)
+  // Non-empty = listed patterns are denied even if allowedClients permits them
+  blockedClients: jsonb('blocked_clients').$type<string[]>().notNull().default([]),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -81,6 +86,10 @@ export const users = pgTable('users', {
   // 优化过期用户查询的复合索引（用于定时任务），仅索引未删除的用户
   usersEnabledExpiresAtIdx: index('idx_users_enabled_expires_at')
     .on(table.isEnabled, table.expiresAt)
+    .where(sql`${table.deletedAt} IS NULL`),
+  // Tag 筛选（@>）的 GIN 索引：加速用户管理列表页的标签过滤
+  usersTagsGinIdx: index('idx_users_tags_gin')
+    .using('gin', table.tags)
     .where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   usersCreatedAtIdx: index('idx_users_created_at').on(table.createdAt),
@@ -125,6 +134,7 @@ export const keys = pgTable('keys', {
 }, (table) => ({
   // 基础索引（详细的复合索引通过迁移脚本管理）
   keysUserIdIdx: index('idx_keys_user_id').on(table.userId),
+  keysKeyIdx: index('idx_keys_key').on(table.key),
   keysCreatedAtIdx: index('idx_keys_created_at').on(table.createdAt),
   keysDeletedAtIdx: index('idx_keys_deleted_at').on(table.deletedAt),
 }));
@@ -188,9 +198,16 @@ export const providers = pgTable('providers', {
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: jsonb('allowed_models').$type<string[] | null>().default(null),
 
-  // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
-  // 启用后，如果该提供商配置了重定向到 claude-* 模型，可以加入 claude 调度池
-  joinClaudePool: boolean('join_claude_pool').default(false),
+  // Client restrictions for this provider
+  // allowedClients: empty = no restriction; non-empty = only listed patterns allowed
+  // blockedClients: non-empty = listed patterns are denied
+  allowedClients: jsonb('allowed_clients').$type<string[]>().notNull().default([]),
+  blockedClients: jsonb('blocked_clients').$type<string[]>().notNull().default([]),
+
+  // Scheduled active time window (HH:mm format)
+  // Both null = always active; both set = active during window only
+  activeTimeStart: varchar('active_time_start', { length: 5 }),
+  activeTimeEnd: varchar('active_time_end', { length: 5 }),
 
   // Codex instructions 策略（已废弃）：历史字段保留以兼容旧数据
   // 当前运行时对 Codex 请求的 instructions 一律透传，不再读取/生效此配置
@@ -263,6 +280,9 @@ export const providers = pgTable('providers', {
   // Cache TTL override（null = 不覆写，沿用客户端请求）
   cacheTtlPreference: varchar('cache_ttl_preference', { length: 10 }),
 
+  // Cache TTL billing swap: when true, invert 1h<->5m for cost calculation only
+  swapCacheTtlBilling: boolean('swap_cache_ttl_billing').notNull().default(false),
+
   // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
   // - 'inherit' (默认): 遵循客户端请求，客户端带 1M header 则启用
   // - 'force_enable': 强制启用 1M 上下文（仅对支持的模型生效）
@@ -309,10 +329,19 @@ export const providers = pgTable('providers', {
   providersEnabledPriorityIdx: index('idx_providers_enabled_priority').on(table.isEnabled, table.priority, table.weight).where(sql`${table.deletedAt} IS NULL`),
   // 分组查询优化
   providersGroupIdx: index('idx_providers_group').on(table.groupTag).where(sql`${table.deletedAt} IS NULL`),
+  // #779：加速“旧 URL 是否仍被引用”的判断（vendor/type/url 精确匹配）
+  providersVendorTypeUrlActiveIdx: index('idx_providers_vendor_type_url_active').on(table.providerVendorId, table.providerType, table.url).where(sql`${table.deletedAt} IS NULL`),
   // 基础索引
   providersCreatedAtIdx: index('idx_providers_created_at').on(table.createdAt),
   providersDeletedAtIdx: index('idx_providers_deleted_at').on(table.deletedAt),
   providersVendorTypeIdx: index('idx_providers_vendor_type').on(table.providerVendorId, table.providerType).where(sql`${table.deletedAt} IS NULL`),
+  // #779/#781：Dashboard/Probe scheduler 的 enabled vendor/type 去重热路径
+  providersEnabledVendorTypeIdx: index('idx_providers_enabled_vendor_type').on(
+    table.providerVendorId,
+    table.providerType
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.isEnabled} = true AND ${table.providerVendorId} IS NOT NULL AND ${table.providerVendorId} > 0`
+  ),
 }));
 
 // Provider Endpoints table - 供应商(官网域名) + 类型 维度的端点池
@@ -355,6 +384,14 @@ export const providerEndpoints = pgTable('provider_endpoints', {
     table.isEnabled,
     table.vendorId,
     table.providerType
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：运行时端点选择热路径（vendor/type/enabled 定位 + sort_order 有序扫描）
+  providerEndpointsPickEnabledIdx: index('idx_provider_endpoints_pick_enabled').on(
+    table.vendorId,
+    table.providerType,
+    table.isEnabled,
+    table.sortOrder,
+    table.id
   ).where(sql`${table.deletedAt} IS NULL`),
   providerEndpointsCreatedAtIdx: index('idx_provider_endpoints_created_at').on(table.createdAt),
   providerEndpointsDeletedAtIdx: index('idx_provider_endpoints_deleted_at').on(table.deletedAt),
@@ -431,6 +468,9 @@ export const messageRequest = pgTable('message_request', {
   // 1M Context Window 应用状态
   context1mApplied: boolean('context_1m_applied').default(false),
 
+  // Swap Cache TTL Billing: whether cache TTL inversion was active for this request
+  swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
+
   // 特殊设置（用于记录各类“特殊行为/覆写”的命中与生效情况，便于审计与展示）
   specialSettings: jsonb('special_settings').$type<SpecialSetting[]>(),
 
@@ -455,8 +495,14 @@ export const messageRequest = pgTable('message_request', {
 }, (table) => ({
   // 优化统计查询的复合索引（用户+时间+费用）
   messageRequestUserDateCostIdx: index('idx_message_request_user_date_cost').on(table.userId, table.createdAt, table.costUsd).where(sql`${table.deletedAt} IS NULL`),
+  messageRequestUserCreatedAtCostStatsIdx: index('idx_message_request_user_created_at_cost_stats')
+    .on(table.userId, table.createdAt, table.costUsd)
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
   // 优化用户查询的复合索引（按创建时间倒序）
   messageRequestUserQueryIdx: index('idx_message_request_user_query').on(table.userId, table.createdAt).where(sql`${table.deletedAt} IS NULL`),
+  messageRequestProviderCreatedAtActiveIdx: index('idx_message_request_provider_created_at_active')
+    .on(table.providerId, table.createdAt)
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
   // Session 查询索引（按 session 聚合查看对话）
   messageRequestSessionIdIdx: index('idx_message_request_session_id').on(table.sessionId).where(sql`${table.deletedAt} IS NULL`),
   // Session ID 前缀查询索引（LIKE 'prefix%'，可稳定命中 B-tree）
@@ -471,8 +517,50 @@ export const messageRequest = pgTable('message_request', {
   messageRequestProviderIdIdx: index('idx_message_request_provider_id').on(table.providerId),
   messageRequestUserIdIdx: index('idx_message_request_user_id').on(table.userId),
   messageRequestKeyIdx: index('idx_message_request_key').on(table.key),
+  // #779：Key 维度分页/时间范围查询热路径（my-usage / usage logs）
+  messageRequestKeyCreatedAtIdIdx: index('idx_message_request_key_created_at_id').on(
+    table.key,
+    table.createdAt.desc(),
+    table.id.desc()
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：my-usage 下拉筛选 DISTINCT model / endpoint（Key 维度热路径）
+  messageRequestKeyModelActiveIdx: index('idx_message_request_key_model_active').on(
+    table.key,
+    table.model
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
+  messageRequestKeyEndpointActiveIdx: index('idx_message_request_key_endpoint_active').on(
+    table.key,
+    table.endpoint
+  ).where(
+    sql`${table.deletedAt} IS NULL AND ${table.endpoint} IS NOT NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`
+  ),
+  // #779：全局 usage logs keyset 分页热路径（按 created_at + id 倒序）
+  messageRequestCreatedAtIdActiveIdx: index('idx_message_request_created_at_id_active').on(
+    table.createdAt.desc(),
+    table.id.desc()
+  ).where(sql`${table.deletedAt} IS NULL`),
+  // #779：筛选器 DISTINCT model / status_code 加速（admin usage logs）
+  messageRequestModelActiveIdx: index('idx_message_request_model_active').on(table.model).where(sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL`),
+  messageRequestStatusCodeActiveIdx: index('idx_message_request_status_code_active').on(table.statusCode).where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
   messageRequestCreatedAtIdx: index('idx_message_request_created_at').on(table.createdAt),
   messageRequestDeletedAtIdx: index('idx_message_request_deleted_at').on(table.deletedAt),
+  // #slow-query: DISTINCT ON / LATERAL last-provider lookup per key
+  messageRequestKeyLastActiveIdx: index('idx_message_request_key_last_active')
+    .on(table.key, table.createdAt.desc())
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
+  // #slow-query: SUM(cost_usd) per key, enables index-only scan
+  messageRequestKeyCostActiveIdx: index('idx_message_request_key_cost_active')
+    .on(table.key, table.costUsd)
+    .where(sql`${table.deletedAt} IS NULL AND (${table.blockedBy} IS NULL OR ${table.blockedBy} <> 'warmup')`),
+  // #slow-query: composite index for session user-info LATERAL lookup
+  // Query: WHERE session_id = $1 AND deleted_at IS NULL ORDER BY created_at LIMIT 1
+  // Provides seek + pre-sorted scan; user_id, key in index reduce heap columns to fetch.
+  // user_agent/api_type still require one heap fetch per session (LIMIT 1, negligible).
+  messageRequestSessionUserInfoIdx: index('idx_message_request_session_user_info')
+    .on(table.sessionId, table.createdAt, table.userId, table.key)
+    .where(sql`${table.deletedAt} IS NULL`),
 }));
 
 // Model Prices table
@@ -687,6 +775,20 @@ export const notificationSettings = pgTable('notification_settings', {
   costAlertThreshold: numeric('cost_alert_threshold', { precision: 5, scale: 2 }).default('0.80'), // 阈值 0-1 (80% = 0.80)
   costAlertCheckInterval: integer('cost_alert_check_interval').default(60), // 检查间隔（分钟）
 
+  // 缓存命中率异常告警配置（provider × model）
+  cacheHitRateAlertEnabled: boolean('cache_hit_rate_alert_enabled').notNull().default(false),
+  cacheHitRateAlertWebhook: varchar('cache_hit_rate_alert_webhook', { length: 512 }),
+  cacheHitRateAlertWindowMode: varchar('cache_hit_rate_alert_window_mode', { length: 10 }).default('auto'),
+  cacheHitRateAlertCheckInterval: integer('cache_hit_rate_alert_check_interval').default(5), // 检查间隔（分钟）
+  cacheHitRateAlertHistoricalLookbackDays: integer('cache_hit_rate_alert_historical_lookback_days').default(7),
+  cacheHitRateAlertMinEligibleRequests: integer('cache_hit_rate_alert_min_eligible_requests').default(20),
+  cacheHitRateAlertMinEligibleTokens: integer('cache_hit_rate_alert_min_eligible_tokens').default(0),
+  cacheHitRateAlertAbsMin: numeric('cache_hit_rate_alert_abs_min', { precision: 5, scale: 4 }).default('0.05'),
+  cacheHitRateAlertDropRel: numeric('cache_hit_rate_alert_drop_rel', { precision: 5, scale: 4 }).default('0.3'),
+  cacheHitRateAlertDropAbs: numeric('cache_hit_rate_alert_drop_abs', { precision: 5, scale: 4 }).default('0.1'),
+  cacheHitRateAlertCooldownMinutes: integer('cache_hit_rate_alert_cooldown_minutes').default(30),
+  cacheHitRateAlertTopN: integer('cache_hit_rate_alert_top_n').default(10),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });
@@ -758,6 +860,74 @@ export const notificationTargetBindings = pgTable(
     bindingsTargetIdx: index('idx_notification_bindings_target').on(table.targetId, table.isEnabled),
   })
 );
+
+// Usage Ledger table - immutable audit log, no FK constraints, no deletedAt/updatedAt
+export const usageLedger = pgTable('usage_ledger', {
+  id: serial('id').primaryKey(),
+  requestId: integer('request_id').notNull(),
+  userId: integer('user_id').notNull(),
+  key: varchar('key').notNull(),
+  providerId: integer('provider_id').notNull(),
+  finalProviderId: integer('final_provider_id').notNull(),
+  model: varchar('model', { length: 128 }),
+  originalModel: varchar('original_model', { length: 128 }),
+  endpoint: varchar('endpoint', { length: 256 }),
+  apiType: varchar('api_type', { length: 20 }),
+  sessionId: varchar('session_id', { length: 64 }),
+  statusCode: integer('status_code'),
+  isSuccess: boolean('is_success').notNull().default(false),
+  blockedBy: varchar('blocked_by', { length: 50 }),
+  costUsd: numeric('cost_usd', { precision: 21, scale: 15 }).default('0'),
+  costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }),
+  inputTokens: bigint('input_tokens', { mode: 'number' }),
+  outputTokens: bigint('output_tokens', { mode: 'number' }),
+  cacheCreationInputTokens: bigint('cache_creation_input_tokens', { mode: 'number' }),
+  cacheReadInputTokens: bigint('cache_read_input_tokens', { mode: 'number' }),
+  cacheCreation5mInputTokens: bigint('cache_creation_5m_input_tokens', { mode: 'number' }),
+  cacheCreation1hInputTokens: bigint('cache_creation_1h_input_tokens', { mode: 'number' }),
+  cacheTtlApplied: varchar('cache_ttl_applied', { length: 10 }),
+  context1mApplied: boolean('context_1m_applied').default(false),
+  swapCacheTtlApplied: boolean('swap_cache_ttl_applied').default(false),
+  durationMs: integer('duration_ms'),
+  ttfbMs: integer('ttfb_ms'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+}, (table) => ({
+  // UNIQUE on requestId (survives message_request log deletion)
+  usageLedgerRequestIdIdx: uniqueIndex('idx_usage_ledger_request_id').on(table.requestId),
+  usageLedgerUserCreatedAtIdx: index('idx_usage_ledger_user_created_at')
+    .on(table.userId, table.createdAt)
+    .where(sql`${table.blockedBy} IS NULL`),
+  usageLedgerKeyCreatedAtIdx: index('idx_usage_ledger_key_created_at')
+    .on(table.key, table.createdAt)
+    .where(sql`${table.blockedBy} IS NULL`),
+  usageLedgerProviderCreatedAtIdx: index('idx_usage_ledger_provider_created_at')
+    .on(table.finalProviderId, table.createdAt)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // Expression index on minute truncation - AT TIME ZONE 'UTC' makes date_trunc IMMUTABLE on timestamptz
+  usageLedgerCreatedAtMinuteIdx: index('idx_usage_ledger_created_at_minute')
+    .on(sql`date_trunc('minute', ${table.createdAt} AT TIME ZONE 'UTC')`),
+  usageLedgerCreatedAtDescIdIdx: index('idx_usage_ledger_created_at_desc_id')
+    .on(table.createdAt.desc(), table.id.desc()),
+  usageLedgerSessionIdIdx: index('idx_usage_ledger_session_id')
+    .on(table.sessionId)
+    .where(sql`${table.sessionId} IS NOT NULL`),
+  usageLedgerModelIdx: index('idx_usage_ledger_model')
+    .on(table.model)
+    .where(sql`${table.model} IS NOT NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per key (replaces old key+cost, adds created_at for time range)
+  usageLedgerKeyCostIdx: index('idx_usage_ledger_key_cost')
+    .on(table.key, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per user (Quotas page + rate-limit total)
+  // Keys: user_id (equality), created_at (range filter), cost_usd (aggregation, index-only scan)
+  usageLedgerUserCostCoverIdx: index('idx_usage_ledger_user_cost_cover')
+    .on(table.userId, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for SUM(cost_usd) per provider (rate-limit total)
+  usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
+    .on(table.finalProviderId, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+}));
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({

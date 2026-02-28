@@ -38,6 +38,22 @@
     "webhookTypeUnknown": "未知平台，請使用企業微信或飛書的 Webhook URL",
     "webhookTypeWeCom": "企業微信"
   },
+  "cacheHitRateAlert": {
+    "absMin": "絕對下限（absMin）",
+    "checkInterval": "檢查間隔（分鐘）",
+    "cooldownMinutes": "冷卻（分鐘）",
+    "description": "當快取命中率（provider × model）異常下降時發送告警",
+    "dropAbs": "絕對跌幅閾值（dropAbs）",
+    "dropRel": "相對跌幅閾值（dropRel）",
+    "enable": "啟用快取命中率告警",
+    "historicalLookbackDays": "歷史回看天數",
+    "minEligibleRequests": "最小可命中請求數",
+    "minEligibleTokens": "最小可命中 Token 數",
+    "title": "快取命中率異常告警",
+    "topN": "Top N",
+    "windowMode": "視窗",
+    "windowModeAuto": "自動"
+  },
   "dailyLeaderboard": {
     "description": "每天定時發送使用者消費 Top N 排行榜",
     "enable": "啟用每日排行榜",

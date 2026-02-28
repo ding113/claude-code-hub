@@ -1,6 +1,7 @@
 "use server";
 
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { GeminiAuth } from "@/app/v1/_lib/gemini/auth";
 import { isClientAbortError } from "@/app/v1/_lib/proxy/errors";
 import { buildProxyUrl } from "@/app/v1/_lib/url";
@@ -11,11 +12,20 @@ import { publishProviderCacheInvalidation } from "@/lib/cache/provider-cache";
 import {
   clearConfigCache,
   clearProviderState,
+  forceCloseCircuitState,
   getAllHealthStatusAsync,
+  publishCircuitBreakerConfigInvalidation,
   resetCircuit,
 } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import {
+  buildProviderBatchApplyUpdates,
+  hasProviderBatchPatchChanges,
+  normalizeProviderBatchPatchDraft,
+  PROVIDER_PATCH_ERROR_CODES,
+} from "@/lib/provider-patch-contract";
 import {
   executeProviderTest,
   type ProviderTestConfig,
@@ -32,11 +42,15 @@ import {
   deleteProviderCircuitConfig,
   saveProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
+import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import type { Context1mPreference } from "@/lib/special-attributes";
 import { maskKey } from "@/lib/utils/validation";
+import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
 import { CreateProviderSchema, UpdateProviderSchema } from "@/lib/validation/schemas";
+import { restoreProvidersBatch } from "@/repository";
 import {
+  type BatchProviderUpdates,
   createProvider,
   deleteProvider,
   findAllProviders,
@@ -46,11 +60,12 @@ import {
   resetProviderTotalCostResetAt,
   updateProvider,
   updateProviderPrioritiesBatch,
+  updateProvidersBatch,
 } from "@/repository/provider";
 import {
   backfillProviderEndpointsFromProviders,
   computeVendorKey,
-  findProviderVendorById,
+  findProviderVendorsByIds,
   getOrCreateProviderVendorIdFromUrls,
   tryDeleteProviderVendorIfEmpty,
 } from "@/repository/provider-endpoints";
@@ -63,7 +78,12 @@ import type {
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
   CodexTextVerbosityPreference,
+  Provider,
+  ProviderBatchApplyUpdates,
+  ProviderBatchPatch,
+  ProviderBatchPatchField,
   ProviderDisplay,
+  ProviderPatchOperation,
   ProviderStatisticsMap,
   ProviderType,
 } from "@/types/provider";
@@ -254,7 +274,11 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         providerVendorId: provider.providerVendorId,
         preserveClientIp: provider.preserveClientIp,
         modelRedirects: provider.modelRedirects,
+        activeTimeStart: provider.activeTimeStart,
+        activeTimeEnd: provider.activeTimeEnd,
         allowedModels: provider.allowedModels,
+        allowedClients: provider.allowedClients,
+        blockedClients: provider.blockedClients,
         mcpPassthroughType: provider.mcpPassthroughType,
         mcpPassthroughUrl: provider.mcpPassthroughUrl,
         limit5hUsd: provider.limit5hUsd,
@@ -277,6 +301,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         websiteUrl: provider.websiteUrl,
         faviconUrl: provider.faviconUrl,
         cacheTtlPreference: provider.cacheTtlPreference,
+        swapCacheTtlBilling: provider.swapCacheTtlBilling,
         context1mPreference: provider.context1mPreference,
         codexReasoningEffortPreference: provider.codexReasoningEffortPreference,
         codexReasoningSummaryPreference: provider.codexReasoningSummaryPreference,
@@ -457,7 +482,11 @@ export async function addProvider(data: {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
+  active_time_start?: string | null;
+  active_time_end?: string | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   limit_5h_usd?: number | null;
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
@@ -628,7 +657,11 @@ export async function editProvider(
     provider_type?: ProviderType;
     preserve_client_ip?: boolean;
     model_redirects?: Record<string, string> | null;
+    active_time_start?: string | null;
+    active_time_end?: string | null;
     allowed_models?: string[] | null;
+    allowed_clients?: string[] | null;
+    blocked_clients?: string[] | null;
     limit_5h_usd?: number | null;
     limit_daily_usd?: number | null;
     daily_reset_time?: string;
@@ -637,6 +670,7 @@ export async function editProvider(
     limit_total_usd?: number | null;
     limit_concurrent_sessions?: number | null;
     cache_ttl_preference?: "inherit" | "5m" | "1h";
+    swap_cache_ttl_billing?: boolean;
     context_1m_preference?: Context1mPreference | null;
     codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
     codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
@@ -662,7 +696,7 @@ export async function editProvider(
     rpd?: number | null;
     cc?: number | null;
   }
-): Promise<ActionResult> {
+): Promise<ActionResult<EditProviderResult>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -708,6 +742,30 @@ export async function editProvider(
       ...(faviconUrl !== undefined && { favicon_url: faviconUrl }),
     };
 
+    const currentProvider = await findProviderById(providerId);
+    if (!currentProvider) {
+      return { ok: false, error: "供应商不存在" };
+    }
+
+    const preimageFields: Record<string, unknown> = {};
+    for (const [field, nextValue] of Object.entries(payload)) {
+      if (field === "key") {
+        continue;
+      }
+
+      const providerKey = SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY[field];
+      if (!providerKey) {
+        continue;
+      }
+
+      const currentValue = currentProvider[providerKey];
+      if (!hasProviderFieldChangedForUndo(currentValue, nextValue)) {
+        continue;
+      }
+
+      preimageFields[providerKey] = currentValue;
+    }
+
     const provider = await updateProvider(providerId, payload);
 
     if (!provider) {
@@ -727,9 +785,14 @@ export async function editProvider(
           openDuration: provider.circuitBreakerOpenDuration,
           halfOpenSuccessThreshold: provider.circuitBreakerHalfOpenSuccessThreshold,
         });
-        // 清除内存缓存，强制下次读取最新配置
-        clearConfigCache(providerId);
+        // 清除配置缓存并广播（跨实例立即生效）
+        await publishCircuitBreakerConfigInvalidation(providerId);
         logger.debug("editProvider:config_synced_to_redis", { providerId });
+
+        // 若管理员禁用熔断器（threshold<=0），则应立即解除 OPEN/HALF-OPEN 拦截（跨实例）
+        if (provider.circuitBreakerFailureThreshold <= 0) {
+          await forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" });
+        }
       } catch (error) {
         logger.warn("editProvider:redis_sync_failed", {
           providerId,
@@ -741,7 +804,26 @@ export async function editProvider(
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "edit", providerId });
 
-    return { ok: true };
+    const undoToken = createProviderPatchUndoToken();
+    const operationId = createProviderPatchOperationId();
+
+    await providerPatchUndoStore.set(undoToken, {
+      undoToken,
+      operationId,
+      providerIds: [providerId],
+      preimage: {
+        [providerId]: preimageFields,
+      },
+      patch: EMPTY_PROVIDER_BATCH_PATCH,
+    });
+
+    return {
+      ok: true,
+      data: {
+        undoToken,
+        operationId,
+      },
+    };
   } catch (error) {
     logger.error("更新服务商失败:", error);
     const message = error instanceof Error ? error.message : "更新服务商失败";
@@ -750,7 +832,9 @@ export async function editProvider(
 }
 
 // 删除服务商
-export async function removeProvider(providerId: number): Promise<ActionResult> {
+export async function removeProvider(
+  providerId: number
+): Promise<ActionResult<RemoveProviderResult>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -759,6 +843,15 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
 
     const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
+
+    const undoToken = createProviderPatchUndoToken();
+    const operationId = createProviderPatchOperationId();
+
+    await providerDeleteUndoStore.set(undoToken, {
+      undoToken,
+      operationId,
+      providerIds: [providerId],
+    });
 
     // 清除内存缓存（无论 Redis 是否成功都要执行）
     clearConfigCache(providerId);
@@ -791,7 +884,13 @@ export async function removeProvider(providerId: number): Promise<ActionResult> 
     // 广播缓存更新（跨实例即时生效）
     await broadcastProviderCacheInvalidation({ operation: "remove", providerId });
 
-    return { ok: true };
+    return {
+      ok: true,
+      data: {
+        undoToken,
+        operationId,
+      },
+    };
   } catch (error) {
     logger.error("删除服务商失败:", error);
     const message = error instanceof Error ? error.message : "删除服务商失败";
@@ -1021,6 +1120,1026 @@ export async function resetProviderTotalUsage(providerId: number): Promise<Actio
 }
 
 const BATCH_OPERATION_MAX_SIZE = 500;
+const PROVIDER_BATCH_PREVIEW_TTL_SECONDS = 60;
+const PROVIDER_PATCH_UNDO_TTL_SECONDS = 10;
+const PROVIDER_DELETE_UNDO_TTL_SECONDS = 60;
+
+const ProviderBatchPatchProviderIdsSchema = z
+  .array(z.number().int().positive())
+  .min(1)
+  .max(BATCH_OPERATION_MAX_SIZE);
+
+const PreviewProviderBatchPatchSchema = z
+  .object({
+    providerIds: ProviderBatchPatchProviderIdsSchema,
+    patch: z.unknown().optional().default({}),
+  })
+  .strict();
+
+const ApplyProviderBatchPatchSchema = z
+  .object({
+    previewToken: z.string().trim().min(1),
+    previewRevision: z.string().trim().min(1),
+    providerIds: ProviderBatchPatchProviderIdsSchema,
+    patch: z.unknown().optional().default({}),
+    idempotencyKey: z.string().trim().min(1).max(128).optional(),
+    excludeProviderIds: z.array(z.number().int().positive()).optional().default([]),
+  })
+  .strict();
+
+const UndoProviderPatchSchema = z
+  .object({
+    undoToken: z.string().trim().min(1),
+    operationId: z.string().trim().min(1),
+  })
+  .strict();
+
+const UndoProviderDeleteSchema = z
+  .object({
+    undoToken: z.string().trim().min(1),
+    operationId: z.string().trim().min(1),
+  })
+  .strict();
+
+export interface ProviderBatchPreviewRow {
+  providerId: number;
+  providerName: string;
+  field: ProviderBatchPatchField;
+  status: "changed" | "skipped";
+  before: unknown;
+  after: unknown;
+  skipReason?: string;
+}
+
+export interface PreviewProviderBatchPatchResult {
+  previewToken: string;
+  previewRevision: string;
+  previewExpiresAt: string;
+  providerIds: number[];
+  changedFields: ProviderBatchPatchField[];
+  rows: ProviderBatchPreviewRow[];
+  summary: {
+    providerCount: number;
+    fieldCount: number;
+    skipCount: number;
+  };
+}
+
+export interface ApplyProviderBatchPatchResult {
+  operationId: string;
+  appliedAt: string;
+  updatedCount: number;
+  undoToken: string;
+  undoExpiresAt: string;
+}
+
+export interface UndoProviderPatchResult {
+  operationId: string;
+  revertedAt: string;
+  revertedCount: number;
+}
+
+export interface EditProviderResult {
+  undoToken: string;
+  operationId: string;
+}
+
+export interface RemoveProviderResult {
+  undoToken: string;
+  operationId: string;
+}
+
+export interface BatchDeleteProvidersResult {
+  deletedCount: number;
+  undoToken: string;
+  operationId: string;
+}
+
+export interface UndoProviderDeleteResult {
+  operationId: string;
+  restoredAt: string;
+  restoredCount: number;
+}
+
+interface ProviderBatchPatchPreviewSnapshot {
+  previewToken: string;
+  previewRevision: string;
+  providerIds: number[];
+  patch: ProviderBatchPatch;
+  patchSerialized: string;
+  changedFields: ProviderBatchPatchField[];
+  rows: ProviderBatchPreviewRow[];
+  applied: boolean;
+  appliedResultByIdempotencyKey: Record<string, ApplyProviderBatchPatchResult>;
+}
+
+interface ProviderPatchUndoSnapshot {
+  undoToken: string;
+  operationId: string;
+  providerIds: number[];
+  preimage: Record<number, Record<string, unknown>>;
+  patch: ProviderBatchPatch;
+}
+
+interface ProviderDeleteUndoSnapshot {
+  undoToken: string;
+  operationId: string;
+  providerIds: number[];
+}
+
+const providerBatchPatchPreviewStore = new RedisKVStore<ProviderBatchPatchPreviewSnapshot>({
+  prefix: "cch:prov:preview:",
+  defaultTtlSeconds: PROVIDER_BATCH_PREVIEW_TTL_SECONDS,
+});
+const providerPatchUndoStore = new RedisKVStore<ProviderPatchUndoSnapshot>({
+  prefix: "cch:prov:undo-patch:",
+  defaultTtlSeconds: PROVIDER_PATCH_UNDO_TTL_SECONDS,
+});
+const providerDeleteUndoStore = new RedisKVStore<ProviderDeleteUndoSnapshot>({
+  prefix: "cch:prov:undo-del:",
+  defaultTtlSeconds: PROVIDER_DELETE_UNDO_TTL_SECONDS,
+});
+type ProviderPatchActionError = Extract<ActionResult, { ok: false }>;
+
+const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider> = {
+  name: "name",
+  url: "url",
+  is_enabled: "isEnabled",
+  weight: "weight",
+  priority: "priority",
+  cost_multiplier: "costMultiplier",
+  group_tag: "groupTag",
+  group_priorities: "groupPriorities",
+  provider_type: "providerType",
+  preserve_client_ip: "preserveClientIp",
+  active_time_start: "activeTimeStart",
+  active_time_end: "activeTimeEnd",
+  model_redirects: "modelRedirects",
+  allowed_models: "allowedModels",
+  limit_5h_usd: "limit5hUsd",
+  limit_daily_usd: "limitDailyUsd",
+  daily_reset_mode: "dailyResetMode",
+  daily_reset_time: "dailyResetTime",
+  limit_weekly_usd: "limitWeeklyUsd",
+  limit_monthly_usd: "limitMonthlyUsd",
+  limit_total_usd: "limitTotalUsd",
+  limit_concurrent_sessions: "limitConcurrentSessions",
+  cache_ttl_preference: "cacheTtlPreference",
+  swap_cache_ttl_billing: "swapCacheTtlBilling",
+  context_1m_preference: "context1mPreference",
+  codex_reasoning_effort_preference: "codexReasoningEffortPreference",
+  codex_reasoning_summary_preference: "codexReasoningSummaryPreference",
+  codex_text_verbosity_preference: "codexTextVerbosityPreference",
+  codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
+  anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
+  anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
+  anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
+  gemini_google_search_preference: "geminiGoogleSearchPreference",
+  max_retry_attempts: "maxRetryAttempts",
+  circuit_breaker_failure_threshold: "circuitBreakerFailureThreshold",
+  circuit_breaker_open_duration: "circuitBreakerOpenDuration",
+  circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
+  proxy_url: "proxyUrl",
+  proxy_fallback_to_direct: "proxyFallbackToDirect",
+  first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
+  streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
+  request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
+  website_url: "websiteUrl",
+  favicon_url: "faviconUrl",
+  mcp_passthrough_type: "mcpPassthroughType",
+  mcp_passthrough_url: "mcpPassthroughUrl",
+  tpm: "tpm",
+  rpm: "rpm",
+  rpd: "rpd",
+  cc: "cc",
+};
+
+const EMPTY_PROVIDER_BATCH_PATCH: ProviderBatchPatch = (() => {
+  const normalized = normalizeProviderBatchPatchDraft({});
+  if (!normalized.ok) {
+    throw new Error("Failed to initialize empty provider batch patch");
+  }
+  return normalized.data;
+})();
+
+function hasProviderFieldChangedForUndo(before: unknown, after: unknown): boolean {
+  if (Object.is(before, after)) {
+    return false;
+  }
+
+  if (
+    before !== null &&
+    after !== null &&
+    typeof before === "object" &&
+    typeof after === "object"
+  ) {
+    try {
+      return JSON.stringify(before) !== JSON.stringify(after);
+    } catch {
+      return true;
+    }
+  }
+
+  return true;
+}
+
+function dedupeProviderIds(providerIds: number[]): number[] {
+  return [...new Set(providerIds)].sort((a, b) => a - b);
+}
+
+function getChangedPatchFields(patch: ProviderBatchPatch): ProviderBatchPatchField[] {
+  return (Object.keys(patch) as ProviderBatchPatchField[]).filter(
+    (field) => patch[field].mode !== "no_change"
+  );
+}
+
+function isSameProviderIdList(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function createProviderBatchPreviewToken(): string {
+  return `provider_patch_preview_${crypto.randomUUID()}`;
+}
+
+function createProviderPatchUndoToken(): string {
+  return `provider_patch_undo_${crypto.randomUUID()}`;
+}
+
+function createProviderPatchOperationId(): string {
+  return `provider_patch_apply_${crypto.randomUUID()}`;
+}
+
+function buildActionValidationError(error: z.ZodError): ProviderPatchActionError {
+  return {
+    ok: false,
+    error: formatZodError(error),
+    errorCode: extractZodErrorCode(error) || PROVIDER_BATCH_PATCH_ERROR_CODES.INVALID_INPUT,
+  };
+}
+
+function buildNoChangesError(): ProviderPatchActionError {
+  return {
+    ok: false,
+    error: "没有可应用的变更",
+    errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
+  };
+}
+
+function mapApplyUpdatesToRepositoryFormat(
+  applyUpdates: ProviderBatchApplyUpdates
+): BatchProviderUpdates {
+  const result: BatchProviderUpdates = {};
+  if (applyUpdates.is_enabled !== undefined) {
+    result.isEnabled = applyUpdates.is_enabled;
+  }
+  if (applyUpdates.priority !== undefined) {
+    result.priority = applyUpdates.priority;
+  }
+  if (applyUpdates.weight !== undefined) {
+    result.weight = applyUpdates.weight;
+  }
+  if (applyUpdates.cost_multiplier !== undefined) {
+    result.costMultiplier = applyUpdates.cost_multiplier.toString();
+  }
+  if (applyUpdates.group_tag !== undefined) {
+    result.groupTag = applyUpdates.group_tag;
+  }
+  if (applyUpdates.model_redirects !== undefined) {
+    result.modelRedirects = applyUpdates.model_redirects;
+  }
+  if (applyUpdates.allowed_models !== undefined) {
+    result.allowedModels = applyUpdates.allowed_models;
+  }
+  if (applyUpdates.allowed_clients !== undefined) {
+    result.allowedClients = applyUpdates.allowed_clients ?? [];
+  }
+  if (applyUpdates.blocked_clients !== undefined) {
+    result.blockedClients = applyUpdates.blocked_clients ?? [];
+  }
+  if (applyUpdates.anthropic_thinking_budget_preference !== undefined) {
+    result.anthropicThinkingBudgetPreference = applyUpdates.anthropic_thinking_budget_preference;
+  }
+  if (applyUpdates.anthropic_adaptive_thinking !== undefined) {
+    result.anthropicAdaptiveThinking = applyUpdates.anthropic_adaptive_thinking;
+  }
+  if (applyUpdates.preserve_client_ip !== undefined) {
+    result.preserveClientIp = applyUpdates.preserve_client_ip;
+  }
+  if (applyUpdates.active_time_start !== undefined) {
+    result.activeTimeStart = applyUpdates.active_time_start;
+  }
+  if (applyUpdates.active_time_end !== undefined) {
+    result.activeTimeEnd = applyUpdates.active_time_end;
+  }
+  if (applyUpdates.group_priorities !== undefined) {
+    result.groupPriorities = applyUpdates.group_priorities;
+  }
+  if (applyUpdates.cache_ttl_preference !== undefined) {
+    result.cacheTtlPreference = applyUpdates.cache_ttl_preference;
+  }
+  if (applyUpdates.swap_cache_ttl_billing !== undefined) {
+    result.swapCacheTtlBilling = applyUpdates.swap_cache_ttl_billing;
+  }
+  if (applyUpdates.context_1m_preference !== undefined) {
+    result.context1mPreference = applyUpdates.context_1m_preference;
+  }
+  if (applyUpdates.codex_reasoning_effort_preference !== undefined) {
+    result.codexReasoningEffortPreference = applyUpdates.codex_reasoning_effort_preference;
+  }
+  if (applyUpdates.codex_reasoning_summary_preference !== undefined) {
+    result.codexReasoningSummaryPreference = applyUpdates.codex_reasoning_summary_preference;
+  }
+  if (applyUpdates.codex_text_verbosity_preference !== undefined) {
+    result.codexTextVerbosityPreference = applyUpdates.codex_text_verbosity_preference;
+  }
+  if (applyUpdates.codex_parallel_tool_calls_preference !== undefined) {
+    result.codexParallelToolCallsPreference = applyUpdates.codex_parallel_tool_calls_preference;
+  }
+  if (applyUpdates.anthropic_max_tokens_preference !== undefined) {
+    result.anthropicMaxTokensPreference = applyUpdates.anthropic_max_tokens_preference;
+  }
+  if (applyUpdates.gemini_google_search_preference !== undefined) {
+    result.geminiGoogleSearchPreference = applyUpdates.gemini_google_search_preference;
+  }
+  if (applyUpdates.limit_5h_usd !== undefined) {
+    result.limit5hUsd =
+      applyUpdates.limit_5h_usd != null ? applyUpdates.limit_5h_usd.toString() : null;
+  }
+  if (applyUpdates.limit_daily_usd !== undefined) {
+    result.limitDailyUsd =
+      applyUpdates.limit_daily_usd != null ? applyUpdates.limit_daily_usd.toString() : null;
+  }
+  if (applyUpdates.daily_reset_mode !== undefined) {
+    result.dailyResetMode = applyUpdates.daily_reset_mode;
+  }
+  if (applyUpdates.daily_reset_time !== undefined) {
+    result.dailyResetTime = applyUpdates.daily_reset_time;
+  }
+  if (applyUpdates.limit_weekly_usd !== undefined) {
+    result.limitWeeklyUsd =
+      applyUpdates.limit_weekly_usd != null ? applyUpdates.limit_weekly_usd.toString() : null;
+  }
+  if (applyUpdates.limit_monthly_usd !== undefined) {
+    result.limitMonthlyUsd =
+      applyUpdates.limit_monthly_usd != null ? applyUpdates.limit_monthly_usd.toString() : null;
+  }
+  if (applyUpdates.limit_total_usd !== undefined) {
+    result.limitTotalUsd =
+      applyUpdates.limit_total_usd != null ? applyUpdates.limit_total_usd.toString() : null;
+  }
+  if (applyUpdates.limit_concurrent_sessions !== undefined) {
+    result.limitConcurrentSessions = applyUpdates.limit_concurrent_sessions;
+  }
+  if (applyUpdates.circuit_breaker_failure_threshold !== undefined) {
+    result.circuitBreakerFailureThreshold = applyUpdates.circuit_breaker_failure_threshold;
+  }
+  if (applyUpdates.circuit_breaker_open_duration !== undefined) {
+    result.circuitBreakerOpenDuration = applyUpdates.circuit_breaker_open_duration;
+  }
+  if (applyUpdates.circuit_breaker_half_open_success_threshold !== undefined) {
+    result.circuitBreakerHalfOpenSuccessThreshold =
+      applyUpdates.circuit_breaker_half_open_success_threshold;
+  }
+  if (applyUpdates.max_retry_attempts !== undefined) {
+    result.maxRetryAttempts = applyUpdates.max_retry_attempts;
+  }
+  if (applyUpdates.proxy_url !== undefined) {
+    result.proxyUrl = applyUpdates.proxy_url;
+  }
+  if (applyUpdates.proxy_fallback_to_direct !== undefined) {
+    result.proxyFallbackToDirect = applyUpdates.proxy_fallback_to_direct;
+  }
+  if (applyUpdates.first_byte_timeout_streaming_ms !== undefined) {
+    result.firstByteTimeoutStreamingMs = applyUpdates.first_byte_timeout_streaming_ms;
+  }
+  if (applyUpdates.streaming_idle_timeout_ms !== undefined) {
+    result.streamingIdleTimeoutMs = applyUpdates.streaming_idle_timeout_ms;
+  }
+  if (applyUpdates.request_timeout_non_streaming_ms !== undefined) {
+    result.requestTimeoutNonStreamingMs = applyUpdates.request_timeout_non_streaming_ms;
+  }
+  if (applyUpdates.mcp_passthrough_type !== undefined) {
+    result.mcpPassthroughType = applyUpdates.mcp_passthrough_type;
+  }
+  if (applyUpdates.mcp_passthrough_url !== undefined) {
+    result.mcpPassthroughUrl = applyUpdates.mcp_passthrough_url;
+  }
+  return result;
+}
+
+const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provider> = {
+  is_enabled: "isEnabled",
+  priority: "priority",
+  weight: "weight",
+  cost_multiplier: "costMultiplier",
+  group_tag: "groupTag",
+  model_redirects: "modelRedirects",
+  allowed_models: "allowedModels",
+  allowed_clients: "allowedClients",
+  blocked_clients: "blockedClients",
+  anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
+  anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
+  preserve_client_ip: "preserveClientIp",
+  active_time_start: "activeTimeStart",
+  active_time_end: "activeTimeEnd",
+  group_priorities: "groupPriorities",
+  cache_ttl_preference: "cacheTtlPreference",
+  swap_cache_ttl_billing: "swapCacheTtlBilling",
+  context_1m_preference: "context1mPreference",
+  codex_reasoning_effort_preference: "codexReasoningEffortPreference",
+  codex_reasoning_summary_preference: "codexReasoningSummaryPreference",
+  codex_text_verbosity_preference: "codexTextVerbosityPreference",
+  codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
+  anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
+  gemini_google_search_preference: "geminiGoogleSearchPreference",
+  limit_5h_usd: "limit5hUsd",
+  limit_daily_usd: "limitDailyUsd",
+  daily_reset_mode: "dailyResetMode",
+  daily_reset_time: "dailyResetTime",
+  limit_weekly_usd: "limitWeeklyUsd",
+  limit_monthly_usd: "limitMonthlyUsd",
+  limit_total_usd: "limitTotalUsd",
+  limit_concurrent_sessions: "limitConcurrentSessions",
+  circuit_breaker_failure_threshold: "circuitBreakerFailureThreshold",
+  circuit_breaker_open_duration: "circuitBreakerOpenDuration",
+  circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",
+  max_retry_attempts: "maxRetryAttempts",
+  proxy_url: "proxyUrl",
+  proxy_fallback_to_direct: "proxyFallbackToDirect",
+  first_byte_timeout_streaming_ms: "firstByteTimeoutStreamingMs",
+  streaming_idle_timeout_ms: "streamingIdleTimeoutMs",
+  request_timeout_non_streaming_ms: "requestTimeoutNonStreamingMs",
+  mcp_passthrough_type: "mcpPassthroughType",
+  mcp_passthrough_url: "mcpPassthroughUrl",
+};
+
+const PATCH_FIELD_CLEAR_VALUE: Partial<Record<ProviderBatchPatchField, unknown>> = {
+  allowed_clients: [],
+  blocked_clients: [],
+  anthropic_thinking_budget_preference: "inherit",
+  cache_ttl_preference: "inherit",
+  context_1m_preference: "inherit",
+  codex_reasoning_effort_preference: "inherit",
+  codex_reasoning_summary_preference: "inherit",
+  codex_text_verbosity_preference: "inherit",
+  codex_parallel_tool_calls_preference: "inherit",
+  anthropic_max_tokens_preference: "inherit",
+  gemini_google_search_preference: "inherit",
+  mcp_passthrough_type: "none",
+};
+
+const CLAUDE_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+  "anthropic_thinking_budget_preference",
+  "anthropic_adaptive_thinking",
+  "anthropic_max_tokens_preference",
+  "context_1m_preference",
+]);
+
+const CODEX_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+  "codex_reasoning_effort_preference",
+  "codex_reasoning_summary_preference",
+  "codex_text_verbosity_preference",
+  "codex_parallel_tool_calls_preference",
+]);
+
+const GEMINI_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
+  "gemini_google_search_preference",
+]);
+
+const CB_PROVIDER_KEYS: ReadonlySet<string> = new Set([
+  "circuitBreakerFailureThreshold",
+  "circuitBreakerOpenDuration",
+  "circuitBreakerHalfOpenSuccessThreshold",
+]);
+
+function isClaudeProviderType(providerType: ProviderType): boolean {
+  return providerType === "claude" || providerType === "claude-auth";
+}
+
+function isCodexProviderType(providerType: ProviderType): boolean {
+  return providerType === "codex";
+}
+
+function isGeminiProviderType(providerType: ProviderType): boolean {
+  return providerType === "gemini" || providerType === "gemini-cli";
+}
+
+const CLAUDE_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
+  "anthropicThinkingBudgetPreference",
+  "anthropicAdaptiveThinking",
+  "anthropicMaxTokensPreference",
+  "context1mPreference",
+]);
+
+const CODEX_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
+  "codexReasoningEffortPreference",
+  "codexReasoningSummaryPreference",
+  "codexTextVerbosityPreference",
+  "codexParallelToolCallsPreference",
+]);
+
+const GEMINI_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
+  "geminiGoogleSearchPreference",
+]);
+
+function filterRepositoryUpdatesByProviderType(
+  updates: BatchProviderUpdates,
+  providerType: string
+): BatchProviderUpdates {
+  const filtered = { ...updates };
+  if (!isClaudeProviderType(providerType as ProviderType)) {
+    for (const key of CLAUDE_ONLY_REPO_KEYS) delete filtered[key];
+  }
+  if (!isCodexProviderType(providerType as ProviderType)) {
+    for (const key of CODEX_ONLY_REPO_KEYS) delete filtered[key];
+  }
+  if (!isGeminiProviderType(providerType as ProviderType)) {
+    for (const key of GEMINI_ONLY_REPO_KEYS) delete filtered[key];
+  }
+  return filtered;
+}
+
+function computePreviewAfterValue(
+  field: ProviderBatchPatchField,
+  operation: ProviderPatchOperation<unknown>
+): unknown {
+  if (operation.mode === "set") {
+    if (
+      field === "allowed_models" &&
+      Array.isArray(operation.value) &&
+      operation.value.length === 0
+    ) {
+      return null;
+    }
+    return operation.value;
+  }
+  if (operation.mode === "clear") {
+    return PATCH_FIELD_CLEAR_VALUE[field] ?? null;
+  }
+  return undefined;
+}
+
+function generatePreviewRows(
+  providers: Provider[],
+  patch: ProviderBatchPatch,
+  changedFields: ProviderBatchPatchField[]
+): ProviderBatchPreviewRow[] {
+  const rows: ProviderBatchPreviewRow[] = [];
+
+  for (const provider of providers) {
+    for (const field of changedFields) {
+      const operation = patch[field] as ProviderPatchOperation<unknown>;
+      const providerKey = PATCH_FIELD_TO_PROVIDER_KEY[field];
+      const before = provider[providerKey];
+      const after = computePreviewAfterValue(field, operation);
+
+      const isClaudeOnly = CLAUDE_ONLY_FIELDS.has(field);
+      const isCodexOnly = CODEX_ONLY_FIELDS.has(field);
+      const isGeminiOnly = GEMINI_ONLY_FIELDS.has(field);
+
+      let isCompatible = true;
+      let skipReason = "";
+      if (isClaudeOnly && !isClaudeProviderType(provider.providerType)) {
+        isCompatible = false;
+        skipReason = `Field "${field}" is only applicable to claude/claude-auth providers`;
+      } else if (isCodexOnly && !isCodexProviderType(provider.providerType)) {
+        isCompatible = false;
+        skipReason = `Field "${field}" is only applicable to codex providers`;
+      } else if (isGeminiOnly && !isGeminiProviderType(provider.providerType)) {
+        isCompatible = false;
+        skipReason = `Field "${field}" is only applicable to gemini/gemini-cli providers`;
+      }
+
+      if (isCompatible) {
+        rows.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          field,
+          status: "changed",
+          before,
+          after,
+        });
+      } else {
+        rows.push({
+          providerId: provider.id,
+          providerName: provider.name,
+          field,
+          status: "skipped",
+          before,
+          after,
+          skipReason,
+        });
+      }
+    }
+  }
+
+  return rows;
+}
+
+export async function previewProviderBatchPatch(
+  input: unknown
+): Promise<ActionResult<PreviewProviderBatchPatchResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = PreviewProviderBatchPatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const normalizedPatch = normalizeProviderBatchPatchDraft(parsed.data.patch);
+    if (!normalizedPatch.ok) {
+      return {
+        ok: false,
+        error: normalizedPatch.error.message,
+        errorCode: PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE,
+      };
+    }
+
+    if (!hasProviderBatchPatchChanges(normalizedPatch.data)) {
+      return buildNoChangesError();
+    }
+
+    const providerIds = dedupeProviderIds(parsed.data.providerIds);
+    const changedFields = getChangedPatchFields(normalizedPatch.data);
+    const nowMs = Date.now();
+
+    const allProviders = await findAllProvidersFresh();
+    const providerIdSet = new Set(providerIds);
+    const matchedProviders = allProviders.filter((p) => providerIdSet.has(p.id));
+    const rows = generatePreviewRows(matchedProviders, normalizedPatch.data, changedFields);
+    const skipCount = rows.filter((r) => r.status === "skipped").length;
+
+    const previewToken = createProviderBatchPreviewToken();
+    const previewRevision = `${nowMs}:${providerIds.join(",")}:${changedFields.join(",")}`;
+    const previewExpiresAt = nowMs + PROVIDER_BATCH_PREVIEW_TTL_SECONDS * 1000;
+
+    await providerBatchPatchPreviewStore.set(previewToken, {
+      previewToken,
+      previewRevision,
+      providerIds,
+      patch: normalizedPatch.data,
+      patchSerialized: JSON.stringify(normalizedPatch.data),
+      changedFields,
+      rows,
+      applied: false,
+      appliedResultByIdempotencyKey: {},
+    });
+
+    return {
+      ok: true,
+      data: {
+        previewToken,
+        previewRevision,
+        previewExpiresAt: new Date(previewExpiresAt).toISOString(),
+        providerIds,
+        changedFields,
+        rows,
+        summary: {
+          providerCount: providerIds.length,
+          fieldCount: changedFields.length,
+          skipCount,
+        },
+      },
+    };
+  } catch (error) {
+    logger.error("预览批量补丁失败:", error);
+    const message = error instanceof Error ? error.message : "预览批量补丁失败";
+    return { ok: false, error: message };
+  }
+}
+
+export async function applyProviderBatchPatch(
+  input: unknown
+): Promise<ActionResult<ApplyProviderBatchPatchResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = ApplyProviderBatchPatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const nowMs = Date.now();
+
+    const snapshot = await providerBatchPatchPreviewStore.get(parsed.data.previewToken);
+    if (!snapshot) {
+      return {
+        ok: false,
+        error: "预览已过期，请重新预览",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_EXPIRED,
+      };
+    }
+
+    const normalizedPatch = normalizeProviderBatchPatchDraft(parsed.data.patch);
+    if (!normalizedPatch.ok) {
+      return {
+        ok: false,
+        error: normalizedPatch.error.message,
+        errorCode: PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE,
+      };
+    }
+
+    if (!hasProviderBatchPatchChanges(normalizedPatch.data)) {
+      return buildNoChangesError();
+    }
+
+    const providerIds = dedupeProviderIds(parsed.data.providerIds);
+    const patchSerialized = JSON.stringify(normalizedPatch.data);
+    const isStale =
+      parsed.data.previewRevision !== snapshot.previewRevision ||
+      !isSameProviderIdList(providerIds, snapshot.providerIds) ||
+      patchSerialized !== snapshot.patchSerialized;
+
+    if (parsed.data.idempotencyKey) {
+      const existingResult = snapshot.appliedResultByIdempotencyKey[parsed.data.idempotencyKey];
+      if (existingResult) {
+        return { ok: true, data: existingResult };
+      }
+    }
+
+    if (isStale || snapshot.applied) {
+      return {
+        ok: false,
+        error: "预览内容已失效，请重新预览",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.PREVIEW_STALE,
+      };
+    }
+
+    const excludeSet = new Set(parsed.data.excludeProviderIds ?? []);
+    const effectiveProviderIds = providerIds.filter((id) => !excludeSet.has(id));
+    if (effectiveProviderIds.length === 0) {
+      return {
+        ok: false,
+        error: "排除后无可应用的供应商",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.NOTHING_TO_APPLY,
+      };
+    }
+
+    const updatesResult = buildProviderBatchApplyUpdates(normalizedPatch.data);
+    if (!updatesResult.ok) {
+      return {
+        ok: false,
+        error: updatesResult.error.message,
+        errorCode: PROVIDER_PATCH_ERROR_CODES.INVALID_PATCH_SHAPE,
+      };
+    }
+
+    const allProviders = await findAllProvidersFresh();
+    const effectiveIdSet = new Set(effectiveProviderIds);
+    const matchedProviders = allProviders.filter((p) => effectiveIdSet.has(p.id));
+    const changedFields = getChangedPatchFields(normalizedPatch.data);
+    const preimage: Record<number, Record<string, unknown>> = {};
+    for (const provider of matchedProviders) {
+      const fieldValues: Record<string, unknown> = {};
+      for (const field of changedFields) {
+        const providerKey = PATCH_FIELD_TO_PROVIDER_KEY[field];
+        fieldValues[providerKey] = provider[providerKey];
+      }
+      preimage[provider.id] = fieldValues;
+    }
+
+    const repositoryUpdates = mapApplyUpdatesToRepositoryFormat(updatesResult.data);
+
+    const hasTypeSpecificFields = changedFields.some(
+      (f) => CLAUDE_ONLY_FIELDS.has(f) || CODEX_ONLY_FIELDS.has(f) || GEMINI_ONLY_FIELDS.has(f)
+    );
+
+    let dbUpdatedCount: number;
+    if (!hasTypeSpecificFields) {
+      dbUpdatedCount = await updateProvidersBatch(effectiveProviderIds, repositoryUpdates);
+    } else {
+      const providersByType = new Map<string, number[]>();
+      for (const provider of matchedProviders) {
+        const type = provider.providerType;
+        if (!providersByType.has(type)) providersByType.set(type, []);
+        providersByType.get(type)!.push(provider.id);
+      }
+
+      dbUpdatedCount = 0;
+      for (const [type, ids] of providersByType) {
+        const filtered = filterRepositoryUpdatesByProviderType(repositoryUpdates, type);
+        if (Object.keys(filtered).length > 0) {
+          dbUpdatedCount += await updateProvidersBatch(ids, filtered);
+        }
+      }
+    }
+
+    await publishProviderCacheInvalidation();
+
+    const hasCbFieldChange = changedFields.some(
+      (f) =>
+        f === "circuit_breaker_failure_threshold" ||
+        f === "circuit_breaker_open_duration" ||
+        f === "circuit_breaker_half_open_success_threshold"
+    );
+    if (hasCbFieldChange) {
+      for (const id of effectiveProviderIds) {
+        try {
+          await deleteProviderCircuitConfig(id);
+        } catch (error) {
+          logger.warn("applyProviderBatchPatch:cb_cache_invalidation_failed", {
+            providerId: id,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // 清除配置缓存并广播（跨实例立即生效）
+      await publishCircuitBreakerConfigInvalidation(effectiveProviderIds);
+
+      // 若本次补丁将熔断器禁用（threshold<=0），则应立即解除 OPEN/HALF-OPEN 拦截（跨实例）
+      const nextFailureThreshold = updatesResult.data.circuit_breaker_failure_threshold;
+      if (typeof nextFailureThreshold === "number" && nextFailureThreshold <= 0) {
+        const batchSize = 20;
+        for (let i = 0; i < effectiveProviderIds.length; i += batchSize) {
+          const batch = effectiveProviderIds.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map((providerId) =>
+              forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" })
+            )
+          );
+        }
+      }
+    }
+
+    const appliedAt = new Date(nowMs).toISOString();
+    const undoToken = createProviderPatchUndoToken();
+    const undoExpiresAtMs = nowMs + PROVIDER_PATCH_UNDO_TTL_SECONDS * 1000;
+
+    const applyResult: ApplyProviderBatchPatchResult = {
+      operationId: createProviderPatchOperationId(),
+      appliedAt,
+      updatedCount: dbUpdatedCount,
+      undoToken,
+      undoExpiresAt: new Date(undoExpiresAtMs).toISOString(),
+    };
+
+    snapshot.applied = true;
+    if (parsed.data.idempotencyKey) {
+      snapshot.appliedResultByIdempotencyKey[parsed.data.idempotencyKey] = applyResult;
+    }
+    await providerBatchPatchPreviewStore.set(parsed.data.previewToken, snapshot);
+
+    await providerPatchUndoStore.set(undoToken, {
+      undoToken,
+      operationId: applyResult.operationId,
+      providerIds: effectiveProviderIds,
+      preimage,
+      patch: normalizedPatch.data,
+    });
+
+    return { ok: true, data: applyResult };
+  } catch (error) {
+    logger.error("应用批量补丁失败:", error);
+    const message = error instanceof Error ? error.message : "应用批量补丁失败";
+    return { ok: false, error: message };
+  }
+}
+
+export async function undoProviderPatch(
+  input: unknown
+): Promise<ActionResult<UndoProviderPatchResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = UndoProviderPatchSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const nowMs = Date.now();
+
+    const snapshot = await providerPatchUndoStore.get(parsed.data.undoToken);
+    if (!snapshot) {
+      return {
+        ok: false,
+        error: "撤销窗口已过期",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+      };
+    }
+
+    if (snapshot.operationId !== parsed.data.operationId) {
+      return {
+        ok: false,
+        error: "撤销参数与操作不匹配",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+      };
+    }
+
+    // Delete after validation passes so operationId mismatch doesn't destroy the token
+    await providerPatchUndoStore.delete(parsed.data.undoToken);
+
+    // Group providers by identical preimage values to minimise DB round-trips
+    const preimageGroups = new Map<string, { ids: number[]; updates: BatchProviderUpdates }>();
+
+    for (const providerId of snapshot.providerIds) {
+      const providerPreimage = snapshot.preimage[providerId];
+      if (!providerPreimage || Object.keys(providerPreimage).length === 0) {
+        continue;
+      }
+
+      const updatesObj: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(providerPreimage)) {
+        if (key === "costMultiplier" && typeof value === "number") {
+          updatesObj[key] = value.toString();
+        } else {
+          updatesObj[key] = value;
+        }
+      }
+      const updates = updatesObj as BatchProviderUpdates;
+
+      const groupKey = JSON.stringify(updates);
+      const existing = preimageGroups.get(groupKey);
+      if (existing) {
+        existing.ids.push(providerId);
+      } else {
+        preimageGroups.set(groupKey, { ids: [providerId], updates });
+      }
+    }
+
+    let revertedCount = 0;
+    for (const { ids, updates } of preimageGroups.values()) {
+      const count = await updateProvidersBatch(ids, updates);
+      revertedCount += count;
+    }
+
+    if (preimageGroups.size > 0) {
+      await publishProviderCacheInvalidation();
+    }
+
+    const hasCbRevert = Object.values(snapshot.preimage).some((fields) =>
+      Object.keys(fields).some((k) => CB_PROVIDER_KEYS.has(k))
+    );
+    if (hasCbRevert) {
+      for (const providerId of snapshot.providerIds) {
+        try {
+          await deleteProviderCircuitConfig(providerId);
+        } catch (error) {
+          logger.warn("undoProviderPatch:cb_cache_invalidation_failed", {
+            providerId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      // 清除配置缓存并广播（跨实例立即生效）
+      await publishCircuitBreakerConfigInvalidation(snapshot.providerIds);
+
+      // 若撤销后变为禁用（threshold<=0），则应立即解除 OPEN/HALF-OPEN 拦截（跨实例）
+      const disabledProviderIds = snapshot.providerIds.filter((providerId) => {
+        const preimage = snapshot.preimage[providerId];
+        if (!preimage) return false;
+        const nextFailureThreshold = preimage.circuitBreakerFailureThreshold;
+        return typeof nextFailureThreshold === "number" && nextFailureThreshold <= 0;
+      });
+
+      if (disabledProviderIds.length > 0) {
+        const batchSize = 20;
+        for (let i = 0; i < disabledProviderIds.length; i += batchSize) {
+          const batch = disabledProviderIds.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map((providerId) =>
+              forceCloseCircuitState(providerId, { reason: "circuit_breaker_disabled" })
+            )
+          );
+        }
+      }
+    }
+
+    return {
+      ok: true,
+      data: {
+        operationId: snapshot.operationId,
+        revertedAt: new Date(nowMs).toISOString(),
+        revertedCount,
+      },
+    };
+  } catch (error) {
+    logger.error("撤销批量补丁失败:", error);
+    const message = error instanceof Error ? error.message : "撤销批量补丁失败";
+    return { ok: false, error: message };
+  }
+}
 
 export interface BatchUpdateProvidersParams {
   providerIds: number[];
@@ -1030,6 +2149,12 @@ export interface BatchUpdateProvidersParams {
     weight?: number;
     cost_multiplier?: number;
     group_tag?: string | null;
+    model_redirects?: Record<string, string> | null;
+    allowed_models?: string[] | null;
+    allowed_clients?: string[];
+    blocked_clients?: string[];
+    anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+    anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   };
 }
 
@@ -1067,6 +2192,28 @@ export async function batchUpdateProviders(
       repositoryUpdates.costMultiplier = updates.cost_multiplier.toString();
     }
     if (updates.group_tag !== undefined) repositoryUpdates.groupTag = updates.group_tag;
+    if (updates.model_redirects !== undefined) {
+      repositoryUpdates.modelRedirects = updates.model_redirects;
+    }
+    if (updates.allowed_models !== undefined) {
+      repositoryUpdates.allowedModels =
+        Array.isArray(updates.allowed_models) && updates.allowed_models.length === 0
+          ? null
+          : updates.allowed_models;
+    }
+    if (updates.allowed_clients !== undefined) {
+      repositoryUpdates.allowedClients = updates.allowed_clients;
+    }
+    if (updates.blocked_clients !== undefined) {
+      repositoryUpdates.blockedClients = updates.blocked_clients;
+    }
+    if (updates.anthropic_thinking_budget_preference !== undefined) {
+      repositoryUpdates.anthropicThinkingBudgetPreference =
+        updates.anthropic_thinking_budget_preference;
+    }
+    if (updates.anthropic_adaptive_thinking !== undefined) {
+      repositoryUpdates.anthropicAdaptiveThinking = updates.anthropic_adaptive_thinking;
+    }
 
     const updatedCount = await updateProvidersBatch(providerIds, repositoryUpdates);
 
@@ -1095,7 +2242,7 @@ export interface BatchDeleteProvidersParams {
 
 export async function batchDeleteProviders(
   params: BatchDeleteProvidersParams
-): Promise<ActionResult<{ deletedCount: number }>> {
+): Promise<ActionResult<BatchDeleteProvidersResult>> {
   try {
     const session = await getSession();
     if (!session || session.user.role !== "admin") {
@@ -1112,29 +2259,108 @@ export async function batchDeleteProviders(
       return { ok: false, error: `单次批量操作最多支持 ${BATCH_OPERATION_MAX_SIZE} 个供应商` };
     }
 
+    const snapshotProviderIds = dedupeProviderIds(providerIds);
+
     const { deleteProvidersBatch } = await import("@/repository/provider");
 
-    const deletedCount = await deleteProvidersBatch(providerIds);
+    const deletedCount = await deleteProvidersBatch(snapshotProviderIds);
 
-    for (const id of providerIds) {
+    const undoToken = createProviderPatchUndoToken();
+    const operationId = createProviderPatchOperationId();
+
+    await providerDeleteUndoStore.set(undoToken, {
+      undoToken,
+      operationId,
+      providerIds: snapshotProviderIds,
+    });
+
+    for (const id of snapshotProviderIds) {
       clearProviderState(id);
       clearConfigCache(id);
     }
 
     await broadcastProviderCacheInvalidation({
       operation: "remove",
-      providerId: providerIds[0],
+      providerId: snapshotProviderIds[0],
     });
 
     logger.info("batchDeleteProviders:completed", {
-      requestedCount: providerIds.length,
+      requestedCount: snapshotProviderIds.length,
       deletedCount,
+      operationId,
     });
 
-    return { ok: true, data: { deletedCount } };
+    return {
+      ok: true,
+      data: {
+        deletedCount,
+        undoToken,
+        operationId,
+      },
+    };
   } catch (error) {
     logger.error("批量删除供应商失败:", error);
     const message = error instanceof Error ? error.message : "批量删除供应商失败";
+    return { ok: false, error: message };
+  }
+}
+
+export async function undoProviderDelete(
+  input: unknown
+): Promise<ActionResult<UndoProviderDeleteResult>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const parsed = UndoProviderDeleteSchema.safeParse(input);
+    if (!parsed.success) {
+      return buildActionValidationError(parsed.error);
+    }
+
+    const nowMs = Date.now();
+
+    const snapshot = await providerDeleteUndoStore.get(parsed.data.undoToken);
+    if (!snapshot) {
+      return {
+        ok: false,
+        error: "撤销窗口已过期",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED,
+      };
+    }
+
+    if (snapshot.operationId !== parsed.data.operationId) {
+      return {
+        ok: false,
+        error: "撤销参数与操作不匹配",
+        errorCode: PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_CONFLICT,
+      };
+    }
+
+    // Delete after validation passes so operationId mismatch doesn't destroy the token
+    await providerDeleteUndoStore.delete(parsed.data.undoToken);
+
+    const restoredCount = await restoreProvidersBatch(snapshot.providerIds);
+
+    for (const id of snapshot.providerIds) {
+      clearProviderState(id);
+      clearConfigCache(id);
+    }
+
+    await publishProviderCacheInvalidation();
+
+    return {
+      ok: true,
+      data: {
+        operationId: snapshot.operationId,
+        restoredAt: new Date(nowMs).toISOString(),
+        restoredCount,
+      },
+    };
+  } catch (error) {
+    logger.error("撤销批量删除失败:", error);
+    const message = error instanceof Error ? error.message : "撤销批量删除失败";
     return { ok: false, error: message };
   }
 }
@@ -3663,10 +4889,8 @@ export async function reclusterProviderVendors(args: {
           .filter((id): id is number => id !== null && id !== undefined && id > 0)
       ),
     ];
-    const vendors = await Promise.all(uniqueVendorIds.map((id) => findProviderVendorById(id)));
-    const vendorMap = new Map(
-      vendors.filter((v): v is NonNullable<typeof v> => v !== null).map((v) => [v.id, v])
-    );
+    const vendors = await findProviderVendorsByIds(uniqueVendorIds);
+    const vendorMap = new Map(vendors.map((vendor) => [vendor.id, vendor]));
 
     // Build provider map for quick lookup in transaction
     const providerMap = new Map(allProviders.map((p) => [p.id, p]));

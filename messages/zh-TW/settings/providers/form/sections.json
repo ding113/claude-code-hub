@@ -174,6 +174,10 @@
         "inherit": "不覆寫（跟隨客戶端）"
       }
     },
+    "swapCacheTtlBilling": {
+      "label": "Cache TTL 計費互換",
+      "desc": "反轉傳入資料的快取 TTL：1h 令牌視為 5 分鐘，反之亦然。影響標記、成本及所有儲存指標。"
+    },
     "codexOverrides": {
       "title": "Codex 參數覆寫",
       "desc": "在供應商級別覆寫 Codex (Responses API) 請求參數",
@@ -302,6 +306,28 @@
       "selectedOnly": "僅允許所選的 {count} 個模型。其他模型將不會被路由到此供應商。",
       "title": "模型允許清單"
     },
+    "clientRestrictions": {
+      "toggleLabel": "啟用用戶端限制",
+      "toggleDesc": "預設不限制用戶端。啟用後可設定白名單/黑名單。",
+      "priorityNote": "黑名單優先於白名單。",
+      "allowedLabel": "白名單客戶端",
+      "allowedPlaceholder": "例如 claude-code-cli",
+      "blockedLabel": "黑名單客戶端",
+      "blockedPlaceholder": "例如 gemini-cli",
+      "allowAction": "允許",
+      "blockAction": "封鎖",
+      "customAllowedLabel": "自訂白名單模式",
+      "customAllowedPlaceholder": "例如 my-ide、internal-tool",
+      "customBlockedLabel": "自訂黑名單模式",
+      "customBlockedPlaceholder": "例如 legacy-client",
+      "customHelp": "自訂模式使用 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。",
+      "presetClients": {
+        "claude-code": "Claude Code（全部）",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "preserveClientIp": {
       "desc": "向上游轉發 x-forwarded-for / x-real-ip，可能暴露真實來源 IP",
       "help": "預設關閉以保護隱私；僅在需要上游感知終端 IP 時開啟。",
@@ -342,6 +368,16 @@
         "label": "權重",
         "placeholder": "1"
       }
+    },
+    "activeTime": {
+      "title": "排程時間窗口",
+      "description": "在指定時間窗口內自動啟用供應商",
+      "toggleLabel": "啟用時間排程",
+      "toggleDescription": "啟用後，此供應商僅在指定時間窗口內處於活躍狀態",
+      "startLabel": "開始時間",
+      "endLabel": "結束時間",
+      "timezoneNote": "時間依據系統時區",
+      "crossDayHint": "跨天排程: 從 {start} 到隔日 {end}"
     },
     "summary": {
       "models": "{count} 個允許模型",

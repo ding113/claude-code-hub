@@ -2,7 +2,7 @@
 
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
-import { getOverviewMetricsWithComparison } from "@/repository/overview";
+import { getOverviewWithCache } from "@/lib/redis";
 import { getSystemSettings } from "@/repository/system-config";
 import { getConcurrentSessions as getConcurrentSessionsCount } from "./concurrent-sessions";
 import type { ActionResult } from "./types";
@@ -59,7 +59,7 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
     const [concurrentResult, metricsData] = await Promise.all([
       // 并发数只有管理员能看全站的
       isAdmin ? getConcurrentSessionsCount() : Promise.resolve({ ok: true as const, data: 0 }),
-      getOverviewMetricsWithComparison(userId),
+      getOverviewWithCache(userId),
     ]);
 
     const concurrentSessions = concurrentResult.ok ? concurrentResult.data : 0;

@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
+import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import type { Provider } from "@/types/provider";
@@ -191,6 +192,7 @@ function createSession(params: {
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
+    endpointPolicy: resolveEndpointPolicy("/v1/chat/completions"),
     isHeaderModified: () => false,
   });
 

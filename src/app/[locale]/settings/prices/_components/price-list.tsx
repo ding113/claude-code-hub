@@ -1,6 +1,5 @@
 "use client";
 
-import { Claude, Gemini, OpenAI } from "@lobehub/icons";
 import { formatInTimeZone } from "date-fns-tz";
 import {
   Braces,
@@ -41,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
+import { PRICE_FILTER_VENDORS } from "@/lib/model-vendor-icons";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import type { ModelPrice, ModelPriceSource } from "@/types/model-price";
 import { DeleteModelDialog } from "./delete-model-dialog";
@@ -357,53 +357,23 @@ export function PriceList({
           {t("filters.local")}
         </Button>
 
-        <Button
-          type="button"
-          variant={litellmProviderFilter === "anthropic" ? "default" : "outline"}
-          size="sm"
-          onClick={() =>
-            applyFilters({
-              source: "",
-              litellmProvider: litellmProviderFilter === "anthropic" ? "" : "anthropic",
-            })
-          }
-        >
-          <Claude.Color className="h-4 w-4 mr-2" />
-          {t("filters.anthropic")}
-        </Button>
-
-        <Button
-          type="button"
-          variant={litellmProviderFilter === "openai" ? "default" : "outline"}
-          size="sm"
-          onClick={() =>
-            applyFilters({
-              source: "",
-              litellmProvider: litellmProviderFilter === "openai" ? "" : "openai",
-            })
-          }
-        >
-          <OpenAI className="h-4 w-4 mr-2" />
-          {t("filters.openai")}
-        </Button>
-
-        <Button
-          type="button"
-          variant={litellmProviderFilter === "vertex_ai-language-models" ? "default" : "outline"}
-          size="sm"
-          onClick={() =>
-            applyFilters({
-              source: "",
-              litellmProvider:
-                litellmProviderFilter === "vertex_ai-language-models"
-                  ? ""
-                  : "vertex_ai-language-models",
-            })
-          }
-        >
-          <Gemini.Color className="h-4 w-4 mr-2" />
-          {t("filters.vertex")}
-        </Button>
+        {PRICE_FILTER_VENDORS.map(({ i18nKey, litellmProvider, icon: Icon }) => (
+          <Button
+            key={litellmProvider}
+            type="button"
+            variant={litellmProviderFilter === litellmProvider ? "default" : "outline"}
+            size="sm"
+            onClick={() =>
+              applyFilters({
+                source: "",
+                litellmProvider: litellmProviderFilter === litellmProvider ? "" : litellmProvider,
+              })
+            }
+          >
+            <Icon className="h-4 w-4 mr-2" />
+            {t(`filters.${i18nKey}`)}
+          </Button>
+        ))}
       </div>
 
       {/* 搜索和页面大小控制 */}

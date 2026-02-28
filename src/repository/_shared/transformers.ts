@@ -48,6 +48,7 @@ export function toUser(dbUser: any): User {
     isEnabled: dbUser?.isEnabled ?? true,
     expiresAt: dbUser?.expiresAt ? new Date(dbUser.expiresAt) : null,
     allowedClients: dbUser?.allowedClients ?? [],
+    blockedClients: dbUser?.blockedClients ?? [],
     allowedModels: dbUser?.allowedModels ?? [],
     createdAt: dbUser?.createdAt ? new Date(dbUser.createdAt) : new Date(),
     updatedAt: dbUser?.updatedAt ? new Date(dbUser.updatedAt) : new Date(),
@@ -91,6 +92,8 @@ export function toProvider(dbProvider: any): Provider {
     providerType: dbProvider?.providerType ?? "claude",
     preserveClientIp: dbProvider?.preserveClientIp ?? false,
     modelRedirects: dbProvider?.modelRedirects ?? null,
+    activeTimeStart: dbProvider?.activeTimeStart ?? null,
+    activeTimeEnd: dbProvider?.activeTimeEnd ?? null,
     mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",
     mcpPassthroughUrl: dbProvider?.mcpPassthroughUrl ?? null,
     limit5hUsd: dbProvider?.limit5hUsd ? parseFloat(dbProvider.limit5hUsd) : null,
@@ -119,6 +122,7 @@ export function toProvider(dbProvider: any): Provider {
     websiteUrl: dbProvider?.websiteUrl ?? null,
     faviconUrl: dbProvider?.faviconUrl ?? null,
     cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,
+    swapCacheTtlBilling: dbProvider?.swapCacheTtlBilling ?? false,
     context1mPreference: dbProvider?.context1mPreference ?? null,
     codexReasoningEffortPreference: dbProvider?.codexReasoningEffortPreference ?? null,
     codexReasoningSummaryPreference: dbProvider?.codexReasoningSummaryPreference ?? null,
@@ -153,6 +157,7 @@ export function toMessageRequest(dbMessage: any): MessageRequest {
     cacheCreation1hInputTokens: dbMessage?.cacheCreation1hInputTokens ?? undefined,
     cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,
     context1mApplied: dbMessage?.context1mApplied ?? false,
+    swapCacheTtlApplied: dbMessage?.swapCacheTtlApplied ?? false,
     specialSettings: dbMessage?.specialSettings ?? null,
   };
 }

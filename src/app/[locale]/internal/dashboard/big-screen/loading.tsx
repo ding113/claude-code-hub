@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function BigScreenLoading() {
   return (
-    <div className="min-h-screen bg-background p-6 space-y-6">
+    <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background p-6 space-y-6">
       <Skeleton className="h-8 w-48" />
       <div className="grid gap-4 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (

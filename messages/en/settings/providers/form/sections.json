@@ -173,6 +173,10 @@
         "inherit": "No override (follow client)"
       }
     },
+    "swapCacheTtlBilling": {
+      "label": "Swap Cache TTL Billing",
+      "desc": "Invert cache TTL for incoming data: 1h tokens treated as 5min and vice versa. Affects badge, cost, and all stored metrics."
+    },
     "codexOverrides": {
       "title": "Codex Parameter Overrides",
       "desc": "Override Codex (Responses API) request parameters at the provider level",
@@ -301,6 +305,28 @@
       "selectedOnly": "Only the selected {count} models are allowed. Other models will not be routed to this provider.",
       "title": "Model Allowlist"
     },
+    "clientRestrictions": {
+      "toggleLabel": "Enable Client Restrictions",
+      "toggleDesc": "Clients are not restricted by default. Enable to configure allowlist/blocklist rules.",
+      "priorityNote": "Blocklist takes precedence over allowlist.",
+      "allowedLabel": "Allowed Clients",
+      "allowedPlaceholder": "e.g. claude-code-cli",
+      "blockedLabel": "Blocked Clients",
+      "blockedPlaceholder": "e.g. gemini-cli",
+      "allowAction": "Allow",
+      "blockAction": "Block",
+      "customAllowedLabel": "Custom Allowed Patterns",
+      "customAllowedPlaceholder": "e.g. my-ide, internal-tool",
+      "customBlockedLabel": "Custom Blocked Patterns",
+      "customBlockedPlaceholder": "e.g. legacy-client",
+      "customHelp": "Custom patterns use case-insensitive User-Agent contains matching. '-' and '_' are treated as equivalent.",
+      "presetClients": {
+        "claude-code": "Claude Code (all)",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "preserveClientIp": {
       "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",
       "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",
@@ -341,6 +367,16 @@
         "label": "Weight",
         "placeholder": "1"
       }
+    },
+    "activeTime": {
+      "title": "Scheduled Active Time",
+      "description": "Automatically activate provider during specific time windows",
+      "toggleLabel": "Enable Schedule",
+      "toggleDescription": "When enabled, this provider is only active during the specified time window",
+      "startLabel": "Start Time",
+      "endLabel": "End Time",
+      "timezoneNote": "Times are based on system timezone",
+      "crossDayHint": "Cross-day schedule: active from {start} to next day {end}"
     },
     "summary": {
       "models": "{count} whitelisted models",

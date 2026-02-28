@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total} провайдеров, {healthy} работоспособных → {provider} ✓",
-    "sessionReuse": "Повторное использование сессии → {provider} ✓"
+    "sessionReuse": "Повторное использование сессии → {provider} ✓",
+    "originHint": "Повторное использование сессии - изначально выбрано через {method}"
   },
   "description": {
     "noDecisionRecord": "Нет записей решений",
@@ -35,6 +36,7 @@
     "candidate": "{name}({probability}%)",
     "requestChain": "Цепочка запросов:",
     "systemError": "Системная ошибка",
+    "resourceNotFound": "Ресурс не найден (404)",
     "concurrentLimit": "Лимит параллельных запросов",
     "http2Fallback": "Откат HTTP/2",
     "clientError": "Ошибка клиента",
@@ -46,13 +48,15 @@
     "retry_success": "Повтор успешен",
     "retry_failed": "Повтор не удался",
     "system_error": "Системная ошибка",
+    "resource_not_found": "Ресурс не найден (404)",
     "client_error_non_retryable": "Ошибка клиента",
     "concurrent_limit_failed": "Лимит параллельных запросов",
     "http2_fallback": "Откат HTTP/2",
     "session_reuse": "Повторное использование сессии",
     "initial_selection": "Первоначальный выбор",
     "endpoint_pool_exhausted": "Пул конечных точек исчерпан",
-    "vendor_type_all_timeout": "Тайм-аут всех конечных точек типа поставщика"
+    "vendor_type_all_timeout": "Тайм-аут всех конечных точек типа поставщика",
+    "client_restriction_filtered": "Клиент ограничен"
   },
   "filterReasons": {
     "rate_limited": "Ограничение скорости",
@@ -67,13 +71,21 @@
     "group_mismatch": "Несоответствие группы",
     "health_check_failed": "Проверка состояния не пройдена",
     "endpoint_circuit_open": "Автомат конечной точки открыт",
-    "endpoint_disabled": "Эндпоинт отключен"
+    "endpoint_disabled": "Эндпоинт отключен",
+    "client_restriction": "Ограничение клиента"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "Временное размыкание типа поставщика",
     "circuit_open": "Размыкатель открыт",
     "circuit_half_open": "Размыкатель полуоткрыт",
-    "rate_limited": "Ограничение скорости"
+    "rate_limited": "Ограничение скорости",
+    "provider_client_restriction": "Провайдер пропущен из-за ограничения клиента",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "Метод выбора",
@@ -128,11 +140,13 @@
     "candidateInfo": "  • {name}: вес={weight} стоимость={cost} вероятность={probability}%",
     "selected": "✓ Выбрано: {provider}",
     "requestFailed": "Запрос не выполнен (Попытка {attempt})",
+    "resourceNotFoundFailed": "Ресурс не найден (404) (Попытка {attempt})",
     "attemptNumber": "Попытка {number}",
     "firstAttempt": "Первая попытка",
     "nthAttempt": "Попытка {attempt}",
     "provider": "Провайдер: {provider}",
     "statusCode": "Код состояния: {code}",
+    "statusCodeInferred": "Код состояния (выведено): {code}",
     "error": "Ошибка: {error}",
     "requestDuration": "Длительность запроса: {duration}мс",
     "requestDurationSeconds": "Длительность запроса: {duration}с",
@@ -158,6 +172,7 @@
     "meaning": "Значение",
     "notCountedInCircuit": "Эта ошибка не учитывается в автомате защиты провайдера",
     "systemErrorNote": "Примечание: Эта ошибка не учитывается в автомате защиты провайдера",
+    "resourceNotFoundNote": "Примечание: Эта ошибка не учитывается в автомате защиты; после исчерпания повторов произойдёт переключение.",
     "reselection": "Повторный выбор провайдера",
     "reselect": "Повторный выбор провайдера",
     "excluded": "Исключено: {providers}",
@@ -208,5 +223,11 @@
     "strictBlockSelectorError": "Строгий режим: ошибка селектора конечных точек, провайдер пропущен без отката",
     "vendorTypeAllTimeout": "Тайм-аут всех конечных точек типа поставщика (524)",
     "vendorTypeAllTimeoutNote": "Все конечные точки этого типа поставщика превысили тайм-аут. Активирован размыкатель типа поставщика."
+  },
+  "selectionMethods": {
+    "session_reuse": "Повторное использование сессии",
+    "weighted_random": "Взвешенный случайный",
+    "group_filtered": "Фильтрация по группе",
+    "fail_open_fallback": "Резервный вариант при сбое"
   }
 }

@@ -11,6 +11,8 @@ import type { ModelPriceData } from "@/types/model-price";
 import type { Provider, ProviderType } from "@/types/provider";
 import type { SpecialSetting } from "@/types/special-settings";
 import type { User } from "@/types/user";
+import { isCountTokensEndpointPath } from "./endpoint-paths";
+import { type EndpointPolicy, resolveEndpointPolicy } from "./endpoint-policy";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
 
@@ -67,6 +69,12 @@ export class ProxySession {
   // Time To First Byte (ms). Streaming: first chunk. Non-stream: equals durationMs.
   ttfbMs: number | null = null;
 
+  // Timestamp when guard pipeline finished and forwarding started (epoch ms).
+  forwardStartTime: number | null = null;
+
+  // Actual serialized request body sent to upstream (after all preprocessing).
+  forwardedRequestBody: string | null = null;
+
   // Session ID（用于会话粘性和并发限流）
   sessionId: string | null;
 
@@ -76,6 +84,8 @@ export class ProxySession {
   // 请求格式追踪：记录原始请求格式和供应商类型
   originalFormat: ClientFormat = "claude";
   providerType: ProviderType | null = null;
+
+  private readonly endpointPolicy: EndpointPolicy;
 
   // 模型重定向追踪：保存原始模型名（重定向前）
   private originalModelName: string | null = null;
@@ -148,6 +158,7 @@ export class ProxySession {
     this.messageContext = null;
     this.sessionId = null;
     this.providerChain = [];
+    this.endpointPolicy = resolveSessionEndpointPolicy(init.requestUrl);
   }
 
   static async fromContext(c: Context): Promise<ProxySession> {
@@ -314,6 +325,16 @@ export class ProxySession {
   }
 
   /**
+   * Record the timestamp when guard pipeline finished and upstream forwarding begins.
+   * Called once; subsequent calls are no-ops.
+   */
+  recordForwardStart(): void {
+    if (this.forwardStartTime === null) {
+      this.forwardStartTime = Date.now();
+    }
+  }
+
+  /**
    * 设置 session ID
    */
   setSessionId(sessionId: string): void {
@@ -428,7 +449,8 @@ export class ProxySession {
         | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
         | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
         | "endpoint_pool_exhausted" // 端点池耗尽（strict endpoint policy 阻止了 fallback）
-        | "vendor_type_all_timeout"; // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
+        | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
+        | "client_restriction_filtered"; // 供应商因客户端限制被跳过（会话复用路径）
       selectionMethod?:
         | "session_reuse"
         | "weighted_random"
@@ -441,6 +463,7 @@ export class ProxySession {
       endpointUrl?: string;
       // 修复：添加新字段
       statusCode?: number; // 成功时的状态码
+      statusCodeInferred?: boolean; // statusCode 是否为响应体推断
       circuitFailureCount?: number; // 熔断失败计数
       circuitFailureThreshold?: number; // 熔断阈值
       errorDetails?: ProviderChainItem["errorDetails"]; // 结构化错误详情
@@ -469,6 +492,7 @@ export class ProxySession {
       errorMessage: metadata?.errorMessage, // 记录错误信息
       // 修复：记录新字段
       statusCode: metadata?.statusCode,
+      statusCodeInferred: metadata?.statusCodeInferred,
       circuitFailureCount: metadata?.circuitFailureCount,
       circuitFailureThreshold: metadata?.circuitFailureThreshold,
       errorDetails: metadata?.errorDetails, // 结构化错误详情
@@ -510,6 +534,10 @@ export class ProxySession {
     return this.request.model;
   }
 
+  getEndpointPolicy(): EndpointPolicy {
+    return this.endpointPolicy;
+  }
+
   /**
    * 获取请求的 API endpoint（来自 URL.pathname）
    * 处理边界：若 URL 不存在则返回 null
@@ -530,7 +558,7 @@ export class ProxySession {
    */
   isCountTokensRequest(): boolean {
     const endpoint = this.getEndpoint();
-    return endpoint === "/v1/messages/count_tokens";
+    return endpoint !== null && isCountTokensEndpointPath(endpoint);
   }
 
   /**
@@ -773,6 +801,17 @@ function optimizeRequestMessage(message: Record<string, unknown>): Record<string
   }
 
   return optimized;
+}
+
+function resolveSessionEndpointPolicy(requestUrl: URL): EndpointPolicy {
+  try {
+    const pathname = requestUrl.pathname;
+    if (typeof pathname === "string" && pathname.length > 0) {
+      return resolveEndpointPolicy(pathname);
+    }
+  } catch {}
+
+  return resolveEndpointPolicy("/");
 }
 
 export function extractModelFromPath(pathname: string): string | null {

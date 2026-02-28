@@ -3,7 +3,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { Badge } from "@/components/ui/badge";
@@ -72,6 +72,7 @@ export function VirtualizedLogsTable({
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const shouldPoll = autoRefreshEnabled && !showScrollToTop;
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
@@ -121,11 +122,13 @@ export function VirtualizedLogsTable({
       initialPageParam: undefined as { createdAt: string; id: number } | undefined,
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
-      refetchInterval: autoRefreshEnabled ? autoRefreshIntervalMs : false,
+      refetchInterval: shouldPoll ? autoRefreshIntervalMs : false,
+      maxPages: 5,
     });
 
   // Flatten all pages into a single array
-  const allLogs = data?.pages.flatMap((page) => page.logs) ?? [];
+  const pages = data?.pages;
+  const allLogs = useMemo(() => pages?.flatMap((page) => page.logs) ?? [], [pages]);
 
   // Virtual list setup
   const rowVirtualizer = useVirtualizer({
@@ -245,7 +248,7 @@ export function VirtualizedLogsTable({
                 </div>
               )}
               <div
-                className="flex-[1] min-w-[80px] px-1.5 truncate"
+                className="flex-[1.3] min-w-[100px] px-1.5 truncate"
                 title={t("logs.columns.model")}
               >
                 {t("logs.columns.model")}
@@ -268,7 +271,7 @@ export function VirtualizedLogsTable({
               )}
               {hideCostColumn ? null : (
                 <div
-                  className="flex-[0.7] min-w-[60px] text-right px-1.5 truncate"
+                  className="flex-[0.6] min-w-[50px] text-right px-1.5 truncate"
                   title={t("logs.columns.cost")}
                 >
                   {t("logs.columns.cost")}
@@ -499,7 +502,7 @@ export function VirtualizedLogsTable({
                     )}
 
                     {/* Model */}
-                    <div className="flex-[1] min-w-[80px] font-mono text-xs px-1.5">
+                    <div className="flex-[1.3] min-w-[100px] font-mono text-xs px-1.5">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -560,9 +563,20 @@ export function VirtualizedLogsTable({
                                   {log.cacheTtlApplied ? (
                                     <Badge
                                       variant="outline"
-                                      className="text-[10px] leading-tight px-1 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+                                      className={cn(
+                                        "text-[10px] leading-tight px-1",
+                                        log.swapCacheTtlApplied
+                                          ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800"
+                                          : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800"
+                                      )}
+                                      title={
+                                        log.swapCacheTtlApplied
+                                          ? t("logs.billingDetails.cacheTtlSwapped")
+                                          : undefined
+                                      }
                                     >
                                       {log.cacheTtlApplied}
+                                      {log.swapCacheTtlApplied ? " ~" : ""}
                                     </Badge>
                                   ) : null}
                                   <span className="ml-auto text-right">
@@ -608,7 +622,7 @@ export function VirtualizedLogsTable({
 
                     {/* Cost */}
                     {hideCostColumn ? null : (
-                      <div className="flex-[0.7] min-w-[60px] text-right font-mono text-xs px-1.5">
+                      <div className="flex-[0.6] min-w-[50px] text-right font-mono text-xs px-1.5">
                         {isNonBilling ? (
                           "-"
                         ) : log.costUsd != null ? (
@@ -737,6 +751,7 @@ export function VirtualizedLogsTable({
                         cacheCreation1hInputTokens={log.cacheCreation1hInputTokens}
                         cacheReadInputTokens={log.cacheReadInputTokens}
                         cacheTtlApplied={log.cacheTtlApplied}
+                        swapCacheTtlApplied={log.swapCacheTtlApplied}
                         costUsd={log.costUsd}
                         costMultiplier={log.costMultiplier}
                         context1mApplied={log.context1mApplied}

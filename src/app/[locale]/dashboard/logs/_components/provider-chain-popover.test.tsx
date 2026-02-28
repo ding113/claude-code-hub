@@ -86,10 +86,24 @@ const messages = {
       details: {
         clickStatusCode: "Click status code",
         fake200ForwardedNotice: "Note: payload may have been forwarded",
+        fake200DetectedReason: "Detected reason: {reason}",
+        statusCodeInferredBadge: "Inferred",
+        statusCodeInferredTooltip: "This status code is inferred from response body content.",
+        statusCodeInferredSuffix: "(inferred)",
+        fake200Reasons: {
+          emptyBody: "Empty response body",
+          htmlBody: "HTML document returned",
+          jsonErrorNonEmpty: "JSON has non-empty error field",
+          jsonErrorMessageNonEmpty: "JSON has non-empty error.message",
+          jsonMessageKeywordMatch: 'JSON message contains "error"',
+          unknown: "Response body indicates an error",
+        },
       },
     },
   },
-  "provider-chain": {},
+  "provider-chain": {
+    summary: { originHint: "Session reuse - originally selected via {method}" },
+  },
 };
 
 function renderWithIntl(node: ReactNode) {
@@ -276,6 +290,25 @@ describe("provider-chain-popover layout", () => {
     expect(html).toContain("Note: payload may have been forwarded");
   });
 
+  test("renders inferred status code badge when statusCodeInferred=true", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "retry_failed",
+            statusCode: 429,
+            statusCodeInferred: true,
+          },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    expect(html).toContain("Inferred");
+  });
+
   test("requestCount<=1 branch keeps truncation container shrinkable", () => {
     const html = renderWithIntl(
       <ProviderChainPopover
@@ -292,6 +325,55 @@ describe("provider-chain-popover layout", () => {
 
     const truncateNode = document.querySelector("#root span.truncate");
     expect(truncateNode).not.toBeNull();
+  });
+
+  test("session_reuse item with selectionMethod shows origin hint text", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "session_reuse",
+            selectionMethod: "weighted_random",
+          },
+          { id: 1, name: "p1", reason: "request_success", statusCode: 200 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+    expect(html).toContain("weighted_random");
+    expect(html).toContain("Session reuse - originally selected via");
+  });
+
+  test("non-session-reuse item does NOT show origin hint", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          {
+            id: 1,
+            name: "p1",
+            reason: "initial_selection",
+            decisionContext: {
+              totalProviders: 1,
+              enabledProviders: 1,
+              targetType: "claude",
+              groupFilterApplied: false,
+              beforeHealthCheck: 1,
+              afterHealthCheck: 1,
+              priorityLevels: [1],
+              selectedPriority: 1,
+              candidatesAtPriority: [
+                { id: 1, name: "p1", weight: 100, costMultiplier: 1, probability: 1 },
+              ],
+            },
+          },
+          { id: 1, name: "p1", reason: "request_success", statusCode: 200 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+    expect(html).not.toContain("Session reuse - originally selected via");
   });
 
   test("requestCount>1 branch uses w-full/min-w-0 button and flex-1 name container", () => {

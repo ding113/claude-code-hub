@@ -174,6 +174,10 @@
         "inherit": "オーバーライドしない（クライアントに従う）"
       }
     },
+    "swapCacheTtlBilling": {
+      "label": "キャッシュTTL課金スワップ",
+      "desc": "受信データのキャッシュTTLを反転：1hトークンを5分として扱い、その逆も同様。バッジ、コスト、保存メトリクスすべてに影響します。"
+    },
     "codexOverrides": {
       "title": "Codex パラメータオーバーライド",
       "desc": "プロバイダーレベルで Codex (Responses API) リクエストパラメータをオーバーライド",
@@ -302,6 +306,28 @@
       "selectedOnly": "選択した {count} 件のモデルのみ許可します。他のモデルはこのプロバイダーにルーティングされません。",
       "title": "モデル許可リスト"
     },
+    "clientRestrictions": {
+      "toggleLabel": "クライアント制限を有効化",
+      "toggleDesc": "既定ではクライアントを制限しません。有効化すると許可/拒否リストを設定できます。",
+      "priorityNote": "拒否リストは許可リストより優先されます。",
+      "allowedLabel": "許可クライアント",
+      "allowedPlaceholder": "例: claude-code-cli",
+      "blockedLabel": "ブロッククライアント",
+      "blockedPlaceholder": "例: gemini-cli",
+      "allowAction": "許可",
+      "blockAction": "ブロック",
+      "customAllowedLabel": "カスタム許可パターン",
+      "customAllowedPlaceholder": "例: my-ide、internal-tool",
+      "customBlockedLabel": "カスタムブロックパターン",
+      "customBlockedPlaceholder": "例: legacy-client",
+      "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます（大文字小文字を区別しません）。'-' と '_' は同等として扱います。",
+      "presetClients": {
+        "claude-code": "Claude Code（すべて）",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "preserveClientIp": {
       "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",
       "help": "プライバシー保護のためデフォルトはオフ。上流側で端末 IP が必要な場合のみ有効化してください。",
@@ -342,6 +368,16 @@
         "label": "重み",
         "placeholder": "1"
       }
+    },
+    "activeTime": {
+      "title": "スケジュール有効時間",
+      "description": "指定した時間帯に自動的にプロバイダーを有効化します",
+      "toggleLabel": "スケジュールを有効化",
+      "toggleDescription": "有効にすると、指定した時間帯のみプロバイダーがアクティブになります",
+      "startLabel": "開始時刻",
+      "endLabel": "終了時刻",
+      "timezoneNote": "時刻はシステムのタイムゾーンに基づきます",
+      "crossDayHint": "日跨ぎスケジュール: {start} から翌日 {end} まで有効"
     },
     "summary": {
       "models": "許可モデル {count} 件",

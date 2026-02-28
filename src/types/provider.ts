@@ -45,6 +45,224 @@ export interface AnthropicAdaptiveThinkingConfig {
   models: string[];
 }
 
+export type ProviderPatchOperation<T> =
+  | { mode: "no_change" }
+  | { mode: "set"; value: T }
+  | { mode: "clear" };
+
+export type ProviderPatchDraftInput<T> =
+  | { set: T; clear?: never; no_change?: never }
+  | { clear: true; set?: never; no_change?: never }
+  | { no_change: true; set?: never; clear?: never }
+  | undefined;
+
+export type ProviderBatchPatchField =
+  // Basic / existing
+  | "is_enabled"
+  | "priority"
+  | "weight"
+  | "cost_multiplier"
+  | "group_tag"
+  | "model_redirects"
+  | "allowed_models"
+  | "allowed_clients"
+  | "blocked_clients"
+  | "anthropic_thinking_budget_preference"
+  | "anthropic_adaptive_thinking"
+  // Routing / Schedule
+  | "active_time_start"
+  | "active_time_end"
+  | "preserve_client_ip"
+  | "group_priorities"
+  | "cache_ttl_preference"
+  | "swap_cache_ttl_billing"
+  | "context_1m_preference"
+  | "codex_reasoning_effort_preference"
+  | "codex_reasoning_summary_preference"
+  | "codex_text_verbosity_preference"
+  | "codex_parallel_tool_calls_preference"
+  | "anthropic_max_tokens_preference"
+  | "gemini_google_search_preference"
+  // Rate Limit
+  | "limit_5h_usd"
+  | "limit_daily_usd"
+  | "daily_reset_mode"
+  | "daily_reset_time"
+  | "limit_weekly_usd"
+  | "limit_monthly_usd"
+  | "limit_total_usd"
+  | "limit_concurrent_sessions"
+  // Circuit Breaker
+  | "circuit_breaker_failure_threshold"
+  | "circuit_breaker_open_duration"
+  | "circuit_breaker_half_open_success_threshold"
+  | "max_retry_attempts"
+  // Network
+  | "proxy_url"
+  | "proxy_fallback_to_direct"
+  | "first_byte_timeout_streaming_ms"
+  | "streaming_idle_timeout_ms"
+  | "request_timeout_non_streaming_ms"
+  // MCP
+  | "mcp_passthrough_type"
+  | "mcp_passthrough_url";
+
+export interface ProviderBatchPatchDraft {
+  // Basic / existing
+  is_enabled?: ProviderPatchDraftInput<boolean>;
+  priority?: ProviderPatchDraftInput<number>;
+  weight?: ProviderPatchDraftInput<number>;
+  cost_multiplier?: ProviderPatchDraftInput<number>;
+  group_tag?: ProviderPatchDraftInput<string>;
+  model_redirects?: ProviderPatchDraftInput<Record<string, string>>;
+  allowed_models?: ProviderPatchDraftInput<string[]>;
+  allowed_clients?: ProviderPatchDraftInput<string[]>;
+  blocked_clients?: ProviderPatchDraftInput<string[]>;
+  anthropic_thinking_budget_preference?: ProviderPatchDraftInput<AnthropicThinkingBudgetPreference>;
+  anthropic_adaptive_thinking?: ProviderPatchDraftInput<AnthropicAdaptiveThinkingConfig>;
+  // Routing / Schedule
+  active_time_start?: ProviderPatchDraftInput<string>;
+  active_time_end?: ProviderPatchDraftInput<string>;
+  preserve_client_ip?: ProviderPatchDraftInput<boolean>;
+  group_priorities?: ProviderPatchDraftInput<Record<string, number>>;
+  cache_ttl_preference?: ProviderPatchDraftInput<CacheTtlPreference>;
+  swap_cache_ttl_billing?: ProviderPatchDraftInput<boolean>;
+  context_1m_preference?: ProviderPatchDraftInput<Context1mPreference>;
+  codex_reasoning_effort_preference?: ProviderPatchDraftInput<CodexReasoningEffortPreference>;
+  codex_reasoning_summary_preference?: ProviderPatchDraftInput<CodexReasoningSummaryPreference>;
+  codex_text_verbosity_preference?: ProviderPatchDraftInput<CodexTextVerbosityPreference>;
+  codex_parallel_tool_calls_preference?: ProviderPatchDraftInput<CodexParallelToolCallsPreference>;
+  anthropic_max_tokens_preference?: ProviderPatchDraftInput<AnthropicMaxTokensPreference>;
+  gemini_google_search_preference?: ProviderPatchDraftInput<GeminiGoogleSearchPreference>;
+  // Rate Limit
+  limit_5h_usd?: ProviderPatchDraftInput<number>;
+  limit_daily_usd?: ProviderPatchDraftInput<number>;
+  daily_reset_mode?: ProviderPatchDraftInput<"fixed" | "rolling">;
+  daily_reset_time?: ProviderPatchDraftInput<string>;
+  limit_weekly_usd?: ProviderPatchDraftInput<number>;
+  limit_monthly_usd?: ProviderPatchDraftInput<number>;
+  limit_total_usd?: ProviderPatchDraftInput<number>;
+  limit_concurrent_sessions?: ProviderPatchDraftInput<number>;
+  // Circuit Breaker
+  circuit_breaker_failure_threshold?: ProviderPatchDraftInput<number>;
+  circuit_breaker_open_duration?: ProviderPatchDraftInput<number>;
+  circuit_breaker_half_open_success_threshold?: ProviderPatchDraftInput<number>;
+  max_retry_attempts?: ProviderPatchDraftInput<number>;
+  // Network
+  proxy_url?: ProviderPatchDraftInput<string>;
+  proxy_fallback_to_direct?: ProviderPatchDraftInput<boolean>;
+  first_byte_timeout_streaming_ms?: ProviderPatchDraftInput<number>;
+  streaming_idle_timeout_ms?: ProviderPatchDraftInput<number>;
+  request_timeout_non_streaming_ms?: ProviderPatchDraftInput<number>;
+  // MCP
+  mcp_passthrough_type?: ProviderPatchDraftInput<McpPassthroughType>;
+  mcp_passthrough_url?: ProviderPatchDraftInput<string>;
+}
+
+export interface ProviderBatchPatch {
+  // Basic / existing
+  is_enabled: ProviderPatchOperation<boolean>;
+  priority: ProviderPatchOperation<number>;
+  weight: ProviderPatchOperation<number>;
+  cost_multiplier: ProviderPatchOperation<number>;
+  group_tag: ProviderPatchOperation<string>;
+  model_redirects: ProviderPatchOperation<Record<string, string>>;
+  allowed_models: ProviderPatchOperation<string[]>;
+  allowed_clients: ProviderPatchOperation<string[]>;
+  blocked_clients: ProviderPatchOperation<string[]>;
+  anthropic_thinking_budget_preference: ProviderPatchOperation<AnthropicThinkingBudgetPreference>;
+  anthropic_adaptive_thinking: ProviderPatchOperation<AnthropicAdaptiveThinkingConfig>;
+  // Routing / Schedule
+  active_time_start: ProviderPatchOperation<string>;
+  active_time_end: ProviderPatchOperation<string>;
+  preserve_client_ip: ProviderPatchOperation<boolean>;
+  group_priorities: ProviderPatchOperation<Record<string, number>>;
+  cache_ttl_preference: ProviderPatchOperation<CacheTtlPreference>;
+  swap_cache_ttl_billing: ProviderPatchOperation<boolean>;
+  context_1m_preference: ProviderPatchOperation<Context1mPreference>;
+  codex_reasoning_effort_preference: ProviderPatchOperation<CodexReasoningEffortPreference>;
+  codex_reasoning_summary_preference: ProviderPatchOperation<CodexReasoningSummaryPreference>;
+  codex_text_verbosity_preference: ProviderPatchOperation<CodexTextVerbosityPreference>;
+  codex_parallel_tool_calls_preference: ProviderPatchOperation<CodexParallelToolCallsPreference>;
+  anthropic_max_tokens_preference: ProviderPatchOperation<AnthropicMaxTokensPreference>;
+  gemini_google_search_preference: ProviderPatchOperation<GeminiGoogleSearchPreference>;
+  // Rate Limit
+  limit_5h_usd: ProviderPatchOperation<number>;
+  limit_daily_usd: ProviderPatchOperation<number>;
+  daily_reset_mode: ProviderPatchOperation<"fixed" | "rolling">;
+  daily_reset_time: ProviderPatchOperation<string>;
+  limit_weekly_usd: ProviderPatchOperation<number>;
+  limit_monthly_usd: ProviderPatchOperation<number>;
+  limit_total_usd: ProviderPatchOperation<number>;
+  limit_concurrent_sessions: ProviderPatchOperation<number>;
+  // Circuit Breaker
+  circuit_breaker_failure_threshold: ProviderPatchOperation<number>;
+  circuit_breaker_open_duration: ProviderPatchOperation<number>;
+  circuit_breaker_half_open_success_threshold: ProviderPatchOperation<number>;
+  max_retry_attempts: ProviderPatchOperation<number>;
+  // Network
+  proxy_url: ProviderPatchOperation<string>;
+  proxy_fallback_to_direct: ProviderPatchOperation<boolean>;
+  first_byte_timeout_streaming_ms: ProviderPatchOperation<number>;
+  streaming_idle_timeout_ms: ProviderPatchOperation<number>;
+  request_timeout_non_streaming_ms: ProviderPatchOperation<number>;
+  // MCP
+  mcp_passthrough_type: ProviderPatchOperation<McpPassthroughType>;
+  mcp_passthrough_url: ProviderPatchOperation<string>;
+}
+
+export interface ProviderBatchApplyUpdates {
+  // Basic / existing
+  is_enabled?: boolean;
+  priority?: number;
+  weight?: number;
+  cost_multiplier?: number;
+  group_tag?: string | null;
+  model_redirects?: Record<string, string> | null;
+  allowed_models?: string[] | null;
+  allowed_clients?: string[];
+  blocked_clients?: string[];
+  anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
+  anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
+  // Routing / Schedule
+  active_time_start?: string | null;
+  active_time_end?: string | null;
+  preserve_client_ip?: boolean;
+  group_priorities?: Record<string, number> | null;
+  cache_ttl_preference?: CacheTtlPreference | null;
+  swap_cache_ttl_billing?: boolean;
+  context_1m_preference?: Context1mPreference | null;
+  codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
+  codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
+  codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
+  codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
+  gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
+  // Rate Limit
+  limit_5h_usd?: number | null;
+  limit_daily_usd?: number | null;
+  daily_reset_mode?: "fixed" | "rolling";
+  daily_reset_time?: string;
+  limit_weekly_usd?: number | null;
+  limit_monthly_usd?: number | null;
+  limit_total_usd?: number | null;
+  limit_concurrent_sessions?: number;
+  // Circuit Breaker
+  circuit_breaker_failure_threshold?: number;
+  circuit_breaker_open_duration?: number;
+  circuit_breaker_half_open_success_threshold?: number;
+  max_retry_attempts?: number | null;
+  // Network
+  proxy_url?: string | null;
+  proxy_fallback_to_direct?: boolean;
+  first_byte_timeout_streaming_ms?: number;
+  streaming_idle_timeout_ms?: number;
+  request_timeout_non_streaming_ms?: number;
+  // MCP
+  mcp_passthrough_type?: McpPassthroughType;
+  mcp_passthrough_url?: string | null;
+}
+
 // Gemini (generateContent API) parameter overrides
 // - "inherit": follow client request (default)
 // - "enabled": force inject googleSearch tool
@@ -78,11 +296,17 @@ export interface Provider {
   preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;
 
+  // Scheduled active time window (HH:mm format, null = always active)
+  activeTimeStart: string | null;
+  activeTimeEnd: string | null;
+
   // 模型列表：双重语义
   // - Anthropic 提供商：白名单（管理员限制可调度的模型，可选）
   // - 非 Anthropic 提供商：声明列表（提供商声称支持的模型，可选）
   // - null 或空数组：Anthropic 允许所有 claude 模型，非 Anthropic 允许任意模型
   allowedModels: string[] | null;
+  allowedClients: string[]; // Allowed client patterns (empty = no restriction)
+  blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
 
   // MCP 透传类型：控制是否启用 MCP 透传功能
   // 'none': 不启用（默认）
@@ -130,6 +354,9 @@ export interface Provider {
 
   // Cache TTL override（inherit 表示不强制覆写）
   cacheTtlPreference: CacheTtlPreference | null;
+
+  // Cache TTL billing swap: invert 1h<->5m for cost calculation
+  swapCacheTtlBilling: boolean;
 
   // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
   context1mPreference: Context1mPreference | null;
@@ -183,8 +410,13 @@ export interface ProviderDisplay {
   // 是否透传客户端 IP
   preserveClientIp: boolean;
   modelRedirects: Record<string, string> | null;
+  // Scheduled active time window
+  activeTimeStart: string | null;
+  activeTimeEnd: string | null;
   // 模型列表（双重语义）
   allowedModels: string[] | null;
+  allowedClients: string[]; // Allowed client patterns (empty = no restriction)
+  blockedClients: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
   // MCP 透传类型
   mcpPassthroughType: McpPassthroughType;
   // MCP 透传 URL
@@ -214,6 +446,7 @@ export interface ProviderDisplay {
   websiteUrl: string | null;
   faviconUrl: string | null;
   cacheTtlPreference: CacheTtlPreference | null;
+  swapCacheTtlBilling: boolean;
   context1mPreference: Context1mPreference | null;
   codexReasoningEffortPreference: CodexReasoningEffortPreference | null;
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
@@ -272,7 +505,11 @@ export interface CreateProviderData {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
+  active_time_start?: string | null;
+  active_time_end?: string | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 
@@ -305,6 +542,7 @@ export interface CreateProviderData {
   website_url?: string | null;
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
+  swap_cache_ttl_billing?: boolean;
   context_1m_preference?: Context1mPreference | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
@@ -345,7 +583,11 @@ export interface UpdateProviderData {
   provider_type?: ProviderType;
   preserve_client_ip?: boolean;
   model_redirects?: Record<string, string> | null;
+  active_time_start?: string | null;
+  active_time_end?: string | null;
   allowed_models?: string[] | null;
+  allowed_clients?: string[] | null;
+  blocked_clients?: string[] | null;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
 
@@ -378,6 +620,7 @@ export interface UpdateProviderData {
   website_url?: string | null;
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
+  swap_cache_ttl_billing?: boolean;
   context_1m_preference?: Context1mPreference | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;

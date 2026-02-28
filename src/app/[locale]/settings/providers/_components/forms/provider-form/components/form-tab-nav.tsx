@@ -19,9 +19,16 @@ interface FormTabNavProps {
   onTabChange: (tab: TabId) => void;
   disabled?: boolean;
   tabStatus?: Partial<Record<TabId, "default" | "warning" | "configured">>;
+  layout?: "vertical" | "horizontal";
 }
 
-export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }: FormTabNavProps) {
+export function FormTabNav({
+  activeTab,
+  onTabChange,
+  disabled,
+  tabStatus = {},
+  layout = "vertical",
+}: FormTabNavProps) {
   const t = useTranslations("settings.providers.form");
 
   const getStatusColor = (status?: "default" | "warning" | "configured") => {
@@ -34,6 +41,66 @@ export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }:
         return null;
     }
   };
+
+  const activeTabIndex = TAB_CONFIG.findIndex((tab) => tab.id === activeTab);
+  const stepNumber = activeTabIndex >= 0 ? activeTabIndex + 1 : 0;
+  const stepProgressWidth = `${(stepNumber / TAB_CONFIG.length) * 100}%`;
+
+  if (layout === "horizontal") {
+    return (
+      <nav className="sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md shrink-0">
+        <div className="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
+          {TAB_CONFIG.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            const status = tabStatus[tab.id];
+            const statusColor = getStatusColor(status);
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onTabChange(tab.id)}
+                disabled={disabled}
+                className={cn(
+                  "relative flex items-center gap-2 px-4 py-3 text-sm font-medium transition-all whitespace-nowrap",
+                  "hover:text-foreground focus-visible:outline-none",
+                  isActive ? "text-primary" : "text-muted-foreground",
+                  disabled && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+                    isActive ? "bg-primary/10" : "hover:bg-muted/50"
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span>{t(tab.labelKey)}</span>
+                {statusColor && (
+                  <span
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      statusColor,
+                      status === "warning" && "animate-pulse"
+                    )}
+                  />
+                )}
+                {isActive && (
+                  <motion.div
+                    layoutId="activeTabIndicatorHorizontal"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <>
@@ -148,7 +215,7 @@ export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }:
       </nav>
 
       {/* Mobile: Bottom Navigation */}
-      <nav className="flex md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
+      <nav className="flex md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
         <div className="flex items-center justify-around w-full px-2 py-1">
           {TAB_CONFIG.map((tab) => {
             const Icon = tab.icon;
@@ -197,13 +264,18 @@ export function FormTabNav({ activeTab, onTabChange, disabled, tabStatus = {} }:
           })}
         </div>
         {/* Step indicator */}
-        <div className="absolute top-0 left-0 right-0 h-0.5 bg-muted">
+        <div
+          className="absolute top-0 left-0 right-0 h-0.5 bg-muted"
+          role="progressbar"
+          aria-valuenow={stepNumber}
+          aria-valuemin={0}
+          aria-valuemax={TAB_CONFIG.length}
+          aria-label={t("tabs.stepProgress")}
+        >
           <motion.div
             className="h-full bg-primary"
-            initial={{ width: "20%" }}
-            animate={{
-              width: `${((TAB_CONFIG.findIndex((t) => t.id === activeTab) + 1) / TAB_CONFIG.length) * 100}%`,
-            }}
+            initial={false}
+            animate={{ width: stepProgressWidth }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           />
         </div>

@@ -82,6 +82,64 @@ describe("Key usage token aggregation overflow", () => {
     expect(totalTokensSql).toContain("double precision");
   });
 
+  test("findKeysWithStatisticsBatch: unnest 必须使用 ARRAY[] 而非行构造器", async () => {
+    vi.resetModules();
+
+    const executeSqlArgs: unknown[] = [];
+
+    const selectQueue: any[] = [];
+    selectQueue.push(
+      createThenableQuery([
+        {
+          id: 10,
+          userId: 1,
+          key: "k",
+          name: "n",
+          isEnabled: true,
+          expiresAt: null,
+          canLoginWebUi: true,
+          limit5hUsd: null,
+          limitDailyUsd: null,
+          dailyResetMode: "fixed",
+          dailyResetTime: "00:00",
+          limitWeeklyUsd: null,
+          limitMonthlyUsd: null,
+          limitTotalUsd: null,
+          limitConcurrentSessions: 0,
+          providerGroup: null,
+          cacheTtlPreference: null,
+          createdAt: new Date("2024-01-01T00:00:00.000Z"),
+          updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+          deletedAt: null,
+        },
+      ])
+    );
+    selectQueue.push(createThenableQuery([]));
+
+    const fallbackSelect = createThenableQuery<unknown[]>([]);
+    const selectMock = vi.fn((_selection: unknown) => selectQueue.shift() ?? fallbackSelect);
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+        execute: vi.fn(async (sqlObj: unknown) => {
+          executeSqlArgs.push(sqlObj);
+          return [];
+        }),
+      },
+    }));
+
+    const { findKeysWithStatisticsBatch } = await import("@/repository/key");
+    await findKeysWithStatisticsBatch([1]);
+
+    expect(executeSqlArgs.length).toBeGreaterThan(0);
+    const lateralJoinSql = sqlToString(executeSqlArgs[0]).toLowerCase();
+
+    expect(lateralJoinSql).toContain("array[");
+    expect(lateralJoinSql).not.toContain("unnest((");
+    expect(lateralJoinSql).toContain("key_val");
+  });
+
   test("findKeysWithStatisticsBatch: modelStats token sum 不应使用 ::int", async () => {
     vi.resetModules();
 
@@ -115,7 +173,6 @@ describe("Key usage token aggregation overflow", () => {
       ])
     );
     selectQueue.push(createThenableQuery([]));
-    selectQueue.push(createThenableQuery([]));
 
     const fallbackSelect = createThenableQuery<unknown[]>([]);
     const selectMock = vi.fn((selection: unknown) => {
@@ -123,13 +180,10 @@ describe("Key usage token aggregation overflow", () => {
       return selectQueue.shift() ?? fallbackSelect;
     });
 
-    const selectDistinctOnMock = vi.fn(() => createThenableQuery([]));
-
     vi.doMock("@/drizzle/db", () => ({
       db: {
         select: selectMock,
-        selectDistinctOn: selectDistinctOnMock,
-        execute: vi.fn(async () => ({ count: 0 })),
+        execute: vi.fn(async () => []),
       },
     }));
 

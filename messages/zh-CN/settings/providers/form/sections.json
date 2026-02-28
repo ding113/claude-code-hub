@@ -49,6 +49,28 @@
       "selectedOnly": "仅允许选中的 {count} 个模型。其他模型的请求不会调度到此供应商。",
       "moreModels": "+{count} 更多"
     },
+    "clientRestrictions": {
+      "toggleLabel": "启用客户端限制",
+      "toggleDesc": "默认不限制客户端。启用后可配置白名单/黑名单。",
+      "priorityNote": "黑名单优先级高于白名单。",
+      "allowedLabel": "白名单客户端",
+      "allowedPlaceholder": "例如 claude-code-cli",
+      "blockedLabel": "黑名单客户端",
+      "blockedPlaceholder": "例如 gemini-cli",
+      "allowAction": "允许",
+      "blockAction": "阻止",
+      "customAllowedLabel": "自定义白名单模式",
+      "customAllowedPlaceholder": "例如 my-ide、internal-tool",
+      "customBlockedLabel": "自定义黑名单模式",
+      "customBlockedPlaceholder": "例如 legacy-client",
+      "customHelp": "自定义模式使用 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。",
+      "presetClients": {
+        "claude-code": "Claude Code（全部）",
+        "gemini-cli": "Gemini CLI",
+        "factory-cli": "Droid CLI",
+        "codex-cli": "Codex CLI"
+      }
+    },
     "scheduleParams": {
       "title": "调度参数",
       "priority": {
@@ -78,6 +100,16 @@
         "noGroups": "请先设置分组标签，才能配置分组优先级"
       }
     },
+    "activeTime": {
+      "title": "调度时间窗口",
+      "description": "在指定时间窗口内自动激活供应商",
+      "toggleLabel": "启用时间调度",
+      "toggleDescription": "启用后，此供应商仅在指定时间窗口内处于活跃状态",
+      "startLabel": "开始时间",
+      "endLabel": "结束时间",
+      "timezoneNote": "时间基于系统时区",
+      "crossDayHint": "跨天调度: 从 {start} 到次日 {end}"
+    },
     "cacheTtl": {
       "label": "Cache TTL 覆写",
       "options": {
@@ -86,6 +118,10 @@
         "1h": "1 小时"
       },
       "desc": "强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。"
+    },
+    "swapCacheTtlBilling": {
+      "label": "Cache TTL 计费互换",
+      "desc": "反转传入数据的缓存 TTL：1h 令牌视为 5 分钟，反之亦然。影响标记、成本及所有存储指标。"
     },
     "context1m": {
       "label": "1M 上下文窗口",

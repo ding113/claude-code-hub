@@ -32,5 +32,10 @@
   "status": {
     "normal": "Система в норме",
     "lastUpdate": "Последнее обновление"
+  },
+  "chart": {
+    "requestUnit": "запросов",
+    "countLabel": "Кол-во",
+    "switchLocale": "Переключить язык: {locale}"
   }
 }

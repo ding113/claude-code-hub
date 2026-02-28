@@ -1,13 +1,18 @@
 "use client";
 
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Copy, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getProviderEndpoints } from "@/actions/provider-endpoints";
-import { editProvider, getUnmaskedProviderKey, removeProvider } from "@/actions/providers";
+import {
+  editProvider,
+  getUnmaskedProviderKey,
+  removeProvider,
+  undoProviderDelete,
+} from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
   AlertDialog,
@@ -39,10 +44,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
-import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
+import type {
+  ProviderDisplay,
+  ProviderEndpoint,
+  ProviderStatisticsMap,
+  ProviderType,
+} from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { InlineEditPopover } from "./inline-edit-popover";
@@ -94,7 +105,10 @@ export function VendorKeysCompactList(props: {
                 {t("addVendorKey")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+            <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
+              <VisuallyHidden>
+                <DialogTitle>{t("addVendorKey")}</DialogTitle>
+              </VisuallyHidden>
               <FormErrorBoundary>
                 <ProviderForm
                   mode="create"
@@ -112,17 +126,26 @@ export function VendorKeysCompactList(props: {
                   }}
                   urlResolver={async (type) => {
                     if (props.vendorId <= 0) return null;
-                    const endpoints = await getProviderEndpoints({
-                      vendorId: props.vendorId,
-                      providerType: type,
-                    });
+
+                    const queryKey = ["provider-endpoints", props.vendorId, type] as const;
+                    const cached = queryClient.getQueryData<ProviderEndpoint[]>(queryKey);
+                    const endpoints =
+                      cached ??
+                      (await queryClient.fetchQuery<ProviderEndpoint[]>({
+                        queryKey,
+                        queryFn: async () =>
+                          await getProviderEndpoints({
+                            vendorId: props.vendorId,
+                            providerType: type,
+                          }),
+                        staleTime: 30_000,
+                      })) ??
+                      [];
                     const enabled = endpoints.find((e) => e.isEnabled);
                     return (enabled ?? endpoints[0])?.url ?? null;
                   }}
                   onSuccess={() => {
                     setCreateOpen(false);
-                    queryClient.invalidateQueries({ queryKey: ["providers"] });
-                    queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
                   }}
                 />
               </FormErrorBoundary>
@@ -197,11 +220,11 @@ function VendorKeyRow(props: {
 }) {
   const t = useTranslations("settings.providers");
   const tList = useTranslations("settings.providers.list");
+  const tBatchEdit = useTranslations("settings.providers.batchEdit");
   const tInline = useTranslations("settings.providers.inlineEdit");
   const tTypes = useTranslations("settings.providers.types");
 
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   const validatePriority = (raw: string) => {
     if (raw.length === 0) return tInline("priorityInvalid");
@@ -239,7 +262,6 @@ function VendorKeyRow(props: {
           toast.success(tInline("saveSuccess"));
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-          router.refresh();
           return true;
         }
         toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -278,8 +300,8 @@ function VendorKeyRow(props: {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-health"] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-      router.refresh();
     },
     onError: () => {
       toast.error(t("toggleFailed"));
@@ -290,15 +312,42 @@ function VendorKeyRow(props: {
     mutationFn: async () => {
       const res = await removeProvider(props.provider.id);
       if (!res.ok) throw new Error(res.error);
+      return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
       setDeleteDialogOpen(false);
-      toast.success(tList("deleteSuccess"), {
-        description: tList("deleteSuccessDesc", { name: props.provider.name }),
+
+      toast.success(tBatchEdit("undo.singleDeleteSuccess"), {
+        duration: 10000,
+        action: {
+          label: tBatchEdit("undo.button"),
+          onClick: async () => {
+            try {
+              const undoResult = await undoProviderDelete({
+                undoToken: data.undoToken,
+                operationId: data.operationId,
+              });
+              if (undoResult.ok) {
+                toast.success(tBatchEdit("undo.singleDeleteUndone"));
+                await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
+                await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+              } else if (undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED) {
+                toast.error(tBatchEdit("undo.expired"));
+              } else {
+                toast.error(tBatchEdit("undo.failed"));
+              }
+            } catch {
+              toast.error(tBatchEdit("undo.failed"));
+            }
+          },
+        },
       });
-      router.refresh();
     },
     onError: () => {
       toast.error(tList("deleteFailed"));
@@ -454,7 +503,10 @@ function VendorKeyRow(props: {
                     <Edit2 className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[90vh] flex flex-col">
+                <DialogContent className="max-w-full sm:max-w-5xl lg:max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
+                  <VisuallyHidden>
+                    <DialogTitle>{t("editProvider")}</DialogTitle>
+                  </VisuallyHidden>
                   <FormErrorBoundary>
                     <ProviderForm
                       mode="edit"
@@ -469,9 +521,6 @@ function VendorKeyRow(props: {
                       }
                       onSuccess={() => {
                         setEditOpen(false);
-                        queryClient.invalidateQueries({ queryKey: ["providers"] });
-                        queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-                        router.refresh();
                       }}
                     />
                   </FormErrorBoundary>

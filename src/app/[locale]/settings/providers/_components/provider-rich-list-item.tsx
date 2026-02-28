@@ -1,8 +1,10 @@
 "use client";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle,
+  Clock,
   Copy,
   Edit,
   Globe,
@@ -12,17 +14,16 @@ import {
   Trash,
   XCircle,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { getProviderVendors } from "@/actions/provider-endpoints";
 import {
   editProvider,
   getUnmaskedProviderKey,
   removeProvider,
   resetProviderCircuit,
   resetProviderTotalUsage,
+  undoProviderDelete,
 } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
@@ -55,12 +56,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
-import type { ProviderDisplay, ProviderStatistics } from "@/types/provider";
+import type { ProviderDisplay, ProviderStatistics, ProviderVendor } from "@/types/provider";
 import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { GroupEditCombobox } from "./group-edit-combobox";
@@ -70,6 +72,7 @@ import { ProviderEndpointHover } from "./provider-endpoint-hover";
 
 interface ProviderRichListItemProps {
   provider: ProviderDisplay;
+  vendor?: ProviderVendor;
   currentUser?: User;
   healthStatus?: {
     circuitState: "closed" | "open" | "half-open";
@@ -103,6 +106,7 @@ interface ProviderRichListItemProps {
 
 export function ProviderRichListItem({
   provider,
+  vendor,
   currentUser,
   healthStatus,
   endpointCircuitInfo = [],
@@ -121,13 +125,7 @@ export function ProviderRichListItem({
   userGroups = [],
   isAdmin = false,
 }: ProviderRichListItemProps) {
-  const router = useRouter();
   const queryClient = useQueryClient();
-  const { data: vendors = [] } = useQuery({
-    queryKey: ["provider-vendors"],
-    queryFn: async () => await getProviderVendors(),
-    staleTime: 60000,
-  });
 
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
@@ -142,8 +140,10 @@ export function ProviderRichListItem({
   const [togglePending, startToggleTransition] = useTransition();
 
   const canEdit = currentUser?.role === "admin";
+  const t = useTranslations("settings.providers");
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
+  const tBatchEdit = useTranslations("settings.providers.batchEdit");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
   const tInline = useTranslations("settings.providers.inlineEdit");
 
@@ -182,10 +182,6 @@ export function ProviderRichListItem({
   const typeLabel = tTypes(`${typeKey}.label`);
   const typeDescription = tTypes(`${typeKey}.description`);
 
-  const vendor = provider.providerVendorId
-    ? vendors.find((v) => v.id === provider.providerVendorId)
-    : undefined;
-
   useEffect(() => {
     setClipboardAvailable(isClipboardSupported());
   }, []);
@@ -217,13 +213,38 @@ export function ProviderRichListItem({
         try {
           const res = await removeProvider(provider.id);
           if (res.ok) {
-            toast.success(tList("deleteSuccess"), {
-              description: tList("deleteSuccessDesc", { name: provider.name }),
+            const undoToken = res.data.undoToken;
+            const operationId = res.data.operationId;
+
+            toast.success(tBatchEdit("undo.singleDeleteSuccess"), {
+              duration: 10000,
+              action: {
+                label: tBatchEdit("undo.button"),
+                onClick: async () => {
+                  try {
+                    const undoResult = await undoProviderDelete({ undoToken, operationId });
+                    if (undoResult.ok) {
+                      toast.success(tBatchEdit("undo.singleDeleteUndone"));
+                      await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                      await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                      await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                    } else if (
+                      undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
+                    ) {
+                      toast.error(tBatchEdit("undo.expired"));
+                    } else {
+                      toast.error(tBatchEdit("undo.failed"));
+                    }
+                  } catch {
+                    toast.error(tBatchEdit("undo.failed"));
+                  }
+                },
+              },
             });
+
             queryClient.invalidateQueries({ queryKey: ["providers"] });
             queryClient.invalidateQueries({ queryKey: ["providers-health"] });
             queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
-            router.refresh();
           } else {
             toast.error(tList("deleteFailed"), {
               description: res.error || tList("unknownError"),
@@ -294,7 +315,6 @@ export function ProviderRichListItem({
           });
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          router.refresh();
         } else {
           toast.error(tList("resetCircuitFailed"), {
             description: res.error || tList("unknownError"),
@@ -320,7 +340,6 @@ export function ProviderRichListItem({
           });
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          router.refresh();
         } else {
           toast.error(tList("resetUsageFailed"), {
             description: res.error || tList("unknownError"),
@@ -349,7 +368,6 @@ export function ProviderRichListItem({
           });
           queryClient.invalidateQueries({ queryKey: ["providers"] });
           queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          router.refresh();
         } else {
           toast.error(tList("toggleFailed"), {
             description: res.error || tList("unknownError"),
@@ -373,7 +391,6 @@ export function ProviderRichListItem({
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
           queryClient.invalidateQueries({ queryKey: ["providers"] });
-          router.refresh();
           return true;
         }
         toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -403,7 +420,6 @@ export function ProviderRichListItem({
       if (res.ok) {
         toast.success(tInline("saveSuccess"));
         queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
         return true;
       }
       toast.error(tInline("groupSaveError"), {
@@ -429,7 +445,6 @@ export function ProviderRichListItem({
       if (res.ok) {
         toast.success(tInline("saveSuccess"));
         queryClient.invalidateQueries({ queryKey: ["providers"] });
-        router.refresh();
         return true;
       }
       toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -523,6 +538,13 @@ export function ProviderRichListItem({
             >
               <AlertTriangle className="h-3 w-3" />
               {tList("endpointCircuitBroken")}
+            </Badge>
+          )}
+          {/* Schedule badge */}
+          {provider.activeTimeStart && provider.activeTimeEnd && (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {provider.activeTimeStart}-{provider.activeTimeEnd}
             </Badge>
           )}
         </div>
@@ -722,6 +744,13 @@ export function ProviderRichListItem({
               >
                 <AlertTriangle className="h-3 w-3" />
                 {tList("endpointCircuitBroken")}
+              </Badge>
+            )}
+            {/* Schedule badge */}
+            {provider.activeTimeStart && provider.activeTimeEnd && (
+              <Badge variant="outline" className="flex items-center gap-1 flex-shrink-0">
+                <Clock className="h-3 w-3" />
+                {provider.activeTimeStart}-{provider.activeTimeEnd}
               </Badge>
             )}
           </div>
@@ -964,16 +993,16 @@ export function ProviderRichListItem({
 
       {/* 编辑 Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
+          <VisuallyHidden>
+            <DialogTitle>{t("editProvider")}</DialogTitle>
+          </VisuallyHidden>
           <FormErrorBoundary>
             <ProviderForm
               mode="edit"
               provider={provider}
               onSuccess={() => {
                 setOpenEdit(false);
-                queryClient.invalidateQueries({ queryKey: ["providers"] });
-                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                router.refresh();
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}
             />
@@ -983,16 +1012,16 @@ export function ProviderRichListItem({
 
       {/* 克隆 Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
+          <VisuallyHidden>
+            <DialogTitle>{t("clone")}</DialogTitle>
+          </VisuallyHidden>
           <FormErrorBoundary>
             <ProviderForm
               mode="create"
               cloneProvider={provider}
               onSuccess={() => {
                 setOpenClone(false);
-                queryClient.invalidateQueries({ queryKey: ["providers"] });
-                queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                router.refresh();
               }}
               enableMultiProviderTypes={enableMultiProviderTypes}
             />

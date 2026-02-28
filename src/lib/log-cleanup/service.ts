@@ -61,6 +61,8 @@ export interface TriggerInfo {
  * @param triggerInfo 触发信息
  * @returns 清理结果
  */
+// NOTE: usage_ledger is intentionally immune to log cleanup.
+// Only message_request rows are deleted here.
 export async function cleanupLogs(
   conditions: CleanupConditions,
   options: CleanupOptions = {},
@@ -223,15 +225,32 @@ async function deleteBatch(whereConditions: SQL[], batchSize: number): Promise<n
       WHERE ${and(...whereConditions)}
       ORDER BY created_at ASC
       LIMIT ${batchSize}
-      FOR UPDATE SKIP LOCKED
+      FOR UPDATE
     )
     DELETE FROM message_request
     WHERE id IN (SELECT id FROM ids_to_delete)
   `);
 
-  // Drizzle execute 返回的 result 包含 rowCount 属性
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (result as any).rowCount || 0;
+  return getAffectedRows(result);
+}
+
+function getAffectedRows(result: unknown): number {
+  if (!result || typeof result !== "object") {
+    return 0;
+  }
+
+  const r = result as { count?: unknown; rowCount?: unknown };
+
+  // postgres.js returns count as BigInt; node-postgres uses rowCount as number
+  if (r.count !== undefined) {
+    return Number(r.count);
+  }
+
+  if (typeof r.rowCount === "number") {
+    return r.rowCount;
+  }
+
+  return 0;
 }
 
 /**

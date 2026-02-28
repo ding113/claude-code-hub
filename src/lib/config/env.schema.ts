@@ -93,6 +93,7 @@ export const EnvSchema = z.object({
   REDIS_TLS_REJECT_UNAUTHORIZED: z.string().default("true").transform(booleanTransform),
   ENABLE_RATE_LIMIT: z.string().default("true").transform(booleanTransform),
   ENABLE_SECURE_COOKIES: z.string().default("true").transform(booleanTransform),
+  SESSION_TOKEN_MODE: z.enum(["legacy", "dual", "opaque"]).default("opaque"),
   SESSION_TTL: z.coerce.number().default(300),
   // 会话消息存储控制
   // - false (默认)：存储请求/响应体但对 message 内容脱敏 [REDACTED]
@@ -127,6 +128,13 @@ export const EnvSchema = z.object({
   FETCH_BODY_TIMEOUT: z.coerce.number().default(600_000), // 请求/响应体传输超时（默认 600 秒）
   FETCH_HEADERS_TIMEOUT: z.coerce.number().default(600_000), // 响应头接收超时（默认 600 秒）
   FETCH_CONNECT_TIMEOUT: z.coerce.number().default(30000), // TCP 连接建立超时（默认 30 秒）
+
+  // Langfuse Observability (optional, auto-enabled when keys are set)
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_BASE_URL: z.string().default("https://cloud.langfuse.com"),
+  LANGFUSE_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(1.0),
+  LANGFUSE_DEBUG: z.string().default("false").transform(booleanTransform),
 });
 
 /**

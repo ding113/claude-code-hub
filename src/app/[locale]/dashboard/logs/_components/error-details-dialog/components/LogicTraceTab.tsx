@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import { getSessionOriginChain } from "@/actions/session-origin-chain";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,9 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
   if (
     item.reason === "retry_failed" ||
     item.reason === "system_error" ||
+    item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
+    item.reason === "endpoint_pool_exhausted" ||
     item.reason === "concurrent_limit_failed"
   ) {
     return "failure";
@@ -51,6 +54,7 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
 export function LogicTraceTab({
   statusCode: _statusCode,
   providerChain,
+  sessionId,
   blockedBy,
   blockedReason,
   requestSequence,
@@ -59,6 +63,9 @@ export function LogicTraceTab({
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
   const [timelineCopied, setTimelineCopied] = useState(false);
+  const [originOpen, setOriginOpen] = useState(false);
+  const [originChain, setOriginChain] = useState<ProviderChainItem[] | null | undefined>(undefined);
+  const [originLoading, setOriginLoading] = useState(false);
 
   const handleCopyTimeline = async () => {
     if (!providerChain) return;
@@ -293,6 +300,235 @@ export function LogicTraceTab({
             />
           )}
 
+          {isSessionReuseFlow && sessionId && (
+            <Collapsible
+              open={originOpen}
+              onOpenChange={(open) => {
+                setOriginOpen(open);
+                if (open && originChain === undefined && !originLoading) {
+                  setOriginLoading(true);
+                  getSessionOriginChain(sessionId)
+                    .then((result) => {
+                      setOriginChain(result.ok ? result.data : null);
+                    })
+                    .catch(() => {
+                      setOriginChain(null);
+                    })
+                    .finally(() => {
+                      setOriginLoading(false);
+                    });
+                }
+              }}
+            >
+              <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground w-full py-1 px-2">
+                <span>{t("logicTrace.originDecisionExpand")}</span>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                {originLoading && (
+                  <div className="text-xs text-muted-foreground px-2 py-1">
+                    {t("logicTrace.originDecisionLoading")}
+                  </div>
+                )}
+                {!originLoading && originChain === null && (
+                  <div className="text-xs text-muted-foreground px-2 py-1">
+                    {t("logicTrace.originDecisionUnavailable")}
+                  </div>
+                )}
+                {!originLoading &&
+                  originChain &&
+                  originChain.length > 0 &&
+                  (() => {
+                    const originItem = originChain.find(
+                      (item) => item.reason === "initial_selection"
+                    );
+                    const ctx = originItem?.decisionContext;
+                    const originFilteredProviders = originChain.flatMap(
+                      (item) => item.decisionContext?.filteredProviders || []
+                    );
+                    return (
+                      <div className="space-y-2 px-2 py-1">
+                        <div className="text-xs font-medium text-muted-foreground">
+                          {t("logicTrace.originDecisionTitle")}
+                        </div>
+                        {ctx && (
+                          <StepCard
+                            step={1}
+                            icon={Database}
+                            title={t("logicTrace.initialSelection")}
+                            subtitle={`${ctx.totalProviders} -> ${ctx.afterModelFilter || ctx.afterHealthCheck}`}
+                            status="success"
+                            details={
+                              <div className="grid grid-cols-2 gap-2 text-xs min-w-0">
+                                <div className="min-w-0">
+                                  <span className="text-muted-foreground">Total:</span>{" "}
+                                  <span className="font-mono">{ctx.totalProviders}</span>
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-muted-foreground">Enabled:</span>{" "}
+                                  <span className="font-mono">{ctx.enabledProviders}</span>
+                                </div>
+                                {ctx.afterGroupFilter !== undefined && (
+                                  <div className="min-w-0">
+                                    <span className="text-muted-foreground">After Group:</span>{" "}
+                                    <span className="font-mono">{ctx.afterGroupFilter}</span>
+                                  </div>
+                                )}
+                                {ctx.afterModelFilter !== undefined && (
+                                  <div className="min-w-0">
+                                    <span className="text-muted-foreground">After Model:</span>{" "}
+                                    <span className="font-mono">{ctx.afterModelFilter}</span>
+                                  </div>
+                                )}
+                              </div>
+                            }
+                          />
+                        )}
+                        {originFilteredProviders.length > 0 && (
+                          <StepCard
+                            step={2}
+                            icon={Filter}
+                            title={t("logicTrace.healthCheck")}
+                            subtitle={`${originFilteredProviders.length} providers filtered`}
+                            status="warning"
+                            details={
+                              <div className="space-y-1 min-w-0">
+                                {originFilteredProviders.map((p, idx) => (
+                                  <div
+                                    key={`${p.id}-${idx}`}
+                                    className="flex items-center gap-2 text-xs flex-wrap min-w-0"
+                                  >
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] shrink-0 max-w-[120px] truncate"
+                                    >
+                                      {p.name}
+                                    </Badge>
+                                    <span className="text-rose-600 break-all">
+                                      {tChain(`filterReasons.${p.reason}`)}
+                                    </span>
+                                    {p.details && (
+                                      <span className="text-muted-foreground break-all">
+                                        (
+                                        {tChain.has(`filterDetails.${p.details}`)
+                                          ? tChain(`filterDetails.${p.details}`)
+                                          : p.details}
+                                        )
+                                      </span>
+                                    )}
+                                    {p.clientRestrictionContext && (
+                                      <div className="ml-4 mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+                                        {p.clientRestrictionContext.matchedPattern && (
+                                          <div>
+                                            {tChain(
+                                              `filterDetails.${p.clientRestrictionContext.matchType}`,
+                                              { pattern: p.clientRestrictionContext.matchedPattern }
+                                            )}
+                                          </div>
+                                        )}
+                                        {!p.clientRestrictionContext.matchedPattern && (
+                                          <div>
+                                            {tChain(
+                                              `filterDetails.${p.clientRestrictionContext.matchType}`
+                                            )}
+                                          </div>
+                                        )}
+                                        {p.clientRestrictionContext.detectedClient && (
+                                          <div>
+                                            {tChain("filterDetails.detectedClient", {
+                                              client: p.clientRestrictionContext.detectedClient,
+                                            })}
+                                          </div>
+                                        )}
+                                        {p.clientRestrictionContext.providerAllowlist.length >
+                                          0 && (
+                                          <div>
+                                            {tChain("filterDetails.providerAllowlist", {
+                                              list: p.clientRestrictionContext.providerAllowlist.join(
+                                                ", "
+                                              ),
+                                            })}
+                                          </div>
+                                        )}
+                                        {p.clientRestrictionContext.providerBlocklist.length >
+                                          0 && (
+                                          <div>
+                                            {tChain("filterDetails.providerBlocklist", {
+                                              list: p.clientRestrictionContext.providerBlocklist.join(
+                                                ", "
+                                              ),
+                                            })}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            }
+                          />
+                        )}
+                        {ctx?.priorityLevels && ctx.priorityLevels.length > 0 && (
+                          <StepCard
+                            step={originFilteredProviders.length > 0 ? 3 : 2}
+                            icon={Layers}
+                            title={t("logicTrace.prioritySelection")}
+                            subtitle={`Priority ${ctx.selectedPriority}`}
+                            status="success"
+                            details={
+                              <div className="space-y-2">
+                                <div className="flex gap-1 flex-wrap">
+                                  {ctx.priorityLevels.map((p) => (
+                                    <Badge
+                                      key={p}
+                                      variant={p === ctx?.selectedPriority ? "default" : "outline"}
+                                      className="text-[10px]"
+                                    >
+                                      P{p}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                {ctx.candidatesAtPriority &&
+                                  ctx.candidatesAtPriority.length > 0 && (
+                                    <div className="space-y-1 mt-2">
+                                      {ctx.candidatesAtPriority.map((c, idx) => {
+                                        const formattedProbability = formatProbability(
+                                          c.probability
+                                        );
+                                        return (
+                                          <div
+                                            key={`${c.id}-${idx}`}
+                                            className="flex items-center justify-between text-xs"
+                                          >
+                                            <span className="font-medium">{c.name}</span>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-muted-foreground">
+                                                W:{c.weight}
+                                              </span>
+                                              <span className="text-muted-foreground">
+                                                x{c.costMultiplier}
+                                              </span>
+                                              {formattedProbability && (
+                                                <Badge variant="secondary" className="text-[10px]">
+                                                  {formattedProbability}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                              </div>
+                            }
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
           {/* Step 1: Initial Selection (only for non-session-reuse flow) */}
           {decisionContext && (
             <StepCard
@@ -360,6 +596,43 @@ export function LogicTraceTab({
                             : p.details}
                           )
                         </span>
+                      )}
+                      {p.clientRestrictionContext && (
+                        <div className="ml-4 mt-1 space-y-0.5 text-[10px] text-muted-foreground">
+                          {p.clientRestrictionContext.matchedPattern && (
+                            <div>
+                              {tChain(`filterDetails.${p.clientRestrictionContext.matchType}`, {
+                                pattern: p.clientRestrictionContext.matchedPattern,
+                              })}
+                            </div>
+                          )}
+                          {!p.clientRestrictionContext.matchedPattern && (
+                            <div>
+                              {tChain(`filterDetails.${p.clientRestrictionContext.matchType}`)}
+                            </div>
+                          )}
+                          {p.clientRestrictionContext.detectedClient && (
+                            <div>
+                              {tChain("filterDetails.detectedClient", {
+                                client: p.clientRestrictionContext.detectedClient,
+                              })}
+                            </div>
+                          )}
+                          {p.clientRestrictionContext.providerAllowlist.length > 0 && (
+                            <div>
+                              {tChain("filterDetails.providerAllowlist", {
+                                list: p.clientRestrictionContext.providerAllowlist.join(", "),
+                              })}
+                            </div>
+                          )}
+                          {p.clientRestrictionContext.providerBlocklist.length > 0 && (
+                            <div>
+                              {tChain("filterDetails.providerBlocklist", {
+                                list: p.clientRestrictionContext.providerBlocklist.join(", "),
+                              })}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
@@ -464,10 +737,20 @@ export function LogicTraceTab({
                 subtitle={
                   isSessionReuse
                     ? item.statusCode
-                      ? `HTTP ${item.statusCode}`
+                      ? t("logicTrace.httpStatus", {
+                          code: item.statusCode,
+                          inferredSuffix: item.statusCodeInferred
+                            ? ` ${t("statusCodeInferredSuffix")}`
+                            : "",
+                        })
                       : item.name
                     : item.statusCode
-                      ? `HTTP ${item.statusCode}`
+                      ? t("logicTrace.httpStatus", {
+                          code: item.statusCode,
+                          inferredSuffix: item.statusCodeInferred
+                            ? ` ${t("statusCodeInferredSuffix")}`
+                            : "",
+                        })
                       : item.reason
                         ? tChain(`reasons.${item.reason}`)
                         : undefined

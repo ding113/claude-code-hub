@@ -34,7 +34,8 @@ export interface ProviderChainItem {
     | "client_error_non_retryable" // 不可重试的客户端错误（Prompt 超限、内容过滤、PDF 限制、Thinking 格式）
     | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
     | "endpoint_pool_exhausted" // 端点池耗尽（所有端点熔断或不可用，严格模式阻止降级）
-    | "vendor_type_all_timeout"; // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
+    | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
+    | "client_restriction_filtered"; // Provider skipped due to client restriction (neutral, no circuit breaker)
 
   // === 选择方法（细化） ===
   selectionMethod?:
@@ -71,6 +72,15 @@ export interface ProviderChainItem {
 
   // 修复：新增成功时的状态码
   statusCode?: number;
+  /**
+   * 标记 statusCode 是否为“基于响应体内容推断”的结果（而非上游真实返回的 HTTP 状态码）。
+   *
+   * 典型场景：上游返回 HTTP 200，但 body 为错误页/错误 JSON（假 200）。
+   * 此时为了让熔断/故障转移/会话绑定与“真实错误语义”保持一致，CCH 会推断更合理的 4xx/5xx。
+   *
+   * 该字段用于在决策链 / 技术时间线 / UI 中显著提示“此状态码为推断”，避免误读。
+   */
+  statusCodeInferred?: boolean;
 
   // 模型重定向信息（在供应商级别记录）
   modelRedirect?: {
@@ -162,8 +172,17 @@ export interface ProviderChainItem {
         | "type_mismatch"
         | "model_not_allowed"
         | "context_1m_disabled" // 供应商禁用了 1M 上下文功能
-        | "disabled";
+        | "schedule_inactive" // 供应商不在调度时间窗口内
+        | "disabled"
+        | "client_restriction"; // Provider filtered due to client restriction
       details?: string; // 额外信息（如费用：$15.2/$15）
+      clientRestrictionContext?: {
+        matchType: "blocklist_hit" | "allowlist_miss";
+        matchedPattern?: string;
+        detectedClient?: string;
+        providerAllowlist: string[];
+        providerBlocklist: string[];
+      };
     }>;
 
     // --- 优先级分层 ---
@@ -247,7 +266,10 @@ export interface MessageRequest {
   // 1M 上下文窗口是否已应用
   context1mApplied?: boolean;
 
-  // 特殊设置（用于记录各类“特殊行为/覆写”的命中与生效情况，便于审计与展示）
+  // Swap Cache TTL Billing: whether cache TTL inversion was active for this request
+  swapCacheTtlApplied?: boolean;
+
+  // 特殊设置（用于记录各类"特殊行为/覆写"的命中与生效情况，便于审计与展示）
   specialSettings?: SpecialSetting[] | null;
 
   createdAt: Date;

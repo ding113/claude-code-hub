@@ -1,16 +1,17 @@
 "use client";
 
-import {
-  QueryClient,
-  QueryClientProvider,
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getAllUserKeyGroups, getAllUserTags, getUsers, getUsersBatch } from "@/actions/users";
+import type { KeyUsageData } from "@/actions/users";
+import {
+  getAllUserKeyGroups,
+  getAllUserTags,
+  getUsers,
+  getUsersBatchCore,
+  getUsersUsageBatch,
+} from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -31,15 +32,6 @@ import { CreateUserDialog } from "../_components/user/create-user-dialog";
 import { clearUsageCache } from "../_components/user/user-limit-badge";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      staleTime: 30000,
-    },
-  },
-});
-
 /**
  * Split comma-separated tags into an array of trimmed, non-empty strings.
  * This matches the server-side providerGroup handling in provider-selector.ts
@@ -57,11 +49,7 @@ interface UsersPageClientProps {
 }
 
 export function UsersPageClient(props: UsersPageClientProps) {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <UsersPageContent {...props} />
-    </QueryClientProvider>
-  );
+  return <UsersPageContent {...props} />;
 }
 
 function UsersPageContent({ currentUser }: UsersPageClientProps) {
@@ -96,11 +84,16 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
   // Debounce search term to avoid frequent API requests
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
-  const debouncedPendingTagsKey = useDebounce(pendingTagFilters.slice().sort().join("|"), 300);
-  const debouncedPendingKeyGroupsKey = useDebounce(
-    pendingKeyGroupFilters.slice().sort().join("|"),
-    300
+  const pendingTagFiltersKey = useMemo(
+    () => pendingTagFilters.slice().sort().join("|"),
+    [pendingTagFilters]
   );
+  const pendingKeyGroupFiltersKey = useMemo(
+    () => pendingKeyGroupFilters.slice().sort().join("|"),
+    [pendingKeyGroupFilters]
+  );
+  const debouncedPendingTagsKey = useDebounce(pendingTagFiltersKey, 300);
+  const debouncedPendingKeyGroupsKey = useDebounce(pendingKeyGroupFiltersKey, 300);
 
   // Use debounced value for API queries, raw value for UI highlighting
   const resolvedSearchTerm = debouncedSearchTerm.trim() ? debouncedSearchTerm.trim() : undefined;
@@ -151,7 +144,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         return { users, nextCursor: null, hasMore: false };
       }
 
-      const result = await getUsersBatch({
+      const result = await getUsersBatchCore({
         cursor: pageParam,
         limit: 50,
         searchTerm: resolvedSearchTerm,
@@ -167,8 +160,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
       return result.data;
     },
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: 0,
-    placeholderData: (previousData) => previousData,
+    initialPageParam: undefined as string | undefined,
   });
 
   // Independent tag query - breaks circular dependency
@@ -203,7 +195,67 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     staleTime: 30_000,
   });
 
-  const allUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
+  // Per-page usage queries: fire independently for each loaded page
+  const pageUserIds = useMemo(
+    () => (data?.pages ?? []).map((page) => page.users.map((u) => u.id)),
+    [data]
+  );
+
+  const usageQueries = useQueries({
+    queries: isAdmin
+      ? pageUserIds.map((ids) => ({
+          queryKey: ["users-usage", ids],
+          queryFn: () => getUsersUsageBatch(ids),
+          enabled: ids.length > 0,
+          staleTime: 60_000,
+          refetchOnWindowFocus: false,
+        }))
+      : [],
+  });
+
+  // Stable fingerprint: only changes when a query actually receives new data,
+  // not on every render tick (useQueries returns a new array reference each time).
+  const usageDataVersion = usageQueries.map((q) => q.dataUpdatedAt).join(",");
+
+  // Build merged usageByKeyId lookup from all resolved usage queries.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: usageDataVersion tracks actual data changes; usageQueries ref is unstable
+  const usageByKeyId = useMemo(() => {
+    const merged: Record<number, KeyUsageData> = {};
+    for (const query of usageQueries) {
+      if (query.data?.ok) {
+        Object.assign(merged, query.data.data.usageByKeyId);
+      }
+    }
+    return merged;
+  }, [usageDataVersion]);
+
+  const coreUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
+
+  // Merge usage data into core users
+  const allUsers = useMemo(() => {
+    if (Object.keys(usageByKeyId).length === 0) return coreUsers;
+    return coreUsers.map((user) => {
+      const hasUsageForAnyKey = user.keys.some((k) => k.id in usageByKeyId);
+      if (!hasUsageForAnyKey) return user;
+      return {
+        ...user,
+        keys: user.keys.map((key) => {
+          const usage = usageByKeyId[key.id];
+          if (!usage) return key;
+          return {
+            ...key,
+            todayUsage: usage.todayUsage,
+            todayCallCount: usage.todayCallCount,
+            todayTokens: usage.todayTokens,
+            lastUsedAt: usage.lastUsedAt,
+            lastProviderName: usage.lastProviderName,
+            modelStats: usage.modelStats,
+          };
+        }),
+      };
+    });
+  }, [coreUsers, usageByKeyId]);
+
   const visibleUsers = useMemo(() => {
     if (isAdmin) return allUsers;
     return allUsers.filter((user) => user.id === currentUser.id);
@@ -720,6 +772,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             translations={tableTranslations}
             onRefresh={() => {
               clearUsageCache();
+              queryClient.invalidateQueries({ queryKey: ["users-usage"] });
               refetch();
             }}
             isRefreshing={isRefreshing}

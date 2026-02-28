@@ -4,6 +4,7 @@ import {
   type LeaderLock,
   releaseLeaderLock,
   renewLeaderLock,
+  startLeaderLockKeepAlive,
 } from "@/lib/provider-endpoints/leader-lock";
 import { probeProviderEndpointAndRecordByEndpoint } from "@/lib/provider-endpoints/probe";
 import {
@@ -29,6 +30,8 @@ const SINGLE_VENDOR_INTERVAL_MS = 600_000;
 const TIMEOUT_OVERRIDE_INTERVAL_MS = 10_000;
 // Scheduler tick interval - use shortest possible interval to support timeout override
 const TICK_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, TIMEOUT_OVERRIDE_INTERVAL_MS);
+// Max idle DB polling interval (bounded by base interval)
+const IDLE_DB_POLL_INTERVAL_MS = Math.min(BASE_INTERVAL_MS, 30_000);
 const TIMEOUT_MS = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_TIMEOUT_MS, 5_000));
 const CONCURRENCY = Math.max(1, parseIntWithDefault(process.env.ENDPOINT_PROBE_CONCURRENCY, 10));
 const CYCLE_JITTER_MS = Math.max(
@@ -46,6 +49,8 @@ const schedulerState = globalThis as unknown as {
   __CCH_ENDPOINT_PROBE_SCHEDULER_RUNNING__?: boolean;
   __CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__?: LeaderLock;
   __CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__?: boolean;
+  __CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DUE_AT_MS__?: number;
+  __CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DB_POLL_AT_MS__?: number;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -65,12 +70,13 @@ function shuffleInPlace<T>(arr: T[]): void {
 }
 
 /**
- * Count enabled endpoints per vendor
+ * Count enabled endpoints per vendor/type
  */
-function countEndpointsByVendor(endpoints: ProviderEndpointProbeTarget[]): Map<number, number> {
-  const counts = new Map<number, number>();
+function countEndpointsByVendorType(endpoints: ProviderEndpointProbeTarget[]): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const ep of endpoints) {
-    counts.set(ep.vendorId, (counts.get(ep.vendorId) ?? 0) + 1);
+    const key = `${ep.vendorId}:${ep.providerType}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
 }
@@ -85,7 +91,7 @@ function countEndpointsByVendor(endpoints: ProviderEndpointProbeTarget[]): Map<n
  */
 function getEffectiveIntervalMs(
   endpoint: ProviderEndpointProbeTarget,
-  vendorEndpointCounts: Map<number, number>
+  vendorEndpointCounts: Map<string, number>
 ): number {
   // Timeout override takes highest priority
   const hasTimeoutError =
@@ -95,7 +101,8 @@ function getEffectiveIntervalMs(
   }
 
   // Single-vendor interval
-  const vendorCount = vendorEndpointCounts.get(endpoint.vendorId) ?? 0;
+  const vendorCount =
+    vendorEndpointCounts.get(`${endpoint.vendorId}:${endpoint.providerType}`) ?? 0;
   if (vendorCount === 1) {
     return SINGLE_VENDOR_INTERVAL_MS;
   }
@@ -109,7 +116,7 @@ function getEffectiveIntervalMs(
  */
 function filterDueEndpoints(
   endpoints: ProviderEndpointProbeTarget[],
-  vendorEndpointCounts: Map<number, number>,
+  vendorEndpointCounts: Map<string, number>,
   now: Date
 ): ProviderEndpointProbeTarget[] {
   const nowMs = now.getTime();
@@ -123,6 +130,38 @@ function filterDueEndpoints(
     const dueAt = ep.lastProbedAt.getTime() + effectiveInterval;
     return nowMs >= dueAt;
   });
+}
+
+function computeNextDueAtMs(
+  endpoints: ProviderEndpointProbeTarget[],
+  vendorEndpointCounts: Map<string, number>,
+  nowMs: number
+): number {
+  let nextDueAtMs = Number.POSITIVE_INFINITY;
+  for (const ep of endpoints) {
+    // Never probed - treat as immediately due (force refresh on next tick)
+    if (ep.lastProbedAt === null) {
+      return nowMs;
+    }
+
+    const effectiveInterval = getEffectiveIntervalMs(ep, vendorEndpointCounts);
+    const dueAtMs = ep.lastProbedAt.getTime() + effectiveInterval;
+    if (dueAtMs < nextDueAtMs) {
+      nextDueAtMs = dueAtMs;
+    }
+  }
+  return nextDueAtMs;
+}
+
+function clearNextWorkHints(): void {
+  schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DUE_AT_MS__ = undefined;
+  schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DB_POLL_AT_MS__ = undefined;
+}
+
+function updateNextWorkHints(input: { nextDueAtMs: number; nowMs: number }): void {
+  schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DUE_AT_MS__ = input.nextDueAtMs;
+  schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DB_POLL_AT_MS__ =
+    input.nowMs + IDLE_DB_POLL_INTERVAL_MS;
 }
 
 async function ensureLeaderLock(): Promise<boolean> {
@@ -146,55 +185,6 @@ async function ensureLeaderLock(): Promise<boolean> {
   return true;
 }
 
-function startLeaderLockKeepAlive(onLost: () => void): () => void {
-  let stopped = false;
-  let renewing = false;
-  let intervalId: ReturnType<typeof setInterval> | undefined;
-
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    if (intervalId) clearInterval(intervalId);
-  };
-
-  const tick = async () => {
-    if (stopped || renewing) return;
-
-    const current = schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__;
-    if (!current) {
-      stop();
-      onLost();
-      return;
-    }
-
-    renewing = true;
-    try {
-      const ok = await renewLeaderLock(current, LOCK_TTL_MS);
-      if (!ok) {
-        schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__ = undefined;
-        stop();
-        onLost();
-        logger.warn("[EndpointProbeScheduler] Lost leader lock during probe cycle", {
-          key: current.key,
-          lockType: current.lockType,
-        });
-      }
-    } finally {
-      renewing = false;
-    }
-  };
-
-  const intervalMs = Math.max(1000, Math.floor(LOCK_TTL_MS / 2));
-  intervalId = setInterval(() => {
-    void tick();
-  }, intervalMs);
-
-  const timer = intervalId as unknown as { unref?: () => void };
-  timer.unref?.();
-
-  return stop;
-}
-
 async function runProbeCycle(): Promise<void> {
   if (schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_RUNNING__) {
     return;
@@ -212,12 +202,32 @@ async function runProbeCycle(): Promise<void> {
   try {
     const isLeader = await ensureLeaderLock();
     if (!isLeader) {
+      clearNextWorkHints();
       return;
     }
 
-    stopKeepAlive = startLeaderLockKeepAlive(() => {
-      leadershipLost = true;
-    });
+    const nowMsBeforeCycle = Date.now();
+    const nextDueAtMs = schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DUE_AT_MS__;
+    const nextDbPollAtMs = schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_NEXT_DB_POLL_AT_MS__;
+    if (typeof nextDueAtMs === "number" && typeof nextDbPollAtMs === "number") {
+      const nextWorkAtMs = Math.min(nextDueAtMs, nextDbPollAtMs);
+      if (nowMsBeforeCycle < nextWorkAtMs) {
+        return;
+      }
+    }
+
+    stopKeepAlive = startLeaderLockKeepAlive({
+      getLock: () => schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__,
+      clearLock: () => {
+        schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_LOCK__ = undefined;
+      },
+      ttlMs: LOCK_TTL_MS,
+      logTag: "EndpointProbeScheduler",
+      onLost: () => {
+        leadershipLost = true;
+        clearNextWorkHints();
+      },
+    }).stop;
 
     const jitter = CYCLE_JITTER_MS > 0 ? Math.floor(Math.random() * CYCLE_JITTER_MS) : 0;
     await sleep(jitter);
@@ -228,16 +238,22 @@ async function runProbeCycle(): Promise<void> {
 
     const allEndpoints = await findEnabledProviderEndpointsForProbing();
     if (allEndpoints.length === 0) {
+      updateNextWorkHints({ nextDueAtMs: Number.POSITIVE_INFINITY, nowMs: Date.now() });
       return;
     }
 
     // Calculate vendor endpoint counts for interval decisions
-    const vendorEndpointCounts = countEndpointsByVendor(allEndpoints);
+    const vendorEndpointCounts = countEndpointsByVendorType(allEndpoints);
 
     // Filter to only endpoints that are due for probing
     const now = new Date();
     const endpoints = filterDueEndpoints(allEndpoints, vendorEndpointCounts, now);
     if (endpoints.length === 0) {
+      const nowMs = now.getTime();
+      updateNextWorkHints({
+        nextDueAtMs: computeNextDueAtMs(allEndpoints, vendorEndpointCounts, nowMs),
+        nowMs,
+      });
       return;
     }
 
@@ -267,11 +283,15 @@ async function runProbeCycle(): Promise<void> {
         }
 
         try {
-          await probeProviderEndpointAndRecordByEndpoint({
+          const result = await probeProviderEndpointAndRecordByEndpoint({
             endpoint,
             source: "scheduled",
             timeoutMs: TIMEOUT_MS,
           });
+
+          endpoint.lastProbedAt = new Date();
+          endpoint.lastProbeOk = result.ok;
+          endpoint.lastProbeErrorType = result.ok ? null : result.errorType;
         } catch (error) {
           logger.warn("[EndpointProbeScheduler] Probe failed", {
             endpointId: endpoint.id,
@@ -282,7 +302,19 @@ async function runProbeCycle(): Promise<void> {
     };
 
     await Promise.all(Array.from({ length: concurrency }, () => worker()));
+
+    if (leadershipLost || schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__) {
+      clearNextWorkHints();
+      return;
+    }
+
+    const cycleNowMs = Date.now();
+    updateNextWorkHints({
+      nextDueAtMs: computeNextDueAtMs(allEndpoints, vendorEndpointCounts, cycleNowMs),
+      nowMs: cycleNowMs,
+    });
   } catch (error) {
+    clearNextWorkHints();
     logger.warn("[EndpointProbeScheduler] Probe cycle error", {
       error: error instanceof Error ? error.message : String(error),
     });
@@ -299,6 +331,7 @@ export function startEndpointProbeScheduler(): void {
 
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__ = false;
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STARTED__ = true;
+  clearNextWorkHints();
 
   void runProbeCycle();
 
@@ -311,6 +344,7 @@ export function startEndpointProbeScheduler(): void {
     singleVendorIntervalMs: SINGLE_VENDOR_INTERVAL_MS,
     timeoutOverrideIntervalMs: TIMEOUT_OVERRIDE_INTERVAL_MS,
     tickIntervalMs: TICK_INTERVAL_MS,
+    idleDbPollIntervalMs: IDLE_DB_POLL_INTERVAL_MS,
     timeoutMs: TIMEOUT_MS,
     concurrency: CONCURRENCY,
     jitterMs: CYCLE_JITTER_MS,
@@ -320,6 +354,7 @@ export function startEndpointProbeScheduler(): void {
 
 export function stopEndpointProbeScheduler(): void {
   schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_STOP_REQUESTED__ = true;
+  clearNextWorkHints();
 
   const intervalId = schedulerState.__CCH_ENDPOINT_PROBE_SCHEDULER_INTERVAL_ID__;
   if (intervalId) {
@@ -343,6 +378,7 @@ export function getEndpointProbeSchedulerStatus(): {
   singleVendorIntervalMs: number;
   timeoutOverrideIntervalMs: number;
   tickIntervalMs: number;
+  idleDbPollIntervalMs: number;
   timeoutMs: number;
   concurrency: number;
   jitterMs: number;
@@ -355,6 +391,7 @@ export function getEndpointProbeSchedulerStatus(): {
     singleVendorIntervalMs: SINGLE_VENDOR_INTERVAL_MS,
     timeoutOverrideIntervalMs: TIMEOUT_OVERRIDE_INTERVAL_MS,
     tickIntervalMs: TICK_INTERVAL_MS,
+    idleDbPollIntervalMs: IDLE_DB_POLL_INTERVAL_MS,
     timeoutMs: TIMEOUT_MS,
     concurrency: CONCURRENCY,
     jitterMs: CYCLE_JITTER_MS,

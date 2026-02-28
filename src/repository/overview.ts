@@ -1,11 +1,11 @@
 "use server";
 
-import { and, avg, count, eq, gte, isNull, sql, sum } from "drizzle-orm";
+import { and, avg, count, eq, gte, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { messageRequest } from "@/drizzle/schema";
+import { usageLedger } from "@/drizzle/schema";
 import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
+import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 
 /**
  * 今日概览统计数据
@@ -42,20 +42,24 @@ export interface OverviewMetricsWithComparison extends OverviewMetrics {
  */
 export async function getOverviewMetrics(): Promise<OverviewMetrics> {
   const timezone = await resolveSystemTimezone();
+  const nowLocal = sql`CURRENT_TIMESTAMP AT TIME ZONE ${timezone}`;
+  const todayStartLocal = sql`DATE_TRUNC('day', ${nowLocal})`;
+  const todayStart = sql`(${todayStartLocal} AT TIME ZONE ${timezone})`;
+  const tomorrowStart = sql`((${todayStartLocal} + INTERVAL '1 day') AT TIME ZONE ${timezone})`;
 
   const [result] = await db
     .select({
       requestCount: count(),
-      totalCost: sum(messageRequest.costUsd),
-      avgDuration: avg(messageRequest.durationMs),
-      errorCount: sql<number>`count(*) FILTER (WHERE ${messageRequest.statusCode} >= 400)`,
+      totalCost: sum(usageLedger.costUsd),
+      avgDuration: avg(usageLedger.durationMs),
+      errorCount: sql<number>`count(*) FILTER (WHERE NOT ${usageLedger.isSuccess})`,
     })
-    .from(messageRequest)
+    .from(usageLedger)
     .where(
       and(
-        isNull(messageRequest.deletedAt),
-        EXCLUDE_WARMUP_CONDITION,
-        sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
+        LEDGER_BILLING_CONDITION,
+        gte(usageLedger.createdAt, todayStart),
+        lt(usageLedger.createdAt, tomorrowStart)
       )
     );
 
@@ -89,9 +93,17 @@ export async function getOverviewMetricsWithComparison(
   userId?: number
 ): Promise<OverviewMetricsWithComparison> {
   const timezone = await resolveSystemTimezone();
+  const nowLocal = sql`CURRENT_TIMESTAMP AT TIME ZONE ${timezone}`;
+  const todayStartLocal = sql`DATE_TRUNC('day', ${nowLocal})`;
+  const todayStart = sql`(${todayStartLocal} AT TIME ZONE ${timezone})`;
+  const tomorrowStart = sql`((${todayStartLocal} + INTERVAL '1 day') AT TIME ZONE ${timezone})`;
+  const yesterdayStartLocal = sql`(${todayStartLocal} - INTERVAL '1 day')`;
+  const yesterdayStart = sql`(${yesterdayStartLocal} AT TIME ZONE ${timezone})`;
+  const yesterdayEndLocal = sql`(${yesterdayStartLocal} + (${nowLocal} - ${todayStartLocal}))`;
+  const yesterdayEnd = sql`(${yesterdayEndLocal} AT TIME ZONE ${timezone})`;
 
   // 用户过滤条件
-  const userCondition = userId ? eq(messageRequest.userId, userId) : undefined;
+  const userCondition = userId ? eq(usageLedger.userId, userId) : undefined;
 
   // 并行查询今日数据、昨日同时段数据、最近1分钟数据
   const [todayResult, yesterdayResult, rpmResult] = await Promise.all([
@@ -99,17 +111,17 @@ export async function getOverviewMetricsWithComparison(
     db
       .select({
         requestCount: count(),
-        totalCost: sum(messageRequest.costUsd),
-        avgDuration: avg(messageRequest.durationMs),
-        errorCount: sql<number>`count(*) FILTER (WHERE ${messageRequest.statusCode} >= 400)`,
+        totalCost: sum(usageLedger.costUsd),
+        avgDuration: avg(usageLedger.durationMs),
+        errorCount: sql<number>`count(*) FILTER (WHERE NOT ${usageLedger.isSuccess})`,
       })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
+          LEDGER_BILLING_CONDITION,
           userCondition,
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date`
+          gte(usageLedger.createdAt, todayStart),
+          lt(usageLedger.createdAt, tomorrowStart)
         )
       ),
 
@@ -117,19 +129,16 @@ export async function getOverviewMetricsWithComparison(
     db
       .select({
         requestCount: count(),
-        totalCost: sum(messageRequest.costUsd),
-        avgDuration: avg(messageRequest.durationMs),
+        totalCost: sum(usageLedger.costUsd),
+        avgDuration: avg(usageLedger.durationMs),
       })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
+          LEDGER_BILLING_CONDITION,
           userCondition,
-          // 昨日同一天
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::date = ((CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '1 day')::date`,
-          // 且时间不超过昨日的当前时刻
-          sql`(${messageRequest.createdAt} AT TIME ZONE ${timezone})::time <= (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::time`
+          gte(usageLedger.createdAt, yesterdayStart),
+          lt(usageLedger.createdAt, yesterdayEnd)
         )
       ),
 
@@ -138,13 +147,12 @@ export async function getOverviewMetricsWithComparison(
       .select({
         requestCount: count(),
       })
-      .from(messageRequest)
+      .from(usageLedger)
       .where(
         and(
-          isNull(messageRequest.deletedAt),
-          EXCLUDE_WARMUP_CONDITION,
+          LEDGER_BILLING_CONDITION,
           userCondition,
-          gte(messageRequest.createdAt, sql`CURRENT_TIMESTAMP - INTERVAL '1 minute'`)
+          gte(usageLedger.createdAt, sql`CURRENT_TIMESTAMP - INTERVAL '1 minute'`)
         )
       ),
   ]);

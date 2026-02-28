@@ -256,6 +256,14 @@ const messages = {
             description: "Restrict clients",
             customLabel: "Custom",
             customPlaceholder: "Custom client",
+            customHelp: "Custom help",
+          },
+          blockedClients: {
+            label: "Blocked Clients",
+            description: "Blocked description",
+            customLabel: "Custom blocked",
+            customPlaceholder: "Blocked client",
+            customHelp: "Blocked help",
           },
           allowedModels: {
             label: "Allowed Models",
@@ -263,8 +271,12 @@ const messages = {
             description: "Restrict models",
           },
         },
+        actions: {
+          allow: "Allow",
+          block: "Block",
+        },
         presetClients: {
-          "claude-cli": "Claude CLI",
+          "claude-code": "Claude Code",
           "gemini-cli": "Gemini CLI",
           "factory-cli": "Factory CLI",
           "codex-cli": "Codex CLI",

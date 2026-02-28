@@ -26,6 +26,7 @@ export type MessageRequestUpdatePatch = {
   model?: string;
   providerId?: number;
   context1mApplied?: boolean;
+  swapCacheTtlApplied?: boolean;
   specialSettings?: CreateMessageRequestData["special_settings"];
 };
 
@@ -59,6 +60,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   model: "model",
   providerId: "provider_id",
   context1mApplied: "context_1m_applied",
+  swapCacheTtlApplied: "swap_cache_ttl_applied",
   specialSettings: "special_settings",
 };
 

@@ -50,6 +50,7 @@ const EditUserSchema = UpdateUserSchema.extend({
   name: z.string().min(1).max(64),
   providerGroup: z.string().max(200).nullable().optional(),
   allowedClients: z.array(z.string().max(64)).max(50).optional().default([]),
+  blockedClients: z.array(z.string().max(64)).max(50).optional().default([]),
   allowedModels: z.array(z.string().max(64)).max(50).optional().default([]),
   dailyQuota: z.number().nullable().optional(),
 });
@@ -73,6 +74,7 @@ function buildDefaultValues(user: UserDisplay): EditUserValues {
     dailyResetMode: user.dailyResetMode ?? "fixed",
     dailyResetTime: user.dailyResetTime ?? "00:00",
     allowedClients: user.allowedClients || [],
+    blockedClients: user.blockedClients || [],
     allowedModels: user.allowedModels || [],
   };
 }
@@ -113,6 +115,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
             dailyResetMode: data.dailyResetMode,
             dailyResetTime: data.dailyResetTime,
             allowedClients: data.allowedClients,
+            blockedClients: data.blockedClients,
             allowedModels: data.allowedModels,
           });
           if (!userRes.ok) {
@@ -241,7 +244,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   };
 
   return (
-    <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[90vh] max-h-[90dvh] p-0 flex flex-col overflow-hidden">
+    <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[var(--cch-viewport-height-90,90vh)] p-0 flex flex-col overflow-hidden">
       <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -270,6 +273,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
               dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
               dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
               allowedClients: currentUserDraft.allowedClients || [],
+              blockedClients: currentUserDraft.blockedClients || [],
               allowedModels: currentUserDraft.allowedModels || [],
             }}
             isEnabled={user.isEnabled}

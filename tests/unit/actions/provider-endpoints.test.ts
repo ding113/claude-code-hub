@@ -10,6 +10,10 @@ const findProviderEndpointByIdMock = vi.fn();
 const softDeleteProviderEndpointMock = vi.fn();
 const tryDeleteProviderVendorIfEmptyMock = vi.fn();
 const updateProviderEndpointMock = vi.fn();
+const findProviderEndpointProbeLogsBatchMock = vi.fn();
+const findVendorTypeEndpointStatsBatchMock = vi.fn();
+const hasEnabledProviderReferenceForVendorTypeUrlMock = vi.fn();
+const findDashboardProviderEndpointsByVendorAndTypeMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -30,6 +34,7 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 vi.mock("@/lib/endpoint-circuit-breaker", () => ({
+  getAllEndpointHealthStatusAsync: vi.fn(async () => ({})),
   getEndpointHealthInfo: vi.fn(async () => ({ health: {}, config: {} })),
   resetEndpointCircuit: vi.fn(async () => {}),
 }));
@@ -48,7 +53,18 @@ vi.mock("@/lib/vendor-type-circuit-breaker", () => ({
 }));
 
 vi.mock("@/lib/provider-endpoints/probe", () => ({
-  probeProviderEndpointAndRecord: vi.fn(async () => null),
+  probeProviderEndpointAndRecordByEndpoint: vi.fn(async () => null),
+}));
+
+vi.mock("@/repository/provider-endpoints-batch", () => ({
+  findProviderEndpointProbeLogsBatch: findProviderEndpointProbeLogsBatchMock,
+  findVendorTypeEndpointStatsBatch: findVendorTypeEndpointStatsBatchMock,
+}));
+
+vi.mock("@/repository/provider-endpoints", () => ({
+  findDashboardProviderEndpointsByVendorAndType: findDashboardProviderEndpointsByVendorAndTypeMock,
+  findEnabledProviderVendorTypePairs: vi.fn(async () => []),
+  hasEnabledProviderReferenceForVendorTypeUrl: hasEnabledProviderReferenceForVendorTypeUrlMock,
 }));
 
 vi.mock("@/repository", () => ({
@@ -68,6 +84,8 @@ vi.mock("@/repository", () => ({
 describe("provider-endpoints actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
+    findDashboardProviderEndpointsByVendorAndTypeMock.mockResolvedValue([]);
   });
 
   it("editProviderVendor: requires admin", async () => {
@@ -78,6 +96,59 @@ describe("provider-endpoints actions", () => {
 
     expect(res.ok).toBe(false);
     expect(res.errorCode).toBe("PERMISSION_DENIED");
+  });
+
+  it("getDashboardProviderEndpoints: requires admin", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "user" } });
+
+    const { getDashboardProviderEndpoints } = await import("@/actions/provider-endpoints");
+    const res = await getDashboardProviderEndpoints({ vendorId: 1, providerType: "claude" });
+
+    expect(res).toEqual([]);
+    expect(findDashboardProviderEndpointsByVendorAndTypeMock).not.toHaveBeenCalled();
+  });
+
+  it("getDashboardProviderEndpoints: invalid input returns empty list", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    const { getDashboardProviderEndpoints } = await import("@/actions/provider-endpoints");
+    const res = await getDashboardProviderEndpoints({ vendorId: 0, providerType: "claude" });
+
+    expect(res).toEqual([]);
+    expect(findDashboardProviderEndpointsByVendorAndTypeMock).not.toHaveBeenCalled();
+  });
+
+  it("getDashboardProviderEndpoints: returns endpoints in use for enabled providers", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    const endpoints = [
+      {
+        id: 1,
+        vendorId: 10,
+        providerType: "claude",
+        url: "https://api.example.com",
+        label: null,
+        sortOrder: 0,
+        isEnabled: true,
+        lastProbedAt: null,
+        lastProbeOk: null,
+        lastProbeStatusCode: null,
+        lastProbeLatencyMs: null,
+        lastProbeErrorType: null,
+        lastProbeErrorMessage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        deletedAt: null,
+      },
+    ];
+
+    findDashboardProviderEndpointsByVendorAndTypeMock.mockResolvedValue(endpoints);
+
+    const { getDashboardProviderEndpoints } = await import("@/actions/provider-endpoints");
+    const res = await getDashboardProviderEndpoints({ vendorId: 10, providerType: "claude" });
+
+    expect(res).toEqual(endpoints);
+    expect(findDashboardProviderEndpointsByVendorAndTypeMock).toHaveBeenCalledWith(10, "claude");
   });
 
   it("editProviderVendor: computes favicon", async () => {
@@ -142,6 +213,26 @@ describe("provider-endpoints actions", () => {
 
   it("editProviderEndpoint: conflict maps to CONFLICT errorCode", async () => {
     getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    findProviderEndpointByIdMock.mockResolvedValue({
+      id: 42,
+      vendorId: 123,
+      providerType: "claude",
+      url: "https://api.example.com",
+      label: null,
+      sortOrder: 0,
+      isEnabled: true,
+      lastProbedAt: null,
+      lastProbeOk: null,
+      lastProbeStatusCode: null,
+      lastProbeLatencyMs: null,
+      lastProbeErrorType: null,
+      lastProbeErrorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    });
+
     updateProviderEndpointMock.mockRejectedValue(
       Object.assign(new Error("[ProviderEndpointEdit] endpoint conflict"), {
         code: "PROVIDER_ENDPOINT_CONFLICT",
@@ -181,6 +272,7 @@ describe("provider-endpoints actions", () => {
       deletedAt: null,
     };
 
+    findProviderEndpointByIdMock.mockResolvedValue(endpoint);
     updateProviderEndpointMock.mockResolvedValue(endpoint);
 
     const { editProviderEndpoint } = await import("@/actions/provider-endpoints");
@@ -252,55 +344,100 @@ describe("provider-endpoints actions", () => {
     });
     softDeleteProviderEndpointMock.mockResolvedValue(true);
     tryDeleteProviderVendorIfEmptyMock.mockResolvedValue(true);
+    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
 
     const { removeProviderEndpoint } = await import("@/actions/provider-endpoints");
     const res = await removeProviderEndpoint({ endpointId: 99 });
 
     expect(res.ok).toBe(true);
+
+    const { resetEndpointCircuit } = await import("@/lib/endpoint-circuit-breaker");
+    expect(resetEndpointCircuit).toHaveBeenCalledWith(99);
     expect(tryDeleteProviderVendorIfEmptyMock).toHaveBeenCalledWith(123);
+  });
+
+  it("probeProviderEndpoint: calls probeProviderEndpointAndRecordByEndpoint and returns result", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    const endpoint = {
+      id: 7,
+      vendorId: 123,
+      providerType: "claude",
+      url: "https://api.example.com",
+      label: null,
+      sortOrder: 0,
+      isEnabled: true,
+      lastProbedAt: null,
+      lastProbeOk: null,
+      lastProbeStatusCode: null,
+      lastProbeLatencyMs: null,
+      lastProbeErrorType: null,
+      lastProbeErrorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    };
+    findProviderEndpointByIdMock.mockResolvedValue(endpoint);
+
+    const { probeProviderEndpointAndRecordByEndpoint } = await import(
+      "@/lib/provider-endpoints/probe"
+    );
+    const result = {
+      ok: true,
+      method: "HEAD",
+      statusCode: 200,
+      latencyMs: 10,
+      errorType: null,
+      errorMessage: null,
+    } as const;
+    vi.mocked(probeProviderEndpointAndRecordByEndpoint).mockResolvedValue(result);
+
+    const { probeProviderEndpoint } = await import("@/actions/provider-endpoints");
+    const res = await probeProviderEndpoint({ endpointId: 7, timeoutMs: 5000 });
+
+    expect(res.ok).toBe(true);
+    expect(probeProviderEndpointAndRecordByEndpoint).toHaveBeenCalledWith({
+      endpoint,
+      source: "manual",
+      timeoutMs: 5000,
+    });
+    expect(res.data?.result).toEqual(result);
   });
 
   describe("batchGetEndpointCircuitInfo", () => {
     it("returns circuit info for multiple endpoints", async () => {
       getSessionMock.mockResolvedValue({ user: { role: "admin" } });
 
-      const { getEndpointHealthInfo } = await import("@/lib/endpoint-circuit-breaker");
-      vi.mocked(getEndpointHealthInfo)
-        .mockResolvedValueOnce({
-          health: {
-            failureCount: 0,
-            lastFailureTime: null,
-            circuitState: "closed" as const,
-            circuitOpenUntil: null,
-            halfOpenSuccessCount: 0,
-          },
-          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
-        })
-        .mockResolvedValueOnce({
-          health: {
-            failureCount: 5,
-            lastFailureTime: Date.now(),
-            circuitState: "open" as const,
-            circuitOpenUntil: Date.now() + 60000,
-            halfOpenSuccessCount: 0,
-          },
-          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
-        })
-        .mockResolvedValueOnce({
-          health: {
-            failureCount: 1,
-            lastFailureTime: Date.now() - 1000,
-            circuitState: "half-open" as const,
-            circuitOpenUntil: null,
-            halfOpenSuccessCount: 0,
-          },
-          config: { failureThreshold: 3, openDuration: 300000, halfOpenSuccessThreshold: 1 },
-        });
+      const { getAllEndpointHealthStatusAsync } = await import("@/lib/endpoint-circuit-breaker");
+      vi.mocked(getAllEndpointHealthStatusAsync).mockResolvedValue({
+        1: {
+          failureCount: 0,
+          lastFailureTime: null,
+          circuitState: "closed",
+          circuitOpenUntil: null,
+          halfOpenSuccessCount: 0,
+        },
+        2: {
+          failureCount: 5,
+          lastFailureTime: Date.now(),
+          circuitState: "open",
+          circuitOpenUntil: Date.now() + 60000,
+          halfOpenSuccessCount: 0,
+        },
+        3: {
+          failureCount: 1,
+          lastFailureTime: Date.now() - 1000,
+          circuitState: "half-open",
+          circuitOpenUntil: null,
+          halfOpenSuccessCount: 0,
+        },
+      });
 
       const { batchGetEndpointCircuitInfo } = await import("@/actions/provider-endpoints");
       const res = await batchGetEndpointCircuitInfo({ endpointIds: [1, 2, 3] });
 
       expect(res.ok).toBe(true);
+      expect(getAllEndpointHealthStatusAsync).toHaveBeenCalledWith([1, 2, 3]);
       expect(res.data).toHaveLength(3);
       expect(res.data?.[0]).toEqual({
         endpointId: 1,

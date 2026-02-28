@@ -28,8 +28,21 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
 const statisticsMock = {
   sumUserCostInTimeRange: vi.fn(async () => 0),
   sumUserTotalCost: vi.fn(async () => 0),
+  sumUserQuotaCosts: vi.fn(async () => ({
+    cost5h: 0,
+    costDaily: 0,
+    costWeekly: 0,
+    costMonthly: 0,
+    costTotal: 0,
+  })),
   sumKeyCostInTimeRange: vi.fn(async () => 0),
-  sumKeyTotalCostById: vi.fn(async () => 0),
+  sumKeyQuotaCostsById: vi.fn(async () => ({
+    cost5h: 0,
+    costDaily: 0,
+    costWeekly: 0,
+    costMonthly: 0,
+    costTotal: 0,
+  })),
 };
 vi.mock("@/repository/statistics", () => statisticsMock);
 

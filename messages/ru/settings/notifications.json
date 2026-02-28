@@ -38,6 +38,22 @@
     "webhookTypeUnknown": "Неизвестная платформа. Используйте URL вебхука WeCom или Feishu",
     "webhookTypeWeCom": "WeCom"
   },
+  "cacheHitRateAlert": {
+    "absMin": "Абсолютный минимум (absMin)",
+    "checkInterval": "Интервал проверки (мин)",
+    "cooldownMinutes": "Охлаждение (мин)",
+    "description": "Уведомлять при аномальном падении доли кеш-хитов (provider × model)",
+    "dropAbs": "Абсолютное падение (dropAbs)",
+    "dropRel": "Относительное падение (dropRel)",
+    "enable": "Включить оповещение о кеш-хите",
+    "historicalLookbackDays": "Исторический период (дни)",
+    "minEligibleRequests": "Мин. eligible запросов",
+    "minEligibleTokens": "Мин. eligible токенов",
+    "title": "Оповещение о кеш-хите",
+    "topN": "Top N",
+    "windowMode": "Окно",
+    "windowModeAuto": "Авто"
+  },
   "dailyLeaderboard": {
     "description": "Ежедневная отправка рейтинга топ N пользователей по потреблению",
     "enable": "Включить ежедневный рейтинг",

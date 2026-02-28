@@ -2,12 +2,13 @@
 
 import { Radio } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  type DashboardProviderVendor,
+  getDashboardProviderEndpoints,
+  getDashboardProviderVendors,
   getProviderEndpointProbeLogs,
-  getProviderEndpoints,
-  getProviderVendors,
   probeProviderEndpoint,
 } from "@/actions/provider-endpoints";
 import { Button } from "@/components/ui/button";
@@ -20,33 +21,16 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderVendor } from "@/types/provider";
+import type { ProviderEndpoint, ProviderEndpointProbeLog, ProviderType } from "@/types/provider";
 import { LatencyCurve } from "./latency-curve";
 import { ProbeGrid } from "./probe-grid";
 import { ProbeTerminal } from "./probe-terminal";
-
-type ProviderType =
-  | "claude"
-  | "claude-auth"
-  | "codex"
-  | "gemini"
-  | "gemini-cli"
-  | "openai-compatible";
-
-const PROVIDER_TYPES: ProviderType[] = [
-  "claude",
-  "claude-auth",
-  "codex",
-  "gemini",
-  "gemini-cli",
-  "openai-compatible",
-];
 
 export function EndpointTab() {
   const t = useTranslations("dashboard.availability");
 
   // State
-  const [vendors, setVendors] = useState<ProviderVendor[]>([]);
+  const [vendors, setVendors] = useState<DashboardProviderVendor[]>([]);
   const [selectedVendorId, setSelectedVendorId] = useState<number | null>(null);
   const [selectedType, setSelectedType] = useState<ProviderType | null>(null);
   const [endpoints, setEndpoints] = useState<ProviderEndpoint[]>([]);
@@ -59,109 +43,297 @@ export function EndpointTab() {
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [probing, setProbing] = useState(false);
 
-  // Fetch vendors on mount
-  useEffect(() => {
-    const fetchVendors = async () => {
-      try {
-        const vendors = await getProviderVendors();
-        setVendors(vendors);
-        if (vendors.length > 0) {
-          setSelectedVendorId(vendors[0].id);
-        }
-      } catch (error) {
-        console.error("Failed to fetch vendors:", error);
-      } finally {
+  const vendorsRequestIdRef = useRef(0);
+  const endpointsRequestIdRef = useRef(0);
+  const probeLogsRequestIdRef = useRef(0);
+  // 切换浏览器标签页时 focus + visibilitychange 可能同时触发；节流避免重复刷新造成请求放大。
+  const lastFocusRefreshAtRef = useRef(0);
+  const latestSelectionRef = useRef<{
+    vendorId: number | null;
+    providerType: ProviderType | null;
+    endpointId: number | null;
+  }>({ vendorId: null, providerType: null, endpointId: null });
+
+  latestSelectionRef.current.vendorId = selectedVendorId;
+  latestSelectionRef.current.providerType = selectedType;
+  latestSelectionRef.current.endpointId = selectedEndpoint?.id ?? null;
+
+  const refreshVendors = useCallback(async (options?: { silent?: boolean }) => {
+    const requestId = ++vendorsRequestIdRef.current;
+    if (!options?.silent) {
+      setLoadingVendors(true);
+    }
+
+    try {
+      const currentVendorId = latestSelectionRef.current.vendorId;
+      const currentType = latestSelectionRef.current.providerType;
+      const nextVendors = await getDashboardProviderVendors();
+
+      if (requestId !== vendorsRequestIdRef.current) {
+        return null;
+      }
+
+      setVendors(nextVendors);
+
+      if (nextVendors.length === 0) {
+        setSelectedVendorId(null);
+        setSelectedType(null);
+        setSelectedEndpoint(null);
+        return {
+          selectionChanged: currentVendorId != null || currentType != null,
+          vendorId: null,
+          providerType: null,
+        };
+      }
+
+      const vendor =
+        (currentVendorId ? nextVendors.find((v) => v.id === currentVendorId) : null) ??
+        nextVendors[0] ??
+        null;
+
+      if (!vendor) {
+        setSelectedVendorId(null);
+        setSelectedType(null);
+        setSelectedEndpoint(null);
+        return {
+          selectionChanged: currentVendorId != null || currentType != null,
+          vendorId: null,
+          providerType: null,
+        };
+      }
+
+      const nextVendorId = vendor.id;
+      const nextProviderType =
+        currentType && vendor.providerTypes.includes(currentType)
+          ? currentType
+          : (vendor.providerTypes[0] ?? null);
+
+      const selectionChanged = nextVendorId !== currentVendorId || nextProviderType !== currentType;
+
+      if (selectionChanged) {
+        // 避免 selection 自动切换期间仍能对旧 endpoint 发起探测请求（#781）。
+        setSelectedEndpoint(null);
+      }
+
+      setSelectedVendorId(nextVendorId);
+      setSelectedType(nextProviderType);
+
+      return {
+        selectionChanged,
+        vendorId: nextVendorId,
+        providerType: nextProviderType,
+      };
+    } catch (error) {
+      if (requestId !== vendorsRequestIdRef.current) {
+        return null;
+      }
+      console.error("Failed to fetch vendors:", error);
+      return null;
+    } finally {
+      if (requestId === vendorsRequestIdRef.current) {
         setLoadingVendors(false);
       }
-    };
-    fetchVendors();
+    }
   }, []);
 
-  // Fetch endpoints when vendor or type changes
-  useEffect(() => {
-    if (!selectedVendorId || !selectedType) {
-      setEndpoints([]);
-      return;
-    }
-
-    const fetchEndpoints = async () => {
+  const refreshEndpoints = useCallback(
+    async (params: {
+      vendorId: number;
+      providerType: ProviderType;
+      keepSelectedEndpointId?: number | null;
+    }) => {
+      const requestId = ++endpointsRequestIdRef.current;
       setLoadingEndpoints(true);
+
       try {
-        const endpoints = await getProviderEndpoints({
-          vendorId: selectedVendorId,
-          providerType: selectedType,
+        const nextEndpoints = await getDashboardProviderEndpoints({
+          vendorId: params.vendorId,
+          providerType: params.providerType,
         });
-        setEndpoints(endpoints);
-        if (endpoints.length > 0) {
-          setSelectedEndpoint(endpoints[0]);
-        } else {
-          setSelectedEndpoint(null);
+
+        if (requestId !== endpointsRequestIdRef.current) {
+          return;
         }
+
+        setEndpoints(nextEndpoints);
+
+        const keepId = params.keepSelectedEndpointId ?? null;
+        if (keepId) {
+          const kept = nextEndpoints.find((e) => e.id === keepId) ?? null;
+          setSelectedEndpoint(kept ?? nextEndpoints[0] ?? null);
+          return;
+        }
+
+        setSelectedEndpoint(nextEndpoints[0] ?? null);
       } catch (error) {
+        if (requestId !== endpointsRequestIdRef.current) {
+          return;
+        }
         console.error("Failed to fetch endpoints:", error);
+        setEndpoints([]);
+        setSelectedEndpoint(null);
       } finally {
-        setLoadingEndpoints(false);
+        if (requestId === endpointsRequestIdRef.current) {
+          setLoadingEndpoints(false);
+        }
       }
-    };
-    fetchEndpoints();
-  }, [selectedVendorId, selectedType]);
+    },
+    []
+  );
 
-  // Fetch probe logs when endpoint changes
-  const fetchProbeLogs = useCallback(async () => {
-    if (!selectedEndpoint) {
-      setProbeLogs([]);
-      return;
-    }
-
+  const refreshProbeLogs = useCallback(async (endpointId: number) => {
+    const requestId = ++probeLogsRequestIdRef.current;
     setLoadingLogs(true);
+
     try {
       const result = await getProviderEndpointProbeLogs({
-        endpointId: selectedEndpoint.id,
+        endpointId,
         limit: 100,
       });
+
+      if (requestId !== probeLogsRequestIdRef.current) {
+        return;
+      }
+
+      if (latestSelectionRef.current.endpointId !== endpointId) {
+        return;
+      }
+
       if (result.ok && result.data) {
         setProbeLogs(result.data.logs);
       }
     } catch (error) {
+      if (requestId !== probeLogsRequestIdRef.current) {
+        return;
+      }
       console.error("Failed to fetch probe logs:", error);
     } finally {
-      setLoadingLogs(false);
+      if (requestId === probeLogsRequestIdRef.current) {
+        setLoadingLogs(false);
+      }
     }
-  }, [selectedEndpoint]);
+  }, []);
 
+  // Fetch vendors on mount
   useEffect(() => {
-    fetchProbeLogs();
-  }, [fetchProbeLogs]);
+    void refreshVendors();
+  }, [refreshVendors]);
+
+  // Fetch endpoints when vendor or type changes
+  useEffect(() => {
+    if (!selectedVendorId || !selectedType) {
+      endpointsRequestIdRef.current += 1;
+      setEndpoints([]);
+      setSelectedEndpoint(null);
+      setLoadingEndpoints(false);
+      return;
+    }
+
+    void refreshEndpoints({ vendorId: selectedVendorId, providerType: selectedType });
+  }, [selectedVendorId, selectedType, refreshEndpoints]);
+
+  // Fetch probe logs when endpoint changes
+  useEffect(() => {
+    const endpointId = selectedEndpoint?.id ?? null;
+    if (!endpointId) {
+      probeLogsRequestIdRef.current += 1;
+      setProbeLogs([]);
+      setLoadingLogs(false);
+      return;
+    }
+
+    void refreshProbeLogs(endpointId);
+  }, [selectedEndpoint?.id, refreshProbeLogs]);
 
   // Auto-refresh logs every 10 seconds
   useEffect(() => {
-    if (!selectedEndpoint) return;
-    const timer = setInterval(fetchProbeLogs, 10000);
+    const endpointId = selectedEndpoint?.id;
+    if (!endpointId) return;
+    const timer = setInterval(() => {
+      void refreshProbeLogs(endpointId);
+    }, 10000);
     return () => clearInterval(timer);
-  }, [selectedEndpoint, fetchProbeLogs]);
+  }, [selectedEndpoint?.id, refreshProbeLogs]);
+
+  // 当用户从“设置页”修改/删除端点后返回本页，自动做一次轻量刷新，避免看到陈旧列表（#781）。
+  useEffect(() => {
+    const refresh = async () => {
+      const vendorResult = await refreshVendors({ silent: true });
+
+      const vendorId = vendorResult?.vendorId ?? latestSelectionRef.current.vendorId;
+      const providerType = vendorResult?.providerType ?? latestSelectionRef.current.providerType;
+      const endpointId = latestSelectionRef.current.endpointId;
+
+      if (!vendorResult?.selectionChanged && vendorId && providerType) {
+        void refreshEndpoints({
+          vendorId,
+          providerType,
+          keepSelectedEndpointId: endpointId,
+        });
+      }
+
+      if (!vendorResult?.selectionChanged && endpointId) {
+        void refreshProbeLogs(endpointId);
+      }
+    };
+
+    // 切回前台时，focus 与 visibilitychange 往往会连发；节流避免重复触发 refresh 链路。
+    const refreshThrottled = () => {
+      const now = Date.now();
+      if (now - lastFocusRefreshAtRef.current < 2000) return;
+      lastFocusRefreshAtRef.current = now;
+      void refresh();
+    };
+
+    const onFocus = () => {
+      refreshThrottled();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshThrottled();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshEndpoints, refreshProbeLogs, refreshVendors]);
 
   // Handle manual probe
   const handleProbe = async () => {
-    if (!selectedEndpoint) return;
+    const endpoint = selectedEndpoint;
+    const vendorId = selectedVendorId;
+    const providerType = selectedType;
+    if (!endpoint || !vendorId || !providerType) return;
 
     setProbing(true);
     try {
       const result = await probeProviderEndpoint({
-        endpointId: selectedEndpoint.id,
+        endpointId: endpoint.id,
       });
       if (result.ok) {
         toast.success(t("actions.probeSuccess"));
-        // Refresh logs and endpoints
-        fetchProbeLogs();
-        if (selectedVendorId && selectedType) {
-          const endpoints = await getProviderEndpoints({
-            vendorId: selectedVendorId,
-            providerType: selectedType,
+
+        // 避免 probe 完成后覆盖用户在 probe 期间切换的 vendor/type/endpoint。
+        const stillSameVendorType =
+          latestSelectionRef.current.vendorId === vendorId &&
+          latestSelectionRef.current.providerType === providerType;
+        const stillSameEndpoint = latestSelectionRef.current.endpointId === endpoint.id;
+
+        if (stillSameEndpoint) {
+          void refreshProbeLogs(endpoint.id);
+        }
+
+        if (stillSameVendorType) {
+          await refreshEndpoints({
+            vendorId,
+            providerType,
+            keepSelectedEndpointId: latestSelectionRef.current.endpointId,
           });
-          setEndpoints(endpoints);
-          // Update selected endpoint with new data
-          const updated = endpoints.find((e) => e.id === selectedEndpoint.id);
-          if (updated) setSelectedEndpoint(updated);
         }
       } else {
         toast.error(result.error || t("actions.probeFailed"));
@@ -190,6 +362,9 @@ export function EndpointTab() {
     );
   }
 
+  const selectedVendor = vendors.find((vendor) => vendor.id === selectedVendorId) ?? null;
+  const providerTypes = selectedVendor?.providerTypes ?? [];
+
   return (
     <div className="space-y-6">
       {/* Filters */}
@@ -199,8 +374,10 @@ export function EndpointTab() {
           <Select
             value={selectedVendorId?.toString() || ""}
             onValueChange={(v) => {
-              setSelectedVendorId(Number(v));
-              setSelectedType(null);
+              const vendorId = Number(v);
+              setSelectedVendorId(vendorId);
+              const nextVendor = vendors.find((vendor) => vendor.id === vendorId);
+              setSelectedType(nextVendor?.providerTypes[0] ?? null);
               setSelectedEndpoint(null);
             }}
           >
@@ -229,7 +406,7 @@ export function EndpointTab() {
               <SelectValue placeholder={t("endpoint.selectType")} />
             </SelectTrigger>
             <SelectContent>
-              {PROVIDER_TYPES.map((type) => (
+              {providerTypes.map((type) => (
                 <SelectItem key={type} value={type}>
                   {type}
                 </SelectItem>

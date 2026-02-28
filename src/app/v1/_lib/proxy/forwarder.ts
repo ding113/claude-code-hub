@@ -26,6 +26,10 @@ import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent"
 import { SessionManager } from "@/lib/session-manager";
 import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import {
+  detectUpstreamErrorFromSseOrJsonText,
+  inferUpstreamErrorStatusCodeFromText,
+} from "@/lib/utils/upstream-error-detection";
+import {
   isVendorTypeCircuitOpen,
   recordVendorTypeAllEndpointsTimeout,
 } from "@/lib/vendor-type-circuit-breaker";
@@ -73,6 +77,7 @@ const STANDARD_ENDPOINTS = [
   "/v1/messages",
   "/v1/messages/count_tokens",
   "/v1/responses",
+  "/v1/responses/compact",
   "/v1/chat/completions",
   "/v1/models",
 ];
@@ -83,6 +88,85 @@ const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
 type CacheTtlOption = CacheTtlPreference | null | undefined;
+
+// 非流式响应体检查的上限（字节）：避免上游在 2xx 场景返回超大内容导致内存占用失控。
+// 说明：
+// - 该检查仅用于“空响应/假 200”启发式判定，不用于业务逻辑解析；
+// - 超过上限时，仍认为“非空”，但会跳过 JSON 内容结构检查（避免截断导致误判）。
+const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 32 * 1024; // 32 KiB
+
+/**
+ * 读取响应体文本，但最多读取 `maxBytes` 字节（用于非流式 2xx 的“空响应/假 200”嗅探）。
+ *
+ * 注意：
+ * - 该函数只用于启发式检测，不用于业务逻辑解析；
+ * - 超过上限时会 fire-and-forget `cancel()` reader，避免继续占用资源；
+ * - cancel() 不使用 await，因为对 tee 分支的 cancel 在推模式大流下可能长时间阻塞；
+ * - 调用方应使用 `response.clone()`，避免消费掉原始响应体，影响后续透传/解析。
+ */
+async function readResponseTextUpTo(
+  response: Response,
+  maxBytes: number
+): Promise<{ text: string; truncated: boolean }> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    return { text: "", truncated: false };
+  }
+
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+  let bytesRead = 0;
+  let truncated = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+
+      const remaining = maxBytes - bytesRead;
+      // 注意：remaining<=0 发生在“已经读到下一块 chunk”之后。
+      // 对启发式嗅探而言，直接标记 truncated 并退出即可（等价于丢弃超出上限的后续字节），
+      // 避免对超出部分做无谓的解码开销。
+      if (remaining <= 0) {
+        truncated = true;
+        break;
+      }
+
+      if (value.byteLength > remaining) {
+        chunks.push(decoder.decode(value.subarray(0, remaining), { stream: true }));
+        bytesRead += remaining;
+        truncated = true;
+        break;
+      }
+
+      chunks.push(decoder.decode(value, { stream: true }));
+      bytesRead += value.byteLength;
+    }
+
+    const flushed = decoder.decode();
+    if (flushed) chunks.push(flushed);
+  } finally {
+    if (truncated) {
+      // Fire-and-forget: do NOT await reader.cancel() here.
+      // On tee'd ReadableStreams backed by push-mode Node streams (e.g. large chunked
+      // responses via nodeStreamToWebStreamSafe), await cancel() can block indefinitely
+      // because the tee controller waits for internal queue drainage while the other
+      // branch has not started consuming yet. This deadlocks the main request path.
+      reader.cancel().catch((cancelErr) => {
+        logger.debug("readResponseTextUpTo: failed to cancel reader", { error: cancelErr });
+      });
+    }
+
+    try {
+      reader.releaseLock();
+    } catch (releaseErr) {
+      logger.debug("readResponseTextUpTo: failed to release reader lock", { error: releaseErr });
+    }
+  }
+
+  return { text: chunks.join(""), truncated };
+}
 
 function resolveCacheTtlPreference(
   keyPref: CacheTtlOption,
@@ -523,6 +607,9 @@ export class ProxyForwarder {
           session.addProviderToChain(currentProvider, {
             reason: "endpoint_pool_exhausted",
             strictBlockCause: strictBlockCause as ProviderChainItem["strictBlockCause"],
+            // 为避免被 initial_selection/session_reuse 去重吞掉，这里需要写入 attemptNumber。
+            // 同时也能让“决策链/技术时间线”把它当作一次实际尝试（虽然请求未发出）。
+            attemptNumber: 1,
             ...(filterStats ? { endpointFilterStats: filterStats } : {}),
             errorMessage: endpointSelectionError?.message,
           });
@@ -619,7 +706,14 @@ export class ProxyForwarder {
 
           // ========== 空响应检测（仅非流式）==========
           const contentType = response.headers.get("content-type") || "";
-          const isSSE = contentType.includes("text/event-stream");
+          const normalizedContentType = contentType.toLowerCase();
+          const isSSE = normalizedContentType.includes("text/event-stream");
+          const isHtml =
+            normalizedContentType.includes("text/html") ||
+            normalizedContentType.includes("application/xhtml+xml");
+          const isJson =
+            normalizedContentType.includes("application/json") ||
+            normalizedContentType.includes("+json");
 
           // ========== 流式响应：延迟成功判定（避免“假 200”）==========
           // 背景：上游可能返回 HTTP 200，但 SSE 内容为错误 JSON（如 {"error": "..."}）。
@@ -655,29 +749,111 @@ export class ProxyForwarder {
             return response;
           }
 
-          if (!isSSE) {
-            // 非流式响应：检测空响应
-            const contentLength = response.headers.get("content-length");
+          // 非流式响应：检测空响应
+          const contentLengthHeader = response.headers.get("content-length");
+          const contentLength = contentLengthHeader?.trim() || undefined;
+          const contentLengthBytes = (() => {
+            if (!contentLength) return null;
 
-            // 检测 Content-Length: 0 的情况
-            if (contentLength === "0") {
+            // Content-Length 必须是纯数字；parseInt("12abc") 会返回 12，容易误判为合法值，
+            // 从而跳过 “!hasValidContentLength” 的检查分支。
+            if (!/^\d+$/.test(contentLength)) return null;
+
+            const num = Number(contentLength);
+            if (!Number.isSafeInteger(num) || num < 0) return null;
+            return num;
+          })();
+          const hasValidContentLength = contentLengthBytes !== null;
+
+          // 检测 Content-Length: 0 的情况
+          if (contentLengthBytes === 0) {
+            throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
+          }
+
+          // 200 + text/html（或 xhtml）通常是上游网关/WAF/Cloudflare 的错误页，但被包装成了 HTTP 200。
+          // 这种“假 200”会导致：
+          // - 熔断/故障转移统计被误记为成功；
+          // - session 智能绑定被更新到不可用 provider（影响后续重试）。
+          // 因此这里在进入成功分支前做一次强信号检测：仅当 body 看起来是完整 HTML 文档时才视为错误。
+          let inspectedText: string | undefined;
+          let inspectedTruncated = false;
+          // 注意：这里不会对“大体积 JSON”做假 200 检测（例如 Content-Length > 32KiB）。
+          // 原因：
+          // - 非流式路径需要 clone 并额外读取响应体，会带来额外的内存/延迟开销；
+          // - 大体积 JSON 更可能是正常响应（而不是网关/WAF 的短错误 JSON）。
+          // 这意味着：极少数“超大 JSON 错误体 + HTTP 200”的上游异常可能会漏检。
+          const shouldInspectJson =
+            isJson &&
+            hasValidContentLength &&
+            contentLengthBytes <= NON_STREAM_BODY_INSPECTION_MAX_BYTES;
+          const shouldInspectBody = isHtml || !hasValidContentLength || shouldInspectJson;
+          if (shouldInspectBody) {
+            // 注意：Response.clone() 会 tee 底层 ReadableStream，可能带来一定的瞬时内存开销；
+            // 这里通过“最多读取 32 KiB”并在截断时 cancel 克隆分支来控制开销。
+            const clonedResponse = response.clone();
+            const inspected = await readResponseTextUpTo(
+              clonedResponse,
+              NON_STREAM_BODY_INSPECTION_MAX_BYTES
+            );
+            inspectedText = inspected.text;
+            inspectedTruncated = inspected.truncated;
+          }
+
+          if (inspectedText !== undefined) {
+            // 对非流式 2xx 响应：只启用“强信号”判定（HTML 文档 / 顶层 error 非空 / 空 body）。
+            // `message` 关键字匹配属于弱信号，误判风险更高；该规则主要用于 SSE 结束后的补充检测。
+            const detected = detectUpstreamErrorFromSseOrJsonText(inspectedText, {
+              maxJsonCharsForMessageCheck: 0,
+            });
+
+            if (detected.isError && detected.code === "FAKE_200_EMPTY_BODY") {
               throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
             }
 
-            // 对于没有 Content-Length 的情况，需要 clone 并检查响应体
-            // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
-            if (!contentLength) {
-              const clonedResponse = response.clone();
-              const responseText = await clonedResponse.text();
+            const isStrongFake200 =
+              detected.isError &&
+              (detected.code === "FAKE_200_HTML_BODY" ||
+                detected.code === "FAKE_200_JSON_ERROR_NON_EMPTY" ||
+                detected.code === "FAKE_200_JSON_ERROR_MESSAGE_NON_EMPTY");
 
-              if (!responseText || responseText.trim() === "") {
-                throw new EmptyResponseError(
-                  currentProvider.id,
-                  currentProvider.name,
-                  "empty_body"
-                );
-              }
+            if (isStrongFake200) {
+              const inferredStatus = inferUpstreamErrorStatusCodeFromText(inspectedText);
+              const inferredStatusCode = inferredStatus?.statusCode;
 
+              throw new ProxyError(detected.code, inferredStatusCode ?? 502, {
+                body: detected.detail ?? "",
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                // 注意：rawBody 仅用于“本次错误响应”向客户端提供更多排查信息（受系统设置控制），
+                // 不参与规则匹配/持久化，避免污染数据库或误触发覆写规则。
+                rawBody: inspectedText,
+                rawBodyTruncated: inspectedTruncated,
+                statusCodeInferred: inferredStatusCode !== undefined,
+                statusCodeInferenceMatcherId: inferredStatus?.matcherId,
+              });
+            }
+          }
+
+          // 对于缺失或非法 Content-Length 的情况，需要 clone 并检查响应体
+          // 注意：这会增加一定的性能开销，但对于非流式响应是可接受的
+          if (!contentLength || !hasValidContentLength) {
+            const responseText = inspectedText ?? "";
+
+            if (!responseText || responseText.trim() === "") {
+              throw new EmptyResponseError(currentProvider.id, currentProvider.name, "empty_body");
+            }
+
+            if (inspectedTruncated) {
+              logger.debug(
+                "ProxyForwarder: Response body too large for non-stream content check, skipping JSON parse",
+                {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  contentType,
+                  maxBytes: NON_STREAM_BODY_INSPECTION_MAX_BYTES,
+                }
+              );
+            } else {
               // 尝试解析 JSON 并检查是否有输出内容
               try {
                 const responseJson = JSON.parse(responseText) as Record<string, unknown>;
@@ -722,7 +898,12 @@ export class ProxyForwarder {
                     // 注意：不抛出错误，因为某些请求（如 count_tokens）可能合法地返回 0 output tokens
                   }
                 }
-              } catch (_parseError) {
+              } catch (_parseOrContentError) {
+                // EmptyResponseError 会触发重试/故障转移，不能在这里被当作 JSON 解析错误吞掉。
+                if (isEmptyResponseError(_parseOrContentError)) {
+                  throw _parseOrContentError;
+                }
+
                 // JSON 解析失败但响应体不为空，不视为空响应错误
                 logger.debug("ProxyForwarder: Non-JSON response body, skipping content check", {
                   providerId: currentProvider.id,
@@ -964,6 +1145,7 @@ export class ProxyForwarder {
                       attemptNumber: attemptCount,
                       errorMessage,
                       statusCode: lastError.statusCode,
+                      statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
                       errorDetails: {
                         provider: {
                           id: currentProvider.id,
@@ -1096,6 +1278,7 @@ export class ProxyForwarder {
                       attemptNumber: attemptCount,
                       errorMessage,
                       statusCode: lastError.statusCode,
+                      statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
                       errorDetails: {
                         provider: {
                           id: currentProvider.id,
@@ -1160,6 +1343,7 @@ export class ProxyForwarder {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -1176,6 +1360,7 @@ export class ProxyForwarder {
               attemptNumber: attemptCount,
               errorMessage: errorMessage,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
                 provider: {
                   id: currentProvider.id,
@@ -1298,6 +1483,7 @@ export class ProxyForwarder {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: 404,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -1312,6 +1498,7 @@ export class ProxyForwarder {
               attemptNumber: attemptCount,
               errorMessage: errorMessage,
               statusCode: 404,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
                 provider: {
                   id: currentProvider.id,
@@ -1435,18 +1622,20 @@ export class ProxyForwarder {
               break;
             }
 
-            // 🆕 count_tokens 请求特殊处理：不计入熔断，不触发供应商切换
-            if (session.isCountTokensRequest()) {
+            // Raw passthrough endpoints: no circuit breaker, no provider switch, no retry
+            const endpointPolicy = session.getEndpointPolicy();
+            if (!endpointPolicy.allowRetry) {
               logger.debug(
-                "ProxyForwarder: count_tokens request error, skipping circuit breaker and provider switch",
+                "ProxyForwarder: raw passthrough endpoint error, skipping circuit breaker and provider switch",
                 {
                   providerId: currentProvider.id,
                   providerName: currentProvider.name,
                   statusCode,
                   error: proxyError.message,
+                  policyKind: endpointPolicy.kind,
                 }
               );
-              // 直接抛出错误，不重试，不切换供应商
+              // Throw immediately: no retry, no provider switch
               throw lastError;
             }
 
@@ -1454,6 +1643,7 @@ export class ProxyForwarder {
               providerId: currentProvider.id,
               providerName: currentProvider.name,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               error: errorMessage,
               attemptNumber: attemptCount,
               totalProvidersAttempted,
@@ -1473,6 +1663,7 @@ export class ProxyForwarder {
               circuitFailureCount: health.failureCount + 1, // 包含本次失败
               circuitFailureThreshold: config.failureThreshold,
               statusCode: statusCode,
+              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
               errorDetails: {
                 provider: {
                   id: currentProvider.id,
@@ -1592,12 +1783,14 @@ export class ProxyForwarder {
       session.setContext1mApplied(context1mApplied);
     }
 
-    // 应用模型重定向（如果配置了）
-    const wasRedirected = ModelRedirector.apply(session, provider);
-    if (wasRedirected) {
-      logger.debug("ProxyForwarder: Model redirected", {
-        providerId: provider.id,
-      });
+    // Apply model redirect (if configured) - skip for raw passthrough endpoints
+    if (!session.getEndpointPolicy().bypassForwarderPreprocessing) {
+      const wasRedirected = ModelRedirector.apply(session, provider);
+      if (wasRedirected) {
+        logger.debug("ProxyForwarder: Model redirected", {
+          providerId: provider.id,
+        });
+      }
     }
 
     let processedHeaders: Headers;
@@ -1648,6 +1841,7 @@ export class ProxyForwarder {
 
         const bodyString = JSON.stringify(bodyToSerialize);
         requestBody = bodyString;
+        session.forwardedRequestBody = bodyString;
       }
 
       // 检测流式请求：Gemini 支持两种方式
@@ -1709,138 +1903,126 @@ export class ProxyForwarder {
       });
     } else {
       // --- STANDARD HANDLING ---
-      if (
-        resolvedCacheTtl &&
-        (provider.providerType === "claude" || provider.providerType === "claude-auth")
-      ) {
-        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
-        if (applied) {
-          logger.info("ProxyForwarder: Applied cache TTL override to request", {
-            providerId: provider.id,
-            providerName: provider.name,
-            cacheTtl: resolvedCacheTtl,
-          });
-        }
-      }
+      if (!session.getEndpointPolicy().bypassForwarderPreprocessing) {
+        // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
+        if (provider.providerType === "codex") {
+          const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
+            provider,
+            session.request.message as Record<string, unknown>
+          );
+          session.request.message = overridden;
 
-      // Codex 供应商级参数覆写（默认 inherit=遵循客户端）
-      if (provider.providerType === "codex") {
-        const { request: overridden, audit } = applyCodexProviderOverridesWithAudit(
-          provider,
-          session.request.message as Record<string, unknown>
-        );
-        session.request.message = overridden;
+          if (audit) {
+            session.addSpecialSetting(audit);
+            const specialSettings = session.getSpecialSettings();
 
-        if (audit) {
-          session.addSpecialSetting(audit);
-          const specialSettings = session.getSpecialSettings();
-
-          if (session.sessionId) {
-            // 这里用 await：避免后续响应侧写入（ResponseFixer 等）先完成后，被本次旧快照覆写
-            await SessionManager.storeSessionSpecialSettings(
-              session.sessionId,
-              specialSettings,
-              session.requestSequence
-            ).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to store special settings", {
-                error: err,
-                sessionId: session.sessionId,
+            if (session.sessionId) {
+              // 这里用 await：避免后续响应侧写入（ResponseFixer 等）先完成后，被本次旧快照覆写
+              await SessionManager.storeSessionSpecialSettings(
+                session.sessionId,
+                specialSettings,
+                session.requestSequence
+              ).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to store special settings", {
+                  error: err,
+                  sessionId: session.sessionId,
+                });
               });
-            });
-          }
+            }
 
-          if (session.messageContext?.id) {
-            // 同上：确保 special_settings 的"旧值"不会在并发下覆盖"新值"
-            await updateMessageRequestDetails(session.messageContext.id, {
-              specialSettings,
-            }).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to persist special settings", {
-                error: err,
-                messageRequestId: session.messageContext?.id,
+            if (session.messageContext?.id) {
+              // 同上：确保 special_settings 的"旧值"不会在并发下覆盖"新值"
+              await updateMessageRequestDetails(session.messageContext.id, {
+                specialSettings,
+              }).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to persist special settings", {
+                  error: err,
+                  messageRequestId: session.messageContext?.id,
+                });
               });
-            });
-          }
-        }
-      }
-
-      // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
-      // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
-      if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
-        // Billing header rectifier: proactively strip x-anthropic-billing-header from system prompt
-        {
-          const settings = await getCachedSystemSettings();
-          const billingRectifierEnabled = settings.enableBillingHeaderRectifier ?? true;
-          if (billingRectifierEnabled) {
-            const billingResult = rectifyBillingHeader(
-              session.request.message as Record<string, unknown>
-            );
-            if (billingResult.applied) {
-              session.addSpecialSetting({
-                type: "billing_header_rectifier",
-                scope: "request",
-                hit: true,
-                removedCount: billingResult.removedCount,
-                extractedValues: billingResult.extractedValues,
-              });
-              logger.info("ProxyForwarder: Billing header rectifier applied", {
-                providerId: provider.id,
-                providerName: provider.name,
-                removedCount: billingResult.removedCount,
-              });
-              await persistSpecialSettings(session);
             }
           }
         }
 
-        const { request: anthropicOverridden, audit: anthropicAudit } =
-          applyAnthropicProviderOverridesWithAudit(
-            provider,
-            session.request.message as Record<string, unknown>
-          );
-        session.request.message = anthropicOverridden;
-
-        if (anthropicAudit) {
-          session.addSpecialSetting(anthropicAudit);
-          const specialSettings = session.getSpecialSettings();
-
-          if (session.sessionId) {
-            await SessionManager.storeSessionSpecialSettings(
-              session.sessionId,
-              specialSettings,
-              session.requestSequence
-            ).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to store Anthropic special settings", {
-                error: err,
-                sessionId: session.sessionId,
-              });
-            });
+        // Anthropic 供应商级参数覆写（默认 inherit=遵循客户端）
+        // 说明：允许管理员在供应商层面强制覆写 max_tokens 和 thinking.budget_tokens
+        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+          // Billing header rectifier: proactively strip x-anthropic-billing-header from system prompt
+          {
+            const settings = await getCachedSystemSettings();
+            const billingRectifierEnabled = settings.enableBillingHeaderRectifier ?? true;
+            if (billingRectifierEnabled) {
+              const billingResult = rectifyBillingHeader(
+                session.request.message as Record<string, unknown>
+              );
+              if (billingResult.applied) {
+                session.addSpecialSetting({
+                  type: "billing_header_rectifier",
+                  scope: "request",
+                  hit: true,
+                  removedCount: billingResult.removedCount,
+                  extractedValues: billingResult.extractedValues,
+                });
+                logger.info("ProxyForwarder: Billing header rectifier applied", {
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  removedCount: billingResult.removedCount,
+                });
+                await persistSpecialSettings(session);
+              }
+            }
           }
 
-          if (session.messageContext?.id) {
-            await updateMessageRequestDetails(session.messageContext.id, {
-              specialSettings,
-            }).catch((err) => {
-              logger.error("[ProxyForwarder] Failed to persist Anthropic special settings", {
-                error: err,
-                messageRequestId: session.messageContext?.id,
+          const { request: anthropicOverridden, audit: anthropicAudit } =
+            applyAnthropicProviderOverridesWithAudit(
+              provider,
+              session.request.message as Record<string, unknown>
+            );
+          session.request.message = anthropicOverridden;
+
+          if (anthropicAudit) {
+            session.addSpecialSetting(anthropicAudit);
+            const specialSettings = session.getSpecialSettings();
+
+            if (session.sessionId) {
+              await SessionManager.storeSessionSpecialSettings(
+                session.sessionId,
+                specialSettings,
+                session.requestSequence
+              ).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to store Anthropic special settings", {
+                  error: err,
+                  sessionId: session.sessionId,
+                });
               });
+            }
+
+            if (session.messageContext?.id) {
+              await updateMessageRequestDetails(session.messageContext.id, {
+                specialSettings,
+              }).catch((err) => {
+                logger.error("[ProxyForwarder] Failed to persist Anthropic special settings", {
+                  error: err,
+                  messageRequestId: session.messageContext?.id,
+                });
+              });
+            }
+          }
+        }
+
+        if (
+          resolvedCacheTtl &&
+          (provider.providerType === "claude" || provider.providerType === "claude-auth")
+        ) {
+          const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
+          if (applied) {
+            logger.debug("ProxyForwarder: Applied cache TTL override to request", {
+              providerId: provider.id,
+              ttl: resolvedCacheTtl,
             });
           }
         }
-      }
-
-      if (
-        resolvedCacheTtl &&
-        (provider.providerType === "claude" || provider.providerType === "claude-auth")
-      ) {
-        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
-        if (applied) {
-          logger.debug("ProxyForwarder: Applied cache TTL override to request", {
-            providerId: provider.id,
-            ttl: resolvedCacheTtl,
-          });
-        }
-      }
+      } // end bypassForwarderPreprocessing gate
 
       processedHeaders = ProxyForwarder.buildHeaders(session, provider);
 
@@ -1974,6 +2156,7 @@ export class ProxyForwarder {
 
         const bodyString = JSON.stringify(messageToSend);
         requestBody = bodyString;
+        session.forwardedRequestBody = bodyString;
 
         try {
           const parsed = JSON.parse(bodyString);

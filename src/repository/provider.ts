@@ -1,13 +1,18 @@
-"use server";
+import "server-only";
 
-import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
-import { providers } from "@/drizzle/schema";
+import { providerEndpoints, providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import type { CreateProviderData, Provider, UpdateProviderData } from "@/types/provider";
+import type {
+  AnthropicAdaptiveThinkingConfig,
+  CreateProviderData,
+  Provider,
+  UpdateProviderData,
+} from "@/types/provider";
 import { toProvider } from "./_shared/transformers";
 import {
   ensureProviderEndpointExistsForUrl,
@@ -15,6 +20,154 @@ import {
   syncProviderEndpointOnProviderEdit,
   tryDeleteProviderVendorIfEmpty,
 } from "./provider-endpoints";
+
+type ProviderTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const PROVIDER_RESTORE_MAX_AGE_MS = 60_000;
+const ENDPOINT_RESTORE_TIME_TOLERANCE_MS = 1_000;
+
+interface ProviderRestoreCandidate {
+  id: number;
+  providerVendorId: number | null;
+  providerType: Provider["providerType"];
+  url: string;
+  deletedAt: Date | null;
+}
+
+async function restoreSoftDeletedEndpointForProvider(
+  tx: ProviderTransaction,
+  provider: ProviderRestoreCandidate,
+  now: Date
+): Promise<void> {
+  if (provider.providerVendorId == null || !provider.url || !provider.deletedAt) {
+    return;
+  }
+
+  const trimmedUrl = provider.url.trim();
+  if (!trimmedUrl) {
+    return;
+  }
+
+  const [activeReference] = await tx
+    .select({ id: providers.id })
+    .from(providers)
+    .where(
+      and(
+        eq(providers.providerVendorId, provider.providerVendorId),
+        eq(providers.providerType, provider.providerType),
+        eq(providers.url, trimmedUrl),
+        eq(providers.isEnabled, true),
+        isNull(providers.deletedAt),
+        ne(providers.id, provider.id)
+      )
+    )
+    .limit(1);
+
+  if (activeReference) {
+    return;
+  }
+
+  const [activeEndpoint] = await tx
+    .select({ id: providerEndpoints.id })
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, provider.providerVendorId),
+        eq(providerEndpoints.providerType, provider.providerType),
+        eq(providerEndpoints.url, trimmedUrl),
+        isNull(providerEndpoints.deletedAt)
+      )
+    )
+    .limit(1);
+
+  if (activeEndpoint) {
+    return;
+  }
+
+  const lowerIso = new Date(
+    provider.deletedAt.getTime() - ENDPOINT_RESTORE_TIME_TOLERANCE_MS
+  ).toISOString();
+  const upperIso = new Date(
+    provider.deletedAt.getTime() + ENDPOINT_RESTORE_TIME_TOLERANCE_MS
+  ).toISOString();
+
+  const [endpointToRestore] = await tx
+    .select({ id: providerEndpoints.id })
+    .from(providerEndpoints)
+    .where(
+      and(
+        eq(providerEndpoints.vendorId, provider.providerVendorId),
+        eq(providerEndpoints.providerType, provider.providerType),
+        eq(providerEndpoints.url, trimmedUrl),
+        isNotNull(providerEndpoints.deletedAt),
+        sql`${providerEndpoints.deletedAt} >= ${lowerIso}::timestamptz`,
+        sql`${providerEndpoints.deletedAt} <= ${upperIso}::timestamptz`
+      )
+    )
+    .orderBy(desc(providerEndpoints.deletedAt), desc(providerEndpoints.id))
+    .limit(1);
+
+  if (!endpointToRestore) {
+    return;
+  }
+
+  await tx
+    .update(providerEndpoints)
+    .set({
+      deletedAt: null,
+      isEnabled: true,
+      updatedAt: now,
+    })
+    .where(
+      and(eq(providerEndpoints.id, endpointToRestore.id), isNotNull(providerEndpoints.deletedAt))
+    );
+}
+
+async function restoreProviderInTransaction(
+  tx: ProviderTransaction,
+  providerId: number,
+  now: Date
+): Promise<boolean> {
+  const [candidate] = await tx
+    .select({
+      id: providers.id,
+      providerVendorId: providers.providerVendorId,
+      providerType: providers.providerType,
+      url: providers.url,
+      deletedAt: providers.deletedAt,
+    })
+    .from(providers)
+    .where(and(eq(providers.id, providerId), isNotNull(providers.deletedAt)))
+    .limit(1);
+
+  if (!candidate?.deletedAt) {
+    return false;
+  }
+
+  if (now.getTime() - candidate.deletedAt.getTime() > PROVIDER_RESTORE_MAX_AGE_MS) {
+    return false;
+  }
+
+  const restored = await tx
+    .update(providers)
+    .set({ deletedAt: null, updatedAt: now })
+    .where(
+      and(
+        eq(providers.id, providerId),
+        isNotNull(providers.deletedAt),
+        eq(providers.deletedAt, candidate.deletedAt)
+      )
+    )
+    .returning({ id: providers.id });
+
+  if (restored.length === 0) {
+    return false;
+  }
+
+  await restoreSoftDeletedEndpointForProvider(tx, candidate, now);
+
+  return true;
+}
 
 export async function createProvider(providerData: CreateProviderData): Promise<Provider> {
   const dbData = {
@@ -32,6 +185,10 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     preserveClientIp: providerData.preserve_client_ip ?? false,
     modelRedirects: providerData.model_redirects,
     allowedModels: providerData.allowed_models,
+    allowedClients: providerData.allowed_clients ?? [],
+    blockedClients: providerData.blocked_clients ?? [],
+    activeTimeStart: providerData.active_time_start ?? null,
+    activeTimeEnd: providerData.active_time_end ?? null,
     mcpPassthroughType: providerData.mcp_passthrough_type ?? "none",
     mcpPassthroughUrl: providerData.mcp_passthrough_url ?? null,
     limit5hUsd: providerData.limit_5h_usd != null ? providerData.limit_5h_usd.toString() : null,
@@ -59,6 +216,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     websiteUrl: providerData.website_url ?? null,
     faviconUrl: providerData.favicon_url ?? null,
     cacheTtlPreference: providerData.cache_ttl_preference ?? null,
+    swapCacheTtlBilling: providerData.swap_cache_ttl_billing ?? false,
     context1mPreference: providerData.context_1m_preference ?? null,
     codexReasoningEffortPreference: providerData.codex_reasoning_effort_preference ?? null,
     codexReasoningSummaryPreference: providerData.codex_reasoning_summary_preference ?? null,
@@ -106,6 +264,10 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         preserveClientIp: providers.preserveClientIp,
         modelRedirects: providers.modelRedirects,
         allowedModels: providers.allowedModels,
+        allowedClients: providers.allowedClients,
+        blockedClients: providers.blockedClients,
+        activeTimeStart: providers.activeTimeStart,
+        activeTimeEnd: providers.activeTimeEnd,
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
@@ -129,6 +291,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
         cacheTtlPreference: providers.cacheTtlPreference,
+        swapCacheTtlBilling: providers.swapCacheTtlBilling,
         context1mPreference: providers.context1mPreference,
         codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
         codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -185,6 +348,10 @@ export async function findProviderList(
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      allowedClients: providers.allowedClients,
+      blockedClients: providers.blockedClients,
+      activeTimeStart: providers.activeTimeStart,
+      activeTimeEnd: providers.activeTimeEnd,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -208,6 +375,7 @@ export async function findProviderList(
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      swapCacheTtlBilling: providers.swapCacheTtlBilling,
       context1mPreference: providers.context1mPreference,
       codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -264,6 +432,10 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      allowedClients: providers.allowedClients,
+      blockedClients: providers.blockedClients,
+      activeTimeStart: providers.activeTimeStart,
+      activeTimeEnd: providers.activeTimeEnd,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -287,6 +459,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      swapCacheTtlBilling: providers.swapCacheTtlBilling,
       context1mPreference: providers.context1mPreference,
       codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -347,6 +520,10 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       preserveClientIp: providers.preserveClientIp,
       modelRedirects: providers.modelRedirects,
       allowedModels: providers.allowedModels,
+      allowedClients: providers.allowedClients,
+      blockedClients: providers.blockedClients,
+      activeTimeStart: providers.activeTimeStart,
+      activeTimeEnd: providers.activeTimeEnd,
       mcpPassthroughType: providers.mcpPassthroughType,
       mcpPassthroughUrl: providers.mcpPassthroughUrl,
       limit5hUsd: providers.limit5hUsd,
@@ -370,6 +547,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       websiteUrl: providers.websiteUrl,
       faviconUrl: providers.faviconUrl,
       cacheTtlPreference: providers.cacheTtlPreference,
+      swapCacheTtlBilling: providers.swapCacheTtlBilling,
       context1mPreference: providers.context1mPreference,
       codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -424,6 +602,14 @@ export async function updateProvider(
   if (providerData.model_redirects !== undefined)
     dbData.modelRedirects = providerData.model_redirects;
   if (providerData.allowed_models !== undefined) dbData.allowedModels = providerData.allowed_models;
+  if (providerData.allowed_clients !== undefined)
+    dbData.allowedClients = providerData.allowed_clients ?? [];
+  if (providerData.blocked_clients !== undefined)
+    dbData.blockedClients = providerData.blocked_clients ?? [];
+  if (providerData.active_time_start !== undefined)
+    dbData.activeTimeStart = providerData.active_time_start ?? null;
+  if (providerData.active_time_end !== undefined)
+    dbData.activeTimeEnd = providerData.active_time_end ?? null;
   if (providerData.mcp_passthrough_type !== undefined)
     dbData.mcpPassthroughType = providerData.mcp_passthrough_type;
   if (providerData.mcp_passthrough_url !== undefined)
@@ -471,6 +657,8 @@ export async function updateProvider(
   if (providerData.favicon_url !== undefined) dbData.faviconUrl = providerData.favicon_url;
   if (providerData.cache_ttl_preference !== undefined)
     dbData.cacheTtlPreference = providerData.cache_ttl_preference ?? null;
+  if (providerData.swap_cache_ttl_billing !== undefined)
+    dbData.swapCacheTtlBilling = providerData.swap_cache_ttl_billing;
   if (providerData.context_1m_preference !== undefined)
     dbData.context1mPreference = providerData.context_1m_preference ?? null;
   if (providerData.codex_reasoning_effort_preference !== undefined)
@@ -499,12 +687,16 @@ export async function updateProvider(
 
   const shouldRefreshVendor =
     providerData.url !== undefined || providerData.website_url !== undefined;
-  const shouldSyncEndpoint = shouldRefreshVendor || providerData.provider_type !== undefined;
+  const shouldSyncEndpoint =
+    shouldRefreshVendor ||
+    providerData.provider_type !== undefined ||
+    providerData.is_enabled === true;
 
   const updateResult = await db.transaction(async (tx) => {
     let previousVendorId: number | null = null;
     let previousUrl: string | null = null;
     let previousProviderType: Provider["providerType"] | null = null;
+    let previousIsEnabled: boolean | null = null;
     let endpointCircuitResetId: number | null = null;
 
     if (shouldSyncEndpoint) {
@@ -516,6 +708,7 @@ export async function updateProvider(
           name: providers.name,
           providerVendorId: providers.providerVendorId,
           providerType: providers.providerType,
+          isEnabled: providers.isEnabled,
         })
         .from(providers)
         .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
@@ -525,6 +718,7 @@ export async function updateProvider(
         previousVendorId = current.providerVendorId;
         previousUrl = current.url;
         previousProviderType = current.providerType;
+        previousIsEnabled = current.isEnabled;
 
         if (shouldRefreshVendor) {
           const providerVendorId = await getOrCreateProviderVendorIdFromUrls(
@@ -561,6 +755,10 @@ export async function updateProvider(
         preserveClientIp: providers.preserveClientIp,
         modelRedirects: providers.modelRedirects,
         allowedModels: providers.allowedModels,
+        allowedClients: providers.allowedClients,
+        blockedClients: providers.blockedClients,
+        activeTimeStart: providers.activeTimeStart,
+        activeTimeEnd: providers.activeTimeEnd,
         mcpPassthroughType: providers.mcpPassthroughType,
         mcpPassthroughUrl: providers.mcpPassthroughUrl,
         limit5hUsd: providers.limit5hUsd,
@@ -584,6 +782,7 @@ export async function updateProvider(
         websiteUrl: providers.websiteUrl,
         faviconUrl: providers.faviconUrl,
         cacheTtlPreference: providers.cacheTtlPreference,
+        swapCacheTtlBilling: providers.swapCacheTtlBilling,
         context1mPreference: providers.context1mPreference,
         codexReasoningEffortPreference: providers.codexReasoningEffortPreference,
         codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
@@ -606,7 +805,16 @@ export async function updateProvider(
     const transformed = toProvider(provider);
 
     if (shouldSyncEndpoint && transformed.providerVendorId) {
-      if (previousUrl && previousProviderType) {
+      // 注意：即使 provider 当前处于禁用态，只要 vendor/type/url 发生变化也同步 endpoint pool：
+      // - 避免旧 URL 残留为 orphan endpoints（#781）
+      // - 保证后续启用/其它同 vendor/type 的 provider 能直接复用端点池
+      if (
+        previousUrl &&
+        previousProviderType &&
+        (previousUrl !== transformed.url ||
+          previousProviderType !== transformed.providerType ||
+          (previousVendorId != null && previousVendorId !== transformed.providerVendorId))
+      ) {
         const syncResult = await syncProviderEndpointOnProviderEdit(
           {
             providerId: transformed.id,
@@ -622,7 +830,7 @@ export async function updateProvider(
         );
 
         endpointCircuitResetId = syncResult.resetCircuitEndpointId ?? null;
-      } else {
+      } else if (previousIsEnabled === false && transformed.isEnabled === true) {
         await ensureProviderEndpointExistsForUrl(
           {
             vendorId: transformed.providerVendorId,
@@ -704,22 +912,92 @@ export async function updateProviderPrioritiesBatch(
       ${priorityCol} = CASE id ${sql.join(cases, sql` `)} ELSE ${priorityCol} END,
       ${updatedAtCol} = NOW()
     WHERE id IN (${idList}) AND deleted_at IS NULL
+    RETURNING id
   `;
 
   const result = await db.execute(query);
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (result as any).rowCount || 0;
+  return Array.from(result).length;
 }
 
 export async function deleteProvider(id: number): Promise<boolean> {
-  const result = await db
-    .update(providers)
-    .set({ deletedAt: new Date() })
-    .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
-    .returning({ id: providers.id });
+  const now = new Date();
 
-  return result.length > 0;
+  const deleted = await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      })
+      .from(providers)
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .limit(1);
+
+    if (!current) {
+      return false;
+    }
+
+    const result = await tx
+      .update(providers)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(providers.id, id), isNull(providers.deletedAt)))
+      .returning({ id: providers.id });
+
+    if (result.length === 0) {
+      return false;
+    }
+
+    if (current.providerVendorId != null && current.url) {
+      const [activeReference] = await tx
+        .select({ id: providers.id })
+        .from(providers)
+        .where(
+          and(
+            eq(providers.providerVendorId, current.providerVendorId),
+            eq(providers.providerType, current.providerType),
+            eq(providers.url, current.url),
+            eq(providers.isEnabled, true),
+            isNull(providers.deletedAt)
+          )
+        )
+        .limit(1);
+
+      if (!activeReference) {
+        await tx
+          .update(providerEndpoints)
+          .set({
+            deletedAt: now,
+            isEnabled: false,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(providerEndpoints.vendorId, current.providerVendorId),
+              eq(providerEndpoints.providerType, current.providerType),
+              eq(providerEndpoints.url, current.url),
+              isNull(providerEndpoints.deletedAt)
+            )
+          );
+      }
+    }
+
+    return true;
+  });
+
+  return deleted;
+}
+
+/**
+ * 恢复单个软删除供应商及其关联端点。
+ *
+ * 安全策略：仅允许恢复 60 秒内删除的供应商。
+ */
+export async function restoreProvider(id: number): Promise<boolean> {
+  const now = new Date();
+
+  const restored = await db.transaction(async (tx) => restoreProviderInTransaction(tx, id, now));
+
+  return restored;
 }
 
 export interface BatchProviderUpdates {
@@ -728,6 +1006,49 @@ export interface BatchProviderUpdates {
   weight?: number;
   costMultiplier?: string;
   groupTag?: string | null;
+  modelRedirects?: Record<string, string> | null;
+  allowedModels?: string[] | null;
+  allowedClients?: string[] | null;
+  blockedClients?: string[] | null;
+  anthropicThinkingBudgetPreference?: string | null;
+  anthropicAdaptiveThinking?: AnthropicAdaptiveThinkingConfig | null;
+  // Routing
+  preserveClientIp?: boolean;
+  activeTimeStart?: string | null;
+  activeTimeEnd?: string | null;
+  groupPriorities?: Record<string, number> | null;
+  cacheTtlPreference?: string | null;
+  swapCacheTtlBilling?: boolean;
+  context1mPreference?: string | null;
+  codexReasoningEffortPreference?: string | null;
+  codexReasoningSummaryPreference?: string | null;
+  codexTextVerbosityPreference?: string | null;
+  codexParallelToolCallsPreference?: string | null;
+  anthropicMaxTokensPreference?: string | null;
+  geminiGoogleSearchPreference?: string | null;
+  // Rate Limit
+  limit5hUsd?: string | null;
+  limitDailyUsd?: string | null;
+  dailyResetMode?: string;
+  dailyResetTime?: string;
+  limitWeeklyUsd?: string | null;
+  limitMonthlyUsd?: string | null;
+  limitTotalUsd?: string | null;
+  limitConcurrentSessions?: number;
+  // Circuit Breaker
+  circuitBreakerFailureThreshold?: number;
+  circuitBreakerOpenDuration?: number;
+  circuitBreakerHalfOpenSuccessThreshold?: number;
+  maxRetryAttempts?: number | null;
+  // Network
+  proxyUrl?: string | null;
+  proxyFallbackToDirect?: boolean;
+  firstByteTimeoutStreamingMs?: number;
+  streamingIdleTimeoutMs?: number;
+  requestTimeoutNonStreamingMs?: number;
+  // MCP
+  mcpPassthroughType?: string;
+  mcpPassthroughUrl?: string | null;
 }
 
 export async function updateProvidersBatch(
@@ -739,7 +1060,8 @@ export async function updateProvidersBatch(
   }
 
   const uniqueIds = [...new Set(ids)];
-  const setClauses: Record<string, unknown> = { updatedAt: new Date() };
+  const now = new Date();
+  const setClauses: Record<string, unknown> = { updatedAt: now };
 
   if (updates.isEnabled !== undefined) {
     setClauses.isEnabled = updates.isEnabled;
@@ -756,21 +1078,219 @@ export async function updateProvidersBatch(
   if (updates.groupTag !== undefined) {
     setClauses.groupTag = updates.groupTag;
   }
+  if (updates.modelRedirects !== undefined) {
+    setClauses.modelRedirects = updates.modelRedirects;
+  }
+  if (updates.allowedModels !== undefined) {
+    setClauses.allowedModels = updates.allowedModels;
+  }
+  if (updates.allowedClients !== undefined) {
+    setClauses.allowedClients = updates.allowedClients;
+  }
+  if (updates.blockedClients !== undefined) {
+    setClauses.blockedClients = updates.blockedClients;
+  }
+  if (updates.anthropicThinkingBudgetPreference !== undefined) {
+    setClauses.anthropicThinkingBudgetPreference = updates.anthropicThinkingBudgetPreference;
+  }
+  if (updates.anthropicAdaptiveThinking !== undefined) {
+    setClauses.anthropicAdaptiveThinking = updates.anthropicAdaptiveThinking;
+  }
+  // Routing
+  if (updates.preserveClientIp !== undefined) {
+    setClauses.preserveClientIp = updates.preserveClientIp;
+  }
+  if (updates.activeTimeStart !== undefined) {
+    setClauses.activeTimeStart = updates.activeTimeStart;
+  }
+  if (updates.activeTimeEnd !== undefined) {
+    setClauses.activeTimeEnd = updates.activeTimeEnd;
+  }
+  if (updates.groupPriorities !== undefined) {
+    setClauses.groupPriorities = updates.groupPriorities;
+  }
+  if (updates.cacheTtlPreference !== undefined) {
+    setClauses.cacheTtlPreference = updates.cacheTtlPreference;
+  }
+  if (updates.swapCacheTtlBilling !== undefined) {
+    setClauses.swapCacheTtlBilling = updates.swapCacheTtlBilling;
+  }
+  if (updates.context1mPreference !== undefined) {
+    setClauses.context1mPreference = updates.context1mPreference;
+  }
+  if (updates.codexReasoningEffortPreference !== undefined) {
+    setClauses.codexReasoningEffortPreference = updates.codexReasoningEffortPreference;
+  }
+  if (updates.codexReasoningSummaryPreference !== undefined) {
+    setClauses.codexReasoningSummaryPreference = updates.codexReasoningSummaryPreference;
+  }
+  if (updates.codexTextVerbosityPreference !== undefined) {
+    setClauses.codexTextVerbosityPreference = updates.codexTextVerbosityPreference;
+  }
+  if (updates.codexParallelToolCallsPreference !== undefined) {
+    setClauses.codexParallelToolCallsPreference = updates.codexParallelToolCallsPreference;
+  }
+  if (updates.anthropicMaxTokensPreference !== undefined) {
+    setClauses.anthropicMaxTokensPreference = updates.anthropicMaxTokensPreference;
+  }
+  if (updates.geminiGoogleSearchPreference !== undefined) {
+    setClauses.geminiGoogleSearchPreference = updates.geminiGoogleSearchPreference;
+  }
+  // Rate Limit
+  if (updates.limit5hUsd !== undefined) {
+    setClauses.limit5hUsd = updates.limit5hUsd;
+  }
+  if (updates.limitDailyUsd !== undefined) {
+    setClauses.limitDailyUsd = updates.limitDailyUsd;
+  }
+  if (updates.dailyResetMode !== undefined) {
+    setClauses.dailyResetMode = updates.dailyResetMode;
+  }
+  if (updates.dailyResetTime !== undefined) {
+    setClauses.dailyResetTime = updates.dailyResetTime;
+  }
+  if (updates.limitWeeklyUsd !== undefined) {
+    setClauses.limitWeeklyUsd = updates.limitWeeklyUsd;
+  }
+  if (updates.limitMonthlyUsd !== undefined) {
+    setClauses.limitMonthlyUsd = updates.limitMonthlyUsd;
+  }
+  if (updates.limitTotalUsd !== undefined) {
+    setClauses.limitTotalUsd = updates.limitTotalUsd;
+  }
+  if (updates.limitConcurrentSessions !== undefined) {
+    setClauses.limitConcurrentSessions = updates.limitConcurrentSessions;
+  }
+  // Circuit Breaker
+  if (updates.circuitBreakerFailureThreshold !== undefined) {
+    setClauses.circuitBreakerFailureThreshold = updates.circuitBreakerFailureThreshold;
+  }
+  if (updates.circuitBreakerOpenDuration !== undefined) {
+    setClauses.circuitBreakerOpenDuration = updates.circuitBreakerOpenDuration;
+  }
+  if (updates.circuitBreakerHalfOpenSuccessThreshold !== undefined) {
+    setClauses.circuitBreakerHalfOpenSuccessThreshold =
+      updates.circuitBreakerHalfOpenSuccessThreshold;
+  }
+  if (updates.maxRetryAttempts !== undefined) {
+    setClauses.maxRetryAttempts = updates.maxRetryAttempts;
+  }
+  // Network
+  if (updates.proxyUrl !== undefined) {
+    setClauses.proxyUrl = updates.proxyUrl;
+  }
+  if (updates.proxyFallbackToDirect !== undefined) {
+    setClauses.proxyFallbackToDirect = updates.proxyFallbackToDirect;
+  }
+  if (updates.firstByteTimeoutStreamingMs !== undefined) {
+    setClauses.firstByteTimeoutStreamingMs = updates.firstByteTimeoutStreamingMs;
+  }
+  if (updates.streamingIdleTimeoutMs !== undefined) {
+    setClauses.streamingIdleTimeoutMs = updates.streamingIdleTimeoutMs;
+  }
+  if (updates.requestTimeoutNonStreamingMs !== undefined) {
+    setClauses.requestTimeoutNonStreamingMs = updates.requestTimeoutNonStreamingMs;
+  }
+  // MCP
+  if (updates.mcpPassthroughType !== undefined) {
+    setClauses.mcpPassthroughType = updates.mcpPassthroughType;
+  }
+  if (updates.mcpPassthroughUrl !== undefined) {
+    setClauses.mcpPassthroughUrl = updates.mcpPassthroughUrl;
+  }
 
   if (Object.keys(setClauses).length === 1) {
     return 0;
   }
 
-  const idList = sql.join(
-    uniqueIds.map((id) => sql`${id}`),
-    sql`, `
-  );
-
   const result = await db
     .update(providers)
     .set(setClauses)
-    .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
-    .returning({ id: providers.id });
+    .where(and(inArray(providers.id, uniqueIds), isNull(providers.deletedAt)))
+    .returning({
+      id: providers.id,
+      providerVendorId: providers.providerVendorId,
+      providerType: providers.providerType,
+      url: providers.url,
+    });
+
+  // #779/#781：批量启用供应商时，best-effort 确保 endpoint pool 中存在对应 URL（避免历史/竞态导致启用后严格端点被阻断）。
+  if (updates.isEnabled === true && result.length > 0) {
+    const endpointKeys = new Map<
+      string,
+      { vendorId: number; providerType: Provider["providerType"]; url: string }
+    >();
+
+    for (const row of result) {
+      if (row.providerVendorId == null || typeof row.url !== "string") {
+        continue;
+      }
+
+      const trimmedUrl = row.url.trim();
+      if (!trimmedUrl) {
+        continue;
+      }
+
+      try {
+        // eslint-disable-next-line no-new
+        new URL(trimmedUrl);
+      } catch {
+        logger.warn("updateProvidersBatch:skip_invalid_url", {
+          providerId: row.id,
+          vendorId: row.providerVendorId,
+          providerType: row.providerType,
+          url: trimmedUrl,
+        });
+        continue;
+      }
+
+      const key = `${row.providerVendorId}::${row.providerType}::${trimmedUrl}`;
+      if (endpointKeys.has(key)) continue;
+
+      endpointKeys.set(key, {
+        vendorId: row.providerVendorId,
+        providerType: row.providerType,
+        url: trimmedUrl,
+      });
+    }
+
+    if (endpointKeys.size > 0) {
+      try {
+        const inserted = await db
+          .insert(providerEndpoints)
+          .values(
+            Array.from(endpointKeys.values()).map((endpoint) => ({
+              vendorId: endpoint.vendorId,
+              providerType: endpoint.providerType,
+              url: endpoint.url,
+              label: null,
+              updatedAt: now,
+            }))
+          )
+          .onConflictDoNothing({
+            target: [
+              providerEndpoints.vendorId,
+              providerEndpoints.providerType,
+              providerEndpoints.url,
+            ],
+            where: sql`${providerEndpoints.deletedAt} IS NULL`,
+          })
+          .returning({ id: providerEndpoints.id });
+
+        logger.debug("updateProvidersBatch:ensured_provider_endpoints", {
+          updatedProviders: result.length,
+          candidateEndpoints: endpointKeys.size,
+          insertedEndpoints: inserted.length,
+        });
+      } catch (error) {
+        logger.warn("updateProvidersBatch:ensure_provider_endpoints_failed", {
+          updatedProviders: result.length,
+          candidateEndpoints: endpointKeys.size,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
 
   logger.debug("updateProvidersBatch:completed", {
     requestedIds: uniqueIds.length,
@@ -787,23 +1307,128 @@ export async function deleteProvidersBatch(ids: number[]): Promise<number> {
   }
 
   const uniqueIds = [...new Set(ids)];
-  const idList = sql.join(
-    uniqueIds.map((id) => sql`${id}`),
-    sql`, `
-  );
+  const now = new Date();
 
-  const result = await db
-    .update(providers)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(sql`id IN (${idList}) AND deleted_at IS NULL`)
-    .returning({ id: providers.id });
+  const deletedCount = await db.transaction(async (tx) => {
+    const result = await tx
+      .update(providers)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(and(inArray(providers.id, uniqueIds), isNull(providers.deletedAt)))
+      .returning({
+        id: providers.id,
+        providerVendorId: providers.providerVendorId,
+        providerType: providers.providerType,
+        url: providers.url,
+      });
+
+    if (result.length === 0) {
+      return 0;
+    }
+
+    const endpointKeys = new Map<
+      string,
+      { vendorId: number; providerType: Provider["providerType"]; url: string }
+    >();
+
+    for (const candidate of result) {
+      if (candidate.providerVendorId == null || !candidate.url) {
+        continue;
+      }
+
+      const key = `${candidate.providerVendorId}::${candidate.providerType}::${candidate.url}`;
+      if (endpointKeys.has(key)) {
+        continue;
+      }
+
+      endpointKeys.set(key, {
+        vendorId: candidate.providerVendorId,
+        providerType: candidate.providerType,
+        url: candidate.url,
+      });
+    }
+
+    const endpoints = Array.from(endpointKeys.values());
+    if (endpoints.length === 0) {
+      return result.length;
+    }
+
+    const chunkSize = 200;
+
+    for (let i = 0; i < endpoints.length; i += chunkSize) {
+      const chunk = endpoints.slice(i, i + chunkSize);
+      const tupleList = sql.join(
+        chunk.map(
+          (endpoint) => sql`(${endpoint.vendorId}, ${endpoint.providerType}, ${endpoint.url})`
+        ),
+        sql`, `
+      );
+
+      await tx
+        .update(providerEndpoints)
+        .set({
+          deletedAt: now,
+          isEnabled: false,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            isNull(providerEndpoints.deletedAt),
+            sql`(${providerEndpoints.vendorId}, ${providerEndpoints.providerType}, ${providerEndpoints.url}) IN (${tupleList})`,
+            sql`NOT EXISTS (
+              SELECT 1
+              FROM providers p
+              WHERE p.is_enabled = true
+                AND p.deleted_at IS NULL
+                AND p.provider_vendor_id = ${providerEndpoints.vendorId}
+                AND p.provider_type = ${providerEndpoints.providerType}
+                AND p.url = ${providerEndpoints.url}
+            )`
+          )
+        );
+    }
+
+    return result.length;
+  });
 
   logger.debug("deleteProvidersBatch:completed", {
     requestedIds: uniqueIds.length,
-    deletedCount: result.length,
+    deletedCount,
   });
 
-  return result.length;
+  return deletedCount;
+}
+
+/**
+ * 批量恢复软删除供应商及其关联端点（事务内逐个恢复）。
+ *
+ * 安全策略：仅允许恢复 60 秒内删除的供应商。
+ */
+export async function restoreProvidersBatch(ids: number[]): Promise<number> {
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const uniqueIds = [...new Set(ids)];
+  const now = new Date();
+
+  const restoredCount = await db.transaction(async (tx) => {
+    let restored = 0;
+
+    for (const id of uniqueIds) {
+      if (await restoreProviderInTransaction(tx, id, now)) {
+        restored += 1;
+      }
+    }
+
+    return restored;
+  });
+
+  logger.debug("restoreProvidersBatch:completed", {
+    requestedIds: uniqueIds.length,
+    restoredCount,
+  });
+
+  return restoredCount;
 }
 
 /**
@@ -863,105 +1488,126 @@ export async function getDistinctProviderGroups(): Promise<string[]> {
  * 包括：今天的总金额、今天的调用次数、最近一次调用时间和模型
  *
  * 性能优化：
- * - provider_stats CTE: LEFT JOIN 添加日期过滤，仅扫描今日数据（避免全表扫描）
- * - latest_call CTE: 添加 7 天时间范围限制（避免扫描历史数据）
+ * - provider_stats: 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × usage_ledger 的笛卡尔积
+ * - bounds: 用“按时区计算的时间范围”过滤 created_at，便于命中 created_at 索引
+ * - DST 兼容：对“本地日界/近 7 日”先在 timestamp 上做 +interval，再 AT TIME ZONE 回到 timestamptz，避免夏令时跨日偏移
+ * - latest_call: 限制近 7 天范围，避免扫描历史数据
  */
-export async function getProviderStatistics(): Promise<
-  Array<{
-    id: number;
-    today_cost: string;
-    today_calls: number;
-    last_call_time: Date | null;
-    last_call_model: string | null;
-  }>
-> {
+export type ProviderStatisticsRow = {
+  id: number;
+  today_cost: string;
+  today_calls: number;
+  last_call_time: Date | null;
+  last_call_model: string | null;
+};
+
+// 轻量内存缓存：降低后台轮询/重复加载导致的重复扫描
+const PROVIDER_STATISTICS_CACHE_TTL_MS = 10 * 1000; // 10 秒
+let providerStatisticsCache: {
+  timezone: string;
+  expiresAt: number;
+  data: ProviderStatisticsRow[];
+} | null = null;
+
+// in-flight 去重：避免缓存过期瞬间并发触发多次相同查询（thundering herd）
+let providerStatisticsInFlight: {
+  timezone: string;
+  promise: Promise<ProviderStatisticsRow[]>;
+} | null = null;
+
+export async function getProviderStatistics(): Promise<ProviderStatisticsRow[]> {
   try {
     // 统一的时区处理：使用 PostgreSQL AT TIME ZONE + 系统时区配置
     // 参考 getUserStatisticsFromDB 的实现，避免 Node.js Date 带来的时区偏移
     const timezone = await resolveSystemTimezone();
+    const now = Date.now();
+    if (
+      providerStatisticsCache &&
+      providerStatisticsCache.expiresAt > now &&
+      providerStatisticsCache.timezone === timezone
+    ) {
+      return providerStatisticsCache.data;
+    }
 
-    // ⭐ 使用 providerChain 最后一项的 providerId 来确定最终供应商（兼容重试切换）
-    // 如果 provider_chain 为空（无重试），则使用 provider_id 字段
-    const query = sql`
-      WITH provider_stats AS (
+    if (providerStatisticsInFlight && providerStatisticsInFlight.timezone === timezone) {
+      return await providerStatisticsInFlight.promise;
+    }
+
+    const promise: Promise<ProviderStatisticsRow[]> = (async () => {
+      const query = sql`
+         WITH bounds AS (
+           SELECT
+             (DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) AT TIME ZONE ${timezone}) AS today_start,
+             ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) + INTERVAL '1 day') AT TIME ZONE ${timezone}) AS tomorrow_start,
+             ((DATE_TRUNC('day', CURRENT_TIMESTAMP AT TIME ZONE ${timezone}) - INTERVAL '7 days') AT TIME ZONE ${timezone}) AS last7_start
+         ),
+         provider_stats AS (
+           -- 先按最终供应商聚合，再与 providers 做 LEFT JOIN，避免 providers × 今日请求 的笛卡尔积
+           SELECT
+            final_provider_id,
+            COALESCE(SUM(cost_usd), 0) AS today_cost,
+            COUNT(*)::integer AS today_calls
+          FROM usage_ledger
+          WHERE blocked_by IS NULL
+            AND created_at >= (SELECT today_start FROM bounds)
+            AND created_at < (SELECT tomorrow_start FROM bounds)
+          GROUP BY final_provider_id
+        ),
+        latest_call AS (
+          SELECT DISTINCT ON (final_provider_id)
+            final_provider_id,
+            created_at AS last_call_time,
+            model AS last_call_model
+          FROM usage_ledger
+          WHERE blocked_by IS NULL
+            AND created_at >= (SELECT last7_start FROM bounds)
+          -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
+          ORDER BY final_provider_id, created_at DESC, id DESC
+        )
         SELECT
           p.id,
-          COALESCE(
-            SUM(CASE
-              WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-                AND (
-                  -- 情况1：无重试（provider_chain 为 NULL 或空数组），使用 provider_id
-                  (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
-                  OR
-                  -- 情况2：有重试，使用 providerChain 最后一项的 id
-                  (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
-                   AND (mr.provider_chain->-1->>'id')::int = p.id)
-                )
-              THEN mr.cost_usd ELSE 0 END),
-            0
-          ) AS today_cost,
-          COUNT(CASE
-            WHEN (mr.created_at AT TIME ZONE ${timezone})::date = (CURRENT_TIMESTAMP AT TIME ZONE ${timezone})::date
-              AND (
-                (mr.provider_chain IS NULL OR jsonb_array_length(mr.provider_chain) = 0) AND mr.provider_id = p.id
-                OR
-                (mr.provider_chain IS NOT NULL AND jsonb_array_length(mr.provider_chain) > 0
-                 AND (mr.provider_chain->-1->>'id')::int = p.id)
-              )
-            THEN 1 END)::integer AS today_calls
+          COALESCE(ps.today_cost, 0) AS today_cost,
+          COALESCE(ps.today_calls, 0) AS today_calls,
+          lc.last_call_time,
+          lc.last_call_model
         FROM providers p
-        -- 性能优化：添加日期过滤条件，仅扫描今日数据（避免全表扫描）
-        LEFT JOIN message_request mr ON mr.deleted_at IS NULL
-          AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          AND mr.created_at >= (CURRENT_DATE AT TIME ZONE ${timezone})
+        LEFT JOIN provider_stats ps ON p.id = ps.final_provider_id
+        LEFT JOIN latest_call lc ON p.id = lc.final_provider_id
         WHERE p.deleted_at IS NULL
-        GROUP BY p.id
-      ),
-      latest_call AS (
-        SELECT DISTINCT ON (final_provider_id)
-          -- 计算最终供应商ID：优先使用 providerChain 最后一项的 id
-          CASE
-            WHEN provider_chain IS NULL OR jsonb_array_length(provider_chain) = 0 THEN provider_id
-            ELSE (provider_chain->-1->>'id')::int
-          END AS final_provider_id,
-          created_at AS last_call_time,
-          model AS last_call_model
-        FROM message_request
-        -- 性能优化：添加 7 天时间范围限制（避免扫描历史数据）
-        WHERE deleted_at IS NULL
-          AND (blocked_by IS NULL OR blocked_by <> 'warmup')
-          AND created_at >= (CURRENT_DATE AT TIME ZONE ${timezone} - INTERVAL '7 days')
-        ORDER BY final_provider_id, created_at DESC
-      )
-      SELECT
-        ps.id,
-        ps.today_cost,
-        ps.today_calls,
-        lc.last_call_time,
-        lc.last_call_model
-      FROM provider_stats ps
-      LEFT JOIN latest_call lc ON ps.id = lc.final_provider_id
-      ORDER BY ps.id ASC
-    `;
+        ORDER BY p.id ASC
+      `;
 
-    logger.trace("getProviderStatistics:executing_query");
+      logger.trace("getProviderStatistics:executing_query");
 
-    const result = await db.execute(query);
+      const result = await db.execute(query);
+      const data = Array.from(result) as ProviderStatisticsRow[];
 
-    logger.trace("getProviderStatistics:result", {
-      count: Array.isArray(result) ? result.length : 0,
-    });
+      logger.trace("getProviderStatistics:result", {
+        count: data.length,
+      });
 
-    // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
-    // last_call_time 由数据库返回为时间戳（UTC）。
-    // 这里保持原样，交由上层进行展示格式化。
-    return result as unknown as Array<{
-      id: number;
-      today_cost: string;
-      today_calls: number;
-      last_call_time: Date | null;
-      last_call_model: string | null;
-    }>;
+      // 注意：返回结果中的 today_cost 为 numeric，使用字符串表示；
+      // last_call_time 由数据库返回为时间戳（UTC）。
+      // 这里保持原样，交由上层进行展示格式化。
+      providerStatisticsCache = {
+        timezone,
+        expiresAt: Date.now() + PROVIDER_STATISTICS_CACHE_TTL_MS,
+        data,
+      };
+
+      return data;
+    })();
+
+    // Set in-flight BEFORE awaiting to prevent concurrent callers from starting duplicate queries
+    providerStatisticsInFlight = { timezone, promise };
+
+    try {
+      return await promise;
+    } finally {
+      if (providerStatisticsInFlight?.promise === promise) {
+        providerStatisticsInFlight = null;
+      }
+    }
   } catch (error) {
     logger.trace("getProviderStatistics:error", {
       message: error instanceof Error ? error.message : String(error),

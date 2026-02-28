@@ -1,9 +1,22 @@
 import { cookies, headers } from "next/headers";
+import type { NextResponse } from "next/server";
 import { config } from "@/lib/config/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
-import { validateApiKeyAndGetUser } from "@/repository/key";
+import { logger } from "@/lib/logger";
+import { constantTimeEqual } from "@/lib/security/constant-time-compare";
+import { findKeyList, validateApiKeyAndGetUser } from "@/repository/key";
 import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
+
+/**
+ * Apply no-store / cache-busting headers to auth responses that mutate session state.
+ * Prevents browsers and intermediary caches from storing sensitive auth responses.
+ */
+export function withNoStoreHeaders<T extends NextResponse>(response: T): T {
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  response.headers.set("Pragma", "no-cache");
+  return response;
+}
 
 export type ScopedAuthContext = {
   session: AuthSession;
@@ -25,12 +38,101 @@ declare global {
   var __cchAuthSessionStorage: AuthSessionStorage | undefined;
 }
 
-const AUTH_COOKIE_NAME = "auth-token";
+export const AUTH_COOKIE_NAME = "auth-token";
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export interface AuthSession {
   user: User;
   key: Key;
+}
+
+export type SessionTokenMode = "legacy" | "dual" | "opaque";
+export type SessionTokenKind = "legacy" | "opaque";
+
+export function getSessionTokenMode(): SessionTokenMode {
+  return getEnvConfig().SESSION_TOKEN_MODE;
+}
+
+// Session contract: opaque token is a random string, not the API key
+export interface OpaqueSessionContract {
+  sessionId: string; // random opaque token
+  keyFingerprint: string; // hash of the API key (for audit, not auth)
+  createdAt: number; // unix timestamp
+  expiresAt: number; // unix timestamp
+  userId: number;
+  userRole: string;
+}
+
+export interface SessionTokenMigrationFlags {
+  dualReadWindowEnabled: boolean;
+  hardCutoverEnabled: boolean;
+  emergencyRollbackEnabled: boolean;
+}
+
+export const SESSION_TOKEN_SEMANTICS = {
+  expiry: "hard_expiry_at_expires_at",
+  rotation: "rotate_before_expiry_and_revoke_previous_session_id",
+  revocation: "server_side_revocation_invalidates_session_immediately",
+  compatibility: {
+    legacy: "accept_legacy_only",
+    dual: "accept_legacy_and_opaque",
+    opaque: "accept_opaque_only",
+  },
+} as const;
+
+export function getSessionTokenMigrationFlags(
+  mode: SessionTokenMode = getSessionTokenMode()
+): SessionTokenMigrationFlags {
+  return {
+    dualReadWindowEnabled: mode === "dual",
+    hardCutoverEnabled: mode === "opaque",
+    emergencyRollbackEnabled: mode === "legacy",
+  };
+}
+
+export function isSessionTokenKindAccepted(
+  mode: SessionTokenMode,
+  kind: SessionTokenKind
+): boolean {
+  if (mode === "dual") return true;
+  if (mode === "legacy") return kind === "legacy";
+  return kind === "opaque";
+}
+
+export function isOpaqueSessionContract(value: unknown): value is OpaqueSessionContract {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.sessionId === "string" &&
+    candidate.sessionId.length > 0 &&
+    typeof candidate.keyFingerprint === "string" &&
+    candidate.keyFingerprint.length > 0 &&
+    typeof candidate.createdAt === "number" &&
+    Number.isFinite(candidate.createdAt) &&
+    typeof candidate.expiresAt === "number" &&
+    Number.isFinite(candidate.expiresAt) &&
+    candidate.expiresAt > candidate.createdAt &&
+    typeof candidate.userId === "number" &&
+    Number.isInteger(candidate.userId) &&
+    typeof candidate.userRole === "string" &&
+    candidate.userRole.length > 0
+  );
+}
+
+const OPAQUE_SESSION_ID_PREFIX = "sid_";
+
+export function detectSessionTokenKind(token: string): SessionTokenKind {
+  const trimmed = token.trim();
+  if (!trimmed) return "legacy";
+  return trimmed.startsWith(OPAQUE_SESSION_ID_PREFIX) ? "opaque" : "legacy";
+}
+
+export function isSessionTokenAccepted(
+  token: string,
+  mode: SessionTokenMode = getSessionTokenMode()
+): boolean {
+  return isSessionTokenKindAccepted(mode, detectSessionTokenKind(token));
 }
 
 export function runWithAuthSession<T>(
@@ -65,7 +167,7 @@ export async function validateKey(
   const allowReadOnlyAccess = options?.allowReadOnlyAccess ?? false;
 
   const adminToken = config.auth.adminToken;
-  if (adminToken && keyString === adminToken) {
+  if (adminToken && constantTimeEqual(keyString, adminToken)) {
     const now = new Date();
     const adminUser: User = {
       id: -1,
@@ -158,6 +260,40 @@ export async function clearAuthCookie() {
   cookieStore.delete(AUTH_COOKIE_NAME);
 }
 
+export async function validateAuthToken(
+  token: string,
+  options?: { allowReadOnlyAccess?: boolean }
+): Promise<AuthSession | null> {
+  const mode = getSessionTokenMode();
+
+  if (mode !== "legacy") {
+    try {
+      const sessionStore = await getSessionStore();
+      const sessionData = await sessionStore.read(token);
+      if (sessionData) {
+        if (sessionData.expiresAt <= Date.now()) {
+          logger.warn("Opaque session expired (application-level check)", {
+            sessionId: sessionData.sessionId,
+            expiresAt: sessionData.expiresAt,
+          });
+          return null;
+        }
+        return convertToAuthSession(sessionData, options);
+      }
+    } catch (error) {
+      logger.warn("Opaque session read failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  if (mode === "legacy" || mode === "dual") {
+    return validateKey(token, options);
+  }
+
+  return null;
+}
+
 export async function getSession(options?: {
   /**
    * 允许仅访问只读页面（如 my-usage），跳过 canLoginWebUi 校验
@@ -181,7 +317,79 @@ export async function getSession(options?: {
     return null;
   }
 
-  return validateKey(keyString, options);
+  return validateAuthToken(keyString, options);
+}
+
+type SessionStoreReader = {
+  read(sessionId: string): Promise<OpaqueSessionContract | null>;
+};
+
+let sessionStorePromise: Promise<SessionStoreReader> | null = null;
+
+async function getSessionStore(): Promise<SessionStoreReader> {
+  if (!sessionStorePromise) {
+    sessionStorePromise = import("@/lib/auth-session-store/redis-session-store")
+      .then(({ RedisSessionStore }) => new RedisSessionStore())
+      .catch((error) => {
+        sessionStorePromise = null;
+        throw error;
+      });
+  }
+
+  return sessionStorePromise;
+}
+
+export async function toKeyFingerprint(keyString: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(keyString));
+  const hex = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(
+    ""
+  );
+  return `sha256:${hex}`;
+}
+
+function normalizeKeyFingerprint(fingerprint: string): string {
+  return fingerprint.startsWith("sha256:") ? fingerprint : `sha256:${fingerprint}`;
+}
+
+async function convertToAuthSession(
+  sessionData: OpaqueSessionContract,
+  options?: { allowReadOnlyAccess?: boolean }
+): Promise<AuthSession | null> {
+  const expectedFingerprint = normalizeKeyFingerprint(sessionData.keyFingerprint);
+
+  // Admin token uses virtual user (id=-1) which has no DB keys;
+  // verify fingerprint against the configured admin token directly.
+  if (sessionData.userId === -1) {
+    const adminToken = config.auth.adminToken;
+    if (!adminToken) return null;
+    const adminFingerprint = await toKeyFingerprint(adminToken);
+    return constantTimeEqual(adminFingerprint, expectedFingerprint)
+      ? validateKey(adminToken, options)
+      : null;
+  }
+
+  const keyList = await findKeyList(sessionData.userId);
+
+  for (const key of keyList) {
+    const keyFingerprint = await toKeyFingerprint(key.key);
+    if (constantTimeEqual(keyFingerprint, expectedFingerprint)) {
+      return validateKey(key.key, options);
+    }
+  }
+
+  return null;
+}
+
+export async function getSessionWithDualRead(options?: {
+  allowReadOnlyAccess?: boolean;
+}): Promise<AuthSession | null> {
+  return getSession(options);
+}
+
+export async function validateSession(options?: {
+  allowReadOnlyAccess?: boolean;
+}): Promise<AuthSession | null> {
+  return getSessionWithDualRead(options);
 }
 
 function parseBearerToken(raw: string | null | undefined): string | undefined {

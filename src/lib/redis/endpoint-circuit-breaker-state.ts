@@ -47,6 +47,94 @@ function deserializeState(data: Record<string, string>): EndpointCircuitBreakerS
   };
 }
 
+export async function loadEndpointCircuitStates(
+  endpointIds: readonly number[]
+): Promise<Map<number, EndpointCircuitBreakerState | null>> {
+  const uniqueEndpointIds = Array.from(new Set(endpointIds));
+  const stateMap = new Map<number, EndpointCircuitBreakerState | null>();
+
+  for (const endpointId of uniqueEndpointIds) {
+    stateMap.set(endpointId, null);
+  }
+
+  const redis = getRedisClient();
+
+  if (!redis || uniqueEndpointIds.length === 0) {
+    if (!redis && uniqueEndpointIds.length > 0) {
+      logger.debug("[EndpointCircuitState] Redis not available, returning null", {
+        count: uniqueEndpointIds.length,
+      });
+    }
+    return stateMap;
+  }
+
+  const PIPELINE_BATCH_SIZE = 200;
+
+  try {
+    for (let i = 0; i < uniqueEndpointIds.length; i += PIPELINE_BATCH_SIZE) {
+      const batchIds = uniqueEndpointIds.slice(i, i + PIPELINE_BATCH_SIZE);
+      const pipeline = redis.pipeline();
+
+      for (const endpointId of batchIds) {
+        pipeline.hgetall(getStateKey(endpointId));
+      }
+
+      const results = await pipeline.exec();
+      if (!results) {
+        logger.warn("[EndpointCircuitState] Pipeline exec returned null", {
+          count: batchIds.length,
+        });
+        continue;
+      }
+
+      let errorCount = 0;
+      const errorSamples: Array<{ endpointId: number; error: string }> = [];
+
+      for (let index = 0; index < batchIds.length; index++) {
+        const endpointId = batchIds[index];
+        const [error, data] = results[index] ?? [];
+
+        if (error) {
+          errorCount += 1;
+          if (errorSamples.length < 3) {
+            errorSamples.push({
+              endpointId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          continue;
+        }
+
+        if (!data || typeof data !== "object" || Array.isArray(data)) {
+          continue;
+        }
+
+        const record = data as Record<string, string>;
+        if (Object.keys(record).length === 0) {
+          continue;
+        }
+
+        stateMap.set(endpointId, deserializeState(record));
+      }
+
+      if (errorCount > 0) {
+        logger.warn("[EndpointCircuitState] Partial batch load failures", {
+          errorCount,
+          sample: errorSamples,
+        });
+      }
+    }
+
+    return stateMap;
+  } catch (error) {
+    logger.warn("[EndpointCircuitState] Failed to batch load from Redis", {
+      count: uniqueEndpointIds.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return stateMap;
+  }
+}
+
 export async function loadEndpointCircuitState(
   endpointId: number
 ): Promise<EndpointCircuitBreakerState | null> {
@@ -89,8 +177,10 @@ export async function saveEndpointCircuitState(
   try {
     const key = getStateKey(endpointId);
     const data = serializeState(state);
-    await redis.hset(key, data);
-    await redis.expire(key, STATE_TTL_SECONDS);
+    const pipeline = redis.pipeline();
+    pipeline.hset(key, data);
+    pipeline.expire(key, STATE_TTL_SECONDS);
+    await pipeline.exec();
   } catch (error) {
     logger.warn("[EndpointCircuitState] Failed to save to Redis", {
       endpointId,

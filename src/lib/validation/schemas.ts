@@ -74,6 +74,21 @@ const ANTHROPIC_ADAPTIVE_THINKING_CONFIG = z
 // - 'disabled': force remove googleSearch tool from request
 const GEMINI_GOOGLE_SEARCH_PREFERENCE = z.enum(["inherit", "enabled", "disabled"]);
 
+const CLIENT_PATTERN_SCHEMA = z
+  .string()
+  .trim()
+  .min(1, "客户端模式不能为空")
+  .max(64, "客户端模式长度不能超过64个字符");
+const CLIENT_PATTERN_ARRAY_SCHEMA = z
+  .array(CLIENT_PATTERN_SCHEMA)
+  .max(50, "客户端模式数量不能超过50个");
+const OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA = z.preprocess(
+  (value) => (value === null ? [] : value),
+  CLIENT_PATTERN_ARRAY_SCHEMA.optional()
+);
+const OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA =
+  OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA.default([]);
+
 /**
  * 用户创建数据验证schema
  */
@@ -197,11 +212,9 @@ export const CreateUserSchema = z.object({
     .optional()
     .default("00:00"),
   // Allowed clients (CLI/IDE restrictions)
-  allowedClients: z
-    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
-    .max(50, "客户端模式数量不能超过50个")
-    .optional()
-    .default([]),
+  allowedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
+  // Blocked clients (CLI/IDE restrictions)
+  blockedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
   // Allowed models (AI model restrictions)
   allowedModels: z
     .array(z.string().max(64, "模型名称长度不能超过64个字符"))
@@ -322,10 +335,9 @@ export const UpdateUserSchema = z.object({
     .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "重置时间格式必须为 HH:mm")
     .optional(),
   // Allowed clients (CLI/IDE restrictions)
-  allowedClients: z
-    .array(z.string().max(64, "客户端模式长度不能超过64个字符"))
-    .max(50, "客户端模式数量不能超过50个")
-    .optional(),
+  allowedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
+  // Blocked clients (CLI/IDE restrictions)
+  blockedClients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
   // Allowed models (AI model restrictions)
   allowedModels: z
     .array(z.string().max(64, "模型名称长度不能超过64个字符"))
@@ -436,7 +448,20 @@ export const CreateProviderSchema = z
       .default("claude"),
     preserve_client_ip: z.boolean().optional().default(false),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    // Scheduled active time window (HH:mm format)
+    active_time_start: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_start must be HH:mm format")
+      .nullable()
+      .optional(),
+    active_time_end: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_end must be HH:mm format")
+      .nullable()
+      .optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
+    blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA,
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional().default("none"),
     mcp_passthrough_url: z
@@ -490,6 +515,7 @@ export const CreateProviderSchema = z
       .optional()
       .default(0),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
+    swap_cache_ttl_billing: z.boolean().optional().default(false),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
     codex_reasoning_effort_preference:
       CODEX_REASONING_EFFORT_PREFERENCE.optional().default("inherit"),
@@ -606,6 +632,23 @@ export const CreateProviderSchema = z
         });
       }
     }
+    // active_time_start and active_time_end must be both set or both null
+    const hasStart = data.active_time_start != null;
+    const hasEnd = data.active_time_end != null;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must be both set or both cleared",
+        path: [hasStart ? "active_time_end" : "active_time_start"],
+      });
+    }
+    if (hasStart && hasEnd && data.active_time_start === data.active_time_end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must not be the same",
+        path: ["active_time_end"],
+      });
+    }
   });
 
 /**
@@ -641,7 +684,19 @@ export const UpdateProviderSchema = z
       .optional(),
     preserve_client_ip: z.boolean().optional(),
     model_redirects: z.record(z.string(), z.string()).nullable().optional(),
+    active_time_start: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_start must be HH:mm format")
+      .nullable()
+      .optional(),
+    active_time_end: z
+      .string()
+      .regex(/^([01][0-9]|2[0-3]):[0-5][0-9]$/, "active_time_end must be HH:mm format")
+      .nullable()
+      .optional(),
     allowed_models: z.array(z.string()).nullable().optional(),
+    allowed_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
+    blocked_clients: OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA,
     // MCP 透传配置
     mcp_passthrough_type: z.enum(["none", "minimax", "glm", "custom"]).optional(),
     mcp_passthrough_url: z
@@ -693,6 +748,7 @@ export const UpdateProviderSchema = z
       .max(1000, "并发Session上限不能超过1000")
       .optional(),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
+    swap_cache_ttl_billing: z.boolean().optional(),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
     codex_reasoning_effort_preference: CODEX_REASONING_EFFORT_PREFERENCE.optional(),
     codex_reasoning_summary_preference: CODEX_REASONING_SUMMARY_PREFERENCE.optional(),
@@ -805,6 +861,23 @@ export const UpdateProviderSchema = z
           path: ["anthropic_thinking_budget_preference"],
         });
       }
+    }
+    // active_time_start and active_time_end must be both set or both null
+    const hasStart = data.active_time_start != null;
+    const hasEnd = data.active_time_end != null;
+    if (hasStart !== hasEnd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must be both set or both cleared",
+        path: [hasStart ? "active_time_end" : "active_time_start"],
+      });
+    }
+    if (hasStart && hasEnd && data.active_time_start === data.active_time_end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "active_time_start and active_time_end must not be the same",
+        path: ["active_time_end"],
+      });
     }
   });
 
