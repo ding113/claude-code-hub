@@ -24,6 +24,32 @@ function isDevelopmentRuntime(): boolean {
   return process.env.NODE_ENV === "development";
 }
 
+/**
+ * Extract the effective host from request headers.
+ * Prefers X-Forwarded-Host (reverse proxy) then falls back to Host.
+ */
+function resolveEffectiveHost(request: CsrfGuardRequest): string | null {
+  const forwarded = request.headers.get("x-forwarded-host")?.trim().toLowerCase();
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return request.headers.get("host")?.trim().toLowerCase() ?? null;
+}
+
+/**
+ * Compare Origin header against Host header (standard CSRF fallback).
+ * Extracts host:port from the Origin URL and compares with the request host.
+ */
+function isOriginMatchingHost(origin: string, host: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.host === host;
+  } catch {
+    return false;
+  }
+}
+
 export function createCsrfOriginGuard(config: CsrfGuardConfig) {
   const allowSameOrigin = config.allowSameOrigin ?? true;
   const enforceInDevelopment = config.enforceInDevelopment ?? false;
@@ -54,6 +80,16 @@ export function createCsrfOriginGuard(config: CsrfGuardConfig) {
         }
 
         return { allowed: true };
+      }
+
+      // Fallback: compare Origin against Host header (standard CSRF technique).
+      // Handles cases where sec-fetch-site is absent (reverse proxy stripping,
+      // older browsers) but the request is genuinely same-origin.
+      if (allowSameOrigin) {
+        const host = resolveEffectiveHost(request);
+        if (host && isOriginMatchingHost(origin, host)) {
+          return { allowed: true };
+        }
       }
 
       if (allowedOrigins.has(origin)) {
