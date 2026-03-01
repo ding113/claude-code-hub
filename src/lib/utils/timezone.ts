@@ -128,14 +128,3 @@ export function getTimezoneOffsetMinutes(timezone: string): number {
 
   return (tzDate.getTime() - utcDate.getTime()) / (1000 * 60);
 }
-
-/**
- * Resolves the system timezone using the fallback chain:
- *   1. DB system_settings.timezone (via cached settings)
- *   2. env TZ variable
- *   3. "UTC" as final fallback
- *
- * Each candidate is validated via isValidIANATimezone before being accepted.
- *
- * @returns Resolved IANA timezone identifier (always valid)
- */

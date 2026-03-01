@@ -371,32 +371,67 @@ export async function getProviderManagerBootstrapData(): Promise<ProviderManager
     };
   }
 
-  const [providers, systemSettings] = await Promise.all([
+  const [providersResult, systemSettingsResult] = await Promise.allSettled([
     getProviders(),
     getCachedSystemSettings(),
   ]);
 
+  const providers = providersResult.status === "fulfilled" ? providersResult.value : [];
+  const currencyDisplay =
+    systemSettingsResult.status === "fulfilled"
+      ? systemSettingsResult.value.currencyDisplay
+      : ("USD" satisfies CurrencyCode);
+
+  if (providersResult.status === "rejected") {
+    logger.warn("[ProvidersBootstrap] Failed to load providers, fallback to empty list", {
+      error:
+        providersResult.reason instanceof Error
+          ? providersResult.reason.message
+          : String(providersResult.reason),
+    });
+  }
+
+  if (systemSettingsResult.status === "rejected") {
+    logger.warn("[ProvidersBootstrap] Failed to load system settings, fallback to USD", {
+      error:
+        systemSettingsResult.reason instanceof Error
+          ? systemSettingsResult.reason.message
+          : String(systemSettingsResult.reason),
+    });
+  }
+
   const providerIds = providers.map((provider) => provider.id);
-  const healthStatusRaw = await getAllHealthStatusAsync(providerIds, { forceRefresh: true });
+  const healthStatusRaw = await getAllHealthStatusAsync(providerIds, { forceRefresh: true }).catch(
+    (error) => {
+      logger.warn("[ProvidersBootstrap] Failed to load health status, fallback to empty", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  );
 
   const now = Date.now();
-  const healthStatus: ProviderHealthStatusMap = {};
-  Object.entries(healthStatusRaw).forEach(([providerId, health]) => {
-    healthStatus[Number(providerId)] = {
-      circuitState: health.circuitState,
-      failureCount: health.failureCount,
-      lastFailureTime: health.lastFailureTime,
-      circuitOpenUntil: health.circuitOpenUntil,
-      recoveryMinutes: health.circuitOpenUntil
-        ? Math.ceil((health.circuitOpenUntil - now) / 60000)
-        : null,
-    };
-  });
+  const healthStatus: ProviderHealthStatusMap = Object.fromEntries(
+    Object.entries(healthStatusRaw).map(([providerIdRaw, health]) => {
+      const providerId = Number(providerIdRaw);
+      const circuitOpenUntil = health.circuitOpenUntil ?? null;
+      return [
+        providerId,
+        {
+          circuitState: health.circuitState,
+          failureCount: health.failureCount,
+          lastFailureTime: health.lastFailureTime,
+          circuitOpenUntil,
+          recoveryMinutes: circuitOpenUntil ? Math.ceil((circuitOpenUntil - now) / 60000) : null,
+        },
+      ];
+    })
+  );
 
   return {
     providers,
     healthStatus,
-    systemSettings: { currencyDisplay: systemSettings.currencyDisplay },
+    systemSettings: { currencyDisplay },
   };
 }
 

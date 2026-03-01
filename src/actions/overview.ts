@@ -1,9 +1,9 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
-import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getOverviewWithCache } from "@/lib/redis";
+import { getAllowGlobalUsageViewFromDB } from "@/repository/system-config";
 import { getConcurrentSessions as getConcurrentSessionsCount } from "./concurrent-sessions";
 import type { ActionResult } from "./types";
 
@@ -48,9 +48,9 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
       };
     }
 
-    const settings = await getCachedSystemSettings();
     const isAdmin = session.user.role === "admin";
-    const canViewGlobalData = isAdmin || settings.allowGlobalUsageView;
+    const allowGlobalUsageView = !isAdmin ? await getAllowGlobalUsageViewFromDB() : false;
+    const canViewGlobalData = isAdmin || allowGlobalUsageView;
 
     // 根据权限决定查询范围
     const userId = canViewGlobalData ? undefined : session.user.id;

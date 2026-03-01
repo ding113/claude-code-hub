@@ -1,11 +1,10 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
-import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getStatisticsWithCache } from "@/lib/redis";
 import { formatCostForStorage } from "@/lib/utils/currency";
-import { getActiveKeysForUserFromDB, getActiveUsersFromDB } from "@/repository/statistics";
+import { getAllowGlobalUsageViewFromDB } from "@/repository/system-config";
 import type {
   ChartDataItem,
   DatabaseKey,
@@ -23,6 +22,28 @@ import type { ActionResult } from "./types";
  * 生成图表数据使用的用户键，避免名称碰撞
  */
 const createDataKey = (prefix: string, id: number): string => `${prefix}-${id}`;
+
+function extractUsersFromStatsData(statsData: DatabaseStatRow[]): DatabaseUser[] {
+  const unique = new Map<number, string>();
+  for (const row of statsData) {
+    unique.set(row.user_id, row.user_name);
+  }
+
+  return Array.from(unique.entries())
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function extractKeysFromStatsData(statsData: DatabaseKeyStatRow[]): DatabaseKey[] {
+  const unique = new Map<number, string>();
+  for (const row of statsData) {
+    unique.set(row.key_id, row.key_name);
+  }
+
+  return Array.from(unique.entries())
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 /**
  * 获取用户统计数据，用于图表展示
@@ -45,13 +66,13 @@ export async function getUserStatistics(
       throw new Error(`Invalid time range: ${timeRange}`);
     }
 
-    const settings = await getCachedSystemSettings();
     const isAdmin = session.user.role === "admin";
+    const allowGlobalUsageView = isAdmin ? true : await getAllowGlobalUsageViewFromDB();
 
     // 确定显示模式
     const mode: "users" | "keys" | "mixed" = isAdmin
       ? "users"
-      : settings.allowGlobalUsageView
+      : allowGlobalUsageView
         ? "mixed"
         : "keys";
 
@@ -62,19 +83,12 @@ export async function getUserStatistics(
 
     if (mode === "users") {
       // Admin: 显示所有用户
-      const [cachedData, userList] = await Promise.all([
-        getStatisticsWithCache(timeRange, "users"),
-        getActiveUsersFromDB(),
-      ]);
-      statsData = cachedData as DatabaseStatRow[];
-      entities = userList;
+      const cachedData = (await getStatisticsWithCache(timeRange, "users")) as DatabaseStatRow[];
+      statsData = cachedData;
+      entities = extractUsersFromStatsData(cachedData);
     } else if (mode === "mixed") {
       // 非 Admin + allowGlobalUsageView: 自己的密钥明细 + 其他用户汇总
-      const [ownKeysList, cachedData] = await Promise.all([
-        getActiveKeysForUserFromDB(session.user.id),
-        getStatisticsWithCache(timeRange, "mixed", session.user.id),
-      ]);
-
+      const cachedData = await getStatisticsWithCache(timeRange, "mixed", session.user.id);
       const mixedData = cachedData as {
         ownKeys: DatabaseKeyStatRow[];
         othersAggregate: DatabaseStatRow[];
@@ -84,15 +98,16 @@ export async function getUserStatistics(
       statsData = [...mixedData.ownKeys, ...mixedData.othersAggregate];
 
       // 合并实体列表：自己的密钥 + 其他用户虚拟实体
-      entities = [...ownKeysList, { id: -1, name: "__others__" }];
+      entities = [...extractKeysFromStatsData(mixedData.ownKeys), { id: -1, name: "__others__" }];
     } else {
       // 非 Admin + !allowGlobalUsageView: 仅显示自己的密钥
-      const [cachedData, keyList] = await Promise.all([
-        getStatisticsWithCache(timeRange, "keys", session.user.id),
-        getActiveKeysForUserFromDB(session.user.id),
-      ]);
-      statsData = cachedData as DatabaseKeyStatRow[];
-      entities = keyList;
+      const cachedData = (await getStatisticsWithCache(
+        timeRange,
+        "keys",
+        session.user.id
+      )) as DatabaseKeyStatRow[];
+      statsData = cachedData;
+      entities = extractKeysFromStatsData(cachedData);
     }
 
     // 将数据转换为适合图表的格式

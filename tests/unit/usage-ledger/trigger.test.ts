@@ -2,9 +2,13 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const sql = readFileSync(resolve(process.cwd(), "src/lib/ledger-backfill/trigger.sql"), "utf-8");
+// 以实际部署的迁移 SQL 为准（trigger.sql 主要用于回填/参考，不一定与最终迁移完全一致）。
+const sql = readFileSync(
+  resolve(process.cwd(), "drizzle/0079_perf_usage_ledger_trigger_skip_blocked_rows.sql"),
+  "utf-8"
+);
 
-describe("fn_upsert_usage_ledger trigger SQL", () => {
+describe("fn_upsert_usage_ledger migration SQL", () => {
   it("contains warmup exclusion check", () => {
     expect(sql).toContain("blocked_by = 'warmup'");
   });
@@ -40,7 +44,7 @@ describe("fn_upsert_usage_ledger trigger SQL", () => {
     expect(sql).toContain("EXISTS (SELECT 1 FROM usage_ledger WHERE request_id = NEW.id)");
   });
 
-  it("creates trigger binding", () => {
-    expect(sql).toContain("CREATE TRIGGER trg_upsert_usage_ledger");
+  it("creates function definition", () => {
+    expect(sql).toContain("CREATE OR REPLACE FUNCTION fn_upsert_usage_ledger");
   });
 });

@@ -9,6 +9,7 @@ import type {
   LeaderboardScope,
 } from "@/lib/redis/leaderboard-cache";
 import { formatCurrency } from "@/lib/utils";
+import { getAllowGlobalUsageViewFromDB } from "@/repository/system-config";
 import type { ProviderType } from "@/types/provider";
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
@@ -48,25 +49,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "未登录" }, { status: 401 });
     }
 
-    // 获取系统配置
-    const systemSettings = await getCachedSystemSettings();
-
     // 检查权限：管理员或开启了全站使用量查看权限
     const isAdmin = session.user.role === "admin";
-    const hasPermission = isAdmin || systemSettings.allowGlobalUsageView;
+    const allowGlobalUsageView = !isAdmin ? await getAllowGlobalUsageViewFromDB() : false;
+    const hasPermission = isAdmin || allowGlobalUsageView;
 
     if (!hasPermission) {
       logger.warn("Leaderboard API: Access denied", {
         userId: session.user.id,
         userName: session.user.name,
         isAdmin,
-        allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+        allowGlobalUsageView,
       });
       return NextResponse.json(
         { error: "无权限访问排行榜，请联系管理员开启全站使用量查看权限" },
         { status: 403 }
       );
     }
+
+    // 获取系统配置（仅权限通过后再读取）
+    const systemSettings = await getCachedSystemSettings();
 
     // 验证参数
     const searchParams = request.nextUrl.searchParams;

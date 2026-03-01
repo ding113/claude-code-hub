@@ -46,7 +46,9 @@
 
 ### 供应商管理（Providers）
 
-- 页面入口：`src/app/[locale]/dashboard/providers/page.tsx`（复用 settings/providers 组件）
+- 页面入口（Settings）：`src/app/[locale]/settings/providers/page.tsx`
+- 快捷入口（Dashboard）：`src/app/[locale]/dashboard/providers/page.tsx`（复用同一套 Providers 管理组件）
+- 复用组件目录：`src/app/[locale]/settings/providers/_components/`
 - 客户端多请求：
   - providers：`src/actions/providers.ts:getProviders`（当前使用 `findAllProvidersFresh()` 绕过 provider cache）
   - health：`src/actions/providers.ts:getProvidersHealthStatus`
@@ -98,7 +100,7 @@
 2) 轮询策略与请求编排（减少无效 QPS）
 - 使用记录：保持 keyset pagination；自动刷新仅更新最新页（已落地）。
 - 活跃会话：在服务端已有缓存的前提下，前端可考虑仅在 tab 可见时轮询，或对并发计数做短 TTL 缓存（不改变展示语义）。
-- 供应商管理：将 providers/health/statistics 的刷新节奏错峰，或合并为单一 endpoints（需要评估 UI 代码改动范围）。
+- 供应商管理：将 providers/health/statistics 的刷新节奏错峰，或合并为单一 endpoint（需要评估 UI 代码改动范围）。
 
 3) 缓存 miss 尖刺治理（降低“缓存雪崩”影响）
 - Overview/Statistics/Leaderboard 的 Redis 锁机制已存在，可补充：

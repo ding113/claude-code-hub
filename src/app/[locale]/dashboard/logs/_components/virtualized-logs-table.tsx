@@ -169,9 +169,22 @@ export function VirtualizedLogsTable({
     if (!shouldPoll) return;
 
     let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => void tick(), autoRefreshIntervalMs);
+    };
 
     const tick = async () => {
-      if (refreshInFlightRef.current) return;
+      if (cancelled) return;
+      if (refreshInFlightRef.current) {
+        scheduleNext();
+        return;
+      }
       refreshInFlightRef.current = true;
 
       try {
@@ -204,6 +217,8 @@ export function VirtualizedLogsTable({
             return old;
           }
 
+          // hasMore 表示“是否还能继续向更旧方向翻页”，因此应以旧的最后一页为准；
+          // 没有旧数据时使用最新页的 hasMore（对应“是否存在更旧数据”）。
           const lastHasMore =
             oldPages.length > 0
               ? (oldPages[oldPages.length - 1]?.hasMore ?? true)
@@ -233,15 +248,17 @@ export function VirtualizedLogsTable({
         // Ignore polling errors (manual refresh still available).
       } finally {
         refreshInFlightRef.current = false;
+        scheduleNext();
       }
     };
 
     void tick();
-    const intervalId = setInterval(() => void tick(), autoRefreshIntervalMs);
 
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, [autoRefreshIntervalMs, filters, queryClient, queryKey, shouldPoll]);
 
