@@ -41,8 +41,10 @@ vi.mock("@/lib/rate-limit/time-utils", () => ({
 }));
 
 const sumKeyCostInTimeRangeMock = vi.fn(async () => 0);
+const sumKeyTotalCostMock = vi.fn(async () => 0);
 vi.mock("@/repository/statistics", () => ({
   sumKeyCostInTimeRange: sumKeyCostInTimeRangeMock,
+  sumKeyTotalCost: sumKeyTotalCostMock,
 }));
 
 const limitMock = vi.fn();
@@ -59,8 +61,10 @@ vi.mock("@/drizzle/db", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: {
+    info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 
@@ -89,6 +93,7 @@ describe("getKeyQuotaUsage - concurrent limit inheritance", () => {
           limitConcurrentSessions: 0,
         },
         userLimitConcurrentSessions: 15,
+        userCostResetAt: null,
       },
     ]);
 

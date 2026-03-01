@@ -31,6 +31,8 @@ beforeEach(() => {
     ENABLE_API_KEY_REDIS_CACHE: "true",
     REDIS_URL: "redis://localhost:6379",
     ENABLE_RATE_LIMIT: "true",
+    CI: "",
+    NEXT_PHASE: "",
   };
 });
 

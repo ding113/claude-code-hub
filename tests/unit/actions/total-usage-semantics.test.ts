@@ -145,7 +145,8 @@ describe("total-usage-semantics", () => {
       expect(sumKeyQuotaCostsByIdMock).toHaveBeenCalledWith(
         1,
         expect.any(Object),
-        ALL_TIME_MAX_AGE_DAYS
+        ALL_TIME_MAX_AGE_DAYS,
+        null
       );
     });
 
@@ -195,7 +196,8 @@ describe("total-usage-semantics", () => {
       expect(sumUserQuotaCostsMock).toHaveBeenCalledWith(
         1,
         expect.any(Object),
-        ALL_TIME_MAX_AGE_DAYS
+        ALL_TIME_MAX_AGE_DAYS,
+        null
       );
     });
   });
@@ -228,7 +230,11 @@ describe("total-usage-semantics", () => {
       await getUserAllLimitUsage(1);
 
       // Verify sumUserTotalCost was called with Infinity (all-time)
-      expect(sumUserTotalCostMock).toHaveBeenCalledWith(1, Infinity);
+      // 3rd arg is user.costResetAt (undefined when not set on mock user)
+      const calls = sumUserTotalCostMock.mock.calls;
+      expect(calls.length).toBe(1);
+      expect(calls[0][0]).toBe(1);
+      expect(calls[0][1]).toBe(Infinity);
     });
   });
 
@@ -252,9 +258,9 @@ describe("total-usage-semantics", () => {
       expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
 
       // Verify quota aggregation uses the constant for all-time usage
-      expect(content).toMatch(/sumUserQuotaCosts\([^)]*ALL_TIME_MAX_AGE_DAYS\s*\)/);
+      expect(content).toMatch(/sumUserQuotaCosts\([\s\S]*?ALL_TIME_MAX_AGE_DAYS/);
 
-      expect(content).toMatch(/sumKeyQuotaCostsById\([^)]*ALL_TIME_MAX_AGE_DAYS\s*\)/);
+      expect(content).toMatch(/sumKeyQuotaCostsById\([\s\S]*?ALL_TIME_MAX_AGE_DAYS/);
     });
 
     it("should verify getUserAllLimitUsage passes ALL_TIME_MAX_AGE_DAYS", async () => {
@@ -267,8 +273,8 @@ describe("total-usage-semantics", () => {
       // Verify the constant is defined as Infinity
       expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
 
-      // Verify sumUserTotalCost is called with the constant
-      expect(content).toContain("sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS)");
+      // Verify sumUserTotalCost is called with the constant (+ optional costResetAt arg)
+      expect(content).toMatch(/sumUserTotalCost\(userId,\s*ALL_TIME_MAX_AGE_DAYS/);
     });
   });
 });

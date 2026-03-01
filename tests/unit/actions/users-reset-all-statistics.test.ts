@@ -22,11 +22,13 @@ vi.mock("next/cache", () => ({
 
 // Mock repository/user
 const findUserByIdMock = vi.fn();
+const resetUserCostResetAtMock = vi.fn();
 vi.mock("@/repository/user", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/repository/user")>();
   return {
     ...actual,
     findUserById: findUserByIdMock,
+    resetUserCostResetAt: resetUserCostResetAtMock,
   };
 });
 
@@ -87,6 +89,7 @@ describe("resetUserAllStatistics", () => {
     redisPipelineMock.exec.mockResolvedValue([]);
     // DB delete returns resolved promise
     dbDeleteWhereMock.mockResolvedValue(undefined);
+    resetUserCostResetAtMock.mockResolvedValue(true);
   });
 
   test("should return PERMISSION_DENIED for non-admin user", async () => {
@@ -177,8 +180,9 @@ describe("resetUserAllStatistics", () => {
     const result = await resetUserAllStatistics(123);
 
     expect(result.ok).toBe(true);
+    // Pipeline partial failures logged as warn inside clearUserCostCache
     expect(loggerMock.warn).toHaveBeenCalledWith(
-      "Some Redis deletes failed during user statistics reset",
+      "Some Redis deletes failed during cost cache cleanup",
       expect.objectContaining({ errorCount: 1, userId: 123 })
     );
   });
@@ -199,21 +203,21 @@ describe("resetUserAllStatistics", () => {
     expect(loggerMock.warn).toHaveBeenCalled();
   });
 
-  test("should succeed with error log when pipeline.exec throws", async () => {
+  test("should succeed when pipeline.exec throws (caught inside clearUserCostCache)", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({ id: 123, name: "Test User" });
     findKeyListMock.mockResolvedValue([{ id: 1 }]);
     scanPatternMock.mockResolvedValue(["key:1:cost_daily"]);
-    // pipeline.exec throws - caught by outer try-catch
+    // pipeline.exec throws - caught inside clearUserCostCache (never-throws contract)
     redisPipelineMock.exec.mockRejectedValue(new Error("Pipeline failed"));
 
     const { resetUserAllStatistics } = await import("@/actions/users");
     const result = await resetUserAllStatistics(123);
 
-    // Should still succeed - DB logs already deleted
+    // clearUserCostCache catches pipeline.exec throw internally, logs warn
     expect(result.ok).toBe(true);
-    expect(loggerMock.error).toHaveBeenCalledWith(
-      "Failed to clear Redis cache during user statistics reset",
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "Redis pipeline.exec() failed during cost cache cleanup",
       expect.objectContaining({ userId: 123 })
     );
   });
