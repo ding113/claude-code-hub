@@ -13,7 +13,7 @@ import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions"
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup } from "@/lib/utils/provider-group";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { maskKey } from "@/lib/utils/validation";
 import { formatZodError } from "@/lib/utils/zod-i18n";
 import { CreateUserSchema, UpdateUserSchema } from "@/lib/validation/schemas";

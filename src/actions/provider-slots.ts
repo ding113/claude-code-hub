@@ -6,7 +6,7 @@ import { providers } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { SessionTracker } from "@/lib/session-tracker";
-import { getSystemSettings } from "@/repository/system-config";
+import { getAllowGlobalUsageViewFromDB } from "@/repository/system-config";
 import type { ActionResult } from "./types";
 
 /**
@@ -42,9 +42,9 @@ export async function getProviderSlots(): Promise<ActionResult<ProviderSlotInfo[
       };
     }
 
-    const settings = await getSystemSettings();
     const isAdmin = session.user.role === "admin";
-    const canViewGlobalData = isAdmin || settings.allowGlobalUsageView;
+    const allowGlobalUsageView = !isAdmin ? await getAllowGlobalUsageViewFromDB() : false;
+    const canViewGlobalData = isAdmin || allowGlobalUsageView;
 
     if (!canViewGlobalData) {
       logger.debug("ProviderSlots: User without global view permission", {
@@ -67,21 +67,21 @@ export async function getProviderSlots(): Promise<ActionResult<ProviderSlotInfo[
       .where(and(eq(providers.isEnabled, true), isNull(providers.deletedAt)))
       .orderBy(providers.priority, providers.id);
 
-    // 并行获取每个供应商的并发数
-    const slotInfoList = await Promise.all(
-      providerList.map(
-        async (provider: { id: number; name: string; limitConcurrentSessions: number | null }) => {
-          const usedSlots = await SessionTracker.getProviderSessionCount(provider.id);
+    // 批量获取并发数（避免 Redis N+1）
+    const providerIds = providerList.map((p) => p.id);
+    const usedSlotsByProviderId = await SessionTracker.getProviderSessionCountBatch(providerIds);
 
-          return {
-            providerId: provider.id,
-            name: provider.name,
-            usedSlots,
-            totalSlots: provider.limitConcurrentSessions ?? 0,
-            totalVolume: 0, // This will be populated by the calling action from leaderboard data.
-          };
-        }
-      )
+    const slotInfoList = providerList.map(
+      (provider: { id: number; name: string; limitConcurrentSessions: number | null }) => {
+        const usedSlots = usedSlotsByProviderId.get(provider.id) ?? 0;
+        return {
+          providerId: provider.id,
+          name: provider.name,
+          usedSlots,
+          totalSlots: provider.limitConcurrentSessions ?? 0,
+          totalVolume: 0, // This will be populated by the calling action from leaderboard data.
+        };
+      }
     );
 
     logger.debug("ProviderSlots: Retrieved provider slots", {

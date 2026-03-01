@@ -15,7 +15,7 @@ import {
   startOfWeek,
 } from "date-fns";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 
 export type TimePeriod = "5h" | "daily" | "weekly" | "monthly";
 export type DailyResetMode = "fixed" | "rolling";

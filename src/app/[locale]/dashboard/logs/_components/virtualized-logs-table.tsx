@@ -1,6 +1,6 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { type InfiniteData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -30,6 +30,39 @@ import { ProviderChainPopover } from "./provider-chain-popover";
 
 const BATCH_SIZE = 50;
 const ROW_HEIGHT = 52; // Estimated row height in pixels
+const MAX_PAGES = 5;
+const MAX_TOTAL_LOGS = BATCH_SIZE * MAX_PAGES;
+
+type Cursor = { createdAt: string; id: number };
+type CursorParam = Cursor | undefined;
+
+type UsageLogsBatchData = Extract<
+  Awaited<ReturnType<typeof getUsageLogsBatch>>,
+  { ok: true }
+>["data"];
+type UsageLogWithCursor = UsageLogsBatchData["logs"][number] & { createdAtRaw?: string };
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [items];
+
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function resolveCursorFromLog(log: UsageLogWithCursor): Cursor | null {
+  const createdAtRaw =
+    typeof log.createdAtRaw === "string" && log.createdAtRaw.length > 0
+      ? log.createdAtRaw
+      : log.createdAt
+        ? log.createdAt.toISOString()
+        : null;
+
+  if (!createdAtRaw) return null;
+  return { createdAt: createdAtRaw, id: log.id };
+}
 
 export interface VirtualizedLogsTableFilters {
   userId?: number;
@@ -73,6 +106,9 @@ export function VirtualizedLogsTable({
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const shouldPoll = autoRefreshEnabled && !showScrollToTop;
+  const queryClient = useQueryClient();
+  const queryKey = useMemo(() => ["usage-logs-batch", filters] as const, [filters]);
+  const refreshInFlightRef = useRef(false);
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
@@ -106,7 +142,7 @@ export function VirtualizedLogsTable({
   // Infinite query with cursor-based pagination
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
     useInfiniteQuery({
-      queryKey: ["usage-logs-batch", filters],
+      queryKey,
       queryFn: async ({ pageParam }) => {
         const result = await getUsageLogsBatch({
           ...filters,
@@ -122,9 +158,109 @@ export function VirtualizedLogsTable({
       initialPageParam: undefined as { createdAt: string; id: number } | undefined,
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
-      refetchInterval: shouldPoll ? autoRefreshIntervalMs : false,
-      maxPages: 5,
+      refetchInterval: false,
+      maxPages: MAX_PAGES,
     });
+
+  // Poll only the latest page to reduce DB load.
+  // We merge the refreshed first page into the existing infinite list (dedupe by id),
+  // and keep a fixed-size rolling window to avoid unbounded growth.
+  useEffect(() => {
+    if (!shouldPoll) return;
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => void tick(), autoRefreshIntervalMs);
+    };
+
+    const tick = async () => {
+      if (cancelled) return;
+      if (refreshInFlightRef.current) {
+        scheduleNext();
+        return;
+      }
+      refreshInFlightRef.current = true;
+
+      try {
+        const result = await getUsageLogsBatch({
+          ...filters,
+          cursor: undefined,
+          limit: BATCH_SIZE,
+        });
+
+        if (!result.ok || cancelled) return;
+
+        const latestPage = result.data;
+
+        queryClient.setQueryData<InfiniteData<UsageLogsBatchData, CursorParam>>(queryKey, (old) => {
+          const oldPages = old?.pages ?? [];
+          const existingLogs = oldPages.flatMap((page) => page.logs);
+
+          const combined = [...latestPage.logs, ...existingLogs];
+          const seen = new Set<number>();
+          const deduped: UsageLogsBatchData["logs"] = [];
+
+          for (const log of combined) {
+            if (seen.has(log.id)) continue;
+            seen.add(log.id);
+            deduped.push(log);
+            if (deduped.length >= MAX_TOTAL_LOGS) break;
+          }
+
+          if (deduped.length === 0) {
+            return old;
+          }
+
+          // hasMore 表示“是否还能继续向更旧方向翻页”，因此应以旧的最后一页为准；
+          // 没有旧数据时使用最新页的 hasMore（对应“是否存在更旧数据”）。
+          const lastHasMore =
+            oldPages.length > 0
+              ? (oldPages[oldPages.length - 1]?.hasMore ?? true)
+              : latestPage.hasMore;
+
+          const chunks = chunkArray(deduped, BATCH_SIZE);
+          const pages = chunks.map((logs, index) => {
+            const isLast = index === chunks.length - 1;
+            const hasMore = isLast ? lastHasMore : true;
+            const lastLog = logs[logs.length - 1] as UsageLogWithCursor | undefined;
+            const cursor = lastLog ? resolveCursorFromLog(lastLog) : null;
+
+            return {
+              logs,
+              hasMore,
+              nextCursor: hasMore && cursor ? cursor : null,
+            } satisfies UsageLogsBatchData;
+          });
+
+          const pageParams = pages.map((_, index) =>
+            index === 0 ? undefined : (pages[index - 1]?.nextCursor ?? undefined)
+          );
+
+          return { pages, pageParams };
+        });
+      } catch {
+        // Ignore polling errors (manual refresh still available).
+      } finally {
+        refreshInFlightRef.current = false;
+        scheduleNext();
+      }
+    };
+
+    void tick();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [autoRefreshIntervalMs, filters, queryClient, queryKey, shouldPoll]);
 
   // Flatten all pages into a single array
   const pages = data?.pages;

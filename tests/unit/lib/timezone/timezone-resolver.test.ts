@@ -103,7 +103,7 @@ beforeEach(() => {
 
 describe("resolveSystemTimezone", () => {
   it("should return DB timezone when set and valid", async () => {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
 
     getCachedSystemSettingsMock.mockResolvedValue(createSettings({ timezone: "America/New_York" }));
     mockEnvConfig("Asia/Shanghai");
@@ -113,7 +113,7 @@ describe("resolveSystemTimezone", () => {
   });
 
   it("should fallback to env TZ when DB timezone is null", async () => {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
 
     getCachedSystemSettingsMock.mockResolvedValue(createSettings({ timezone: null }));
     mockEnvConfig("Europe/London");
@@ -123,7 +123,7 @@ describe("resolveSystemTimezone", () => {
   });
 
   it("should fallback to env TZ when DB timezone is invalid", async () => {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
 
     getCachedSystemSettingsMock.mockResolvedValue(
       createSettings({ timezone: "Invalid/Timezone_Zone" })
@@ -135,7 +135,7 @@ describe("resolveSystemTimezone", () => {
   });
 
   it("should fallback to UTC when both DB timezone and env TZ are invalid", async () => {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
 
     getCachedSystemSettingsMock.mockResolvedValue(createSettings({ timezone: "Invalid/Zone" }));
     // Empty string TZ won't pass isValidIANATimezone
@@ -146,7 +146,7 @@ describe("resolveSystemTimezone", () => {
   });
 
   it("should fallback to UTC when getCachedSystemSettings throws", async () => {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
 
     getCachedSystemSettingsMock.mockRejectedValue(new Error("DB connection failed"));
     mockEnvConfig("Asia/Shanghai");
@@ -157,7 +157,7 @@ describe("resolveSystemTimezone", () => {
   });
 
   it("should fallback to UTC when getCachedSystemSettings throws and env TZ is empty", async () => {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
 
     getCachedSystemSettingsMock.mockRejectedValue(new Error("DB connection failed"));
     mockEnvConfig("");
@@ -167,7 +167,7 @@ describe("resolveSystemTimezone", () => {
   });
 
   it("should handle empty string DB timezone as null", async () => {
-    const { resolveSystemTimezone } = await import("@/lib/utils/timezone");
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
 
     getCachedSystemSettingsMock.mockResolvedValue(
       createSettings({ timezone: "" as unknown as null })

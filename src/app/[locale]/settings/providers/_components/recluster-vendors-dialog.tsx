@@ -113,7 +113,7 @@ export function ReclusterVendorsDialog() {
       const result = await reclusterProviderVendors({ confirm: true });
       if (result.ok) {
         toast.success(t("success", { count: result.data.preview.providersMoved }));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         queryClient.invalidateQueries({ queryKey: ["provider-endpoints"] });
         setOpen(false);

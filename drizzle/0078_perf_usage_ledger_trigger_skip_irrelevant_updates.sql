@@ -1,3 +1,5 @@
+-- perf: avoid redundant usage_ledger UPSERTs on irrelevant message_request updates
+
 CREATE OR REPLACE FUNCTION fn_upsert_usage_ledger()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -9,13 +11,6 @@ BEGIN
   IF NEW.blocked_by = 'warmup' THEN
     -- If a ledger row already exists (row was originally non-warmup), mark it as warmup
     UPDATE usage_ledger SET blocked_by = 'warmup' WHERE request_id = NEW.id;
-    RETURN NEW;
-  END IF;
-
-  IF NEW.blocked_by IS NOT NULL THEN
-    -- Blocked requests are excluded from billing stats; avoid creating usage_ledger rows.
-    -- If a ledger row already exists (row was originally unblocked), mark it as blocked.
-    UPDATE usage_ledger SET blocked_by = NEW.blocked_by WHERE request_id = NEW.id;
     RETURN NEW;
   END IF;
 
@@ -32,10 +27,8 @@ BEGIN
 
   v_is_success := (NEW.error_message IS NULL OR NEW.error_message = '');
 
-  -- 性能优化：避免“无关字段更新”触发 usage_ledger 的重复 UPSERT（写放大）
-  -- 典型无关字段：special_settings、error_stack、error_cause、updated_at 等。
-  -- 仅当会影响 usage_ledger 的字段发生变化时才继续执行。
-  -- 注意：usage_ledger 不存 provider_chain / error_message，因此这里比较其派生值（final_provider_id / is_success）即可。
+  -- Performance: skip UPSERT when UPDATE doesn't affect usage_ledger fields.
+  -- usage_ledger does NOT persist provider_chain / error_message, so compare derived values instead.
   IF TG_OP = 'UPDATE' THEN
     IF OLD.provider_chain IS NOT NULL
        AND jsonb_typeof(OLD.provider_chain) = 'array'
@@ -78,8 +71,8 @@ BEGIN
       AND NEW.ttfb_ms IS NOT DISTINCT FROM OLD.ttfb_ms
       AND NEW.created_at IS NOT DISTINCT FROM OLD.created_at
     THEN
-      -- 自愈：如果上一次 UPSERT 因异常失败导致 ledger 行缺失，允许在后续 UPDATE 中补齐。
-      -- 这里用索引读（request_id UNIQUE）替代重复写入，兼顾“写放大治理”和“最终一致”。
+      -- Self-heal: if prior UPSERT failed and ledger row is missing, allow a later UPDATE to fill it.
+      -- Uses cheap indexed read (request_id UNIQUE) to avoid reintroducing write amplification.
       IF EXISTS (SELECT 1 FROM usage_ledger WHERE request_id = NEW.id) THEN
         RETURN NEW;
       END IF;
@@ -141,8 +134,3 @@ EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_upsert_usage_ledger
-AFTER INSERT OR UPDATE ON message_request
-FOR EACH ROW
-EXECUTE FUNCTION fn_upsert_usage_ledger();

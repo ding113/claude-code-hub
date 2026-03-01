@@ -225,8 +225,7 @@ export function ProviderRichListItem({
                     const undoResult = await undoProviderDelete({ undoToken, operationId });
                     if (undoResult.ok) {
                       toast.success(tBatchEdit("undo.singleDeleteUndone"));
-                      await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                      await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                      await queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
                       await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
                     } else if (
                       undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
@@ -242,8 +241,7 @@ export function ProviderRichListItem({
               },
             });
 
-            queryClient.invalidateQueries({ queryKey: ["providers"] });
-            queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+            queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
             queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
           } else {
             toast.error(tList("deleteFailed"), {
@@ -313,8 +311,7 @@ export function ProviderRichListItem({
           toast.success(tList("resetCircuitSuccess"), {
             description: tList("resetCircuitSuccessDesc", { name: provider.name }),
           });
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
-          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         } else {
           toast.error(tList("resetCircuitFailed"), {
             description: res.error || tList("unknownError"),
@@ -338,8 +335,7 @@ export function ProviderRichListItem({
           toast.success(tList("resetUsageSuccess"), {
             description: tList("resetUsageSuccessDesc", { name: provider.name }),
           });
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
-          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         } else {
           toast.error(tList("resetUsageFailed"), {
             description: res.error || tList("unknownError"),
@@ -366,8 +362,7 @@ export function ProviderRichListItem({
           toast.success(tList("toggleSuccess", { status }), {
             description: tList("toggleSuccessDesc", { name: provider.name }),
           });
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
-          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         } else {
           toast.error(tList("toggleFailed"), {
             description: res.error || tList("unknownError"),
@@ -390,7 +385,7 @@ export function ProviderRichListItem({
         >[1]);
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
           return true;
         }
         toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -419,7 +414,7 @@ export function ProviderRichListItem({
       const res = await editProvider(provider.id, { group_tag: groupTag });
       if (res.ok) {
         toast.success(tInline("saveSuccess"));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         return true;
       }
       toast.error(tInline("groupSaveError"), {
@@ -444,7 +439,7 @@ export function ProviderRichListItem({
       });
       if (res.ok) {
         toast.success(tInline("saveSuccess"));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         return true;
       }
       toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });

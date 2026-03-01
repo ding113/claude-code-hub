@@ -1,7 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { Section } from "@/components/section";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings } from "@/lib/config";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { AutoCleanupForm } from "./_components/auto-cleanup-form";
 import { SettingsConfigSkeleton } from "./_components/settings-config-skeleton";
@@ -28,7 +28,7 @@ export default async function SettingsConfigPage() {
 
 async function SettingsConfigContent() {
   const t = await getTranslations("settings");
-  const settings = await getSystemSettings();
+  const settings = await getCachedSystemSettings();
 
   return (
     <>

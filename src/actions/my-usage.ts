@@ -5,15 +5,16 @@ import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
+import { getRedisClient } from "@/lib/redis";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
-import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
@@ -183,7 +184,7 @@ export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const key = session.key;
     const user = session.user;
 
@@ -212,6 +213,34 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
   try {
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
+
+    const redisClient = getRedisClient();
+    const redis = redisClient && redisClient.status === "ready" ? redisClient : null;
+    const cacheKey = `my-usage:quota:user:${session.user.id}:key:${session.key.id}`;
+    if (redis) {
+      try {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          // 注意：该 action 会被 Client Component 直接调用，返回值中的 Date 需要保持为 Date。
+          // JSON 序列化会把 Date 变成字符串，因此这里需要 revive。
+          const parsed = JSON.parse(cached) as Omit<MyUsageQuota, "userExpiresAt" | "expiresAt"> & {
+            userExpiresAt: string | null;
+            expiresAt: string | null;
+          };
+
+          return {
+            ok: true,
+            data: {
+              ...parsed,
+              userExpiresAt: parsed.userExpiresAt ? new Date(parsed.userExpiresAt) : null,
+              expiresAt: parsed.expiresAt ? new Date(parsed.expiresAt) : null,
+            },
+          };
+        }
+      } catch (error) {
+        logger.warn("[my-usage] getMyQuota cache read failed, fallback to compute", { error });
+      }
+    }
 
     const key = session.key;
     const user = session.user;
@@ -334,6 +363,16 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       dailyResetTime: key.dailyResetTime ?? "00:00",
     };
 
+    if (redis) {
+      // 短 TTL：页面高频刷新时减少 DB/Redis 压力，同时保持“几乎实时”的观感
+      const cachePayload = {
+        ...quota,
+        userExpiresAt: quota.userExpiresAt ? quota.userExpiresAt.toISOString() : null,
+        expiresAt: quota.expiresAt ? quota.expiresAt.toISOString() : null,
+      };
+      await redis.setex(cacheKey, 2, JSON.stringify(cachePayload)).catch(() => {});
+    }
+
     return { ok: true, data: quota };
   } catch (error) {
     logger.error("[my-usage] getMyQuota failed", error);
@@ -346,7 +385,21 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const redisClient = getRedisClient();
+    const redis = redisClient && redisClient.status === "ready" ? redisClient : null;
+    const cacheKey = `my-usage:today-stats:key:${session.key.id}`;
+    if (redis) {
+      try {
+        const cached = await redis.get(cacheKey);
+        if (cached) {
+          return { ok: true, data: JSON.parse(cached) as MyTodayStats };
+        }
+      } catch (error) {
+        logger.warn("[my-usage] getMyTodayStats cache read failed, fallback to compute", { error });
+      }
+    }
+
+    const settings = await getCachedSystemSettings();
     const billingModelSource = settings.billingModelSource;
     const currencyCode = settings.currencyDisplay;
 
@@ -413,6 +466,10 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
       billingModelSource,
     };
 
+    if (redis) {
+      await redis.setex(cacheKey, 5, JSON.stringify(stats)).catch(() => {});
+    }
+
     return { ok: true, data: stats };
   } catch (error) {
     logger.error("[my-usage] getMyTodayStats failed", error);
@@ -441,13 +498,14 @@ export async function getMyUsageLogs(
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
 
     const rawPageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : 20;
     const pageSize = Math.min(rawPageSize, 100);
     const page = filters.page && filters.page > 0 ? filters.page : 1;
 
-    const timezone = await resolveSystemTimezone();
+    const hasDateFilter = Boolean(filters.startDate?.trim() || filters.endDate?.trim());
+    const timezone = hasDateFilter ? await resolveSystemTimezone() : undefined;
     const { startTime, endTime } = parseDateRangeInServerTimezone(
       filters.startDate,
       filters.endDate,
@@ -583,10 +641,11 @@ export async function getMyStatsSummary(
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
-    const timezone = await resolveSystemTimezone();
+    const hasDateFilter = Boolean(filters.startDate?.trim() || filters.endDate?.trim());
+    const timezone = hasDateFilter ? await resolveSystemTimezone() : undefined;
     const { startTime, endTime } = parseDateRangeInServerTimezone(
       filters.startDate,
       filters.endDate,

@@ -3,7 +3,7 @@
 import { getSession } from "@/lib/auth";
 import type { NotificationJobType } from "@/lib/constants/notification.constants";
 import { logger } from "@/lib/logger";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { WebhookNotifier } from "@/lib/webhook";
 import { buildTestMessage } from "@/lib/webhook/templates/test-messages";
 import {

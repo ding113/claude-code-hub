@@ -8,4 +8,5 @@ export {
   getCachedSystemSettings,
   invalidateSystemSettingsCache,
   isHttp2Enabled,
+  publishSystemSettingsCacheInvalidation,
 } from "./system-settings-cache";

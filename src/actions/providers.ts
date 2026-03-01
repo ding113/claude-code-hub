@@ -17,6 +17,7 @@ import {
   publishCircuitBreakerConfigInvalidation,
   resetCircuit,
 } from "@/lib/circuit-breaker";
+import { getCachedSystemSettings } from "@/lib/config";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
@@ -44,6 +45,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import type { Context1mPreference } from "@/lib/special-attributes";
+import type { CurrencyCode } from "@/lib/utils/currency";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -201,6 +203,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
     }
 
     // 仅获取供应商列表，统计数据由前端异步获取
+    // 管理/配置类页面：优先保证强一致，避免跨实例缓存带来的短暂陈旧数据（用户可感知）
+    // 热路径（proxy/session）仍可使用 findAllProviders() 的进程缓存以降低 DB 压力
     const providers = await findAllProvidersFresh();
     // 空统计数组，保持后续合并逻辑兼容
     const statistics: Awaited<ReturnType<typeof getProviderStatistics>> = [];
@@ -335,6 +339,100 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
     logger.error("获取服务商数据失败:", error);
     return [];
   }
+}
+
+export type ProviderHealthStatusMap = Record<
+  number,
+  {
+    circuitState: "closed" | "open" | "half-open";
+    failureCount: number;
+    lastFailureTime: number | null;
+    circuitOpenUntil: number | null;
+    recoveryMinutes: number | null;
+  }
+>;
+
+export type ProviderManagerBootstrapData = {
+  providers: ProviderDisplay[];
+  healthStatus: ProviderHealthStatusMap;
+  systemSettings: { currencyDisplay: CurrencyCode };
+};
+
+/**
+ * Providers 管理页：合并 providers / health / system-settings 的读取，减少瀑布式请求
+ */
+export async function getProviderManagerBootstrapData(): Promise<ProviderManagerBootstrapData> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      providers: [],
+      healthStatus: {},
+      systemSettings: { currencyDisplay: "USD" },
+    };
+  }
+
+  const [providersResult, systemSettingsResult] = await Promise.allSettled([
+    getProviders(),
+    getCachedSystemSettings(),
+  ]);
+
+  const providers = providersResult.status === "fulfilled" ? providersResult.value : [];
+  const currencyDisplay =
+    systemSettingsResult.status === "fulfilled"
+      ? systemSettingsResult.value.currencyDisplay
+      : ("USD" satisfies CurrencyCode);
+
+  if (providersResult.status === "rejected") {
+    logger.warn("[ProvidersBootstrap] Failed to load providers, fallback to empty list", {
+      error:
+        providersResult.reason instanceof Error
+          ? providersResult.reason.message
+          : String(providersResult.reason),
+    });
+  }
+
+  if (systemSettingsResult.status === "rejected") {
+    logger.warn("[ProvidersBootstrap] Failed to load system settings, fallback to USD", {
+      error:
+        systemSettingsResult.reason instanceof Error
+          ? systemSettingsResult.reason.message
+          : String(systemSettingsResult.reason),
+    });
+  }
+
+  const providerIds = providers.map((provider) => provider.id);
+  const healthStatusRaw = await getAllHealthStatusAsync(providerIds, { forceRefresh: true }).catch(
+    (error) => {
+      logger.warn("[ProvidersBootstrap] Failed to load health status, fallback to empty", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
+  );
+
+  const now = Date.now();
+  const healthStatus: ProviderHealthStatusMap = Object.fromEntries(
+    Object.entries(healthStatusRaw).map(([providerIdRaw, health]) => {
+      const providerId = Number(providerIdRaw);
+      const circuitOpenUntil = health.circuitOpenUntil ?? null;
+      return [
+        providerId,
+        {
+          circuitState: health.circuitState,
+          failureCount: health.failureCount,
+          lastFailureTime: health.lastFailureTime,
+          circuitOpenUntil,
+          recoveryMinutes: circuitOpenUntil ? Math.ceil((circuitOpenUntil - now) / 60000) : null,
+        },
+      ];
+    })
+  );
+
+  return {
+    providers,
+    healthStatus,
+    systemSettings: { currencyDisplay },
+  };
 }
 
 /**
@@ -1035,6 +1133,7 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
+    // 管理/监控展示：优先保证强一致，避免跨实例缓存导致新 provider/删除 provider 短暂不一致
     const providerIds = await findAllProvidersFresh().then((providers) =>
       providers.map((p) => p.id)
     );
