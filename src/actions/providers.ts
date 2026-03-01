@@ -203,8 +203,9 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
     }
 
     // 仅获取供应商列表，统计数据由前端异步获取
-    // 使用进程级缓存（30s TTL + pub/sub 失效）降低后台高频读取对 DB 的压力
-    const providers = await findAllProviders();
+    // 管理/配置类页面：优先保证强一致，避免跨实例缓存带来的短暂陈旧数据（用户可感知）
+    // 热路径（proxy/session）仍可使用 findAllProviders() 的进程缓存以降低 DB 压力
+    const providers = await findAllProvidersFresh();
     // 空统计数组，保持后续合并逻辑兼容
     const statistics: Awaited<ReturnType<typeof getProviderStatistics>> = [];
 
@@ -1097,8 +1098,10 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    // 使用进程级缓存（30s TTL + pub/sub 失效）降低后台高频读取对 DB 的压力
-    const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
+    // 管理/监控展示：优先保证强一致，避免跨实例缓存导致新 provider/删除 provider 短暂不一致
+    const providerIds = await findAllProvidersFresh().then((providers) =>
+      providers.map((p) => p.id)
+    );
     const healthStatus = await getAllHealthStatusAsync(providerIds, {
       forceRefresh: true,
     });
