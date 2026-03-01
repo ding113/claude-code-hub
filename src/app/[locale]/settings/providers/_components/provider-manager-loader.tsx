@@ -2,34 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import {
+  getProviderManagerBootstrapData,
   getProviderStatisticsAsync,
-  getProviders,
-  getProvidersHealthStatus,
+  type ProviderManagerBootstrapData,
 } from "@/actions/providers";
-import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
 import { AddProviderDialog } from "./add-provider-dialog";
 import { ProviderManager } from "./provider-manager";
-
-type ProviderHealthStatus = Record<
-  number,
-  {
-    circuitState: "closed" | "open" | "half-open";
-    failureCount: number;
-    lastFailureTime: number | null;
-    circuitOpenUntil: number | null;
-    recoveryMinutes: number | null;
-  }
->;
-
-async function fetchSystemSettings(): Promise<{ currencyDisplay: CurrencyCode }> {
-  const response = await fetch("/api/system-settings");
-  if (!response.ok) {
-    throw new Error("FETCH_SETTINGS_FAILED");
-  }
-  return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
-}
 
 interface ProviderManagerLoaderProps {
   currentUser?: User;
@@ -41,26 +21,19 @@ function ProviderManagerLoaderContent({
   enableMultiProviderTypes = true,
 }: ProviderManagerLoaderProps) {
   const {
-    data: providers = [],
-    isLoading: isProvidersLoading,
-    isFetching: isProvidersFetching,
-  } = useQuery<ProviderDisplay[]>({
-    queryKey: ["providers"],
-    queryFn: getProviders,
+    data: bootstrap,
+    isLoading: isBootstrapLoading,
+    isFetching: isBootstrapFetching,
+  } = useQuery<ProviderManagerBootstrapData>({
+    queryKey: ["providers-bootstrap"],
+    queryFn: getProviderManagerBootstrapData,
     refetchOnWindowFocus: false,
     staleTime: 30_000,
   });
 
-  const {
-    data: healthStatus = {} as ProviderHealthStatus,
-    isLoading: isHealthLoading,
-    isFetching: isHealthFetching,
-  } = useQuery<ProviderHealthStatus>({
-    queryKey: ["providers-health"],
-    queryFn: getProvidersHealthStatus,
-    refetchOnWindowFocus: false,
-    staleTime: 30_000,
-  });
+  const providers: ProviderDisplay[] = bootstrap?.providers ?? [];
+  const healthStatus = bootstrap?.healthStatus ?? {};
+  const currencyCode = bootstrap?.systemSettings.currencyDisplay ?? "USD";
 
   // Statistics loaded independently with longer cache
   const { data: statistics = {} as ProviderStatisticsMap, isLoading: isStatisticsLoading } =
@@ -72,20 +45,8 @@ function ProviderManagerLoaderContent({
       refetchInterval: 60_000,
     });
 
-  const {
-    data: systemSettings,
-    isLoading: isSettingsLoading,
-    isFetching: isSettingsFetching,
-  } = useQuery<{ currencyDisplay: CurrencyCode }>({
-    queryKey: ["system-settings"],
-    queryFn: fetchSystemSettings,
-    refetchOnWindowFocus: false,
-    staleTime: 30_000,
-  });
-
-  const loading = isProvidersLoading || isHealthLoading || isSettingsLoading;
-  const refreshing = !loading && (isProvidersFetching || isHealthFetching || isSettingsFetching);
-  const currencyCode = systemSettings?.currencyDisplay ?? "USD";
+  const loading = isBootstrapLoading;
+  const refreshing = !loading && isBootstrapFetching;
 
   return (
     <ProviderManager

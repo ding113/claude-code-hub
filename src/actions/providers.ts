@@ -17,6 +17,7 @@ import {
   publishCircuitBreakerConfigInvalidation,
   resetCircuit,
 } from "@/lib/circuit-breaker";
+import { getCachedSystemSettings } from "@/lib/config";
 import { PROVIDER_GROUP, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
@@ -44,6 +45,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import type { Context1mPreference } from "@/lib/special-attributes";
+import type { CurrencyCode } from "@/lib/utils/currency";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -201,7 +203,8 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
     }
 
     // 仅获取供应商列表，统计数据由前端异步获取
-    const providers = await findAllProvidersFresh();
+    // 使用进程级缓存（30s TTL + pub/sub 失效）降低后台高频读取对 DB 的压力
+    const providers = await findAllProviders();
     // 空统计数组，保持后续合并逻辑兼容
     const statistics: Awaited<ReturnType<typeof getProviderStatistics>> = [];
 
@@ -335,6 +338,65 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
     logger.error("获取服务商数据失败:", error);
     return [];
   }
+}
+
+export type ProviderHealthStatusMap = Record<
+  number,
+  {
+    circuitState: "closed" | "open" | "half-open";
+    failureCount: number;
+    lastFailureTime: number | null;
+    circuitOpenUntil: number | null;
+    recoveryMinutes: number | null;
+  }
+>;
+
+export type ProviderManagerBootstrapData = {
+  providers: ProviderDisplay[];
+  healthStatus: ProviderHealthStatusMap;
+  systemSettings: { currencyDisplay: CurrencyCode };
+};
+
+/**
+ * Providers 管理页：合并 providers / health / system-settings 的读取，减少瀑布式请求
+ */
+export async function getProviderManagerBootstrapData(): Promise<ProviderManagerBootstrapData> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return {
+      providers: [],
+      healthStatus: {},
+      systemSettings: { currencyDisplay: "USD" },
+    };
+  }
+
+  const [providers, systemSettings] = await Promise.all([
+    getProviders(),
+    getCachedSystemSettings(),
+  ]);
+
+  const providerIds = providers.map((provider) => provider.id);
+  const healthStatusRaw = await getAllHealthStatusAsync(providerIds, { forceRefresh: true });
+
+  const now = Date.now();
+  const healthStatus: ProviderHealthStatusMap = {};
+  Object.entries(healthStatusRaw).forEach(([providerId, health]) => {
+    healthStatus[Number(providerId)] = {
+      circuitState: health.circuitState,
+      failureCount: health.failureCount,
+      lastFailureTime: health.lastFailureTime,
+      circuitOpenUntil: health.circuitOpenUntil,
+      recoveryMinutes: health.circuitOpenUntil
+        ? Math.ceil((health.circuitOpenUntil - now) / 60000)
+        : null,
+    };
+  });
+
+  return {
+    providers,
+    healthStatus,
+    systemSettings: { currencyDisplay: systemSettings.currencyDisplay },
+  };
 }
 
 /**
@@ -1035,9 +1097,8 @@ export async function getProvidersHealthStatus() {
       return {};
     }
 
-    const providerIds = await findAllProvidersFresh().then((providers) =>
-      providers.map((p) => p.id)
-    );
+    // 使用进程级缓存（30s TTL + pub/sub 失效）降低后台高频读取对 DB 的压力
+    const providerIds = await findAllProviders().then((providers) => providers.map((p) => p.id));
     const healthStatus = await getAllHealthStatusAsync(providerIds, {
       forceRefresh: true,
     });
