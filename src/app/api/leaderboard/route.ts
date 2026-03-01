@@ -231,7 +231,7 @@ export async function GET(request: NextRequest) {
         ...base,
         ...providerFields,
         ...cacheFields,
-        ...(modelStatsFormatted ? { modelStats: modelStatsFormatted } : {}),
+        ...(modelStatsFormatted !== undefined ? { modelStats: modelStatsFormatted } : {}),
       };
     });
 
