@@ -71,7 +71,11 @@ BEGIN
       AND NEW.ttfb_ms IS NOT DISTINCT FROM OLD.ttfb_ms
       AND NEW.created_at IS NOT DISTINCT FROM OLD.created_at
     THEN
-      RETURN NEW;
+      -- 自愈：如果上一次 UPSERT 因异常失败导致 ledger 行缺失，允许在后续 UPDATE 中补齐。
+      -- 这里用索引读（request_id UNIQUE）替代重复写入，兼顾“写放大治理”和“最终一致”。
+      IF EXISTS (SELECT 1 FROM usage_ledger WHERE request_id = NEW.id) THEN
+        RETURN NEW;
+      END IF;
     END IF;
   END IF;
 

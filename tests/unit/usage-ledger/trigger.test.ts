@@ -31,6 +31,8 @@ describe("fn_upsert_usage_ledger trigger SQL", () => {
     // Ensure the skip logic compares derived values (usage_ledger doesn't persist provider_chain / error_message)
     expect(sql).toContain("v_final_provider_id IS NOT DISTINCT FROM v_old_final_provider_id");
     expect(sql).toContain("v_is_success IS NOT DISTINCT FROM v_old_is_success");
+    // Self-heal: if ledger row is missing, later UPDATE can fill it (avoids permanent gaps)
+    expect(sql).toContain("EXISTS (SELECT 1 FROM usage_ledger WHERE request_id = NEW.id)");
   });
 
   it("creates trigger binding", () => {

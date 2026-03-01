@@ -71,7 +71,11 @@ BEGIN
       AND NEW.ttfb_ms IS NOT DISTINCT FROM OLD.ttfb_ms
       AND NEW.created_at IS NOT DISTINCT FROM OLD.created_at
     THEN
-      RETURN NEW;
+      -- Self-heal: if prior UPSERT failed and ledger row is missing, allow a later UPDATE to fill it.
+      -- Uses cheap indexed read (request_id UNIQUE) to avoid reintroducing write amplification.
+      IF EXISTS (SELECT 1 FROM usage_ledger WHERE request_id = NEW.id) THEN
+        RETURN NEW;
+      END IF;
     END IF;
   END IF;
 
