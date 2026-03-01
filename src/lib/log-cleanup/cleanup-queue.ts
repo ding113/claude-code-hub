@@ -3,8 +3,8 @@ import { BullAdapter } from "@bull-board/api/bullAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 import type { Job } from "bull";
 import Queue from "bull";
-import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
+import { getSystemSettings } from "@/repository/system-config";
 import { cleanupLogs } from "./service";
 
 /**
@@ -147,7 +147,7 @@ function setupQueueProcessor(queue: Queue.Queue): void {
  */
 export async function scheduleAutoCleanup() {
   try {
-    const settings = await getCachedSystemSettings();
+    const settings = await getSystemSettings();
     const queue = getCleanupQueue();
 
     if (!settings.enableAutoCleanup) {
