@@ -72,6 +72,7 @@
 
 - 系统设置缓存跨实例失效通知：在保存系统设置后通过 Redis Pub/Sub 广播失效，让各实例的进程内缓存立即失效（减少重复读 `system_settings`）。
 - 使用记录自动刷新减负：前端仅轮询“最新一页”，并合并到现有无限列表（避免 react-query 在 infiniteQuery 下重拉所有 pages）。
+- 供应商管理请求瀑布减负：将 providers/health/system-settings 合并为单一 bootstrap 请求（约 4 个请求 -> 2 个请求）；providers 列表改为走 30s TTL + pub/sub 失效的进程缓存（降低 DB 读放大）。
 
 ### 已落地代码位置（便于继续扩展）
 
@@ -115,6 +116,7 @@
   - 示例触发字段：`status_code`、`cost_usd`、`duration_ms`、`tokens`、`blocked_by`、`provider_chain`、`model/provider_id` 等。
   - 优点：不改变外部读模型（usage_ledger 仍是源），但能显著减少重复 UPSERT。
   - 风险：需要严谨列出“影响 billing/统计/展示”的字段集合，避免漏更新。
+  - 已落地：在 trigger 函数内对 `usage_ledger` 相关字段与派生值（`final_provider_id` / `is_success`）做对比，无变化直接 `RETURN NEW`，减少无效 UPSERT（迁移：`0078_perf_usage_ledger_trigger_skip_irrelevant_updates.sql`）。
 - 方向 B：仅在“终态”写入 ledger（例如 `duration_ms IS NOT NULL` 或 `status_code IS NOT NULL`）
   - 优点：写放大最小。
   - 风险：会改变“进行中请求”的统计可见性，需要产品确认，并必须 feature flag。
