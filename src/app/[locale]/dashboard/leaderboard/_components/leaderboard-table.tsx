@@ -41,7 +41,9 @@ interface LeaderboardTableProps<T> {
   period: LeaderboardPeriod;
   columns: ColumnDef<T>[]; // 不包含"排名"列，组件会自动添加
   getRowKey?: (row: T, index: number) => string | number;
+  /** 返回子行数据（非空且长度 > 0 时，父行展示可展开图标） */
   getSubRows?: (row: T, index: number) => T[] | null | undefined;
+  /** 子行的 React key（默认使用 `${parentKey}-${subIndex}` 组合） */
   getSubRowKey?: (
     subRow: T,
     parentRow: T,

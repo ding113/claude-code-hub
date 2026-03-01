@@ -46,6 +46,7 @@ export interface LeaderboardFilters {
   providerType?: ProviderType;
   userTags?: string[];
   userGroups?: string[];
+  /** 仅 scope=provider 生效：是否包含按模型拆分的数据（ProviderLeaderboardEntry.modelStats） */
   includeModelStats?: boolean;
 }
 
