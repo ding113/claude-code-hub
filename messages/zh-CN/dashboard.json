@@ -1516,6 +1516,21 @@
       "deleteFailed": "删除用户失败",
       "userDeleted": "用户已删除",
       "saving": "保存中...",
+      "resetSection": {
+        "title": "数据重置"
+      },
+      "resetLimits": {
+        "title": "重置限额",
+        "description": "重置所有限额的累计消费计数器。请求日志和统计数据将被保留。",
+        "button": "重置限额",
+        "confirmTitle": "仅重置限额？",
+        "confirmDescription": "这将把所有累计消费计数器（5小时、每日、每周、每月、总计）归零。请求日志和使用统计将被保留。",
+        "confirm": "是的，重置限额",
+        "loading": "正在重置...",
+        "error": "重置限额失败",
+        "success": "所有限额已重置",
+        "lastResetAt": "上次重置: {date}"
+      },
       "resetData": {
         "title": "重置统计",
         "description": "删除该用户的所有请求日志和使用数据。此操作不可逆。",

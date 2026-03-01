@@ -1,13 +1,19 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Trash2, UserCog } from "lucide-react";
+import { Loader2, RotateCcw, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { editUser, removeUser, resetUserAllStatistics, toggleUserEnabled } from "@/actions/users";
+import {
+  editUser,
+  removeUser,
+  resetUserAllStatistics,
+  resetUserLimitsOnly,
+  toggleUserEnabled,
+} from "@/actions/users";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,9 +90,12 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const queryClient = useQueryClient();
   const t = useTranslations("dashboard.userManagement");
   const tCommon = useTranslations("common");
+  const locale = useLocale();
   const [isPending, startTransition] = useTransition();
   const [isResettingAll, setIsResettingAll] = useState(false);
   const [resetAllDialogOpen, setResetAllDialogOpen] = useState(false);
+  const [isResettingLimits, setIsResettingLimits] = useState(false);
+  const [resetLimitsDialogOpen, setResetLimitsDialogOpen] = useState(false);
 
   // Always show providerGroup field in edit mode
   const userEditTranslations = useUserTranslations({ showProviderGroup: true });
@@ -243,6 +252,25 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     }
   };
 
+  const handleResetLimitsOnly = async () => {
+    setIsResettingLimits(true);
+    try {
+      const res = await resetUserLimitsOnly(user.id);
+      if (!res.ok) {
+        toast.error(res.error || t("editDialog.resetLimits.error"));
+        return;
+      }
+      toast.success(t("editDialog.resetLimits.success"));
+      setResetLimitsDialogOpen(false);
+      window.location.reload();
+    } catch (error) {
+      console.error("[EditUserDialog] reset limits only failed", error);
+      toast.error(t("editDialog.resetLimits.error"));
+    } finally {
+      setIsResettingLimits(false);
+    }
+  };
+
   return (
     <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[var(--cch-viewport-height-90,90vh)] p-0 flex flex-col overflow-hidden">
       <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
@@ -291,55 +319,129 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
           />
 
           {/* Reset Data Section - Admin Only */}
-          <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium text-destructive">
-                  {t("editDialog.resetData.title")}
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  {t("editDialog.resetData.description")}
-                </p>
-              </div>
+          <section className="rounded-lg border border-muted p-4 space-y-3">
+            <h3 className="text-sm font-medium">{t("editDialog.resetSection.title")}</h3>
 
-              <AlertDialog open={resetAllDialogOpen} onOpenChange={setResetAllDialogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button type="button" variant="destructive">
-                    <Trash2 className="h-4 w-4" />
-                    {t("editDialog.resetData.button")}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>{t("editDialog.resetData.confirmTitle")}</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t("editDialog.resetData.confirmDescription")}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel disabled={isResettingAll}>
-                      {tCommon("cancel")}
-                    </AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleResetAllStatistics();
-                      }}
-                      disabled={isResettingAll}
-                      className={cn(buttonVariants({ variant: "destructive" }))}
+            {/* Reset Limits Only - Less destructive (amber) */}
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                    {t("editDialog.resetLimits.title")}
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    {t("editDialog.resetLimits.description")}
+                  </p>
+                  {user.costResetAt && (
+                    <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
+                      {t("editDialog.resetLimits.lastResetAt", {
+                        date: new Intl.DateTimeFormat(locale, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(user.costResetAt)),
+                      })}
+                    </p>
+                  )}
+                </div>
+
+                <AlertDialog open={resetLimitsDialogOpen} onOpenChange={setResetLimitsDialogOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/10"
                     >
-                      {isResettingAll ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          {t("editDialog.resetData.loading")}
-                        </>
-                      ) : (
-                        t("editDialog.resetData.confirm")
-                      )}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                      <RotateCcw className="h-4 w-4" />
+                      {t("editDialog.resetLimits.button")}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        {t("editDialog.resetLimits.confirmTitle")}
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t("editDialog.resetLimits.confirmDescription")}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isResettingLimits}>
+                        {tCommon("cancel")}
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleResetLimitsOnly();
+                        }}
+                        disabled={isResettingLimits}
+                        className="bg-amber-600 text-white hover:bg-amber-700"
+                      >
+                        {isResettingLimits ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            {t("editDialog.resetLimits.loading")}
+                          </>
+                        ) : (
+                          t("editDialog.resetLimits.confirm")
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            </div>
+
+            {/* Reset All Statistics - Destructive (red) */}
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium text-destructive">
+                    {t("editDialog.resetData.title")}
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    {t("editDialog.resetData.description")}
+                  </p>
+                </div>
+
+                <AlertDialog open={resetAllDialogOpen} onOpenChange={setResetAllDialogOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button type="button" variant="destructive">
+                      <Trash2 className="h-4 w-4" />
+                      {t("editDialog.resetData.button")}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t("editDialog.resetData.confirmTitle")}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        {t("editDialog.resetData.confirmDescription")}
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isResettingAll}>
+                        {tCommon("cancel")}
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleResetAllStatistics();
+                        }}
+                        disabled={isResettingAll}
+                        className={cn(buttonVariants({ variant: "destructive" }))}
+                      >
+                        {isResettingAll ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            {t("editDialog.resetData.loading")}
+                          </>
+                        ) : (
+                          t("editDialog.resetData.confirm")
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
           </section>
 

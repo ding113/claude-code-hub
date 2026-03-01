@@ -18,6 +18,7 @@ export interface User {
   limitWeeklyUsd?: number; // 周消费上限（美元）
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
+  costResetAt?: Date | null; // Cost reset timestamp for limits-only reset
   limitConcurrentSessions?: number; // 并发 Session 上限
   // Daily quota reset mode
   dailyResetMode: "fixed" | "rolling"; // 每日限额重置模式
@@ -150,6 +151,7 @@ export interface UserDisplay {
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
+  costResetAt?: Date | null; // Cost reset timestamp for limits-only reset
   limitConcurrentSessions?: number | null;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";

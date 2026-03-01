@@ -21,11 +21,31 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   const allUserIds = users.map((u) => u.id);
   const allKeyIds = users.flatMap((u) => u.keys.map((k) => k.id));
 
+  // Build resetAt maps for users with cost reset timestamps
+  const userResetAtMap = new Map<number, Date>();
+  const keyResetAtMap = new Map<number, Date>();
+  for (const u of users) {
+    if (u.costResetAt instanceof Date) {
+      userResetAtMap.set(u.id, u.costResetAt);
+      for (const k of u.keys) {
+        keyResetAtMap.set(k.id, u.costResetAt);
+      }
+    }
+  }
+
   // 3 queries total instead of N+M individual SUM queries
   const [quotaResults, userCostMap, keyCostMap] = await Promise.all([
     Promise.all(users.map((u) => getUserLimitUsage(u.id))),
-    sumUserTotalCostBatch(allUserIds),
-    sumKeyTotalCostBatchByIds(allKeyIds),
+    sumUserTotalCostBatch(
+      allUserIds,
+      undefined,
+      userResetAtMap.size > 0 ? userResetAtMap : undefined
+    ),
+    sumKeyTotalCostBatchByIds(
+      allKeyIds,
+      undefined,
+      keyResetAtMap.size > 0 ? keyResetAtMap : undefined
+    ),
   ]);
 
   return users.map((user, idx) => {

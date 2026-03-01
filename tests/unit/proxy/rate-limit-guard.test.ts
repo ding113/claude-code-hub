@@ -163,6 +163,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       daily_reset_time: "00:00",
       limit_weekly_usd: null,
       limit_monthly_usd: null,
+      cost_reset_at: null,
     });
   });
 
@@ -223,6 +224,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       daily_reset_mode: "fixed",
       limit_weekly_usd: null,
       limit_monthly_usd: null,
+      cost_reset_at: null,
     });
   });
 
@@ -566,6 +568,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       daily_reset_mode: "rolling",
       limit_weekly_usd: null,
       limit_monthly_usd: null,
+      cost_reset_at: null,
     });
 
     // checkUserDailyCost should NOT be called (migrated to lease)
