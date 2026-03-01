@@ -103,6 +103,7 @@ describe("LeaderboardTable expandable rows", () => {
     act(() => {
       expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    expect(expandButton!.getAttribute("aria-expanded")).toBe("true");
 
     const modelCell = findCellByText("model-x");
     expect(modelCell).toBeTruthy();
@@ -110,5 +111,11 @@ describe("LeaderboardTable expandable rows", () => {
     const modelRow = modelCell!.closest("tr");
     expect(modelRow).toBeTruthy();
     expect(modelRow!.className).toContain("bg-muted/30");
+
+    act(() => {
+      expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(expandButton!.getAttribute("aria-expanded")).toBe("false");
+    expect(findCellByText("model-x")).toBeNull();
   });
 });

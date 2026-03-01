@@ -537,10 +537,11 @@ async function findProviderLeaderboardWithTimezone(
   // Model breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
-  const modelField =
+  const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
       : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
 
   const modelRows = await db
     .select({
@@ -566,7 +567,7 @@ async function findProviderLeaderboardWithTimezone(
 
   const modelStatsByProvider = new Map<number, ModelProviderStat[]>();
   for (const row of modelRows) {
-    if (!row.model?.trim()) continue;
+    if (!row.model) continue;
     const totalCost = parseFloat(row.totalCost);
     const totalRequests = row.totalRequests;
     const totalTokens = row.totalTokens;
@@ -656,10 +657,11 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   // Model-level cache hit breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
-  const modelField =
+  const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
       : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
 
   const modelTotalInput = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
   const modelCacheRead = sql<number>`COALESCE(sum(COALESCE(${usageLedger.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
@@ -691,7 +693,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   // Group model stats by providerId
   const modelStatsByProvider = new Map<number, ModelCacheHitStat[]>();
   for (const row of modelRows) {
-    if (!row.model || row.model.trim() === "") continue;
+    if (!row.model) continue;
     const stats = modelStatsByProvider.get(row.providerId) ?? [];
     stats.push({
       model: row.model,

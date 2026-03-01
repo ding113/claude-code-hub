@@ -190,6 +190,12 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const skeletonGridStyle = { gridTemplateColumns: `repeat(${skeletonColumns}, minmax(0, 1fr))` };
 
   // 列定义（根据 scope 动态切换）
+  const renderSubModelLabel = (model: string) => (
+    <div className="pl-6">
+      <span className="font-mono text-sm">{model}</span>
+    </div>
+  );
+
   const userColumns: ColumnDef<UserEntry>[] = [
     {
       header: t("columns.user"),
@@ -226,11 +232,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       header: t("columns.provider"),
       cell: (row) => {
         if ("providerName" in row) return row.providerName;
-        return (
-          <div className="pl-6">
-            <span className="font-mono text-sm">{row.model}</span>
-          </div>
-        );
+        return renderSubModelLabel(row.model);
       },
       sortKey: "providerName",
       getValue: (row) => ("providerName" in row ? row.providerName : row.model),
@@ -311,11 +313,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       header: t("columns.provider"),
       cell: (row) => {
         if ("providerName" in row) return row.providerName;
-        return (
-          <div className="pl-6">
-            <span className="font-mono text-sm">{row.model}</span>
-          </div>
-        );
+        return renderSubModelLabel(row.model);
       },
       sortKey: "providerName",
       getValue: (row) => ("providerName" in row ? row.providerName : row.model),
