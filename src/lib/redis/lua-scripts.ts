@@ -417,8 +417,15 @@ if not score then
   return 0
 end
 
-if expected ~= '' and score ~= expected then
-  return 0
+if expected ~= '' then
+  local score_num = tonumber(score)
+  local expected_num = tonumber(expected)
+  if not expected_num then
+    return 0
+  end
+  if score_num ~= expected_num then
+    return 0
+  end
 end
 
 return redis.call('ZREM', key, member)

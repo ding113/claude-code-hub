@@ -247,6 +247,48 @@ describe("RateLimitService - other quota paths", () => {
     expect(ttlMsArg).toBe("300000");
   });
 
+  it("untrackProviderUa: should remove member when score matches", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const { UNTRACK_ZSET_MEMBER_IF_SCORE_MATCH } = await import("@/lib/redis/lua-scripts");
+
+    redisClientRef.eval.mockResolvedValueOnce(1);
+    const ok = await RateLimitService.untrackProviderUa(9, "ua", 123);
+    expect(ok).toBe(true);
+
+    expect(redisClientRef.eval).toHaveBeenCalledWith(
+      UNTRACK_ZSET_MEMBER_IF_SCORE_MATCH,
+      1,
+      "{active_uas}:provider:9:active_uas",
+      "ua",
+      "123"
+    );
+  });
+
+  it("untrackProviderUa: should support unconditional removal when expected score omitted", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+    const { UNTRACK_ZSET_MEMBER_IF_SCORE_MATCH } = await import("@/lib/redis/lua-scripts");
+
+    redisClientRef.eval.mockResolvedValueOnce(1);
+    const ok = await RateLimitService.untrackProviderUa(9, "ua");
+    expect(ok).toBe(true);
+
+    expect(redisClientRef.eval).toHaveBeenCalledWith(
+      UNTRACK_ZSET_MEMBER_IF_SCORE_MATCH,
+      1,
+      "{active_uas}:provider:9:active_uas",
+      "ua",
+      ""
+    );
+  });
+
+  it("untrackProviderUa: should return false when member not removed", async () => {
+    const { RateLimitService } = await import("@/lib/rate-limit");
+
+    redisClientRef.eval.mockResolvedValueOnce(0);
+    const ok = await RateLimitService.untrackProviderUa(9, "ua", 123);
+    expect(ok).toBe(false);
+  });
+
   it("checkAndTrackKeyUserSession：keyLimit/userLimit 均 <=0 时应放行且不追踪", async () => {
     const { RateLimitService } = await import("@/lib/rate-limit");
 
