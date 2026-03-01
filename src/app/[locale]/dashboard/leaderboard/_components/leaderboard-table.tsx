@@ -11,7 +11,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -79,6 +79,14 @@ export function LeaderboardTable<T>({
       return next;
     });
   };
+
+  // 当调用方未提供稳定 rowKey 时（回退到 index），排序会导致展开态错位；此时在排序/数据变化时清空展开态，至少避免错位展开。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖用于在排序/数据变化时触发清空，避免 index key 造成错位展开
+  useEffect(() => {
+    if (!getRowKey) {
+      setExpandedRows(new Set());
+    }
+  }, [data, sortKey, sortDirection, getRowKey]);
 
   // 判断列是否需要加粗
   const getShouldBold = (col: ColumnDef<T>) => {
@@ -244,18 +252,25 @@ export function LeaderboardTable<T>({
 
                 return (
                   <Fragment key={rowKey}>
-                    <TableRow
-                      className={`${isTopThree ? "bg-muted/50" : ""} ${hasExpandable ? "cursor-pointer" : ""}`}
-                      onClick={hasExpandable ? () => toggleRow(rowKey) : undefined}
-                    >
+                    <TableRow className={`${isTopThree ? "bg-muted/50" : ""}`}>
                       <TableCell>
                         <div className="flex items-center gap-1">
                           {hasExpandable ? (
-                            isExpanded ? (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                            )
+                            <button
+                              type="button"
+                              className="inline-flex items-center cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              onClick={() => toggleRow(rowKey)}
+                              aria-expanded={isExpanded}
+                              aria-label={
+                                isExpanded ? t("collapseModelStats") : t("expandModelStats")
+                              }
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                              )}
+                            </button>
                           ) : null}
                           {getRankBadge(rank)}
                         </div>

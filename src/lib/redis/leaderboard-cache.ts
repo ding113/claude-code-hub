@@ -321,11 +321,16 @@ export async function getLeaderboardWithCache(
  *
  * @param period - 排行榜周期
  * @param currencyDisplay - 货币显示单位
+ * @param scope - 榜单范围
+ * @param dateRange - 自定义日期范围（仅 period=custom 时使用）
+ * @param filters - 过滤条件（会影响缓存键）
  */
 export async function invalidateLeaderboardCache(
   period: LeaderboardPeriod,
   currencyDisplay: string,
-  scope: LeaderboardScope = "user"
+  scope: LeaderboardScope = "user",
+  dateRange?: DateRangeParams,
+  filters?: LeaderboardFilters
 ): Promise<void> {
   const redis = getRedisClient();
   if (!redis) {
@@ -334,7 +339,7 @@ export async function invalidateLeaderboardCache(
 
   // Resolve timezone once per request
   const timezone = await resolveSystemTimezone();
-  const cacheKey = buildCacheKey(period, currencyDisplay, timezone, scope);
+  const cacheKey = buildCacheKey(period, currencyDisplay, timezone, scope, dateRange, filters);
 
   try {
     await redis.del(cacheKey);

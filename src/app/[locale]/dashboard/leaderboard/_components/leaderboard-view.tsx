@@ -29,16 +29,23 @@ interface LeaderboardViewProps {
 }
 
 type LeaderboardScope = "user" | "provider" | "providerCacheHitRate" | "model";
-type UserEntry = LeaderboardEntry & { totalCostFormatted?: string };
-type ProviderEntry = ProviderLeaderboardEntry & {
+type TotalCostFormattedFields = { totalCostFormatted?: string };
+type ProviderCostFormattedFields = {
+  // API 额外返回的展示用字段（格式化后的字符串）
   totalCostFormatted?: string;
   avgCostPerRequestFormatted?: string | null;
   avgCostPerMillionTokensFormatted?: string | null;
 };
-type ProviderRow = ProviderEntry | ModelProviderStat;
+type UserEntry = LeaderboardEntry & TotalCostFormattedFields;
+type ModelEntry = ModelLeaderboardEntry & TotalCostFormattedFields;
+type ModelProviderStatClient = ModelProviderStat & ProviderCostFormattedFields;
+type ProviderEntry = Omit<ProviderLeaderboardEntry, "modelStats"> &
+  ProviderCostFormattedFields & {
+    modelStats?: ModelProviderStatClient[];
+  };
+type ProviderRow = ProviderEntry | ModelProviderStatClient;
 type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry;
 type ProviderCacheHitRateRow = ProviderCacheHitRateEntry | ModelCacheHitStat;
-type ModelEntry = ModelLeaderboardEntry & { totalCostFormatted?: string };
 type AnyEntry = UserEntry | ProviderEntry | ProviderCacheHitRateEntry | ModelEntry;
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
@@ -186,33 +193,30 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const userColumns: ColumnDef<UserEntry>[] = [
     {
       header: t("columns.user"),
-      cell: (row) => (row as UserEntry).userName,
+      cell: (row) => row.userName,
       sortKey: "userName",
-      getValue: (row) => (row as UserEntry).userName,
+      getValue: (row) => row.userName,
     },
     {
       header: t("columns.requests"),
       className: "text-right",
-      cell: (row) => (row as UserEntry).totalRequests.toLocaleString(),
+      cell: (row) => row.totalRequests.toLocaleString(),
       sortKey: "totalRequests",
-      getValue: (row) => (row as UserEntry).totalRequests,
+      getValue: (row) => row.totalRequests,
     },
     {
       header: t("columns.tokens"),
       className: "text-right",
-      cell: (row) => formatTokenAmount((row as UserEntry).totalTokens),
+      cell: (row) => formatTokenAmount(row.totalTokens),
       sortKey: "totalTokens",
-      getValue: (row) => (row as UserEntry).totalTokens,
+      getValue: (row) => row.totalTokens,
     },
     {
       header: t("columns.consumedAmount"),
       className: "text-right font-mono",
-      cell: (row) => {
-        const r = row as UserEntry & { totalCostFormatted?: string };
-        return r.totalCostFormatted ?? r.totalCost;
-      },
+      cell: (row) => row.totalCostFormatted ?? row.totalCost,
       sortKey: "totalCost",
-      getValue: (row) => (row as UserEntry).totalCost,
+      getValue: (row) => row.totalCost,
       defaultBold: true,
     },
   ];
@@ -241,10 +245,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     {
       header: t("columns.cost"),
       className: "text-right font-mono",
-      cell: (row) => {
-        const r = row as { totalCostFormatted?: string; totalCost: number };
-        return r.totalCostFormatted ?? r.totalCost;
-      },
+      cell: (row) => row.totalCostFormatted ?? row.totalCost,
       sortKey: "totalCost",
       getValue: (row) => row.totalCost,
       defaultBold: true,
@@ -288,9 +289,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       className: "text-right font-mono",
       cell: (row) => {
         if (row.avgCostPerRequest == null) return "-";
-        const formatted = (row as { avgCostPerRequestFormatted?: string | null })
-          .avgCostPerRequestFormatted;
-        return formatted ?? row.avgCostPerRequest.toFixed(4);
+        return row.avgCostPerRequestFormatted ?? row.avgCostPerRequest.toFixed(4);
       },
       sortKey: "avgCostPerRequest",
       getValue: (row) => row.avgCostPerRequest ?? 0,
@@ -300,9 +299,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
       className: "text-right font-mono",
       cell: (row) => {
         if (row.avgCostPerMillionTokens == null) return "-";
-        const formatted = (row as { avgCostPerMillionTokensFormatted?: string | null })
-          .avgCostPerMillionTokensFormatted;
-        return formatted ?? row.avgCostPerMillionTokens.toFixed(2);
+        return row.avgCostPerMillionTokensFormatted ?? row.avgCostPerMillionTokens.toFixed(2);
       },
       sortKey: "avgCostPerMillionTokens",
       getValue: (row) => row.avgCostPerMillionTokens ?? 0,
@@ -365,41 +362,38 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   const modelColumns: ColumnDef<ModelEntry>[] = [
     {
       header: t("columns.model"),
-      cell: (row) => <span className="font-mono text-sm">{(row as ModelEntry).model}</span>,
+      cell: (row) => <span className="font-mono text-sm">{row.model}</span>,
       sortKey: "model",
-      getValue: (row) => (row as ModelEntry).model,
+      getValue: (row) => row.model,
     },
     {
       header: t("columns.requests"),
       className: "text-right",
-      cell: (row) => (row as ModelEntry).totalRequests.toLocaleString(),
+      cell: (row) => row.totalRequests.toLocaleString(),
       sortKey: "totalRequests",
-      getValue: (row) => (row as ModelEntry).totalRequests,
+      getValue: (row) => row.totalRequests,
     },
     {
       header: t("columns.tokens"),
       className: "text-right",
-      cell: (row) => formatTokenAmount((row as ModelEntry).totalTokens),
+      cell: (row) => formatTokenAmount(row.totalTokens),
       sortKey: "totalTokens",
-      getValue: (row) => (row as ModelEntry).totalTokens,
+      getValue: (row) => row.totalTokens,
     },
     {
       header: t("columns.cost"),
       className: "text-right font-mono",
-      cell: (row) => {
-        const r = row as ModelEntry & { totalCostFormatted?: string };
-        return r.totalCostFormatted ?? r.totalCost;
-      },
+      cell: (row) => row.totalCostFormatted ?? row.totalCost,
       sortKey: "totalCost",
-      getValue: (row) => (row as ModelEntry).totalCost,
+      getValue: (row) => row.totalCost,
       defaultBold: true,
     },
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(Number((row as ModelEntry).successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => `${(Number(row.successRate || 0) * 100).toFixed(1)}%`,
       sortKey: "successRate",
-      getValue: (row) => (row as ModelEntry).successRate,
+      getValue: (row) => row.successRate,
     },
   ];
 
@@ -418,12 +412,12 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     if (scope === "provider") {
       return (
         <LeaderboardTable<ProviderRow>
-          data={data as ProviderEntry[] as ProviderRow[]}
+          data={data as ProviderRow[]}
           period={period}
           columns={providerColumns}
           getRowKey={(row) => ("providerId" in row ? row.providerId : row.model)}
           getSubRows={(row) => ("modelStats" in row ? row.modelStats : null)}
-          getSubRowKey={(row) => ("model" in row ? row.model : row.providerId)}
+          getSubRowKey={(subRow) => (subRow as ModelProviderStatClient).model}
         />
       );
     }
@@ -431,12 +425,12 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     if (scope === "providerCacheHitRate") {
       return (
         <LeaderboardTable<ProviderCacheHitRateRow>
-          data={data as ProviderCacheHitRateEntry[] as ProviderCacheHitRateRow[]}
+          data={data as ProviderCacheHitRateRow[]}
           period={period}
           columns={providerCacheHitRateColumns}
           getRowKey={(row) => ("providerId" in row ? row.providerId : row.model)}
           getSubRows={(row) => ("modelStats" in row ? row.modelStats : null)}
-          getSubRowKey={(row) => ("model" in row ? row.model : row.providerId)}
+          getSubRowKey={(subRow) => (subRow as ModelCacheHitStat).model}
         />
       );
     }

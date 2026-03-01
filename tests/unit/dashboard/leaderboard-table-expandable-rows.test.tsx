@@ -94,9 +94,14 @@ describe("LeaderboardTable expandable rows", () => {
     expect(findCellByText("Provider A")).toBeTruthy();
     expect(findCellByText("model-x")).toBeNull();
 
-    const providerCell = findCellByText("Provider A")!;
+    const expandButton = container.querySelector(
+      'button[aria-label="expandModelStats"]'
+    ) as HTMLButtonElement | null;
+    expect(expandButton).toBeTruthy();
+    expect(expandButton!.getAttribute("aria-expanded")).toBe("false");
+
     act(() => {
-      providerCell.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expandButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     const modelCell = findCellByText("model-x");

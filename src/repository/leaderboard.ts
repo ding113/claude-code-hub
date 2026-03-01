@@ -8,6 +8,8 @@ import type { ProviderType } from "@/types/provider";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { getSystemSettings } from "./system-config";
 
+const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(value ?? 0, 0), 1);
+
 /**
  * 排行榜条目类型
  */
@@ -519,7 +521,7 @@ async function findProviderLeaderboardWithTimezone(
       totalRequests,
       totalCost,
       totalTokens,
-      successRate: entry.successRate ?? 0,
+      successRate: clampRatio01(entry.successRate),
       avgTtfbMs: entry.avgTtfbMs ?? 0,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
       ...avgCosts,
@@ -571,7 +573,7 @@ async function findProviderLeaderboardWithTimezone(
       totalRequests,
       totalCost,
       totalTokens,
-      successRate: Math.min(Math.max(row.successRate ?? 0, 0), 1),
+      successRate: clampRatio01(row.successRate),
       avgTtfbMs: row.avgTtfbMs ?? 0,
       avgTokensPerSecond: row.avgTokensPerSecond ?? 0,
       ...avgCosts,
@@ -833,7 +835,7 @@ async function findModelLeaderboardWithTimezone(
       totalRequests: entry.totalRequests,
       totalCost: parseFloat(entry.totalCost),
       totalTokens: entry.totalTokens,
-      successRate: entry.successRate ?? 0,
+      successRate: clampRatio01(entry.successRate),
     }));
 }
 
