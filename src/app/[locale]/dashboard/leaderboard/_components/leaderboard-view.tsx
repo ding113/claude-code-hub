@@ -16,6 +16,7 @@ import type {
   LeaderboardPeriod,
   ModelCacheHitStat,
   ModelLeaderboardEntry,
+  ModelProviderStat,
   ProviderCacheHitRateLeaderboardEntry,
   ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
@@ -34,7 +35,9 @@ type ProviderEntry = ProviderLeaderboardEntry & {
   avgCostPerRequestFormatted?: string | null;
   avgCostPerMillionTokensFormatted?: string | null;
 };
+type ProviderRow = ProviderEntry | ModelProviderStat;
 type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry;
+type ProviderCacheHitRateRow = ProviderCacheHitRateEntry | ModelCacheHitStat;
 type ModelEntry = ModelLeaderboardEntry & { totalCostFormatted?: string };
 type AnyEntry = UserEntry | ProviderEntry | ProviderCacheHitRateEntry | ModelEntry;
 
@@ -121,6 +124,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           providerTypeFilter !== "all"
         ) {
           url += `&providerType=${encodeURIComponent(providerTypeFilter)}`;
+        }
+        if (scope === "provider") {
+          url += "&includeModelStats=1";
         }
         if (scope === "user") {
           if (userTagFilters.length > 0) {
@@ -211,108 +217,124 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
   ];
 
-  const providerColumns: ColumnDef<ProviderEntry>[] = [
+  const providerColumns: ColumnDef<ProviderRow>[] = [
     {
       header: t("columns.provider"),
-      cell: (row) => (row as ProviderEntry).providerName,
+      cell: (row) => {
+        if ("providerName" in row) return row.providerName;
+        return (
+          <div className="pl-6">
+            <span className="font-mono text-sm">{row.model}</span>
+          </div>
+        );
+      },
       sortKey: "providerName",
-      getValue: (row) => (row as ProviderEntry).providerName,
+      getValue: (row) => ("providerName" in row ? row.providerName : row.model),
     },
     {
       header: t("columns.requests"),
       className: "text-right",
-      cell: (row) => (row as ProviderEntry).totalRequests.toLocaleString(),
+      cell: (row) => row.totalRequests.toLocaleString(),
       sortKey: "totalRequests",
-      getValue: (row) => (row as ProviderEntry).totalRequests,
+      getValue: (row) => row.totalRequests,
     },
     {
       header: t("columns.cost"),
       className: "text-right font-mono",
       cell: (row) => {
-        const r = row as ProviderEntry & { totalCostFormatted?: string };
+        const r = row as { totalCostFormatted?: string; totalCost: number };
         return r.totalCostFormatted ?? r.totalCost;
       },
       sortKey: "totalCost",
-      getValue: (row) => (row as ProviderEntry).totalCost,
+      getValue: (row) => row.totalCost,
       defaultBold: true,
     },
     {
       header: t("columns.tokens"),
       className: "text-right",
-      cell: (row) => formatTokenAmount((row as ProviderEntry).totalTokens),
+      cell: (row) => formatTokenAmount(row.totalTokens),
       sortKey: "totalTokens",
-      getValue: (row) => (row as ProviderEntry).totalTokens,
+      getValue: (row) => row.totalTokens,
     },
     {
       header: t("columns.successRate"),
       className: "text-right",
-      cell: (row) => `${(Number((row as ProviderEntry).successRate || 0) * 100).toFixed(1)}%`,
+      cell: (row) => `${(Number(row.successRate || 0) * 100).toFixed(1)}%`,
       sortKey: "successRate",
-      getValue: (row) => (row as ProviderEntry).successRate,
+      getValue: (row) => row.successRate,
     },
     {
       header: t("columns.avgTtfbMs"),
       className: "text-right",
       cell: (row) => {
-        const val = (row as ProviderEntry).avgTtfbMs;
+        const val = row.avgTtfbMs;
         return val && val > 0 ? `${Math.round(val).toLocaleString()} ms` : "-";
       },
       sortKey: "avgTtfbMs",
-      getValue: (row) => (row as ProviderEntry).avgTtfbMs ?? 0,
+      getValue: (row) => row.avgTtfbMs ?? 0,
     },
     {
       header: t("columns.avgTokensPerSecond"),
       className: "text-right",
       cell: (row) => {
-        const val = (row as ProviderEntry).avgTokensPerSecond;
+        const val = row.avgTokensPerSecond;
         return val && val > 0 ? `${val.toFixed(1)} tok/s` : "-";
       },
       sortKey: "avgTokensPerSecond",
-      getValue: (row) => (row as ProviderEntry).avgTokensPerSecond ?? 0,
+      getValue: (row) => row.avgTokensPerSecond ?? 0,
     },
     {
       header: t("columns.avgCostPerRequest"),
       className: "text-right font-mono",
       cell: (row) => {
-        const r = row as ProviderEntry;
-        if (r.avgCostPerRequest == null) return "-";
-        return r.avgCostPerRequestFormatted ?? r.avgCostPerRequest.toFixed(4);
+        if (row.avgCostPerRequest == null) return "-";
+        const formatted = (row as { avgCostPerRequestFormatted?: string | null })
+          .avgCostPerRequestFormatted;
+        return formatted ?? row.avgCostPerRequest.toFixed(4);
       },
       sortKey: "avgCostPerRequest",
-      getValue: (row) => (row as ProviderEntry).avgCostPerRequest ?? 0,
+      getValue: (row) => row.avgCostPerRequest ?? 0,
     },
     {
       header: t("columns.avgCostPerMillionTokens"),
       className: "text-right font-mono",
       cell: (row) => {
-        const r = row as ProviderEntry;
-        if (r.avgCostPerMillionTokens == null) return "-";
-        return r.avgCostPerMillionTokensFormatted ?? r.avgCostPerMillionTokens.toFixed(2);
+        if (row.avgCostPerMillionTokens == null) return "-";
+        const formatted = (row as { avgCostPerMillionTokensFormatted?: string | null })
+          .avgCostPerMillionTokensFormatted;
+        return formatted ?? row.avgCostPerMillionTokens.toFixed(2);
       },
       sortKey: "avgCostPerMillionTokens",
-      getValue: (row) => (row as ProviderEntry).avgCostPerMillionTokens ?? 0,
+      getValue: (row) => row.avgCostPerMillionTokens ?? 0,
     },
   ];
 
-  const providerCacheHitRateColumns: ColumnDef<ProviderCacheHitRateEntry>[] = [
+  const providerCacheHitRateColumns: ColumnDef<ProviderCacheHitRateRow>[] = [
     {
       header: t("columns.provider"),
-      cell: (row) => (row as ProviderCacheHitRateEntry).providerName,
+      cell: (row) => {
+        if ("providerName" in row) return row.providerName;
+        return (
+          <div className="pl-6">
+            <span className="font-mono text-sm">{row.model}</span>
+          </div>
+        );
+      },
       sortKey: "providerName",
-      getValue: (row) => (row as ProviderCacheHitRateEntry).providerName,
+      getValue: (row) => ("providerName" in row ? row.providerName : row.model),
     },
     {
       header: t("columns.cacheHitRequests"),
       className: "text-right",
-      cell: (row) => (row as ProviderCacheHitRateEntry).totalRequests.toLocaleString(),
+      cell: (row) => row.totalRequests.toLocaleString(),
       sortKey: "totalRequests",
-      getValue: (row) => (row as ProviderCacheHitRateEntry).totalRequests,
+      getValue: (row) => row.totalRequests,
     },
     {
       header: t("columns.cacheHitRate"),
       className: "text-right",
       cell: (row) => {
-        const rate = Number((row as ProviderCacheHitRateEntry).cacheHitRate || 0) * 100;
+        const rate = Number(row.cacheHitRate || 0) * 100;
         const colorClass =
           rate >= 85
             ? "text-green-600 dark:text-green-400"
@@ -322,21 +344,21 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         return <span className={colorClass}>{rate.toFixed(1)}%</span>;
       },
       sortKey: "cacheHitRate",
-      getValue: (row) => (row as ProviderCacheHitRateEntry).cacheHitRate,
+      getValue: (row) => row.cacheHitRate,
     },
     {
       header: t("columns.cacheReadTokens"),
       className: "text-right",
-      cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).cacheReadTokens),
+      cell: (row) => formatTokenAmount(row.cacheReadTokens),
       sortKey: "cacheReadTokens",
-      getValue: (row) => (row as ProviderCacheHitRateEntry).cacheReadTokens,
+      getValue: (row) => row.cacheReadTokens,
     },
     {
       header: t("columns.totalTokens"),
       className: "text-right",
-      cell: (row) => formatTokenAmount((row as ProviderCacheHitRateEntry).totalInputTokens),
+      cell: (row) => formatTokenAmount(row.totalInputTokens),
       sortKey: "totalInputTokens",
-      getValue: (row) => (row as ProviderCacheHitRateEntry).totalInputTokens,
+      getValue: (row) => row.totalInputTokens,
     },
   ];
 
@@ -381,30 +403,52 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
   ];
 
-  const columns = (() => {
-    switch (scope) {
-      case "user":
-        return userColumns as ColumnDef<AnyEntry>[];
-      case "provider":
-        return providerColumns as ColumnDef<AnyEntry>[];
-      case "providerCacheHitRate":
-        return providerCacheHitRateColumns as ColumnDef<AnyEntry>[];
-      case "model":
-        return modelColumns as ColumnDef<AnyEntry>[];
+  const renderTable = () => {
+    if (scope === "user") {
+      return (
+        <LeaderboardTable<UserEntry>
+          data={data as UserEntry[]}
+          period={period}
+          columns={userColumns}
+          getRowKey={(row) => row.userId}
+        />
+      );
     }
-  })();
 
-  const rowKey = (row: AnyEntry) => {
-    switch (scope) {
-      case "user":
-        return (row as UserEntry).userId;
-      case "provider":
-        return (row as ProviderEntry).providerId;
-      case "providerCacheHitRate":
-        return (row as ProviderCacheHitRateEntry).providerId;
-      case "model":
-        return (row as ModelEntry).model;
+    if (scope === "provider") {
+      return (
+        <LeaderboardTable<ProviderRow>
+          data={data as ProviderEntry[] as ProviderRow[]}
+          period={period}
+          columns={providerColumns}
+          getRowKey={(row) => ("providerId" in row ? row.providerId : row.model)}
+          getSubRows={(row) => ("modelStats" in row ? row.modelStats : null)}
+          getSubRowKey={(row) => ("model" in row ? row.model : row.providerId)}
+        />
+      );
     }
+
+    if (scope === "providerCacheHitRate") {
+      return (
+        <LeaderboardTable<ProviderCacheHitRateRow>
+          data={data as ProviderCacheHitRateEntry[] as ProviderCacheHitRateRow[]}
+          period={period}
+          columns={providerCacheHitRateColumns}
+          getRowKey={(row) => ("providerId" in row ? row.providerId : row.model)}
+          getSubRows={(row) => ("modelStats" in row ? row.modelStats : null)}
+          getSubRowKey={(row) => ("model" in row ? row.model : row.providerId)}
+        />
+      );
+    }
+
+    return (
+      <LeaderboardTable<ModelEntry>
+        data={data as ModelEntry[]}
+        period={period}
+        columns={modelColumns}
+        getRowKey={(row) => row.model}
+      />
+    );
   };
 
   return (
@@ -511,70 +555,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
             </CardContent>
           </Card>
         ) : (
-          <LeaderboardTable
-            data={data}
-            period={period}
-            columns={columns}
-            getRowKey={rowKey}
-            renderExpandedContent={
-              scope === "providerCacheHitRate"
-                ? (row) => {
-                    const entry = row as ProviderCacheHitRateEntry & {
-                      modelStats?: ModelCacheHitStat[];
-                    };
-                    if (!entry.modelStats || entry.modelStats.length === 0) return null;
-                    return (
-                      <div className="px-8 py-3">
-                        <div className="text-xs text-muted-foreground mb-2 font-medium">
-                          {t("expandModelStats")}
-                        </div>
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="text-xs text-muted-foreground border-b">
-                              <th className="text-left py-1 pr-4">{t("columns.model")}</th>
-                              <th className="text-right py-1 pr-4">{t("columns.requests")}</th>
-                              <th className="text-right py-1 pr-4">
-                                {t("columns.cacheReadTokens")}
-                              </th>
-                              <th className="text-right py-1 pr-4">{t("columns.totalTokens")}</th>
-                              <th className="text-right py-1">{t("columns.cacheHitRate")}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {entry.modelStats.map((ms) => {
-                              const rate = (ms.cacheHitRate ?? 0) * 100;
-                              const colorClass =
-                                rate >= 85
-                                  ? "text-green-600 dark:text-green-400"
-                                  : rate >= 60
-                                    ? "text-yellow-600 dark:text-yellow-400"
-                                    : "text-orange-600 dark:text-orange-400";
-                              return (
-                                <tr key={ms.model} className="border-b last:border-b-0">
-                                  <td className="py-1 pr-4 font-mono">{ms.model}</td>
-                                  <td className="text-right py-1 pr-4">
-                                    {ms.totalRequests.toLocaleString()}
-                                  </td>
-                                  <td className="text-right py-1 pr-4">
-                                    {formatTokenAmount(ms.cacheReadTokens)}
-                                  </td>
-                                  <td className="text-right py-1 pr-4">
-                                    {formatTokenAmount(ms.totalInputTokens)}
-                                  </td>
-                                  <td className={`text-right py-1 ${colorClass}`}>
-                                    {rate.toFixed(1)}%
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    );
-                  }
-                : undefined
-            }
-          />
+          renderTable()
         )}
       </div>
     </div>

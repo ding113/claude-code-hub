@@ -197,5 +197,57 @@ describe("GET /api/leaderboard", () => {
       expect(entry.modelStats[0]).toHaveProperty("model", "claude-3-opus");
       expect(entry.modelStats[0]).toHaveProperty("cacheHitRate", 0.53);
     });
+
+    it("passes includeModelStats to cache and formats provider modelStats entries", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "u", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          providerId: 1,
+          providerName: "test-provider",
+          totalRequests: 10,
+          totalCost: 1.5,
+          totalTokens: 1000,
+          successRate: 1,
+          avgTtfbMs: 100,
+          avgTokensPerSecond: 20,
+          avgCostPerRequest: 0.15,
+          avgCostPerMillionTokens: 1500,
+          modelStats: [
+            {
+              model: "model-a",
+              totalRequests: 6,
+              totalCost: 1.0,
+              totalTokens: 600,
+              successRate: 1,
+              avgTtfbMs: 110,
+              avgTokensPerSecond: 25,
+              avgCostPerRequest: 0.1667,
+              avgCostPerMillionTokens: 1666.7,
+            },
+          ],
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url =
+        "http://localhost/api/leaderboard?scope=provider&period=daily&includeModelStats=1";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(mocks.getLeaderboardWithCache).toHaveBeenCalledTimes(1);
+
+      const callArgs = mocks.getLeaderboardWithCache.mock.calls[0];
+      const options = callArgs[4];
+      expect(options.includeModelStats).toBe(true);
+
+      expect(body).toHaveLength(1);
+      const entry = body[0];
+      expect(entry).toHaveProperty("modelStats");
+      expect(entry.modelStats).toHaveLength(1);
+      expect(entry.modelStats[0]).toHaveProperty("totalCostFormatted");
+      expect(entry.modelStats[0]).toHaveProperty("avgCostPerRequestFormatted");
+      expect(entry.modelStats[0]).toHaveProperty("avgCostPerMillionTokensFormatted");
+    });
   });
 });
