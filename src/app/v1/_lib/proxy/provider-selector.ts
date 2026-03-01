@@ -302,7 +302,8 @@ export class ProxyProviderResolver {
               : "weighted_random",
             circuitState: getCircuitState(session.provider.id),
             attemptNumber: attemptCount,
-            errorMessage: uaCheckResult.reason || "并发 UA 限制已达到",
+            errorCode: uaCheckResult.reasonCode,
+            errorParams: uaCheckResult.reasonParams,
             decisionContext: failedContext
               ? {
                   ...failedContext,

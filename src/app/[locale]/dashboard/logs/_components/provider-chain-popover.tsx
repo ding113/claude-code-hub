@@ -62,6 +62,25 @@ function parseGroupTags(groupTag?: string | null): string[] {
   return groups;
 }
 
+function resolveChainItemErrorMessage(
+  item: ProviderChainItem,
+  tErrors: (key: string, params?: Record<string, string | number>) => string
+): string | null {
+  if (typeof item.errorMessage === "string" && item.errorMessage.trim()) {
+    return item.errorMessage;
+  }
+
+  if (typeof item.errorCode !== "string" || !item.errorCode.trim()) {
+    return null;
+  }
+
+  try {
+    return tErrors(item.errorCode, item.errorParams ?? undefined);
+  } catch {
+    return item.errorCode;
+  }
+}
+
 /**
  * Get status icon and color for a provider chain item
  */
@@ -126,6 +145,7 @@ export function ProviderChainPopover({
 }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
+  const tErrors = useTranslations("errors");
 
   // “假 200”识别发生在 SSE 流式结束后：此时响应内容可能已透传给客户端，但内部会按失败统计/熔断。
   const hasFake200PostStreamFailure = chain.some(
@@ -459,6 +479,7 @@ export function ProviderChainPopover({
             const status = getItemStatus(item);
             const Icon = status.icon;
             const isLast = index === actualRequests.length - 1;
+            const resolvedErrorMessage = resolveChainItemErrorMessage(item, tErrors);
 
             return (
               <div
@@ -536,10 +557,10 @@ export function ProviderChainPopover({
                       </span>
                     )}
                   </div>
-                  {item.errorMessage && (
+                  {resolvedErrorMessage && (
                     <>
                       <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">
-                        {item.errorMessage}
+                        {resolvedErrorMessage}
                       </p>
                       {typeof item.errorMessage === "string" &&
                         item.errorMessage.startsWith("FAKE_200_") && (

@@ -807,7 +807,13 @@ export class RateLimitService {
     providerId: number,
     uaId: string,
     limit: number
-  ): Promise<{ allowed: boolean; count: number; tracked: boolean; reason?: string }> {
+  ): Promise<{
+    allowed: boolean;
+    count: number;
+    tracked: boolean;
+    reasonCode?: string;
+    reasonParams?: Record<string, string | number>;
+  }> {
     if (limit <= 0) {
       return { allowed: true, count: 0, tracked: false };
     }
@@ -838,7 +844,8 @@ export class RateLimitService {
           allowed: false,
           count,
           tracked: false,
-          reason: `供应商并发 UA 上限已达到（${count}/${limit}）`,
+          reasonCode: ERROR_CODES.RATE_LIMIT_CONCURRENT_UAS_EXCEEDED,
+          reasonParams: { current: count, limit, target: "provider" },
         };
       }
 

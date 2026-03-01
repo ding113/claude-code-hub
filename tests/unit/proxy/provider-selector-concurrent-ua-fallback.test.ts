@@ -101,7 +101,13 @@ describe("ProxyProviderResolver.ensure - concurrent UA fallback", () => {
       });
 
     rateLimitMocks.RateLimitService.checkAndTrackProviderUa
-      .mockResolvedValueOnce({ allowed: false, count: 1, tracked: false, reason: "ua limit" })
+      .mockResolvedValueOnce({
+        allowed: false,
+        count: 1,
+        tracked: false,
+        reasonCode: "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED",
+        reasonParams: { current: 1, limit: 1 },
+      })
       .mockResolvedValueOnce({ allowed: true, count: 1, tracked: true });
 
     rateLimitMocks.RateLimitService.checkAndTrackProviderSession.mockResolvedValueOnce({

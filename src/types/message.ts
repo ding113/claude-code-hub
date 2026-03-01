@@ -92,6 +92,10 @@ export interface ProviderChainItem {
   // 错误信息（记录失败时的上游报错）
   errorMessage?: string;
 
+  // 结构化错误码/参数（用于 i18n 渲染）
+  errorCode?: string;
+  errorParams?: Record<string, string | number>;
+
   // 结构化错误详情（便于格式化显示）
   errorDetails?: {
     // 供应商错误（HTTP 4xx/5xx）

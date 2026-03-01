@@ -210,8 +210,13 @@ describe("RateLimitService - other quota paths", () => {
 
     redisClientRef.eval.mockResolvedValueOnce([0, 2, 0]);
     const result = await RateLimitService.checkAndTrackProviderUa(9, "ua", 2);
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("供应商并发 UA 上限已达到（2/2）");
+    expect(result).toEqual({
+      allowed: false,
+      count: 2,
+      tracked: false,
+      reasonCode: "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED",
+      reasonParams: { current: 2, limit: 2, target: "provider" },
+    });
   });
 
   it("checkAndTrackProviderUa：未达到上限时应返回 allowed 且可标记 tracked", async () => {

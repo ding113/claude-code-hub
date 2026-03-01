@@ -51,6 +51,25 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
   return "pending";
 }
 
+function resolveChainItemErrorMessage(
+  item: ProviderChainItem,
+  tErrors: (key: string, params?: Record<string, string | number>) => string
+): string | null {
+  if (typeof item.errorMessage === "string" && item.errorMessage.trim()) {
+    return item.errorMessage;
+  }
+
+  if (typeof item.errorCode !== "string" || !item.errorCode.trim()) {
+    return null;
+  }
+
+  try {
+    return tErrors(item.errorCode, item.errorParams ?? undefined);
+  } catch {
+    return item.errorCode;
+  }
+}
+
 export function LogicTraceTab({
   statusCode: _statusCode,
   providerChain,
@@ -62,6 +81,7 @@ export function LogicTraceTab({
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
+  const tErrors = useTranslations("errors");
   const [timelineCopied, setTimelineCopied] = useState(false);
   const [originOpen, setOriginOpen] = useState(false);
   const [originChain, setOriginChain] = useState<ProviderChainItem[] | null | undefined>(undefined);
@@ -708,6 +728,7 @@ export function LogicTraceTab({
             const isRetry = item.attemptNumber && item.attemptNumber > 1;
             const isSessionReuse =
               item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
+            const resolvedErrorMessage = resolveChainItemErrorMessage(item, tErrors);
 
             // Determine icon based on type
             const stepIcon = isSessionReuse
@@ -876,14 +897,14 @@ export function LogicTraceTab({
                     )}
 
                     {/* Error Message */}
-                    {item.errorMessage && (
+                    {resolvedErrorMessage && (
                       <div className="pt-2 border-t border-muted/50">
                         <div className="flex items-center gap-1 text-rose-600 mb-1">
                           <AlertCircle className="h-3 w-3" />
                           <span>{tChain("details.error")}</span>
                         </div>
                         <pre className="text-[10px] bg-rose-50 dark:bg-rose-950/20 p-2 rounded whitespace-pre-wrap break-words">
-                          {item.errorMessage}
+                          {resolvedErrorMessage}
                         </pre>
                       </div>
                     )}
