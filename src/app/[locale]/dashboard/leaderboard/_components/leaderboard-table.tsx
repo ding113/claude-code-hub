@@ -41,7 +41,13 @@ interface LeaderboardTableProps<T> {
   period: LeaderboardPeriod;
   columns: ColumnDef<T>[]; // 不包含"排名"列，组件会自动添加
   getRowKey?: (row: T, index: number) => string | number;
-  renderExpandedContent?: (row: T, index: number) => React.ReactNode | null;
+  getSubRows?: (row: T, index: number) => T[] | null | undefined;
+  getSubRowKey?: (
+    subRow: T,
+    parentRow: T,
+    parentIndex: number,
+    subIndex: number
+  ) => string | number;
 }
 
 export function LeaderboardTable<T>({
@@ -49,7 +55,8 @@ export function LeaderboardTable<T>({
   period,
   columns,
   getRowKey,
-  renderExpandedContent,
+  getSubRows,
+  getSubRowKey,
 }: LeaderboardTableProps<T>) {
   const t = useTranslations("dashboard.leaderboard");
 
@@ -229,21 +236,19 @@ export function LeaderboardTable<T>({
                 const rank = index + 1;
                 const isTopThree = rank <= 3;
                 const rowKey = getRowKey ? (getRowKey(row, index) ?? index) : index;
-                const hasExpandable = renderExpandedContent != null;
-                const expandedContent = hasExpandable ? renderExpandedContent(row, index) : null;
-                const isExpanded = expandedRows.has(rowKey);
+                const subRows = getSubRows ? getSubRows(row, index) : null;
+                const hasExpandable = (subRows?.length ?? 0) > 0;
+                const isExpanded = hasExpandable && expandedRows.has(rowKey);
 
                 return (
                   <Fragment key={rowKey}>
                     <TableRow
-                      className={`${isTopThree ? "bg-muted/50" : ""} ${hasExpandable && expandedContent ? "cursor-pointer" : ""}`}
-                      onClick={
-                        hasExpandable && expandedContent ? () => toggleRow(rowKey) : undefined
-                      }
+                      className={`${isTopThree ? "bg-muted/50" : ""} ${hasExpandable ? "cursor-pointer" : ""}`}
+                      onClick={hasExpandable ? () => toggleRow(rowKey) : undefined}
                     >
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          {hasExpandable && expandedContent ? (
+                          {hasExpandable ? (
                             isExpanded ? (
                               <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                             ) : (
@@ -265,16 +270,33 @@ export function LeaderboardTable<T>({
                         );
                       })}
                     </TableRow>
-                    {isExpanded && expandedContent && (
-                      <TableRow
-                        key={`${rowKey}-expanded`}
-                        className="bg-muted/30 hover:bg-muted/30"
-                      >
-                        <TableCell colSpan={columns.length + 1} className="p-0">
-                          {expandedContent}
-                        </TableCell>
-                      </TableRow>
-                    )}
+                    {isExpanded &&
+                      (subRows ?? []).map((subRow, subIndex) => {
+                        const rawSubKey = getSubRowKey
+                          ? getSubRowKey(subRow, row, index, subIndex)
+                          : subIndex;
+                        const subKey = `${rowKey}-${String(rawSubKey)}`;
+                        return (
+                          <TableRow key={subKey} className="bg-muted/30 hover:bg-muted/30">
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <div className="h-4 w-4" />
+                              </div>
+                            </TableCell>
+                            {columns.map((col, idx) => {
+                              const shouldBold = getShouldBold(col);
+                              return (
+                                <TableCell
+                                  key={idx}
+                                  className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
+                                >
+                                  {col.cell(subRow, subIndex)}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
                   </Fragment>
                 );
               })}

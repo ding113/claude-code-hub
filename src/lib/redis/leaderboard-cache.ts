@@ -46,6 +46,7 @@ export interface LeaderboardFilters {
   providerType?: ProviderType;
   userTags?: string[];
   userGroups?: string[];
+  includeModelStats?: boolean;
 }
 
 /**
@@ -62,6 +63,8 @@ function buildCacheKey(
 ): string {
   const now = new Date();
   const providerTypeSuffix = filters?.providerType ? `:providerType:${filters.providerType}` : "";
+  const includeModelStatsSuffix =
+    scope === "provider" && filters?.includeModelStats ? ":includeModelStats" : "";
 
   let userFilterSuffix = "";
   if (scope === "user") {
@@ -76,22 +79,22 @@ function buildCacheKey(
 
   if (period === "custom" && dateRange) {
     // leaderboard:{scope}:custom:2025-01-01_2025-01-15:USD
-    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:custom:${dateRange.startDate}_${dateRange.endDate}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "daily") {
     // leaderboard:{scope}:daily:2025-01-15:USD
     const dateStr = formatInTimeZone(now, timezone, "yyyy-MM-dd");
-    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:daily:${dateStr}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "weekly") {
     // leaderboard:{scope}:weekly:2025-W03:USD (ISO week)
     const weekStr = formatInTimeZone(now, timezone, "yyyy-'W'ww");
-    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:weekly:${weekStr}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else if (period === "monthly") {
     // leaderboard:{scope}:monthly:2025-01:USD
     const monthStr = formatInTimeZone(now, timezone, "yyyy-MM");
-    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:monthly:${monthStr}:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   } else {
     // allTime: leaderboard:{scope}:allTime:USD (no date component)
-    return `leaderboard:${scope}:allTime:${currencyDisplay}${providerTypeSuffix}${userFilterSuffix}`;
+    return `leaderboard:${scope}:allTime:${currencyDisplay}${providerTypeSuffix}${includeModelStatsSuffix}${userFilterSuffix}`;
   }
 }
 
@@ -115,7 +118,11 @@ async function queryDatabase(
       return await findCustomRangeLeaderboard(dateRange, userFilters);
     }
     if (scope === "provider") {
-      return await findCustomRangeProviderLeaderboard(dateRange, filters?.providerType);
+      return await findCustomRangeProviderLeaderboard(
+        dateRange,
+        filters?.providerType,
+        filters?.includeModelStats
+      );
     }
     if (scope === "providerCacheHitRate") {
       return await findCustomRangeProviderCacheHitRateLeaderboard(dateRange, filters?.providerType);
@@ -140,15 +147,30 @@ async function queryDatabase(
   if (scope === "provider") {
     switch (period) {
       case "daily":
-        return await findDailyProviderLeaderboard(filters?.providerType);
+        return await findDailyProviderLeaderboard(
+          filters?.providerType,
+          filters?.includeModelStats
+        );
       case "weekly":
-        return await findWeeklyProviderLeaderboard(filters?.providerType);
+        return await findWeeklyProviderLeaderboard(
+          filters?.providerType,
+          filters?.includeModelStats
+        );
       case "monthly":
-        return await findMonthlyProviderLeaderboard(filters?.providerType);
+        return await findMonthlyProviderLeaderboard(
+          filters?.providerType,
+          filters?.includeModelStats
+        );
       case "allTime":
-        return await findAllTimeProviderLeaderboard(filters?.providerType);
+        return await findAllTimeProviderLeaderboard(
+          filters?.providerType,
+          filters?.includeModelStats
+        );
       default:
-        return await findDailyProviderLeaderboard(filters?.providerType);
+        return await findDailyProviderLeaderboard(
+          filters?.providerType,
+          filters?.includeModelStats
+        );
     }
   }
   if (scope === "providerCacheHitRate") {

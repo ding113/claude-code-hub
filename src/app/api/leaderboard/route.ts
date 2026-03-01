@@ -35,6 +35,7 @@ export const runtime = "nodejs";
  * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|providerCacheHitRate|model
  * 当 period=custom 时，需要提供 startDate 和 endDate 参数 (YYYY-MM-DD 格式)
  * 当 scope=providerCacheHitRate 时，可选 providerType=claude|claude-auth|codex|gemini|gemini-cli|openai-compatible
+ * 当 scope=provider 时，可选 includeModelStats=true|1，返回供应商下各模型的拆分数据
  *
  * 需要认证，普通用户需要 allowGlobalUsageView 权限
  * 实时计算 + Redis 乐观缓存（60 秒 TTL）
@@ -75,6 +76,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const providerTypeParam = searchParams.get("providerType");
+    const includeModelStatsParam = searchParams.get("includeModelStats");
     const userTagsParam = searchParams.get("userTags");
     const userGroupsParam = searchParams.get("userGroups");
 
@@ -127,6 +129,12 @@ export async function GET(request: NextRequest) {
       providerType = providerTypeParam;
     }
 
+    const includeModelStats =
+      scope === "provider" &&
+      (includeModelStatsParam === "1" ||
+        includeModelStatsParam === "true" ||
+        includeModelStatsParam === "yes");
+
     const parseListParam = (param: string | null): string[] | undefined => {
       if (!param) return undefined;
       const items = param
@@ -150,7 +158,7 @@ export async function GET(request: NextRequest) {
       systemSettings.currencyDisplay,
       scope,
       dateRange,
-      { providerType, userTags, userGroups }
+      { providerType, userTags, userGroups, includeModelStats }
     );
 
     // 格式化金额字段
@@ -165,6 +173,7 @@ export async function GET(request: NextRequest) {
         avgCostPerRequest?: number | null;
         avgCostPerMillionTokens?: number | null;
         cacheCreationCost?: number;
+        modelStats?: unknown[];
       };
 
       const providerFields =
@@ -194,7 +203,36 @@ export async function GET(request: NextRequest) {
             }
           : {};
 
-      return { ...base, ...providerFields, ...cacheFields };
+      const modelStatsFormatted =
+        scope === "provider" && Array.isArray(typedEntry.modelStats)
+          ? typedEntry.modelStats.map((ms) => {
+              const stat = ms as {
+                totalCost: number;
+                avgCostPerRequest: number | null;
+                avgCostPerMillionTokens: number | null;
+              } & Record<string, unknown>;
+
+              return {
+                ...stat,
+                totalCostFormatted: formatCurrency(stat.totalCost, systemSettings.currencyDisplay),
+                avgCostPerRequestFormatted:
+                  stat.avgCostPerRequest != null
+                    ? formatCurrency(stat.avgCostPerRequest, systemSettings.currencyDisplay)
+                    : null,
+                avgCostPerMillionTokensFormatted:
+                  stat.avgCostPerMillionTokens != null
+                    ? formatCurrency(stat.avgCostPerMillionTokens, systemSettings.currencyDisplay)
+                    : null,
+              };
+            })
+          : undefined;
+
+      return {
+        ...base,
+        ...providerFields,
+        ...cacheFields,
+        ...(modelStatsFormatted ? { modelStats: modelStatsFormatted } : {}),
+      };
     });
 
     logger.info("Leaderboard API: Access granted", {
@@ -205,6 +243,7 @@ export async function GET(request: NextRequest) {
       scope,
       dateRange,
       providerType,
+      includeModelStats,
       userTags,
       userGroups,
       entriesCount: data.length,

@@ -236,6 +236,105 @@ describe("Provider Leaderboard Average Cost Metrics", () => {
   });
 });
 
+describe("Provider Leaderboard Model Breakdown", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    selectCallIndex = 0;
+    chainMocks = [];
+    mockSelect.mockClear();
+    mocks.resolveSystemTimezone.mockResolvedValue("UTC");
+    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+  });
+
+  it("includes modelStats when includeModelStats=true and excludes empty model names", async () => {
+    chainMocks = [
+      createChainMock([
+        {
+          providerId: 1,
+          providerName: "provider-a",
+          totalRequests: 100,
+          totalCost: "10.0",
+          totalTokens: 1000,
+          successRate: 0.9,
+          avgTtfbMs: 200,
+          avgTokensPerSecond: 50,
+        },
+        {
+          providerId: 2,
+          providerName: "provider-b",
+          totalRequests: 50,
+          totalCost: "5.0",
+          totalTokens: 500,
+          successRate: 0.8,
+          avgTtfbMs: 300,
+          avgTokensPerSecond: 40,
+        },
+      ]),
+      createChainMock([
+        {
+          providerId: 1,
+          model: "model-a",
+          totalRequests: 60,
+          totalCost: "6.0",
+          totalTokens: 600,
+          successRate: 0.95,
+          avgTtfbMs: 120,
+          avgTokensPerSecond: 55,
+        },
+        {
+          providerId: 1,
+          model: "model-b",
+          totalRequests: 40,
+          totalCost: "4.0",
+          totalTokens: 400,
+          successRate: 0.85,
+          avgTtfbMs: 180,
+          avgTokensPerSecond: 45,
+        },
+        {
+          providerId: 2,
+          model: "",
+          totalRequests: 1,
+          totalCost: "0.1",
+          totalTokens: 10,
+          successRate: 0,
+          avgTtfbMs: 0,
+          avgTokensPerSecond: 0,
+        },
+        {
+          providerId: 2,
+          model: "model-c",
+          totalRequests: 50,
+          totalCost: "5.0",
+          totalTokens: 500,
+          successRate: 0.8,
+          avgTtfbMs: 300,
+          avgTokensPerSecond: 40,
+        },
+      ]),
+    ];
+
+    const { findDailyProviderLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyProviderLeaderboard(undefined, true);
+
+    expect(result).toHaveLength(2);
+
+    const p1 = result.find((r) => r.providerId === 1);
+    expect(p1).toBeDefined();
+    expect(p1!.modelStats).toBeDefined();
+    expect(p1!.modelStats).toHaveLength(2);
+    expect(p1!.modelStats![0].model).toBe("model-a");
+    expect(p1!.modelStats![0].avgCostPerRequest).toBeCloseTo(6.0 / 60);
+    expect(p1!.modelStats![0].avgCostPerMillionTokens).toBeCloseTo((6.0 * 1_000_000) / 600);
+
+    const p2 = result.find((r) => r.providerId === 2);
+    expect(p2).toBeDefined();
+    // Empty model must be excluded
+    expect(p2!.modelStats).toHaveLength(1);
+    expect(p2!.modelStats![0].model).toBe("model-c");
+  });
+});
+
 describe("Provider Cache Hit Rate Model Breakdown", () => {
   beforeEach(() => {
     vi.resetModules();
