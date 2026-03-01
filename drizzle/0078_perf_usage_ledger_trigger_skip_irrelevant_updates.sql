@@ -1,3 +1,5 @@
+-- perf: avoid redundant usage_ledger UPSERTs on irrelevant message_request updates
+
 CREATE OR REPLACE FUNCTION fn_upsert_usage_ledger()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -25,10 +27,8 @@ BEGIN
 
   v_is_success := (NEW.error_message IS NULL OR NEW.error_message = '');
 
-  -- 性能优化：避免“无关字段更新”触发 usage_ledger 的重复 UPSERT（写放大）
-  -- 典型无关字段：special_settings、error_stack、error_cause、updated_at 等。
-  -- 仅当会影响 usage_ledger 的字段发生变化时才继续执行。
-  -- 注意：usage_ledger 不存 provider_chain / error_message，因此这里比较其派生值（final_provider_id / is_success）即可。
+  -- Performance: skip UPSERT when UPDATE doesn't affect usage_ledger fields.
+  -- usage_ledger does NOT persist provider_chain / error_message, so compare derived values instead.
   IF TG_OP = 'UPDATE' THEN
     IF OLD.provider_chain IS NOT NULL
        AND jsonb_typeof(OLD.provider_chain) = 'array'
@@ -130,8 +130,3 @@ EXCEPTION WHEN OTHERS THEN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trg_upsert_usage_ledger
-AFTER INSERT OR UPDATE ON message_request
-FOR EACH ROW
-EXECUTE FUNCTION fn_upsert_usage_ledger();

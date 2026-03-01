@@ -547,6 +547,13 @@
       "when": 1772219877045,
       "tag": "0077_nappy_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1772348135114,
+      "tag": "0078_perf_usage_ledger_trigger_skip_irrelevant_updates",
+      "breakpoints": true
     }
   ]
 }

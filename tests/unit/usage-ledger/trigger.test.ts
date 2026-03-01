@@ -25,6 +25,14 @@ describe("fn_upsert_usage_ledger trigger SQL", () => {
     expect(sql).toContain("error_message IS NULL");
   });
 
+  it("skips irrelevant updates to reduce write amplification", () => {
+    expect(sql).toContain("TG_OP = 'UPDATE'");
+    expect(sql).toContain("IS NOT DISTINCT FROM");
+    // Ensure the skip logic compares derived values (usage_ledger doesn't persist provider_chain / error_message)
+    expect(sql).toContain("v_final_provider_id IS NOT DISTINCT FROM v_old_final_provider_id");
+    expect(sql).toContain("v_is_success IS NOT DISTINCT FROM v_old_is_success");
+  });
+
   it("creates trigger binding", () => {
     expect(sql).toContain("CREATE TRIGGER trg_upsert_usage_ledger");
   });
