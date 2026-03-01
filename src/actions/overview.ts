@@ -1,9 +1,9 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getOverviewWithCache } from "@/lib/redis";
-import { getSystemSettings } from "@/repository/system-config";
 import { getConcurrentSessions as getConcurrentSessionsCount } from "./concurrent-sessions";
 import type { ActionResult } from "./types";
 
@@ -48,7 +48,7 @@ export async function getOverviewData(): Promise<ActionResult<OverviewData>> {
       };
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const isAdmin = session.user.role === "admin";
     const canViewGlobalData = isAdmin || settings.allowGlobalUsageView;
 

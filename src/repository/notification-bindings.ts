@@ -3,7 +3,7 @@
 import { and, desc, eq, notInArray } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { notificationTargetBindings, webhookTargets } from "@/drizzle/schema";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import type { WebhookProviderType, WebhookTarget, WebhookTestResult } from "./webhook-targets";
 
 export type NotificationType =

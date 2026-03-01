@@ -1,11 +1,11 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getStatisticsWithCache } from "@/lib/redis";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import { getActiveKeysForUserFromDB, getActiveUsersFromDB } from "@/repository/statistics";
-import { getSystemSettings } from "@/repository/system-config";
 import type {
   ChartDataItem,
   DatabaseKey,
@@ -45,7 +45,7 @@ export async function getUserStatistics(
       throw new Error(`Invalid time range: ${timeRange}`);
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const isAdmin = session.user.role === "admin";
 
     // 确定显示模式

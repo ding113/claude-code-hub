@@ -3,9 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { locales } from "@/i18n/config";
 import { getSession } from "@/lib/auth";
-import { invalidateSystemSettingsCache } from "@/lib/config";
+import { publishSystemSettingsCacheInvalidation } from "@/lib/config";
 import { logger } from "@/lib/logger";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
 import type { ResponseFixerConfig, SystemSettings } from "@/types/system-config";
@@ -108,7 +108,7 @@ export async function saveSystemSettings(formData: {
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings
-    invalidateSystemSettingsCache();
+    await publishSystemSettingsCacheInvalidation();
 
     // Revalidate paths for all locales to ensure cache invalidation across i18n routes
     for (const locale of locales) {

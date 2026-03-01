@@ -729,8 +729,8 @@ export class ProxySession {
       if (!this.billingModelSourcePromise) {
         this.billingModelSourcePromise = (async () => {
           try {
-            const { getSystemSettings } = await import("@/repository/system-config");
-            const systemSettings = await getSystemSettings();
+            const { getCachedSystemSettings } = await import("@/lib/config");
+            const systemSettings = await getCachedSystemSettings();
             const source = systemSettings.billingModelSource;
 
             if (source !== "original" && source !== "redirected") {

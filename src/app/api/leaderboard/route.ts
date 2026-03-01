@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getLeaderboardWithCache } from "@/lib/redis";
 import type {
@@ -8,7 +9,6 @@ import type {
   LeaderboardScope,
 } from "@/lib/redis/leaderboard-cache";
 import { formatCurrency } from "@/lib/utils";
-import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderType } from "@/types/provider";
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 获取系统配置
-    const systemSettings = await getSystemSettings();
+    const systemSettings = await getCachedSystemSettings();
 
     // 检查权限：管理员或开启了全站使用量查看权限
     const isAdmin = session.user.role === "admin";

@@ -13,7 +13,7 @@ import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-se
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import { toKey } from "@/repository/_shared/transformers";
 import type { KeyStatistics } from "@/repository/key";

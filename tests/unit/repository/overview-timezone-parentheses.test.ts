@@ -108,7 +108,7 @@ vi.mock("@/drizzle/schema", () => ({
   },
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone.server", () => ({
   resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 

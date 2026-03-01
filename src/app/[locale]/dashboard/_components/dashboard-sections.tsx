@@ -5,12 +5,12 @@ import { getUserStatistics } from "@/actions/statistics";
 import { OverviewPanel } from "@/components/customs/overview-panel";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings as getCachedSystemSettingsFromConfig } from "@/lib/config";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
 import { StatisticsWrapper } from "./statistics";
 import { TodayLeaderboard } from "./today-leaderboard";
 
-const getCachedSystemSettings = cache(getSystemSettings);
+const getCachedSystemSettings = cache(getCachedSystemSettingsFromConfig);
 
 export async function DashboardOverviewSection({ isAdmin }: { isAdmin: boolean }) {
   const systemSettings = await getCachedSystemSettings();

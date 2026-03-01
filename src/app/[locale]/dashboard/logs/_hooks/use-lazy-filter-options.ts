@@ -77,7 +77,7 @@ function createLazyFilterHook<T>(
 
       inFlightRef.current = promise;
       return promise;
-    }, [fetcher, isLoaded]);
+    }, [isLoaded]);
 
     const onOpenChange = useCallback(
       (open: boolean) => {

@@ -1,6 +1,7 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { findRecentActivityStream } from "@/repository/activity-stream";
 import {
@@ -11,7 +12,6 @@ import {
   type ModelLeaderboardEntry,
   type ProviderLeaderboardEntry,
 } from "@/repository/leaderboard";
-import { getSystemSettings } from "@/repository/system-config";
 // 导入已有的接口和方法
 import { getOverviewData, type OverviewData } from "./overview";
 import { getProviderSlots, type ProviderSlotInfo } from "./provider-slots";
@@ -96,7 +96,7 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       };
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const isAdmin = session.user.role === "admin";
     const canViewGlobalData = isAdmin || settings.allowGlobalUsageView;
 

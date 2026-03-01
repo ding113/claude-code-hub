@@ -6,9 +6,9 @@ import { getMessages } from "next-intl/server";
 import { Footer } from "@/components/customs/footer";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import { getSystemSettings } from "@/repository/system-config";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { AppProviders } from "../providers";
 
 const FALLBACK_TITLE = "Claude Code Hub";
@@ -21,7 +21,7 @@ export async function generateMetadata({
   const { locale } = await params;
 
   try {
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const title = settings.siteTitle?.trim() || FALLBACK_TITLE;
 
     // Generate alternates for all locales

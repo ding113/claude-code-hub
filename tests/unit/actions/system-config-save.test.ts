@@ -4,7 +4,7 @@ import { locales } from "@/i18n/config";
 // Mock dependencies
 const getSessionMock = vi.fn();
 const revalidatePathMock = vi.fn();
-const invalidateSystemSettingsCacheMock = vi.fn();
+const publishSystemSettingsCacheInvalidationMock = vi.fn();
 const updateSystemSettingsMock = vi.fn();
 const getSystemSettingsMock = vi.fn();
 
@@ -17,7 +17,7 @@ vi.mock("next/cache", () => ({
 }));
 
 vi.mock("@/lib/config", () => ({
-  invalidateSystemSettingsCache: () => invalidateSystemSettingsCacheMock(),
+  publishSystemSettingsCacheInvalidation: () => publishSystemSettingsCacheInvalidationMock(),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -30,7 +30,7 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone.server", () => ({
   resolveSystemTimezone: vi.fn(async () => "UTC"),
   isValidIANATimezone: vi.fn(() => true),
 }));
@@ -124,10 +124,10 @@ describe("saveSystemSettings", () => {
     );
   });
 
-  it("should invalidate system settings cache after successful save", async () => {
+  it("should publish system settings cache invalidation after successful save", async () => {
     await saveSystemSettings({ siteTitle: "New Title" });
 
-    expect(invalidateSystemSettingsCacheMock).toHaveBeenCalled();
+    expect(publishSystemSettingsCacheInvalidationMock).toHaveBeenCalled();
   });
 
   describe("revalidatePath locale coverage", () => {

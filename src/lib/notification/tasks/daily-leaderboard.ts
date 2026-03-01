@@ -1,5 +1,5 @@
 import { logger } from "@/lib/logger";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import type { DailyLeaderboardData } from "@/lib/webhook";
 import { findLast24HoursLeaderboard } from "@/repository/leaderboard";
 

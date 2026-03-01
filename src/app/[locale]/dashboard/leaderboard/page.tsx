@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings } from "@/lib/config";
 import { LeaderboardView } from "./_components/leaderboard-view";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export default async function LeaderboardPage() {
   const t = await getTranslations("dashboard");
   // 获取用户 session 和系统设置
   const session = await getSession();
-  const systemSettings = await getSystemSettings();
+  const systemSettings = await getCachedSystemSettings();
 
   // 检查权限
   const isAdmin = session?.user.role === "admin";

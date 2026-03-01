@@ -27,6 +27,9 @@ vi.mock("@tanstack/react-query", () => ({
     isError: mockIsError,
     error: mockError,
   }),
+  useQueryClient: () => ({
+    setQueryData: vi.fn(),
+  }),
 }));
 
 vi.mock("@/hooks/use-virtualizer", () => ({

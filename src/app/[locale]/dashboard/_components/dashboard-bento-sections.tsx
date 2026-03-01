@@ -1,11 +1,11 @@
 import { cache } from "react";
 import { getOverviewData } from "@/actions/overview";
 import { getUserStatistics } from "@/actions/statistics";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings as getCachedSystemSettingsFromConfig } from "@/lib/config";
 import { DEFAULT_TIME_RANGE } from "@/types/statistics";
 import { DashboardBento } from "./bento/dashboard-bento";
 
-const getCachedSystemSettings = cache(getSystemSettings);
+const getCachedSystemSettings = cache(getCachedSystemSettingsFromConfig);
 
 interface DashboardBentoSectionProps {
   isAdmin: boolean;

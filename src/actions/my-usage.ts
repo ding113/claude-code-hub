@@ -5,15 +5,15 @@ import { and, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
-import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
@@ -183,7 +183,7 @@ export async function getMyUsageMetadata(): Promise<ActionResult<MyUsageMetadata
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const key = session.key;
     const user = session.user;
 
@@ -346,7 +346,7 @@ export async function getMyTodayStats(): Promise<ActionResult<MyTodayStats>> {
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const billingModelSource = settings.billingModelSource;
     const currencyCode = settings.currencyDisplay;
 
@@ -441,7 +441,7 @@ export async function getMyUsageLogs(
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
 
     const rawPageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : 20;
     const pageSize = Math.min(rawPageSize, 100);
@@ -583,7 +583,7 @@ export async function getMyStatsSummary(
     const session = await getSession({ allowReadOnlyAccess: true });
     if (!session) return { ok: false, error: "Unauthorized" };
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
     const timezone = await resolveSystemTimezone();
