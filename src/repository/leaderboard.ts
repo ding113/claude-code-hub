@@ -45,7 +45,11 @@ export interface ProviderLeaderboardEntry {
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
   avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
   avgCostPerMillionTokens: number | null; // totalCost * 1_000_000 / totalTokens, null when totalTokens === 0
-  /** 可选：按模型拆分（仅在 includeModelStats=true 时填充） */
+  /**
+   * 可选：按模型拆分
+   * - undefined: 未请求 includeModelStats
+   * - []: 已请求 includeModelStats，但该 provider 下无可用模型统计
+   */
   modelStats?: ModelProviderStat[];
 }
 

@@ -43,9 +43,9 @@ type ProviderEntry = Omit<ProviderLeaderboardEntry, "modelStats"> &
   ProviderCostFormattedFields & {
     modelStats?: ModelProviderStatClient[];
   };
-type ProviderRow = ProviderEntry | ModelProviderStatClient;
+type ProviderTableRow = ProviderEntry | ModelProviderStatClient;
 type ProviderCacheHitRateEntry = ProviderCacheHitRateLeaderboardEntry;
-type ProviderCacheHitRateRow = ProviderCacheHitRateEntry | ModelCacheHitStat;
+type ProviderCacheHitRateTableRow = ProviderCacheHitRateEntry | ModelCacheHitStat;
 type AnyEntry = UserEntry | ProviderEntry | ProviderCacheHitRateEntry | ModelEntry;
 
 const VALID_PERIODS: LeaderboardPeriod[] = ["daily", "weekly", "monthly", "allTime", "custom"];
@@ -221,7 +221,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
   ];
 
-  const providerColumns: ColumnDef<ProviderRow>[] = [
+  const providerColumns: ColumnDef<ProviderTableRow>[] = [
     {
       header: t("columns.provider"),
       cell: (row) => {
@@ -306,7 +306,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
   ];
 
-  const providerCacheHitRateColumns: ColumnDef<ProviderCacheHitRateRow>[] = [
+  const providerCacheHitRateColumns: ColumnDef<ProviderCacheHitRateTableRow>[] = [
     {
       header: t("columns.provider"),
       cell: (row) => {
@@ -411,26 +411,26 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
 
     if (scope === "provider") {
       return (
-        <LeaderboardTable<ProviderRow>
-          data={data as ProviderRow[]}
+        <LeaderboardTable<ProviderEntry, ModelProviderStatClient>
+          data={data as ProviderEntry[]}
           period={period}
           columns={providerColumns}
-          getRowKey={(row) => ("providerId" in row ? row.providerId : row.model)}
-          getSubRows={(row) => ("modelStats" in row ? row.modelStats : null)}
-          getSubRowKey={(subRow) => (subRow as ModelProviderStatClient).model}
+          getRowKey={(row) => row.providerId}
+          getSubRows={(row) => row.modelStats}
+          getSubRowKey={(subRow) => subRow.model}
         />
       );
     }
 
     if (scope === "providerCacheHitRate") {
       return (
-        <LeaderboardTable<ProviderCacheHitRateRow>
-          data={data as ProviderCacheHitRateRow[]}
+        <LeaderboardTable<ProviderCacheHitRateEntry, ModelCacheHitStat>
+          data={data as ProviderCacheHitRateEntry[]}
           period={period}
           columns={providerCacheHitRateColumns}
-          getRowKey={(row) => ("providerId" in row ? row.providerId : row.model)}
-          getSubRows={(row) => ("modelStats" in row ? row.modelStats : null)}
-          getSubRowKey={(subRow) => (subRow as ModelCacheHitStat).model}
+          getRowKey={(row) => row.providerId}
+          getSubRows={(row) => row.modelStats}
+          getSubRowKey={(subRow) => subRow.model}
         />
       );
     }

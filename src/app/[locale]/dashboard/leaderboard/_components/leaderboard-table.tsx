@@ -36,31 +36,32 @@ export interface ColumnDef<T> {
 
 type SortDirection = "asc" | "desc" | null;
 
-interface LeaderboardTableProps<T> {
-  data: T[];
+interface LeaderboardTableProps<TParent, TSub = TParent> {
+  data: TParent[];
   period: LeaderboardPeriod;
-  columns: ColumnDef<T>[]; // 不包含"排名"列，组件会自动添加
-  getRowKey?: (row: T, index: number) => string | number;
+  columns: ColumnDef<TParent | TSub>[]; // 不包含"排名"列，组件会自动添加
+  getRowKey?: (row: TParent, index: number) => string | number;
   /** 返回子行数据（非空且长度 > 0 时，父行展示可展开图标） */
-  getSubRows?: (row: T, index: number) => T[] | null | undefined;
+  getSubRows?: (row: TParent, index: number) => TSub[] | null | undefined;
   /** 子行的 React key（默认使用 `${parentKey}-${subIndex}` 组合） */
   getSubRowKey?: (
-    subRow: T,
-    parentRow: T,
+    subRow: TSub,
+    parentRow: TParent,
     parentIndex: number,
     subIndex: number
   ) => string | number;
 }
 
-export function LeaderboardTable<T>({
+export function LeaderboardTable<TParent, TSub = TParent>({
   data,
   period,
   columns,
   getRowKey,
   getSubRows,
   getSubRowKey,
-}: LeaderboardTableProps<T>) {
+}: LeaderboardTableProps<TParent, TSub>) {
   const t = useTranslations("dashboard.leaderboard");
+  type TableRow = TParent | TSub;
 
   // 排序状态
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -89,7 +90,7 @@ export function LeaderboardTable<T>({
   }, [data, sortKey, sortDirection, getRowKey]);
 
   // 判断列是否需要加粗
-  const getShouldBold = (col: ColumnDef<T>) => {
+  const getShouldBold = (col: ColumnDef<TableRow>) => {
     const isActiveSortColumn = sortKey === col.sortKey && sortDirection !== null;
     const noSorting = sortKey === null;
     return isActiveSortColumn || (col.defaultBold && noSorting);

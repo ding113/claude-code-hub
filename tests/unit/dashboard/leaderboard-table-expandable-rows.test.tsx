@@ -77,13 +77,13 @@ describe("LeaderboardTable expandable rows", () => {
     ];
 
     const { container } = renderSimple(
-      <LeaderboardTable<Row>
-        data={data as Row[]}
+      <LeaderboardTable<ParentRow, ChildRow>
+        data={data}
         period="daily"
         columns={columns}
-        getRowKey={(row) => ("providerId" in row ? row.providerId : row.model)}
-        getSubRows={(row) => ("modelStats" in row ? row.modelStats : null)}
-        getSubRowKey={(row) => ("model" in row ? row.model : row.providerId)}
+        getRowKey={(row) => row.providerId}
+        getSubRows={(row) => row.modelStats}
+        getSubRowKey={(subRow) => subRow.model}
       />
     );
 
