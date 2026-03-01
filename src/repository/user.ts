@@ -546,10 +546,7 @@ export async function deleteUser(id: number): Promise<boolean> {
   return result.length > 0;
 }
 
-export async function resetUserCostResetAt(
-  userId: number,
-  resetAt: Date | null,
-): Promise<boolean> {
+export async function resetUserCostResetAt(userId: number, resetAt: Date | null): Promise<boolean> {
   const result = await db
     .update(users)
     .set({ costResetAt: resetAt, updatedAt: new Date() })

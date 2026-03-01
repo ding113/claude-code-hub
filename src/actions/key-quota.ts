@@ -120,7 +120,11 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
         sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
-        sumKeyCostInTimeRange(keyId, clipStart(keyDailyTimeRange.startTime), keyDailyTimeRange.endTime),
+        sumKeyCostInTimeRange(
+          keyId,
+          clipStart(keyDailyTimeRange.startTime),
+          keyDailyTimeRange.endTime
+        ),
         sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
         sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
         sumKeyTotalCost(keyRow.key, 365, costResetAt),

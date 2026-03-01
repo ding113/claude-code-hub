@@ -1559,7 +1559,9 @@ export async function getUserLimitUsage(userId: number): Promise<
       resetMode
     );
     const effectiveStart =
-      user.costResetAt instanceof Date && user.costResetAt > startTime ? user.costResetAt : startTime;
+      user.costResetAt instanceof Date && user.costResetAt > startTime
+        ? user.costResetAt
+        : startTime;
     const dailyCost = await sumUserCostInTimeRange(userId, effectiveStart, endTime);
     const resetInfo = await getResetInfoWithMode("daily", resetTime, resetMode);
     const resetAt = resetInfo.resetAt;

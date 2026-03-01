@@ -10,10 +10,8 @@ function chain(): Record<string, unknown> {
     obj[method] = vi.fn(() => chain());
   }
   // Make it thenable so `await db.select().from().where()` works
-  obj.then = (
-    resolve: (v: unknown) => void,
-    reject: (e: unknown) => void
-  ) => {
+  // biome-ignore lint/suspicious/noThenProperty: thenable mock for drizzle query chain
+  obj.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) => {
     try {
       resolve(dbResultMock());
     } catch (e) {
@@ -194,7 +192,13 @@ describe("statistics resetAt parameter", () => {
     test("with resetAt -- returns correct cost summary", async () => {
       const resetAt = new Date("2026-02-25T00:00:00Z");
       dbResultMock.mockReturnValue([
-        { cost5h: "1.0", costDaily: "2.0", costWeekly: "3.0", costMonthly: "4.0", costTotal: "5.0" },
+        {
+          cost5h: "1.0",
+          costDaily: "2.0",
+          costWeekly: "3.0",
+          costMonthly: "4.0",
+          costTotal: "5.0",
+        },
       ]);
 
       const { sumUserQuotaCosts } = await import("@/repository/statistics");
@@ -242,11 +246,15 @@ describe("statistics resetAt parameter", () => {
         },
       };
       // First: getKeyStringByIdCached lookup, then main query
-      dbResultMock
-        .mockReturnValueOnce([{ key: "sk-test-hash" }])
-        .mockReturnValueOnce([
-          { cost5h: "2.0", costDaily: "4.0", costWeekly: "6.0", costMonthly: "8.0", costTotal: "10.0" },
-        ]);
+      dbResultMock.mockReturnValueOnce([{ key: "sk-test-hash" }]).mockReturnValueOnce([
+        {
+          cost5h: "2.0",
+          costDaily: "4.0",
+          costWeekly: "6.0",
+          costMonthly: "8.0",
+          costTotal: "10.0",
+        },
+      ]);
 
       const { sumKeyQuotaCostsById } = await import("@/repository/statistics");
       const result = await sumKeyQuotaCostsById(42, ranges, 365, resetAt);

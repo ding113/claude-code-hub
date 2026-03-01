@@ -80,7 +80,11 @@ describe("clearUserCostCache", () => {
       if (pattern === "user:10:cost_*") return ["user:10:cost_monthly"];
       return [];
     });
-    redisPipelineMock.exec.mockResolvedValue([[null, 1], [null, 1], [null, 1]]);
+    redisPipelineMock.exec.mockResolvedValue([
+      [null, 1],
+      [null, 1],
+      [null, 1],
+    ]);
 
     const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
     const result = await clearUserCostCache({
@@ -102,7 +106,11 @@ describe("clearUserCostCache", () => {
       if (pattern === "key:1:cost_*") return ["key:1:cost_daily"];
       return [];
     });
-    redisPipelineMock.exec.mockResolvedValue([[null, 1], [null, 1], [null, 1]]);
+    redisPipelineMock.exec.mockResolvedValue([
+      [null, 1],
+      [null, 1],
+      [null, 1],
+    ]);
 
     const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
     const result = await clearUserCostCache({
@@ -161,15 +169,9 @@ describe("clearUserCostCache", () => {
     expect(result).not.toBeNull();
     // 2 key sessions + 1 user session
     expect(result!.activeSessionsDeleted).toBe(3);
-    expect(redisPipelineMock.del).toHaveBeenCalledWith(
-      "{active_sessions}:key:1:active_sessions"
-    );
-    expect(redisPipelineMock.del).toHaveBeenCalledWith(
-      "{active_sessions}:key:2:active_sessions"
-    );
-    expect(redisPipelineMock.del).toHaveBeenCalledWith(
-      "{active_sessions}:user:10:active_sessions"
-    );
+    expect(redisPipelineMock.del).toHaveBeenCalledWith("{active_sessions}:key:1:active_sessions");
+    expect(redisPipelineMock.del).toHaveBeenCalledWith("{active_sessions}:key:2:active_sessions");
+    expect(redisPipelineMock.del).toHaveBeenCalledWith("{active_sessions}:user:10:active_sessions");
   });
 
   test("includeActiveSessions=false skips session keys", async () => {

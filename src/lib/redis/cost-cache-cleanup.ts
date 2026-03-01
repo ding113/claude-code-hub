@@ -25,7 +25,7 @@ export interface ClearUserCostCacheResult {
  * Returns null if Redis is not ready. Never throws -- logs errors internally.
  */
 export async function clearUserCostCache(
-  options: ClearUserCostCacheOptions,
+  options: ClearUserCostCacheOptions
 ): Promise<ClearUserCostCacheResult | null> {
   const { userId, keyIds, keyHashes, includeActiveSessions = false } = options;
 
@@ -42,7 +42,7 @@ export async function clearUserCostCache(
       scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
         logger.warn("Failed to scan key cost pattern", { keyId, error: err });
         return [];
-      }),
+      })
     ),
     scanPattern(redis, `user:${userId}:cost_*`).catch((err) => {
       logger.warn("Failed to scan user cost pattern", { userId, error: err });
@@ -53,7 +53,7 @@ export async function clearUserCostCache(
     scanPattern(redis, `total_cost:user:${userId}:*`).catch(() => []),
     ...keyHashes.map((keyHash) => scanPattern(redis, `total_cost:key:${keyHash}`).catch(() => [])),
     ...keyHashes.map((keyHash) =>
-      scanPattern(redis, `total_cost:key:${keyHash}:*`).catch(() => []),
+      scanPattern(redis, `total_cost:key:${keyHash}:*`).catch(() => [])
     ),
     // Lease cache keys (budget slices cached by LeaseService)
     ...keyIds.map((keyId) => scanPattern(redis, `lease:key:${keyId}:*`).catch(() => [])),
