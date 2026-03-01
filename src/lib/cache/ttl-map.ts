@@ -50,6 +50,19 @@ export class TTLMap<K, V> {
     return true;
   }
 
+  clear(): void {
+    this.store.clear();
+  }
+
+  purgeExpired(): void {
+    const now = Date.now();
+    for (const [k, v] of this.store) {
+      if (v.expiresAt <= now) {
+        this.store.delete(k);
+      }
+    }
+  }
+
   get size(): number {
     return this.store.size;
   }

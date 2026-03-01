@@ -1,7 +1,13 @@
 import { getSession } from "@/lib/auth";
 import { acquireBackupLock, releaseBackupLock } from "@/lib/database-backup/backup-lock";
-import { checkDatabaseConnection, executePgDump } from "@/lib/database-backup/docker-executor";
+import {
+  checkDatabaseConnection,
+  type ExportMode,
+  executePgDump,
+} from "@/lib/database-backup/docker-executor";
 import { logger } from "@/lib/logger";
+
+const VALID_EXPORT_MODES = new Set<ExportMode>(["full", "excludeLogs", "ledgerOnly"]);
 
 // 需要数据库连接
 export const runtime = "nodejs";
@@ -76,14 +82,7 @@ function createMonitoredStream(
 }
 
 /**
- * 导出数据库备份
- *
- * GET /api/admin/database/export?excludeLogs=true
- *
- * Query Parameters:
- *   - excludeLogs: 'true' | 'false' (是否排除日志数据，默认 false)
- *
- * 响应: application/octet-stream (pg_dump custom format)
+ * GET /api/admin/database/export?mode=full|excludeLogs|ledgerOnly
  */
 export async function GET(request: Request) {
   let lockId: string | null = null;
@@ -134,20 +133,27 @@ export async function GET(request: Request) {
 
     // 4. 解析查询参数
     const url = new URL(request.url);
-    const excludeLogs = url.searchParams.get("excludeLogs") === "true";
+    const modeParam = url.searchParams.get("mode") ?? "full";
+    const mode: ExportMode = VALID_EXPORT_MODES.has(modeParam as ExportMode)
+      ? (modeParam as ExportMode)
+      : "full";
 
     // 5. 执行 pg_dump
-    const stream = executePgDump(excludeLogs);
+    const stream = executePgDump(mode);
 
     // 6. 生成文件名（带时间戳和标记）
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, -5);
-    const suffix = excludeLogs ? "_no-logs" : "";
-    const filename = `backup_${timestamp}${suffix}.dump`;
+    const suffixMap: Record<ExportMode, string> = {
+      full: "",
+      excludeLogs: "_no-logs",
+      ledgerOnly: "_ledger-only",
+    };
+    const filename = `backup_${timestamp}${suffixMap[mode]}.dump`;
 
     logger.info({
       action: "database_export_initiated",
       filename,
-      excludeLogs,
+      mode,
       user: session.user.name,
     });
 

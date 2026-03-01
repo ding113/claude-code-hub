@@ -88,6 +88,15 @@ vi.mock("@/drizzle/db", () => ({
 }));
 
 vi.mock("@/drizzle/schema", () => ({
+  usageLedger: {
+    blockedBy: "blockedBy",
+    userId: "userId",
+    costUsd: "costUsd",
+    durationMs: "durationMs",
+    statusCode: "statusCode",
+    isSuccess: "isSuccess",
+    createdAt: "createdAt",
+  },
   messageRequest: {
     deletedAt: "deletedAt",
     userId: "userId",

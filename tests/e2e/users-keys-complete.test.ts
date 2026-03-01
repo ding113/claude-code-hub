@@ -23,14 +23,18 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { loginAndGetAuthToken } from "./_helpers/auth";
 
 // ==================== 配置 ====================
 
 /** API 基础 URL */
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/api/actions";
 
-/** 管理员认证 Token（从环境变量读取）*/
-const ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
+/** 管理员认证 Key（从环境变量读取，用于登录换取会话 token）*/
+const ADMIN_KEY = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
+const run = ADMIN_KEY ? describe : describe.skip;
+
+let sessionToken: string | undefined;
 
 /** 测试数据存储（用于清理）*/
 const testData = {
@@ -58,14 +62,19 @@ async function callApi(
   module: string,
   action: string,
   body: Record<string, unknown> = {},
-  authToken = ADMIN_TOKEN
+  authToken = sessionToken
 ) {
+  if (!authToken) {
+    throw new Error("E2E tests require ADMIN_TOKEN/TEST_ADMIN_TOKEN (used to login)");
+  }
+
   const url = `${API_BASE_URL}/${module}/${action}`;
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
       Cookie: `auth-token=${authToken}`,
     },
     body: JSON.stringify(body),
@@ -160,6 +169,8 @@ async function expectError(module: string, action: string, body: Record<string, 
  * 2. 删除所有创建的用户
  */
 afterAll(async () => {
+  if (!sessionToken) return;
+
   console.log("\n🧹 开始清理 E2E 测试数据...");
   console.log(`   用户数：${testData.userIds.length}`);
   console.log(`   Key数：${testData.keyIds.length}`);
@@ -178,7 +189,12 @@ afterAll(async () => {
 
 // ==================== 测试套件 ====================
 
-describe("用户和 Key 管理 - 完整 E2E 测试", () => {
+beforeAll(async () => {
+  if (!ADMIN_KEY) return;
+  sessionToken = await loginAndGetAuthToken(API_BASE_URL, ADMIN_KEY);
+});
+
+run("用户和 Key 管理 - 完整 E2E 测试", () => {
   // 测试用户 ID（在多个测试间共享）
   let testUser1Id: number;
   let testUser2Id: number;

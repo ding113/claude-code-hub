@@ -42,6 +42,7 @@ const CreateUserSchema = UpdateUserSchema.extend({
   name: z.string().min(1).max(64),
   providerGroup: z.string().max(200).nullable().optional(),
   allowedClients: z.array(z.string().max(64)).max(50).optional().default([]),
+  blockedClients: z.array(z.string().max(64)).max(50).optional().default([]),
   allowedModels: z.array(z.string().max(64)).max(50).optional().default([]),
   dailyQuota: z.number().nullable().optional(),
 });
@@ -89,6 +90,7 @@ function buildDefaultValues(): CreateFormValues {
       dailyResetMode: "fixed",
       dailyResetTime: "00:00",
       allowedClients: [],
+      blockedClients: [],
       allowedModels: [],
     },
     key: {
@@ -155,6 +157,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
             dailyResetMode: data.user.dailyResetMode,
             dailyResetTime: data.user.dailyResetTime,
             allowedClients: data.user.allowedClients,
+            blockedClients: data.user.blockedClients,
             allowedModels: data.user.allowedModels,
           });
           if (!userRes.ok) {
@@ -334,7 +337,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
   }
 
   return (
-    <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[90vh] max-h-[90dvh] p-0 flex flex-col overflow-hidden">
+    <DialogContent className="w-full max-w-[95vw] sm:max-w-[85vw] md:max-w-[70vw] lg:max-w-3xl max-h-[var(--cch-viewport-height-90)] p-0 flex flex-col overflow-hidden">
       <form onSubmit={form.handleSubmit} className="flex flex-1 min-h-0 flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <div className="flex items-center gap-2">
@@ -363,6 +366,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
               dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
               dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
               allowedClients: currentUserDraft.allowedClients || [],
+              blockedClients: currentUserDraft.blockedClients || [],
               allowedModels: currentUserDraft.allowedModels || [],
             }}
             isEnabled={true}

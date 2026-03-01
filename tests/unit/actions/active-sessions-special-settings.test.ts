@@ -31,7 +31,7 @@ vi.mock("@/lib/cache/session-cache", () => ({
   setSessionDetailsCache: setSessionDetailsCacheMock,
   clearActiveSessionsCache: vi.fn(),
   clearSessionDetailsCache: vi.fn(),
-  clearAllSessionsCache: vi.fn(),
+  clearAllSessionsQueryCache: vi.fn(),
 }));
 
 vi.mock("@/lib/logger", () => ({

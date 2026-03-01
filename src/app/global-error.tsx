@@ -1,5 +1,7 @@
 "use client";
 
+import "./globals.css";
+
 import { isNetworkError } from "@/lib/utils/error-detection";
 
 /**
@@ -37,7 +39,7 @@ export default function GlobalError({
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            minHeight: "100vh",
+            minHeight: "var(--cch-viewport-height, 100vh)",
             fontFamily: "system-ui, sans-serif",
             backgroundColor: "#f8f9fa",
             padding: "20px",

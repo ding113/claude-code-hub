@@ -39,6 +39,23 @@ vi.mock("@/drizzle/db", () => ({
 }));
 
 vi.mock("@/drizzle/schema", () => ({
+  usageLedger: {
+    providerId: "providerId",
+    finalProviderId: "finalProviderId",
+    userId: "userId",
+    costUsd: "costUsd",
+    inputTokens: "inputTokens",
+    outputTokens: "outputTokens",
+    cacheCreationInputTokens: "cacheCreationInputTokens",
+    cacheReadInputTokens: "cacheReadInputTokens",
+    isSuccess: "isSuccess",
+    blockedBy: "blockedBy",
+    createdAt: "createdAt",
+    ttfbMs: "ttfbMs",
+    durationMs: "durationMs",
+    model: "model",
+    originalModel: "originalModel",
+  },
   messageRequest: {
     deletedAt: "deletedAt",
     providerId: "providerId",

@@ -1,7 +1,7 @@
 "use client";
 import { Check, ChevronsUpDown, Cloud, Database, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAvailableModelsByProviderType } from "@/actions/model-prices";
 import { fetchUpstreamModels, getUnmaskedProviderKey } from "@/actions/providers";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,38 @@ interface ModelMultiSelectProps {
   providerId?: number;
 }
 
+function ModelSourceIndicator({
+  loading,
+  isUpstream,
+  label,
+  description,
+}: {
+  loading: boolean;
+  isUpstream: boolean;
+  label: string;
+  description: string;
+}) {
+  if (loading) return null;
+
+  const Icon = isUpstream ? Cloud : Database;
+
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
+            <Icon className="h-3 w-3" />
+            <span>{label}</span>
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[200px]">
+          <p className="text-xs">{description}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function ModelMultiSelect({
   providerType,
   selectedModels,
@@ -58,7 +90,7 @@ export function ModelMultiSelect({
   const [modelSource, setModelSource] = useState<ModelSource>("loading");
   const [customModel, setCustomModel] = useState("");
 
-  const displayedModels = (() => {
+  const displayedModels = useMemo(() => {
     const seen = new Set<string>();
     const merged: string[] = [];
 
@@ -76,7 +108,7 @@ export function ModelMultiSelect({
     }
 
     return merged;
-  })();
+  }, [availableModels, selectedModels]);
 
   // 供应商类型到显示名称的映射
   const getProviderTypeLabel = (type: string): string => {
@@ -162,31 +194,9 @@ export function ModelMultiSelect({
     setCustomModel("");
   };
 
-  // 数据来源指示器
-  const SourceIndicator = () => {
-    if (loading) return null;
-
-    const isUpstream = modelSource === "upstream";
-    const Icon = isUpstream ? Cloud : Database;
-    const label = isUpstream ? t("sourceUpstream") : t("sourceFallback");
-    const description = isUpstream ? t("sourceUpstreamDesc") : t("sourceFallbackDesc");
-
-    return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
-              <Icon className="h-3 w-3" />
-              <span>{label}</span>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[200px]">
-            <p className="text-xs">{description}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  };
+  const isUpstream = modelSource === "upstream";
+  const sourceLabel = isUpstream ? t("sourceUpstream") : t("sourceFallback");
+  const sourceDescription = isUpstream ? t("sourceUpstreamDesc") : t("sourceFallbackDesc");
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -222,7 +232,7 @@ export function ModelMultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[400px] p-0 flex flex-col"
+        className="w-[400px] max-w-[calc(100vw-2rem)] p-0 flex flex-col"
         align="start"
         onWheel={(e) => e.stopPropagation()}
         onTouchMove={(e) => e.stopPropagation()}
@@ -238,7 +248,12 @@ export function ModelMultiSelect({
                 <CommandGroup>
                   <div className="flex items-center justify-between gap-2 p-2">
                     <div className="flex items-center gap-2">
-                      <SourceIndicator />
+                      <ModelSourceIndicator
+                        loading={loading}
+                        isUpstream={isUpstream}
+                        label={sourceLabel}
+                        description={sourceDescription}
+                      />
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>

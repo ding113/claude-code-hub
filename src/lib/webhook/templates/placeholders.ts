@@ -1,4 +1,5 @@
 import type {
+  CacheHitRateAlertData,
   CircuitBreakerAlertData,
   CostAlertData,
   DailyLeaderboardData,
@@ -18,6 +19,7 @@ export const WEBHOOK_NOTIFICATION_TYPES = [
   "circuit_breaker",
   "daily_leaderboard",
   "cost_alert",
+  "cache_hit_rate_alert",
 ] as const satisfies readonly WebhookNotificationType[];
 
 export const TEMPLATE_PLACEHOLDERS = {
@@ -58,6 +60,20 @@ export const TEMPLATE_PLACEHOLDERS = {
     { key: "{{current_cost}}", label: "当前消费", description: "当前已消费金额" },
     { key: "{{quota_limit}}", label: "配额上限", description: "配额限制金额" },
     { key: "{{usage_percent}}", label: "使用比例", description: "百分比(0-100)" },
+  ],
+  cache_hit_rate_alert: [
+    { key: "{{window_mode}}", label: "窗口模式", description: "auto/5m/30m/1h/1.5h" },
+    { key: "{{window_start}}", label: "窗口开始", description: "ISO 8601 格式" },
+    { key: "{{window_end}}", label: "窗口结束", description: "ISO 8601 格式" },
+    { key: "{{anomaly_count}}", label: "告警数量", description: "本次告警条数" },
+    { key: "{{suppressed_count}}", label: "抑制数量", description: "冷却/去重抑制的条数" },
+    { key: "{{anomalies_json}}", label: "告警明细", description: "JSON 格式 anomalies 列表" },
+    { key: "{{abs_min}}", label: "绝对下限", description: "absMin (0-1)" },
+    { key: "{{drop_rel}}", label: "相对跌幅阈值", description: "dropRel (0-1)" },
+    { key: "{{drop_abs}}", label: "绝对跌幅阈值", description: "dropAbs (0-1)" },
+    { key: "{{cooldown_minutes}}", label: "冷却分钟", description: "cooldownMinutes" },
+    { key: "{{top_n}}", label: "TopN", description: "topN" },
+    { key: "{{generated_at}}", label: "生成时间", description: "ISO 8601 格式" },
   ],
 } as const satisfies Record<string, readonly TemplatePlaceholder[]>;
 
@@ -118,6 +134,24 @@ export function buildTemplateVariables(params: {
     values["{{current_cost}}"] = ca?.currentCost !== undefined ? String(ca.currentCost) : "";
     values["{{quota_limit}}"] = ca?.quotaLimit !== undefined ? String(ca.quotaLimit) : "";
     values["{{usage_percent}}"] = buildUsagePercent(ca);
+  }
+
+  if (notificationType === "cache_hit_rate_alert") {
+    const ch = data as Partial<CacheHitRateAlertData> | undefined;
+    values["{{window_mode}}"] = ch?.window?.mode ?? "";
+    values["{{window_start}}"] = ch?.window?.startTime ?? "";
+    values["{{window_end}}"] = ch?.window?.endTime ?? "";
+    values["{{anomaly_count}}"] = ch?.anomalies ? String(ch.anomalies.length) : "0";
+    values["{{suppressed_count}}"] =
+      ch?.suppressedCount !== undefined ? String(ch.suppressedCount) : "0";
+    values["{{anomalies_json}}"] = ch?.anomalies ? safeJsonStringify(ch.anomalies) : "[]";
+    values["{{abs_min}}"] = ch?.settings?.absMin !== undefined ? String(ch.settings.absMin) : "";
+    values["{{drop_rel}}"] = ch?.settings?.dropRel !== undefined ? String(ch.settings.dropRel) : "";
+    values["{{drop_abs}}"] = ch?.settings?.dropAbs !== undefined ? String(ch.settings.dropAbs) : "";
+    values["{{cooldown_minutes}}"] =
+      ch?.settings?.cooldownMinutes !== undefined ? String(ch.settings.cooldownMinutes) : "";
+    values["{{top_n}}"] = ch?.settings?.topN !== undefined ? String(ch.settings.topN) : "";
+    values["{{generated_at}}"] = ch?.generatedAt ?? "";
   }
 
   return values;

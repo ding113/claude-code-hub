@@ -5,6 +5,7 @@
     "routing": "Routing",
     "limits": "Limits",
     "network": "Network",
-    "testing": "Testing"
+    "testing": "Testing",
+    "stepProgress": "Step progress"
   }
 }

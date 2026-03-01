@@ -130,6 +130,22 @@
     "interval": "检查间隔（分钟）",
     "test": "测试连接"
   },
+  "cacheHitRateAlert": {
+    "title": "缓存命中率异常告警",
+    "description": "当缓存命中率（provider × model）异常下降时发送告警",
+    "enable": "启用缓存命中率告警",
+    "windowMode": "窗口",
+    "windowModeAuto": "自动",
+    "checkInterval": "检查间隔（分钟）",
+    "historicalLookbackDays": "历史回看天数",
+    "cooldownMinutes": "冷却（分钟）",
+    "absMin": "绝对下限（absMin）",
+    "dropAbs": "绝对跌幅阈值（dropAbs）",
+    "dropRel": "相对跌幅阈值（dropRel）",
+    "minEligibleRequests": "最小可命中请求数",
+    "minEligibleTokens": "最小可命中 Tokens",
+    "topN": "Top N"
+  },
   "form": {
     "save": "保存设置",
     "saving": "保存中...",

@@ -27,7 +27,7 @@ function sqlToString(sqlObj: unknown): string {
         if (Object.hasOwn(anyNode, "value")) {
           const { value } = anyNode;
           if (Array.isArray(value)) {
-            return value.map(String).join("");
+            return value.map(walk).join("");
           }
           if (value === null || value === undefined) return "";
           return String(value);
@@ -51,7 +51,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("returns 0 and does not execute SQL when updates is empty", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 0 }));
+    const executeMock = vi.fn(async () => []);
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -69,7 +69,7 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
   test("generates CASE batch update SQL and returns affected rows", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 2 }));
+    const executeMock = vi.fn(async () => [{ id: 1 }, { id: 2 }]);
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -96,12 +96,13 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
     expect(sqlText).toContain("WHEN 2 THEN 3");
     expect(sqlText).toContain("updated_at = NOW()");
     expect(sqlText).toContain("WHERE id IN (1, 2) AND deleted_at IS NULL");
+    expect(sqlText).toContain("RETURNING id");
   });
 
   test("deduplicates provider ids (last update wins)", async () => {
     vi.resetModules();
 
-    const executeMock = vi.fn(async () => ({ rowCount: 1 }));
+    const executeMock = vi.fn(async () => [{ id: 1 }]);
 
     vi.doMock("@/drizzle/db", () => ({
       db: {
@@ -123,5 +124,26 @@ describe("provider repository - updateProviderPrioritiesBatch", () => {
 
     expect(sqlText).toContain("WHEN 1 THEN 2");
     expect(sqlText).toContain("WHERE id IN (1) AND deleted_at IS NULL");
+    expect(sqlText).toContain("RETURNING id");
+  });
+
+  test("propagates db.execute errors", async () => {
+    vi.resetModules();
+
+    const executeMock = vi.fn(async () => {
+      throw new Error("DB connection failed");
+    });
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        execute: executeMock,
+      },
+    }));
+
+    const { updateProviderPrioritiesBatch } = await import("@/repository/provider");
+
+    await expect(updateProviderPrioritiesBatch([{ id: 1, priority: 0 }])).rejects.toThrow(
+      "DB connection failed"
+    );
   });
 });

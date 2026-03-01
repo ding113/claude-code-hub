@@ -5,7 +5,7 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
-import { messageRequest, users as usersTable } from "@/drizzle/schema";
+import { messageRequest, usageLedger, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
@@ -21,7 +21,7 @@ import {
   createKey,
   findKeyList,
   findKeyListBatch,
-  findKeysWithStatisticsBatch,
+  findKeysStatisticsBatchFromKeys,
   findKeyUsageTodayBatch,
 } from "@/repository/key";
 import {
@@ -42,7 +42,7 @@ import type { ActionResult } from "./types";
  * 批量获取用户列表的查询参数（用于用户管理列表页）。
  */
 export interface GetUsersBatchParams {
-  cursor?: number;
+  cursor?: string;
   limit?: number;
   searchTerm?: string;
   tagFilters?: string[];
@@ -66,8 +66,32 @@ export interface GetUsersBatchParams {
  */
 export interface GetUsersBatchResult {
   users: UserDisplay[];
-  nextCursor: number | null;
+  nextCursor: string | null;
   hasMore: boolean;
+}
+
+/**
+ * Usage data for a single key (lazy-loaded separately from core user data).
+ */
+export interface KeyUsageData {
+  todayUsage: number;
+  todayCallCount: number;
+  todayTokens: number;
+  lastUsedAt: Date | null;
+  lastProviderName: string | null;
+  modelStats: Array<{
+    model: string;
+    callCount: number;
+    totalCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+  }>;
+}
+
+export interface GetUsersUsageBatchResult {
+  usageByKeyId: Record<number, KeyUsageData>;
 }
 
 /**
@@ -215,11 +239,11 @@ export async function getUsers(): Promise<UserDisplay[]> {
     // Instead of N*3 queries (one per user for keys, usage, statistics),
     // we now do 3 batch queries total
     const userIds = users.map((u) => u.id);
-    const [keysMap, usageMap, statisticsMap] = await Promise.all([
+    const [keysMap, usageMap] = await Promise.all([
       findKeyListBatch(userIds),
       findKeyUsageTodayBatch(userIds),
-      findKeysWithStatisticsBatch(userIds),
     ]);
+    const statisticsMap = await findKeysStatisticsBatchFromKeys(keysMap);
 
     const userDisplays: UserDisplay[] = users.map((user) => {
       try {
@@ -254,6 +278,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
@@ -320,6 +345,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: [],
         };
@@ -484,11 +510,11 @@ export async function getUsersBatch(
     }
 
     const userIds = users.map((u) => u.id);
-    const [keysMap, usageMap, statisticsMap] = await Promise.all([
+    const [keysMap, usageMap] = await Promise.all([
       findKeyListBatch(userIds),
       findKeyUsageTodayBatch(userIds),
-      findKeysWithStatisticsBatch(userIds),
     ]);
+    const statisticsMap = await findKeysStatisticsBatchFromKeys(keysMap);
 
     const userDisplays: UserDisplay[] = users.map((user) => {
       try {
@@ -523,6 +549,7 @@ export async function getUsersBatch(
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
@@ -585,6 +612,7 @@ export async function getUsersBatch(
           isEnabled: user.isEnabled,
           expiresAt: user.expiresAt ?? null,
           allowedClients: user.allowedClients || [],
+          blockedClients: user.blockedClients || [],
           allowedModels: user.allowedModels ?? [],
           keys: [],
         };
@@ -595,6 +623,214 @@ export async function getUsersBatch(
   } catch (error) {
     logger.error("Failed to fetch user batch data:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch user batch data";
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
+  }
+}
+
+/**
+ * Fast version of getUsersBatch: returns users + keys only (no usage/statistics).
+ * Usage fields are filled with defaults (0 / null / []).
+ * Designed for instant initial render; usage data loaded separately via getUsersUsageBatch.
+ *
+ * Admin only.
+ */
+export async function getUsersBatchCore(
+  params: GetUsersBatchParams
+): Promise<ActionResult<GetUsersBatchResult>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const locale = await getLocale();
+    const t = await getTranslations("users");
+
+    const { users, nextCursor, hasMore } = await findUserListBatch({
+      cursor: params.cursor,
+      limit: params.limit,
+      searchTerm: params.searchTerm,
+      tagFilters: params.tagFilters,
+      keyGroupFilters: params.keyGroupFilters,
+      statusFilter: params.statusFilter,
+      sortBy: params.sortBy,
+      sortOrder: params.sortOrder,
+    });
+
+    if (users.length === 0) {
+      return { ok: true, data: { users: [], nextCursor, hasMore } };
+    }
+
+    const userIds = users.map((u) => u.id);
+    const keysMap = await findKeyListBatch(userIds);
+
+    const userDisplays: UserDisplay[] = users.map((user) => {
+      const keys = keysMap.get(user.id) || [];
+
+      return {
+        id: user.id,
+        name: user.name,
+        note: user.description || undefined,
+        role: user.role,
+        rpm: user.rpm,
+        dailyQuota: user.dailyQuota,
+        providerGroup: user.providerGroup || undefined,
+        tags: user.tags || [],
+        limit5hUsd: user.limit5hUsd ?? null,
+        limitWeeklyUsd: user.limitWeeklyUsd ?? null,
+        limitMonthlyUsd: user.limitMonthlyUsd ?? null,
+        limitTotalUsd: user.limitTotalUsd ?? null,
+        limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+        dailyResetMode: user.dailyResetMode,
+        dailyResetTime: user.dailyResetTime,
+        isEnabled: user.isEnabled,
+        expiresAt: user.expiresAt ?? null,
+        allowedClients: user.allowedClients || [],
+        blockedClients: user.blockedClients || [],
+        allowedModels: user.allowedModels ?? [],
+        keys: keys.map((key) => ({
+          id: key.id,
+          name: key.name,
+          maskedKey: maskKey(key.key),
+          fullKey: key.key,
+          canCopy: true,
+          expiresAt: key.expiresAt ? key.expiresAt.toISOString().split("T")[0] : t("neverExpires"),
+          status: key.isEnabled ? "enabled" : ("disabled" as const),
+          createdAt: key.createdAt,
+          createdAtFormatted: key.createdAt.toLocaleString(locale, {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          }),
+          todayUsage: 0,
+          todayTokens: 0,
+          todayCallCount: 0,
+          lastUsedAt: null,
+          lastProviderName: null,
+          modelStats: [],
+          canLoginWebUi: key.canLoginWebUi,
+          limit5hUsd: key.limit5hUsd,
+          limitDailyUsd: key.limitDailyUsd,
+          dailyResetMode: key.dailyResetMode,
+          dailyResetTime: key.dailyResetTime,
+          limitWeeklyUsd: key.limitWeeklyUsd,
+          limitMonthlyUsd: key.limitMonthlyUsd,
+          limitTotalUsd: key.limitTotalUsd,
+          limitConcurrentSessions: key.limitConcurrentSessions || 0,
+          providerGroup: key.providerGroup,
+        })),
+      };
+    });
+
+    return { ok: true, data: { users: userDisplays, nextCursor, hasMore } };
+  } catch (error) {
+    logger.error("Failed to fetch user batch core data:", error);
+    const message = error instanceof Error ? error.message : "Failed to fetch user batch core data";
+    return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
+  }
+}
+
+/**
+ * Lazy-load usage data for a batch of users.
+ * Called after getUsersBatchCore to populate usage fields in the background.
+ *
+ * Admin only.
+ */
+export async function getUsersUsageBatch(
+  userIds: number[]
+): Promise<ActionResult<GetUsersUsageBatchResult>> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session) {
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
+    }
+    if (session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    if (userIds.length === 0) {
+      return { ok: true, data: { usageByKeyId: {} } };
+    }
+
+    const sanitizedIds = Array.from(new Set(userIds)).filter(
+      (id) => Number.isInteger(id) && id > 0
+    );
+    if (sanitizedIds.length === 0) {
+      return { ok: true, data: { usageByKeyId: {} } };
+    }
+    if (sanitizedIds.length > 500) {
+      return {
+        ok: false,
+        error: tError("BATCH_SIZE_EXCEEDED"),
+        errorCode: ERROR_CODES.INVALID_FORMAT,
+      };
+    }
+
+    const [keysMap, usageMap] = await Promise.all([
+      findKeyListBatch(sanitizedIds),
+      findKeyUsageTodayBatch(sanitizedIds),
+    ]);
+
+    const statisticsMap = await findKeysStatisticsBatchFromKeys(keysMap);
+
+    const usageByKeyId: Record<number, KeyUsageData> = {};
+
+    for (const [userId, userKeys] of keysMap) {
+      const usageRecords = usageMap.get(userId) || [];
+      const keyStatistics = statisticsMap.get(userId) || [];
+
+      const usageLookup = new Map(
+        usageRecords.map((item) => [
+          item.keyId,
+          { totalCost: item.totalCost ?? 0, totalTokens: item.totalTokens ?? 0 },
+        ])
+      );
+      const statisticsLookup = new Map(keyStatistics.map((stat) => [stat.keyId, stat]));
+
+      for (const key of userKeys) {
+        const stats = statisticsLookup.get(key.id);
+        usageByKeyId[key.id] = {
+          todayUsage: usageLookup.get(key.id)?.totalCost ?? 0,
+          todayCallCount: stats?.todayCallCount ?? 0,
+          todayTokens: usageLookup.get(key.id)?.totalTokens ?? 0,
+          lastUsedAt: stats?.lastUsedAt ?? null,
+          lastProviderName: stats?.lastProviderName ?? null,
+          modelStats: stats?.modelStats ?? [],
+        };
+      }
+    }
+
+    return { ok: true, data: { usageByKeyId } };
+  } catch (error) {
+    logger.error("Failed to fetch user usage batch data:", error);
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch user usage batch data";
     return { ok: false, error: message, errorCode: ERROR_CODES.INTERNAL_ERROR };
   }
 }
@@ -750,6 +986,7 @@ export async function addUser(data: {
   isEnabled?: boolean;
   expiresAt?: Date | null;
   allowedClients?: string[];
+  blockedClients?: string[];
   allowedModels?: string[];
 }): Promise<
   ActionResult<{
@@ -810,6 +1047,7 @@ export async function addUser(data: {
       isEnabled: data.isEnabled,
       expiresAt: data.expiresAt,
       allowedClients: data.allowedClients || [],
+      blockedClients: data.blockedClients || [],
       allowedModels: data.allowedModels || [],
     });
 
@@ -869,6 +1107,7 @@ export async function addUser(data: {
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt ?? null,
       allowedClients: validatedData.allowedClients ?? [],
+      blockedClients: validatedData.blockedClients ?? [],
       allowedModels: validatedData.allowedModels ?? [],
     });
 
@@ -942,6 +1181,7 @@ export async function createUserOnly(data: {
   isEnabled?: boolean;
   expiresAt?: Date | null;
   allowedClients?: string[];
+  blockedClients?: string[];
   allowedModels?: string[];
 }): Promise<
   ActionResult<{
@@ -995,6 +1235,7 @@ export async function createUserOnly(data: {
       isEnabled: data.isEnabled,
       expiresAt: data.expiresAt,
       allowedClients: data.allowedClients || [],
+      blockedClients: data.blockedClients || [],
       allowedModels: data.allowedModels || [],
     });
 
@@ -1053,6 +1294,7 @@ export async function createUserOnly(data: {
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt ?? null,
       allowedClients: validatedData.allowedClients ?? [],
+      blockedClients: validatedData.blockedClients ?? [],
       allowedModels: validatedData.allowedModels ?? [],
     });
 
@@ -1111,6 +1353,7 @@ export async function editUser(
     isEnabled?: boolean;
     expiresAt?: Date | null;
     allowedClients?: string[];
+    blockedClients?: string[];
     allowedModels?: string[];
   }
 ): Promise<ActionResult> {
@@ -1211,6 +1454,7 @@ export async function editUser(
       isEnabled: validatedData.isEnabled,
       expiresAt: validatedData.expiresAt,
       allowedClients: validatedData.allowedClients,
+      blockedClients: validatedData.blockedClients,
       allowedModels: validatedData.allowedModels,
     });
 
@@ -1231,6 +1475,7 @@ export async function editUser(
 }
 
 // 删除用户
+// Ledger rows intentionally survive user deletion (billing audit trail)
 export async function removeUser(userId: number): Promise<ActionResult> {
   try {
     // Get translations for error messages
@@ -1571,6 +1816,9 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
 
     // 1. Delete all messageRequest logs for this user
     await db.delete(messageRequest).where(eq(messageRequest.userId, userId));
+
+    // Also clear ledger rows -- the ONLY legitimate DELETE path for usage_ledger
+    await db.delete(usageLedger).where(eq(usageLedger.userId, userId));
 
     // 2. Clear Redis cache
     const { getRedisClient } = await import("@/lib/redis");

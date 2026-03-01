@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total} providers, {healthy} healthy → {provider} ✓",
-    "sessionReuse": "Session reuse → {provider} ✓"
+    "sessionReuse": "Session reuse → {provider} ✓",
+    "originHint": "Session reuse - originally selected via {method}"
   },
   "description": {
     "noDecisionRecord": "No decision record",
@@ -54,7 +55,8 @@
     "session_reuse": "Session Reuse",
     "initial_selection": "Initial Selection",
     "endpoint_pool_exhausted": "Endpoint Pool Exhausted",
-    "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout"
+    "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout",
+    "client_restriction_filtered": "Client Restricted"
   },
   "filterReasons": {
     "rate_limited": "Rate Limited",
@@ -69,13 +71,21 @@
     "group_mismatch": "Group Mismatch",
     "health_check_failed": "Health Check Failed",
     "endpoint_circuit_open": "Endpoint Circuit Open",
-    "endpoint_disabled": "Endpoint Disabled"
+    "endpoint_disabled": "Endpoint Disabled",
+    "client_restriction": "Client Restriction"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "Vendor-type temporarily circuit-broken",
     "circuit_open": "Circuit breaker open",
     "circuit_half_open": "Circuit breaker half-open",
-    "rate_limited": "Rate limited"
+    "rate_limited": "Rate limited",
+    "provider_client_restriction": "Provider skipped due to client restriction",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "Selection",
@@ -213,5 +223,11 @@
     "strictBlockSelectorError": "Strict mode: endpoint selector encountered an error, provider skipped without fallback",
     "vendorTypeAllTimeout": "Vendor-Type All Endpoints Timeout (524)",
     "vendorTypeAllTimeoutNote": "All endpoints for this vendor-type timed out. Vendor-type circuit breaker triggered."
+  },
+  "selectionMethods": {
+    "session_reuse": "Session Reuse",
+    "weighted_random": "Weighted Random",
+    "group_filtered": "Group Filtered",
+    "fail_open_fallback": "Fail-Open Fallback"
   }
 }

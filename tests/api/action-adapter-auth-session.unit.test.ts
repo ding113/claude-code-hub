@@ -76,11 +76,12 @@ describe("Action Adapter：会话透传", () => {
       return {
         ...actual,
         validateKey: vi.fn(async () => mockSession),
+        validateAuthToken: vi.fn(async () => mockSession),
       };
     });
 
     const { createActionRoute } = await import("@/lib/api/action-adapter-openapi");
-    const { getSession, validateKey } = await import("@/lib/auth");
+    const { getSession, validateAuthToken } = await import("@/lib/auth");
 
     const action = vi.fn(async () => {
       const session = await getSession();
@@ -115,7 +116,7 @@ describe("Action Adapter：会话透传", () => {
         }),
     } as any)) as Response;
 
-    expect(validateKey).toHaveBeenCalledTimes(1);
+    expect(validateAuthToken).toHaveBeenCalledTimes(1);
     expect(action).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({

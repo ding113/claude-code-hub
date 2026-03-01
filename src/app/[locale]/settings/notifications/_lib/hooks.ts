@@ -13,6 +13,10 @@ import {
   testWebhookTargetAction,
   updateWebhookTargetAction,
 } from "@/actions/webhook-targets";
+import {
+  type CacheHitRateAlertSettingsWindowMode,
+  isCacheHitRateAlertSettingsWindowMode,
+} from "@/lib/webhook/types";
 import type { NotificationType, WebhookProviderType } from "./schemas";
 
 export interface ClientActionResult<T> {
@@ -35,6 +39,18 @@ export interface NotificationSettingsState {
   costAlertWebhook: string;
   costAlertThreshold: number;
   costAlertCheckInterval: number;
+
+  cacheHitRateAlertEnabled: boolean;
+  cacheHitRateAlertWindowMode: CacheHitRateAlertSettingsWindowMode;
+  cacheHitRateAlertCheckInterval: number;
+  cacheHitRateAlertHistoricalLookbackDays: number;
+  cacheHitRateAlertMinEligibleRequests: number;
+  cacheHitRateAlertMinEligibleTokens: number;
+  cacheHitRateAlertAbsMin: number;
+  cacheHitRateAlertDropRel: number;
+  cacheHitRateAlertDropAbs: number;
+  cacheHitRateAlertCooldownMinutes: number;
+  cacheHitRateAlertTopN: number;
 }
 
 export interface WebhookTestResult {
@@ -94,9 +110,55 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
   "circuit_breaker",
   "daily_leaderboard",
   "cost_alert",
+  "cache_hit_rate_alert",
 ];
 
+const INT32_MAX = 2_147_483_647;
+
+function toFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string" && value.trim() === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function toBoundedInt(value: unknown, fallback: number, min: number, max: number): number {
+  const n = toFiniteNumber(value);
+  if (n == null) return fallback;
+  const intValue = Math.trunc(n);
+  return clampNumber(intValue, min, max);
+}
+
+function toBoundedFloat(value: unknown, fallback: number, min: number, max: number): number {
+  const n = toFiniteNumber(value);
+  if (n == null) return fallback;
+  return clampNumber(n, min, max);
+}
+
+function normalizeIntPatch(value: number, min: number, max: number): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  if (!Number.isInteger(value)) return undefined;
+  if (value < min || value > max) return undefined;
+  return value;
+}
+
+function normalizeFloatPatch(value: number, min: number, max: number): number | undefined {
+  if (!Number.isFinite(value)) return undefined;
+  if (value < min || value > max) return undefined;
+  return value;
+}
+
 function toClientSettings(raw: any): NotificationSettingsState {
+  const cacheHitRateAlertWindowMode = isCacheHitRateAlertSettingsWindowMode(
+    raw?.cacheHitRateAlertWindowMode
+  )
+    ? raw.cacheHitRateAlertWindowMode
+    : "auto";
+
   return {
     enabled: Boolean(raw?.enabled),
     circuitBreakerEnabled: Boolean(raw?.circuitBreakerEnabled),
@@ -104,11 +166,42 @@ function toClientSettings(raw: any): NotificationSettingsState {
     dailyLeaderboardEnabled: Boolean(raw?.dailyLeaderboardEnabled),
     dailyLeaderboardWebhook: raw?.dailyLeaderboardWebhook || "",
     dailyLeaderboardTime: raw?.dailyLeaderboardTime || "09:00",
-    dailyLeaderboardTopN: Number(raw?.dailyLeaderboardTopN || 5),
+    dailyLeaderboardTopN: toBoundedInt(raw?.dailyLeaderboardTopN, 5, 1, 20),
     costAlertEnabled: Boolean(raw?.costAlertEnabled),
     costAlertWebhook: raw?.costAlertWebhook || "",
-    costAlertThreshold: parseFloat(raw?.costAlertThreshold || "0.80"),
-    costAlertCheckInterval: Number(raw?.costAlertCheckInterval || 60),
+    costAlertThreshold: toBoundedFloat(raw?.costAlertThreshold, 0.8, 0.5, 1.0),
+    costAlertCheckInterval: toBoundedInt(raw?.costAlertCheckInterval, 60, 10, 1440),
+    cacheHitRateAlertEnabled: Boolean(raw?.cacheHitRateAlertEnabled),
+    cacheHitRateAlertWindowMode,
+    cacheHitRateAlertCheckInterval: toBoundedInt(raw?.cacheHitRateAlertCheckInterval, 5, 1, 1440),
+    cacheHitRateAlertHistoricalLookbackDays: toBoundedInt(
+      raw?.cacheHitRateAlertHistoricalLookbackDays,
+      7,
+      1,
+      90
+    ),
+    cacheHitRateAlertMinEligibleRequests: toBoundedInt(
+      raw?.cacheHitRateAlertMinEligibleRequests,
+      20,
+      1,
+      100000
+    ),
+    cacheHitRateAlertMinEligibleTokens: toBoundedInt(
+      raw?.cacheHitRateAlertMinEligibleTokens,
+      0,
+      0,
+      INT32_MAX
+    ),
+    cacheHitRateAlertAbsMin: toBoundedFloat(raw?.cacheHitRateAlertAbsMin, 0.05, 0, 1),
+    cacheHitRateAlertDropRel: toBoundedFloat(raw?.cacheHitRateAlertDropRel, 0.3, 0, 1),
+    cacheHitRateAlertDropAbs: toBoundedFloat(raw?.cacheHitRateAlertDropAbs, 0.1, 0, 1),
+    cacheHitRateAlertCooldownMinutes: toBoundedInt(
+      raw?.cacheHitRateAlertCooldownMinutes,
+      30,
+      0,
+      1440
+    ),
+    cacheHitRateAlertTopN: toBoundedInt(raw?.cacheHitRateAlertTopN, 10, 1, 100),
   };
 }
 
@@ -121,6 +214,7 @@ export function useNotificationsPageData() {
     circuit_breaker: [],
     daily_leaderboard: [],
     cost_alert: [],
+    cache_hit_rate_alert: [],
   }));
 
   const [isLoading, setIsLoading] = useState(true);
@@ -136,7 +230,7 @@ export function useNotificationsPageData() {
     if (!result.ok) {
       throw new Error(result.error || "LOAD_TARGETS_FAILED");
     }
-    setTargets(result.data as WebhookTargetState[]);
+    setTargets(result.data);
   }, []);
 
   const refreshBindingsForType = useCallback(async (type: NotificationType) => {
@@ -144,7 +238,7 @@ export function useNotificationsPageData() {
     if (!result.ok) {
       throw new Error(result.error || "LOAD_BINDINGS_FAILED");
     }
-    setBindingsByType((prev) => ({ ...prev, [type]: result.data as NotificationBindingState[] }));
+    setBindingsByType((prev) => ({ ...prev, [type]: result.data }));
   }, []);
 
   const refreshAll = useCallback(async () => {
@@ -198,7 +292,10 @@ export function useNotificationsPageData() {
         payload.dailyLeaderboardTime = patch.dailyLeaderboardTime;
       }
       if (patch.dailyLeaderboardTopN !== undefined) {
-        payload.dailyLeaderboardTopN = patch.dailyLeaderboardTopN;
+        const nextValue = normalizeIntPatch(patch.dailyLeaderboardTopN, 1, 20);
+        if (nextValue !== undefined) {
+          payload.dailyLeaderboardTopN = nextValue;
+        }
       }
 
       if (patch.costAlertEnabled !== undefined) {
@@ -210,10 +307,77 @@ export function useNotificationsPageData() {
           : null;
       }
       if (patch.costAlertThreshold !== undefined) {
-        payload.costAlertThreshold = patch.costAlertThreshold.toString();
+        const nextValue = normalizeFloatPatch(patch.costAlertThreshold, 0.5, 1.0);
+        if (nextValue !== undefined) {
+          payload.costAlertThreshold = nextValue.toFixed(2);
+        }
       }
       if (patch.costAlertCheckInterval !== undefined) {
-        payload.costAlertCheckInterval = patch.costAlertCheckInterval;
+        const nextValue = normalizeIntPatch(patch.costAlertCheckInterval, 10, 1440);
+        if (nextValue !== undefined) {
+          payload.costAlertCheckInterval = nextValue;
+        }
+      }
+
+      if (patch.cacheHitRateAlertEnabled !== undefined) {
+        payload.cacheHitRateAlertEnabled = patch.cacheHitRateAlertEnabled;
+      }
+      if (patch.cacheHitRateAlertWindowMode !== undefined) {
+        payload.cacheHitRateAlertWindowMode = patch.cacheHitRateAlertWindowMode;
+      }
+      if (patch.cacheHitRateAlertCheckInterval !== undefined) {
+        const nextValue = normalizeIntPatch(patch.cacheHitRateAlertCheckInterval, 1, 1440);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertCheckInterval = nextValue;
+        }
+      }
+      if (patch.cacheHitRateAlertHistoricalLookbackDays !== undefined) {
+        const nextValue = normalizeIntPatch(patch.cacheHitRateAlertHistoricalLookbackDays, 1, 90);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertHistoricalLookbackDays = nextValue;
+        }
+      }
+      if (patch.cacheHitRateAlertMinEligibleRequests !== undefined) {
+        const nextValue = normalizeIntPatch(patch.cacheHitRateAlertMinEligibleRequests, 1, 100000);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertMinEligibleRequests = nextValue;
+        }
+      }
+      if (patch.cacheHitRateAlertMinEligibleTokens !== undefined) {
+        const nextValue = normalizeIntPatch(patch.cacheHitRateAlertMinEligibleTokens, 0, INT32_MAX);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertMinEligibleTokens = nextValue;
+        }
+      }
+      if (patch.cacheHitRateAlertAbsMin !== undefined) {
+        const nextValue = normalizeFloatPatch(patch.cacheHitRateAlertAbsMin, 0, 1);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertAbsMin = nextValue.toFixed(4);
+        }
+      }
+      if (patch.cacheHitRateAlertDropRel !== undefined) {
+        const nextValue = normalizeFloatPatch(patch.cacheHitRateAlertDropRel, 0, 1);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertDropRel = nextValue.toFixed(4);
+        }
+      }
+      if (patch.cacheHitRateAlertDropAbs !== undefined) {
+        const nextValue = normalizeFloatPatch(patch.cacheHitRateAlertDropAbs, 0, 1);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertDropAbs = nextValue.toFixed(4);
+        }
+      }
+      if (patch.cacheHitRateAlertCooldownMinutes !== undefined) {
+        const nextValue = normalizeIntPatch(patch.cacheHitRateAlertCooldownMinutes, 0, 1440);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertCooldownMinutes = nextValue;
+        }
+      }
+      if (patch.cacheHitRateAlertTopN !== undefined) {
+        const nextValue = normalizeIntPatch(patch.cacheHitRateAlertTopN, 1, 100);
+        if (nextValue !== undefined) {
+          payload.cacheHitRateAlertTopN = nextValue;
+        }
       }
 
       const result = await updateNotificationSettingsAction(payload);

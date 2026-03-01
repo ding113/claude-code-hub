@@ -16,7 +16,7 @@ import type {
 } from "@/types/provider";
 
 // Form mode
-export type FormMode = "create" | "edit";
+export type FormMode = "create" | "edit" | "batch";
 
 // Tab identifiers
 export type TabId = "basic" | "routing" | "limits" | "network" | "testing";
@@ -42,6 +42,8 @@ export interface RoutingState {
   preserveClientIp: boolean;
   modelRedirects: Record<string, string>;
   allowedModels: string[];
+  allowedClients: string[];
+  blockedClients: string[];
   priority: number;
   groupPriorities: Record<string, number>;
   weight: number;
@@ -60,6 +62,9 @@ export interface RoutingState {
   anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
   // Gemini-specific
   geminiGoogleSearchPreference: GeminiGoogleSearchPreference;
+  // Scheduled active time window (HH:mm format, null = always active)
+  activeTimeStart: string | null;
+  activeTimeEnd: string | null;
 }
 
 export interface RateLimitState {
@@ -93,6 +98,10 @@ export interface McpState {
   mcpPassthroughUrl: string;
 }
 
+export interface BatchState {
+  isEnabled: "no_change" | "true" | "false";
+}
+
 export interface UIState {
   activeTab: TabId;
   isPending: boolean;
@@ -107,6 +116,7 @@ export interface ProviderFormState {
   circuitBreaker: CircuitBreakerState;
   network: NetworkState;
   mcp: McpState;
+  batch: BatchState;
   ui: UIState;
 }
 
@@ -123,6 +133,8 @@ export type ProviderFormAction =
   | { type: "SET_PRESERVE_CLIENT_IP"; payload: boolean }
   | { type: "SET_MODEL_REDIRECTS"; payload: Record<string, string> }
   | { type: "SET_ALLOWED_MODELS"; payload: string[] }
+  | { type: "SET_ALLOWED_CLIENTS"; payload: string[] }
+  | { type: "SET_BLOCKED_CLIENTS"; payload: string[] }
   | { type: "SET_PRIORITY"; payload: number }
   | { type: "SET_GROUP_PRIORITIES"; payload: Record<string, number> }
   | { type: "SET_WEIGHT"; payload: number }
@@ -144,6 +156,8 @@ export type ProviderFormAction =
   | { type: "SET_ADAPTIVE_THINKING_MODELS"; payload: string[] }
   | { type: "SET_ADAPTIVE_THINKING_ENABLED"; payload: boolean }
   | { type: "SET_GEMINI_GOOGLE_SEARCH"; payload: GeminiGoogleSearchPreference }
+  | { type: "SET_ACTIVE_TIME_START"; payload: string | null }
+  | { type: "SET_ACTIVE_TIME_END"; payload: string | null }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }
   | { type: "SET_LIMIT_DAILY_USD"; payload: number | null }
@@ -173,7 +187,9 @@ export type ProviderFormAction =
   | { type: "SET_SHOW_FAILURE_THRESHOLD_CONFIRM"; payload: boolean }
   // Bulk actions
   | { type: "RESET_FORM" }
-  | { type: "LOAD_PROVIDER"; payload: ProviderDisplay };
+  | { type: "LOAD_PROVIDER"; payload: ProviderDisplay }
+  // Batch actions
+  | { type: "SET_BATCH_IS_ENABLED"; payload: "no_change" | "true" | "false" };
 
 // Form props
 export interface ProviderFormProps {
@@ -204,4 +220,6 @@ export interface ProviderFormContextValue {
   hideUrl: boolean;
   hideWebsiteUrl: boolean;
   groupSuggestions: string[];
+  batchProviders?: ProviderDisplay[];
+  dirtyFields: Set<string>;
 }

@@ -1,14 +1,63 @@
 import { spawn } from "node:child_process";
+import { createReadStream } from "node:fs";
+import { sql } from "drizzle-orm";
+import { db } from "@/drizzle/db";
 import { logger } from "@/lib/logger";
 import { getDatabaseConfig } from "./db-config";
+
+export type ExportMode = "full" | "excludeLogs" | "ledgerOnly";
+
+/**
+ * Parse PG_COMPOSE_EXEC env var into a command array for docker compose exec.
+ * Returns null when unset (direct mode -- pg tools must exist on the host PATH).
+ */
+export function getDockerComposeExec(): string[] | null {
+  const cmd = process.env.PG_COMPOSE_EXEC;
+  if (!cmd) return null;
+  return cmd.split(/\s+/);
+}
+
+/**
+ * Spawn a PostgreSQL CLI tool, routing through docker compose exec when
+ * PG_COMPOSE_EXEC is set.
+ */
+export function spawnPgTool(
+  command: string,
+  args: string[],
+  env: Record<string, string>,
+  options?: { stdin?: boolean }
+) {
+  const composeExec = getDockerComposeExec();
+
+  if (!composeExec) {
+    return spawn(command, args, {
+      env: { ...process.env, ...env },
+    });
+  }
+
+  const execFlags = ["-T"];
+  if (options?.stdin) execFlags.push("-i");
+  if (env.PGPASSWORD) {
+    execFlags.push("-e", `PGPASSWORD=${env.PGPASSWORD}`);
+  }
+
+  return spawn(
+    composeExec[0],
+    [...composeExec.slice(1), "exec", ...execFlags, "postgres", command, ...args],
+    { env: { ...process.env } }
+  );
+}
 
 /**
  * 执行 pg_dump 导出数据库
  *
- * @param excludeLogs 是否排除日志数据（保留表结构但不导出 message_request 数据）
+ * @param mode 导出模式:
+ *   - 'full': 完整备份（默认）
+ *   - 'excludeLogs': 排除日志数据（保留表结构但不导出 message_request 数据）
+ *   - 'ledgerOnly': 仅导出账单数据（完全排除 message_request 表的结构和数据）
  * @returns ReadableStream 数据流
  */
-export function executePgDump(excludeLogs = false): ReadableStream<Uint8Array> {
+export function executePgDump(mode: ExportMode = "full"): ReadableStream<Uint8Array> {
   const dbConfig = getDatabaseConfig();
 
   const args = [
@@ -24,16 +73,16 @@ export function executePgDump(excludeLogs = false): ReadableStream<Uint8Array> {
     "-v", // Verbose
   ];
 
-  // 排除日志数据（保留表结构但不导出数据）
-  if (excludeLogs) {
+  if (mode === "excludeLogs") {
+    // 保留表结构但不导出数据
     args.push("--exclude-table-data=message_request");
+  } else if (mode === "ledgerOnly") {
+    // 完全排除 message_request 表（结构和数据）
+    args.push("--exclude-table=message_request");
   }
 
-  const pgProcess = spawn("pg_dump", args, {
-    env: {
-      ...process.env,
-      PGPASSWORD: dbConfig.password,
-    },
+  const pgProcess = spawnPgTool("pg_dump", args, {
+    PGPASSWORD: dbConfig.password,
   });
 
   logger.info({
@@ -41,7 +90,7 @@ export function executePgDump(excludeLogs = false): ReadableStream<Uint8Array> {
     host: dbConfig.host,
     port: dbConfig.port,
     database: dbConfig.database,
-    excludeLogs,
+    mode,
   });
 
   return new ReadableStream({
@@ -199,15 +248,33 @@ export function executePgRestore(
     args.push("--exclude-table-data=message_request");
   }
 
-  // 直接指定文件路径（比 stdin 更高效，避免额外的流处理）
-  args.push(filePath);
+  // In docker exec mode, the host file path is not visible inside the
+  // container. pg_restore reads from stdin when no filename argument is
+  // given, and custom format (-Fc) supports this.
+  const isDockerExec = !!getDockerComposeExec();
+  if (!isDockerExec) {
+    args.push(filePath);
+  }
 
-  const pgProcess = spawn("pg_restore", args, {
-    env: {
-      ...process.env,
-      PGPASSWORD: dbConfig.password,
-    },
-  });
+  const pgProcess = spawnPgTool(
+    "pg_restore",
+    args,
+    { PGPASSWORD: dbConfig.password },
+    { stdin: isDockerExec }
+  );
+
+  if (isDockerExec) {
+    const fileStream = createReadStream(filePath);
+    fileStream.pipe(pgProcess.stdin!);
+    fileStream.on("error", (err) => {
+      logger.error({
+        action: "pg_restore_file_read_error",
+        error: err.message,
+        filePath,
+      });
+      pgProcess.kill();
+    });
+  }
 
   logger.info({
     action: "pg_restore_start",
@@ -395,111 +462,29 @@ export async function getDatabaseInfo(): Promise<{
   tableCount: number;
   version: string;
 }> {
-  const dbConfig = getDatabaseConfig();
-
-  return new Promise((resolve, reject) => {
-    // 查询数据库大小和表数量
-    // 使用 current_database() 避免 SQL 注入风险
-    const query = `
-      SELECT
-        pg_size_pretty(pg_database_size(current_database())) as size,
-        (SELECT count(*) FROM information_schema.tables
-         WHERE table_schema = 'public' AND table_type = 'BASE TABLE') as table_count,
-        version() as version;
-    `;
-
-    const pgProcess = spawn(
-      "psql",
-      [
-        "-h",
-        dbConfig.host,
-        "-p",
-        dbConfig.port.toString(),
-        "-U",
-        dbConfig.user,
-        "-d",
-        dbConfig.database,
-        "-t", // 不显示列名
-        "-A", // 不对齐
-        "-c",
-        query,
-      ],
-      {
-        env: {
-          ...process.env,
-          PGPASSWORD: dbConfig.password,
-        },
-      }
-    );
-
-    let output = "";
-    let error = "";
-
-    pgProcess.stdout.on("data", (chunk: Buffer) => {
-      output += chunk.toString();
-    });
-
-    pgProcess.stderr.on("data", (chunk: Buffer) => {
-      error += chunk.toString();
-    });
-
-    pgProcess.on("close", (code: number | null) => {
-      if (code === 0) {
-        const lines = output.trim().split("\n");
-        if (lines.length > 0) {
-          const [size, tableCount, version] = lines[0].split("|");
-          resolve({
-            size: size?.trim() || "Unknown",
-            tableCount: parseInt(tableCount?.trim() || "0", 10),
-            version: version?.trim().split(" ")[0] || "Unknown",
-          });
-        } else {
-          reject(new Error("未能获取数据库信息"));
-        }
-      } else {
-        reject(new Error(error || `查询失败，退出代码: ${code}`));
-      }
-    });
-
-    pgProcess.on("error", (err: Error) => {
-      reject(err);
-    });
-  });
+  const result = await db.execute(sql`
+    SELECT
+      pg_size_pretty(pg_database_size(current_database())) as size,
+      (SELECT count(*) FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_type = 'BASE TABLE') as table_count,
+      version() as version
+  `);
+  const row = result[0];
+  return {
+    size: String(row?.size ?? "Unknown"),
+    tableCount: Number(row?.table_count ?? 0),
+    version: String(row?.version ?? "Unknown").split(" ")[0] || "Unknown",
+  };
 }
 
 /**
  * 检查数据库连接是否可用
  */
 export async function checkDatabaseConnection(): Promise<boolean> {
-  const dbConfig = getDatabaseConfig();
-
-  return new Promise((resolve) => {
-    const pgProcess = spawn(
-      "pg_isready",
-      [
-        "-h",
-        dbConfig.host,
-        "-p",
-        dbConfig.port.toString(),
-        "-U",
-        dbConfig.user,
-        "-d",
-        dbConfig.database,
-      ],
-      {
-        env: {
-          ...process.env,
-          PGPASSWORD: dbConfig.password,
-        },
-      }
-    );
-
-    pgProcess.on("close", (code: number | null) => {
-      resolve(code === 0);
-    });
-
-    pgProcess.on("error", () => {
-      resolve(false);
-    });
-  });
+  try {
+    await db.execute(sql`SELECT 1`);
+    return true;
+  } catch {
+    return false;
+  }
 }

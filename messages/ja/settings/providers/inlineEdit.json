@@ -18,7 +18,7 @@
   "priorityInvalid": "0 以上の整数を入力してください",
   "priorityLabel": "優先度",
   "save": "保存する",
-  "saving": "保存中...",
+  "saving": "保存しています...",
   "saveFailed": "保存に失敗しました",
   "saveSuccess": "保存に成功しました",
   "searchGroups": "グループを検索...",

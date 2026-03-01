@@ -13,12 +13,16 @@
  * 🧹 清理：测试完成后自动清理数据
  */
 
-import { afterAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { loginAndGetAuthToken } from "./_helpers/auth";
 
 // ==================== 配置 ====================
 
 const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:13500/api/actions";
-const ADMIN_TOKEN = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
+const ADMIN_KEY = process.env.TEST_ADMIN_TOKEN || process.env.ADMIN_TOKEN;
+const run = ADMIN_KEY ? describe : describe.skip;
+
+let authToken: string | undefined;
 
 const testData = {
   userIds: [] as number[],
@@ -26,12 +30,22 @@ const testData = {
 
 // ==================== 辅助函数 ====================
 
+beforeAll(async () => {
+  if (!ADMIN_KEY) return;
+  authToken = await loginAndGetAuthToken(API_BASE_URL, ADMIN_KEY);
+});
+
 async function callApi(module: string, action: string, body: Record<string, unknown> = {}) {
+  if (!authToken) {
+    throw new Error("E2E tests require ADMIN_TOKEN/TEST_ADMIN_TOKEN (used to login)");
+  }
+
   const response = await fetch(`${API_BASE_URL}/${module}/${action}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Cookie: `auth-token=${ADMIN_TOKEN}`,
+      Authorization: `Bearer ${authToken}`,
+      Cookie: `auth-token=${authToken}`,
     },
     body: JSON.stringify(body),
   });
@@ -56,6 +70,8 @@ async function expectSuccess(module: string, action: string, body: Record<string
 // ==================== 测试清理 ====================
 
 afterAll(async () => {
+  if (!authToken) return;
+
   console.log(`\n🧹 清理 ${testData.userIds.length} 个测试用户...`);
   for (const userId of testData.userIds) {
     try {
@@ -69,7 +85,7 @@ afterAll(async () => {
 
 // ==================== 测试 ====================
 
-describe("用户和 Key 管理 - E2E 测试", () => {
+run("用户和 Key 管理 - E2E 测试", () => {
   let user1Id: number;
   let user2Id: number;
 

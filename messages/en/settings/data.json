@@ -39,6 +39,16 @@
     "error": "Failed to export database",
     "exporting": "Exporting...",
     "failed": "Export failed",
+    "mode": {
+      "excludeLogs": "Exclude Logs",
+      "full": "Full Backup",
+      "ledgerOnly": "Ledger Only"
+    },
+    "modeDescription": {
+      "excludeLogs": "Export without log data (keeps structure)",
+      "full": "Export all data including request logs",
+      "ledgerOnly": "Export only billing ledger (minimal size)"
+    },
     "successMessage": "Database exported successfully!"
   },
   "guide": {
@@ -128,7 +138,9 @@
     "loading": "Loading...",
     "retry": "Retry",
     "tables": "{count} tables",
-    "unavailable": "Database unavailable"
+    "unavailable": "Database unavailable",
+    "size": "Database Size",
+    "tableCount": "Table Count"
   },
   "title": "Data Management"
 }

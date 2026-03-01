@@ -443,7 +443,7 @@ function BatchEditDialogInner({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[70vh] overflow-y-auto space-y-6 pr-1">
+        <div className="max-h-[var(--cch-viewport-height-70)] overflow-y-auto space-y-6 pr-1">
           {selectedUsersCount > 0 ? (
             <BatchUserSection
               affectedUsersCount={selectedUsersCount}

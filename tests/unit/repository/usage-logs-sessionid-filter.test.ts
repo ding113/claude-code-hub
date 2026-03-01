@@ -64,15 +64,21 @@ describe("Usage logs sessionId filter", () => {
         execute: vi.fn(async () => ({ count: 0 })),
       },
     }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => true),
+    }));
 
     const { findUsageLogsBatch } = await import("@/repository/usage-logs");
     await findUsageLogsBatch({});
     await findUsageLogsBatch({ sessionId: "   " });
 
-    expect(whereArgs).toHaveLength(2);
-    const baseWhereSql = sqlToString(whereArgs[0]).toLowerCase();
-    const blankWhereSql = sqlToString(whereArgs[1]).toLowerCase();
-    expect(blankWhereSql).toBe(baseWhereSql);
+    expect(whereArgs).toHaveLength(4);
+    const basePrimaryWhereSql = sqlToString(whereArgs[0]).toLowerCase();
+    const baseLedgerWhereSql = sqlToString(whereArgs[1]).toLowerCase();
+    const blankPrimaryWhereSql = sqlToString(whereArgs[2]).toLowerCase();
+    const blankLedgerWhereSql = sqlToString(whereArgs[3]).toLowerCase();
+    expect(blankPrimaryWhereSql).toBe(basePrimaryWhereSql);
+    expect(blankLedgerWhereSql).toBe(baseLedgerWhereSql);
   });
 
   test("findUsageLogsBatch: sessionId 应 trim 后精确匹配", async () => {
@@ -87,14 +93,20 @@ describe("Usage logs sessionId filter", () => {
         execute: vi.fn(async () => ({ count: 0 })),
       },
     }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => true),
+    }));
 
     const { findUsageLogsBatch } = await import("@/repository/usage-logs");
     await findUsageLogsBatch({ sessionId: "  abc  " });
 
-    expect(whereArgs.length).toBeGreaterThan(0);
-    const whereSql = sqlToString(whereArgs[0]).toLowerCase();
-    expect(whereSql).toContain("abc");
-    expect(whereSql).not.toContain("  abc  ");
+    expect(whereArgs).toHaveLength(2);
+    const primaryWhereSql = sqlToString(whereArgs[0]).toLowerCase();
+    const ledgerWhereSql = sqlToString(whereArgs[1]).toLowerCase();
+    expect(primaryWhereSql).toContain("abc");
+    expect(primaryWhereSql).not.toContain("  abc  ");
+    expect(ledgerWhereSql).toContain("abc");
+    expect(ledgerWhereSql).not.toContain("  abc  ");
   });
 
   test("findUsageLogsWithDetails: sessionId 为空/空白不应追加条件", async () => {

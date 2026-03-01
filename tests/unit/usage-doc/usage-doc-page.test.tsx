@@ -10,6 +10,7 @@ import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
 import { describe, expect, test, vi } from "vitest";
 import UsageDocPage from "@/app/[locale]/usage-doc/page";
+import { UsageDocAuthProvider } from "@/app/[locale]/usage-doc/_components/usage-doc-auth-context";
 
 vi.mock("@/i18n/routing", () => ({
   Link: ({
@@ -56,18 +57,18 @@ async function renderWithIntl(locale: string, node: ReactNode) {
 }
 
 describe("UsageDocPage - 目录/快速链接交互", () => {
-  test("应渲染 skip links，且登录态显示返回仪表盘链接", async () => {
+  test("should render skip links and show dashboard link when logged in", async () => {
     Object.defineProperty(window, "scrollTo", {
       value: vi.fn(),
       writable: true,
     });
 
-    Object.defineProperty(document, "cookie", {
-      configurable: true,
-      get: () => "auth-token=test-token",
-    });
-
-    const { unmount } = await renderWithIntl("en", <UsageDocPage />);
+    const { unmount } = await renderWithIntl(
+      "en",
+      <UsageDocAuthProvider isLoggedIn={true}>
+        <UsageDocPage />
+      </UsageDocAuthProvider>
+    );
 
     expect(document.querySelector('a[href="#main-content"]')).not.toBeNull();
     expect(document.querySelector('a[href="#toc-navigation"]')).not.toBeNull();
@@ -76,8 +77,6 @@ describe("UsageDocPage - 目录/快速链接交互", () => {
     expect(dashboardLink).not.toBeNull();
 
     await unmount();
-
-    Reflect.deleteProperty(document, "cookie");
   });
 
   test("ru 语言不应显示中文占位符与代码块注释", async () => {

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getSessionMock = vi.fn();
 
+const findProviderByIdMock = vi.fn();
 const findAllProvidersFreshMock = vi.fn();
 const getProviderStatisticsMock = vi.fn();
 const createProviderMock = vi.fn();
@@ -26,7 +27,7 @@ vi.mock("@/repository/provider", () => ({
   deleteProvider: deleteProviderMock,
   findAllProviders: vi.fn(async () => []),
   findAllProvidersFresh: findAllProvidersFreshMock,
-  findProviderById: vi.fn(async () => null),
+  findProviderById: findProviderByIdMock,
   getProviderStatistics: getProviderStatisticsMock,
   resetProviderTotalCostResetAt: vi.fn(async () => {}),
   updateProvider: updateProviderMock,
@@ -141,6 +142,11 @@ describe("Provider Actions - Async Optimization", () => {
     ]);
 
     getProviderStatisticsMock.mockResolvedValue([]);
+
+    findProviderByIdMock.mockImplementation(async (id: number) => {
+      const providers = await findAllProvidersFreshMock();
+      return providers.find((p: { id: number }) => p.id === id) ?? null;
+    });
 
     createProviderMock.mockResolvedValue({
       id: 123,

@@ -114,6 +114,7 @@ export function NetworkSection() {
   const t = useTranslations("settings.providers.form");
   const { state, dispatch, mode } = useProviderForm();
   const isEdit = mode === "edit";
+  const isBatch = mode === "batch";
 
   return (
     <motion.div
@@ -171,22 +172,26 @@ export function NetworkSection() {
                 />
               </ToggleRow>
 
-              {/* Proxy Test */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
-                <div className="flex items-center gap-3">
-                  <Wifi className="h-4 w-4 text-primary" />
-                  <div className="space-y-0.5">
-                    <div className="text-sm font-medium">{t("sections.proxy.test.label")}</div>
-                    <p className="text-xs text-muted-foreground">{t("sections.proxy.test.desc")}</p>
+              {/* Proxy Test - hidden in batch mode */}
+              {!isBatch && (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border/50">
+                  <div className="flex items-center gap-3">
+                    <Wifi className="h-4 w-4 text-primary" />
+                    <div className="space-y-0.5">
+                      <div className="text-sm font-medium">{t("sections.proxy.test.label")}</div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("sections.proxy.test.desc")}
+                      </p>
+                    </div>
                   </div>
+                  <ProxyTestButton
+                    providerUrl={state.basic.url}
+                    proxyUrl={state.network.proxyUrl}
+                    proxyFallbackToDirect={state.network.proxyFallbackToDirect}
+                    disabled={state.ui.isPending || !state.basic.url.trim()}
+                  />
                 </div>
-                <ProxyTestButton
-                  providerUrl={state.basic.url}
-                  proxyUrl={state.network.proxyUrl}
-                  proxyFallbackToDirect={state.network.proxyFallbackToDirect}
-                  disabled={state.ui.isPending || !state.basic.url.trim()}
-                />
-              </div>
+              )}
             </motion.div>
           )}
         </div>

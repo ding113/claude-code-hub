@@ -606,7 +606,10 @@ const TrafficTrend = ({
               }}
               itemStyle={{ color: "#fff" }}
               labelFormatter={(value) => `${value}:00`}
-              formatter={(value) => [`${value ?? 0} 请求`, "数量"]}
+              formatter={(value) => [
+                `${value ?? 0} ${t("chart.requestUnit")}`,
+                t("chart.countLabel"),
+              ]}
             />
             <Area
               type="monotone"
@@ -743,8 +746,9 @@ export default function BigScreenPage() {
       return result.data;
     },
     {
-      refreshInterval: 2000, // 2秒刷新
+      refreshInterval: 2000,
       revalidateOnFocus: false,
+      refreshWhenHidden: false,
     }
   );
 
@@ -756,7 +760,7 @@ export default function BigScreenPage() {
       if (!response.ok) throw new Error("Failed to fetch settings");
       return response.json() as Promise<{ currencyDisplay: CurrencyCode }>;
     },
-    { revalidateOnFocus: false }
+    { revalidateOnFocus: false, refreshWhenHidden: false }
   );
 
   const currencySymbol = CURRENCY_CONFIG[systemSettings?.currencyDisplay ?? "USD"]?.symbol ?? "$";
@@ -787,7 +791,7 @@ export default function BigScreenPage() {
 
   return (
     <div
-      className={`relative w-full h-screen overflow-hidden transition-colors duration-500 font-sans selection:bg-orange-500/30 ${theme.bg}`}
+      className={`relative w-full h-[var(--cch-viewport-height,100vh)] overflow-hidden transition-colors duration-500 font-sans selection:bg-orange-500/30 ${theme.bg}`}
     >
       <ParticleBackground themeMode={themeMode} />
 
@@ -814,7 +818,7 @@ export default function BigScreenPage() {
               <button
                 onClick={handleLocaleSwitch}
                 className={`p-1.5 rounded hover:bg-white/5 ${theme.text} flex items-center gap-1.5 transition-colors`}
-                title={`当前: ${localeLabels[currentLocale]} (点击切��)`}
+                title={t("chart.switchLocale", { locale: localeLabels[currentLocale] })}
               >
                 <Globe size={18} />
                 <span className="text-[10px] font-mono uppercase">

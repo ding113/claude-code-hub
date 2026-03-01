@@ -400,6 +400,27 @@ export function formatProviderTimeline(
       continue;
     }
 
+    // === Session reuse client restriction ===
+    if (item.reason === "client_restriction_filtered" && ctx) {
+      timeline += `${t("filterDetails.session_reuse_client_restriction")}\n\n`;
+      timeline += `${t("timeline.provider", { provider: item.name })}\n`;
+      if (ctx.filteredProviders && ctx.filteredProviders.length > 0) {
+        const f = ctx.filteredProviders[0];
+        if (f.clientRestrictionContext) {
+          const crc = f.clientRestrictionContext;
+          const detailKey = `filterDetails.${crc.matchType}`;
+          const detailsText = crc.matchedPattern
+            ? t(detailKey, { pattern: crc.matchedPattern })
+            : t(detailKey);
+          timeline += `${detailsText}\n`;
+          if (crc.detectedClient) {
+            timeline += `${t("filterDetails.detectedClient", { client: crc.detectedClient })}\n`;
+          }
+        }
+      }
+      continue;
+    }
+
     // === 首次选择 ===
     if (item.reason === "initial_selection" && ctx) {
       timeline += `${t("timeline.initialSelectionTitle")}\n\n`;
@@ -425,13 +446,28 @@ export function formatProviderTimeline(
       if (ctx.filteredProviders && ctx.filteredProviders.length > 0) {
         timeline += `\n${t("timeline.filtered")}:\n`;
         for (const f of ctx.filteredProviders) {
-          const icon = f.reason === "circuit_open" ? "⚡" : "💰";
+          const icon =
+            f.reason === "circuit_open" ? "⚡" : f.reason === "client_restriction" ? "🚫" : "💰";
           const detailsText = f.details
             ? t(`filterDetails.${f.details}`) !== `filterDetails.${f.details}`
               ? t(`filterDetails.${f.details}`)
               : f.details
             : f.reason;
           timeline += `  ${icon} ${f.name} (${detailsText})\n`;
+
+          // Client restriction context details
+          if (f.clientRestrictionContext) {
+            const crc = f.clientRestrictionContext;
+            if (crc.detectedClient) {
+              timeline += `    ${t("filterDetails.detectedClient", { client: crc.detectedClient })}\n`;
+            }
+            if (crc.providerAllowlist.length > 0) {
+              timeline += `    ${t("filterDetails.providerAllowlist", { list: crc.providerAllowlist.join(", ") })}\n`;
+            }
+            if (crc.providerBlocklist.length > 0) {
+              timeline += `    ${t("filterDetails.providerBlocklist", { list: crc.providerBlocklist.join(", ") })}\n`;
+            }
+          }
         }
       }
 

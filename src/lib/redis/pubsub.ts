@@ -10,7 +10,7 @@ export const CHANNEL_SENSITIVE_WORDS_UPDATED = "cch:cache:sensitive_words:update
 // API Key 集合发生变化（典型：创建新 key）时，通知各实例重建 Vacuum Filter，避免误拒绝
 export const CHANNEL_API_KEYS_UPDATED = "cch:cache:api_keys:updated";
 
-type CacheInvalidationCallback = () => void;
+type CacheInvalidationCallback = (message: string) => void;
 
 let subscriberClient: Redis | null = null;
 let subscriberReady: Promise<Redis> | null = null;
@@ -18,6 +18,21 @@ const subscriptions = new Map<string, Set<CacheInvalidationCallback>>();
 const subscribedChannels = new Set<string>();
 
 let resubscribeInFlight: Promise<void> | null = null;
+
+const SUBSCRIBER_CONNECT_TIMEOUT_MS = 10000;
+const SUBSCRIBER_CONNECT_BACKOFF_BASE_MS = 1000;
+const SUBSCRIBER_CONNECT_BACKOFF_MAX_MS = 60000;
+
+let subscriberConnectFailures = 0;
+let subscriberNextConnectAt = 0;
+
+function computeSubscriberConnectBackoffMs(consecutiveFailures: number): number {
+  if (!Number.isFinite(consecutiveFailures) || consecutiveFailures <= 0) return 0;
+
+  const exponent = Math.min(consecutiveFailures - 1, 10);
+  const backoffMs = SUBSCRIBER_CONNECT_BACKOFF_BASE_MS * 2 ** exponent;
+  return Math.min(SUBSCRIBER_CONNECT_BACKOFF_MAX_MS, backoffMs);
+}
 
 async function resubscribeAll(sub: Redis): Promise<void> {
   if (resubscribeInFlight) return resubscribeInFlight;
@@ -62,13 +77,25 @@ async function resubscribeAll(sub: Redis): Promise<void> {
 function ensureSubscriber(baseClient: Redis): Promise<Redis> {
   if (subscriberReady) return subscriberReady;
 
+  const now = Date.now();
+  const startDelayMs = Math.max(0, subscriberNextConnectAt - now);
+
   subscriberReady = new Promise<Redis>((resolve, reject) => {
-    const sub = baseClient.duplicate();
+    let sub: Redis | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let startDelayTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
 
     function cleanup(): void {
-      sub.off("ready", onReady);
-      sub.off("error", onError);
+      if (startDelayTimeoutId) {
+        clearTimeout(startDelayTimeoutId);
+        startDelayTimeoutId = null;
+      }
+
+      if (sub) {
+        sub.off("ready", onReady);
+        sub.off("error", onError);
+      }
 
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -77,10 +104,24 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
     }
 
     function fail(error: Error): void {
+      if (settled) return;
+      settled = true;
+
       cleanup();
       subscriberReady = null;
+
+      subscriberConnectFailures++;
+      const backoffMs = computeSubscriberConnectBackoffMs(subscriberConnectFailures);
+      subscriberNextConnectAt = Date.now() + backoffMs;
+
+      logger.warn("[RedisPubSub] Subscriber connection failed", {
+        error,
+        consecutiveFailures: subscriberConnectFailures,
+        nextRetryAt: new Date(subscriberNextConnectAt).toISOString(),
+        backoffMs,
+      });
       try {
-        sub.disconnect();
+        sub?.disconnect();
       } catch {
         // ignore
       }
@@ -88,23 +129,37 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
     }
 
     function onReady(): void {
+      if (settled) return;
+      settled = true;
+
       cleanup();
-      subscriberClient = sub;
+      if (!sub) {
+        subscriberReady = null;
+        reject(new Error("Redis subscriber connection ready without client"));
+        return;
+      }
+
+      const readySub = sub;
+
+      subscriberClient = readySub;
       subscribedChannels.clear();
 
-      sub.on("error", (error) =>
+      subscriberConnectFailures = 0;
+      subscriberNextConnectAt = 0;
+
+      readySub.on("error", (error) =>
         logger.warn("[RedisPubSub] Subscriber connection error", { error })
       );
-      sub.on("close", () => subscribedChannels.clear());
-      sub.on("end", () => subscribedChannels.clear());
-      sub.on("ready", () => void resubscribeAll(sub));
+      readySub.on("close", () => subscribedChannels.clear());
+      readySub.on("end", () => subscribedChannels.clear());
+      readySub.on("ready", () => void resubscribeAll(readySub));
 
-      sub.on("message", (channel: string) => {
+      readySub.on("message", (channel: string, message: string) => {
         const callbacks = subscriptions.get(channel);
         if (!callbacks || callbacks.size === 0) return;
         for (const cb of callbacks) {
           try {
-            cb();
+            cb(message);
           } catch (error) {
             logger.error("[RedisPubSub] Callback error", { channel, error });
           }
@@ -112,23 +167,33 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
       });
 
       logger.info("[RedisPubSub] Subscriber connection ready");
-      resolve(sub);
+      resolve(readySub);
     }
 
     function onError(error: Error): void {
-      logger.warn("[RedisPubSub] Subscriber connection error", { error });
       fail(error);
     }
 
-    sub.once("ready", onReady);
-    sub.once("error", onError);
+    function startConnection(): void {
+      if (settled) return;
 
-    // Timeout 10 seconds
-    timeoutId = setTimeout(() => {
-      if (sub.status !== "ready") {
-        fail(new Error("Redis subscriber connection timeout"));
-      }
-    }, 10000);
+      sub = baseClient.duplicate();
+      sub.once("ready", onReady);
+      sub.once("error", onError);
+
+      // Timeout 10 seconds
+      timeoutId = setTimeout(() => {
+        if (sub?.status !== "ready") {
+          fail(new Error("Redis subscriber connection timeout"));
+        }
+      }, SUBSCRIBER_CONNECT_TIMEOUT_MS);
+    }
+
+    if (startDelayMs > 0) {
+      startDelayTimeoutId = setTimeout(startConnection, startDelayMs);
+    } else {
+      startConnection();
+    }
   });
 
   return subscriberReady;
@@ -137,12 +202,12 @@ function ensureSubscriber(baseClient: Redis): Promise<Redis> {
 /**
  * Publish cache invalidation (silent fail, auto-degrade)
  */
-export async function publishCacheInvalidation(channel: string): Promise<void> {
+export async function publishCacheInvalidation(channel: string, message?: string): Promise<void> {
   const redis = getRedisClient();
   if (!redis) return;
 
   try {
-    await redis.publish(channel, Date.now().toString());
+    await redis.publish(channel, message ?? Date.now().toString());
   } catch (error) {
     logger.warn("[RedisPubSub] Failed to publish cache invalidation", { channel, error });
   }
@@ -159,43 +224,45 @@ export async function subscribeCacheInvalidation(
   const baseClient = getRedisClient();
   if (!baseClient) return null;
 
+  let sub: Redis;
   try {
-    const sub = await ensureSubscriber(baseClient);
-
-    const callbacks = subscriptions.get(channel) ?? new Set<CacheInvalidationCallback>();
-    callbacks.add(callback);
-    subscriptions.set(channel, callbacks);
-
-    if (!subscribedChannels.has(channel)) {
-      try {
-        await sub.subscribe(channel);
-        subscribedChannels.add(channel);
-        logger.info("[RedisPubSub] Subscribed to channel", { channel });
-      } catch (error) {
-        callbacks.delete(callback);
-        if (callbacks.size === 0) {
-          subscriptions.delete(channel);
-        }
-        throw error;
-      }
-    }
-
-    return () => {
-      const cbs = subscriptions.get(channel);
-      if (!cbs) return;
-
-      cbs.delete(callback);
-
-      if (cbs.size === 0) {
-        subscriptions.delete(channel);
-        subscribedChannels.delete(channel);
-        if (subscriberClient) {
-          void subscriberClient.unsubscribe(channel);
-        }
-      }
-    };
-  } catch (error) {
-    logger.warn("[RedisPubSub] Failed to subscribe cache invalidation", { channel, error });
+    sub = await ensureSubscriber(baseClient);
+  } catch {
+    // ensureSubscriber 内部已记录连接失败与 backoff 信息，避免这里按 channel 重复刷屏
     return null;
   }
+
+  const callbacks = subscriptions.get(channel) ?? new Set<CacheInvalidationCallback>();
+  callbacks.add(callback);
+  subscriptions.set(channel, callbacks);
+
+  if (!subscribedChannels.has(channel)) {
+    try {
+      await sub.subscribe(channel);
+      subscribedChannels.add(channel);
+      logger.info("[RedisPubSub] Subscribed to channel", { channel });
+    } catch (error) {
+      callbacks.delete(callback);
+      if (callbacks.size === 0) {
+        subscriptions.delete(channel);
+      }
+      logger.warn("[RedisPubSub] Failed to subscribe channel", { channel, error });
+      return null;
+    }
+  }
+
+  return () => {
+    const cbs = subscriptions.get(channel);
+    if (!cbs) return;
+
+    cbs.delete(callback);
+
+    if (cbs.size === 0) {
+      subscriptions.delete(channel);
+      subscribedChannels.delete(channel);
+      if (subscriberClient) {
+        void subscriberClient.unsubscribe(channel);
+      }
+    }
+  };
 }

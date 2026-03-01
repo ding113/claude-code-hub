@@ -42,6 +42,8 @@ export {
   findProviderById,
   findProviderList,
   getDistinctProviderGroups,
+  restoreProvider,
+  restoreProvidersBatch,
   updateProvider,
 } from "./provider";
 export type { ProviderEndpointProbeTarget } from "./provider-endpoints";
@@ -74,5 +76,13 @@ export {
 } from "./statistics";
 // System settings related exports
 export { getSystemSettings, updateSystemSettings } from "./system-config";
+// Usage ledger related exports
+export {
+  countLedgerRequestsInTimeRange,
+  sumLedgerCostInTimeRange,
+  sumLedgerQuotaCosts,
+  sumLedgerTotalCost,
+  sumLedgerTotalCostBatch,
+} from "./usage-ledger";
 // User related exports
 export { createUser, deleteUser, findUserById, findUserList, updateUser } from "./user";

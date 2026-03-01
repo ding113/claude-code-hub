@@ -73,7 +73,9 @@ dev: db
 	@echo "  REDIS_URL=$(LOCAL_REDIS_URL)"
 	@echo ""
 	@DSN="$(LOCAL_DSN)" REDIS_URL="$(LOCAL_REDIS_URL)" ENABLE_RATE_LIMIT="$(ENABLE_RATE_LIMIT)" \
-		ADMIN_TOKEN="$(ADMIN_TOKEN)" bun run dev
+		ADMIN_TOKEN="$(ADMIN_TOKEN)" \
+		PG_COMPOSE_EXEC="docker compose -f $(CURDIR)/$(COMPOSE_FILE) -p $(PROJECT_NAME)" \
+		bun run dev
 
 build:
 	@$(COMPOSE) --profile app build app

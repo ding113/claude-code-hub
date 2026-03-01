@@ -838,6 +838,43 @@ const DEFAULT_ERROR_RULES = [
       },
     },
   },
+  // OpenAI Responses API: store=false causes item not found
+  {
+    pattern: "Items are not persisted when",
+    category: "store_error",
+    description: "OpenAI Responses API item not found due to store=false",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 73,
+    overrideResponse: {
+      error: {
+        message:
+          "引用的 Response 项已失效（上游 store=false 导致项未持久化）。请在 Provider 自定义请求体中设置 store=true，或移除输入中的历史项 ID（rs_xxx）后重试",
+        type: "invalid_request_error",
+        param: null,
+        code: null,
+      },
+    },
+  },
+  // OpenAI Responses API: input must be a list
+  {
+    pattern: "Input must be a list",
+    category: "parameter_error",
+    description: "OpenAI Responses API input field is not an array",
+    matchType: "contains" as const,
+    isDefault: true,
+    isEnabled: true,
+    priority: 74,
+    overrideResponse: {
+      error: {
+        message: "Responses API 的 input 参数必须为数组格式。请检查请求体中 input 字段是否为列表",
+        type: "invalid_request_error",
+        param: "input",
+        code: null,
+      },
+    },
+  },
 ];
 
 /**

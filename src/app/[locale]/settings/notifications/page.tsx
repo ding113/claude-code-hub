@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
+import { Section } from "@/components/section";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { SettingsPageHeader } from "../_components/settings-page-header";
 import { GlobalSettingsCard } from "./_components/global-settings-card";
@@ -39,7 +40,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <SettingsPageHeader
         title={t("notifications.title")}
         description={t("notifications.description")}
@@ -68,19 +69,21 @@ export default function NotificationsPage() {
         onTest={testTarget}
       />
 
-      <div className="grid gap-4">
-        {NOTIFICATION_TYPES.map((type) => (
-          <NotificationTypeCard
-            key={type}
-            type={type}
-            settings={settings}
-            targets={targets}
-            bindings={bindingsByType[type]}
-            onUpdateSettings={handleUpdateSettings}
-            onSaveBindings={saveBindings}
-          />
-        ))}
-      </div>
+      <Section title={t("notifications.bindings.title")} icon="bell" noPadding>
+        <div className="grid gap-4 p-5 md:p-6 pt-0">
+          {NOTIFICATION_TYPES.map((type) => (
+            <NotificationTypeCard
+              key={type}
+              type={type}
+              settings={settings}
+              targets={targets}
+              bindings={bindingsByType[type]}
+              onUpdateSettings={handleUpdateSettings}
+              onSaveBindings={saveBindings}
+            />
+          ))}
+        </div>
+      </Section>
     </div>
   );
 }

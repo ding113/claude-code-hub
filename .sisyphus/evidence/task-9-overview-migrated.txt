@@ -1,0 +1,29 @@
+Task 9: Migrate overview.ts read paths to usage_ledger
+========================================================
+
+File: src/repository/overview.ts
+
+Changes:
+- Imports: messageRequest -> usageLedger, EXCLUDE_WARMUP_CONDITION -> LEDGER_BILLING_CONDITION
+- Removed: isNull import (no deletedAt on ledger)
+
+getOverviewMetrics():
+- .from(messageRequest) -> .from(usageLedger)
+- messageRequest.costUsd -> usageLedger.costUsd
+- messageRequest.durationMs -> usageLedger.durationMs
+- messageRequest.createdAt -> usageLedger.createdAt
+- Error rate: statusCode >= 400 -> NOT isSuccess (pre-computed boolean)
+- Removed: isNull(messageRequest.deletedAt)
+- EXCLUDE_WARMUP_CONDITION -> LEDGER_BILLING_CONDITION
+
+getOverviewMetricsWithComparison():
+- Same pattern as above for all 3 parallel queries (today, yesterday, RPM)
+- messageRequest.userId -> usageLedger.userId
+- Error rate: statusCode >= 400 -> NOT isSuccess
+
+Interfaces unchanged:
+- OverviewMetrics: todayRequests, todayCost, avgResponseTime, todayErrorRate
+- OverviewMetricsWithComparison: extends OverviewMetrics + yesterday comparison + RPM
+
+Verification:
+- bun run typecheck: EXIT_CODE:0 (clean)

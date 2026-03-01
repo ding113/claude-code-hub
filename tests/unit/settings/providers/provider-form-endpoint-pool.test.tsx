@@ -304,6 +304,12 @@ describe("ProviderForm: endpoint pool integration", () => {
     }
 
     expect(providersActionMocks.addProvider).toHaveBeenCalledTimes(1);
+    expect(providersActionMocks.addProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowed_clients: [],
+        blocked_clients: [],
+      })
+    );
 
     await flushTicks(3);
     expect(providerEndpointsActionMocks.addProviderEndpoint).toHaveBeenCalledTimes(0);

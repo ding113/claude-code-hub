@@ -5,6 +5,7 @@
     "routing": "路由",
     "limits": "限制",
     "network": "網路",
-    "testing": "測試"
+    "testing": "測試",
+    "stepProgress": "步驟進度"
   }
 }

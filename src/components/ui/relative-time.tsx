@@ -4,6 +4,7 @@ import { formatInTimeZone } from "date-fns-tz";
 import { useLocale, useTimeZone, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { subscribeToTick } from "@/lib/shared-timer";
 import { formatDateDistance } from "@/lib/utils/date-format";
 
 interface RelativeTimeProps {
@@ -100,7 +101,11 @@ export function RelativeTime({
 
     if (!autoUpdate) return;
 
-    // 定时更新时间
+    // Use shared 10s timer for default interval, per-instance timer for custom
+    if (updateInterval === 10_000) {
+      return subscribeToTick(updateTime);
+    }
+
     const interval = setInterval(updateTime, updateInterval);
 
     return () => clearInterval(interval);

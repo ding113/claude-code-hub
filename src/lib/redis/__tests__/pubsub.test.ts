@@ -80,8 +80,10 @@ describe("Redis Pub/Sub cache invalidation", () => {
     expect(base.duplicate).toHaveBeenCalledTimes(1);
     expect(subscriber.subscribe).toHaveBeenCalledWith("test-channel");
 
-    subscriber.emit("message", "test-channel", Date.now().toString());
+    const message = Date.now().toString();
+    subscriber.emit("message", "test-channel", message);
     expect(onInvalidate).toHaveBeenCalledTimes(1);
+    expect(onInvalidate).toHaveBeenCalledWith(message);
 
     cleanup!();
     subscriber.emit("message", "test-channel", Date.now().toString());
@@ -156,6 +158,49 @@ describe("Redis Pub/Sub cache invalidation", () => {
     const cleanup = await subscribePromise;
     expect(cleanup).toBeNull();
     expect(onInvalidate).not.toHaveBeenCalled();
+  });
+
+  test("subscribeCacheInvalidation: should backoff reconnect attempts after connection error", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    try {
+      const base = new MockRedis();
+      const subscriber1 = new MockRedis();
+      const subscriber2 = new MockRedis();
+      base.duplicate.mockReturnValueOnce(subscriber1).mockReturnValueOnce(subscriber2);
+      subscriber2.subscribe.mockResolvedValue(1);
+
+      const { getRedisClient } = await import("@/lib/redis/client");
+      (getRedisClient as unknown as ReturnType<typeof vi.fn>).mockReturnValue(base);
+
+      const { subscribeCacheInvalidation } = await import("@/lib/redis/pubsub");
+
+      const cleanup1Promise = subscribeCacheInvalidation("test-channel", vi.fn());
+      subscriber1.emit("error", new Error("Connection refused"));
+
+      const cleanup1 = await cleanup1Promise;
+      expect(cleanup1).toBeNull();
+      expect(base.duplicate).toHaveBeenCalledTimes(1);
+
+      const cleanup2Promise = subscribeCacheInvalidation("test-channel", vi.fn());
+      expect(base.duplicate).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(999);
+      expect(base.duplicate).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(base.duplicate).toHaveBeenCalledTimes(2);
+
+      subscriber2.status = "ready";
+      subscriber2.emit("ready");
+
+      const cleanup2 = await cleanup2Promise;
+      expect(cleanup2).not.toBeNull();
+      cleanup2!();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("subscribeCacheInvalidation: should rollback callback when subscribe fails and allow retry", async () => {

@@ -27,7 +27,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
       <DashboardHeader session={session} />
       <DashboardMain>{children}</DashboardMain>
       <WebhookMigrationDialog />

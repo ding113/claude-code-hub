@@ -1,5 +1,15 @@
-import path from "node:path";
 import { defineConfig } from "vitest/config";
+import { sharedResolve } from "./tests/vitest.base";
+
+const isIntegrationFileFilterRequested = process.argv.some((arg) =>
+  /tests[\\/]+integration[\\/].+\.(test|spec)\.[cm]?[jt]sx?$/.test(arg)
+);
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 export default defineConfig({
   test: {
@@ -12,6 +22,7 @@ export default defineConfig({
           environment: "happy-dom",
           include: [
             "tests/unit/**/*.{test,spec}.tsx",
+            "tests/security/**/*.{test,spec}.{ts,tsx}",
             "tests/api/**/*.{test,spec}.tsx",
             "src/**/*.{test,spec}.tsx",
           ],
@@ -85,12 +96,19 @@ export default defineConfig({
     // ==================== 并发配置 ====================
     maxConcurrency: 5, // 最大并发测试数
     pool: "threads", // 使用线程池（推荐）
+    // 高核机器/Windows 下 threads worker 过多可能触发 EMFILE / 资源争用导致用例超时。
+    // 允许通过环境变量覆盖：VITEST_MAX_WORKERS=...
+    maxWorkers: parsePositiveInt(process.env.VITEST_MAX_WORKERS, 8),
 
     // ==================== 文件匹配 ====================
     include: [
       "tests/unit/**/*.{test,spec}.ts", // 单元测试
+      "tests/security/**/*.{test,spec}.ts",
       "tests/api/**/*.{test,spec}.ts", // API 测试
       "src/**/*.{test,spec}.ts", // 支持源码中的测试
+      ...(isIntegrationFileFilterRequested
+        ? ["tests/integration/**/*.{test,spec}.ts", "tests/integration/**/*.{test,spec}.tsx"]
+        : []),
     ],
     exclude: [
       "node_modules",
@@ -99,8 +117,7 @@ export default defineConfig({
       "build",
       "coverage",
       "**/*.d.ts",
-      // 排除需要 Next.js 完整运行时的集成测试
-      "tests/integration/**",
+      ...(isIntegrationFileFilterRequested ? [] : ["tests/integration/**"]),
       "tests/api/users-actions.test.ts",
       "tests/api/providers-actions.test.ts",
       "tests/api/keys-actions.test.ts",
@@ -128,13 +145,5 @@ export default defineConfig({
     },
   },
 
-  // ==================== 路径别名（与 tsconfig.json 保持一致）====================
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@messages": path.resolve(__dirname, "./messages"),
-      // Mock server-only 包，避免测试环境报错
-      "server-only": path.resolve(__dirname, "./tests/server-only.mock.ts"),
-    },
-  },
+  resolve: sharedResolve({ includeMessages: true }),
 });

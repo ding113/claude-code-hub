@@ -388,7 +388,7 @@ export function UserList({ users, activeUserId, onUserSelect, currentUser }: Use
           if (!open) setEditUser(null);
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-h-[var(--cch-viewport-height-85)] overflow-y-auto">
           <FormErrorBoundary>
             {editUser ? (
               <UserForm

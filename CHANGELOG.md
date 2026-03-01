@@ -4,6 +4,26 @@
 
 ---
 
+## v0.5.8 (2026-02-15)
+
+### 优化
+
+- my-usage 页面配额卡片和统计摘要卡片 UX 改进 (#794) [@miraserver](https://github.com/miraserver)
+- 日志页面虚拟化视图中无筛选条件时隐藏统计面板，提升渲染性能
+
+### 修复
+
+- 移除确定性 Session ID，防止跨会话冲突 (#793)
+- 修复标准路径下 Host Header 未匹配实际请求目标的问题
+- 从 Gemini Vertex AI publishers 路径正确提取模型，确保计费准确
+
+### 其他
+
+- README 添加 SSSAiCode 推广信息
+- i18n 翻译文件更新
+
+---
+
 ## v0.5.7 (2026-02-14)
 
 ### 新增

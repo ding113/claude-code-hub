@@ -251,7 +251,7 @@ export function UsageLogsTable({
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-mono text-xs w-[180px] max-w-[180px]">
+                    <TableCell className="font-mono text-xs w-[220px] max-w-[220px]">
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>

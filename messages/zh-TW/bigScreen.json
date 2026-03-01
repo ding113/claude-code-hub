@@ -32,5 +32,10 @@
   "status": {
     "normal": "系統正常",
     "lastUpdate": "資料更新"
+  },
+  "chart": {
+    "requestUnit": "請求",
+    "countLabel": "數量",
+    "switchLocale": "切換語言: {locale}"
   }
 }

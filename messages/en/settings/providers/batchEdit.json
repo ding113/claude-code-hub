@@ -5,6 +5,10 @@
   "invertSelection": "Invert",
   "selectedCount": "{count} selected",
   "editSelected": "Edit Selected",
+  "selectByType": "Select by Type",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "Select by Group",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "Edit",
     "delete": "Delete",
@@ -20,12 +24,35 @@
     "next": "Next",
     "noFieldEnabled": "Please enable at least one field to update"
   },
+  "sections": {
+    "basic": "Basic Settings",
+    "routing": "Group & Routing",
+    "anthropic": "Anthropic Settings"
+  },
   "fields": {
-    "isEnabled": "Status",
+    "isEnabled": {
+      "label": "Status",
+      "noChange": "No Change",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
     "priority": "Priority",
     "weight": "Weight",
     "costMultiplier": "Cost Multiplier",
-    "groupTag": "Group Tag"
+    "groupTag": {
+      "label": "Group Tag",
+      "clear": "Clear"
+    },
+    "modelRedirects": "Model Redirects",
+    "allowedModels": "Allowed Models",
+    "thinkingBudget": "Thinking Budget",
+    "adaptiveThinking": "Adaptive Thinking",
+    "activeTimeStart": "Active Start Time",
+    "activeTimeEnd": "Active End Time"
+  },
+  "affectedProviders": {
+    "title": "Affected Providers",
+    "more": "+{count} more"
   },
   "confirm": {
     "title": "Confirm Operation",
@@ -34,10 +61,48 @@
     "goBack": "Go Back",
     "processing": "Processing..."
   },
+  "preview": {
+    "title": "Preview Changes",
+    "description": "Review changes before applying to {count} providers",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "nullValue": "null",
+    "fieldSkipped": "{field}: Skipped ({reason})",
+    "excludeProvider": "Exclude",
+    "summary": "{providerCount} providers, {fieldCount} changes, {skipCount} skipped",
+    "noChanges": "No changes to apply",
+    "apply": "Apply Changes",
+    "back": "Back to Edit",
+    "loading": "Generating preview..."
+  },
+  "batchNotes": {
+    "codexOnly": "Codex only",
+    "claudeOnly": "Claude only",
+    "geminiOnly": "Gemini only"
+  },
+  "selectionHint": "Select multiple providers for batch operations",
+  "undo": {
+    "button": "Undo",
+    "success": "Operation undone successfully",
+    "expired": "Undo expired",
+    "batchDeleteSuccess": "Deleted {count} providers",
+    "batchDeleteUndone": "Restored {count} providers",
+    "singleDeleteSuccess": "Provider deleted",
+    "singleDeleteUndone": "Provider restored",
+    "singleEditSuccess": "Provider updated",
+    "singleEditUndone": "Changes reverted",
+    "failed": "Undo failed"
+  },
   "toast": {
     "updated": "Updated {count} providers",
     "deleted": "Deleted {count} providers",
     "circuitReset": "Reset {count} circuit breakers",
-    "failed": "Operation failed: {error}"
+    "failed": "Operation failed: {error}",
+    "undo": "Undo",
+    "undoSuccess": "Reverted {count} providers",
+    "undoFailed": "Undo failed: {error}",
+    "undoExpired": "Undo window expired",
+    "previewFailed": "Preview failed: {error}",
+    "unknownError": "Unknown error"
   }
 }

@@ -87,7 +87,7 @@ export function EditUserQuotaDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[600px] max-h-[70vh] flex flex-col">
+      <DialogContent className="sm:max-w-[600px] max-h-[var(--cch-viewport-height-70)] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description", { userName })}</DialogDescription>

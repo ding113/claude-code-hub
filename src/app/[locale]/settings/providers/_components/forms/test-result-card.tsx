@@ -172,7 +172,7 @@ export function TestResultCard({ result }: TestResultCardProps) {
                 {t("viewDetails")}
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+            <DialogContent className="max-w-4xl max-h-[var(--cch-viewport-height-85)] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   {icon}

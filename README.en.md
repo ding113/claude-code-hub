@@ -72,8 +72,8 @@ Register via this link to get started → <a href="https://co.yes.vg/register?re
 </a>
 </td>
 <td>
-<b>💎 Special Offer</b>: <a href="https://www.sssaicode.com/register?ref=NQMO05">SSSAiCode</a> is a stable and reliable API relay service, dedicated to providing stable, reliable, and affordable Claude and CodeX model services.<br/>
-SSSAiCode offers a special bonus for users of this software. Register via this link to enjoy a $10 purchase bonus every time → <a href="https://www.sssaicode.com/register?ref=NQMO05">Visit Now</a>
+<b>💎 Special Offer</b>: <a href="https://www.sssaicode.com/register?ref=NQMO05">SSSAiCode</a> is a stable and reliable API relay service, dedicated to providing stable, reliable, and affordable Claude and CodeX model services. <b>Offering cost-effective official Claude services at 0.5 CNY/$</b>, with multiple billing options including monthly plans and Pay-as-you-go, plus same-day invoice support.<br/>
+SSSAiCode offers a special bonus for users of this software. Register via this link to enjoy an extra $10 bonus on monthly plan purchases → <a href="https://www.sssaicode.com/register?ref=NQMO05">Visit Now</a>
 </td>
 </tr>
 </table>

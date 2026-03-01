@@ -5,6 +5,10 @@
   "invertSelection": "反転",
   "selectedCount": "{count} 件選択中",
   "editSelected": "選択項目を編集",
+  "selectByType": "タイプで選択",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "グループで選択",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "編集",
     "delete": "削除",
@@ -20,12 +24,35 @@
     "next": "次へ",
     "noFieldEnabled": "更新するフィールドを少なくとも1つ有効にしてください"
   },
+  "sections": {
+    "basic": "基本設定",
+    "routing": "グループとルーティング",
+    "anthropic": "Anthropic 設定"
+  },
   "fields": {
-    "isEnabled": "ステータス",
+    "isEnabled": {
+      "label": "ステータス",
+      "noChange": "変更なし",
+      "enable": "有効",
+      "disable": "無効"
+    },
     "priority": "優先度",
     "weight": "重み",
     "costMultiplier": "価格倍率",
-    "groupTag": "グループタグ"
+    "groupTag": {
+      "label": "グループタグ",
+      "clear": "クリア"
+    },
+    "modelRedirects": "モデルリダイレクト",
+    "allowedModels": "許可モデル",
+    "thinkingBudget": "思考バジェット",
+    "adaptiveThinking": "アダプティブ思考",
+    "activeTimeStart": "スケジュール開始時刻",
+    "activeTimeEnd": "スケジュール終了時刻"
+  },
+  "affectedProviders": {
+    "title": "影響を受けるプロバイダー",
+    "more": "+{count} 件"
   },
   "confirm": {
     "title": "操作の確認",
@@ -34,10 +61,48 @@
     "goBack": "戻る",
     "processing": "処理中..."
   },
+  "preview": {
+    "title": "変更のプレビュー",
+    "description": "{count} 件のプロバイダーに適用する前に変更内容を確認してください",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "nullValue": "なし",
+    "fieldSkipped": "{field}: スキップ ({reason})",
+    "excludeProvider": "除外",
+    "summary": "{providerCount} 件のプロバイダー, {fieldCount} 件の変更, {skipCount} 件スキップ",
+    "noChanges": "適用する変更はありません",
+    "apply": "変更を適用",
+    "back": "編集に戻る",
+    "loading": "プレビューを生成中..."
+  },
+  "batchNotes": {
+    "codexOnly": "Codex のみ",
+    "claudeOnly": "Claude のみ",
+    "geminiOnly": "Gemini のみ"
+  },
+  "selectionHint": "複数のプロバイダーを選択して一括操作を実行",
+  "undo": {
+    "button": "元に戻す",
+    "success": "操作が正常に元に戻されました",
+    "expired": "元に戻す期限が切れました",
+    "batchDeleteSuccess": "{count} 件のプロバイダーを削除しました",
+    "batchDeleteUndone": "{count} 件のプロバイダーを復元しました",
+    "singleDeleteSuccess": "プロバイダーを削除しました",
+    "singleDeleteUndone": "プロバイダーを復元しました",
+    "singleEditSuccess": "プロバイダーを更新しました",
+    "singleEditUndone": "変更を元に戻しました",
+    "failed": "元に戻すことに失敗しました"
+  },
   "toast": {
     "updated": "{count} 件のプロバイダーを更新しました",
     "deleted": "{count} 件のプロバイダーを削除しました",
     "circuitReset": "{count} 件のサーキットブレーカーをリセットしました",
-    "failed": "操作に失敗しました: {error}"
+    "failed": "操作に失敗しました: {error}",
+    "undo": "元に戻す",
+    "undoSuccess": "{count} 件のプロバイダーを復元しました",
+    "undoFailed": "元に戻す操作に失敗しました: {error}",
+    "undoExpired": "元に戻す期限が切れました",
+    "previewFailed": "プレビューに失敗しました: {error}",
+    "unknownError": "不明なエラー"
   }
 }

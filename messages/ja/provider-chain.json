@@ -19,7 +19,8 @@
   },
   "summary": {
     "singleSuccess": "{total}個のプロバイダー、{healthy}個正常 → {provider} ✓",
-    "sessionReuse": "セッション再利用 → {provider} ✓"
+    "sessionReuse": "セッション再利用 → {provider} ✓",
+    "originHint": "セッション再利用 - 元は {method} で選択"
   },
   "description": {
     "noDecisionRecord": "決定記録なし",
@@ -54,7 +55,8 @@
     "session_reuse": "セッション再利用",
     "initial_selection": "初期選択",
     "endpoint_pool_exhausted": "エンドポイントプール枯渇",
-    "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト"
+    "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト",
+    "client_restriction_filtered": "クライアント制限"
   },
   "filterReasons": {
     "rate_limited": "レート制限",
@@ -69,13 +71,21 @@
     "group_mismatch": "グループ不一致",
     "health_check_failed": "ヘルスチェック失敗",
     "endpoint_circuit_open": "エンドポイントサーキットオープン",
-    "endpoint_disabled": "エンドポイント無効"
+    "endpoint_disabled": "エンドポイント無効",
+    "client_restriction": "クライアント制限"
   },
   "filterDetails": {
     "vendor_type_circuit_open": "ベンダータイプ一時サーキットブレイク",
     "circuit_open": "サーキットブレーカーオープン",
     "circuit_half_open": "サーキットブレーカーハーフオープン",
-    "rate_limited": "レート制限"
+    "rate_limited": "レート制限",
+    "provider_client_restriction": "クライアント制限によりプロバイダーをスキップ",
+    "session_reuse_client_restriction": "Session reuse rejected: client restriction",
+    "blocklist_hit": "Blocked by pattern: {pattern}",
+    "allowlist_miss": "Not in allowed list",
+    "detectedClient": "Detected: {client}",
+    "providerAllowlist": "Allowlist: {list}",
+    "providerBlocklist": "Blocklist: {list}"
   },
   "details": {
     "selectionMethod": "選択方法",
@@ -213,5 +223,11 @@
     "strictBlockSelectorError": "厳格モード：エンドポイントセレクターでエラーが発生したため、フォールバックなしでプロバイダーをスキップ",
     "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト（524）",
     "vendorTypeAllTimeoutNote": "このベンダータイプの全エンドポイントがタイムアウトしました。ベンダータイプサーキットブレーカーが発動しました。"
+  },
+  "selectionMethods": {
+    "session_reuse": "セッション再利用",
+    "weighted_random": "重み付きランダム",
+    "group_filtered": "グループフィルタ",
+    "fail_open_fallback": "フェイルオープンフォールバック"
   }
 }

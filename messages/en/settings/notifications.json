@@ -38,6 +38,22 @@
     "webhookTypeUnknown": "Unknown platform. Please use WeCom or Feishu webhook URL",
     "webhookTypeWeCom": "WeCom"
   },
+  "cacheHitRateAlert": {
+    "absMin": "Absolute Minimum (absMin)",
+    "checkInterval": "Check Interval (minutes)",
+    "cooldownMinutes": "Cooldown (minutes)",
+    "description": "Alert when cache hit rate drops abnormally (provider × model)",
+    "dropAbs": "Absolute Drop (dropAbs)",
+    "dropRel": "Relative Drop (dropRel)",
+    "enable": "Enable Cache Hit Rate Alert",
+    "historicalLookbackDays": "Historical Lookback (days)",
+    "minEligibleRequests": "Min Eligible Requests",
+    "minEligibleTokens": "Min Eligible Tokens",
+    "title": "Cache Hit Rate Alert",
+    "topN": "Top N",
+    "windowMode": "Window",
+    "windowModeAuto": "Auto"
+  },
   "dailyLeaderboard": {
     "description": "Send daily scheduled user consumption Top N leaderboard",
     "enable": "Enable Daily Leaderboard",

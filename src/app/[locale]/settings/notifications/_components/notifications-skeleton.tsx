@@ -61,7 +61,7 @@ export function NotificationsSkeleton() {
 
       {/* Notification type cards skeleton */}
       <div className="grid gap-6">
-        {[1, 2, 3].map((i) => (
+        {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
             className="rounded-xl border border-white/5 bg-card/30 p-5 md:p-6 backdrop-blur-sm"

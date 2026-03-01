@@ -340,7 +340,12 @@
         "sessionAge": "Session Age",
         "reusedProvider": "Reused Provider",
         "executeRequest": "Execute Request",
-        "cacheOptimizationHint": "Session reuse optimizes performance by maintaining provider affinity within the same conversation, reducing selection overhead and improving cache hit rates."
+        "cacheOptimizationHint": "Session reuse optimizes performance by maintaining provider affinity within the same conversation, reducing selection overhead and improving cache hit rates.",
+        "originDecisionTitle": "Original Selection Decision",
+        "originDecisionDesc": "How this provider was initially chosen for this session",
+        "originDecisionLoading": "Loading original decision...",
+        "originDecisionUnavailable": "Original decision record unavailable",
+        "originDecisionExpand": "View original selection"
       }
     },
     "providerChain": {
@@ -706,7 +711,8 @@
     "states": {
       "noData": "No statistics data available",
       "fetchFailed": "Failed to fetch statistics"
-    }
+    },
+    "othersAggregate": "Other Users"
   },
   "errors": {
     "fetchSystemSettingsFailed": "Failed to fetch system settings",
@@ -784,6 +790,12 @@
   },
   "keyListHeader": {
     "todayUsage": "Today's Usage",
+    "userStatus": {
+      "disabled": "Disabled",
+      "expired": "Expired",
+      "expiringSoon": "Expiring soon",
+      "active": "Enabled"
+    },
     "allowedModels": {
       "label": "Allowed Models",
       "noRestrictions": "Allowed Models: No restrictions"
@@ -1818,7 +1830,15 @@
           "label": "Client Restrictions",
           "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",
           "customLabel": "Custom Client Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')"
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
+          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
+        },
+        "blockedClients": {
+          "label": "Blocked Clients",
+          "description": "Clients matching these patterns will be rejected, even if they match allowed clients.",
+          "customLabel": "Custom Block Pattern",
+          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
+          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
         },
         "allowedModels": {
           "label": "Model Restrictions",
@@ -1839,11 +1859,22 @@
           "processing": "Processing..."
         }
       },
+      "actions": {
+        "allow": "Allow",
+        "block": "Block"
+      },
       "presetClients": {
         "claude-cli": "Claude Code CLI",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
-        "codex-cli": "Codex CLI"
+        "codex-cli": "Codex CLI",
+        "claude-code": "Claude Code (all)",
+        "claude-code-cli": "Claude Code CLI (builtin)",
+        "claude-code-cli-sdk": "Claude Code CLI SDK",
+        "claude-code-vscode": "Claude Code VSCode",
+        "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
+        "claude-code-sdk-py": "Claude Code SDK (Python)",
+        "claude-code-gh-action": "Claude Code GitHub Action"
       }
     },
     "keyEditSection": {
@@ -1869,14 +1900,14 @@
           "descriptionEnabled": "When enabled, this key will access an independent personal usage page upon login. However, it cannot modify its own key's provider group.",
           "descriptionDisabled": "When disabled, the user cannot access the personal usage page UI. Instead, they will use the restricted Web UI."
         },
-      "providerGroup": {
-        "label": "Provider Group",
-        "placeholder": "Default: default",
-        "selectHint": "Select the provider group(s) this key can use (default: default).",
-        "editHint": "Provider group cannot be changed for existing keys.",
-        "allGroups": "Use all groups",
-        "noGroupHint": "default includes providers without groupTag."
-      },
+        "providerGroup": {
+          "label": "Provider Group",
+          "placeholder": "Default: default",
+          "selectHint": "Select the provider group(s) this key can use (default: default).",
+          "editHint": "Provider group cannot be changed for existing keys.",
+          "allGroups": "Use all groups",
+          "noGroupHint": "default includes providers without groupTag."
+        },
         "cacheTtl": {
           "label": "Cache TTL Override",
           "description": "Force Anthropic prompt cache TTL for requests containing cache_control.",

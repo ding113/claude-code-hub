@@ -1,0 +1,31 @@
+Task 11: Migrate message.ts session aggregation to usage_ledger
+================================================================
+
+File changed: src/repository/message.ts
+
+Functions migrated:
+1. aggregateSessionStats() - single session stats
+2. aggregateMultipleSessionStats() - batch session stats
+
+Changes per function:
+- .from(messageRequest) -> .from(usageLedger)
+- messageRequest.X -> usageLedger.X for all aggregated columns
+- EXCLUDE_WARMUP_CONDITION -> LEDGER_BILLING_CONDITION (warmup already excluded at trigger level)
+- Removed isNull(messageRequest.deletedAt) (no deletedAt on ledger)
+- Provider sub-query: messageRequest.providerId -> usageLedger.finalProviderId
+- Cache TTL sub-query: messageRequest.cacheTtlApplied -> usageLedger.cacheTtlApplied
+- Model sub-query: messageRequest.model -> usageLedger.model
+- FILTER (WHERE EXCLUDE_WARMUP_CONDITION) removed from aggregates (ledger has no warmup rows)
+
+NOT migrated (detail-view, stays on messageRequest):
+- userInfo sub-query (step 4) - needs userAgent, apiType, key join
+- findMessageRequestById, findMessageRequestBySessionId, etc.
+
+Import changes:
+- Added: usageLedger from schema
+- Added: LEDGER_BILLING_CONDITION from ledger-conditions
+- Kept: messageRequest, EXCLUDE_WARMUP_CONDITION (used by detail functions)
+
+Return types: UNCHANGED
+
+Typecheck: PASS (tsgo exit code 0, 0.51s)

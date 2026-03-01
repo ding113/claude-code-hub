@@ -6,6 +6,7 @@ import {
   ChevronRight,
   InfoIcon,
   Link2,
+  MinusCircle,
   RefreshCw,
   XCircle,
   Zap,
@@ -33,6 +34,8 @@ interface ProviderChainPopoverProps {
  * Determine if this is an actual request record (excluding intermediate states)
  */
 function isActualRequest(item: ProviderChainItem): boolean {
+  if (item.reason === "client_restriction_filtered") return false;
+
   if (item.reason === "concurrent_limit_failed") return true;
 
   if (item.reason === "retry_failed" || item.reason === "system_error") return true;
@@ -101,6 +104,13 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-orange-50 dark:bg-orange-950/30",
     };
   }
+  if (item.reason === "client_restriction_filtered") {
+    return {
+      icon: MinusCircle,
+      color: "text-muted-foreground",
+      bgColor: "bg-muted/30",
+    };
+  }
   return {
     icon: RefreshCw,
     color: "text-slate-500",
@@ -121,9 +131,11 @@ export function ProviderChainPopover({
   const hasFake200PostStreamFailure = chain.some(
     (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
   );
-  const fake200CodeForDisplay = chain.find(
-    (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
-  )?.errorMessage;
+  const fake200CodeForDisplay = chain
+    .find(
+      (item) => typeof item.errorMessage === "string" && item.errorMessage.startsWith("FAKE_200_")
+    )
+    ?.errorMessage?.split(": ")[0];
 
   // Calculate actual request count (excluding intermediate states)
   const requestCount = chain.filter(isActualRequest).length;
@@ -258,6 +270,13 @@ export function ProviderChainPopover({
                         </div>
                       )}
                     </div>
+                    {sessionReuseItem?.selectionMethod && (
+                      <div className="text-[10px] text-zinc-400 dark:text-zinc-500 pt-0.5">
+                        {tChain("summary.originHint", {
+                          method: tChain(`selectionMethods.${sessionReuseItem.selectionMethod}`),
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -528,7 +547,7 @@ export function ProviderChainPopover({
                             {t("logs.details.fake200DetectedReason", {
                               reason: t(
                                 getFake200ReasonKey(
-                                  item.errorMessage,
+                                  item.errorMessage.split(": ")[0],
                                   "logs.details.fake200Reasons"
                                 )
                               ),

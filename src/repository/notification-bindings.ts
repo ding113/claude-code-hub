@@ -6,7 +6,11 @@ import { notificationTargetBindings, webhookTargets } from "@/drizzle/schema";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { WebhookProviderType, WebhookTarget, WebhookTestResult } from "./webhook-targets";
 
-export type NotificationType = "circuit_breaker" | "daily_leaderboard" | "cost_alert";
+export type NotificationType =
+  | "circuit_breaker"
+  | "daily_leaderboard"
+  | "cost_alert"
+  | "cache_hit_rate_alert";
 
 export interface NotificationBinding {
   id: number;

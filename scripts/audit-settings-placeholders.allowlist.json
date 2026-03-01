@@ -31,6 +31,238 @@
     {
       "key": "providers.form.sortByCost",
       "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.batchEdit.exitMode",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.batchEdit.dialog.next",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.batchEdit.fields.isEnabled.noChange",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.batchEdit.fields.groupTag.clear",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.batchEdit.affectedProviders.more",
+      "reason": "zh-cn==zh-tw common ui term"
+    },
+    {
+      "key": "providers.batchEdit.confirm.cancel",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.batchEdit.confirm.goBack",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.batchEdit.preview.excludeProvider",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.common.tabs.routing",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.common.tabs.limits",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.quickPaste.cancel",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.sections.routing.scheduleParams.group.placeholder",
+      "reason": "mixed zh/en placeholder; same across locales"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.maxTokens.placeholder",
+      "reason": "numeric placeholder; same across locales"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.thinkingBudget.placeholder",
+      "reason": "numeric placeholder; same across locales"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.effort.label",
+      "reason": "zh-cn==zh-tw term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.effort.help",
+      "reason": "zh-cn==zh-tw term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.effort.options.low",
+      "reason": "single CJK char 低; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.effort.options.medium",
+      "reason": "single CJK char 中; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.effort.options.max",
+      "reason": "zh-cn==zh-tw term 最大; same meaning in ja"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.label",
+      "reason": "zh-cn==zh-tw term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.modelMatchMode.options.all",
+      "reason": "zh-cn==zh-tw term; ja uses same kanji"
+    },
+    {
+      "key": "providers.form.sections.routing.anthropicOverrides.adaptiveThinking.models.placeholder",
+      "reason": "model name placeholder; same across locales"
+    },
+    {
+      "key": "providers.form.sections.limits.otherLimits",
+      "reason": "zh-cn==zh-tw term; ja uses same kanji"
+    },
+    {
+      "key": "providers.list.actions",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.columnActions",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.probeOk",
+      "reason": "zh-cn==zh-tw common status term; ja uses same kanji"
+    },
+    {
+      "key": "providers.sortOrder",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "providers.vendorOfficial",
+      "reason": "zh-cn==zh-tw common term; ja uses same kanji"
+    },
+    {
+      "key": "providers.endpointStatus.healthy",
+      "reason": "zh-cn==zh-tw status term; ja uses same kanji"
+    },
+    {
+      "key": "providers.endpointStatus.unhealthy",
+      "reason": "zh-cn==zh-tw status term; ja uses same kanji"
+    },
+    {
+      "key": "providers.endpointStatus.unknown",
+      "reason": "zh-cn==zh-tw status term; ja uses same kanji"
+    },
+    {
+      "key": "clientVersions.table.stats.withGA",
+      "reason": "zh-cn==zh-tw term; contains English acronym GA"
+    },
+    {
+      "key": "dashboard.logs.filters.quickFilters.today",
+      "reason": "single CJK word 今天; same in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.logs.filters.activeFilters.clearAll",
+      "reason": "zh-cn==zh-tw common ui term; ja uses same kanji"
+    },
+    {
+      "key": "dashboard.logs.details.fake200Reasons.jsonErrorMessageNonEmpty",
+      "reason": "technical term with English identifiers; same across locales"
+    },
+    {
+      "key": "dashboard.logs.details.billingDetails.context1m",
+      "reason": "technical label with number; same across locales"
+    },
+    {
+      "key": "dashboard.logs.details.performanceTab.assessment.good",
+      "reason": "CJK term 良好; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.logs.details.performanceTab.assessment.warning",
+      "reason": "CJK term 警告; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.timeRange.7d",
+      "reason": "numeric label; same across locales"
+    },
+    {
+      "key": "dashboard.availability.probeHistory.columns.method",
+      "reason": "CJK term 方法; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.probeHistory.success",
+      "reason": "CJK term 成功; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.laneChart.availability",
+      "reason": "CJK term 可用性; same meaning in zh-TW and ja; includes {value} token"
+    },
+    {
+      "key": "dashboard.availability.laneChart.denseData",
+      "reason": "zh-cn==zh-tw term 密集; ja uses same kanji"
+    },
+    {
+      "key": "dashboard.availability.laneChart.sparseData",
+      "reason": "zh-cn==zh-tw term 稀疏; ja uses same kanji"
+    },
+    {
+      "key": "dashboard.availability.latencyCurve.avg",
+      "reason": "single CJK char term 平均; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.latencyCurve.min",
+      "reason": "CJK term 最小; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.latencyCurve.max",
+      "reason": "CJK term 最大; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.probeGrid.status.unknown",
+      "reason": "CJK term 未知; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.probeGrid.status.healthy",
+      "reason": "CJK term 健康; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.confidence.low",
+      "reason": "single CJK char 低; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.confidence.medium",
+      "reason": "single CJK char 中; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.availability.confidence.high",
+      "reason": "single CJK char 高; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.userManagement.keyStatsDialog.modal.performanceHigh",
+      "reason": "single CJK char 高; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.userManagement.keyStatsDialog.modal.performanceMedium",
+      "reason": "single CJK char 中; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "dashboard.userManagement.keyStatsDialog.modal.performanceLow",
+      "reason": "single CJK char 低; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "myUsage.stats.modal.performanceHigh",
+      "reason": "single CJK char 高; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "myUsage.stats.modal.performanceMedium",
+      "reason": "single CJK char 中; same meaning in zh-TW and ja"
+    },
+    {
+      "key": "myUsage.stats.modal.performanceLow",
+      "reason": "single CJK char 低; same meaning in zh-TW and ja"
     }
   ],
   "glossary": []

@@ -75,7 +75,12 @@ function validateProviderConfig(params: {
 }
 
 const ProviderTypeSchema = z.enum(["wechat", "feishu", "dingtalk", "telegram", "custom"]);
-const NotificationTypeSchema = z.enum(["circuit_breaker", "daily_leaderboard", "cost_alert"]);
+const NotificationTypeSchema = z.enum([
+  "circuit_breaker",
+  "daily_leaderboard",
+  "cost_alert",
+  "cache_hit_rate_alert",
+]);
 
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 
@@ -241,6 +246,8 @@ function toJobType(type: NotificationType): NotificationJobType {
       return "daily-leaderboard";
     case "cost_alert":
       return "cost-alert";
+    case "cache_hit_rate_alert":
+      return "cache-hit-rate-alert";
   }
 }
 
@@ -273,6 +280,54 @@ function buildTestData(type: NotificationType): unknown {
         quotaLimit: 100,
         threshold: 0.8,
         period: "本月",
+      };
+    case "cache_hit_rate_alert":
+      return {
+        window: {
+          mode: "5m",
+          startTime: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+          endTime: new Date().toISOString(),
+          durationMinutes: 5,
+        },
+        anomalies: [
+          {
+            providerId: 1,
+            providerName: "测试供应商",
+            providerType: "claude",
+            model: "test-model",
+            baselineSource: "historical",
+            current: {
+              kind: "eligible",
+              requests: 100,
+              denominatorTokens: 10000,
+              hitRateTokens: 0.12,
+            },
+            baseline: {
+              kind: "eligible",
+              requests: 100,
+              denominatorTokens: 10000,
+              hitRateTokens: 0.45,
+            },
+            deltaAbs: -0.33,
+            deltaRel: -0.7333,
+            dropAbs: 0.33,
+            reasonCodes: ["abs_min", "drop_abs_rel"],
+          },
+        ],
+        suppressedCount: 0,
+        settings: {
+          windowMode: "auto",
+          checkIntervalMinutes: 5,
+          historicalLookbackDays: 7,
+          minEligibleRequests: 20,
+          minEligibleTokens: 0,
+          absMin: 0.05,
+          dropRel: 0.3,
+          dropAbs: 0.1,
+          cooldownMinutes: 30,
+          topN: 10,
+        },
+        generatedAt: new Date().toISOString(),
       };
   }
 }

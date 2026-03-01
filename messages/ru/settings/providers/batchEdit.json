@@ -5,6 +5,10 @@
   "invertSelection": "Инвертировать",
   "selectedCount": "Выбрано: {count}",
   "editSelected": "Редактировать выбранные",
+  "selectByType": "Выбрать по типу",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "Выбрать по группе",
+  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "Редактировать",
     "delete": "Удалить",
@@ -20,12 +24,35 @@
     "next": "Далее",
     "noFieldEnabled": "Пожалуйста, включите хотя бы одно поле для обновления"
   },
+  "sections": {
+    "basic": "Основные настройки",
+    "routing": "Группы и маршрутизация",
+    "anthropic": "Настройки Anthropic"
+  },
   "fields": {
-    "isEnabled": "Статус",
+    "isEnabled": {
+      "label": "Статус",
+      "noChange": "Без изменений",
+      "enable": "Включить",
+      "disable": "Отключить"
+    },
     "priority": "Приоритет",
     "weight": "Вес",
     "costMultiplier": "Множитель стоимости",
-    "groupTag": "Тег группы"
+    "groupTag": {
+      "label": "Тег группы",
+      "clear": "Очистить"
+    },
+    "modelRedirects": "Перенаправление моделей",
+    "allowedModels": "Разрешённые модели",
+    "thinkingBudget": "Бюджет мышления",
+    "adaptiveThinking": "Адаптивное мышление",
+    "activeTimeStart": "Время начала расписания",
+    "activeTimeEnd": "Время окончания расписания"
+  },
+  "affectedProviders": {
+    "title": "Затронутые поставщики",
+    "more": "+{count} ещё"
   },
   "confirm": {
     "title": "Подтвердите операцию",
@@ -34,10 +61,48 @@
     "goBack": "Назад",
     "processing": "Обработка..."
   },
+  "preview": {
+    "title": "Предпросмотр изменений",
+    "description": "Проверьте изменения перед применением к {count} поставщикам",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "nullValue": "null",
+    "fieldSkipped": "{field}: Пропущено ({reason})",
+    "excludeProvider": "Исключить",
+    "summary": "{providerCount} поставщиков, {fieldCount} изменений, {skipCount} пропущено",
+    "noChanges": "Нет изменений для применения",
+    "apply": "Применить изменения",
+    "back": "Вернуться к редактированию",
+    "loading": "Генерация предпросмотра..."
+  },
+  "batchNotes": {
+    "codexOnly": "Только Codex",
+    "claudeOnly": "Только Claude",
+    "geminiOnly": "Только Gemini"
+  },
+  "selectionHint": "Выберите нескольких поставщиков для массовых операций",
+  "undo": {
+    "button": "Отменить",
+    "success": "Операция успешно отменена",
+    "expired": "Время отмены истекло",
+    "batchDeleteSuccess": "Удалено поставщиков: {count}",
+    "batchDeleteUndone": "Восстановлено поставщиков: {count}",
+    "singleDeleteSuccess": "Поставщик удалён",
+    "singleDeleteUndone": "Поставщик восстановлен",
+    "singleEditSuccess": "Поставщик обновлён",
+    "singleEditUndone": "Изменения отменены",
+    "failed": "Ошибка отмены"
+  },
   "toast": {
     "updated": "Обновлено поставщиков: {count}",
     "deleted": "Удалено поставщиков: {count}",
     "circuitReset": "Сброшено прерывателей: {count}",
-    "failed": "Операция не удалась: {error}"
+    "failed": "Операция не удалась: {error}",
+    "undo": "Отменить",
+    "undoSuccess": "Восстановлено поставщиков: {count}",
+    "undoFailed": "Отмена не удалась: {error}",
+    "undoExpired": "Время отмены истекло",
+    "previewFailed": "Предпросмотр не удался: {error}",
+    "unknownError": "Неизвестная ошибка"
   }
 }

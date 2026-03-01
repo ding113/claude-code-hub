@@ -21,7 +21,7 @@ export default async function MyUsageLayout({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-[var(--cch-viewport-height,100vh)] bg-background">
       <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-6">{children}</main>
     </div>
   );

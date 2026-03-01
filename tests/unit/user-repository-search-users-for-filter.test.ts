@@ -18,7 +18,8 @@ vi.mock("drizzle-orm", async (importOriginal) => {
 let resolvedRows: Array<{ id: number; name: string }> = [];
 
 vi.mock("@/drizzle/db", () => {
-  const orderByMock = vi.fn(() => Promise.resolve(resolvedRows));
+  const limitMock = vi.fn(() => Promise.resolve(resolvedRows));
+  const orderByMock = vi.fn(() => ({ limit: limitMock }));
   const whereMock = vi.fn(() => ({ orderBy: orderByMock }));
   const fromMock = vi.fn(() => ({ where: whereMock }));
   const selectMock = vi.fn(() => ({ from: fromMock }));

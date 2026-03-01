@@ -68,7 +68,7 @@ export function SessionMessagesDetailsTabs({
   isResponseCopied,
 }: SessionMessagesDetailsTabsProps) {
   const t = useTranslations("dashboard.sessions");
-  const codeExpandedMaxHeight = "calc(100vh - 260px)";
+  const codeExpandedMaxHeight = "calc(var(--cch-viewport-height, 100vh) - 260px)";
 
   // 后端已根据 STORE_SESSION_MESSAGES 配置进行脱敏，前端直接显示
   const requestBodyContent = useMemo(() => {

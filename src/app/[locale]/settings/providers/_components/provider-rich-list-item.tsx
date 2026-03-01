@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle,
+  Clock,
   Copy,
   Edit,
   Globe,
@@ -22,6 +23,7 @@ import {
   removeProvider,
   resetProviderCircuit,
   resetProviderTotalUsage,
+  undoProviderDelete,
 } from "@/actions/providers";
 import { FormErrorBoundary } from "@/components/form-error-boundary";
 import {
@@ -54,6 +56,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
@@ -140,6 +143,7 @@ export function ProviderRichListItem({
   const t = useTranslations("settings.providers");
   const tTypes = useTranslations("settings.providers.types");
   const tList = useTranslations("settings.providers.list");
+  const tBatchEdit = useTranslations("settings.providers.batchEdit");
   const tTimeout = useTranslations("settings.providers.form.sections.timeout");
   const tInline = useTranslations("settings.providers.inlineEdit");
 
@@ -209,9 +213,35 @@ export function ProviderRichListItem({
         try {
           const res = await removeProvider(provider.id);
           if (res.ok) {
-            toast.success(tList("deleteSuccess"), {
-              description: tList("deleteSuccessDesc", { name: provider.name }),
+            const undoToken = res.data.undoToken;
+            const operationId = res.data.operationId;
+
+            toast.success(tBatchEdit("undo.singleDeleteSuccess"), {
+              duration: 10000,
+              action: {
+                label: tBatchEdit("undo.button"),
+                onClick: async () => {
+                  try {
+                    const undoResult = await undoProviderDelete({ undoToken, operationId });
+                    if (undoResult.ok) {
+                      toast.success(tBatchEdit("undo.singleDeleteUndone"));
+                      await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                      await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                      await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                    } else if (
+                      undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
+                    ) {
+                      toast.error(tBatchEdit("undo.expired"));
+                    } else {
+                      toast.error(tBatchEdit("undo.failed"));
+                    }
+                  } catch {
+                    toast.error(tBatchEdit("undo.failed"));
+                  }
+                },
+              },
             });
+
             queryClient.invalidateQueries({ queryKey: ["providers"] });
             queryClient.invalidateQueries({ queryKey: ["providers-health"] });
             queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
@@ -510,6 +540,13 @@ export function ProviderRichListItem({
               {tList("endpointCircuitBroken")}
             </Badge>
           )}
+          {/* Schedule badge */}
+          {provider.activeTimeStart && provider.activeTimeEnd && (
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {provider.activeTimeStart}-{provider.activeTimeEnd}
+            </Badge>
+          )}
         </div>
 
         {/* Mobile: metrics row */}
@@ -707,6 +744,13 @@ export function ProviderRichListItem({
               >
                 <AlertTriangle className="h-3 w-3" />
                 {tList("endpointCircuitBroken")}
+              </Badge>
+            )}
+            {/* Schedule badge */}
+            {provider.activeTimeStart && provider.activeTimeEnd && (
+              <Badge variant="outline" className="flex items-center gap-1 flex-shrink-0">
+                <Clock className="h-3 w-3" />
+                {provider.activeTimeStart}-{provider.activeTimeEnd}
               </Badge>
             )}
           </div>
@@ -949,7 +993,7 @@ export function ProviderRichListItem({
 
       {/* 编辑 Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
           <VisuallyHidden>
             <DialogTitle>{t("editProvider")}</DialogTitle>
           </VisuallyHidden>
@@ -968,7 +1012,7 @@ export function ProviderRichListItem({
 
       {/* 克隆 Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
-        <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col">
+        <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
           <VisuallyHidden>
             <DialogTitle>{t("clone")}</DialogTitle>
           </VisuallyHidden>

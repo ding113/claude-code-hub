@@ -95,14 +95,22 @@ function setupQueueProcessor(queue: Queue.Queue): void {
    * 处理清理任务
    */
   queue.process(async (job: Job) => {
+    // Compute beforeDate dynamically at execution time so cron jobs roll forward correctly.
+    // retentionDays is stored in job data; beforeDate must NOT be serialized into Redis.
+    const retentionDays: number = job.data.retentionDays ?? 30;
+    const beforeDate = new Date();
+    beforeDate.setDate(beforeDate.getDate() - retentionDays);
+
+    const conditions = { ...job.data.conditions, beforeDate };
+
     logger.info({
       action: "cleanup_job_start",
       jobId: job.id,
-      conditions: job.data.conditions,
+      conditions,
     });
 
     const result = await cleanupLogs(
-      job.data.conditions,
+      conditions,
       { batchSize: job.data.batchSize },
       { type: "scheduled" }
     );
@@ -160,16 +168,16 @@ export async function scheduleAutoCleanup() {
       await queue.removeRepeatableByKey(job.key);
     }
 
-    // 构建清理条件（使用默认值）
+    // 存储 retentionDays 而非计算好的 beforeDate。
+    // beforeDate 在 job 处理器执行时动态计算，保证每次 cron 触发时日期随时间滚动。
     const retentionDays = settings.cleanupRetentionDays ?? 30;
-    const beforeDate = new Date();
-    beforeDate.setDate(beforeDate.getDate() - retentionDays);
 
     // 添加新的定时任务
     await queue.add(
       "auto-cleanup",
       {
-        conditions: { beforeDate },
+        retentionDays,
+        conditions: {},
         batchSize: settings.cleanupBatchSize ?? 10000,
       },
       {

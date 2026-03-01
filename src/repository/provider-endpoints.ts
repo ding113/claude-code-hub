@@ -408,8 +408,7 @@ export async function deleteProviderEndpointProbeLogsBeforeDateBatch(input: {
     WHERE id IN (SELECT id FROM ids_to_delete)
   `);
 
-  const rowCount = (result as { rowCount?: number }).rowCount;
-  return typeof rowCount === "number" ? rowCount : 0;
+  return Number((result as { count?: unknown }).count) || 0;
 }
 
 export async function getOrCreateProviderVendorIdFromUrls(

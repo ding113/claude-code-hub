@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QuickLinks } from "./_components/quick-links";
 import { type TocItem, TocNav } from "./_components/toc-nav";
+import { useUsageDocAuth } from "./_components/usage-doc-auth-context";
 
 const headingClasses = {
   h2: "scroll-m-20 text-2xl font-semibold leading-snug text-foreground",
@@ -1774,19 +1775,17 @@ curl -I ${resolvedOrigin}`}
  */
 export default function UsageDocPage() {
   const t = useTranslations("usage");
+  const { isLoggedIn } = useUsageDocAuth();
   const [activeId, setActiveId] = useState<string>("");
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
   const [tocReady, setTocReady] = useState(false);
   const [serviceOrigin, setServiceOrigin] = useState(
     () => (typeof window !== "undefined" && window.location.origin) || ""
   );
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
     setServiceOrigin(window.location.origin);
-    // 检查是否已登录（通过检查 auth-token cookie）
-    setIsLoggedIn(document.cookie.includes("auth-token="));
   }, []);
 
   // 生成目录并监听滚动
