@@ -32,6 +32,7 @@ import {
   findUserListBatch,
   getAllUserProviderGroups as getAllUserProviderGroupsRepository,
   getAllUserTags as getAllUserTagsRepository,
+  resetUserCostResetAt,
   searchUsersForFilter as searchUsersForFilterRepository,
   updateUser,
 } from "@/repository/user";
@@ -1828,82 +1829,26 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
     const keyHashes = keys.map((k) => k.key);
 
     // Set costResetAt on user so all cost calculations start fresh
-    await db.update(usersTable).set({ costResetAt: new Date() }).where(eq(usersTable.id, userId));
-
-    // Invalidate auth cache so the new costResetAt is picked up immediately
-    const { invalidateCachedUser } = await import("@/lib/security/api-key-auth-cache");
-    await invalidateCachedUser(userId).catch(() => {});
+    // Uses repo function which also sets updatedAt and invalidates auth cache
+    await resetUserCostResetAt(userId, new Date());
 
     // Clear Redis cost cache (but NOT active sessions, NOT DB logs)
-    const { getRedisClient } = await import("@/lib/redis");
-    const { scanPattern } = await import("@/lib/redis/scan-helper");
-    const redis = getRedisClient();
-
-    if (redis && redis.status === "ready") {
-      try {
-        const startTime = Date.now();
-
-        // Scan all cost patterns in parallel
-        const scanResults = await Promise.all([
-          ...keyIds.map((keyId) =>
-            scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
-              logger.warn("Failed to scan key cost pattern", { keyId, error: err });
-              return [];
-            })
-          ),
-          scanPattern(redis, `user:${userId}:cost_*`).catch((err) => {
-            logger.warn("Failed to scan user cost pattern", { userId, error: err });
-            return [];
-          }),
-          // Total cost cache keys (with optional resetAt suffix)
-          scanPattern(redis, `total_cost:user:${userId}`).catch(() => []),
-          scanPattern(redis, `total_cost:user:${userId}:*`).catch(() => []),
-          ...keyHashes.map((keyHash) =>
-            scanPattern(redis, `total_cost:key:${keyHash}`).catch(() => [])
-          ),
-          ...keyHashes.map((keyHash) =>
-            scanPattern(redis, `total_cost:key:${keyHash}:*`).catch(() => [])
-          ),
-          // Lease cache keys (budget slices cached by LeaseService)
-          ...keyIds.map((keyId) => scanPattern(redis, `lease:key:${keyId}:*`).catch(() => [])),
-          scanPattern(redis, `lease:user:${userId}:*`).catch(() => []),
-        ]);
-
-        const allCostKeys = scanResults.flat();
-
-        if (allCostKeys.length > 0) {
-          // Batch delete via pipeline
-          const pipeline = redis.pipeline();
-          for (const key of allCostKeys) {
-            pipeline.del(key);
-          }
-
-          const results = await pipeline.exec();
-
-          // Check for errors
-          const errors = results?.filter(([err]) => err);
-          if (errors && errors.length > 0) {
-            logger.warn("Some Redis deletes failed during user limits reset", {
-              errorCount: errors.length,
-              userId,
-            });
-          }
-        }
-
-        const duration = Date.now() - startTime;
+    try {
+      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      const cacheResult = await clearUserCostCache({ userId, keyIds, keyHashes });
+      if (cacheResult) {
         logger.info("Reset user limits only - Redis cost cache cleared", {
           userId,
           keyCount: keyIds.length,
-          costKeysDeleted: allCostKeys.length,
-          durationMs: duration,
+          ...cacheResult,
         });
-      } catch (error) {
-        logger.error("Failed to clear Redis cache during user limits reset", {
-          userId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Continue execution - costResetAt already set in DB
       }
+    } catch (error) {
+      logger.error("Failed to clear Redis cache during user limits reset", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Continue execution - costResetAt already set in DB
     }
 
     logger.info("Reset user limits only (costResetAt set)", { userId, keyCount: keyIds.length });
@@ -1948,6 +1893,7 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     // Get user's keys
     const keys = await findKeyList(userId);
     const keyIds = keys.map((k) => k.id);
+    const keyHashes = keys.map((k) => k.key);
 
     // 1. Delete all messageRequest logs for this user
     await db.delete(messageRequest).where(eq(messageRequest.userId, userId));
@@ -1955,78 +1901,31 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     // Also clear ledger rows -- the ONLY legitimate DELETE path for usage_ledger
     await db.delete(usageLedger).where(eq(usageLedger.userId, userId));
 
-    // Invalidate auth cache so stale user data is not served
-    const { invalidateCachedUser } = await import("@/lib/security/api-key-auth-cache");
-    await invalidateCachedUser(userId).catch(() => {});
+    // Clear costResetAt since all data is wiped (also invalidates auth cache)
+    await resetUserCostResetAt(userId, null);
 
-    // 2. Clear Redis cache
-    const { getRedisClient } = await import("@/lib/redis");
-    const { scanPattern } = await import("@/lib/redis/scan-helper");
-    const { getKeyActiveSessionsKey, getUserActiveSessionsKey } = await import(
-      "@/lib/redis/active-session-keys"
-    );
-    const redis = getRedisClient();
-
-    if (redis && redis.status === "ready") {
-      try {
-        const startTime = Date.now();
-
-        // Scan all patterns in parallel
-        const scanResults = await Promise.all([
-          ...keyIds.map((keyId) =>
-            scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
-              logger.warn("Failed to scan key cost pattern", { keyId, error: err });
-              return [];
-            })
-          ),
-          scanPattern(redis, `user:${userId}:cost_*`).catch((err) => {
-            logger.warn("Failed to scan user cost pattern", { userId, error: err });
-            return [];
-          }),
-        ]);
-
-        const allCostKeys = scanResults.flat();
-
-        // Batch delete via pipeline
-        const pipeline = redis.pipeline();
-
-        // Active sessions
-        for (const keyId of keyIds) {
-          pipeline.del(getKeyActiveSessionsKey(keyId));
-        }
-        pipeline.del(getUserActiveSessionsKey(userId));
-
-        // Cost keys
-        for (const key of allCostKeys) {
-          pipeline.del(key);
-        }
-
-        const results = await pipeline.exec();
-
-        // Check for errors
-        const errors = results?.filter(([err]) => err);
-        if (errors && errors.length > 0) {
-          logger.warn("Some Redis deletes failed during user statistics reset", {
-            errorCount: errors.length,
-            userId,
-          });
-        }
-
-        const duration = Date.now() - startTime;
+    // 2. Clear Redis cache (cost keys + active sessions)
+    try {
+      const { clearUserCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      const cacheResult = await clearUserCostCache({
+        userId,
+        keyIds,
+        keyHashes,
+        includeActiveSessions: true,
+      });
+      if (cacheResult) {
         logger.info("Reset user statistics - Redis cache cleared", {
           userId,
           keyCount: keyIds.length,
-          costKeysDeleted: allCostKeys.length,
-          activeSessionsDeleted: keyIds.length + 1,
-          durationMs: duration,
+          ...cacheResult,
         });
-      } catch (error) {
-        logger.error("Failed to clear Redis cache during user statistics reset", {
-          userId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // Continue execution - DB logs already deleted
       }
+    } catch (error) {
+      logger.error("Failed to clear Redis cache during user statistics reset", {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Continue execution - DB logs already deleted
     }
 
     logger.info("Reset all user statistics", { userId, keyCount: keyIds.length });

@@ -546,6 +546,22 @@ export async function deleteUser(id: number): Promise<boolean> {
   return result.length > 0;
 }
 
+export async function resetUserCostResetAt(
+  userId: number,
+  resetAt: Date | null,
+): Promise<boolean> {
+  const result = await db
+    .update(users)
+    .set({ costResetAt: resetAt, updatedAt: new Date() })
+    .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+    .returning({ id: users.id });
+
+  if (result.length > 0) {
+    await invalidateCachedUser(userId).catch(() => {});
+  }
+  return result.length > 0;
+}
+
 /**
  * Mark an expired user as disabled (idempotent operation)
  * Only updates if the user is currently enabled

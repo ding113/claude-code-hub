@@ -168,7 +168,7 @@ export class LeaseService {
 
       // Clip startTime forward if costResetAt is more recent (limits-only reset)
       const effectiveStartTime =
-        params.costResetAt && params.costResetAt > startTime ? params.costResetAt : startTime;
+        params.costResetAt instanceof Date && params.costResetAt > startTime ? params.costResetAt : startTime;
 
       // Query DB for current usage
       const currentUsage = await LeaseService.queryDbUsage(

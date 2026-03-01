@@ -22,11 +22,13 @@ vi.mock("next/cache", () => ({
 
 // Mock repository/user
 const findUserByIdMock = vi.fn();
+const resetUserCostResetAtMock = vi.fn();
 vi.mock("@/repository/user", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/repository/user")>();
   return {
     ...actual,
     findUserById: findUserByIdMock,
+    resetUserCostResetAt: resetUserCostResetAtMock,
   };
 });
 
@@ -89,6 +91,7 @@ describe("resetUserLimitsOnly", () => {
     redisMock.status = "ready";
     redisPipelineMock.exec.mockResolvedValue([]);
     dbUpdateWhereMock.mockResolvedValue(undefined);
+    resetUserCostResetAtMock.mockResolvedValue(true);
   });
 
   test("should return PERMISSION_DENIED for non-admin user", async () => {
@@ -121,7 +124,7 @@ describe("resetUserLimitsOnly", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errorCode).toBe(ERROR_CODES.NOT_FOUND);
-    expect(dbUpdateMock).not.toHaveBeenCalled();
+    expect(resetUserCostResetAtMock).not.toHaveBeenCalled();
   });
 
   test("should set costResetAt and clear Redis cost cache", async () => {
@@ -138,12 +141,8 @@ describe("resetUserLimitsOnly", () => {
     const result = await resetUserLimitsOnly(123);
 
     expect(result.ok).toBe(true);
-    // costResetAt set via db.update
-    expect(dbUpdateMock).toHaveBeenCalled();
-    expect(dbUpdateSetMock).toHaveBeenCalledWith(
-      expect.objectContaining({ costResetAt: expect.any(Date) })
-    );
-    expect(dbUpdateWhereMock).toHaveBeenCalled();
+    // costResetAt set via repository function
+    expect(resetUserCostResetAtMock).toHaveBeenCalledWith(123, expect.any(Date));
     // Redis cost keys scanned and deleted
     expect(scanPatternMock).toHaveBeenCalled();
     expect(redisMock.pipeline).toHaveBeenCalled();
@@ -179,8 +178,8 @@ describe("resetUserLimitsOnly", () => {
     const result = await resetUserLimitsOnly(123);
 
     expect(result.ok).toBe(true);
-    // costResetAt still set in DB
-    expect(dbUpdateMock).toHaveBeenCalled();
+    // costResetAt still set via repo function
+    expect(resetUserCostResetAtMock).toHaveBeenCalledWith(123, expect.any(Date));
     // Redis pipeline NOT called
     expect(redisMock.pipeline).not.toHaveBeenCalled();
   });
@@ -200,7 +199,7 @@ describe("resetUserLimitsOnly", () => {
 
     expect(result.ok).toBe(true);
     expect(loggerMock.warn).toHaveBeenCalledWith(
-      "Some Redis deletes failed during user limits reset",
+      "Some Redis deletes failed during cost cache cleanup",
       expect.objectContaining({ errorCount: 1, userId: 123 })
     );
   });
@@ -244,7 +243,7 @@ describe("resetUserLimitsOnly", () => {
     const result = await resetUserLimitsOnly(123);
 
     expect(result.ok).toBe(true);
-    expect(dbUpdateMock).toHaveBeenCalled();
+    expect(resetUserCostResetAtMock).toHaveBeenCalledWith(123, expect.any(Date));
     // No DB deletes
     expect(dbDeleteMock).not.toHaveBeenCalled();
   });

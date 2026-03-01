@@ -245,7 +245,7 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     // Clip time range starts by costResetAt (for limits-only reset)
     const costResetAt = user.costResetAt ?? null;
     const clipStart = (start: Date): Date =>
-      costResetAt && costResetAt > start ? costResetAt : start;
+      costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
 
     const clippedRange5h = { startTime: clipStart(range5h.startTime), endTime: range5h.endTime };
     const clippedRangeWeekly = {
