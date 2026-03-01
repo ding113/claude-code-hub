@@ -136,12 +136,15 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
 
     expect(result.ok).toBe(true);
 
-    // 5h range start (7h ago) < costResetAt (2h ago) => clipped to costResetAt
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, costResetAt, NOW);
-    // daily start (midnight) < costResetAt (10:00) => clipped to costResetAt
-    expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, costResetAt, NOW);
-    // weekly/monthly starts are way before costResetAt => also clipped
     expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledTimes(4);
+    // 1st call = 5h: clipped (07:00 < 10:00)
+    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(1, 42, costResetAt, NOW);
+    // 2nd call = daily: clipped (00:00 < 10:00)
+    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(2, 42, costResetAt, NOW);
+    // 3rd call = weekly: clipped (Feb 23 < Mar 1 10:00)
+    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(3, 42, costResetAt, NOW);
+    // 4th call = monthly: clipped (Feb 1 < Mar 1 10:00)
+    expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(4, 42, costResetAt, NOW);
 
     // sumKeyTotalCost receives costResetAt as 3rd argument
     expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", 365, costResetAt);
