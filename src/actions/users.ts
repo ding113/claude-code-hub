@@ -1832,7 +1832,10 @@ export async function resetUserLimitsOnly(userId: number): Promise<ActionResult>
 
     // Set costResetAt on user so all cost calculations start fresh
     // Uses repo function which also sets updatedAt and invalidates auth cache
-    await resetUserCostResetAt(userId, new Date());
+    const updated = await resetUserCostResetAt(userId, new Date());
+    if (!updated) {
+      return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
 
     // Clear Redis cost cache (but NOT active sessions, NOT DB logs)
     try {

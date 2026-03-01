@@ -88,7 +88,17 @@ export async function clearUserCostCache(
     pipeline.del(key);
   }
 
-  const results = await pipeline.exec();
+  let results: Array<[Error | null, unknown]> | null = null;
+  try {
+    results = await pipeline.exec();
+  } catch (error) {
+    logger.warn("Redis pipeline.exec() failed during cost cache cleanup", { userId, error });
+    return {
+      costKeysDeleted: allCostKeys.length,
+      activeSessionsDeleted,
+      durationMs: Date.now() - startTime,
+    };
+  }
 
   // Check for pipeline errors
   const errors = results?.filter(([err]) => err);

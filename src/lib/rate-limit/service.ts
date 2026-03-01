@@ -461,7 +461,8 @@ export class RateLimitService {
       );
 
       // Clip startTime forward if costResetAt is more recent
-      const effectiveStartTime = costResetAt && costResetAt > startTime ? costResetAt : startTime;
+      const effectiveStartTime =
+        costResetAt instanceof Date && costResetAt > startTime ? costResetAt : startTime;
 
       // 查询数据库
       let current = 0;

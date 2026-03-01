@@ -204,7 +204,7 @@ describe("resetUserLimitsOnly", () => {
     );
   });
 
-  test("should succeed when pipeline.exec throws", async () => {
+  test("should succeed when pipeline.exec throws (caught inside clearUserCostCache)", async () => {
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
     findUserByIdMock.mockResolvedValue({ id: 123, name: "Test User" });
     findKeyListMock.mockResolvedValue([{ id: 1, key: "sk-hash-1" }]);
@@ -214,9 +214,11 @@ describe("resetUserLimitsOnly", () => {
     const { resetUserLimitsOnly } = await import("@/actions/users");
     const result = await resetUserLimitsOnly(123);
 
+    // pipeline.exec throw is now caught inside clearUserCostCache (never-throws contract)
+    // so resetUserLimitsOnly still succeeds without hitting its own catch block
     expect(result.ok).toBe(true);
-    expect(loggerMock.error).toHaveBeenCalledWith(
-      "Failed to clear Redis cache during user limits reset",
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "Redis pipeline.exec() failed during cost cache cleanup",
       expect.objectContaining({ userId: 123 })
     );
   });

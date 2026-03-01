@@ -702,6 +702,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       .select({
         key: keysTable,
         userLimitConcurrentSessions: usersTable.limitConcurrentSessions,
+        userCostResetAt: usersTable.costResetAt,
       })
       .from(keysTable)
       .leftJoin(usersTable, and(eq(keysTable.userId, usersTable.id), isNull(usersTable.deletedAt)))
@@ -733,14 +734,10 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       result.userLimitConcurrentSessions ?? null
     );
 
-    // Load owning user to get costResetAt for limits-only reset
-    const { findUserById } = await import("@/repository/user");
-    const ownerUser = await findUserById(key.userId);
-    const costResetAt = ownerUser?.costResetAt ?? null;
-
     // Clip time range start by costResetAt (for limits-only reset)
+    const costResetAt = result.userCostResetAt ?? null;
     const clipStart = (start: Date): Date =>
-      costResetAt && costResetAt > start ? costResetAt : start;
+      costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
 
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(

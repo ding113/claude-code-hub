@@ -470,13 +470,17 @@ export async function sumKeyTotalCost(
 ): Promise<number> {
   const conditions = [eq(usageLedger.key, keyHash), LEDGER_BILLING_CONDITION];
 
-  // resetAt takes priority: only count costs after the reset timestamp
+  // Use the more recent of resetAt and maxAgeDays cutoff
+  const maxAgeCutoff =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+  let cutoff = maxAgeCutoff;
   if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
-    conditions.push(gte(usageLedger.createdAt, resetAt));
-  } else if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
-    // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
-    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+    cutoff = maxAgeCutoff && maxAgeCutoff > resetAt ? maxAgeCutoff : resetAt;
+  }
+  if (cutoff) {
+    conditions.push(gte(usageLedger.createdAt, cutoff));
   }
 
   const result = await db
@@ -499,13 +503,17 @@ export async function sumUserTotalCost(
 ): Promise<number> {
   const conditions = [eq(usageLedger.userId, userId), LEDGER_BILLING_CONDITION];
 
-  // resetAt takes priority: only count costs after the reset timestamp
+  // Use the more recent of resetAt and maxAgeDays cutoff
+  const maxAgeCutoff =
+    Number.isFinite(maxAgeDays) && maxAgeDays > 0
+      ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
+      : null;
+  let cutoff = maxAgeCutoff;
   if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
-    conditions.push(gte(usageLedger.createdAt, resetAt));
-  } else if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
-    // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
-    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+    cutoff = maxAgeCutoff && maxAgeCutoff > resetAt ? maxAgeCutoff : resetAt;
+  }
+  if (cutoff) {
+    conditions.push(gte(usageLedger.createdAt, cutoff));
   }
 
   const result = await db
@@ -772,12 +780,10 @@ export async function sumUserQuotaCosts(
       ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
       : null;
   // Use the more recent of maxAgeCutoff and resetAt
-  const cutoffDate =
-    resetAt instanceof Date && !Number.isNaN(resetAt.getTime())
-      ? maxAgeCutoff && maxAgeCutoff > resetAt
-        ? maxAgeCutoff
-        : resetAt
-      : maxAgeCutoff;
+  let cutoffDate = maxAgeCutoff;
+  if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
+    cutoffDate = maxAgeCutoff && maxAgeCutoff > resetAt ? maxAgeCutoff : resetAt;
+  }
 
   const scanStart = cutoffDate
     ? new Date(
@@ -850,12 +856,10 @@ export async function sumKeyQuotaCostsById(
       ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
       : null;
   // Use the more recent of maxAgeCutoff and resetAt
-  const cutoffDate =
-    resetAt instanceof Date && !Number.isNaN(resetAt.getTime())
-      ? maxAgeCutoff && maxAgeCutoff > resetAt
-        ? maxAgeCutoff
-        : resetAt
-      : maxAgeCutoff;
+  let cutoffDate = maxAgeCutoff;
+  if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
+    cutoffDate = maxAgeCutoff && maxAgeCutoff > resetAt ? maxAgeCutoff : resetAt;
+  }
 
   const scanStart = cutoffDate
     ? new Date(
