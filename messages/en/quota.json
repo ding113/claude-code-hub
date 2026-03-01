@@ -103,6 +103,7 @@
     "limitMonthly": "Monthly Limit",
     "limitTotal": "Total Limit",
     "limitConcurrent": "Concurrent Sessions",
+    "limitConcurrentUas": "Concurrent UAs",
     "role": {
       "admin": "Admin",
       "user": "User"
@@ -335,6 +336,12 @@
         "placeholder": "0 means unlimited",
         "description": "Number of simultaneous conversations",
         "descriptionWithUserLimit": "Cannot exceed user session limit ({limit})"
+      },
+      "limitConcurrentUas": {
+        "label": "Concurrent UA Limit",
+        "placeholder": "0 means unlimited",
+        "description": "Number of active UAs (User-Agent)",
+        "descriptionWithUserLimit": "Cannot exceed user UA limit ({limit})"
       },
       "providerGroup": {
         "label": "Provider Group",

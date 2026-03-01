@@ -55,6 +55,7 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_LIMIT_MONTHLY_USD: "rateLimit.limitMonthlyUsd",
   SET_LIMIT_TOTAL_USD: "rateLimit.limitTotalUsd",
   SET_LIMIT_CONCURRENT_SESSIONS: "rateLimit.limitConcurrentSessions",
+  SET_LIMIT_CONCURRENT_UAS: "rateLimit.limitConcurrentUas",
   SET_FAILURE_THRESHOLD: "circuitBreaker.failureThreshold",
   SET_OPEN_DURATION_MINUTES: "circuitBreaker.openDurationMinutes",
   SET_HALF_OPEN_SUCCESS_THRESHOLD: "circuitBreaker.halfOpenSuccessThreshold",
@@ -124,6 +125,7 @@ export function createInitialState(
         limitMonthlyUsd: null,
         limitTotalUsd: null,
         limitConcurrentSessions: null,
+        limitConcurrentUas: null,
       },
       circuitBreaker: {
         failureThreshold: undefined,
@@ -206,6 +208,7 @@ export function createInitialState(
       limitMonthlyUsd: sourceProvider?.limitMonthlyUsd ?? null,
       limitTotalUsd: sourceProvider?.limitTotalUsd ?? null,
       limitConcurrentSessions: sourceProvider?.limitConcurrentSessions ?? null,
+      limitConcurrentUas: sourceProvider?.limitConcurrentUas ?? null,
     },
     circuitBreaker: {
       failureThreshold: sourceProvider?.circuitBreakerFailureThreshold,
@@ -411,6 +414,11 @@ export function providerFormReducer(
       return {
         ...state,
         rateLimit: { ...state.rateLimit, limitConcurrentSessions: action.payload },
+      };
+    case "SET_LIMIT_CONCURRENT_UAS":
+      return {
+        ...state,
+        rateLimit: { ...state.rateLimit, limitConcurrentUas: action.payload },
       };
 
     // Circuit breaker

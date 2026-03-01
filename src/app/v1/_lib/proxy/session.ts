@@ -459,6 +459,8 @@ export class ProxySession {
       circuitState?: "closed" | "open" | "half-open";
       attemptNumber?: number;
       errorMessage?: string; // 错误信息（失败时记录）
+      errorCode?: string; // 错误码（用于 i18n 渲染/聚合）
+      errorParams?: Record<string, string | number>; // 错误参数（用于 i18n 渲染）
       endpointId?: number | null;
       endpointUrl?: string;
       // 修复：添加新字段
@@ -490,6 +492,8 @@ export class ProxySession {
       timestamp: Date.now(),
       attemptNumber: metadata?.attemptNumber,
       errorMessage: metadata?.errorMessage, // 记录错误信息
+      errorCode: metadata?.errorCode,
+      errorParams: metadata?.errorParams,
       // 修复：记录新字段
       statusCode: metadata?.statusCode,
       statusCodeInferred: metadata?.statusCodeInferred,

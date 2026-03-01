@@ -92,6 +92,7 @@ export type ProviderBatchPatchField =
   | "limit_monthly_usd"
   | "limit_total_usd"
   | "limit_concurrent_sessions"
+  | "limit_concurrent_uas"
   // Circuit Breaker
   | "circuit_breaker_failure_threshold"
   | "circuit_breaker_open_duration"
@@ -143,6 +144,7 @@ export interface ProviderBatchPatchDraft {
   limit_monthly_usd?: ProviderPatchDraftInput<number>;
   limit_total_usd?: ProviderPatchDraftInput<number>;
   limit_concurrent_sessions?: ProviderPatchDraftInput<number>;
+  limit_concurrent_uas?: ProviderPatchDraftInput<number>;
   // Circuit Breaker
   circuit_breaker_failure_threshold?: ProviderPatchDraftInput<number>;
   circuit_breaker_open_duration?: ProviderPatchDraftInput<number>;
@@ -195,6 +197,7 @@ export interface ProviderBatchPatch {
   limit_monthly_usd: ProviderPatchOperation<number>;
   limit_total_usd: ProviderPatchOperation<number>;
   limit_concurrent_sessions: ProviderPatchOperation<number>;
+  limit_concurrent_uas: ProviderPatchOperation<number>;
   // Circuit Breaker
   circuit_breaker_failure_threshold: ProviderPatchOperation<number>;
   circuit_breaker_open_duration: ProviderPatchOperation<number>;
@@ -247,6 +250,7 @@ export interface ProviderBatchApplyUpdates {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
+  limit_concurrent_uas?: number;
   // Circuit Breaker
   circuit_breaker_failure_threshold?: number;
   circuit_breaker_open_duration?: number;
@@ -332,6 +336,7 @@ export interface Provider {
   // 总消费重置时间：用于实现“达到总限额后手动重置用量”
   totalCostResetAt: Date | null;
   limitConcurrentSessions: number;
+  limitConcurrentUas: number;
 
   // 熔断器配置（每个供应商独立配置）
   maxRetryAttempts: number | null;
@@ -430,6 +435,7 @@ export interface ProviderDisplay {
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
   limitConcurrentSessions: number;
+  limitConcurrentUas: number;
   // 熔断器配置
   maxRetryAttempts: number | null;
   circuitBreakerFailureThreshold: number;
@@ -522,6 +528,7 @@ export interface CreateProviderData {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
+  limit_concurrent_uas?: number;
 
   // 熔断器配置
   max_retry_attempts?: number | null;
@@ -600,6 +607,7 @@ export interface UpdateProviderData {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
+  limit_concurrent_uas?: number;
 
   // 熔断器配置
   max_retry_attempts?: number | null;

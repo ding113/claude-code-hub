@@ -29,7 +29,8 @@ export type LimitType =
   | "limitWeekly"
   | "limitMonthly"
   | "limitTotal"
-  | "limitSessions";
+  | "limitSessions"
+  | "limitUas";
 
 export type DailyResetMode = "fixed" | "rolling";
 
@@ -47,21 +48,22 @@ export interface LimitRulePickerProps {
    * - fields.value.label, fields.value.placeholder
    * - daily.mode.label, daily.mode.fixed, daily.mode.rolling
    * - daily.time.label, daily.time.placeholder
-   * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions}
+   * - limitTypes.{limitRpm|limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions|limitUas}
    * - errors.missingType, errors.invalidValue, errors.invalidTime
    * - overwriteHint
    */
   translations: Record<string, unknown>;
 }
 
-const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
-  { type: "limitRpm", fallbackLabel: "RPM 限额" },
-  { type: "limit5h", fallbackLabel: "5小时限额" },
-  { type: "limitDaily", fallbackLabel: "每日限额" },
-  { type: "limitWeekly", fallbackLabel: "周限额" },
-  { type: "limitMonthly", fallbackLabel: "月限额" },
-  { type: "limitTotal", fallbackLabel: "总限额" },
-  { type: "limitSessions", fallbackLabel: "并发 Session" },
+const LIMIT_TYPE_OPTIONS: LimitType[] = [
+  "limitRpm",
+  "limit5h",
+  "limitDaily",
+  "limitWeekly",
+  "limitMonthly",
+  "limitTotal",
+  "limitSessions",
+  "limitUas",
 ];
 
 const QUICK_VALUES = [10, 50, 100, 500] as const;
@@ -103,13 +105,13 @@ export function LimitRulePicker({
   // Reset state when dialog opens
   useEffect(() => {
     if (!open) return;
-    const first = availableTypes[0]?.type ?? "";
+    const first = availableTypes[0] ?? "";
     setType((prev) => (prev ? prev : first));
     setRawValue("");
     setDailyMode("fixed");
     setDailyTime("00:00");
     setError(null);
-  }, [open, availableTypes]);
+  }, [open]);
 
   const numericValue = useMemo(() => {
     const trimmed = rawValue.trim();
@@ -117,6 +119,7 @@ export function LimitRulePicker({
     return Number(trimmed);
   }, [rawValue]);
 
+  const requiresInteger = type === "limitSessions" || type === "limitUas" || type === "limitRpm";
   const isDaily = type === "limitDaily";
   const needsTime = isDaily && dailyMode === "fixed";
 
@@ -124,6 +127,7 @@ export function LimitRulePicker({
     type !== "" &&
     Number.isFinite(numericValue) &&
     numericValue >= 0 &&
+    (!requiresInteger || Number.isInteger(numericValue)) &&
     (!needsTime || isValidTime(dailyTime));
 
   const handleCancel = () => onOpenChange(false);
@@ -141,6 +145,11 @@ export function LimitRulePicker({
       return;
     }
 
+    if (requiresInteger && !Number.isInteger(numericValue)) {
+      setError(getTranslation(translations, "errors.invalidValue", "请输入有效数值"));
+      return;
+    }
+
     if (needsTime && !isValidTime(dailyTime)) {
       setError(getTranslation(translations, "errors.invalidTime", "请输入有效时间 (HH:mm)"));
       return;
@@ -153,6 +162,8 @@ export function LimitRulePicker({
     }
     onOpenChange(false);
   };
+
+  const typePlaceholder = getTranslation(translations, "fields.type.placeholder", "请选择");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -177,14 +188,12 @@ export function LimitRulePicker({
               <Label>{getTranslation(translations, "fields.type.label", "限额类型")}</Label>
               <Select value={type} onValueChange={(val) => setType(val as LimitType)}>
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={getTranslation(translations, "fields.type.placeholder", "请选择")}
-                  />
+                  <SelectValue placeholder={typePlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableTypes.map((opt) => (
-                    <SelectItem key={opt.type} value={opt.type}>
-                      {getTranslation(translations, `limitTypes.${opt.type}`, opt.fallbackLabel)}
+                    <SelectItem key={opt} value={opt}>
+                      {getTranslation(translations, `limitTypes.${opt}`, typePlaceholder)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -208,7 +217,9 @@ export function LimitRulePicker({
               <Input
                 type="number"
                 min={0}
-                step={type === "limitSessions" || type === "limitRpm" ? 1 : 0.01}
+                step={
+                  type === "limitSessions" || type === "limitUas" || type === "limitRpm" ? 1 : 0.01
+                }
                 inputMode="decimal"
                 autoFocus
                 value={rawValue}
@@ -218,7 +229,7 @@ export function LimitRulePicker({
               />
 
               <div className="flex flex-wrap gap-2">
-                {(type === "limitSessions"
+                {(type === "limitSessions" || type === "limitUas"
                   ? SESSION_QUICK_VALUES
                   : type === "limitRpm"
                     ? RPM_QUICK_VALUES
@@ -233,7 +244,7 @@ export function LimitRulePicker({
                   >
                     {v === 0
                       ? getTranslation(translations, "quickValues.unlimited", "无限")
-                      : type === "limitSessions" || type === "limitRpm"
+                      : type === "limitSessions" || type === "limitUas" || type === "limitRpm"
                         ? v
                         : `$${v}`}
                   </Button>

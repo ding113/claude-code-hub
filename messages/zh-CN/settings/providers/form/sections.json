@@ -249,6 +249,7 @@
       "monthly": "月: {amount}",
       "total": "总: {amount}",
       "concurrent": "并发: {count}",
+      "concurrentUas": "并发 UA: {count}",
       "none": "无限制"
     },
     "limit5h": {
@@ -287,6 +288,10 @@
     },
     "limitConcurrent": {
       "label": "并发 Session 上限",
+      "placeholder": "0 表示无限制"
+    },
+    "limitConcurrentUas": {
+      "label": "并发 UA 上限",
       "placeholder": "0 表示无限制"
     }
   },

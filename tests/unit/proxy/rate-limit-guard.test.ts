@@ -4,6 +4,7 @@ const generateSessionIdMock = vi.hoisted(() => vi.fn(() => "sess_generated"));
 
 const rateLimitServiceMock = {
   checkTotalCostLimit: vi.fn(),
+  checkAndTrackKeyUserUa: vi.fn(),
   checkAndTrackKeyUserSession: vi.fn(),
   checkRpmLimit: vi.fn(),
   checkCostLimitsWithLease: vi.fn(),
@@ -38,6 +39,7 @@ const getErrorMessageServerMock = vi.fn(async () => "mock rate limit message");
 vi.mock("@/lib/utils/error-messages", () => ({
   ERROR_CODES: {
     RATE_LIMIT_TOTAL_EXCEEDED: "RATE_LIMIT_TOTAL_EXCEEDED",
+    RATE_LIMIT_CONCURRENT_UAS_EXCEEDED: "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED",
     RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED: "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED",
     RATE_LIMIT_RPM_EXCEEDED: "RATE_LIMIT_RPM_EXCEEDED",
     RATE_LIMIT_DAILY_QUOTA_EXCEEDED: "RATE_LIMIT_DAILY_QUOTA_EXCEEDED",
@@ -60,6 +62,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
+      limitConcurrentUas: number | null;
       limitConcurrentSessions: number | null;
     }>;
     key?: Partial<{
@@ -72,11 +75,13 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       limitWeeklyUsd: number | null;
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
+      limitConcurrentUas: number;
       limitConcurrentSessions: number;
     }>;
   }) => {
     const session = {
       sessionId: "sess_test",
+      userAgent: "claude-cli/2.0.31 (external, cli)",
       authState: {
         user: {
           id: 1,
@@ -88,6 +93,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
           limitWeeklyUsd: null,
           limitMonthlyUsd: null,
           limitTotalUsd: null,
+          limitConcurrentUas: null,
           limitConcurrentSessions: null,
           ...overrides?.user,
         },
@@ -101,6 +107,7 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
           limitWeeklyUsd: null,
           limitMonthlyUsd: null,
           limitTotalUsd: null,
+          limitConcurrentUas: 0,
           limitConcurrentSessions: 0,
           ...overrides?.key,
         },
@@ -119,6 +126,13 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
     generateSessionIdMock.mockReturnValue("sess_generated");
 
     rateLimitServiceMock.checkTotalCostLimit.mockResolvedValue({ allowed: true });
+    rateLimitServiceMock.checkAndTrackKeyUserUa.mockResolvedValue({
+      allowed: true,
+      keyCount: 0,
+      userCount: 0,
+      trackedKey: false,
+      trackedUser: false,
+    });
     rateLimitServiceMock.checkAndTrackKeyUserSession.mockResolvedValue({
       allowed: true,
       keyCount: 0,
@@ -317,6 +331,78 @@ describe("ProxyRateLimitGuard - key daily limit enforcement", () => {
       currentUsage: 2,
       limitValue: 1,
     });
+  });
+
+  it("Key 并发 UA 超限应拦截（concurrent_uas）", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    rateLimitServiceMock.checkAndTrackKeyUserUa.mockResolvedValueOnce({
+      allowed: false,
+      rejectedBy: "key",
+      reasonCode: "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED",
+      reasonParams: { current: 2, limit: 1, target: "key" },
+      keyCount: 2,
+      userCount: 0,
+      trackedKey: false,
+      trackedUser: false,
+    });
+
+    const session = createSession({
+      key: { limitConcurrentUas: 1 },
+    });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).rejects.toMatchObject({
+      name: "RateLimitError",
+      limitType: "concurrent_uas",
+      currentUsage: 2,
+      limitValue: 1,
+    });
+  });
+
+  it("User 并发 UA 超限应拦截（concurrent_uas）", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    rateLimitServiceMock.checkAndTrackKeyUserUa.mockResolvedValueOnce({
+      allowed: false,
+      rejectedBy: "user",
+      reasonCode: "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED",
+      reasonParams: { current: 2, limit: 1, target: "user" },
+      keyCount: 0,
+      userCount: 2,
+      trackedKey: false,
+      trackedUser: false,
+    });
+
+    const session = createSession({
+      user: { limitConcurrentUas: 1 },
+      key: { limitConcurrentUas: 10 },
+    });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).rejects.toMatchObject({
+      name: "RateLimitError",
+      limitType: "concurrent_uas",
+      currentUsage: 2,
+      limitValue: 1,
+    });
+  });
+
+  it("当 Key 并发 UA 未设置（0）且 User 并发 UA 已设置时，Key 并发 UA 检查应继承 User 并发上限", async () => {
+    const { ProxyRateLimitGuard } = await import("@/app/v1/_lib/proxy/rate-limit-guard");
+
+    const session = createSession({
+      user: { limitConcurrentUas: 15 },
+      key: { limitConcurrentUas: 0 },
+    });
+
+    await expect(ProxyRateLimitGuard.ensure(session)).resolves.toBeUndefined();
+
+    expect(rateLimitServiceMock.checkAndTrackKeyUserUa).toHaveBeenCalledWith(
+      2,
+      1,
+      expect.any(String),
+      15,
+      15
+    );
   });
 
   it("当 Key 并发未设置（0）且 User 并发已设置时，Key 并发检查应继承 User 并发上限", async () => {

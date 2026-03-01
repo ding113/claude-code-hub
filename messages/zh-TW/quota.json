@@ -85,7 +85,8 @@
       "warning": "接近限額 (>60%)",
       "exceeded": "已超限 (≥100%)"
     },
-    "expiresAtLabel": "過期時間"
+    "expiresAtLabel": "過期時間",
+    "limitConcurrentUas": "並發 UA"
   },
   "providers": {
     "title": "供應商限額統計",
@@ -310,6 +311,12 @@
         "placeholder": "0 表示無限制",
         "description": "同時運行的對話數量",
         "descriptionWithUserLimit": "不能超過使用者並發限額 ({limit})"
+      },
+      "limitConcurrentUas": {
+        "label": "並發 UA 上限",
+        "placeholder": "0 表示無限制",
+        "description": "同時活躍的 UA（User-Agent）數量",
+        "descriptionWithUserLimit": "不能超過使用者並發 UA 限額 ({limit})"
       },
       "providerGroup": {
         "label": "供應商分組",

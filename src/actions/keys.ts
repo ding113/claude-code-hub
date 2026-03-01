@@ -99,6 +99,7 @@ export async function addKey(data: {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  limitConcurrentUas?: number;
   providerGroup?: string | null;
   cacheTtlPreference?: "inherit" | "5m" | "1h";
 }): Promise<ActionResult<{ generatedKey: string; name: string }>> {
@@ -172,6 +173,7 @@ export async function addKey(data: {
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
+      limitConcurrentUas: data.limitConcurrentUas,
       providerGroup: providerGroupForKey,
       cacheTtlPreference: data.cacheTtlPreference,
     });
@@ -282,6 +284,22 @@ export async function addKey(data: {
       };
     }
 
+    if (
+      validatedData.limitConcurrentUas != null &&
+      validatedData.limitConcurrentUas > 0 &&
+      user.limitConcurrentUas != null &&
+      user.limitConcurrentUas > 0 &&
+      validatedData.limitConcurrentUas > user.limitConcurrentUas
+    ) {
+      return {
+        ok: false,
+        error: tError("KEY_LIMIT_CONCURRENT_UAS_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitConcurrentUas),
+          userLimit: String(user.limitConcurrentUas),
+        }),
+      };
+    }
+
     const generatedKey = `sk-${randomBytes(16).toString("hex")}`;
 
     // 转换 expiresAt: undefined → null（永不过期），string → Date（按系统时区解析）
@@ -306,6 +324,7 @@ export async function addKey(data: {
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
+      limit_concurrent_uas: validatedData.limitConcurrentUas,
       provider_group: validatedData.providerGroup,
       cache_ttl_preference: validatedData.cacheTtlPreference,
     });
@@ -342,6 +361,7 @@ export async function editKey(
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
+    limitConcurrentUas?: number;
     providerGroup?: string | null;
     cacheTtlPreference?: "inherit" | "5m" | "1h";
   }
@@ -502,6 +522,22 @@ export async function editKey(
       };
     }
 
+    if (
+      validatedData.limitConcurrentUas != null &&
+      validatedData.limitConcurrentUas > 0 &&
+      user.limitConcurrentUas != null &&
+      user.limitConcurrentUas > 0 &&
+      validatedData.limitConcurrentUas > user.limitConcurrentUas
+    ) {
+      return {
+        ok: false,
+        error: tError("KEY_LIMIT_CONCURRENT_UAS_EXCEEDS_USER_LIMIT", {
+          keyLimit: String(validatedData.limitConcurrentUas),
+          userLimit: String(user.limitConcurrentUas),
+        }),
+      };
+    }
+
     // 移除 providerGroup 子集校验（用户分组由 Key 分组自动计算）
 
     // 转换 expiresAt（按系统时区解析）：
@@ -544,6 +580,7 @@ export async function editKey(
       limit_monthly_usd: validatedData.limitMonthlyUsd,
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
+      limit_concurrent_uas: validatedData.limitConcurrentUas,
       // providerGroup 为 admin-only 字段：非管理员不允许更新该字段
       ...(isAdmin ? { provider_group: normalizeProviderGroup(validatedData.providerGroup) } : {}),
       cache_ttl_preference: validatedData.cacheTtlPreference,

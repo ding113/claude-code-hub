@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { formatProbabilityCompact } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { getFake200ReasonKey } from "./fake200-reason";
+import { resolveChainItemErrorMessage } from "./resolve-chain-item-error-message";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
@@ -126,6 +127,7 @@ export function ProviderChainPopover({
 }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
+  const tErrors = useTranslations("errors");
 
   // “假 200”识别发生在 SSE 流式结束后：此时响应内容可能已透传给客户端，但内部会按失败统计/熔断。
   const hasFake200PostStreamFailure = chain.some(
@@ -459,6 +461,7 @@ export function ProviderChainPopover({
             const status = getItemStatus(item);
             const Icon = status.icon;
             const isLast = index === actualRequests.length - 1;
+            const resolvedErrorMessage = resolveChainItemErrorMessage(item, tErrors);
 
             return (
               <div
@@ -536,10 +539,10 @@ export function ProviderChainPopover({
                       </span>
                     )}
                   </div>
-                  {item.errorMessage && (
+                  {resolvedErrorMessage && (
                     <>
                       <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-1">
-                        {item.errorMessage}
+                        {resolvedErrorMessage}
                       </p>
                       {typeof item.errorMessage === "string" &&
                         item.errorMessage.startsWith("FAKE_200_") && (

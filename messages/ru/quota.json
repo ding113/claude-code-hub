@@ -103,6 +103,7 @@
     "limitMonthly": "Месячный лимит",
     "limitTotal": "Общий лимит",
     "limitConcurrent": "Параллельные сессии",
+    "limitConcurrentUas": "Одновременные UA",
     "role": {
       "admin": "Администратор",
       "user": "Пользователь"
@@ -335,6 +336,12 @@
         "placeholder": "0 = без ограничений",
         "description": "Количество одновременных диалогов",
         "descriptionWithUserLimit": "Не может превышать лимит пользователя ({limit})"
+      },
+      "limitConcurrentUas": {
+        "label": "Лимит одновременных UA",
+        "placeholder": "0 = без ограничений",
+        "description": "Количество активных UA (User-Agent)",
+        "descriptionWithUserLimit": "Не может превышать лимит UA пользователя ({limit})"
       },
       "providerGroup": {
         "label": "Группа провайдеров",

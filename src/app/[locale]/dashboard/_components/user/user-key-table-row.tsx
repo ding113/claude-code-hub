@@ -617,6 +617,7 @@ export function UserKeyTableRow({
                 limitMonthlyUsd: editingKey.limitMonthlyUsd,
                 limitTotalUsd: editingKey.limitTotalUsd,
                 limitConcurrentSessions: editingKey.limitConcurrentSessions,
+                limitConcurrentUas: editingKey.limitConcurrentUas,
               }}
               user={{
                 id: user.id,
@@ -626,6 +627,7 @@ export function UserKeyTableRow({
                 limitMonthlyUsd: user.limitMonthlyUsd ?? undefined,
                 limitTotalUsd: user.limitTotalUsd ?? undefined,
                 limitConcurrentSessions: user.limitConcurrentSessions ?? undefined,
+                limitConcurrentUas: user.limitConcurrentUas ?? undefined,
               }}
               isAdmin={isAdmin}
               onSuccess={() => {

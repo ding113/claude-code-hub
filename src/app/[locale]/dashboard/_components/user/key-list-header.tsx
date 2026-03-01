@@ -341,6 +341,7 @@ export function KeyListHeader({
                           limitMonthlyUsd: activeUser.limitMonthlyUsd ?? undefined,
                           limitTotalUsd: activeUser.limitTotalUsd ?? undefined,
                           limitConcurrentSessions: activeUser.limitConcurrentSessions ?? undefined,
+                          limitConcurrentUas: activeUser.limitConcurrentUas ?? undefined,
                         }
                       : undefined
                   }

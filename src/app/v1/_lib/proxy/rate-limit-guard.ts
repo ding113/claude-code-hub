@@ -1,6 +1,10 @@
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
+import {
+  resolveConcurrentUaIdentity,
+  resolveKeyUserConcurrentUaLimits,
+} from "@/lib/rate-limit/concurrent-ua-limit";
 import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
 import { SessionManager } from "@/lib/session-manager";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
@@ -41,9 +45,9 @@ export class ProxyRateLimitGuard {
    *
    * 检查顺序（基于 Codex 专业分析）：
    * 1-2. 永久硬限制：Key 总限额 → User 总限额
-   * 3-4. 资源/频率保护：Key/User 并发 → User RPM
-   * 5-8. 短期周期限额：Key 5h → User 5h → Key 每日 → User 每日
-   * 9-12. 中长期周期限额：Key 周 → User 周 → Key 月 → User 月
+   * 3-5. 资源/频率保护：Key/User 并发 UA → Key/User 并发 Session → User RPM
+   * 6-9. 短期周期限额：Key 5h → User 5h → Key 每日 → User 每日
+   * 10-13. 中长期周期限额：Key 周 → User 周 → Key 月 → User 月
    *
    * 设计原则：
    * - 硬上限优先于周期上限
@@ -124,7 +128,65 @@ export class ProxyRateLimitGuard {
 
     // ========== 第二层：资源/频率保护 ==========
 
-    // 3. Key 并发 Session（避免创建上游连接）
+    // 3. Key/User 并发 UA（用于限制“同时活跃的客户端/UA 数量”）
+    // Key 未设置时，继承 User 并发上限（避免 UI/心智模型不一致）
+    const {
+      effectiveKeyLimit: effectiveKeyUaConcurrentLimit,
+      normalizedUserLimit: normalizedUserUaConcurrentLimit,
+    } = resolveKeyUserConcurrentUaLimits(key.limitConcurrentUas ?? 0, user.limitConcurrentUas);
+
+    const { id: uaId } = resolveConcurrentUaIdentity(session.userAgent);
+
+    const uaConcurrentCheck = await RateLimitService.checkAndTrackKeyUserUa(
+      key.id,
+      user.id,
+      uaId,
+      effectiveKeyUaConcurrentLimit,
+      normalizedUserUaConcurrentLimit
+    );
+
+    if (!uaConcurrentCheck.allowed) {
+      const rejectedBy = uaConcurrentCheck.rejectedBy ?? "key";
+      const fallbackCurrentUsage =
+        rejectedBy === "user" ? uaConcurrentCheck.userCount : uaConcurrentCheck.keyCount;
+      const fallbackLimitValue =
+        rejectedBy === "user" ? normalizedUserUaConcurrentLimit : effectiveKeyUaConcurrentLimit;
+      const currentUsage = Number(uaConcurrentCheck.reasonParams?.current);
+      const limitValue = Number(uaConcurrentCheck.reasonParams?.limit);
+      const resolvedCurrentUsage = Number.isFinite(currentUsage)
+        ? currentUsage
+        : fallbackCurrentUsage;
+      const resolvedLimitValue = Number.isFinite(limitValue) ? limitValue : fallbackLimitValue;
+
+      logger.warn(
+        `[RateLimit] ${rejectedBy === "user" ? "User" : "Key"} UA limit exceeded: key=${key.id}, user=${user.id}, current=${resolvedCurrentUsage}, limit=${resolvedLimitValue}`
+      );
+
+      const resetTime = new Date().toISOString();
+
+      const { getLocale } = await import("next-intl/server");
+      const locale = await getLocale();
+      const message = await getErrorMessageServer(
+        locale,
+        uaConcurrentCheck.reasonCode ?? ERROR_CODES.RATE_LIMIT_CONCURRENT_UAS_EXCEEDED,
+        {
+          current: String(resolvedCurrentUsage),
+          limit: String(resolvedLimitValue),
+        }
+      );
+
+      throw new RateLimitError(
+        "rate_limit_error",
+        message,
+        "concurrent_uas",
+        resolvedCurrentUsage,
+        resolvedLimitValue,
+        resetTime,
+        null
+      );
+    }
+
+    // 4. Key 并发 Session（避免创建上游连接）
     // Key 未设置时，继承 User 并发上限（避免 UI/心智模型不一致：User 设置了并发，但 Key 仍显示“无限制”）
     const {
       effectiveKeyLimit: effectiveKeyConcurrentLimit,
@@ -193,7 +255,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 4. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制
+    // 5. User RPM（频率闸门，挡住高频噪声）- null/0 表示无限制
     if (user.rpm != null && user.rpm > 0) {
       const rpmCheck = await RateLimitService.checkRpmLimit(user.id, "user", user.rpm);
       if (!rpmCheck.allowed) {
@@ -223,7 +285,7 @@ export class ProxyRateLimitGuard {
 
     // ========== 第三层：短期周期限额（混合检查）==========
 
-    // 5. Key 5h 限额（最短周期，最易触发）
+    // 6. Key 5h 限额（最短周期，最易触发）
     const key5hCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: key.limit5hUsd,
       limit_daily_usd: null, // 仅检查 5h
@@ -259,7 +321,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 6. User 5h 限额（防止多 Key 合力在短窗口打爆用户）
+    // 7. User 5h 限额（防止多 Key 合力在短窗口打爆用户）
     const user5hCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: user.limit5hUsd ?? null,
       limit_daily_usd: null,
@@ -295,7 +357,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 7. Key 每日限额（Key 独有的每日预算）- null 表示无限制
+    // 8. Key 每日限额（Key 独有的每日预算）- null 表示无限制
     const keyDailyCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: null,
       limit_daily_usd: key.limitDailyUsd,
@@ -367,7 +429,7 @@ export class ProxyRateLimitGuard {
       }
     }
 
-    // 8. User 每日额度（User 独有的常用预算）- null 表示无限制
+    // 9. User 每日额度（User 独有的常用预算）- null 表示无限制
     // NOTE: 已迁移到 checkCostLimitsWithLease 以保持与其他周期限额的一致性
     const userDailyCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: null, // 仅检查 daily
@@ -444,7 +506,7 @@ export class ProxyRateLimitGuard {
 
     // ========== 第四层：中长期周期限额（混合检查）==========
 
-    // 9. Key 周限额
+    // 10. Key 周限额
     const keyWeeklyCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: null,
       limit_daily_usd: null,
@@ -478,7 +540,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 10. User 周限额
+    // 11. User 周限额
     const userWeeklyCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: null,
       limit_daily_usd: null,
@@ -514,7 +576,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 11. Key 月限额
+    // 12. Key 月限额
     const keyMonthlyCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: null,
       limit_daily_usd: null,
@@ -550,7 +612,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 12. User 月限额（最后一道长期预算闸门）
+    // 13. User 月限额（最后一道长期预算闸门）
     const userMonthlyCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: null,
       limit_daily_usd: null,

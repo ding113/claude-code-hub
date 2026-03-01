@@ -102,6 +102,7 @@ export const RATE_LIMIT_ERRORS = {
   RATE_LIMIT_MONTHLY_EXCEEDED: "RATE_LIMIT_MONTHLY_EXCEEDED",
   RATE_LIMIT_TOTAL_EXCEEDED: "RATE_LIMIT_TOTAL_EXCEEDED",
   RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED: "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED",
+  RATE_LIMIT_CONCURRENT_UAS_EXCEEDED: "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED",
   RATE_LIMIT_DAILY_QUOTA_EXCEEDED: "RATE_LIMIT_DAILY_QUOTA_EXCEEDED",
   RATE_LIMIT_DAILY_ROLLING_EXCEEDED: "RATE_LIMIT_DAILY_ROLLING_EXCEEDED",
 } as const;
@@ -218,6 +219,9 @@ export function zodErrorToCode(
 
   switch (zodErrorCode) {
     case "invalid_type":
+      if (type === "int") {
+        return { code: ERROR_CODES.MUST_BE_INTEGER, params: { field: field || "field" } };
+      }
       if (type === "string" && params.received === "undefined") {
         return { code: ERROR_CODES.REQUIRED_FIELD, params: { field: field || "field" } };
       }

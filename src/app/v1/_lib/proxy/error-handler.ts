@@ -31,7 +31,11 @@ const OVERRIDE_STATUS_CODE_MAX = 599;
  * - 消费限额用 402 Payment Required（需充值/等待重置）
  */
 function getRateLimitStatusCode(limitType: string): number {
-  return limitType === "rpm" || limitType === "concurrent_sessions" ? 429 : 402;
+  return limitType === "rpm" ||
+    limitType === "concurrent_sessions" ||
+    limitType === "concurrent_uas"
+    ? 429
+    : 402;
 }
 
 export class ProxyErrorHandler {
@@ -316,7 +320,7 @@ export class ProxyErrorHandler {
    * - error.type: "rate_limit_error"
    * - error.message: 人类可读的错误消息
    * - error.code: 错误代码（固定为 "rate_limit_exceeded"）
-   * - error.limit_type: 限流类型（rpm/usd_5h/usd_weekly/usd_monthly/concurrent_sessions/daily_quota）
+   * - error.limit_type: 限流类型（rpm/usd_5h/usd_weekly/usd_monthly/concurrent_uas/concurrent_sessions/daily_quota）
    * - error.current: 当前使用量
    * - error.limit: 限制值
    * - error.reset_time: 重置时间（ISO-8601格式，滚动窗口为 null）

@@ -273,6 +273,19 @@ export function LimitsSection() {
                 step="1"
                 isDecimal={false}
               />
+              <LimitCard
+                label={t("sections.rateLimit.limitConcurrentUas.label")}
+                value={state.rateLimit.limitConcurrentUas}
+                unit=""
+                icon={Users}
+                color="bg-cyan-500/10 text-cyan-500"
+                id={isEdit ? "edit-limit-concurrent-uas" : "limit-concurrent-uas"}
+                placeholder={t("sections.rateLimit.limitConcurrentUas.placeholder")}
+                onChange={(value) => dispatch({ type: "SET_LIMIT_CONCURRENT_UAS", payload: value })}
+                disabled={state.ui.isPending}
+                step="1"
+                isDecimal={false}
+              />
             </div>
           </FieldGroup>
         </div>

@@ -131,6 +131,10 @@
       "label": "Concurrent Sessions Limit",
       "placeholder": "0 means unlimited"
     },
+    "limitConcurrentUas": {
+      "label": "Concurrent UA Limit",
+      "placeholder": "0 means unlimited"
+    },
     "limitDaily": {
       "label": "Daily Spend Limit (USD)",
       "placeholder": "Leave empty for unlimited"
@@ -149,6 +153,7 @@
     },
     "summary": {
       "concurrent": "Concurrent: {count}",
+      "concurrentUas": "UAs: {count}",
       "daily": "Day: ${amount} (reset ${resetTime})",
       "fiveHour": "5h: ${amount}",
       "monthly": "Month: ${amount}",

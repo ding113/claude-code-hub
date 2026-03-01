@@ -901,9 +901,15 @@
     },
     "limitConcurrentSessions": {
       "label": "並發 Session 上限",
-      "placeholder": "0 表示無限制",
-      "description": "同時執行的對話數量",
-      "descriptionWithUserLimit": "最大 Session 數（使用者上限：{limit}）"
+      "placeholder": "0 表示繼承使用者上限",
+      "description": "同時執行的對話數量（0 表示繼承使用者上限）",
+      "descriptionWithUserLimit": "同時執行的對話數量（0 表示繼承使用者上限；使用者上限：{limit}）"
+    },
+    "limitConcurrentUas": {
+      "label": "並發 UA 上限",
+      "placeholder": "0 表示繼承使用者上限",
+      "description": "同時活躍的 UA（User-Agent）數量（0 表示繼承使用者上限）",
+      "descriptionWithUserLimit": "同時活躍的 UA（User-Agent）數量（0 表示繼承使用者上限；使用者上限：{limit}）"
     },
     "providerGroup": {
       "label": "供應商分組",
@@ -999,6 +1005,11 @@
       "label": "並發 Session 上限",
       "placeholder": "0 表示無限制",
       "description": "同時執行的對話數量"
+    },
+    "limitConcurrentUas": {
+      "label": "並發 UA 上限",
+      "placeholder": "0 表示無限制",
+      "description": "同時活躍的 UA（User-Agent）數量"
     },
     "isEnabled": {
       "label": "啟用使用者",
@@ -1619,7 +1630,8 @@
         "limitWeekly": "週限額",
         "limitMonthly": "月限額",
         "limitTotal": "總限額",
-        "limitSessions": "並發 Session"
+        "limitSessions": "並發 Session",
+        "limitUas": "並發 UA"
       },
       "dailyMode": {
         "fixed": "固定時間重設",

@@ -89,6 +89,14 @@ const OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA = z.preprocess(
 const OPTIONAL_CLIENT_PATTERN_ARRAY_WITH_DEFAULT_SCHEMA =
   OPTIONAL_CLIENT_PATTERN_ARRAY_SCHEMA.default([]);
 
+const CONCURRENT_LIMIT_INT_SCHEMA = z.coerce.number().int().min(0).max(1000);
+const CONCURRENT_LIMIT_NULLABLE_OPTIONAL_SCHEMA = z
+  .preprocess(
+    (value) => (typeof value === "string" && value.trim() === "" ? null : value),
+    z.union([z.null(), CONCURRENT_LIMIT_INT_SCHEMA])
+  )
+  .optional();
+
 /**
  * 用户创建数据验证schema
  */
@@ -143,13 +151,8 @@ export const CreateUserSchema = z.object({
     .max(10000000, "总消费上限不能超过10000000美元")
     .nullable()
     .optional(),
-  limitConcurrentSessions: z.coerce
-    .number()
-    .int("并发Session上限必须是整数")
-    .min(0, "并发Session上限不能为负数")
-    .max(1000, "并发Session上限不能超过1000")
-    .nullable()
-    .optional(),
+  limitConcurrentSessions: CONCURRENT_LIMIT_NULLABLE_OPTIONAL_SCHEMA,
+  limitConcurrentUas: CONCURRENT_LIMIT_NULLABLE_OPTIONAL_SCHEMA,
   // User status and expiry management
   isEnabled: z.boolean().optional().default(true),
   expiresAt: z.preprocess(
@@ -270,13 +273,8 @@ export const UpdateUserSchema = z.object({
     .max(10000000, "总消费上限不能超过10000000美元")
     .nullable()
     .optional(),
-  limitConcurrentSessions: z.coerce
-    .number()
-    .int("并发Session上限必须是整数")
-    .min(0, "并发Session上限不能为负数")
-    .max(1000, "并发Session上限不能超过1000")
-    .nullable()
-    .optional(),
+  limitConcurrentSessions: CONCURRENT_LIMIT_NULLABLE_OPTIONAL_SCHEMA,
+  limitConcurrentUas: CONCURRENT_LIMIT_NULLABLE_OPTIONAL_SCHEMA,
   // User status and expiry management
   isEnabled: z.boolean().optional(),
   expiresAt: z.preprocess(
@@ -394,13 +392,8 @@ export const KeyFormSchema = z.object({
     .max(10000000, "总消费上限不能超过10000000美元")
     .nullable()
     .optional(),
-  limitConcurrentSessions: z.coerce
-    .number()
-    .int("并发Session上限必须是整数")
-    .min(0, "并发Session上限不能为负数")
-    .max(1000, "并发Session上限不能超过1000")
-    .optional()
-    .default(0),
+  limitConcurrentSessions: CONCURRENT_LIMIT_INT_SCHEMA.optional().default(0),
+  limitConcurrentUas: CONCURRENT_LIMIT_INT_SCHEMA.optional().default(0),
   providerGroup: z
     .string()
     .max(200, "供应商分组不能超过200个字符")
@@ -507,13 +500,8 @@ export const CreateProviderSchema = z
       .max(10000000, "总消费上限不能超过10000000美元")
       .nullable()
       .optional(),
-    limit_concurrent_sessions: z.coerce
-      .number()
-      .int("并发Session上限必须是整数")
-      .min(0, "并发Session上限不能为负数")
-      .max(1000, "并发Session上限不能超过1000")
-      .optional()
-      .default(0),
+    limit_concurrent_sessions: CONCURRENT_LIMIT_INT_SCHEMA.optional().default(0),
+    limit_concurrent_uas: CONCURRENT_LIMIT_INT_SCHEMA.optional().default(0),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
     swap_cache_ttl_billing: z.boolean().optional().default(false),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),
@@ -741,12 +729,8 @@ export const UpdateProviderSchema = z
       .max(10000000, "总消费上限不能超过10000000美元")
       .nullable()
       .optional(),
-    limit_concurrent_sessions: z.coerce
-      .number()
-      .int("并发Session上限必须是整数")
-      .min(0, "并发Session上限不能为负数")
-      .max(1000, "并发Session上限不能超过1000")
-      .optional(),
+    limit_concurrent_sessions: CONCURRENT_LIMIT_INT_SCHEMA.optional(),
+    limit_concurrent_uas: CONCURRENT_LIMIT_INT_SCHEMA.optional(),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
     swap_cache_ttl_billing: z.boolean().optional(),
     context_1m_preference: CONTEXT_1M_PREFERENCE.nullable().optional(),

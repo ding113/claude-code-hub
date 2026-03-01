@@ -41,6 +41,7 @@ export interface UserEditSectionProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    limitConcurrentUas?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
     // 访问限制字段
@@ -217,6 +218,7 @@ export function UserEditSection({
     add("limitMonthly", user.limitMonthlyUsd);
     add("limitTotal", user.limitTotalUsd);
     add("limitSessions", user.limitConcurrentSessions);
+    add("limitUas", user.limitConcurrentUas);
 
     return items;
   }, [
@@ -229,6 +231,7 @@ export function UserEditSection({
     user.limitMonthlyUsd,
     user.limitTotalUsd,
     user.limitConcurrentSessions,
+    user.limitConcurrentUas,
   ]);
 
   const existingTypes = useMemo(() => {
@@ -276,6 +279,9 @@ export function UserEditSection({
       case "limitSessions":
         emitChange("limitConcurrentSessions", null);
         return;
+      case "limitUas":
+        emitChange("limitConcurrentUas", null);
+        return;
       default:
         return;
     }
@@ -308,6 +314,9 @@ export function UserEditSection({
         return;
       case "limitSessions":
         emitChange("limitConcurrentSessions", value);
+        return;
+      case "limitUas":
+        emitChange("limitConcurrentUas", value);
         return;
       default:
         return;

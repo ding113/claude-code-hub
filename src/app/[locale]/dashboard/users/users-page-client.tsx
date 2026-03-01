@@ -806,6 +806,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             limitMonthlyUsd: selfUser.limitMonthlyUsd ?? undefined,
             limitTotalUsd: selfUser.limitTotalUsd ?? undefined,
             limitConcurrentSessions: selfUser.limitConcurrentSessions ?? undefined,
+            limitConcurrentUas: selfUser.limitConcurrentUas ?? undefined,
           }}
           isAdmin={false}
           onSuccess={handleKeyCreated}
@@ -826,6 +827,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             limitMonthlyUsd: addKeyUser.limitMonthlyUsd ?? undefined,
             limitTotalUsd: addKeyUser.limitTotalUsd ?? undefined,
             limitConcurrentSessions: addKeyUser.limitConcurrentSessions ?? undefined,
+            limitConcurrentUas: addKeyUser.limitConcurrentUas ?? undefined,
           }}
           isAdmin={isAdmin}
           onSuccess={handleKeyCreated}

@@ -910,9 +910,15 @@
     },
     "limitConcurrentSessions": {
       "label": "Concurrent Session Limit",
-      "placeholder": "0 means unlimited",
-      "description": "Number of simultaneous conversations",
-      "descriptionWithUserLimit": "Maximum sessions (User limit: {limit})"
+      "placeholder": "0 means inherit user limit",
+      "description": "Number of simultaneous conversations (0 inherits user limit)",
+      "descriptionWithUserLimit": "Number of simultaneous conversations (0 inherits user limit; user limit: {limit})"
+    },
+    "limitConcurrentUas": {
+      "label": "Concurrent UA Limit",
+      "placeholder": "0 means inherit user limit",
+      "description": "Number of active UAs (User-Agent) (0 inherits user limit)",
+      "descriptionWithUserLimit": "Number of active UAs (User-Agent) (0 inherits user limit; user limit: {limit})"
     },
     "providerGroup": {
       "label": "Provider Group",
@@ -1013,6 +1019,11 @@
       "label": "Concurrent Sessions Limit",
       "placeholder": "0 means unlimited",
       "description": "Number of simultaneous conversations"
+    },
+    "limitConcurrentUas": {
+      "label": "Concurrent UA Limit",
+      "placeholder": "0 means unlimited",
+      "description": "Number of active UAs (User-Agent)"
     },
     "isEnabled": {
       "label": "Enable User",
@@ -1659,7 +1670,8 @@
         "limitWeekly": "Weekly Limit",
         "limitMonthly": "Monthly Limit",
         "limitTotal": "Total Limit",
-        "limitSessions": "Concurrent Sessions"
+        "limitSessions": "Concurrent Sessions",
+        "limitUas": "Concurrent UAs"
       },
       "ruleTypes": {
         "limitRpm": "RPM limit",
@@ -1668,7 +1680,8 @@
         "limitWeekly": "Weekly limit",
         "limitMonthly": "Monthly limit",
         "limitTotal": "Total limit",
-        "limitSessions": "Concurrent sessions"
+        "limitSessions": "Concurrent sessions",
+        "limitUas": "Concurrent UAs"
       },
       "errors": {
         "missingType": "Please select a limit type",

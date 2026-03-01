@@ -57,6 +57,7 @@
   "RATE_LIMIT_MONTHLY_EXCEEDED": "Monthly cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
   "RATE_LIMIT_TOTAL_EXCEEDED": "Total spending limit exceeded: ${current} USD (limit: ${limit} USD)",
   "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "Concurrent sessions limit exceeded: {current} sessions (limit: {limit}). Please wait for active sessions to complete",
+  "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED": "Concurrent user agents limit exceeded: {current} UAs (limit: {limit}). Please wait for active UAs to free up",
   "RATE_LIMIT_DAILY_QUOTA_EXCEEDED": "Daily quota exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",
   "RATE_LIMIT_DAILY_ROLLING_EXCEEDED": "24-hour rolling window cost limit exceeded: ${current} USD (limit: ${limit} USD). Usage gradually expires over the past 24 hours",
 
@@ -82,6 +83,7 @@
   "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT": "Key monthly limit ({keyLimit}) cannot exceed user limit ({userLimit})",
   "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT": "Key total limit ({keyLimit}) cannot exceed user limit ({userLimit})",
   "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT": "Key concurrent session limit ({keyLimit}) cannot exceed user limit ({userLimit})",
+  "KEY_LIMIT_CONCURRENT_UAS_EXCEEDS_USER_LIMIT": "Key concurrent UA limit ({keyLimit}) cannot exceed user limit ({userLimit})",
   "NO_DEFAULT_GROUP_PERMISSION": "No permission to use default group. You don't have a Key with default group",
   "NO_GROUP_PERMISSION": "No permission to use the following groups: {groups}"
 }

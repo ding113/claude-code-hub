@@ -242,6 +242,14 @@ export function UserQuotaListItem({ user, currencyCode = "USD" }: UserQuotaListI
                 : t("noLimitSet")}
             </p>
           </div>
+          <div className="text-sm space-y-1">
+            <p className="text-muted-foreground">{t("limitConcurrentUas")}</p>
+            <p className="font-medium">
+              {user.limitConcurrentUas && user.limitConcurrentUas > 0
+                ? user.limitConcurrentUas
+                : t("noLimitSet")}
+            </p>
+          </div>
         </div>
 
         {/* Keys preview + full list */}

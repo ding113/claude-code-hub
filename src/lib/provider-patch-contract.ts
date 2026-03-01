@@ -58,6 +58,7 @@ const PATCH_FIELDS: ProviderBatchPatchField[] = [
   "limit_monthly_usd",
   "limit_total_usd",
   "limit_concurrent_sessions",
+  "limit_concurrent_uas",
   // Circuit Breaker
   "circuit_breaker_failure_threshold",
   "circuit_breaker_open_duration",
@@ -110,6 +111,7 @@ const CLEARABLE_FIELDS: Record<ProviderBatchPatchField, boolean> = {
   limit_monthly_usd: true,
   limit_total_usd: true,
   limit_concurrent_sessions: false,
+  limit_concurrent_uas: false,
   // Circuit Breaker
   circuit_breaker_failure_threshold: false,
   circuit_breaker_open_duration: false,
@@ -222,7 +224,6 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "limit_weekly_usd":
     case "limit_monthly_usd":
     case "limit_total_usd":
-    case "limit_concurrent_sessions":
     case "circuit_breaker_failure_threshold":
     case "circuit_breaker_open_duration":
     case "circuit_breaker_half_open_success_threshold":
@@ -231,6 +232,9 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "streaming_idle_timeout_ms":
     case "request_timeout_non_streaming_ms":
       return typeof value === "number" && Number.isFinite(value);
+    case "limit_concurrent_sessions":
+    case "limit_concurrent_uas":
+      return typeof value === "number" && Number.isInteger(value) && value >= 0;
     case "group_tag":
     case "daily_reset_time":
     case "proxy_url":
@@ -519,6 +523,12 @@ export function normalizeProviderBatchPatchDraft(
   );
   if (!limitConcurrentSessions.ok) return limitConcurrentSessions;
 
+  const limitConcurrentUas = normalizePatchField(
+    "limit_concurrent_uas",
+    typedDraft.limit_concurrent_uas
+  );
+  if (!limitConcurrentUas.ok) return limitConcurrentUas;
+
   // Circuit Breaker
   const cbFailureThreshold = normalizePatchField(
     "circuit_breaker_failure_threshold",
@@ -619,6 +629,7 @@ export function normalizeProviderBatchPatchDraft(
       limit_monthly_usd: limitMonthlyUsd.data,
       limit_total_usd: limitTotalUsd.data,
       limit_concurrent_sessions: limitConcurrentSessions.data,
+      limit_concurrent_uas: limitConcurrentUas.data,
       // Circuit Breaker
       circuit_breaker_failure_threshold: cbFailureThreshold.data,
       circuit_breaker_open_duration: cbOpenDuration.data,
@@ -760,6 +771,10 @@ function applyPatchField<T>(
       case "limit_concurrent_sessions":
         updates.limit_concurrent_sessions =
           patch.value as ProviderBatchApplyUpdates["limit_concurrent_sessions"];
+        return { ok: true, data: undefined };
+      case "limit_concurrent_uas":
+        updates.limit_concurrent_uas =
+          patch.value as ProviderBatchApplyUpdates["limit_concurrent_uas"];
         return { ok: true, data: undefined };
       // Circuit Breaker
       case "circuit_breaker_failure_threshold":
@@ -943,6 +958,7 @@ export function buildProviderBatchApplyUpdates(
     ["limit_monthly_usd", patch.limit_monthly_usd],
     ["limit_total_usd", patch.limit_total_usd],
     ["limit_concurrent_sessions", patch.limit_concurrent_sessions],
+    ["limit_concurrent_uas", patch.limit_concurrent_uas],
     // Circuit Breaker
     ["circuit_breaker_failure_threshold", patch.circuit_breaker_failure_threshold],
     ["circuit_breaker_open_duration", patch.circuit_breaker_open_duration],
@@ -1008,6 +1024,7 @@ export function hasProviderBatchPatchChanges(patch: ProviderBatchPatch): boolean
     patch.limit_monthly_usd.mode !== "no_change" ||
     patch.limit_total_usd.mode !== "no_change" ||
     patch.limit_concurrent_sessions.mode !== "no_change" ||
+    patch.limit_concurrent_uas.mode !== "no_change" ||
     // Circuit Breaker
     patch.circuit_breaker_failure_threshold.mode !== "no_change" ||
     patch.circuit_breaker_open_duration.mode !== "no_change" ||

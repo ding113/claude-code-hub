@@ -132,6 +132,10 @@
       "label": "Лимит параллельных сессий",
       "placeholder": "0 — без ограничений"
     },
+    "limitConcurrentUas": {
+      "label": "Лимит одновременных UA",
+      "placeholder": "0 — без ограничений"
+    },
     "limitDaily": {
       "label": "Дневной лимит расходов (USD)",
       "placeholder": "Пусто — без ограничений"
@@ -150,6 +154,7 @@
     },
     "summary": {
       "concurrent": "Параллельно: {count}",
+      "concurrentUas": "UA: {count}",
       "daily": "день: {amount} (сброс {resetTime})",
       "fiveHour": "5ч: ${amount}",
       "monthly": "Месяц: ${amount}",

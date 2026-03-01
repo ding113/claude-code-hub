@@ -17,6 +17,7 @@ export const USER_FIELD_PERMISSIONS = {
   limitMonthlyUsd: { requiredRole: "admin" },
   limitTotalUsd: { requiredRole: "admin" },
   limitConcurrentSessions: { requiredRole: "admin" },
+  limitConcurrentUas: { requiredRole: "admin" },
 
   // Admin-only fields (daily reset configuration)
   dailyResetMode: { requiredRole: "admin" },

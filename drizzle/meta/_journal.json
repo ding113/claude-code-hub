@@ -547,6 +547,13 @@
       "when": 1772219877045,
       "tag": "0077_nappy_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1772345662783,
+      "tag": "0078_wild_scourge",
+      "breakpoints": true
     }
   ]
 }

@@ -904,9 +904,15 @@
     },
     "limitConcurrentSessions": {
       "label": "Лимит параллельных сеансов",
-      "placeholder": "0 означает неограниченно",
-      "description": "Количество одновременных разговоров",
-      "descriptionWithUserLimit": "Максимум сеансов (Лимит пользователя: {limit})"
+      "placeholder": "0 наследует лимит пользователя",
+      "description": "Количество одновременных разговоров (0 наследует лимит пользователя)",
+      "descriptionWithUserLimit": "Количество одновременных разговоров (0 наследует лимит пользователя; лимит пользователя: {limit})"
+    },
+    "limitConcurrentUas": {
+      "label": "Лимит одновременных UA",
+      "placeholder": "0 наследует лимит пользователя",
+      "description": "Количество активных UA (User-Agent) (0 наследует лимит пользователя)",
+      "descriptionWithUserLimit": "Количество активных UA (User-Agent) (0 наследует лимит пользователя; лимит пользователя: {limit})"
     },
     "providerGroup": {
       "label": "Группа провайдеров",
@@ -1002,6 +1008,11 @@
       "label": "Лимит одновременных сессий",
       "placeholder": "0 означает неограниченно",
       "description": "Количество одновременных разговоров"
+    },
+    "limitConcurrentUas": {
+      "label": "Лимит одновременных UA",
+      "placeholder": "0 означает неограниченно",
+      "description": "Количество активных UA (User-Agent)"
     },
     "isEnabled": {
       "label": "Активировать пользователя",
@@ -1642,7 +1653,8 @@
         "limitWeekly": "Недельный лимит",
         "limitMonthly": "Месячный лимит",
         "limitTotal": "Общий лимит",
-        "limitSessions": "Одновременные сессии"
+        "limitSessions": "Одновременные сессии",
+        "limitUas": "Одновременные UA"
       },
       "ruleTypes": {
         "limitRpm": "Лимит RPM",
@@ -1651,7 +1663,8 @@
         "limitWeekly": "Недельный лимит",
         "limitMonthly": "Месячный лимит",
         "limitTotal": "Общий лимит",
-        "limitSessions": "Одновременные сессии"
+        "limitSessions": "Одновременные сессии",
+        "limitUas": "Одновременные UA"
       },
       "errors": {
         "missingType": "Пожалуйста, выберите тип лимита",

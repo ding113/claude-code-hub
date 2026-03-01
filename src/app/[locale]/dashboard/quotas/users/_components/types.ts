@@ -17,6 +17,7 @@ export interface UserKeyWithUsage {
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
   limitConcurrentSessions: number;
+  limitConcurrentUas: number;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
 }
@@ -36,6 +37,7 @@ export interface UserQuotaWithUsage {
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
   limitConcurrentSessions: number | null;
+  limitConcurrentUas: number | null;
   totalUsage: number;
   keys: UserKeyWithUsage[];
 }

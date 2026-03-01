@@ -21,6 +21,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { getSessionOriginChain } from "@/actions/session-origin-chain";
+import { resolveChainItemErrorMessage } from "@/app/[locale]/dashboard/logs/_components/resolve-chain-item-error-message";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -62,6 +63,7 @@ export function LogicTraceTab({
 }: LogicTraceTabProps) {
   const t = useTranslations("dashboard.logs.details");
   const tChain = useTranslations("provider-chain");
+  const tErrors = useTranslations("errors");
   const [timelineCopied, setTimelineCopied] = useState(false);
   const [originOpen, setOriginOpen] = useState(false);
   const [originChain, setOriginChain] = useState<ProviderChainItem[] | null | undefined>(undefined);
@@ -708,6 +710,7 @@ export function LogicTraceTab({
             const isRetry = item.attemptNumber && item.attemptNumber > 1;
             const isSessionReuse =
               item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
+            const resolvedErrorMessage = resolveChainItemErrorMessage(item, tErrors);
 
             // Determine icon based on type
             const stepIcon = isSessionReuse
@@ -876,14 +879,14 @@ export function LogicTraceTab({
                     )}
 
                     {/* Error Message */}
-                    {item.errorMessage && (
+                    {resolvedErrorMessage && (
                       <div className="pt-2 border-t border-muted/50">
                         <div className="flex items-center gap-1 text-rose-600 mb-1">
                           <AlertCircle className="h-3 w-3" />
                           <span>{tChain("details.error")}</span>
                         </div>
                         <pre className="text-[10px] bg-rose-50 dark:bg-rose-950/20 p-2 rounded whitespace-pre-wrap break-words">
-                          {item.errorMessage}
+                          {resolvedErrorMessage}
                         </pre>
                       </div>
                     )}
