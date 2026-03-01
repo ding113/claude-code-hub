@@ -385,3 +385,13 @@ end
 
 return tostring(total)
 `;
+
+/**
+ * 通用别名：单 ZSET member 的并发检查 + 追踪（Session/UA 复用）。
+ */
+export const CHECK_AND_TRACK_ZSET_MEMBER = CHECK_AND_TRACK_SESSION;
+
+/**
+ * 通用别名：global/key/user 三 key 的并发检查 + 追踪（Session/UA 复用）。
+ */
+export const CHECK_AND_TRACK_KEY_USER_ZSET_MEMBER = CHECK_AND_TRACK_KEY_USER_SESSION;

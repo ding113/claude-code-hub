@@ -80,7 +80,9 @@ import {
 } from "@/lib/redis/active-ua-keys";
 import {
   CHECK_AND_TRACK_KEY_USER_SESSION,
+  CHECK_AND_TRACK_KEY_USER_ZSET_MEMBER,
   CHECK_AND_TRACK_SESSION,
+  CHECK_AND_TRACK_ZSET_MEMBER,
   GET_COST_5H_ROLLING_WINDOW,
   GET_COST_DAILY_ROLLING_WINDOW,
   TRACK_COST_5H_ROLLING_WINDOW,
@@ -606,7 +608,7 @@ export class RateLimitService {
       const now = Date.now();
 
       const result = (await RateLimitService.redis.eval(
-        CHECK_AND_TRACK_KEY_USER_SESSION,
+        CHECK_AND_TRACK_KEY_USER_ZSET_MEMBER,
         3, // KEYS count
         globalKey, // KEYS[1]
         keyKey, // KEYS[2]
@@ -820,7 +822,7 @@ export class RateLimitService {
       const now = Date.now();
 
       const result = (await RateLimitService.redis.eval(
-        CHECK_AND_TRACK_SESSION,
+        CHECK_AND_TRACK_ZSET_MEMBER,
         1, // KEYS count
         key, // KEYS[1]
         uaId, // ARGV[1]
