@@ -8,13 +8,14 @@ export function resolveChainItemErrorMessage(
     return item.errorMessage;
   }
 
-  if (typeof item.errorCode !== "string" || !item.errorCode.trim()) {
+  const errorCode = typeof item.errorCode === "string" ? item.errorCode.trim() : "";
+  if (!errorCode) {
     return null;
   }
 
   try {
-    return tErrors(item.errorCode, item.errorParams ?? undefined);
+    return tErrors(errorCode, item.errorParams ?? undefined);
   } catch {
-    return item.errorCode;
+    return errorCode;
   }
 }
