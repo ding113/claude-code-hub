@@ -35,6 +35,7 @@ function hasQuota(user: UserQuotaWithUsage): boolean {
     user.limitMonthlyUsd ?? 0,
     user.limitTotalUsd ?? 0,
     user.limitConcurrentSessions ?? 0,
+    user.limitConcurrentUas ?? 0,
   ];
   return limits.some((limit) => (limit ?? 0) > 0);
 }

@@ -906,6 +906,12 @@
       "description": "同時に実行される会話の数",
       "descriptionWithUserLimit": "最大セッション数 (ユーザー上限: {limit})"
     },
+    "limitConcurrentUas": {
+      "label": "同時 UA 上限",
+      "placeholder": "0は無制限を意味します",
+      "description": "アクティブな UA (User-Agent) の数",
+      "descriptionWithUserLimit": "最大 UA 数 (ユーザー上限: {limit})"
+    },
     "providerGroup": {
       "label": "プロバイダーグループ",
       "placeholder": "プロバイダーグループタグを入力し、Enterで追加",
@@ -1000,6 +1006,11 @@
       "label": "同時セッション上限",
       "placeholder": "0は無制限を意味します",
       "description": "同時に実行される会話の数"
+    },
+    "limitConcurrentUas": {
+      "label": "同時 UA 上限",
+      "placeholder": "0は無制限を意味します",
+      "description": "アクティブな UA (User-Agent) の数"
     },
     "isEnabled": {
       "label": "ユーザーを有効化",
@@ -1611,7 +1622,8 @@
         "limitWeekly": "週次上限",
         "limitMonthly": "月次上限",
         "limitTotal": "総上限",
-        "limitSessions": "同時セッション"
+        "limitSessions": "同時セッション",
+        "limitUas": "同時 UA"
       },
       "dailyMode": {
         "fixed": "固定時刻でリセット",

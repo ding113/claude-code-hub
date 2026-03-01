@@ -37,6 +37,7 @@ export async function findKeyById(id: number): Promise<Key | null> {
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      limitConcurrentUas: keys.limitConcurrentUas,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
@@ -68,6 +69,7 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      limitConcurrentUas: keys.limitConcurrentUas,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
@@ -107,6 +109,7 @@ export async function findKeyListBatch(userIds: number[]): Promise<Map<number, K
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      limitConcurrentUas: keys.limitConcurrentUas,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
@@ -150,6 +153,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
       keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null,
     limitTotalUsd: keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null,
     limitConcurrentSessions: keyData.limit_concurrent_sessions,
+    limitConcurrentUas: keyData.limit_concurrent_uas,
     providerGroup: keyData.provider_group ?? null,
     cacheTtlPreference: keyData.cache_ttl_preference ?? null,
   };
@@ -170,6 +174,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitMonthlyUsd: keys.limitMonthlyUsd,
     limitTotalUsd: keys.limitTotalUsd,
     limitConcurrentSessions: keys.limitConcurrentSessions,
+    limitConcurrentUas: keys.limitConcurrentUas,
     providerGroup: keys.providerGroup,
     cacheTtlPreference: keys.cacheTtlPreference,
     createdAt: keys.createdAt,
@@ -239,6 +244,8 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null;
   if (keyData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = keyData.limit_concurrent_sessions;
+  if (keyData.limit_concurrent_uas !== undefined)
+    dbData.limitConcurrentUas = keyData.limit_concurrent_uas;
   if (keyData.provider_group !== undefined) dbData.providerGroup = keyData.provider_group;
   if (keyData.cache_ttl_preference !== undefined)
     dbData.cacheTtlPreference = keyData.cache_ttl_preference ?? null;
@@ -263,6 +270,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      limitConcurrentUas: keys.limitConcurrentUas,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
@@ -305,6 +313,7 @@ export async function findActiveKeyByUserIdAndName(
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      limitConcurrentUas: keys.limitConcurrentUas,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
@@ -486,6 +495,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
       limitConcurrentSessions: keys.limitConcurrentSessions,
+      limitConcurrentUas: keys.limitConcurrentUas,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
       createdAt: keys.createdAt,
@@ -547,6 +557,7 @@ export async function validateApiKeyAndGetUser(
         limitMonthlyUsd: users.limitMonthlyUsd,
         limitTotalUsd: users.limitTotalUsd,
         limitConcurrentSessions: users.limitConcurrentSessions,
+        limitConcurrentUas: users.limitConcurrentUas,
         dailyResetMode: users.dailyResetMode,
         dailyResetTime: users.dailyResetTime,
         isEnabled: users.isEnabled,
@@ -592,6 +603,7 @@ export async function validateApiKeyAndGetUser(
       keyLimitMonthlyUsd: keys.limitMonthlyUsd,
       keyLimitTotalUsd: keys.limitTotalUsd,
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
+      keyLimitConcurrentUas: keys.limitConcurrentUas,
       keyProviderGroup: keys.providerGroup,
       keyCacheTtlPreference: keys.cacheTtlPreference,
       keyCreatedAt: keys.createdAt,
@@ -610,6 +622,7 @@ export async function validateApiKeyAndGetUser(
       userLimitMonthlyUsd: users.limitMonthlyUsd,
       userLimitTotalUsd: users.limitTotalUsd,
       userLimitConcurrentSessions: users.limitConcurrentSessions,
+      userLimitConcurrentUas: users.limitConcurrentUas,
       userDailyResetMode: users.dailyResetMode,
       userDailyResetTime: users.dailyResetTime,
       userIsEnabled: users.isEnabled,
@@ -651,6 +664,7 @@ export async function validateApiKeyAndGetUser(
     limitMonthlyUsd: row.userLimitMonthlyUsd,
     limitTotalUsd: row.userLimitTotalUsd,
     limitConcurrentSessions: row.userLimitConcurrentSessions,
+    limitConcurrentUas: row.userLimitConcurrentUas,
     dailyResetMode: row.userDailyResetMode,
     dailyResetTime: row.userDailyResetTime,
     isEnabled: row.userIsEnabled,
@@ -678,6 +692,7 @@ export async function validateApiKeyAndGetUser(
     limitMonthlyUsd: row.keyLimitMonthlyUsd,
     limitTotalUsd: row.keyLimitTotalUsd,
     limitConcurrentSessions: row.keyLimitConcurrentSessions,
+    limitConcurrentUas: row.keyLimitConcurrentUas,
     providerGroup: row.keyProviderGroup,
     cacheTtlPreference: row.keyCacheTtlPreference,
     createdAt: row.keyCreatedAt,

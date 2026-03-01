@@ -87,6 +87,7 @@ function buildDefaultValues(): CreateFormValues {
       limitMonthlyUsd: null,
       limitTotalUsd: null,
       limitConcurrentSessions: null,
+      limitConcurrentUas: null,
       dailyResetMode: "fixed",
       dailyResetTime: "00:00",
       allowedClients: [],
@@ -109,6 +110,7 @@ function buildDefaultValues(): CreateFormValues {
       limitMonthlyUsd: null,
       limitTotalUsd: null,
       limitConcurrentSessions: 0,
+      limitConcurrentUas: 0,
     },
   };
 }
@@ -154,6 +156,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
             limitMonthlyUsd: data.user.limitMonthlyUsd,
             limitTotalUsd: data.user.limitTotalUsd,
             limitConcurrentSessions: data.user.limitConcurrentSessions,
+            limitConcurrentUas: data.user.limitConcurrentUas,
             dailyResetMode: data.user.dailyResetMode,
             dailyResetTime: data.user.dailyResetTime,
             allowedClients: data.user.allowedClients,
@@ -184,6 +187,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
             limitMonthlyUsd: data.key.limitMonthlyUsd,
             limitTotalUsd: data.key.limitTotalUsd,
             limitConcurrentSessions: data.key.limitConcurrentSessions,
+            limitConcurrentUas: data.key.limitConcurrentUas,
           });
 
           if (!keyRes.ok) {
@@ -363,6 +367,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
               limitMonthlyUsd: currentUserDraft.limitMonthlyUsd ?? null,
               limitTotalUsd: currentUserDraft.limitTotalUsd ?? null,
               limitConcurrentSessions: currentUserDraft.limitConcurrentSessions ?? null,
+              limitConcurrentUas: currentUserDraft.limitConcurrentUas ?? null,
               dailyResetMode: currentUserDraft.dailyResetMode ?? "fixed",
               dailyResetTime: currentUserDraft.dailyResetTime ?? "00:00",
               allowedClients: currentUserDraft.allowedClients || [],
@@ -395,6 +400,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
               limitMonthlyUsd: currentKeyDraft.limitMonthlyUsd ?? null,
               limitTotalUsd: currentKeyDraft.limitTotalUsd ?? null,
               limitConcurrentSessions: currentKeyDraft.limitConcurrentSessions ?? 0,
+              limitConcurrentUas: currentKeyDraft.limitConcurrentUas ?? 0,
             }}
             isAdmin={true}
             showLimitRules={false}

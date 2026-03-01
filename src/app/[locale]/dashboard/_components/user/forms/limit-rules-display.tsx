@@ -19,7 +19,7 @@ export interface LimitRulesDisplayProps {
   /**
    * i18n strings passed from parent.
    * Expected keys (optional):
-   * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions}
+   * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions|limitUas}
    * - daily.mode.fixed, daily.mode.rolling
    * - actions.remove
    */

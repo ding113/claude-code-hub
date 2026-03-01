@@ -19,6 +19,7 @@ export interface User {
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   limitConcurrentSessions?: number; // 并发 Session 上限
+  limitConcurrentUas?: number; // 并发 UA 上限
   // Daily quota reset mode
   dailyResetMode: "fixed" | "rolling"; // 每日限额重置模式
   dailyResetTime: string; // 每日重置时间 (HH:mm)
@@ -48,6 +49,7 @@ export interface CreateUserData {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  limitConcurrentUas?: number;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
@@ -77,6 +79,7 @@ export interface UpdateUserData {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  limitConcurrentUas?: number | null;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
@@ -128,6 +131,7 @@ export interface UserKeyDisplay {
   limitMonthlyUsd: number | null; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   limitConcurrentSessions: number; // 并发 Session 上限
+  limitConcurrentUas: number; // 并发 UA 上限
   // Provider group override (null = inherit from user)
   providerGroup?: string | null;
 }
@@ -151,6 +155,7 @@ export interface UserDisplay {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  limitConcurrentUas?: number | null;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
@@ -176,6 +181,7 @@ export interface KeyDialogUserContext {
   limitMonthlyUsd?: number;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number;
+  limitConcurrentUas?: number;
   allowedClients?: string[];
   blockedClients?: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
   allowedModels?: string[];

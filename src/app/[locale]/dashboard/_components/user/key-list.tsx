@@ -92,7 +92,8 @@ export function KeyList({
             (record.limitDailyUsd && record.limitDailyUsd > 0) ||
             (record.limitWeeklyUsd && record.limitWeeklyUsd > 0) ||
             (record.limitMonthlyUsd && record.limitMonthlyUsd > 0) ||
-            (record.limitConcurrentSessions && record.limitConcurrentSessions > 0)
+            (record.limitConcurrentSessions && record.limitConcurrentSessions > 0) ||
+            (record.limitConcurrentUas && record.limitConcurrentUas > 0)
         );
 
         const hasModelStats = record.modelStats.length > 0;

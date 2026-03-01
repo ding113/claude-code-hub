@@ -40,6 +40,7 @@ interface EditKeyFormProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
+    limitConcurrentUas?: number;
   };
   user?: KeyDialogUserContext;
   isAdmin?: boolean;
@@ -98,6 +99,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
       limitMonthlyUsd: keyData?.limitMonthlyUsd ?? null,
       limitTotalUsd: keyData?.limitTotalUsd ?? null,
       limitConcurrentSessions: keyData?.limitConcurrentSessions ?? 0,
+      limitConcurrentUas: keyData?.limitConcurrentUas ?? 0,
     },
     onSubmit: async (data) => {
       if (!keyData) {
@@ -120,6 +122,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             limitMonthlyUsd: data.limitMonthlyUsd,
             limitTotalUsd: data.limitTotalUsd,
             limitConcurrentSessions: data.limitConcurrentSessions,
+            limitConcurrentUas: data.limitConcurrentUas,
             ...(isAdmin ? { providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT } : {}),
           });
           if (!res.ok) {
@@ -384,6 +387,21 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
           min={0}
           step={1}
           {...form.getFieldProps("limitConcurrentSessions")}
+        />
+
+        <NumberField
+          label={t("limitConcurrentUas.label")}
+          placeholder={t("limitConcurrentUas.placeholder")}
+          description={
+            user?.limitConcurrentUas
+              ? t("limitConcurrentUas.descriptionWithUserLimit", {
+                  limit: user.limitConcurrentUas,
+                })
+              : t("limitConcurrentUas.description")
+          }
+          min={0}
+          step={1}
+          {...form.getFieldProps("limitConcurrentUas")}
         />
       </FormGrid>
     </DialogFormLayout>

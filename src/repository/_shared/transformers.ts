@@ -43,6 +43,7 @@ export function toUser(dbUser: any): User {
     limitMonthlyUsd: parseOptionalNumber(dbUser?.limitMonthlyUsd),
     limitTotalUsd: parseOptionalNumber(dbUser?.limitTotalUsd),
     limitConcurrentSessions: parseOptionalInteger(dbUser?.limitConcurrentSessions),
+    limitConcurrentUas: parseOptionalInteger(dbUser?.limitConcurrentUas),
     dailyResetMode: dbUser?.dailyResetMode ?? "fixed",
     dailyResetTime: dbUser?.dailyResetTime ?? "00:00",
     isEnabled: dbUser?.isEnabled ?? true,
@@ -71,6 +72,7 @@ export function toKey(dbKey: any): Key {
         ? parseFloat(dbKey.limitTotalUsd)
         : null,
     limitConcurrentSessions: dbKey?.limitConcurrentSessions ?? 0,
+    limitConcurrentUas: dbKey?.limitConcurrentUas ?? 0,
     providerGroup: dbKey?.providerGroup ?? null,
     cacheTtlPreference: dbKey?.cacheTtlPreference ?? null,
     createdAt: dbKey?.createdAt ? new Date(dbKey.createdAt) : new Date(),
@@ -107,6 +109,7 @@ export function toProvider(dbProvider: any): Provider {
         : null,
     totalCostResetAt: dbProvider?.totalCostResetAt ? new Date(dbProvider.totalCostResetAt) : null,
     limitConcurrentSessions: dbProvider?.limitConcurrentSessions ?? 0,
+    limitConcurrentUas: dbProvider?.limitConcurrentUas ?? 0,
     maxRetryAttempts:
       dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null
         ? Number(dbProvider.maxRetryAttempts)

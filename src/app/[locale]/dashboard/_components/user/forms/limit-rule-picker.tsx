@@ -29,7 +29,8 @@ export type LimitType =
   | "limitWeekly"
   | "limitMonthly"
   | "limitTotal"
-  | "limitSessions";
+  | "limitSessions"
+  | "limitUas";
 
 export type DailyResetMode = "fixed" | "rolling";
 
@@ -47,7 +48,7 @@ export interface LimitRulePickerProps {
    * - fields.value.label, fields.value.placeholder
    * - daily.mode.label, daily.mode.fixed, daily.mode.rolling
    * - daily.time.label, daily.time.placeholder
-   * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions}
+   * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions|limitUas}
    * - errors.missingType, errors.invalidValue, errors.invalidTime
    * - overwriteHint
    */
@@ -62,6 +63,7 @@ const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
   { type: "limitMonthly", fallbackLabel: "月限额" },
   { type: "limitTotal", fallbackLabel: "总限额" },
   { type: "limitSessions", fallbackLabel: "并发 Session" },
+  { type: "limitUas", fallbackLabel: "并发 UA" },
 ];
 
 const QUICK_VALUES = [10, 50, 100, 500] as const;
@@ -208,7 +210,9 @@ export function LimitRulePicker({
               <Input
                 type="number"
                 min={0}
-                step={type === "limitSessions" || type === "limitRpm" ? 1 : 0.01}
+                step={
+                  type === "limitSessions" || type === "limitUas" || type === "limitRpm" ? 1 : 0.01
+                }
                 inputMode="decimal"
                 autoFocus
                 value={rawValue}
@@ -218,7 +222,7 @@ export function LimitRulePicker({
               />
 
               <div className="flex flex-wrap gap-2">
-                {(type === "limitSessions"
+                {(type === "limitSessions" || type === "limitUas"
                   ? SESSION_QUICK_VALUES
                   : type === "limitRpm"
                     ? RPM_QUICK_VALUES
@@ -233,7 +237,7 @@ export function LimitRulePicker({
                   >
                     {v === 0
                       ? getTranslation(translations, "quickValues.unlimited", "无限")
-                      : type === "limitSessions" || type === "limitRpm"
+                      : type === "limitSessions" || type === "limitUas" || type === "limitRpm"
                         ? v
                         : `$${v}`}
                   </Button>

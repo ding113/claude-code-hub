@@ -54,6 +54,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitMonthlyUsd: userData.limitMonthlyUsd?.toString(),
     limitTotalUsd: userData.limitTotalUsd?.toString(),
     limitConcurrentSessions: userData.limitConcurrentSessions,
+    limitConcurrentUas: userData.limitConcurrentUas,
     dailyResetMode: userData.dailyResetMode ?? "fixed",
     dailyResetTime: userData.dailyResetTime ?? "00:00",
     isEnabled: userData.isEnabled ?? true,
@@ -80,6 +81,7 @@ export async function createUser(userData: CreateUserData): Promise<User> {
     limitMonthlyUsd: users.limitMonthlyUsd,
     limitTotalUsd: users.limitTotalUsd,
     limitConcurrentSessions: users.limitConcurrentSessions,
+    limitConcurrentUas: users.limitConcurrentUas,
     dailyResetMode: users.dailyResetMode,
     dailyResetTime: users.dailyResetTime,
     isEnabled: users.isEnabled,
@@ -113,6 +115,7 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      limitConcurrentUas: users.limitConcurrentUas,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
       isEnabled: users.isEnabled,
@@ -359,6 +362,7 @@ export async function findUserListBatch(
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      limitConcurrentUas: users.limitConcurrentUas,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
       isEnabled: users.isEnabled,
@@ -417,6 +421,7 @@ export async function findUserById(id: number): Promise<User | null> {
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      limitConcurrentUas: users.limitConcurrentUas,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
       isEnabled: users.isEnabled,
@@ -451,6 +456,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
     limitMonthlyUsd?: string | null;
     limitTotalUsd?: string | null;
     limitConcurrentSessions?: number | null;
+    limitConcurrentUas?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
     isEnabled?: boolean;
@@ -483,6 +489,8 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       userData.limitTotalUsd === null ? null : userData.limitTotalUsd.toString();
   if (userData.limitConcurrentSessions !== undefined)
     dbData.limitConcurrentSessions = userData.limitConcurrentSessions;
+  if (userData.limitConcurrentUas !== undefined)
+    dbData.limitConcurrentUas = userData.limitConcurrentUas;
   if (userData.dailyResetMode !== undefined) dbData.dailyResetMode = userData.dailyResetMode;
   if (userData.dailyResetTime !== undefined) dbData.dailyResetTime = userData.dailyResetTime;
   if (userData.isEnabled !== undefined) dbData.isEnabled = userData.isEnabled;
@@ -512,6 +520,7 @@ export async function updateUser(id: number, userData: UpdateUserData): Promise<
       limitMonthlyUsd: users.limitMonthlyUsd,
       limitTotalUsd: users.limitTotalUsd,
       limitConcurrentSessions: users.limitConcurrentSessions,
+      limitConcurrentUas: users.limitConcurrentUas,
       dailyResetMode: users.dailyResetMode,
       dailyResetTime: users.dailyResetTime,
       isEnabled: users.isEnabled,

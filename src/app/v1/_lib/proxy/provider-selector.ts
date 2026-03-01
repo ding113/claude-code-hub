@@ -2,6 +2,7 @@ import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
+import { resolveConcurrentUaIdentity } from "@/lib/rate-limit/concurrent-ua-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -265,6 +266,7 @@ export class ProxyProviderResolver {
     }
 
     // === 故障转移循环 ===
+    const { id: uaId } = resolveConcurrentUaIdentity(session.userAgent);
     let attemptCount = 0;
     while (true) {
       attemptCount++;
@@ -275,6 +277,74 @@ export class ProxyProviderResolver {
 
       // 选定供应商后，进行原子性并发检查并追踪
       if (session.sessionId) {
+        // 0. 供应商并发 UA（User-Agent）限制：优先检查，避免先追踪 session 再因 UA 超限而回退导致 session 计数泄漏
+        const uaLimit = session.provider.limitConcurrentUas || 0;
+        const uaCheckResult = await RateLimitService.checkAndTrackProviderUa(
+          session.provider.id,
+          uaId,
+          uaLimit
+        );
+
+        if (!uaCheckResult.allowed) {
+          logger.warn("ProviderSelector: Provider concurrent UA limit exceeded, trying fallback", {
+            providerName: session.provider.name,
+            providerId: session.provider.id,
+            current: uaCheckResult.count,
+            limit: uaLimit,
+            attempt: attemptCount,
+          });
+
+          const failedContext = session.getLastSelectionContext();
+          session.addProviderToChain(session.provider, {
+            reason: "concurrent_limit_failed",
+            selectionMethod: failedContext?.groupFilterApplied
+              ? "group_filtered"
+              : "weighted_random",
+            circuitState: getCircuitState(session.provider.id),
+            attemptNumber: attemptCount,
+            errorMessage: uaCheckResult.reason || "并发 UA 限制已达到",
+            decisionContext: failedContext
+              ? {
+                  ...failedContext,
+                  concurrentLimit: uaLimit,
+                  currentConcurrent: uaCheckResult.count,
+                }
+              : {
+                  totalProviders: 0,
+                  enabledProviders: 0,
+                  targetType: session.provider.providerType as NonNullable<
+                    ProviderChainItem["decisionContext"]
+                  >["targetType"],
+                  requestedModel: session.getOriginalModel() || "",
+                  groupFilterApplied: false,
+                  beforeHealthCheck: 0,
+                  afterHealthCheck: 0,
+                  priorityLevels: [],
+                  selectedPriority: 0,
+                  candidatesAtPriority: [],
+                  concurrentLimit: uaLimit,
+                  currentConcurrent: uaCheckResult.count,
+                },
+          });
+
+          excludedProviders.push(session.provider.id);
+
+          const { provider: fallbackProvider, context: retryContext } =
+            await ProxyProviderResolver.pickRandomProvider(session, excludedProviders);
+
+          if (!fallbackProvider) {
+            logger.error("ProviderSelector: No fallback providers available", {
+              excludedCount: excludedProviders.length,
+              totalAttempts: attemptCount,
+            });
+            break;
+          }
+
+          session.setProvider(fallbackProvider);
+          session.setLastSelectionContext(retryContext);
+          continue;
+        }
+
         const limit = session.provider.limitConcurrentSessions || 0;
 
         // 使用原子性检查并追踪（解决竞态条件）

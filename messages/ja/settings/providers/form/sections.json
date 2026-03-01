@@ -132,6 +132,10 @@
       "label": "同時セッション上限",
       "placeholder": "0 は無制限"
     },
+    "limitConcurrentUas": {
+      "label": "同時 UA 上限",
+      "placeholder": "0 は無制限"
+    },
     "limitDaily": {
       "label": "1日の支出上限 (USD)",
       "placeholder": "空欄は無制限"

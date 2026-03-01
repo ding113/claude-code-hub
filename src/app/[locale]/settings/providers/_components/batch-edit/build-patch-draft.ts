@@ -231,6 +231,13 @@ export function buildPatchDraftFromFormState(
       draft.limit_concurrent_sessions = { set: state.rateLimit.limitConcurrentSessions };
     }
   }
+  if (dirtyFields.has("rateLimit.limitConcurrentUas")) {
+    if (state.rateLimit.limitConcurrentUas === null) {
+      draft.limit_concurrent_uas = { set: 0 };
+    } else {
+      draft.limit_concurrent_uas = { set: state.rateLimit.limitConcurrentUas };
+    }
+  }
 
   // Circuit breaker fields (minutes -> ms conversion for open duration)
   if (dirtyFields.has("circuitBreaker.failureThreshold")) {

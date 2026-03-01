@@ -200,6 +200,7 @@ export async function validateKey(
       limitWeeklyUsd: null,
       limitMonthlyUsd: null,
       limitConcurrentSessions: 0,
+      limitConcurrentUas: 0,
       cacheTtlPreference: null,
       createdAt: now,
       updatedAt: now,

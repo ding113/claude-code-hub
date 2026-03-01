@@ -914,6 +914,12 @@
       "description": "Number of simultaneous conversations",
       "descriptionWithUserLimit": "Maximum sessions (User limit: {limit})"
     },
+    "limitConcurrentUas": {
+      "label": "Concurrent UA Limit",
+      "placeholder": "0 means unlimited",
+      "description": "Number of active UAs (User-Agent)",
+      "descriptionWithUserLimit": "Maximum UAs (User limit: {limit})"
+    },
     "providerGroup": {
       "label": "Provider Group",
       "placeholder": "Enter provider group tags, press Enter to add",
@@ -1013,6 +1019,11 @@
       "label": "Concurrent Sessions Limit",
       "placeholder": "0 means unlimited",
       "description": "Number of simultaneous conversations"
+    },
+    "limitConcurrentUas": {
+      "label": "Concurrent UA Limit",
+      "placeholder": "0 means unlimited",
+      "description": "Number of active UAs (User-Agent)"
     },
     "isEnabled": {
       "label": "Enable User",
@@ -1659,7 +1670,8 @@
         "limitWeekly": "Weekly Limit",
         "limitMonthly": "Monthly Limit",
         "limitTotal": "Total Limit",
-        "limitSessions": "Concurrent Sessions"
+        "limitSessions": "Concurrent Sessions",
+        "limitUas": "Concurrent UAs"
       },
       "ruleTypes": {
         "limitRpm": "RPM limit",
@@ -1668,7 +1680,8 @@
         "limitWeekly": "Weekly limit",
         "limitMonthly": "Monthly limit",
         "limitTotal": "Total limit",
-        "limitSessions": "Concurrent sessions"
+        "limitSessions": "Concurrent sessions",
+        "limitUas": "Concurrent UAs"
       },
       "errors": {
         "missingType": "Please select a limit type",

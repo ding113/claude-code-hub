@@ -289,6 +289,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         limitMonthlyUsd: provider.limitMonthlyUsd,
         limitTotalUsd: provider.limitTotalUsd,
         limitConcurrentSessions: provider.limitConcurrentSessions,
+        limitConcurrentUas: provider.limitConcurrentUas,
         maxRetryAttempts: provider.maxRetryAttempts,
         circuitBreakerFailureThreshold: provider.circuitBreakerFailureThreshold,
         circuitBreakerOpenDuration: provider.circuitBreakerOpenDuration,
@@ -495,6 +496,7 @@ export async function addProvider(data: {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number | null;
+  limit_concurrent_uas?: number | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   context_1m_preference?: Context1mPreference | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
@@ -572,6 +574,7 @@ export async function addProvider(data: {
       limit_monthly_usd: validated.limit_monthly_usd ?? null,
       limit_total_usd: validated.limit_total_usd ?? null,
       limit_concurrent_sessions: validated.limit_concurrent_sessions ?? 0,
+      limit_concurrent_uas: validated.limit_concurrent_uas ?? 0,
       max_retry_attempts: validated.max_retry_attempts ?? null,
       circuit_breaker_failure_threshold: validated.circuit_breaker_failure_threshold ?? 5,
       circuit_breaker_open_duration: validated.circuit_breaker_open_duration ?? 1800000,
@@ -669,6 +672,7 @@ export async function editProvider(
     limit_monthly_usd?: number | null;
     limit_total_usd?: number | null;
     limit_concurrent_sessions?: number | null;
+    limit_concurrent_uas?: number | null;
     cache_ttl_preference?: "inherit" | "5m" | "1h";
     swap_cache_ttl_billing?: boolean;
     context_1m_preference?: Context1mPreference | null;
@@ -1284,6 +1288,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   limit_monthly_usd: "limitMonthlyUsd",
   limit_total_usd: "limitTotalUsd",
   limit_concurrent_sessions: "limitConcurrentSessions",
+  limit_concurrent_uas: "limitConcurrentUas",
   cache_ttl_preference: "cacheTtlPreference",
   swap_cache_ttl_billing: "swapCacheTtlBilling",
   context_1m_preference: "context1mPreference",
@@ -1500,6 +1505,9 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.limit_concurrent_sessions !== undefined) {
     result.limitConcurrentSessions = applyUpdates.limit_concurrent_sessions;
   }
+  if (applyUpdates.limit_concurrent_uas !== undefined) {
+    result.limitConcurrentUas = applyUpdates.limit_concurrent_uas;
+  }
   if (applyUpdates.circuit_breaker_failure_threshold !== undefined) {
     result.circuitBreakerFailureThreshold = applyUpdates.circuit_breaker_failure_threshold;
   }
@@ -1570,6 +1578,7 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   limit_monthly_usd: "limitMonthlyUsd",
   limit_total_usd: "limitTotalUsd",
   limit_concurrent_sessions: "limitConcurrentSessions",
+  limit_concurrent_uas: "limitConcurrentUas",
   circuit_breaker_failure_threshold: "circuitBreakerFailureThreshold",
   circuit_breaker_open_duration: "circuitBreakerOpenDuration",
   circuit_breaker_half_open_success_threshold: "circuitBreakerHalfOpenSuccessThreshold",

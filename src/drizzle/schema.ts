@@ -52,6 +52,7 @@ export const users = pgTable('users', {
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
+  limitConcurrentUas: integer('limit_concurrent_uas'),
 
   // Daily quota reset mode (fixed: reset at specific time, rolling: 24h window)
   dailyResetMode: dailyResetModeEnum('daily_reset_mode')
@@ -121,6 +122,7 @@ export const keys = pgTable('keys', {
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
+  limitConcurrentUas: integer('limit_concurrent_uas').default(0),
 
   // Provider group for this key (explicit; defaults to "default")
   providerGroup: varchar('provider_group', { length: 200 }).default('default'),
@@ -244,6 +246,7 @@ export const providers = pgTable('providers', {
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
   totalCostResetAt: timestamp('total_cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
+  limitConcurrentUas: integer('limit_concurrent_uas').default(0),
 
   // 熔断器配置（每个供应商独立配置）
   // null = 使用全局默认值 (env.MAX_RETRY_ATTEMPTS_DEFAULT 或 2)

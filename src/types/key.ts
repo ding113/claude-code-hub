@@ -23,6 +23,7 @@ export interface Key {
   limitMonthlyUsd: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions: number;
+  limitConcurrentUas: number;
 
   // Provider group override (null = inherit from user)
   providerGroup: string | null;
@@ -55,6 +56,7 @@ export interface CreateKeyData {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
+  limit_concurrent_uas?: number;
   // Provider group override (null = inherit from user)
   provider_group?: string | null;
 
@@ -80,6 +82,7 @@ export interface UpdateKeyData {
   limit_monthly_usd?: number | null;
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number;
+  limit_concurrent_uas?: number;
   // Provider group override (null = inherit from user)
   provider_group?: string | null;
 

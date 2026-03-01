@@ -43,6 +43,7 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
       limitMonthlyUsd: key.limitMonthlyUsd,
       limitTotalUsd: key.limitTotalUsd ?? null,
       limitConcurrentSessions: key.limitConcurrentSessions,
+      limitConcurrentUas: key.limitConcurrentUas,
       dailyResetMode: key.dailyResetMode,
       dailyResetTime: key.dailyResetTime,
     }));
@@ -62,6 +63,7 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
       limitMonthlyUsd: user.limitMonthlyUsd ?? null,
       limitTotalUsd: user.limitTotalUsd ?? null,
       limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+      limitConcurrentUas: user.limitConcurrentUas ?? null,
       totalUsage: userCostMap.get(user.id) ?? 0,
       keys: keysWithUsage,
     };

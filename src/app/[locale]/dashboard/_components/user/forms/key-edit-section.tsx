@@ -42,6 +42,7 @@ export interface KeyEditSectionProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
+    limitConcurrentUas?: number;
   };
   /** Admin 可自由编辑 providerGroup */
   isAdmin?: boolean;
@@ -188,6 +189,10 @@ export function KeyEditSection({
       rules.push({ type: "limitSessions", value: keyData.limitConcurrentSessions });
     }
 
+    if (typeof keyData.limitConcurrentUas === "number" && keyData.limitConcurrentUas > 0) {
+      rules.push({ type: "limitUas", value: keyData.limitConcurrentUas });
+    }
+
     return rules;
   }, [
     keyData.limit5hUsd,
@@ -198,6 +203,7 @@ export function KeyEditSection({
     keyData.limitMonthlyUsd,
     keyData.limitTotalUsd,
     keyData.limitConcurrentSessions,
+    keyData.limitConcurrentUas,
   ]);
 
   const existingLimitTypes = useMemo(() => limitRules.map((r) => r.type), [limitRules]);
@@ -226,6 +232,9 @@ export function KeyEditSection({
         return;
       case "limitSessions":
         onChange("limitConcurrentSessions", 0);
+        return;
+      case "limitUas":
+        onChange("limitConcurrentUas", 0);
         return;
       default:
         return;
@@ -271,6 +280,9 @@ export function KeyEditSection({
         return;
       case "limitSessions":
         onChange("limitConcurrentSessions", Math.max(0, Math.floor(value)));
+        return;
+      case "limitUas":
+        onChange("limitConcurrentUas", Math.max(0, Math.floor(value)));
         return;
       default:
         return;

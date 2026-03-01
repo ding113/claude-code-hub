@@ -273,6 +273,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          limitConcurrentUas: user.limitConcurrentUas ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
           isEnabled: user.isEnabled,
@@ -320,6 +321,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
               limitMonthlyUsd: key.limitMonthlyUsd,
               limitTotalUsd: key.limitTotalUsd,
               limitConcurrentSessions: key.limitConcurrentSessions || 0,
+              limitConcurrentUas: key.limitConcurrentUas || 0,
               providerGroup: key.providerGroup,
             };
           }),
@@ -340,6 +342,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          limitConcurrentUas: user.limitConcurrentUas ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
           isEnabled: user.isEnabled,
@@ -544,6 +547,7 @@ export async function getUsersBatch(
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          limitConcurrentUas: user.limitConcurrentUas ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
           isEnabled: user.isEnabled,
@@ -587,6 +591,7 @@ export async function getUsersBatch(
               limitMonthlyUsd: key.limitMonthlyUsd,
               limitTotalUsd: key.limitTotalUsd,
               limitConcurrentSessions: key.limitConcurrentSessions || 0,
+              limitConcurrentUas: key.limitConcurrentUas || 0,
               providerGroup: key.providerGroup,
             };
           }),
@@ -607,6 +612,7 @@ export async function getUsersBatch(
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+          limitConcurrentUas: user.limitConcurrentUas ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
           isEnabled: user.isEnabled,
@@ -694,6 +700,7 @@ export async function getUsersBatchCore(
         limitMonthlyUsd: user.limitMonthlyUsd ?? null,
         limitTotalUsd: user.limitTotalUsd ?? null,
         limitConcurrentSessions: user.limitConcurrentSessions ?? null,
+        limitConcurrentUas: user.limitConcurrentUas ?? null,
         dailyResetMode: user.dailyResetMode,
         dailyResetTime: user.dailyResetTime,
         isEnabled: user.isEnabled,
@@ -733,6 +740,7 @@ export async function getUsersBatchCore(
           limitMonthlyUsd: key.limitMonthlyUsd,
           limitTotalUsd: key.limitTotalUsd,
           limitConcurrentSessions: key.limitConcurrentSessions || 0,
+          limitConcurrentUas: key.limitConcurrentUas || 0,
           providerGroup: key.providerGroup,
         })),
       };
@@ -981,6 +989,7 @@ export async function addUser(data: {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  limitConcurrentUas?: number | null;
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
   isEnabled?: boolean;
@@ -1006,6 +1015,7 @@ export async function addUser(data: {
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
       limitConcurrentSessions: number | null;
+      limitConcurrentUas: number | null;
       allowedModels: string[];
     };
     defaultKey: {
@@ -1042,6 +1052,7 @@ export async function addUser(data: {
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
+      limitConcurrentUas: data.limitConcurrentUas,
       dailyResetMode: data.dailyResetMode,
       dailyResetTime: data.dailyResetTime,
       isEnabled: data.isEnabled,
@@ -1102,6 +1113,7 @@ export async function addUser(data: {
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      limitConcurrentUas: validatedData.limitConcurrentUas ?? undefined,
       dailyResetMode: validatedData.dailyResetMode,
       dailyResetTime: validatedData.dailyResetTime,
       isEnabled: validatedData.isEnabled,
@@ -1142,6 +1154,7 @@ export async function addUser(data: {
           limitMonthlyUsd: newUser.limitMonthlyUsd ?? null,
           limitTotalUsd: newUser.limitTotalUsd ?? null,
           limitConcurrentSessions: newUser.limitConcurrentSessions ?? null,
+          limitConcurrentUas: newUser.limitConcurrentUas ?? null,
           allowedModels: newUser.allowedModels ?? [],
         },
         defaultKey: {
@@ -1176,6 +1189,7 @@ export async function createUserOnly(data: {
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
   limitConcurrentSessions?: number | null;
+  limitConcurrentUas?: number | null;
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
   isEnabled?: boolean;
@@ -1201,6 +1215,7 @@ export async function createUserOnly(data: {
       limitMonthlyUsd: number | null;
       limitTotalUsd: number | null;
       limitConcurrentSessions: number | null;
+      limitConcurrentUas: number | null;
     };
   }>
 > {
@@ -1230,6 +1245,7 @@ export async function createUserOnly(data: {
       limitMonthlyUsd: data.limitMonthlyUsd,
       limitTotalUsd: data.limitTotalUsd,
       limitConcurrentSessions: data.limitConcurrentSessions,
+      limitConcurrentUas: data.limitConcurrentUas,
       dailyResetMode: data.dailyResetMode,
       dailyResetTime: data.dailyResetTime,
       isEnabled: data.isEnabled,
@@ -1289,6 +1305,7 @@ export async function createUserOnly(data: {
       limitMonthlyUsd: validatedData.limitMonthlyUsd ?? undefined,
       limitTotalUsd: validatedData.limitTotalUsd ?? undefined,
       limitConcurrentSessions: validatedData.limitConcurrentSessions ?? undefined,
+      limitConcurrentUas: validatedData.limitConcurrentUas ?? undefined,
       dailyResetMode: validatedData.dailyResetMode,
       dailyResetTime: validatedData.dailyResetTime,
       isEnabled: validatedData.isEnabled,
@@ -1318,6 +1335,7 @@ export async function createUserOnly(data: {
           limitMonthlyUsd: newUser.limitMonthlyUsd ?? null,
           limitTotalUsd: newUser.limitTotalUsd ?? null,
           limitConcurrentSessions: newUser.limitConcurrentSessions ?? null,
+          limitConcurrentUas: newUser.limitConcurrentUas ?? null,
         },
       },
     };
@@ -1348,6 +1366,7 @@ export async function editUser(
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    limitConcurrentUas?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
     isEnabled?: boolean;
@@ -1449,6 +1468,7 @@ export async function editUser(
       limitMonthlyUsd: validatedData.limitMonthlyUsd,
       limitTotalUsd: validatedData.limitTotalUsd,
       limitConcurrentSessions: validatedData.limitConcurrentSessions,
+      limitConcurrentUas: validatedData.limitConcurrentUas,
       dailyResetMode: validatedData.dailyResetMode,
       dailyResetTime: validatedData.dailyResetTime,
       isEnabled: validatedData.isEnabled,

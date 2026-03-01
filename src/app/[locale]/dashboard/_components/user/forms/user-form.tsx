@@ -39,6 +39,7 @@ interface UserFormProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number | null;
+    limitConcurrentUas?: number | null;
     isEnabled?: boolean;
     expiresAt?: Date | null;
     allowedClients?: string[];
@@ -92,6 +93,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
       limitMonthlyUsd: user?.limitMonthlyUsd ?? null,
       limitTotalUsd: user?.limitTotalUsd ?? null,
       limitConcurrentSessions: user?.limitConcurrentSessions ?? null,
+      limitConcurrentUas: user?.limitConcurrentUas ?? null,
       isEnabled: user?.isEnabled ?? true,
       expiresAt: user?.expiresAt ? formatDateToLocalYmd(user.expiresAt) : "",
       allowedClients: user?.allowedClients || [],
@@ -121,6 +123,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
+              limitConcurrentUas: data.limitConcurrentUas,
               isEnabled: data.isEnabled,
               expiresAt,
               allowedClients: data.allowedClients,
@@ -140,6 +143,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
               limitMonthlyUsd: data.limitMonthlyUsd,
               limitTotalUsd: data.limitTotalUsd,
               limitConcurrentSessions: data.limitConcurrentSessions,
+              limitConcurrentUas: data.limitConcurrentUas,
               isEnabled: data.isEnabled,
               expiresAt,
               allowedClients: data.allowedClients,
@@ -326,6 +330,16 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
             step={1}
             placeholder={tForm("limitConcurrentSessions.placeholder")}
             {...form.getFieldProps("limitConcurrentSessions")}
+          />
+
+          <TextField
+            label={tForm("limitConcurrentUas.label")}
+            type="number"
+            min={0}
+            max={1000}
+            step={1}
+            placeholder={tForm("limitConcurrentUas.placeholder")}
+            {...form.getFieldProps("limitConcurrentUas")}
           />
         </FormGrid>
       )}

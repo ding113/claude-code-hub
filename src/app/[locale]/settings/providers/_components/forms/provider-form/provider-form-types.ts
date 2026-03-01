@@ -76,6 +76,7 @@ export interface RateLimitState {
   limitMonthlyUsd: number | null;
   limitTotalUsd: number | null;
   limitConcurrentSessions: number | null;
+  limitConcurrentUas: number | null;
 }
 
 export interface CircuitBreakerState {
@@ -167,6 +168,7 @@ export type ProviderFormAction =
   | { type: "SET_LIMIT_MONTHLY_USD"; payload: number | null }
   | { type: "SET_LIMIT_TOTAL_USD"; payload: number | null }
   | { type: "SET_LIMIT_CONCURRENT_SESSIONS"; payload: number | null }
+  | { type: "SET_LIMIT_CONCURRENT_UAS"; payload: number | null }
   // Circuit breaker actions
   | { type: "SET_FAILURE_THRESHOLD"; payload: number | undefined }
   | { type: "SET_OPEN_DURATION_MINUTES"; payload: number | undefined }

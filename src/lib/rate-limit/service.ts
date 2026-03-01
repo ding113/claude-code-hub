@@ -73,6 +73,11 @@ import {
   getUserActiveSessionsKey,
 } from "@/lib/redis/active-session-keys";
 import {
+  getGlobalActiveUasKey,
+  getKeyActiveUasKey,
+  getUserActiveUasKey,
+} from "@/lib/redis/active-ua-keys";
+import {
   CHECK_AND_TRACK_KEY_USER_SESSION,
   CHECK_AND_TRACK_SESSION,
   GET_COST_5H_ROLLING_WINDOW,
@@ -645,6 +650,90 @@ export class RateLimitService {
   }
 
   /**
+   * 原子性检查并追踪 Key/User 并发 UA（解决竞态条件）
+   *
+   * 语义与 checkAndTrackKeyUserSession 保持一致：
+   * - 仅阻止“新 UA”进入；已存在 UA 达到上限后仍允许继续请求
+   * - keyLimit/userLimit 均 <=0 时表示无限制，直接放行且不追踪
+   * - Redis 不可用时 Fail Open
+   */
+  static async checkAndTrackKeyUserUa(
+    keyId: number,
+    userId: number,
+    uaId: string,
+    keyLimit: number,
+    userLimit: number
+  ): Promise<{
+    allowed: boolean;
+    keyCount: number;
+    userCount: number;
+    trackedKey: boolean;
+    trackedUser: boolean;
+    rejectedBy?: "key" | "user";
+    reasonCode?: string;
+    reasonParams?: Record<string, string | number>;
+  }> {
+    if (keyLimit <= 0 && userLimit <= 0) {
+      return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
+    }
+
+    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
+      logger.warn("[RateLimit] Redis not ready, Fail Open");
+      return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
+    }
+
+    try {
+      const globalKey = getGlobalActiveUasKey();
+      const keyKey = getKeyActiveUasKey(keyId);
+      const userKey = getUserActiveUasKey(userId);
+      const now = Date.now();
+
+      const result = (await RateLimitService.redis.eval(
+        CHECK_AND_TRACK_KEY_USER_SESSION,
+        3, // KEYS count
+        globalKey, // KEYS[1]
+        keyKey, // KEYS[2]
+        userKey, // KEYS[3]
+        uaId, // ARGV[1]
+        keyLimit.toString(), // ARGV[2]
+        userLimit.toString(), // ARGV[3]
+        now.toString(), // ARGV[4]
+        SESSION_TTL_MS.toString() // ARGV[5]
+      )) as [number, number, number, number, number, number];
+
+      const [allowed, rejectedBy, keyCount, keyTracked, userCount, userTracked] = result;
+
+      if (allowed === 0) {
+        const rejectTarget: "key" | "user" = rejectedBy === 1 ? "key" : "user";
+        const limit = rejectTarget === "key" ? keyLimit : userLimit;
+        const count = rejectTarget === "key" ? keyCount : userCount;
+
+        return {
+          allowed: false,
+          keyCount,
+          userCount,
+          trackedKey: false,
+          trackedUser: false,
+          rejectedBy: rejectTarget,
+          reasonCode: ERROR_CODES.RATE_LIMIT_CONCURRENT_UAS_EXCEEDED,
+          reasonParams: { current: count, limit, target: rejectTarget },
+        };
+      }
+
+      return {
+        allowed: true,
+        keyCount,
+        userCount,
+        trackedKey: keyTracked === 1,
+        trackedUser: userTracked === 1,
+      };
+    } catch (error) {
+      logger.error("[RateLimit] Key/User UA check+track failed:", error);
+      return { allowed: true, keyCount: 0, userCount: 0, trackedKey: false, trackedUser: false };
+    }
+  }
+
+  /**
    * 原子性检查并追踪供应商 Session（解决竞态条件）
    *
    * 使用 Lua 脚本保证"检查 + 追踪"的原子性，防止并发请求同时通过限制检查
@@ -701,6 +790,63 @@ export class RateLimitService {
     } catch (error) {
       logger.error("[RateLimit] Atomic check-and-track failed:", error);
       return { allowed: true, count: 0, tracked: false }; // Fail Open
+    }
+  }
+
+  /**
+   * 原子性检查并追踪供应商 UA（解决竞态条件）
+   *
+   * 语义与 checkAndTrackProviderSession 保持一致：
+   * - 仅阻止“新 UA”进入；已存在 UA 达到上限后仍允许继续请求
+   * - Redis 不可用时 Fail Open
+   */
+  static async checkAndTrackProviderUa(
+    providerId: number,
+    uaId: string,
+    limit: number
+  ): Promise<{ allowed: boolean; count: number; tracked: boolean; reason?: string }> {
+    if (limit <= 0) {
+      return { allowed: true, count: 0, tracked: false };
+    }
+
+    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
+      logger.warn("[RateLimit] Redis not ready, Fail Open");
+      return { allowed: true, count: 0, tracked: false };
+    }
+
+    try {
+      const key = `provider:${providerId}:active_uas`;
+      const now = Date.now();
+
+      const result = (await RateLimitService.redis.eval(
+        CHECK_AND_TRACK_SESSION,
+        1, // KEYS count
+        key, // KEYS[1]
+        uaId, // ARGV[1]
+        limit.toString(), // ARGV[2]
+        now.toString(), // ARGV[3]
+        SESSION_TTL_MS.toString() // ARGV[4]
+      )) as [number, number, number];
+
+      const [allowed, count, tracked] = result;
+
+      if (allowed === 0) {
+        return {
+          allowed: false,
+          count,
+          tracked: false,
+          reason: `供应商并发 UA 上限已达到（${count}/${limit}）`,
+        };
+      }
+
+      return {
+        allowed: true,
+        count,
+        tracked: tracked === 1,
+      };
+    } catch (error) {
+      logger.error("[RateLimit] Provider UA check+track failed:", error);
+      return { allowed: true, count: 0, tracked: false };
     }
   }
 

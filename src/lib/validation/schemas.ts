@@ -150,6 +150,13 @@ export const CreateUserSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .nullable()
     .optional(),
+  limitConcurrentUas: z.coerce
+    .number()
+    .int("并发UA上限必须是整数")
+    .min(0, "并发UA上限不能为负数")
+    .max(1000, "并发UA上限不能超过1000")
+    .nullable()
+    .optional(),
   // User status and expiry management
   isEnabled: z.boolean().optional().default(true),
   expiresAt: z.preprocess(
@@ -277,6 +284,13 @@ export const UpdateUserSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .nullable()
     .optional(),
+  limitConcurrentUas: z.coerce
+    .number()
+    .int("并发UA上限必须是整数")
+    .min(0, "并发UA上限不能为负数")
+    .max(1000, "并发UA上限不能超过1000")
+    .nullable()
+    .optional(),
   // User status and expiry management
   isEnabled: z.boolean().optional(),
   expiresAt: z.preprocess(
@@ -401,6 +415,13 @@ export const KeyFormSchema = z.object({
     .max(1000, "并发Session上限不能超过1000")
     .optional()
     .default(0),
+  limitConcurrentUas: z.coerce
+    .number()
+    .int("并发UA上限必须是整数")
+    .min(0, "并发UA上限不能为负数")
+    .max(1000, "并发UA上限不能超过1000")
+    .optional()
+    .default(0),
   providerGroup: z
     .string()
     .max(200, "供应商分组不能超过200个字符")
@@ -512,6 +533,13 @@ export const CreateProviderSchema = z
       .int("并发Session上限必须是整数")
       .min(0, "并发Session上限不能为负数")
       .max(1000, "并发Session上限不能超过1000")
+      .optional()
+      .default(0),
+    limit_concurrent_uas: z.coerce
+      .number()
+      .int("并发UA上限必须是整数")
+      .min(0, "并发UA上限不能为负数")
+      .max(1000, "并发UA上限不能超过1000")
       .optional()
       .default(0),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional().default("inherit"),
@@ -746,6 +774,12 @@ export const UpdateProviderSchema = z
       .int("并发Session上限必须是整数")
       .min(0, "并发Session上限不能为负数")
       .max(1000, "并发Session上限不能超过1000")
+      .optional(),
+    limit_concurrent_uas: z.coerce
+      .number()
+      .int("并发UA上限必须是整数")
+      .min(0, "并发UA上限不能为负数")
+      .max(1000, "并发UA上限不能超过1000")
       .optional(),
     cache_ttl_preference: CACHE_TTL_PREFERENCE.optional(),
     swap_cache_ttl_billing: z.boolean().optional(),

@@ -67,6 +67,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
       limitMonthlyUsd: null,
       limitTotalUsd: null,
       limitConcurrentSessions: 0,
+      limitConcurrentUas: 0,
     },
     onSubmit: async (data) => {
       if (!userId) {
@@ -88,6 +89,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           limitMonthlyUsd: data.limitMonthlyUsd,
           limitTotalUsd: data.limitTotalUsd,
           limitConcurrentSessions: data.limitConcurrentSessions,
+          limitConcurrentUas: data.limitConcurrentUas,
           cacheTtlPreference: data.cacheTtlPreference,
           providerGroup: data.providerGroup || PROVIDER_GROUP.DEFAULT,
         });
@@ -363,6 +365,21 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           min={0}
           step={1}
           {...form.getFieldProps("limitConcurrentSessions")}
+        />
+
+        <NumberField
+          label={t("limitConcurrentUas.label")}
+          placeholder={t("limitConcurrentUas.placeholder")}
+          description={
+            user?.limitConcurrentUas
+              ? t("limitConcurrentUas.descriptionWithUserLimit", {
+                  limit: user.limitConcurrentUas,
+                })
+              : t("limitConcurrentUas.description")
+          }
+          min={0}
+          step={1}
+          {...form.getFieldProps("limitConcurrentUas")}
         />
       </FormGrid>
     </DialogFormLayout>

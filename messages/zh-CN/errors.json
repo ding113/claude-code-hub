@@ -55,6 +55,7 @@
   "RATE_LIMIT_MONTHLY_EXCEEDED": "月消费超限：当前 ${current} USD（限制：${limit} USD）。将于 {resetTime} 重置",
   "RATE_LIMIT_TOTAL_EXCEEDED": "总消费上限已达到：${current} / ${limit} USD",
   "RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED": "并发 Session 超限：当前 {current} 个（限制：{limit} 个）。请等待活跃 Session 完成",
+  "RATE_LIMIT_CONCURRENT_UAS_EXCEEDED": "并发 UA 超限：当前 {current} 个（限制：{limit} 个）。请等待活跃 UA 释放",
   "RESOURCE_BUSY": "资源正在使用中",
   "INVALID_STATE": "当前状态不允许此操作",
   "CONFLICT": "操作冲突",
@@ -81,6 +82,7 @@
   "KEY_LIMIT_MONTHLY_EXCEEDS_USER_LIMIT": "Key的月消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
   "KEY_LIMIT_TOTAL_EXCEEDS_USER_LIMIT": "Key的总消费上限（{keyLimit}）不能超过用户限额（{userLimit}）",
   "KEY_LIMIT_CONCURRENT_EXCEEDS_USER_LIMIT": "Key的并发Session上限（{keyLimit}）不能超过用户限额（{userLimit}）",
+  "KEY_LIMIT_CONCURRENT_UAS_EXCEEDS_USER_LIMIT": "Key的并发UA上限（{keyLimit}）不能超过用户限额（{userLimit}）",
   "NO_DEFAULT_GROUP_PERMISSION": "无权使用 default 分组，您当前没有 default 分组的 Key",
   "NO_GROUP_PERMISSION": "无权使用以下分组: {groups}"
 }

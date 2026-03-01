@@ -908,6 +908,12 @@
       "description": "Количество одновременных разговоров",
       "descriptionWithUserLimit": "Максимум сеансов (Лимит пользователя: {limit})"
     },
+    "limitConcurrentUas": {
+      "label": "Лимит одновременных UA",
+      "placeholder": "0 означает неограниченно",
+      "description": "Количество активных UA (User-Agent)",
+      "descriptionWithUserLimit": "Максимум UA (Лимит пользователя: {limit})"
+    },
     "providerGroup": {
       "label": "Группа провайдеров",
       "placeholder": "Введите теги групп провайдеров и нажмите Enter",
@@ -1002,6 +1008,11 @@
       "label": "Лимит одновременных сессий",
       "placeholder": "0 означает неограниченно",
       "description": "Количество одновременных разговоров"
+    },
+    "limitConcurrentUas": {
+      "label": "Лимит одновременных UA",
+      "placeholder": "0 означает неограниченно",
+      "description": "Количество активных UA (User-Agent)"
     },
     "isEnabled": {
       "label": "Активировать пользователя",
@@ -1642,7 +1653,8 @@
         "limitWeekly": "Недельный лимит",
         "limitMonthly": "Месячный лимит",
         "limitTotal": "Общий лимит",
-        "limitSessions": "Одновременные сессии"
+        "limitSessions": "Одновременные сессии",
+        "limitUas": "Одновременные UA"
       },
       "ruleTypes": {
         "limitRpm": "Лимит RPM",
@@ -1651,7 +1663,8 @@
         "limitWeekly": "Недельный лимит",
         "limitMonthly": "Месячный лимит",
         "limitTotal": "Общий лимит",
-        "limitSessions": "Одновременные сессии"
+        "limitSessions": "Одновременные сессии",
+        "limitUas": "Одновременные UA"
       },
       "errors": {
         "missingType": "Пожалуйста, выберите тип лимита",

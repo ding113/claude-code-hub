@@ -207,6 +207,9 @@ export function ProviderForm({
   const [limitConcurrentSessions, setLimitConcurrentSessions] = useState<number | null>(
     sourceProvider?.limitConcurrentSessions ?? null
   );
+  const [limitConcurrentUas, setLimitConcurrentUas] = useState<number | null>(
+    sourceProvider?.limitConcurrentUas ?? null
+  );
   const [allowedModels, setAllowedModels] = useState<string[]>(sourceProvider?.allowedModels ?? []);
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
@@ -491,6 +494,7 @@ export function ProviderForm({
             limit_monthly_usd?: number | null;
             limit_total_usd?: number | null;
             limit_concurrent_sessions?: number | null;
+            limit_concurrent_uas?: number | null;
             cache_ttl_preference?: "inherit" | "5m" | "1h";
             context_1m_preference?: Context1mPreference | null;
             codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
@@ -533,6 +537,7 @@ export function ProviderForm({
             limit_monthly_usd: limitMonthlyUsd,
             limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
+            limit_concurrent_uas: limitConcurrentUas ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
             codex_reasoning_effort_preference: codexReasoningEffortPreference,
@@ -596,6 +601,7 @@ export function ProviderForm({
             limit_monthly_usd: limitMonthlyUsd,
             limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
+            limit_concurrent_uas: limitConcurrentUas ?? 0,
             cache_ttl_preference: cacheTtlPreference,
             context_1m_preference: context1mPreference,
             codex_reasoning_effort_preference: codexReasoningEffortPreference,
@@ -657,6 +663,7 @@ export function ProviderForm({
           setLimitMonthlyUsd(null);
           setLimitTotalUsd(null);
           setLimitConcurrentSessions(null);
+          setLimitConcurrentUas(null);
           setMaxRetryAttempts(null);
           setFailureThreshold(5);
           setOpenDurationMinutes(30);
@@ -1506,6 +1513,21 @@ export function ProviderForm({
                         setLimitConcurrentSessions(validateNumericField(e.target.value))
                       }
                       placeholder={t("sections.rateLimit.limitConcurrent.placeholder")}
+                      disabled={isPending}
+                      min="0"
+                      step="1"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={isEdit ? "edit-limit-concurrent-uas" : "limit-concurrent-uas"}>
+                      {t("sections.rateLimit.limitConcurrentUas.label")}
+                    </Label>
+                    <Input
+                      id={isEdit ? "edit-limit-concurrent-uas" : "limit-concurrent-uas"}
+                      type="number"
+                      value={limitConcurrentUas?.toString() ?? ""}
+                      onChange={(e) => setLimitConcurrentUas(validateNumericField(e.target.value))}
+                      placeholder={t("sections.rateLimit.limitConcurrentUas.placeholder")}
                       disabled={isPending}
                       min="0"
                       step="1"

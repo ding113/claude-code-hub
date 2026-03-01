@@ -132,6 +132,10 @@
       "label": "並發 Session 上限",
       "placeholder": "0 表示無限制"
     },
+    "limitConcurrentUas": {
+      "label": "並發 UA 上限",
+      "placeholder": "0 表示無限制"
+    },
     "limitDaily": {
       "label": "每日消費上限（USD）",
       "placeholder": "留空表示無限制"

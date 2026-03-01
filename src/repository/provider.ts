@@ -203,6 +203,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     limitTotalUsd:
       providerData.limit_total_usd != null ? providerData.limit_total_usd.toString() : null,
     limitConcurrentSessions: providerData.limit_concurrent_sessions,
+    limitConcurrentUas: providerData.limit_concurrent_uas,
     maxRetryAttempts: providerData.max_retry_attempts ?? null,
     circuitBreakerFailureThreshold: providerData.circuit_breaker_failure_threshold ?? 5,
     circuitBreakerOpenDuration: providerData.circuit_breaker_open_duration ?? 1800000,
@@ -279,6 +280,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         limitTotalUsd: providers.limitTotalUsd,
         totalCostResetAt: providers.totalCostResetAt,
         limitConcurrentSessions: providers.limitConcurrentSessions,
+        limitConcurrentUas: providers.limitConcurrentUas,
         maxRetryAttempts: providers.maxRetryAttempts,
         circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
         circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
@@ -363,6 +365,7 @@ export async function findProviderList(
       limitTotalUsd: providers.limitTotalUsd,
       totalCostResetAt: providers.totalCostResetAt,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      limitConcurrentUas: providers.limitConcurrentUas,
       maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
@@ -447,6 +450,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       limitTotalUsd: providers.limitTotalUsd,
       totalCostResetAt: providers.totalCostResetAt,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      limitConcurrentUas: providers.limitConcurrentUas,
       maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
@@ -535,6 +539,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       limitTotalUsd: providers.limitTotalUsd,
       totalCostResetAt: providers.totalCostResetAt,
       limitConcurrentSessions: providers.limitConcurrentSessions,
+      limitConcurrentUas: providers.limitConcurrentUas,
       maxRetryAttempts: providers.maxRetryAttempts,
       circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
       circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
@@ -635,6 +640,8 @@ export async function updateProvider(
       providerData.limit_total_usd != null ? providerData.limit_total_usd.toString() : null;
   if (providerData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = providerData.limit_concurrent_sessions;
+  if (providerData.limit_concurrent_uas !== undefined)
+    dbData.limitConcurrentUas = providerData.limit_concurrent_uas;
   if (providerData.max_retry_attempts !== undefined)
     dbData.maxRetryAttempts = providerData.max_retry_attempts;
   if (providerData.circuit_breaker_failure_threshold !== undefined)
@@ -770,6 +777,7 @@ export async function updateProvider(
         limitTotalUsd: providers.limitTotalUsd,
         totalCostResetAt: providers.totalCostResetAt,
         limitConcurrentSessions: providers.limitConcurrentSessions,
+        limitConcurrentUas: providers.limitConcurrentUas,
         maxRetryAttempts: providers.maxRetryAttempts,
         circuitBreakerFailureThreshold: providers.circuitBreakerFailureThreshold,
         circuitBreakerOpenDuration: providers.circuitBreakerOpenDuration,
@@ -1035,6 +1043,7 @@ export interface BatchProviderUpdates {
   limitMonthlyUsd?: string | null;
   limitTotalUsd?: string | null;
   limitConcurrentSessions?: number;
+  limitConcurrentUas?: number;
   // Circuit Breaker
   circuitBreakerFailureThreshold?: number;
   circuitBreakerOpenDuration?: number;
@@ -1160,6 +1169,9 @@ export async function updateProvidersBatch(
   }
   if (updates.limitConcurrentSessions !== undefined) {
     setClauses.limitConcurrentSessions = updates.limitConcurrentSessions;
+  }
+  if (updates.limitConcurrentUas !== undefined) {
+    setClauses.limitConcurrentUas = updates.limitConcurrentUas;
   }
   // Circuit Breaker
   if (updates.circuitBreakerFailureThreshold !== undefined) {
