@@ -30,6 +30,8 @@ interface ActiveSessionsListProps {
   maxHeight?: string;
   /** 是否显示 Token/成本（默认显示） */
   showTokensCost?: boolean;
+  /** 空状态时压缩为单行 */
+  compactEmpty?: boolean;
   /** 自定义类名 */
   className?: string;
 }
@@ -45,6 +47,7 @@ export function ActiveSessionsList({
   maxItems,
   showHeader = true,
   maxHeight = "200px",
+  compactEmpty = false,
   showTokensCost = true,
   className = "",
 }: ActiveSessionsListProps) {
@@ -62,6 +65,18 @@ export function ActiveSessionsList({
   const displaySessions = maxItems ? data.slice(0, maxItems) : data;
   // 实际的活跃 session 总数（用于计数显示）
   const totalCount = data.length;
+
+  if (compactEmpty && !isLoading && totalCount === 0) {
+    return (
+      <div
+        className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border border-border/50 bg-card/30 text-sm ${className}`}
+      >
+        <Activity className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="text-muted-foreground">{tc("activeSessions.title")}</span>
+        <span className="text-xs text-muted-foreground">{tc("activeSessions.empty")}</span>
+      </div>
+    );
+  }
 
   return (
     <div className={`border rounded-lg bg-card ${className}`}>

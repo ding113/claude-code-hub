@@ -1,7 +1,16 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Expand, Filter, ListOrdered, Minimize2, Pause, Play, RefreshCw } from "lucide-react";
+import {
+  ChevronDown,
+  Expand,
+  Filter,
+  ListOrdered,
+  Minimize2,
+  Pause,
+  Play,
+  RefreshCw,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,8 +19,10 @@ import { getKeys } from "@/actions/keys";
 import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
 import { getProviders } from "@/actions/providers";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { getHiddenColumns, type LogsTableColumn } from "@/lib/column-visibility";
@@ -81,6 +92,7 @@ function UsageLogsViewContent({
   const [hideProviderColumn, setHideProviderColumn] = useState(false);
   const wasInFullscreenRef = useRef(false);
   const [hiddenColumns, setHiddenColumns] = useState<LogsTableColumn[]>([]);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   // Load initial hidden columns from localStorage
   useEffect(() => {
@@ -250,21 +262,47 @@ function UsageLogsViewContent({
     };
   }, []);
 
-  const statsFilters = {
-    userId: filters.userId,
-    keyId: filters.keyId,
-    providerId: filters.providerId,
-    sessionId: filters.sessionId,
-    startTime: filters.startTime,
-    endTime: filters.endTime,
-    statusCode: filters.statusCode,
-    excludeStatusCode200: filters.excludeStatusCode200,
-    model: filters.model,
-    endpoint: filters.endpoint,
-    minRetryCount: filters.minRetryCount,
-  };
+  const statsFilters = useMemo(
+    () => ({
+      userId: filters.userId,
+      keyId: filters.keyId,
+      providerId: filters.providerId,
+      sessionId: filters.sessionId,
+      startTime: filters.startTime,
+      endTime: filters.endTime,
+      statusCode: filters.statusCode,
+      excludeStatusCode200: filters.excludeStatusCode200,
+      model: filters.model,
+      endpoint: filters.endpoint,
+      minRetryCount: filters.minRetryCount,
+    }),
+    [filters]
+  );
 
   const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.userId !== undefined) count++;
+    if (filters.keyId !== undefined) count++;
+    if (filters.providerId !== undefined) count++;
+    if (filters.sessionId) count++;
+    if (filters.startTime && filters.endTime) count++;
+    if (filters.statusCode !== undefined || filters.excludeStatusCode200) count++;
+    if (filters.model) count++;
+    if (filters.endpoint) count++;
+    if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) count++;
+    return count;
+  }, [filters]);
+
+  // Auto-expand filter panel when URL-based filters are present on initial load
+  const filterAutoExpandRef = useRef(true);
+  useEffect(() => {
+    if (filterAutoExpandRef.current && activeFilterCount > 0) {
+      setIsFiltersOpen(true);
+    }
+    filterAutoExpandRef.current = false;
+  }, [activeFilterCount]);
 
   return (
     <>
@@ -274,35 +312,41 @@ function UsageLogsViewContent({
           <UsageLogsStatsPanel filters={statsFilters} currencyCode={resolvedCurrencyCode} />
         )}
 
-        {/* Filter Criteria */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted/50">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <CardTitle className="text-base">{t("title.filterCriteria")}</CardTitle>
-                <CardDescription className="text-xs">
-                  {t("title.filterCriteriaDescription")}
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <UsageLogsFilters
-              isAdmin={isAdmin}
-              providers={resolvedProviders}
-              initialKeys={resolvedKeys}
-              filters={filters}
-              onChange={handleFilterChange}
-              onReset={() => router.push("/dashboard/logs")}
-              isProvidersLoading={isProvidersLoading}
-              isKeysLoading={isKeysLoading}
-              serverTimeZone={serverTimeZone}
-            />
-          </CardContent>
-        </Card>
+        {/* Filter Criteria - Collapsible */}
+        <Collapsible open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-4 py-2.5 rounded-lg border border-border/50 bg-card/30 text-sm cursor-pointer select-none hover:border-border transition-colors"
+            >
+              <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-muted-foreground">{t("title.filterCriteria")}</span>
+              {!isFiltersOpen && activeFilterCount > 0 ? (
+                <Badge variant="secondary">{activeFilterCount}</Badge>
+              ) : null}
+              <ChevronDown
+                className={`ml-auto h-4 w-4 text-muted-foreground transition-transform duration-200 ${isFiltersOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <Card className="border-border/50 mt-2">
+              <CardContent className="pt-4">
+                <UsageLogsFilters
+                  isAdmin={isAdmin}
+                  providers={resolvedProviders}
+                  initialKeys={resolvedKeys}
+                  filters={filters}
+                  onChange={handleFilterChange}
+                  onReset={() => router.push("/dashboard/logs")}
+                  isProvidersLoading={isProvidersLoading}
+                  isKeysLoading={isKeysLoading}
+                  serverTimeZone={serverTimeZone}
+                />
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
 
         {/* Usage Records Table */}
         <Card className="border-border/50">
