@@ -395,52 +395,51 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     },
   ];
 
+  const renderUserTable = () => (
+    <LeaderboardTable<UserEntry>
+      data={data as UserEntry[]}
+      period={period}
+      columns={userColumns}
+      getRowKey={(row) => row.userId}
+    />
+  );
+
+  const renderProviderTable = () => (
+    <LeaderboardTable<ProviderEntry, ModelProviderStatClient>
+      data={data as ProviderEntry[]}
+      period={period}
+      columns={providerColumns}
+      getRowKey={(row) => row.providerId}
+      getSubRows={(row) => row.modelStats}
+      getSubRowKey={(subRow) => subRow.model}
+    />
+  );
+
+  const renderProviderCacheHitRateTable = () => (
+    <LeaderboardTable<ProviderCacheHitRateEntry, ModelCacheHitStat>
+      data={data as ProviderCacheHitRateEntry[]}
+      period={period}
+      columns={providerCacheHitRateColumns}
+      getRowKey={(row) => row.providerId}
+      getSubRows={(row) => row.modelStats}
+      getSubRowKey={(subRow) => subRow.model}
+    />
+  );
+
+  const renderModelTable = () => (
+    <LeaderboardTable<ModelEntry>
+      data={data as ModelEntry[]}
+      period={period}
+      columns={modelColumns}
+      getRowKey={(row) => row.model}
+    />
+  );
+
   const renderTable = () => {
-    if (scope === "user") {
-      return (
-        <LeaderboardTable<UserEntry>
-          data={data as UserEntry[]}
-          period={period}
-          columns={userColumns}
-          getRowKey={(row) => row.userId}
-        />
-      );
-    }
-
-    if (scope === "provider") {
-      return (
-        <LeaderboardTable<ProviderEntry, ModelProviderStatClient>
-          data={data as ProviderEntry[]}
-          period={period}
-          columns={providerColumns}
-          getRowKey={(row) => row.providerId}
-          getSubRows={(row) => row.modelStats}
-          getSubRowKey={(subRow) => subRow.model}
-        />
-      );
-    }
-
-    if (scope === "providerCacheHitRate") {
-      return (
-        <LeaderboardTable<ProviderCacheHitRateEntry, ModelCacheHitStat>
-          data={data as ProviderCacheHitRateEntry[]}
-          period={period}
-          columns={providerCacheHitRateColumns}
-          getRowKey={(row) => row.providerId}
-          getSubRows={(row) => row.modelStats}
-          getSubRowKey={(subRow) => subRow.model}
-        />
-      );
-    }
-
-    return (
-      <LeaderboardTable<ModelEntry>
-        data={data as ModelEntry[]}
-        period={period}
-        columns={modelColumns}
-        getRowKey={(row) => row.model}
-      />
-    );
+    if (scope === "user") return renderUserTable();
+    if (scope === "provider") return renderProviderTable();
+    if (scope === "providerCacheHitRate") return renderProviderCacheHitRateTable();
+    return renderModelTable();
   };
 
   return (

@@ -700,7 +700,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
       totalRequests: row.totalRequests,
       cacheReadTokens: row.cacheReadTokens,
       totalInputTokens: row.totalInputTokens,
-      cacheHitRate: Math.min(Math.max(row.cacheHitRate ?? 0, 0), 1),
+      cacheHitRate: clampRatio01(row.cacheHitRate),
     });
     modelStatsByProvider.set(row.providerId, stats);
   }
@@ -714,7 +714,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     cacheCreationCost: parseFloat(entry.cacheCreationCost),
     totalInputTokens: entry.totalInputTokens,
     totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
-    cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
+    cacheHitRate: clampRatio01(entry.cacheHitRate),
     modelStats: modelStatsByProvider.get(entry.providerId) ?? [],
   }));
 }
