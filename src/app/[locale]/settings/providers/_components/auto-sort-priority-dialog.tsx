@@ -113,7 +113,7 @@ export function AutoSortPriorityDialog() {
       const result = await autoSortProviderPriority({ confirm: true });
       if (result.ok) {
         toast.success(t("success", { count: result.data.summary.changedCount }));
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
+        queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         setOpen(false);
       } else {
         toast.error(getActionErrorMessage(result));
