@@ -910,15 +910,15 @@
     },
     "limitConcurrentSessions": {
       "label": "Concurrent Session Limit",
-      "placeholder": "0 means unlimited",
-      "description": "Number of simultaneous conversations",
-      "descriptionWithUserLimit": "Maximum sessions (User limit: {limit})"
+      "placeholder": "0 means inherit user limit",
+      "description": "Number of simultaneous conversations (0 inherits user limit)",
+      "descriptionWithUserLimit": "Number of simultaneous conversations (0 inherits user limit; user limit: {limit})"
     },
     "limitConcurrentUas": {
       "label": "Concurrent UA Limit",
-      "placeholder": "0 means unlimited",
-      "description": "Number of active UAs (User-Agent)",
-      "descriptionWithUserLimit": "Maximum UAs (User limit: {limit})"
+      "placeholder": "0 means inherit user limit",
+      "description": "Number of active UAs (User-Agent) (0 inherits user limit)",
+      "descriptionWithUserLimit": "Number of active UAs (User-Agent) (0 inherits user limit; user limit: {limit})"
     },
     "providerGroup": {
       "label": "Provider Group",

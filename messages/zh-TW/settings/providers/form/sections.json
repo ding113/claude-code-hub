@@ -154,6 +154,7 @@
     },
     "summary": {
       "concurrent": "並發：{count}",
+      "concurrentUas": "並發 UA：{count}",
       "daily": "日: {amount}（重置 {resetTime}）",
       "fiveHour": "5h：${amount}",
       "monthly": "月：${amount}",

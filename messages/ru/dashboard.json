@@ -904,15 +904,15 @@
     },
     "limitConcurrentSessions": {
       "label": "Лимит параллельных сеансов",
-      "placeholder": "0 означает неограниченно",
-      "description": "Количество одновременных разговоров",
-      "descriptionWithUserLimit": "Максимум сеансов (Лимит пользователя: {limit})"
+      "placeholder": "0 наследует лимит пользователя",
+      "description": "Количество одновременных разговоров (0 наследует лимит пользователя)",
+      "descriptionWithUserLimit": "Количество одновременных разговоров (0 наследует лимит пользователя; лимит пользователя: {limit})"
     },
     "limitConcurrentUas": {
       "label": "Лимит одновременных UA",
-      "placeholder": "0 означает неограниченно",
-      "description": "Количество активных UA (User-Agent)",
-      "descriptionWithUserLimit": "Максимум UA (Лимит пользователя: {limit})"
+      "placeholder": "0 наследует лимит пользователя",
+      "description": "Количество активных UA (User-Agent) (0 наследует лимит пользователя)",
+      "descriptionWithUserLimit": "Количество активных UA (User-Agent) (0 наследует лимит пользователя; лимит пользователя: {limit})"
     },
     "providerGroup": {
       "label": "Группа провайдеров",

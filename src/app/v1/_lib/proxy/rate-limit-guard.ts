@@ -285,7 +285,7 @@ export class ProxyRateLimitGuard {
 
     // ========== 第三层：短期周期限额（混合检查）==========
 
-    // 5. Key 5h 限额（最短周期，最易触发）
+    // 6. Key 5h 限额（最短周期，最易触发）
     const key5hCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: key.limit5hUsd,
       limit_daily_usd: null, // 仅检查 5h
@@ -321,7 +321,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 6. User 5h 限额（防止多 Key 合力在短窗口打爆用户）
+    // 7. User 5h 限额（防止多 Key 合力在短窗口打爆用户）
     const user5hCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: user.limit5hUsd ?? null,
       limit_daily_usd: null,
@@ -357,7 +357,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 7. Key 每日限额（Key 独有的每日预算）- null 表示无限制
+    // 8. Key 每日限额（Key 独有的每日预算）- null 表示无限制
     const keyDailyCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: null,
       limit_daily_usd: key.limitDailyUsd,
@@ -429,7 +429,7 @@ export class ProxyRateLimitGuard {
       }
     }
 
-    // 8. User 每日额度（User 独有的常用预算）- null 表示无限制
+    // 9. User 每日额度（User 独有的常用预算）- null 表示无限制
     // NOTE: 已迁移到 checkCostLimitsWithLease 以保持与其他周期限额的一致性
     const userDailyCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: null, // 仅检查 daily
@@ -506,7 +506,7 @@ export class ProxyRateLimitGuard {
 
     // ========== 第四层：中长期周期限额（混合检查）==========
 
-    // 9. Key 周限额
+    // 10. Key 周限额
     const keyWeeklyCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: null,
       limit_daily_usd: null,
@@ -540,7 +540,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 10. User 周限额
+    // 11. User 周限额
     const userWeeklyCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: null,
       limit_daily_usd: null,
@@ -576,7 +576,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 11. Key 月限额
+    // 12. Key 月限额
     const keyMonthlyCheck = await RateLimitService.checkCostLimitsWithLease(key.id, "key", {
       limit_5h_usd: null,
       limit_daily_usd: null,
@@ -612,7 +612,7 @@ export class ProxyRateLimitGuard {
       );
     }
 
-    // 12. User 月限额（最后一道长期预算闸门）
+    // 13. User 月限额（最后一道长期预算闸门）
     const userMonthlyCheck = await RateLimitService.checkCostLimitsWithLease(user.id, "user", {
       limit_5h_usd: null,
       limit_daily_usd: null,

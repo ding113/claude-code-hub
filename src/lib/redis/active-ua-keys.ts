@@ -18,6 +18,9 @@ export function getGlobalActiveUasKey(): string {
  * Key 维度活跃 UA ZSET（用于 Key 并发 UA 上限判断）。
  */
 export function getKeyActiveUasKey(keyId: number): string {
+  if (!Number.isSafeInteger(keyId)) {
+    throw new TypeError("getKeyActiveUasKey: keyId must be a safe integer");
+  }
   return `${ACTIVE_UAS_HASH_TAG}:key:${keyId}:active_uas`;
 }
 
@@ -25,6 +28,9 @@ export function getKeyActiveUasKey(keyId: number): string {
  * User 维度活跃 UA ZSET（用于跨多 Key 的 User 并发 UA 上限判断）。
  */
 export function getUserActiveUasKey(userId: number): string {
+  if (!Number.isSafeInteger(userId)) {
+    throw new TypeError("getUserActiveUasKey: userId must be a safe integer");
+  }
   return `${ACTIVE_UAS_HASH_TAG}:user:${userId}:active_uas`;
 }
 
@@ -32,5 +38,8 @@ export function getUserActiveUasKey(userId: number): string {
  * Provider 维度活跃 UA ZSET（用于 Provider 并发 UA 上限判断）。
  */
 export function getProviderActiveUasKey(providerId: number): string {
+  if (!Number.isSafeInteger(providerId)) {
+    throw new TypeError("getProviderActiveUasKey: providerId must be a safe integer");
+  }
   return `${ACTIVE_UAS_HASH_TAG}:provider:${providerId}:active_uas`;
 }

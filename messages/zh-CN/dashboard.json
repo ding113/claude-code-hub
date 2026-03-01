@@ -911,15 +911,15 @@
     },
     "limitConcurrentSessions": {
       "label": "并发 Session 上限",
-      "placeholder": "0 表示无限制",
-      "description": "同时运行的对话数量",
-      "descriptionWithUserLimit": "同时运行的对话数量（用户限额: {limit}）"
+      "placeholder": "0 表示继承用户限额",
+      "description": "同时运行的对话数量（0 表示继承用户限额）",
+      "descriptionWithUserLimit": "同时运行的对话数量（0 表示继承用户限额；用户限额: {limit}）"
     },
     "limitConcurrentUas": {
       "label": "并发 UA 上限",
-      "placeholder": "0 表示无限制",
-      "description": "同时活跃的 UA（User-Agent）数量",
-      "descriptionWithUserLimit": "同时活跃的 UA（User-Agent）数量（用户限额: {limit}）"
+      "placeholder": "0 表示继承用户限额",
+      "description": "同时活跃的 UA（User-Agent）数量（0 表示继承用户限额）",
+      "descriptionWithUserLimit": "同时活跃的 UA（User-Agent）数量（0 表示继承用户限额；用户限额: {limit}）"
     },
     "providerGroup": {
       "label": "供应商分组",

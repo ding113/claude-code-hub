@@ -4,6 +4,7 @@ import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { resolveConcurrentUaIdentity } from "@/lib/rate-limit/concurrent-ua-limit";
 import { SessionManager } from "@/lib/session-manager";
+import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
@@ -417,7 +418,8 @@ export class ProxyProviderResolver {
             {
               concurrentLimit: limit,
               currentConcurrent: checkResult.count,
-              errorMessage: checkResult.reason || "并发限制已达到",
+              errorCode: ERROR_CODES.RATE_LIMIT_CONCURRENT_SESSIONS_EXCEEDED,
+              errorParams: { current: checkResult.count, limit, target: "provider" },
             }
           );
 

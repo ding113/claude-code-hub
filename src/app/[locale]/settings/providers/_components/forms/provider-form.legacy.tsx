@@ -1356,6 +1356,12 @@ export function ProviderForm({
                           count: limitConcurrentSessions,
                         })
                       );
+                    if (limitConcurrentUas)
+                      limits.push(
+                        t("sections.rateLimit.summary.concurrentUas", {
+                          count: limitConcurrentUas,
+                        })
+                      );
                     return limits.length > 0
                       ? limits.join(", ")
                       : t("sections.rateLimit.summary.none");

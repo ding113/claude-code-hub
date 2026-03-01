@@ -249,6 +249,7 @@
       "monthly": "月: {amount}",
       "total": "总: {amount}",
       "concurrent": "并发: {count}",
+      "concurrentUas": "并发 UA: {count}",
       "none": "无限制"
     },
     "limit5h": {

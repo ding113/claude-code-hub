@@ -153,6 +153,7 @@
     },
     "summary": {
       "concurrent": "Concurrent: {count}",
+      "concurrentUas": "UAs: {count}",
       "daily": "Day: ${amount} (reset ${resetTime})",
       "fiveHour": "5h: ${amount}",
       "monthly": "Month: ${amount}",

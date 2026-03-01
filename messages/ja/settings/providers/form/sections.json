@@ -154,6 +154,7 @@
     },
     "summary": {
       "concurrent": "同時: {count}",
+      "concurrentUas": "UA: {count}",
       "daily": "日: {amount}（{resetTime}にリセット）",
       "fiveHour": "5h: ${amount}",
       "monthly": "月: ${amount}",
