@@ -163,6 +163,8 @@ export function LimitRulePicker({
     onOpenChange(false);
   };
 
+  const typePlaceholder = getTranslation(translations, "fields.type.placeholder", "请选择");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[680px]">
@@ -186,14 +188,12 @@ export function LimitRulePicker({
               <Label>{getTranslation(translations, "fields.type.label", "限额类型")}</Label>
               <Select value={type} onValueChange={(val) => setType(val as LimitType)}>
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={getTranslation(translations, "fields.type.placeholder", "请选择")}
-                  />
+                  <SelectValue placeholder={typePlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableTypes.map((opt) => (
                     <SelectItem key={opt} value={opt}>
-                      {getTranslation(translations, `limitTypes.${opt}`, opt)}
+                      {getTranslation(translations, `limitTypes.${opt}`, typePlaceholder)}
                     </SelectItem>
                   ))}
                 </SelectContent>

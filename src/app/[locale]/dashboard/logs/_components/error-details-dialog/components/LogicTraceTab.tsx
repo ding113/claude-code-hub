@@ -21,12 +21,12 @@ import {
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { getSessionOriginChain } from "@/actions/session-origin-chain";
+import { resolveChainItemErrorMessage } from "@/app/[locale]/dashboard/logs/_components/resolve-chain-item-error-message";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
-import { resolveChainItemErrorMessage } from "../../resolve-chain-item-error-message";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
 import { StepCard, type StepStatus } from "./StepCard";
 
