@@ -224,7 +224,12 @@ describe("RateLimitService - other quota paths", () => {
 
     redisClientRef.eval.mockResolvedValueOnce([1, 1, 1]);
     const result = await RateLimitService.checkAndTrackProviderUa(9, "ua", 2);
-    expect(result).toEqual({ allowed: true, count: 1, tracked: true });
+    expect(result).toEqual({
+      allowed: true,
+      count: 1,
+      tracked: true,
+      trackedAtMs: expect.any(Number),
+    });
   });
 
   it("checkAndTrackProviderUa: should pass SESSION_TTL_MS as ARGV[4] to Lua script", async () => {

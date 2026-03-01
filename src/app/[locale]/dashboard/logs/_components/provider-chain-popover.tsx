@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { formatProbabilityCompact } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { getFake200ReasonKey } from "./fake200-reason";
+import { resolveChainItemErrorMessage } from "./resolve-chain-item-error-message";
 
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
@@ -60,25 +61,6 @@ function parseGroupTags(groupTag?: string | null): string[] {
     groups.push(trimmed);
   }
   return groups;
-}
-
-function resolveChainItemErrorMessage(
-  item: ProviderChainItem,
-  tErrors: (key: string, params?: Record<string, string | number>) => string
-): string | null {
-  if (typeof item.errorMessage === "string" && item.errorMessage.trim()) {
-    return item.errorMessage;
-  }
-
-  if (typeof item.errorCode !== "string" || !item.errorCode.trim()) {
-    return null;
-  }
-
-  try {
-    return tErrors(item.errorCode, item.errorParams ?? undefined);
-  } catch {
-    return item.errorCode;
-  }
 }
 
 /**

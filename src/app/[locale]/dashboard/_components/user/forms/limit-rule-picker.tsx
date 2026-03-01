@@ -48,7 +48,7 @@ export interface LimitRulePickerProps {
    * - fields.value.label, fields.value.placeholder
    * - daily.mode.label, daily.mode.fixed, daily.mode.rolling
    * - daily.time.label, daily.time.placeholder
-   * - limitTypes.{limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions|limitUas}
+   * - limitTypes.{limitRpm|limit5h|limitDaily|limitWeekly|limitMonthly|limitTotal|limitSessions|limitUas}
    * - errors.missingType, errors.invalidValue, errors.invalidTime
    * - overwriteHint
    */

@@ -395,3 +395,31 @@ export const CHECK_AND_TRACK_ZSET_MEMBER = CHECK_AND_TRACK_SESSION;
  * 通用别名：global/key/user 三 key 的并发检查 + 追踪（Session/UA 复用）。
  */
 export const CHECK_AND_TRACK_KEY_USER_ZSET_MEMBER = CHECK_AND_TRACK_KEY_USER_SESSION;
+
+/**
+ * 从单 ZSET 移除 member（可选：仅当 score 匹配时）。
+ *
+ * KEYS[1]: target ZSET key
+ * ARGV[1]: member
+ * ARGV[2]: expectedScore（可选；空字符串表示无条件移除）
+ *
+ * Return:
+ * - 1: removed
+ * - 0: not removed
+ */
+export const UNTRACK_ZSET_MEMBER_IF_SCORE_MATCH = `
+local key = KEYS[1]
+local member = ARGV[1]
+local expected = ARGV[2] or ''
+
+local score = redis.call('ZSCORE', key, member)
+if not score then
+  return 0
+end
+
+if expected ~= '' and score ~= expected then
+  return 0
+end
+
+return redis.call('ZREM', key, member)
+`;

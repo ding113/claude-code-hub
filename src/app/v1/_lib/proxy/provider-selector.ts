@@ -284,6 +284,8 @@ export class ProxyProviderResolver {
           uaId,
           uaLimit
         );
+        const uaTrackedThisAttempt = uaCheckResult.tracked;
+        const uaTrackedAtMs = uaCheckResult.trackedAtMs;
 
         if (!uaCheckResult.allowed) {
           logger.warn("ProviderSelector: Provider concurrent UA limit exceeded, trying fallback", {
@@ -356,6 +358,11 @@ export class ProxyProviderResolver {
         );
 
         if (!checkResult.allowed) {
+          // 避免“UA 已追踪但 Session 未通过”导致的 UA 计数泄漏（仅回滚本次新增 UA）
+          if (uaTrackedThisAttempt) {
+            await RateLimitService.untrackProviderUa(session.provider.id, uaId, uaTrackedAtMs);
+          }
+
           // === 并发限制失败 ===
           logger.warn(
             "ProviderSelector: Provider concurrent session limit exceeded, trying fallback",

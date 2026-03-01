@@ -87,6 +87,7 @@ import {
   GET_COST_DAILY_ROLLING_WINDOW,
   TRACK_COST_5H_ROLLING_WINDOW,
   TRACK_COST_DAILY_ROLLING_WINDOW,
+  UNTRACK_ZSET_MEMBER_IF_SCORE_MATCH,
 } from "@/lib/redis/lua-scripts";
 import { SessionTracker } from "@/lib/session-tracker";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
@@ -811,6 +812,7 @@ export class RateLimitService {
     allowed: boolean;
     count: number;
     tracked: boolean;
+    trackedAtMs?: number;
     reasonCode?: string;
     reasonParams?: Record<string, string | number>;
   }> {
@@ -853,10 +855,37 @@ export class RateLimitService {
         allowed: true,
         count,
         tracked: tracked === 1,
+        trackedAtMs: tracked === 1 ? now : undefined,
       };
     } catch (error) {
       logger.error("[RateLimit] Provider UA check+track failed:", error);
       return { allowed: true, count: 0, tracked: false };
+    }
+  }
+
+  static async untrackProviderUa(
+    providerId: number,
+    uaId: string,
+    expectedScoreMs?: number
+  ): Promise<boolean> {
+    if (!RateLimitService.redis || RateLimitService.redis.status !== "ready") {
+      return false;
+    }
+
+    try {
+      const key = getProviderActiveUasKey(providerId);
+      const removed = (await RateLimitService.redis.eval(
+        UNTRACK_ZSET_MEMBER_IF_SCORE_MATCH,
+        1, // KEYS count
+        key, // KEYS[1]
+        uaId, // ARGV[1]
+        expectedScoreMs != null ? String(expectedScoreMs) : "" // ARGV[2]
+      )) as number;
+
+      return removed === 1;
+    } catch (error) {
+      logger.error("[RateLimit] Provider UA untrack failed:", error);
+      return false;
     }
   }
 

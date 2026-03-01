@@ -23,6 +23,7 @@ const rateLimitMocks = vi.hoisted(() => ({
   RateLimitService: {
     checkAndTrackProviderUa: vi.fn(async () => ({ allowed: true, count: 0, tracked: false })),
     checkAndTrackProviderSession: vi.fn(async () => ({ allowed: true, count: 0, tracked: false })),
+    untrackProviderUa: vi.fn(async () => true),
     checkCostLimitsWithLease: vi.fn(async () => ({ allowed: true })),
     checkTotalCostLimit: vi.fn(async () => ({ allowed: true, current: 0 })),
   },
@@ -165,5 +166,83 @@ describe("ProxyProviderResolver.ensure - concurrent UA fallback", () => {
 
     pickRandomProviderMock.mockRestore();
     expect(providerChain.length).toBeGreaterThan(0);
+  });
+
+  test("供应商并发 Session 超限触发回退时，应回滚本次新增的 Provider UA 追踪", async () => {
+    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
+
+    const provider1 = {
+      id: 1,
+      name: "p1",
+      providerType: "claude",
+      groupTag: null,
+      weight: 1,
+      priority: 0,
+      costMultiplier: 1,
+      isEnabled: true,
+      limitConcurrentSessions: 1,
+      limitConcurrentUas: 10,
+    } as unknown as Provider;
+
+    const provider2 = {
+      ...provider1,
+      id: 2,
+      name: "p2",
+    } as unknown as Provider;
+
+    const excludeSnapshots: number[][] = [];
+    const pickRandomProviderMock = vi
+      .spyOn(ProxyProviderResolver as any, "pickRandomProvider")
+      .mockImplementationOnce(async (_session: unknown, excludeIds: number[] = []) => {
+        excludeSnapshots.push([...excludeIds]);
+        return { provider: provider1, context: { groupFilterApplied: false } };
+      })
+      .mockImplementationOnce(async (_session: unknown, excludeIds: number[] = []) => {
+        excludeSnapshots.push([...excludeIds]);
+        return { provider: provider2, context: { groupFilterApplied: false } };
+      });
+
+    rateLimitMocks.RateLimitService.checkAndTrackProviderUa
+      .mockResolvedValueOnce({ allowed: true, count: 1, tracked: true, trackedAtMs: 123 })
+      .mockResolvedValueOnce({ allowed: true, count: 1, tracked: false });
+
+    rateLimitMocks.RateLimitService.checkAndTrackProviderSession
+      .mockResolvedValueOnce({
+        allowed: false,
+        count: 1,
+        tracked: false,
+        reason: "供应商并发 Session 上限已达到（1/1）",
+      })
+      .mockResolvedValueOnce({ allowed: true, count: 1, tracked: true });
+
+    const session: Partial<ProxySession> = {
+      sessionId: "s1",
+      userAgent: "claude-cli/2.0.32 (external, cli)",
+      authState: null,
+      provider: null,
+      shouldReuseProvider: () => false,
+      getOriginalModel: () => null,
+      getCurrentModel: () => null,
+      setProvider: (p: Provider | null) => {
+        session.provider = p;
+      },
+      setLastSelectionContext: () => undefined,
+      getLastSelectionContext: () => undefined,
+      addProviderToChain: () => undefined,
+    };
+
+    await expect(ProxyProviderResolver.ensure(session as ProxySession)).resolves.toBeNull();
+    expect(session.provider?.id).toBe(2);
+
+    expect(pickRandomProviderMock).toHaveBeenCalledTimes(2);
+    expect(excludeSnapshots).toEqual([[], [1]]);
+
+    const uaId = rateLimitMocks.RateLimitService.checkAndTrackProviderUa.mock.calls[0]?.[1];
+    expect(uaId).toBeTypeOf("string");
+
+    expect(rateLimitMocks.RateLimitService.untrackProviderUa).toHaveBeenCalledTimes(1);
+    expect(rateLimitMocks.RateLimitService.untrackProviderUa).toHaveBeenCalledWith(1, uaId, 123);
+
+    pickRandomProviderMock.mockRestore();
   });
 });

@@ -26,6 +26,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { formatProbability, formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
+import { resolveChainItemErrorMessage } from "../../resolve-chain-item-error-message";
 import { type LogicTraceTabProps, parseBlockedReason } from "../types";
 import { StepCard, type StepStatus } from "./StepCard";
 
@@ -49,25 +50,6 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
   }
   // http2_fallback and other retry-related reasons are treated as pending/in-progress
   return "pending";
-}
-
-function resolveChainItemErrorMessage(
-  item: ProviderChainItem,
-  tErrors: (key: string, params?: Record<string, string | number>) => string
-): string | null {
-  if (typeof item.errorMessage === "string" && item.errorMessage.trim()) {
-    return item.errorMessage;
-  }
-
-  if (typeof item.errorCode !== "string" || !item.errorCode.trim()) {
-    return null;
-  }
-
-  try {
-    return tErrors(item.errorCode, item.errorParams ?? undefined);
-  } catch {
-    return item.errorCode;
-  }
 }
 
 export function LogicTraceTab({
