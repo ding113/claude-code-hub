@@ -9,6 +9,11 @@ describe("fn_upsert_usage_ledger trigger SQL", () => {
     expect(sql).toContain("blocked_by = 'warmup'");
   });
 
+  it("skips blocked requests to avoid wasted ledger writes", () => {
+    expect(sql).toContain("NEW.blocked_by IS NOT NULL");
+    expect(sql).toContain("UPDATE usage_ledger SET blocked_by = NEW.blocked_by");
+  });
+
   it("contains ON CONFLICT UPSERT", () => {
     expect(sql).toContain("ON CONFLICT (request_id) DO UPDATE");
   });
