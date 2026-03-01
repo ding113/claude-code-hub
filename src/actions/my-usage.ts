@@ -242,6 +242,29 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
+    // Clip time range starts by costResetAt (for limits-only reset)
+    const costResetAt = user.costResetAt ?? null;
+    const clipStart = (start: Date): Date =>
+      costResetAt && costResetAt > start ? costResetAt : start;
+
+    const clippedRange5h = { startTime: clipStart(range5h.startTime), endTime: range5h.endTime };
+    const clippedRangeWeekly = {
+      startTime: clipStart(rangeWeekly.startTime),
+      endTime: rangeWeekly.endTime,
+    };
+    const clippedRangeMonthly = {
+      startTime: clipStart(rangeMonthly.startTime),
+      endTime: rangeMonthly.endTime,
+    };
+    const clippedKeyDaily = {
+      startTime: clipStart(keyDailyTimeRange.startTime),
+      endTime: keyDailyTimeRange.endTime,
+    };
+    const clippedUserDaily = {
+      startTime: clipStart(userDailyTimeRange.startTime),
+      endTime: userDailyTimeRange.endTime,
+    };
+
     const effectiveKeyConcurrentLimit = resolveKeyConcurrentSessionLimit(
       key.limitConcurrentSessions ?? 0,
       user.limitConcurrentSessions ?? null
@@ -252,24 +275,26 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       sumKeyQuotaCostsById(
         key.id,
         {
-          range5h,
-          rangeDaily: keyDailyTimeRange,
-          rangeWeekly,
-          rangeMonthly,
+          range5h: clippedRange5h,
+          rangeDaily: clippedKeyDaily,
+          rangeWeekly: clippedRangeWeekly,
+          rangeMonthly: clippedRangeMonthly,
         },
-        ALL_TIME_MAX_AGE_DAYS
+        ALL_TIME_MAX_AGE_DAYS,
+        costResetAt
       ),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
       sumUserQuotaCosts(
         user.id,
         {
-          range5h,
-          rangeDaily: userDailyTimeRange,
-          rangeWeekly,
-          rangeMonthly,
+          range5h: clippedRange5h,
+          rangeDaily: clippedUserDaily,
+          rangeWeekly: clippedRangeWeekly,
+          rangeMonthly: clippedRangeMonthly,
         },
-        ALL_TIME_MAX_AGE_DAYS
+        ALL_TIME_MAX_AGE_DAYS,
+        costResetAt
       ),
       getUserConcurrentSessions(user.id),
     ]);

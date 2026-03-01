@@ -1515,6 +1515,20 @@
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
       "saving": "Saving...",
+      "resetSection": {
+        "title": "Reset Data"
+      },
+      "resetLimits": {
+        "title": "Reset Limits",
+        "description": "Reset accumulated cost counters for all limits. Request logs and statistics are preserved.",
+        "button": "Reset Limits",
+        "confirmTitle": "Reset Limits Only?",
+        "confirmDescription": "This will reset all accumulated cost counters (5h, daily, weekly, monthly, total) to zero. Request logs and usage statistics will be preserved.",
+        "confirm": "Yes, Reset Limits",
+        "loading": "Resetting...",
+        "error": "Failed to reset limits",
+        "success": "All limits have been reset"
+      },
       "resetData": {
         "title": "Reset Statistics",
         "description": "Delete all request logs and usage data for this user. This action is irreversible.",

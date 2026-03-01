@@ -272,6 +272,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
+          costResetAt: user.costResetAt ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
@@ -339,6 +340,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
+          costResetAt: user.costResetAt ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
@@ -543,6 +545,7 @@ export async function getUsersBatch(
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
+          costResetAt: user.costResetAt ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
@@ -606,6 +609,7 @@ export async function getUsersBatch(
           limitWeeklyUsd: user.limitWeeklyUsd ?? null,
           limitMonthlyUsd: user.limitMonthlyUsd ?? null,
           limitTotalUsd: user.limitTotalUsd ?? null,
+          costResetAt: user.costResetAt ?? null,
           limitConcurrentSessions: user.limitConcurrentSessions ?? null,
           dailyResetMode: user.dailyResetMode,
           dailyResetTime: user.dailyResetTime,
@@ -693,6 +697,7 @@ export async function getUsersBatchCore(
         limitWeeklyUsd: user.limitWeeklyUsd ?? null,
         limitMonthlyUsd: user.limitMonthlyUsd ?? null,
         limitTotalUsd: user.limitTotalUsd ?? null,
+        costResetAt: user.costResetAt ?? null,
         limitConcurrentSessions: user.limitConcurrentSessions ?? null,
         dailyResetMode: user.dailyResetMode,
         dailyResetTime: user.dailyResetTime,
@@ -1552,7 +1557,9 @@ export async function getUserLimitUsage(userId: number): Promise<
       resetTime,
       resetMode
     );
-    const dailyCost = await sumUserCostInTimeRange(userId, startTime, endTime);
+    const effectiveStart =
+      user.costResetAt && user.costResetAt > startTime ? user.costResetAt : startTime;
+    const dailyCost = await sumUserCostInTimeRange(userId, effectiveStart, endTime);
     const resetInfo = await getResetInfoWithMode("daily", resetTime, resetMode);
     const resetAt = resetInfo.resetAt;
 
@@ -1758,14 +1765,18 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
+    // Clip time range start by costResetAt (for limits-only reset)
+    const clipStart = (start: Date): Date =>
+      user.costResetAt && user.costResetAt > start ? user.costResetAt : start;
+
     // 并行查询各时间范围的消费
     // Note: sumUserTotalCost uses ALL_TIME_MAX_AGE_DAYS for all-time semantics
     const [usage5h, usageDaily, usageWeekly, usageMonthly, usageTotal] = await Promise.all([
-      sumUserCostInTimeRange(userId, range5h.startTime, range5h.endTime),
-      sumUserCostInTimeRange(userId, rangeDaily.startTime, rangeDaily.endTime),
-      sumUserCostInTimeRange(userId, rangeWeekly.startTime, rangeWeekly.endTime),
-      sumUserCostInTimeRange(userId, rangeMonthly.startTime, rangeMonthly.endTime),
-      sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS),
+      sumUserCostInTimeRange(userId, clipStart(range5h.startTime), range5h.endTime),
+      sumUserCostInTimeRange(userId, clipStart(rangeDaily.startTime), rangeDaily.endTime),
+      sumUserCostInTimeRange(userId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
+      sumUserCostInTimeRange(userId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
+      sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS, user.costResetAt),
     ]);
 
     return {
@@ -1783,6 +1794,130 @@ export async function getUserAllLimitUsage(userId: number): Promise<
     const tError = await getTranslations("errors");
     const message = error instanceof Error ? error.message : tError("GET_USER_QUOTA_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.OPERATION_FAILED };
+  }
+}
+
+/**
+ * Reset user cost limits only (without deleting logs or statistics).
+ * Sets costResetAt = NOW() so all cost calculations start fresh.
+ * Logs, statistics, and usage_ledger remain intact.
+ *
+ * Admin only.
+ */
+export async function resetUserLimitsOnly(userId: number): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const user = await findUserById(userId);
+    if (!user) {
+      return { ok: false, error: tError("USER_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+    }
+
+    // Get user's keys
+    const keys = await findKeyList(userId);
+    const keyIds = keys.map((k) => k.id);
+    const keyHashes = keys.map((k) => k.key);
+
+    // Set costResetAt on user so all cost calculations start fresh
+    await db.update(usersTable).set({ costResetAt: new Date() }).where(eq(usersTable.id, userId));
+
+    // Invalidate auth cache so the new costResetAt is picked up immediately
+    const { invalidateCachedUser } = await import("@/lib/security/api-key-auth-cache");
+    await invalidateCachedUser(userId).catch(() => {});
+
+    // Clear Redis cost cache (but NOT active sessions, NOT DB logs)
+    const { getRedisClient } = await import("@/lib/redis");
+    const { scanPattern } = await import("@/lib/redis/scan-helper");
+    const redis = getRedisClient();
+
+    if (redis && redis.status === "ready") {
+      try {
+        const startTime = Date.now();
+
+        // Scan all cost patterns in parallel
+        const scanResults = await Promise.all([
+          ...keyIds.map((keyId) =>
+            scanPattern(redis, `key:${keyId}:cost_*`).catch((err) => {
+              logger.warn("Failed to scan key cost pattern", { keyId, error: err });
+              return [];
+            })
+          ),
+          scanPattern(redis, `user:${userId}:cost_*`).catch((err) => {
+            logger.warn("Failed to scan user cost pattern", { userId, error: err });
+            return [];
+          }),
+          // Total cost cache keys (with optional resetAt suffix)
+          scanPattern(redis, `total_cost:user:${userId}`).catch(() => []),
+          scanPattern(redis, `total_cost:user:${userId}:*`).catch(() => []),
+          ...keyHashes.map((keyHash) =>
+            scanPattern(redis, `total_cost:key:${keyHash}`).catch(() => [])
+          ),
+          ...keyHashes.map((keyHash) =>
+            scanPattern(redis, `total_cost:key:${keyHash}:*`).catch(() => [])
+          ),
+          // Lease cache keys (budget slices cached by LeaseService)
+          ...keyIds.map((keyId) => scanPattern(redis, `lease:key:${keyId}:*`).catch(() => [])),
+          scanPattern(redis, `lease:user:${userId}:*`).catch(() => []),
+        ]);
+
+        const allCostKeys = scanResults.flat();
+
+        if (allCostKeys.length > 0) {
+          // Batch delete via pipeline
+          const pipeline = redis.pipeline();
+          for (const key of allCostKeys) {
+            pipeline.del(key);
+          }
+
+          const results = await pipeline.exec();
+
+          // Check for errors
+          const errors = results?.filter(([err]) => err);
+          if (errors && errors.length > 0) {
+            logger.warn("Some Redis deletes failed during user limits reset", {
+              errorCount: errors.length,
+              userId,
+            });
+          }
+        }
+
+        const duration = Date.now() - startTime;
+        logger.info("Reset user limits only - Redis cost cache cleared", {
+          userId,
+          keyCount: keyIds.length,
+          costKeysDeleted: allCostKeys.length,
+          durationMs: duration,
+        });
+      } catch (error) {
+        logger.error("Failed to clear Redis cache during user limits reset", {
+          userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Continue execution - costResetAt already set in DB
+      }
+    }
+
+    logger.info("Reset user limits only (costResetAt set)", { userId, keyCount: keyIds.length });
+    revalidatePath("/dashboard/users");
+
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to reset user limits:", error);
+    const tError = await getTranslations("errors");
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
   }
 }
 
@@ -1819,6 +1954,10 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
 
     // Also clear ledger rows -- the ONLY legitimate DELETE path for usage_ledger
     await db.delete(usageLedger).where(eq(usageLedger.userId, userId));
+
+    // Invalidate auth cache so stale user data is not served
+    const { invalidateCachedUser } = await import("@/lib/security/api-key-auth-cache");
+    await invalidateCachedUser(userId).catch(() => {});
 
     // 2. Clear Redis cache
     const { getRedisClient } = await import("@/lib/redis");

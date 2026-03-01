@@ -463,11 +463,18 @@ export async function sumUserCostToday(userId: number): Promise<number> {
  * @param keyHash - API Key hash
  * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
-export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365): Promise<number> {
+export async function sumKeyTotalCost(
+  keyHash: string,
+  maxAgeDays: number = 365,
+  resetAt?: Date | null
+): Promise<number> {
   const conditions = [eq(usageLedger.key, keyHash), LEDGER_BILLING_CONDITION];
 
-  // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
-  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+  // resetAt takes priority: only count costs after the reset timestamp
+  if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
+    conditions.push(gte(usageLedger.createdAt, resetAt));
+  } else if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
     const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
     conditions.push(gte(usageLedger.createdAt, cutoffDate));
   }
@@ -485,11 +492,18 @@ export async function sumKeyTotalCost(keyHash: string, maxAgeDays: number = 365)
  * @param userId - User ID
  * @param maxAgeDays - Max query days (default 365). Use Infinity for all-time.
  */
-export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365): Promise<number> {
+export async function sumUserTotalCost(
+  userId: number,
+  maxAgeDays: number = 365,
+  resetAt?: Date | null
+): Promise<number> {
   const conditions = [eq(usageLedger.userId, userId), LEDGER_BILLING_CONDITION];
 
-  // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
-  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+  // resetAt takes priority: only count costs after the reset timestamp
+  if (resetAt instanceof Date && !Number.isNaN(resetAt.getTime())) {
+    conditions.push(gte(usageLedger.createdAt, resetAt));
+  } else if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+    // Finite positive maxAgeDays adds a date filter; Infinity/0/negative means all-time
     const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
     conditions.push(gte(usageLedger.createdAt, cutoffDate));
   }
@@ -510,28 +524,55 @@ export async function sumUserTotalCost(userId: number, maxAgeDays: number = 365)
  */
 export async function sumUserTotalCostBatch(
   userIds: number[],
-  maxAgeDays: number = 365
+  maxAgeDays: number = 365,
+  resetAtMap?: Map<number, Date>
 ): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (userIds.length === 0) return result;
+  for (const id of userIds) result.set(id, 0);
 
-  const conditions: SQL[] = [inArray(usageLedger.userId, userIds), LEDGER_BILLING_CONDITION];
-  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
-    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+  // Split users: those with costResetAt need individual queries
+  const resetUserIds: number[] = [];
+  const batchUserIds: number[] = [];
+  for (const id of userIds) {
+    if (resetAtMap?.has(id)) {
+      resetUserIds.push(id);
+    } else {
+      batchUserIds.push(id);
+    }
   }
 
-  const rows = await db
-    .select({
-      userId: usageLedger.userId,
-      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
-    })
-    .from(usageLedger)
-    .where(and(...conditions))
-    .groupBy(usageLedger.userId);
+  // Individual queries for users with costResetAt
+  if (resetUserIds.length > 0) {
+    const resetResults = await Promise.all(
+      resetUserIds.map(async (id) => ({
+        id,
+        total: await sumUserTotalCost(id, maxAgeDays, resetAtMap!.get(id)),
+      }))
+    );
+    for (const { id, total } of resetResults) result.set(id, total);
+  }
 
-  for (const id of userIds) result.set(id, 0);
-  for (const row of rows) result.set(row.userId, Number(row.total || 0));
+  // Batch query for users without costResetAt
+  if (batchUserIds.length > 0) {
+    const conditions: SQL[] = [inArray(usageLedger.userId, batchUserIds), LEDGER_BILLING_CONDITION];
+    if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+      const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+      conditions.push(gte(usageLedger.createdAt, cutoffDate));
+    }
+
+    const rows = await db
+      .select({
+        userId: usageLedger.userId,
+        total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+      })
+      .from(usageLedger)
+      .where(and(...conditions))
+      .groupBy(usageLedger.userId);
+
+    for (const row of rows) result.set(row.userId, Number(row.total || 0));
+  }
+
   return result;
 }
 
@@ -545,7 +586,8 @@ export async function sumUserTotalCostBatch(
  */
 export async function sumKeyTotalCostBatchByIds(
   keyIds: number[],
-  maxAgeDays: number = 365
+  maxAgeDays: number = 365,
+  resetAtMap?: Map<number, Date>
 ): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (keyIds.length === 0) return result;
@@ -558,29 +600,59 @@ export async function sumKeyTotalCostBatchByIds(
     .where(inArray(keys.id, keyIds));
 
   const keyStringToId = new Map(keyMappings.map((k) => [k.key, k.id]));
+  const idToKeyString = new Map(keyMappings.map((k) => [k.id, k.key]));
   const keyStrings = keyMappings.map((k) => k.key);
   if (keyStrings.length === 0) return result;
 
-  // Step 2: Aggregate on usage_ledger directly (hits idx_usage_ledger_key_cost)
-  const conditions: SQL[] = [inArray(usageLedger.key, keyStrings), LEDGER_BILLING_CONDITION];
-  if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
-    const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
-    conditions.push(gte(usageLedger.createdAt, cutoffDate));
+  // Split keys: those with costResetAt need individual queries
+  const resetKeyIds: number[] = [];
+  const batchKeyStrings: string[] = [];
+  for (const mapping of keyMappings) {
+    if (resetAtMap?.has(mapping.id)) {
+      resetKeyIds.push(mapping.id);
+    } else {
+      batchKeyStrings.push(mapping.key);
+    }
   }
 
-  const rows = await db
-    .select({
-      key: usageLedger.key,
-      total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
-    })
-    .from(usageLedger)
-    .where(and(...conditions))
-    .groupBy(usageLedger.key);
-
-  for (const row of rows) {
-    const keyId = keyStringToId.get(row.key);
-    if (keyId !== undefined) result.set(keyId, Number(row.total || 0));
+  // Individual queries for keys with costResetAt
+  if (resetKeyIds.length > 0) {
+    const resetResults = await Promise.all(
+      resetKeyIds.map(async (id) => {
+        const keyString = idToKeyString.get(id);
+        if (!keyString) return { id, total: 0 };
+        return {
+          id,
+          total: await sumKeyTotalCost(keyString, maxAgeDays, resetAtMap!.get(id)),
+        };
+      })
+    );
+    for (const { id, total } of resetResults) result.set(id, total);
   }
+
+  // Step 2: Batch aggregate for keys without costResetAt
+  if (batchKeyStrings.length > 0) {
+    const conditions: SQL[] = [inArray(usageLedger.key, batchKeyStrings), LEDGER_BILLING_CONDITION];
+    if (Number.isFinite(maxAgeDays) && maxAgeDays > 0) {
+      const cutoffDate = new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000);
+      conditions.push(gte(usageLedger.createdAt, cutoffDate));
+    }
+
+    const rows = await db
+      .select({
+        key: usageLedger.key,
+        total: sql<number>`COALESCE(SUM(${usageLedger.costUsd}), 0)`,
+      })
+      .from(usageLedger)
+      .where(and(...conditions))
+      .groupBy(usageLedger.key);
+
+    for (const row of rows) {
+      const keyId = keyStringToId.get(row.key);
+      if (keyId !== undefined) result.set(keyId, Number(row.total || 0));
+    }
+  }
+
   return result;
 }
 
@@ -692,12 +764,20 @@ interface QuotaCostSummary {
 export async function sumUserQuotaCosts(
   userId: number,
   ranges: QuotaCostRanges,
-  maxAgeDays: number = 365
+  maxAgeDays: number = 365,
+  resetAt?: Date | null
 ): Promise<QuotaCostSummary> {
-  const cutoffDate =
+  const maxAgeCutoff =
     Number.isFinite(maxAgeDays) && maxAgeDays > 0
       ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
       : null;
+  // Use the more recent of maxAgeCutoff and resetAt
+  const cutoffDate =
+    resetAt instanceof Date && !Number.isNaN(resetAt.getTime())
+      ? maxAgeCutoff && maxAgeCutoff > resetAt
+        ? maxAgeCutoff
+        : resetAt
+      : maxAgeCutoff;
 
   const scanStart = cutoffDate
     ? new Date(
@@ -757,17 +837,25 @@ export async function sumUserQuotaCosts(
 export async function sumKeyQuotaCostsById(
   keyId: number,
   ranges: QuotaCostRanges,
-  maxAgeDays: number = 365
+  maxAgeDays: number = 365,
+  resetAt?: Date | null
 ): Promise<QuotaCostSummary> {
   const keyString = await getKeyStringByIdCached(keyId);
   if (!keyString) {
     return { cost5h: 0, costDaily: 0, costWeekly: 0, costMonthly: 0, costTotal: 0 };
   }
 
-  const cutoffDate =
+  const maxAgeCutoff =
     Number.isFinite(maxAgeDays) && maxAgeDays > 0
       ? new Date(Date.now() - Math.floor(maxAgeDays) * 24 * 60 * 60 * 1000)
       : null;
+  // Use the more recent of maxAgeCutoff and resetAt
+  const cutoffDate =
+    resetAt instanceof Date && !Number.isNaN(resetAt.getTime())
+      ? maxAgeCutoff && maxAgeCutoff > resetAt
+        ? maxAgeCutoff
+        : resetAt
+      : maxAgeCutoff;
 
   const scanStart = cutoffDate
     ? new Date(

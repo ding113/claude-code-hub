@@ -733,6 +733,15 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       result.userLimitConcurrentSessions ?? null
     );
 
+    // Load owning user to get costResetAt for limits-only reset
+    const { findUserById } = await import("@/repository/user");
+    const ownerUser = await findUserById(key.userId);
+    const costResetAt = ownerUser?.costResetAt ?? null;
+
+    // Clip time range start by costResetAt (for limits-only reset)
+    const clipStart = (start: Date): Date =>
+      costResetAt && costResetAt > start ? costResetAt : start;
+
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
       "daily",
@@ -748,11 +757,15 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-        sumKeyCostInTimeRange(keyId, range5h.startTime, range5h.endTime),
-        sumKeyCostInTimeRange(keyId, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
-        sumKeyCostInTimeRange(keyId, rangeWeekly.startTime, rangeWeekly.endTime),
-        sumKeyCostInTimeRange(keyId, rangeMonthly.startTime, rangeMonthly.endTime),
-        sumKeyTotalCost(key.key),
+        sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
+        sumKeyCostInTimeRange(
+          keyId,
+          clipStart(keyDailyTimeRange.startTime),
+          keyDailyTimeRange.endTime
+        ),
+        sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
+        sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
+        sumKeyTotalCost(key.key, 365, costResetAt),
         SessionTracker.getKeySessionCount(keyId),
       ]);
 
