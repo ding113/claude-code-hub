@@ -55,15 +55,15 @@ export interface LimitRulePickerProps {
   translations: Record<string, unknown>;
 }
 
-const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
-  { type: "limitRpm", fallbackLabel: "RPM 限额" },
-  { type: "limit5h", fallbackLabel: "5小时限额" },
-  { type: "limitDaily", fallbackLabel: "每日限额" },
-  { type: "limitWeekly", fallbackLabel: "周限额" },
-  { type: "limitMonthly", fallbackLabel: "月限额" },
-  { type: "limitTotal", fallbackLabel: "总限额" },
-  { type: "limitSessions", fallbackLabel: "并发 Session" },
-  { type: "limitUas", fallbackLabel: "并发 UA" },
+const LIMIT_TYPE_OPTIONS: LimitType[] = [
+  "limitRpm",
+  "limit5h",
+  "limitDaily",
+  "limitWeekly",
+  "limitMonthly",
+  "limitTotal",
+  "limitSessions",
+  "limitUas",
 ];
 
 const QUICK_VALUES = [10, 50, 100, 500] as const;
@@ -105,13 +105,13 @@ export function LimitRulePicker({
   // Reset state when dialog opens
   useEffect(() => {
     if (!open) return;
-    const first = availableTypes[0]?.type ?? "";
+    const first = availableTypes[0] ?? "";
     setType((prev) => (prev ? prev : first));
     setRawValue("");
     setDailyMode("fixed");
     setDailyTime("00:00");
     setError(null);
-  }, [open, availableTypes]);
+  }, [open]);
 
   const numericValue = useMemo(() => {
     const trimmed = rawValue.trim();
@@ -119,6 +119,7 @@ export function LimitRulePicker({
     return Number(trimmed);
   }, [rawValue]);
 
+  const requiresInteger = type === "limitSessions" || type === "limitUas" || type === "limitRpm";
   const isDaily = type === "limitDaily";
   const needsTime = isDaily && dailyMode === "fixed";
 
@@ -126,6 +127,7 @@ export function LimitRulePicker({
     type !== "" &&
     Number.isFinite(numericValue) &&
     numericValue >= 0 &&
+    (!requiresInteger || Number.isInteger(numericValue)) &&
     (!needsTime || isValidTime(dailyTime));
 
   const handleCancel = () => onOpenChange(false);
@@ -139,6 +141,11 @@ export function LimitRulePicker({
     }
 
     if (!Number.isFinite(numericValue) || numericValue < 0) {
+      setError(getTranslation(translations, "errors.invalidValue", "请输入有效数值"));
+      return;
+    }
+
+    if (requiresInteger && !Number.isInteger(numericValue)) {
       setError(getTranslation(translations, "errors.invalidValue", "请输入有效数值"));
       return;
     }
@@ -185,8 +192,8 @@ export function LimitRulePicker({
                 </SelectTrigger>
                 <SelectContent>
                   {availableTypes.map((opt) => (
-                    <SelectItem key={opt.type} value={opt.type}>
-                      {getTranslation(translations, `limitTypes.${opt.type}`, opt.fallbackLabel)}
+                    <SelectItem key={opt} value={opt}>
+                      {getTranslation(translations, `limitTypes.${opt}`, opt)}
                     </SelectItem>
                   ))}
                 </SelectContent>

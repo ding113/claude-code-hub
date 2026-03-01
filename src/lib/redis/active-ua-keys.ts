@@ -3,7 +3,7 @@
  *
  * 说明：
  * - 为兼容 Redis Cluster 下的 Lua 脚本多 key 操作，需要相关 key 共享相同 hash tag，避免 CROSSSLOT。
- * - 目前仅对 global/key/user 三类 active_uas key 统一加 hash tag；provider 维度不需要。
+ * - active_uas 相关 key 统一加 hash tag，避免后续扩展出现 CROSSSLOT 风险。
  */
 const ACTIVE_UAS_HASH_TAG = "{active_uas}";
 
@@ -26,4 +26,11 @@ export function getKeyActiveUasKey(keyId: number): string {
  */
 export function getUserActiveUasKey(userId: number): string {
   return `${ACTIVE_UAS_HASH_TAG}:user:${userId}:active_uas`;
+}
+
+/**
+ * Provider 维度活跃 UA ZSET（用于 Provider 并发 UA 上限判断）。
+ */
+export function getProviderActiveUasKey(providerId: number): string {
+  return `${ACTIVE_UAS_HASH_TAG}:provider:${providerId}:active_uas`;
 }

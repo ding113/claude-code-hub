@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { Provider } from "@/types/provider";
+import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 
 const circuitBreakerMocks = vi.hoisted(() => ({
   isCircuitOpen: vi.fn(async () => false),
@@ -109,10 +110,10 @@ describe("ProxyProviderResolver.ensure - concurrent UA fallback", () => {
       tracked: true,
     });
 
-    const providerChain: unknown[] = [];
-    let lastContext: unknown = null;
+    const providerChain: Array<Parameters<ProxySession["addProviderToChain"]>[1]> = [];
+    let lastContext: ReturnType<ProxySession["getLastSelectionContext"]>;
 
-    const session: any = {
+    const session: Partial<ProxySession> = {
       sessionId: "s1",
       userAgent: "claude-cli/2.0.32 (external, cli)",
       authState: null,
@@ -123,16 +124,19 @@ describe("ProxyProviderResolver.ensure - concurrent UA fallback", () => {
       setProvider: (p: Provider | null) => {
         session.provider = p;
       },
-      setLastSelectionContext: (ctx: unknown) => {
+      setLastSelectionContext: (ctx: Parameters<ProxySession["setLastSelectionContext"]>[0]) => {
         lastContext = ctx;
       },
       getLastSelectionContext: () => lastContext,
-      addProviderToChain: (_provider: Provider, item: unknown) => {
+      addProviderToChain: (
+        _provider: Provider,
+        item?: Parameters<ProxySession["addProviderToChain"]>[1]
+      ) => {
         providerChain.push(item);
       },
     };
 
-    await expect(ProxyProviderResolver.ensure(session)).resolves.toBeNull();
+    await expect(ProxyProviderResolver.ensure(session as ProxySession)).resolves.toBeNull();
     expect(session.provider?.id).toBe(2);
 
     expect(pickRandomProviderMock).toHaveBeenCalledTimes(2);

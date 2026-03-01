@@ -224,8 +224,6 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "limit_weekly_usd":
     case "limit_monthly_usd":
     case "limit_total_usd":
-    case "limit_concurrent_sessions":
-    case "limit_concurrent_uas":
     case "circuit_breaker_failure_threshold":
     case "circuit_breaker_open_duration":
     case "circuit_breaker_half_open_success_threshold":
@@ -234,6 +232,9 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "streaming_idle_timeout_ms":
     case "request_timeout_non_streaming_ms":
       return typeof value === "number" && Number.isFinite(value);
+    case "limit_concurrent_sessions":
+    case "limit_concurrent_uas":
+      return typeof value === "number" && Number.isInteger(value) && value >= 0;
     case "group_tag":
     case "daily_reset_time":
     case "proxy_url":

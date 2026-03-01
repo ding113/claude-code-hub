@@ -22,7 +22,23 @@ export interface Key {
   limitWeeklyUsd: number | null;
   limitMonthlyUsd: number | null;
   limitTotalUsd?: number | null;
+
+  /**
+   * Key 维度并发 Session 上限。
+   *
+   * 语义：
+   * - `0`：不启用 Key 维度限制（仅受 User 维度限制/或无限制）
+   * - `>0`：启用 Key 维度限制
+   */
   limitConcurrentSessions: number;
+
+  /**
+   * Key 维度并发 UA 上限。
+   *
+   * 语义：
+   * - `0`：不启用 Key 维度限制（仅受 User 维度限制/或无限制）
+   * - `>0`：启用 Key 维度限制
+   */
   limitConcurrentUas: number;
 
   // Provider group override (null = inherit from user)

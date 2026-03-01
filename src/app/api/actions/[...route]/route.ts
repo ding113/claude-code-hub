@@ -91,7 +91,7 @@ const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
         limitMonthlyUsd: z.number().nullable().describe("月消费上限"),
         limitTotalUsd: z.number().nullable().describe("总消费上限"),
         limitConcurrentSessions: z.number().nullable().describe("并发Session上限"),
-        limitConcurrentUas: z.number().nullable().describe("并发UA上限"),
+        limitConcurrentUas: z.number().nullable(),
         createdAt: z.string().describe("创建时间"),
       })
     ),
@@ -126,7 +126,7 @@ const { route: addUserRoute, handler: addUserHandler } = createActionRoute(
         limitMonthlyUsd: z.number().nullable().describe("月消费上限"),
         limitTotalUsd: z.number().nullable().describe("总消费上限"),
         limitConcurrentSessions: z.number().nullable().describe("并发Session上限"),
-        limitConcurrentUas: z.number().nullable().describe("并发UA上限"),
+        limitConcurrentUas: z.number().nullable(),
       }),
       defaultKey: z.object({
         id: z.number().describe("密钥ID"),

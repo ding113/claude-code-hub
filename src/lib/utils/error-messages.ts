@@ -219,6 +219,9 @@ export function zodErrorToCode(
 
   switch (zodErrorCode) {
     case "invalid_type":
+      if (type === "int") {
+        return { code: ERROR_CODES.MUST_BE_INTEGER, params: { field: field || "field" } };
+      }
       if (type === "string" && params.received === "undefined") {
         return { code: ERROR_CODES.REQUIRED_FIELD, params: { field: field || "field" } };
       }

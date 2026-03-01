@@ -534,7 +534,8 @@ function ProviderFormContent({
       state.rateLimit.limitWeeklyUsd ||
       state.rateLimit.limitMonthlyUsd ||
       state.rateLimit.limitTotalUsd ||
-      state.rateLimit.limitConcurrentSessions
+      state.rateLimit.limitConcurrentSessions ||
+      state.rateLimit.limitConcurrentUas
     ) {
       status.limits = "configured";
     }

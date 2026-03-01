@@ -75,6 +75,7 @@ import {
 import {
   getGlobalActiveUasKey,
   getKeyActiveUasKey,
+  getProviderActiveUasKey,
   getUserActiveUasKey,
 } from "@/lib/redis/active-ua-keys";
 import {
@@ -815,7 +816,7 @@ export class RateLimitService {
     }
 
     try {
-      const key = `provider:${providerId}:active_uas`;
+      const key = getProviderActiveUasKey(providerId);
       const now = Date.now();
 
       const result = (await RateLimitService.redis.eval(
