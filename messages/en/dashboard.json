@@ -1527,7 +1527,8 @@
         "confirm": "Yes, Reset Limits",
         "loading": "Resetting...",
         "error": "Failed to reset limits",
-        "success": "All limits have been reset"
+        "success": "All limits have been reset",
+        "lastResetAt": "Last reset: {date}"
       },
       "resetData": {
         "title": "Reset Statistics",

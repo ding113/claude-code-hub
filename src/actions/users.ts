@@ -1559,7 +1559,7 @@ export async function getUserLimitUsage(userId: number): Promise<
       resetMode
     );
     const effectiveStart =
-      user.costResetAt && user.costResetAt > startTime ? user.costResetAt : startTime;
+      user.costResetAt instanceof Date && user.costResetAt > startTime ? user.costResetAt : startTime;
     const dailyCost = await sumUserCostInTimeRange(userId, effectiveStart, endTime);
     const resetInfo = await getResetInfoWithMode("daily", resetTime, resetMode);
     const resetAt = resetInfo.resetAt;
@@ -1768,7 +1768,7 @@ export async function getUserAllLimitUsage(userId: number): Promise<
 
     // Clip time range start by costResetAt (for limits-only reset)
     const clipStart = (start: Date): Date =>
-      user.costResetAt && user.costResetAt > start ? user.costResetAt : start;
+      user.costResetAt instanceof Date && user.costResetAt > start ? user.costResetAt : start;
 
     // 并行查询各时间范围的消费
     // Note: sumUserTotalCost uses ALL_TIME_MAX_AGE_DAYS for all-time semantics

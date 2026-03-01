@@ -3,7 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, RotateCcw, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -90,6 +90,7 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const queryClient = useQueryClient();
   const t = useTranslations("dashboard.userManagement");
   const tCommon = useTranslations("common");
+  const locale = useLocale();
   const [isPending, startTransition] = useTransition();
   const [isResettingAll, setIsResettingAll] = useState(false);
   const [resetAllDialogOpen, setResetAllDialogOpen] = useState(false);
@@ -331,6 +332,16 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
                   <p className="text-xs text-muted-foreground">
                     {t("editDialog.resetLimits.description")}
                   </p>
+                  {user.costResetAt && (
+                    <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
+                      {t("editDialog.resetLimits.lastResetAt", {
+                        date: new Intl.DateTimeFormat(locale, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        }).format(new Date(user.costResetAt)),
+                      })}
+                    </p>
+                  )}
                 </div>
 
                 <AlertDialog open={resetLimitsDialogOpen} onOpenChange={setResetLimitsDialogOpen}>

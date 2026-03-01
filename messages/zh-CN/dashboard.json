@@ -1528,7 +1528,8 @@
         "confirm": "是的，重置限额",
         "loading": "正在重置...",
         "error": "重置限额失败",
-        "success": "所有限额已重置"
+        "success": "所有限额已重置",
+        "lastResetAt": "上次重置: {date}"
       },
       "resetData": {
         "title": "重置统计",

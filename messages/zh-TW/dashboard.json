@@ -1513,7 +1513,8 @@
         "confirm": "是的，重設限額",
         "loading": "正在重設...",
         "error": "重設限額失敗",
-        "success": "所有限額已重設"
+        "success": "所有限額已重設",
+        "lastResetAt": "上次重設: {date}"
       },
       "resetData": {
         "title": "重置統計",

@@ -25,7 +25,7 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   const userResetAtMap = new Map<number, Date>();
   const keyResetAtMap = new Map<number, Date>();
   for (const u of users) {
-    if (u.costResetAt) {
+    if (u.costResetAt instanceof Date) {
       userResetAtMap.set(u.id, u.costResetAt);
       for (const k of u.keys) {
         keyResetAtMap.set(k.id, u.costResetAt);
