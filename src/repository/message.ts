@@ -254,6 +254,8 @@ export async function sealOrphanedMessageRequests(options?: {
       error_message = COALESCE(error_message, ${ORPHANED_ERROR_MESSAGE}),
       updated_at = NOW()
     WHERE id IN (SELECT id FROM candidates)
+      AND duration_ms IS NULL
+      AND deleted_at IS NULL
     RETURNING id
   `;
 

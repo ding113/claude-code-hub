@@ -405,14 +405,15 @@ class MessageRequestWriteBuffer {
     this.config = config;
   }
 
-  enqueue(id: number, patch: MessageRequestUpdatePatch): void {
+  enqueue(id: number, patch: MessageRequestUpdatePatch): boolean {
     const sanitized = sanitizePatch(patch);
     if (Object.keys(sanitized).length === 0) {
-      return;
+      return false;
     }
 
     const existing = this.pending.get(id) ?? {};
     this.pending.set(id, { ...existing, ...sanitized });
+    let accepted = true;
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
@@ -440,6 +441,9 @@ class MessageRequestWriteBuffer {
 
       if (droppedId !== undefined) {
         this.pending.delete(droppedId);
+        if (droppedId === id) {
+          accepted = false;
+        }
         logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
           maxPending: this.config.maxPending,
           droppedId,
@@ -452,7 +456,7 @@ class MessageRequestWriteBuffer {
     // flush 过程中有新任务：标记需要再跑一轮（避免刚好 flush 完成时遗漏）
     if (this.flushInFlight) {
       this.flushAgainAfterCurrent = true;
-      return;
+      return accepted;
     }
 
     // 停止阶段不再调度 timer，避免阻止进程退出
@@ -465,6 +469,8 @@ class MessageRequestWriteBuffer {
     if (this.pending.size >= this.config.batchSize) {
       void this.flush();
     }
+
+    return accepted;
   }
 
   private ensureFlushTimer(delayMs?: number): void {
@@ -708,8 +714,7 @@ export function enqueueMessageRequestUpdate(id: number, patch: MessageRequestUpd
   if (!buffer) {
     return false;
   }
-  buffer.enqueue(id, patch);
-  return true;
+  return buffer.enqueue(id, patch);
 }
 
 export async function flushMessageRequestWriteBuffer(): Promise<void> {

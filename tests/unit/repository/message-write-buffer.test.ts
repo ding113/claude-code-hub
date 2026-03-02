@@ -272,6 +272,21 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("status_code");
   });
 
+  it("enqueueMessageRequestUpdate 的返回值应反映 patch 是否被接受（sanitize 为空时返回 false）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    const accepted = enqueueMessageRequestUpdate(1, { durationMs: Number.NaN });
+
+    await stopMessageRequestWriteBuffer();
+
+    expect(accepted).toBe(false);
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
   it("队列溢出时应优先丢弃非终态更新（尽量保留 durationMs）", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
     process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";

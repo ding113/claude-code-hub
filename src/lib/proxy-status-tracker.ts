@@ -1,6 +1,7 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
+import { logger } from "@/lib/logger";
 import { maskKey } from "@/lib/utils/validation";
 import type { ProxyStatusResponse } from "@/types/proxy-status";
 
@@ -146,6 +147,8 @@ export class ProxyStatusTracker {
   }
 
   private async loadActiveRequests(): Promise<ActiveRequestRow[]> {
+    const limit = 1000;
+
     const rows = await db
       .select({
         requestId: messageRequest.id,
@@ -170,7 +173,17 @@ export class ProxyStatusTracker {
       // 防御：异常情况下 durationMs 长期为空会导致“活跃请求”无限累积，进而撑爆查询与响应体。
       // 这里对返回明细做上限保护（监控用途不需要无穷列表）。
       .orderBy(desc(messageRequest.createdAt))
-      .limit(1000);
+      .limit(limit);
+
+    if (rows.length >= limit) {
+      logger.warn(
+        "[ProxyStatusTracker] Active requests query hit limit, results may be incomplete",
+        {
+          limit,
+          rowCount: rows.length,
+        }
+      );
+    }
 
     return rows as ActiveRequestRow[];
   }

@@ -154,7 +154,12 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
     const { sealOrphanedMessageRequests } = await import("@/repository/message");
     const intervalMs = 60 * 1000;
 
+    let inFlight = false;
     const runOnce = async (reason: "startup" | "scheduled") => {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
       try {
         const { sealedCount } = await sealOrphanedMessageRequests();
         if (sealedCount > 0) {
@@ -168,10 +173,12 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
           reason,
           error: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        inFlight = false;
       }
     };
 
-    await runOnce("startup");
+    void runOnce("startup");
     instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__ = setInterval(() => {
       void runOnce("scheduled");
     }, intervalMs);
