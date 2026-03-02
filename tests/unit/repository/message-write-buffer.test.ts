@@ -272,7 +272,7 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("status_code");
   });
 
-  it("enqueueMessageRequestUpdate 的返回值应反映 patch 是否被接受（sanitize 为空时返回 false）", async () => {
+  it("enqueueMessageRequestUpdate 的返回值应反映 patch 是否被接受（sanitize 为空时返回 rejected_invalid）", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 
     const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
@@ -295,7 +295,7 @@ describe("message_request 异步批量写入", () => {
       "@/repository/message-write-buffer"
     );
 
-    enqueueMessageRequestUpdate(1001, { statusCode: 200 }); // 非终态（无 durationMs）
+    enqueueMessageRequestUpdate(1001, { ttfbMs: 200 }); // 非终态（无 durationMs/statusCode）
     for (let i = 0; i < 100; i++) {
       enqueueMessageRequestUpdate(2000 + i, { durationMs: i });
     }

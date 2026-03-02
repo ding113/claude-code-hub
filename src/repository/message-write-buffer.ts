@@ -72,6 +72,9 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
 
 const INT32_MAX = 2147483647;
 
+const REJECTED_INVALID_LOG_THROTTLE_MS = 60_000;
+let _lastRejectedInvalidLogAt = 0;
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -414,6 +417,14 @@ class MessageRequestWriteBuffer {
   enqueue(id: number, patch: MessageRequestUpdatePatch): MessageRequestUpdateEnqueueResult {
     const sanitized = sanitizePatch(patch);
     if (Object.keys(sanitized).length === 0) {
+      const now = Date.now();
+      if (now - _lastRejectedInvalidLogAt > REJECTED_INVALID_LOG_THROTTLE_MS) {
+        _lastRejectedInvalidLogAt = now;
+        logger.warn("[MessageRequestWriteBuffer] Patch rejected: empty after sanitize", {
+          requestId: id,
+          originalKeys: Object.keys(patch),
+        });
+      }
       return "rejected_invalid";
     }
 
@@ -423,12 +434,12 @@ class MessageRequestWriteBuffer {
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
-      // 优先丢弃非“终态”更新（没有 durationMs 的条目），尽量保留请求完成信息
+      // 优先丢弃非“终态”更新（不含 durationMs/statusCode 的条目），尽量保留请求完成信息
       let droppedId: number | undefined;
       let droppedPatch: MessageRequestUpdatePatch | undefined;
 
       for (const [candidateId, candidatePatch] of this.pending) {
-        if (candidatePatch.durationMs === undefined) {
+        if (!isTerminalPatch(candidatePatch)) {
           droppedId = candidateId;
           droppedPatch = candidatePatch;
           break;
@@ -453,7 +464,7 @@ class MessageRequestWriteBuffer {
         logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
           maxPending: this.config.maxPending,
           droppedId,
-          droppedHasDurationMs: droppedPatch?.durationMs !== undefined,
+          droppedIsTerminal: droppedPatch ? isTerminalPatch(droppedPatch) : undefined,
           currentPending: this.pending.size,
         });
       }

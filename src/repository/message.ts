@@ -224,8 +224,19 @@ export async function sealOrphanedMessageRequests(options?: {
 }): Promise<{ sealedCount: number }> {
   const env = getEnvConfig();
 
-  const staleAfterMs = Math.max(60_000, options?.staleAfterMs ?? env.FETCH_BODY_TIMEOUT + 60_000);
-  const limit = Math.max(1, options?.limit ?? 1000);
+  const toFiniteInt = (value: unknown): number | null => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    return Math.trunc(value);
+  };
+
+  const fetchBodyTimeout = toFiniteInt(env.FETCH_BODY_TIMEOUT) ?? 600_000;
+  const staleAfterMsCandidate = toFiniteInt(options?.staleAfterMs) ?? fetchBodyTimeout + 60_000;
+  const staleAfterMs = Math.max(60_000, staleAfterMsCandidate);
+
+  const limitCandidate = toFiniteInt(options?.limit) ?? 1000;
+  const limit = Math.max(1, limitCandidate);
   const threshold = new Date(Date.now() - staleAfterMs);
 
   const ORPHANED_STATUS_CODE = 520;
