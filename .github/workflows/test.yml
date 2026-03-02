@@ -29,6 +29,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Ensure Biome CLI
+        run: |
+          BIOME_VERSION=$(bun -p "require('@biomejs/biome/package.json').version")
+          bun install --no-save @biomejs/cli-linux-x64@${BIOME_VERSION}
+
       - name: Run linting
         run: bun run lint
 
