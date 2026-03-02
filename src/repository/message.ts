@@ -11,7 +11,11 @@ import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
-import { enqueueMessageRequestUpdate } from "./message-write-buffer";
+import type { MessageRequestUpdatePatch } from "./message-write-buffer";
+import {
+  enqueueMessageRequestUpdate,
+  sanitizeMessageRequestUpdatePatch,
+} from "./message-write-buffer";
 
 /**
  * 创建消息请求记录
@@ -71,21 +75,34 @@ export async function createMessageRequest(
   return toMessageRequest(result);
 }
 
-/**
- * 更新消息请求的耗时
- */
-export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
-  if (enqueueMessageRequestUpdate(id, { durationMs }) !== "buffer_unavailable") {
+async function writeMessageRequestUpdateToDb(
+  id: number,
+  patch: MessageRequestUpdatePatch
+): Promise<void> {
+  const sanitized = sanitizeMessageRequestUpdatePatch(patch);
+  if (Object.keys(sanitized).length === 0) {
     return;
   }
 
   await db
     .update(messageRequest)
     .set({
-      durationMs: durationMs,
+      ...sanitized,
       updatedAt: new Date(),
     })
-    .where(eq(messageRequest.id, id));
+    .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)));
+}
+
+/**
+ * 更新消息请求的耗时
+ */
+export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
+  const enqueueResult = enqueueMessageRequestUpdate(id, { durationMs });
+  if (enqueueResult === "enqueued" || enqueueResult === "rejected_invalid") {
+    return;
+  }
+
+  await writeMessageRequestUpdateToDb(id, { durationMs });
 }
 
 /**
@@ -100,17 +117,12 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  if (enqueueMessageRequestUpdate(id, { costUsd: formattedCost }) !== "buffer_unavailable") {
+  const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
+  if (enqueueResult === "enqueued" || enqueueResult === "rejected_invalid") {
     return;
   }
 
-  await db
-    .update(messageRequest)
-    .set({
-      costUsd: formattedCost,
-      updatedAt: new Date(),
-    })
-    .where(eq(messageRequest.id, id));
+  await writeMessageRequestUpdateToDb(id, { costUsd: formattedCost });
 }
 
 /**
@@ -139,70 +151,18 @@ export async function updateMessageRequestDetails(
     specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
-  if (enqueueMessageRequestUpdate(id, details) !== "buffer_unavailable") {
+  const enqueueResult = enqueueMessageRequestUpdate(id, details);
+  if (enqueueResult === "enqueued" || enqueueResult === "rejected_invalid") {
     return;
   }
 
-  const updateData: Record<string, unknown> = {
-    updatedAt: new Date(),
-  };
-
-  if (details.statusCode !== undefined) {
-    updateData.statusCode = details.statusCode;
-  }
-  if (details.inputTokens !== undefined) {
-    updateData.inputTokens = details.inputTokens;
-  }
-  if (details.outputTokens !== undefined) {
-    updateData.outputTokens = details.outputTokens;
-  }
-  if (details.ttfbMs !== undefined) {
-    updateData.ttfbMs = details.ttfbMs;
-  }
-  if (details.cacheCreationInputTokens !== undefined) {
-    updateData.cacheCreationInputTokens = details.cacheCreationInputTokens;
-  }
-  if (details.cacheReadInputTokens !== undefined) {
-    updateData.cacheReadInputTokens = details.cacheReadInputTokens;
-  }
-  if (details.cacheCreation5mInputTokens !== undefined) {
-    updateData.cacheCreation5mInputTokens = details.cacheCreation5mInputTokens;
-  }
-  if (details.cacheCreation1hInputTokens !== undefined) {
-    updateData.cacheCreation1hInputTokens = details.cacheCreation1hInputTokens;
-  }
-  if (details.cacheTtlApplied !== undefined) {
-    updateData.cacheTtlApplied = details.cacheTtlApplied;
-  }
-  if (details.providerChain !== undefined) {
-    updateData.providerChain = details.providerChain;
-  }
-  if (details.errorMessage !== undefined) {
-    updateData.errorMessage = details.errorMessage;
-  }
-  if (details.errorStack !== undefined) {
-    updateData.errorStack = details.errorStack;
-  }
-  if (details.errorCause !== undefined) {
-    updateData.errorCause = details.errorCause;
-  }
-  if (details.model !== undefined) {
-    updateData.model = details.model;
-  }
-  if (details.providerId !== undefined) {
-    updateData.providerId = details.providerId;
-  }
-  if (details.context1mApplied !== undefined) {
-    updateData.context1mApplied = details.context1mApplied;
-  }
-  if (details.swapCacheTtlApplied !== undefined) {
-    updateData.swapCacheTtlApplied = details.swapCacheTtlApplied;
-  }
-  if (details.specialSettings !== undefined) {
-    updateData.specialSettings = details.specialSettings;
+  // 非终态 patch 在 overflow 场景下丢弃即可，避免在压力峰值时反向放大 DB 写入。
+  // 终态（包含 statusCode）则尽量走同步写入，避免请求长期卡在“请求中”。
+  if (enqueueResult === "dropped_overflow" && details.statusCode === undefined) {
+    return;
   }
 
-  await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
+  await writeMessageRequestUpdateToDb(id, details);
 }
 
 /**

@@ -311,4 +311,32 @@ describe("message_request 异步批量写入", () => {
     expect(built.params).toContain(2099);
     expect(built.params).not.toContain(1001);
   });
+
+  it("队列溢出且全部为终态更新时应丢弃当前 patch（避免误删已有终态）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    for (let i = 0; i < 100; i++) {
+      enqueueMessageRequestUpdate(2000 + i, { durationMs: i });
+    }
+
+    const overflowId = 9999;
+    const result = enqueueMessageRequestUpdate(overflowId, { durationMs: 123 });
+
+    await stopMessageRequestWriteBuffer();
+
+    expect(result).toBe("dropped_overflow");
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    const query = executeMock.mock.calls[0]?.[0];
+    const built = toSqlText(query);
+
+    expect(built.params).toContain(2000);
+    expect(built.params).toContain(2099);
+    expect(built.params).not.toContain(overflowId);
+  });
 });

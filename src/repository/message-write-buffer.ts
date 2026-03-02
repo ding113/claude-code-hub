@@ -258,6 +258,12 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
   return sanitized;
 }
 
+export function sanitizeMessageRequestUpdatePatch(
+  patch: MessageRequestUpdatePatch
+): MessageRequestUpdatePatch {
+  return sanitizePatch(patch);
+}
+
 function isTerminalPatch(patch: MessageRequestUpdatePatch): boolean {
   return patch.durationMs !== undefined || patch.statusCode !== undefined;
 }
@@ -446,14 +452,11 @@ class MessageRequestWriteBuffer {
         }
       }
 
+      // 当 pending 全部为终态 patch 时，不应随机淘汰已有终态（会导致其他请求永久缺失完成信息）。
+      // 此时优先丢弃“当前” patch，并让调用方按返回值决定是否走同步写入兜底。
       if (droppedId === undefined) {
-        const first = this.pending.entries().next().value as
-          | [number, MessageRequestUpdatePatch]
-          | undefined;
-        if (first) {
-          droppedId = first[0];
-          droppedPatch = first[1];
-        }
+        droppedId = id;
+        droppedPatch = this.pending.get(id);
       }
 
       if (droppedId !== undefined) {
