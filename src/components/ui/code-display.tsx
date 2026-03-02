@@ -1004,10 +1004,23 @@ export function CodeDisplay({
     if (!onlyMatchesQuery) return null;
     if (shouldOptimizeOnlyMatches) return null;
 
+    const shouldDebounceFallbackSearch =
+      nonSseTextForMode.length > codeDisplayConfig.highlightMaxChars;
+    const query = shouldDebounceFallbackSearch ? debouncedOnlyMatchesQuery : onlyMatchesQuery;
+    if (!query) return null;
+
     const lines = splitLines(nonSseTextForMode);
-    const matches = lines.filter((line) => line.includes(onlyMatchesQuery));
+    const matches = lines.filter((line) => line.includes(query));
     return matches.length === 0 ? "" : matches.join("\n");
-  }, [language, nonSseTextForMode, onlyMatchesQuery, showOnlyMatches, shouldOptimizeOnlyMatches]);
+  }, [
+    debouncedOnlyMatchesQuery,
+    codeDisplayConfig.highlightMaxChars,
+    language,
+    nonSseTextForMode,
+    onlyMatchesQuery,
+    showOnlyMatches,
+    shouldOptimizeOnlyMatches,
+  ]);
 
   const highlighterStyle = resolvedTheme === "dark" ? oneDark : oneLight;
 
@@ -1036,15 +1049,12 @@ export function CodeDisplay({
     const text = resolveTextForAction();
 
     const isCandidateJson = language === "json" && !(showOnlyMatches && onlyMatchesQuery);
-    let downloadType: "application/json" | "text/plain" = isCandidateJson
-      ? "application/json"
-      : "text/plain";
+    let downloadType: "application/json" | "text/plain" = "text/plain";
 
     // 避免对超大内容在主线程 JSON.parse；小内容可用于更准确决定 MIME 类型。
     const maxValidateJsonChars = MAX_SYNC_JSON_CHARS;
     if (isCandidateJson && text.length <= maxValidateJsonChars) {
-      const parsed = safeJsonParse(text);
-      if (!parsed.ok) downloadType = "text/plain";
+      if (safeJsonParse(text).ok) downloadType = "application/json";
     }
 
     const blob = new Blob([text], {
