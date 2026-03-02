@@ -97,9 +97,14 @@ type WorkerResponse =
 
 const cancelledJobs = new Set<number>();
 const CANCELLED_JOB_TTL_MS = 60_000;
+const YIELD_MIN_INTERVAL_MS = 50;
 
 function isCancelled(jobId: number): boolean {
   return cancelledJobs.has(jobId);
+}
+
+async function yieldToEventLoop() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
 }
 
 function estimateUtf16Bytes(textLength: number): number {
@@ -584,7 +589,7 @@ function formatJsonPrettyStreaming({
   }
 }
 
-function buildLineIndex({
+async function buildLineIndex({
   text,
   jobId,
   maxLines,
@@ -592,16 +597,32 @@ function buildLineIndex({
   text: string;
   jobId: number;
   maxLines: number;
-}):
+}): Promise<
   | { ok: true; lineStarts: Int32Array; lineCount: number }
-  | { ok: false; errorCode: "CANCELED" | "TOO_MANY_LINES"; lineCount?: number } {
+  | { ok: false; errorCode: "CANCELED" | "TOO_MANY_LINES"; lineCount?: number }
+> {
   const total = text.length;
 
   const starts: number[] = [0];
   let lastProgressAt = 0;
+  let lastYieldAt = 0;
 
   for (let i = 0; i < total; i += 1) {
-    if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+    if ((i & 8191) === 0) {
+      if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+
+      const now = performance.now();
+      if (now - lastYieldAt > YIELD_MIN_INTERVAL_MS) {
+        lastYieldAt = now;
+        await yieldToEventLoop();
+        if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+      }
+
+      if (now - lastProgressAt > 200) {
+        lastProgressAt = now;
+        post({ type: "progress", jobId, stage: "index", processed: i, total });
+      }
+    }
 
     const code = text.charCodeAt(i);
     if (code === 10) {
@@ -626,14 +647,6 @@ function buildLineIndex({
         starts.push(i + 1);
       }
     }
-
-    if ((i & 8191) === 0) {
-      const now = performance.now();
-      if (now - lastProgressAt > 200) {
-        lastProgressAt = now;
-        post({ type: "progress", jobId, stage: "index", processed: i, total });
-      }
-    }
   }
 
   const lineCount = starts.length;
@@ -646,7 +659,7 @@ function buildLineIndex({
   return { ok: true, lineStarts, lineCount };
 }
 
-function searchLines({
+async function searchLines({
   text,
   query,
   jobId,
@@ -656,11 +669,12 @@ function searchLines({
   query: string;
   jobId: number;
   maxResults: number;
-}): { ok: true; matches: Int32Array } | { ok: false; errorCode: "CANCELED" } {
+}): Promise<{ ok: true; matches: Int32Array } | { ok: false; errorCode: "CANCELED" }> {
   if (!query) return { ok: true, matches: new Int32Array(0) };
 
   const total = text.length;
   let lastProgressAt = 0;
+  let lastYieldAt = 0;
 
   const lines: number[] = [];
   let lastLine = -1;
@@ -673,7 +687,16 @@ function searchLines({
 
     // 更新 lineNo 到 pos 所在行（scan 指针单调前进，整体 O(n)）
     while (scan < pos) {
-      if ((scan & 8191) === 0 && isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+      if ((scan & 8191) === 0) {
+        if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+
+        const now = performance.now();
+        if (now - lastYieldAt > YIELD_MIN_INTERVAL_MS) {
+          lastYieldAt = now;
+          await yieldToEventLoop();
+          if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+        }
+      }
       const code = text.charCodeAt(scan);
       if (code === 10) {
         lineNo += 1;
@@ -702,6 +725,11 @@ function searchLines({
     pos = text.indexOf(query, pos + 1);
 
     const now = performance.now();
+    if (now - lastYieldAt > YIELD_MIN_INTERVAL_MS) {
+      lastYieldAt = now;
+      await yieldToEventLoop();
+      if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+    }
     if (now - lastProgressAt > 200) {
       lastProgressAt = now;
       post({
@@ -718,183 +746,218 @@ function searchLines({
   return { ok: true, matches: Int32Array.from(lines) };
 }
 
+type WorkerJobRequest = Exclude<WorkerRequest, { type: "cancel" }>;
+
+const jobQueue: WorkerJobRequest[] = [];
+let isProcessingQueue = false;
+
+function handleCancel(jobId: number) {
+  cancelledJobs.add(jobId);
+  setTimeout(() => cancelledJobs.delete(jobId), CANCELLED_JOB_TTL_MS);
+
+  // best-effort：如果任务还在队列里，直接移除避免无意义计算
+  for (let i = jobQueue.length - 1; i >= 0; i -= 1) {
+    if (jobQueue[i]?.jobId === jobId) {
+      jobQueue.splice(i, 1);
+    }
+  }
+}
+
+async function handleJob(msg: WorkerJobRequest) {
+  const { jobId } = msg;
+
+  if (msg.type === "formatJsonPretty") {
+    // 优先使用流式格式化；若失败可回落为 JSON.parse/stringify（更严格但可能占内存）。
+    const streaming = formatJsonPrettyStreaming({
+      text: msg.text,
+      jobId,
+      indentSize: msg.indentSize,
+      maxOutputBytes: msg.maxOutputBytes,
+    });
+
+    if (streaming.ok) {
+      post({
+        type: "formatJsonPrettyResult",
+        jobId,
+        ok: true,
+        text: streaming.text,
+        usedStreaming: true,
+      });
+      return;
+    }
+
+    if (streaming.errorCode === "CANCELED") {
+      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+    if (streaming.errorCode === "OUTPUT_TOO_LARGE") {
+      post({
+        type: "formatJsonPrettyResult",
+        jobId,
+        ok: false,
+        errorCode: "OUTPUT_TOO_LARGE",
+      });
+      return;
+    }
+
+    // 回落：严格 JSON.parse（可能较慢/占内存，但能处理部分边界情况）
+    if (isCancelled(jobId)) {
+      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+    const parsed = safeJsonParse(msg.text);
+    if (isCancelled(jobId)) {
+      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+    if (!parsed.ok) {
+      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "INVALID_JSON" });
+      return;
+    }
+
+    if (isCancelled(jobId)) {
+      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+    const text = stringifyPretty(parsed.value, msg.indentSize);
+    if (isCancelled(jobId)) {
+      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+    if (estimateUtf16Bytes(text.length) > msg.maxOutputBytes) {
+      post({
+        type: "formatJsonPrettyResult",
+        jobId,
+        ok: false,
+        errorCode: "OUTPUT_TOO_LARGE",
+      });
+      return;
+    }
+
+    if (isCancelled(jobId)) {
+      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+    post({ type: "formatJsonPrettyResult", jobId, ok: true, text, usedStreaming: false });
+    return;
+  }
+
+  if (msg.type === "stringifyJsonPretty") {
+    if (isCancelled(jobId)) {
+      post({ type: "stringifyJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+
+    const text = stringifyPretty(msg.value, msg.indentSize);
+    if (isCancelled(jobId)) {
+      post({ type: "stringifyJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+      return;
+    }
+    if (estimateUtf16Bytes(text.length) > msg.maxOutputBytes) {
+      post({
+        type: "stringifyJsonPrettyResult",
+        jobId,
+        ok: false,
+        errorCode: "OUTPUT_TOO_LARGE",
+      });
+      return;
+    }
+
+    post({ type: "stringifyJsonPrettyResult", jobId, ok: true, text });
+    return;
+  }
+
+  if (msg.type === "buildLineIndex") {
+    const result = await buildLineIndex({ text: msg.text, jobId, maxLines: msg.maxLines });
+
+    if (!result.ok) {
+      post({
+        type: "buildLineIndexResult",
+        jobId,
+        ok: false,
+        errorCode: result.errorCode,
+        lineCount: result.lineCount,
+      });
+      return;
+    }
+
+    post(
+      {
+        type: "buildLineIndexResult",
+        jobId,
+        ok: true,
+        lineStarts: result.lineStarts,
+        lineCount: result.lineCount,
+      },
+      [result.lineStarts.buffer]
+    );
+    return;
+  }
+
+  if (msg.type === "searchLines") {
+    const result = await searchLines({
+      text: msg.text,
+      query: msg.query,
+      jobId,
+      maxResults: msg.maxResults,
+    });
+
+    if (!result.ok) {
+      post({ type: "searchLinesResult", jobId, ok: false, errorCode: result.errorCode });
+      return;
+    }
+
+    post({ type: "searchLinesResult", jobId, ok: true, matches: result.matches }, [
+      result.matches.buffer,
+    ]);
+    return;
+  }
+}
+
+async function processQueue() {
+  while (jobQueue.length > 0) {
+    const msg = jobQueue.shift();
+    if (!msg) continue;
+
+    const { jobId } = msg;
+    try {
+      await handleJob(msg);
+    } catch {
+      // 最后兜底
+      if (msg.type === "formatJsonPretty") {
+        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "UNKNOWN" });
+        continue;
+      }
+      if (msg.type === "stringifyJsonPretty") {
+        post({ type: "stringifyJsonPrettyResult", jobId, ok: false, errorCode: "UNKNOWN" });
+        continue;
+      }
+      if (msg.type === "buildLineIndex") {
+        post({ type: "buildLineIndexResult", jobId, ok: false, errorCode: "UNKNOWN" });
+        continue;
+      }
+      if (msg.type === "searchLines") {
+        post({ type: "searchLinesResult", jobId, ok: false, errorCode: "UNKNOWN" });
+      }
+    } finally {
+      cancelledJobs.delete(jobId);
+    }
+  }
+
+  isProcessingQueue = false;
+}
+
 (self as DedicatedWorkerGlobalScope).onmessage = (e: MessageEvent<WorkerRequest>) => {
   const msg = e.data;
 
   if (msg.type === "cancel") {
-    cancelledJobs.add(msg.jobId);
-    setTimeout(() => cancelledJobs.delete(msg.jobId), CANCELLED_JOB_TTL_MS);
+    handleCancel(msg.jobId);
     return;
   }
 
-  const { jobId } = msg;
+  jobQueue.push(msg);
+  if (isProcessingQueue) return;
 
-  try {
-    if (msg.type === "formatJsonPretty") {
-      // 优先使用流式格式化；若失败可回落为 JSON.parse/stringify（更严格但可能占内存）。
-      const streaming = formatJsonPrettyStreaming({
-        text: msg.text,
-        jobId,
-        indentSize: msg.indentSize,
-        maxOutputBytes: msg.maxOutputBytes,
-      });
-
-      if (streaming.ok) {
-        post({
-          type: "formatJsonPrettyResult",
-          jobId,
-          ok: true,
-          text: streaming.text,
-          usedStreaming: true,
-        });
-        return;
-      }
-
-      if (streaming.errorCode === "CANCELED") {
-        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-      if (streaming.errorCode === "OUTPUT_TOO_LARGE") {
-        post({
-          type: "formatJsonPrettyResult",
-          jobId,
-          ok: false,
-          errorCode: "OUTPUT_TOO_LARGE",
-        });
-        return;
-      }
-
-      // 回落：严格 JSON.parse（可能较慢/占内存，但能处理部分边界情况）
-      if (isCancelled(jobId)) {
-        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-      const parsed = safeJsonParse(msg.text);
-      if (isCancelled(jobId)) {
-        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-      if (!parsed.ok) {
-        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "INVALID_JSON" });
-        return;
-      }
-
-      if (isCancelled(jobId)) {
-        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-      const text = stringifyPretty(parsed.value, msg.indentSize);
-      if (isCancelled(jobId)) {
-        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-      if (estimateUtf16Bytes(text.length) > msg.maxOutputBytes) {
-        post({
-          type: "formatJsonPrettyResult",
-          jobId,
-          ok: false,
-          errorCode: "OUTPUT_TOO_LARGE",
-        });
-        return;
-      }
-
-      if (isCancelled(jobId)) {
-        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-      post({ type: "formatJsonPrettyResult", jobId, ok: true, text, usedStreaming: false });
-      return;
-    }
-
-    if (msg.type === "stringifyJsonPretty") {
-      if (isCancelled(jobId)) {
-        post({ type: "stringifyJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-
-      const text = stringifyPretty(msg.value, msg.indentSize);
-      if (isCancelled(jobId)) {
-        post({ type: "stringifyJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
-        return;
-      }
-      if (estimateUtf16Bytes(text.length) > msg.maxOutputBytes) {
-        post({
-          type: "stringifyJsonPrettyResult",
-          jobId,
-          ok: false,
-          errorCode: "OUTPUT_TOO_LARGE",
-        });
-        return;
-      }
-
-      post({ type: "stringifyJsonPrettyResult", jobId, ok: true, text });
-      return;
-    }
-
-    if (msg.type === "buildLineIndex") {
-      const result = buildLineIndex({ text: msg.text, jobId, maxLines: msg.maxLines });
-
-      if (!result.ok) {
-        post({
-          type: "buildLineIndexResult",
-          jobId,
-          ok: false,
-          errorCode: result.errorCode,
-          lineCount: result.lineCount,
-        });
-        return;
-      }
-
-      post(
-        {
-          type: "buildLineIndexResult",
-          jobId,
-          ok: true,
-          lineStarts: result.lineStarts,
-          lineCount: result.lineCount,
-        },
-        [result.lineStarts.buffer]
-      );
-      return;
-    }
-
-    if (msg.type === "searchLines") {
-      const result = searchLines({
-        text: msg.text,
-        query: msg.query,
-        jobId,
-        maxResults: msg.maxResults,
-      });
-
-      if (!result.ok) {
-        post({ type: "searchLinesResult", jobId, ok: false, errorCode: result.errorCode });
-        return;
-      }
-
-      post({ type: "searchLinesResult", jobId, ok: true, matches: result.matches }, [
-        result.matches.buffer,
-      ]);
-      return;
-    }
-  } catch (error) {
-    // 最后兜底
-    if (msg.type === "formatJsonPretty") {
-      post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "UNKNOWN" });
-      return;
-    }
-    if (msg.type === "stringifyJsonPretty") {
-      post({ type: "stringifyJsonPrettyResult", jobId, ok: false, errorCode: "UNKNOWN" });
-      return;
-    }
-    if (msg.type === "buildLineIndex") {
-      post({ type: "buildLineIndexResult", jobId, ok: false, errorCode: "UNKNOWN" });
-      return;
-    }
-    if (msg.type === "searchLines") {
-      post({ type: "searchLinesResult", jobId, ok: false, errorCode: "UNKNOWN" });
-      return;
-    }
-  } finally {
-    cancelledJobs.delete(jobId);
-  }
+  isProcessingQueue = true;
+  void processQueue();
 };
