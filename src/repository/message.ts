@@ -6,16 +6,16 @@ import { keys as keysTable, messageRequest, providers, usageLedger, users } from
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import type { MessageRequestUpdatePatch } from "@/repository/message-write-buffer";
+import {
+  enqueueMessageRequestUpdate,
+  sanitizeMessageRequestUpdatePatch,
+} from "@/repository/message-write-buffer";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
-import type { MessageRequestUpdatePatch } from "./message-write-buffer";
-import {
-  enqueueMessageRequestUpdate,
-  sanitizeMessageRequestUpdatePatch,
-} from "./message-write-buffer";
 
 /**
  * 创建消息请求记录
@@ -200,7 +200,8 @@ export async function sealOrphanedMessageRequests(options?: {
   const threshold = new Date(Date.now() - staleAfterMs);
 
   const ORPHANED_STATUS_CODE = 520;
-  const ORPHANED_ERROR_MESSAGE = "ORPHANED_REQUEST";
+  // 注意：这里写入的是稳定的“错误码”，展示层若直接展示 error_message，应做 i18n 映射。
+  const ORPHANED_ERROR_CODE = "ORPHANED_REQUEST";
 
   const query = sql<{ id: number }>`
     WITH candidates AS (
@@ -222,7 +223,7 @@ export async function sealOrphanedMessageRequests(options?: {
         )::int
       ),
       status_code = COALESCE(status_code, ${ORPHANED_STATUS_CODE}),
-      error_message = COALESCE(error_message, ${ORPHANED_ERROR_MESSAGE}),
+      error_message = COALESCE(error_message, ${ORPHANED_ERROR_CODE}),
       updated_at = NOW()
     WHERE id IN (SELECT id FROM candidates)
       AND duration_ms IS NULL
