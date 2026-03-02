@@ -79,6 +79,9 @@ let _lastRejectedInvalidLogAt = 0;
 const INT32_CLAMP_LOG_THROTTLE_MS = 60_000;
 const _lastInt32ClampLogAt = new Map<string, number>();
 
+const REQUEUE_OVERFLOW_LOG_THROTTLE_MS = 60_000;
+let _lastRequeueOverflowLogAt = 0;
+
 // 终态 patch（duration/status）尽快刷库，但仍保留极短延迟以便 micro-batch，避免高并发下频繁 flush。
 const TERMINAL_FLUSH_DELAY_MS = 10;
 
@@ -568,6 +571,10 @@ class MessageRequestWriteBuffer {
   }
 
   enqueue(id: number, patch: MessageRequestUpdatePatch): MessageRequestUpdateEnqueueResult {
+    if (this.stopping) {
+      return { kind: "buffer_unavailable" };
+    }
+
     const sanitized = sanitizePatch(patch);
     if (Object.keys(sanitized).length === 0) {
       const now = Date.now();
@@ -582,8 +589,9 @@ class MessageRequestWriteBuffer {
       return { kind: "rejected_invalid" };
     }
 
-    const existing = this.pending.get(id) ?? {};
-    const merged = { ...existing, ...sanitized };
+    const existing = this.pending.get(id);
+    const isNewId = existing === undefined;
+    const merged = { ...(existing ?? {}), ...sanitized };
     this.pending.set(id, merged);
     if (isTerminalPatch(merged)) {
       this.nonTerminalIds.delete(id);
@@ -593,8 +601,8 @@ class MessageRequestWriteBuffer {
     let result: MessageRequestUpdateEnqueueResult = { kind: "enqueued" };
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
-    if (this.pending.size > this.config.maxPending) {
-      const trimResult = this.trimPendingToMaxPending(id);
+    if (isNewId && this.pending.size > this.config.maxPending) {
+      const trimResult = this.trimPendingToMaxPending({ currentId: id, allowDropTerminal: true });
       if (trimResult.droppedCount > 0) {
         if (trimResult.droppedCurrent) {
           result = {
@@ -677,7 +685,7 @@ class MessageRequestWriteBuffer {
       }
     }
 
-    const trimResult = this.trimPendingToMaxPending();
+    const trimResult = this.trimPendingToMaxPending({ allowDropTerminal: false });
     if (trimResult.droppedCount > 0) {
       logger.warn(
         "[MessageRequestWriteBuffer] Pending queue overflow after requeue, dropping updates",
@@ -690,15 +698,32 @@ class MessageRequestWriteBuffer {
         }
       );
     }
+
+    // requeue 场景下尽量不丢弃终态 patch（duration/status），避免“请求中”悬挂；若仍超上限，允许暂时超过 maxPending。
+    if (this.pending.size > this.config.maxPending) {
+      const now = Date.now();
+      if (now - _lastRequeueOverflowLogAt > REQUEUE_OVERFLOW_LOG_THROTTLE_MS) {
+        _lastRequeueOverflowLogAt = now;
+        logger.warn(
+          "[MessageRequestWriteBuffer] Pending queue exceeds maxPending after requeue, keeping terminal patches",
+          {
+            maxPending: this.config.maxPending,
+            currentPending: this.pending.size,
+          }
+        );
+      }
+    }
   }
 
-  private trimPendingToMaxPending(currentId?: number): {
+  private trimPendingToMaxPending(options?: { currentId?: number; allowDropTerminal?: boolean }): {
     droppedCount: number;
     droppedTerminalCount: number;
     droppedIdsSample: number[];
     droppedCurrent: boolean;
     droppedCurrentPatch?: MessageRequestUpdatePatch;
   } {
+    const currentId = options?.currentId;
+    const allowDropTerminal = options?.allowDropTerminal ?? true;
     let droppedCount = 0;
     let droppedTerminalCount = 0;
     const droppedIdsSample: number[] = [];
@@ -739,6 +764,9 @@ class MessageRequestWriteBuffer {
       }
 
       if (droppedId === undefined) {
+        if (!allowDropTerminal) {
+          break;
+        }
         // 当 pending 全部为终态 patch 时，不应随机淘汰已有终态（会导致其他请求永久缺失完成信息）。
         // enqueue 路径会优先丢弃“当前” patch 并由调用方决定是否同步兜底；其他场景（如 requeue）则退化为丢弃最早条目。
         if (currentId !== undefined && this.pending.has(currentId)) {

@@ -302,7 +302,7 @@ describe("message_request 异步批量写入", () => {
     await stopMessageRequestWriteBuffer();
   });
 
-  it("requeue 后应收敛到 maxPending，避免后续更新误触发 overflow 丢弃", async () => {
+  it("requeue 后更新已存在 id 不应误触发 overflow 丢弃", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
     process.env.MESSAGE_REQUEST_ASYNC_BATCH_SIZE = "100";
     process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";
@@ -318,7 +318,7 @@ describe("message_request 异步批量写入", () => {
 
     // pending=100 后会触发一次自动 flush（batchSize=100）
     for (let i = 1; i <= 100; i++) {
-      enqueueMessageRequestUpdate(i, { durationMs: i });
+      enqueueMessageRequestUpdate(i, { durationMs: 1 });
     }
 
     const flushPromise = flushMessageRequestWriteBuffer();
@@ -326,18 +326,28 @@ describe("message_request 异步批量写入", () => {
 
     // flush in-flight 期间继续写入（填满 pending）
     for (let i = 101; i <= 200; i++) {
-      enqueueMessageRequestUpdate(i, { durationMs: i });
+      enqueueMessageRequestUpdate(i, { durationMs: 1 });
     }
 
     // 暂态错误：触发 requeue
     deferred.reject(new Error("db down"));
     await flushPromise;
 
-    // 若 requeue 不收敛到 maxPending，这里更新“已存在”的 id 也会误触发 overflow 并丢弃当前 patch。
+    // 即使 requeue 后 pending 可能暂时超过 maxPending，这里更新“已存在”的 id 也不应误触发 overflow 并丢弃当前 patch。
     const result = enqueueMessageRequestUpdate(100, { durationMs: 999 });
     expect(result.kind).toBe("enqueued");
 
     await stopMessageRequestWriteBuffer();
+
+    // 防回归：旧实现的 requeue trim 可能会静默丢弃终态 patch（duration/status），导致这些请求永久缺失完成信息。
+    // 本用例在 requeue 后确保 id=101 的终态更新仍会被写入 DB。
+    expect(executeMock).toHaveBeenCalledTimes(3);
+    const secondQuery = executeMock.mock.calls[1]?.[0];
+    const thirdQuery = executeMock.mock.calls[2]?.[0];
+    const secondBuilt = toSqlText(secondQuery);
+    const thirdBuilt = toSqlText(thirdQuery);
+    expect(secondBuilt.params).toContain(101);
+    expect(thirdBuilt.params).toContain(2);
   });
 
   it("enqueueMessageRequestUpdate 的返回值应反映 patch 是否被接受（sanitize 为空时返回 rejected_invalid）", async () => {

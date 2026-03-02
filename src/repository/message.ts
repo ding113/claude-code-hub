@@ -114,7 +114,7 @@ async function writeMessageRequestUpdateToDb(
  */
 export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
   const enqueueResult = enqueueMessageRequestUpdate(id, { durationMs });
-  if (enqueueResult.kind === "enqueued" || enqueueResult.kind === "rejected_invalid") {
+  if (enqueueResult.kind === "enqueued") {
     return;
   }
 
@@ -136,7 +136,7 @@ export async function updateMessageRequestCost(
   }
 
   const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
-  if (enqueueResult.kind === "enqueued" || enqueueResult.kind === "rejected_invalid") {
+  if (enqueueResult.kind === "enqueued") {
     return;
   }
 
@@ -175,15 +175,15 @@ export async function updateMessageRequestDetails(
     errorMessage?: string;
     errorStack?: string; // 完整堆栈信息
     errorCause?: string; // 嵌套错误原因（JSON 格式）
-    model?: string; // ⭐ 新增：支持更新重定向后的模型名称
-    providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
+    model?: string; // 新增：支持更新重定向后的模型名称
+    providerId?: number; // 新增：支持更新最终供应商ID（重试切换后）
     context1mApplied?: boolean; // 是否应用了1M上下文窗口
     swapCacheTtlApplied?: boolean; // Swap Cache TTL Billing active at request time
     specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
   const enqueueResult = enqueueMessageRequestUpdate(id, details);
-  if (enqueueResult.kind === "enqueued" || enqueueResult.kind === "rejected_invalid") {
+  if (enqueueResult.kind === "enqueued") {
     return;
   }
 
@@ -243,7 +243,7 @@ export async function sealOrphanedMessageRequests(options?: {
       SELECT id
       FROM message_request
       WHERE deleted_at IS NULL
-        AND (duration_ms IS NULL OR status_code IS NULL)
+        AND duration_ms IS NULL
         AND updated_at < ${threshold}
         AND ${EXCLUDE_WARMUP_CONDITION}
       ORDER BY updated_at ASC
@@ -261,11 +261,14 @@ export async function sealOrphanedMessageRequests(options?: {
         )
       ),
       status_code = COALESCE(status_code, ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE}),
-      error_message = COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE}),
+      error_message = CASE
+        WHEN status_code IS NULL THEN COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE})
+        ELSE error_message
+      END,
       updated_at = NOW()
     WHERE id IN (SELECT id FROM candidates)
       AND deleted_at IS NULL
-      AND (duration_ms IS NULL OR status_code IS NULL)
+      AND duration_ms IS NULL
       AND updated_at < ${threshold}
       AND ${EXCLUDE_WARMUP_CONDITION}
     RETURNING id
