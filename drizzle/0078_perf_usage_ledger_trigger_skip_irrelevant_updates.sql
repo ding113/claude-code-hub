@@ -19,7 +19,12 @@ BEGIN
      AND jsonb_array_length(NEW.provider_chain) > 0
      AND jsonb_typeof(NEW.provider_chain -> -1) = 'object'
      AND (NEW.provider_chain -> -1 ? 'id')
-     AND (NEW.provider_chain -> -1 ->> 'id') ~ '^[0-9]+$' THEN
+     AND (NEW.provider_chain -> -1 ->> 'id') ~ '^[0-9]+$'
+     AND length(NEW.provider_chain -> -1 ->> 'id') <= 10
+     AND (
+       length(NEW.provider_chain -> -1 ->> 'id') < 10
+       OR (NEW.provider_chain -> -1 ->> 'id') <= '2147483647'
+     ) THEN
     v_final_provider_id := (NEW.provider_chain -> -1 ->> 'id')::integer;
   ELSE
     v_final_provider_id := NEW.provider_id;
@@ -35,7 +40,12 @@ BEGIN
        AND jsonb_array_length(OLD.provider_chain) > 0
        AND jsonb_typeof(OLD.provider_chain -> -1) = 'object'
        AND (OLD.provider_chain -> -1 ? 'id')
-       AND (OLD.provider_chain -> -1 ->> 'id') ~ '^[0-9]+$' THEN
+       AND (OLD.provider_chain -> -1 ->> 'id') ~ '^[0-9]+$'
+       AND length(OLD.provider_chain -> -1 ->> 'id') <= 10
+       AND (
+         length(OLD.provider_chain -> -1 ->> 'id') < 10
+         OR (OLD.provider_chain -> -1 ->> 'id') <= '2147483647'
+       ) THEN
       v_old_final_provider_id := (OLD.provider_chain -> -1 ->> 'id')::integer;
     ELSE
       v_old_final_provider_id := OLD.provider_id;

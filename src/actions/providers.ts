@@ -422,7 +422,9 @@ export async function getProviderManagerBootstrapData(): Promise<ProviderManager
           failureCount: health.failureCount,
           lastFailureTime: health.lastFailureTime,
           circuitOpenUntil,
-          recoveryMinutes: circuitOpenUntil ? Math.ceil((circuitOpenUntil - now) / 60000) : null,
+          recoveryMinutes: circuitOpenUntil
+            ? Math.max(0, Math.ceil((circuitOpenUntil - now) / 60000))
+            : null,
         },
       ];
     })

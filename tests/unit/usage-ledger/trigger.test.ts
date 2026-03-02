@@ -30,6 +30,11 @@ describe("fn_upsert_usage_ledger migration SQL", () => {
     expect(sql).toContain("jsonb_typeof");
   });
 
+  it("guards provider_chain id extraction cast range", () => {
+    expect(sql).toContain("2147483647");
+    expect(sql).toContain("length(NEW.provider_chain -> -1 ->> 'id') <= 10");
+  });
+
   it("computes is_success from error_message", () => {
     expect(sql).toContain("error_message IS NULL");
   });

@@ -71,6 +71,8 @@ export interface DashboardRealtimeData {
 // Constants for data limits
 const ACTIVITY_STREAM_LIMIT = 20;
 const MODEL_DISTRIBUTION_LIMIT = 10;
+const REDIS_UNLOCK_LUA =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) end return 0";
 
 /**
  * 获取数据大屏的所有实时数据
@@ -125,6 +127,7 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
     const lockWaitMs = 50;
     const lockWaitBudgetMs = 200;
 
+    let lockValue: string | null = null;
     let lockAcquired = false;
     if (redis) {
       try {
@@ -137,7 +140,8 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       }
 
       try {
-        const lockResult = await redis.set(lockKey, "1", "EX", lockTtlSeconds, "NX");
+        lockValue = crypto.randomUUID();
+        const lockResult = await redis.set(lockKey, lockValue, "EX", lockTtlSeconds, "NX");
         lockAcquired = lockResult === "OK";
 
         if (!lockAcquired) {
@@ -363,8 +367,8 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
         data,
       };
     } finally {
-      if (redis && lockAcquired) {
-        await redis.del(lockKey).catch(() => {});
+      if (redis && lockAcquired && lockValue) {
+        await redis.eval(REDIS_UNLOCK_LUA, 1, lockKey, lockValue).catch(() => {});
       }
     }
   } catch (error) {

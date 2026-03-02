@@ -24,6 +24,14 @@ const CACHE_TTL_MS = 60 * 1000;
 
 export const CHANNEL_SYSTEM_SETTINGS_UPDATED = "cch:cache:system_settings:updated";
 
+const SUBSCRIPTION_RETRY_BASE_MS = 5_000;
+const SUBSCRIPTION_RETRY_MAX_MS = 5 * 60_000;
+
+function computeSubscriptionRetryBackoffMs(failures: number): number {
+  const exponent = Math.min(8, Math.max(0, failures - 1));
+  return Math.min(SUBSCRIPTION_RETRY_MAX_MS, SUBSCRIPTION_RETRY_BASE_MS * 2 ** exponent);
+}
+
 /** Cached settings and timestamp */
 let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
@@ -74,15 +82,22 @@ const DEFAULT_SETTINGS: Pick<
 
 let subscriptionInitialized = false;
 let subscriptionInitPromise: Promise<void> | null = null;
+let subscriptionRetryFailures = 0;
+let subscriptionNextRetryAt = 0;
 
 async function ensureSubscription(): Promise<void> {
   if (subscriptionInitialized) return;
   if (subscriptionInitPromise) return subscriptionInitPromise;
 
+  const now = Date.now();
+  if (subscriptionNextRetryAt > now) return;
+
   subscriptionInitPromise = (async () => {
     // CI/build 阶段跳过，避免触发 Redis 连接
     if (process.env.CI === "true" || process.env.NEXT_PHASE === "phase-production-build") {
       subscriptionInitialized = true;
+      subscriptionRetryFailures = 0;
+      subscriptionNextRetryAt = 0;
       return;
     }
 
@@ -93,6 +108,8 @@ async function ensureSubscription(): Promise<void> {
     // Redis 不可用或未启用（当前 pubsub 实现依赖 ENABLE_RATE_LIMIT=true）
     if (!redisUrl || !isRateLimitEnabled) {
       subscriptionInitialized = true;
+      subscriptionRetryFailures = 0;
+      subscriptionNextRetryAt = 0;
       return;
     }
 
@@ -102,11 +119,29 @@ async function ensureSubscription(): Promise<void> {
         logger.debug("[SystemSettingsCache] Cache invalidated via pub/sub");
       });
 
-      if (!cleanup) return;
+      if (!cleanup) {
+        subscriptionRetryFailures++;
+        subscriptionNextRetryAt =
+          Date.now() + computeSubscriptionRetryBackoffMs(subscriptionRetryFailures);
+        logger.debug("[SystemSettingsCache] Pub/sub subscribe not ready, will retry later", {
+          consecutiveFailures: subscriptionRetryFailures,
+          nextRetryAt: new Date(subscriptionNextRetryAt).toISOString(),
+        });
+        return;
+      }
 
       subscriptionInitialized = true;
+      subscriptionRetryFailures = 0;
+      subscriptionNextRetryAt = 0;
     } catch (error) {
-      logger.warn("[SystemSettingsCache] Failed to subscribe settings invalidation", { error });
+      subscriptionRetryFailures++;
+      subscriptionNextRetryAt =
+        Date.now() + computeSubscriptionRetryBackoffMs(subscriptionRetryFailures);
+      logger.warn("[SystemSettingsCache] Failed to subscribe settings invalidation", {
+        error,
+        consecutiveFailures: subscriptionRetryFailures,
+        nextRetryAt: new Date(subscriptionNextRetryAt).toISOString(),
+      });
     }
   })().finally(() => {
     subscriptionInitPromise = null;
