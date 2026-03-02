@@ -490,6 +490,10 @@ export function CodeDisplay({
   const [showOnlyMatches, setShowOnlyMatches] = useState(false);
   const [largePrettyView, setLargePrettyView] = useState<"plain" | "virtual">("plain");
   const [forceLargePrettyPlain, setForceLargePrettyPlain] = useState(false);
+  const [largePrettyVirtualFallback, setLargePrettyVirtualFallback] = useState<{
+    errorCode: BuildLineIndexErrorCode;
+    lineCount?: number;
+  } | null>(null);
 
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
   const [copied, setCopied] = useState(false);
@@ -763,12 +767,14 @@ export function CodeDisplay({
     ) {
       lastLargePrettySourceKeyRef.current = null;
       setForceLargePrettyPlain(false);
+      setLargePrettyVirtualFallback(null);
       setLargePrettyView("plain");
       return;
     }
 
     if (lastLargePrettySourceKeyRef.current !== largePrettySourceKey) {
       setForceLargePrettyPlain(false);
+      setLargePrettyVirtualFallback(null);
     }
 
     if (forceLargePrettyPlain) {
@@ -1420,6 +1426,7 @@ export function CodeDisplay({
                     size="sm"
                     onClick={() => {
                       setForceLargePrettyPlain(false);
+                      setLargePrettyVirtualFallback(null);
                       setLargePrettyView("virtual");
                     }}
                     data-testid="code-display-large-pretty-view-virtual"
@@ -1429,7 +1436,25 @@ export function CodeDisplay({
                   </Button>
                   {forceLargePrettyPlain && (
                     <span className="text-xs text-muted-foreground">
-                      {t("codeDisplay.virtualFallbackToPlain")}
+                      {(() => {
+                        const fallback = largePrettyVirtualFallback;
+                        if (!fallback) return t("codeDisplay.virtualFallbackToPlain");
+                        if (fallback.errorCode === "CANCELED") {
+                          return t("codeDisplay.virtual.indexCanceled");
+                        }
+                        if (fallback.errorCode === "TOO_MANY_LINES") {
+                          if (typeof fallback.lineCount === "number") {
+                            return t("codeDisplay.virtual.indexTooManyLines", {
+                              lineCount: fallback.lineCount,
+                              maxLines: codeDisplayConfig.maxLineIndexLines,
+                            });
+                          }
+                          return t("codeDisplay.virtual.indexTooManyLinesUnknown", {
+                            maxLines: codeDisplayConfig.maxLineIndexLines,
+                          });
+                        }
+                        return t("codeDisplay.virtual.indexFailed");
+                      })()}
                     </span>
                   )}
                 </div>
@@ -1542,8 +1567,9 @@ export function CodeDisplay({
                 maxLines={codeDisplayConfig.maxLineIndexLines}
                 perfDebugEnabled={codeDisplayConfig.perfDebugEnabled}
                 className="border-0"
-                onRequestPlainView={() => {
+                onRequestPlainView={(reason, lineCount) => {
                   setForceLargePrettyPlain(true);
+                  setLargePrettyVirtualFallback(reason ? { errorCode: reason, lineCount } : null);
                   setLargePrettyView("plain");
                 }}
               />

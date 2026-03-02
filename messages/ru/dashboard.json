@@ -603,7 +603,11 @@
       "sseEvent": "Событие",
       "sseData": "Данные",
       "virtual": {
-        "indexWorking": "Индексация... {percent}%"
+        "indexWorking": "Индексация... {percent}%",
+        "indexFailed": "Не удалось построить индекс — переключено на простой текст",
+        "indexCanceled": "Индексация отменена — переключено на простой текст",
+        "indexTooManyLines": "Слишком много строк ({lineCount}, максимум {maxLines}) — переключено на простой текст",
+        "indexTooManyLinesUnknown": "Слишком много строк (максимум {maxLines}) — переключено на простой текст"
       },
       "hardLimit": {
         "title": "Содержимое слишком большое",

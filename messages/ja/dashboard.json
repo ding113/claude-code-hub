@@ -603,7 +603,11 @@
       "sseEvent": "イベント",
       "sseData": "データ",
       "virtual": {
-        "indexWorking": "索引作成中... {percent}%"
+        "indexWorking": "索引作成中... {percent}%",
+        "indexFailed": "索引の作成に失敗したため、テキスト表示に切り替えました",
+        "indexCanceled": "索引作成をキャンセルしたため、テキスト表示に切り替えました",
+        "indexTooManyLines": "行数が多すぎます ({lineCount} 行、上限 {maxLines} 行)。テキスト表示に切り替えました",
+        "indexTooManyLinesUnknown": "行数が多すぎます (上限 {maxLines} 行)。テキスト表示に切り替えました"
       },
       "hardLimit": {
         "title": "コンテンツが大きすぎます",

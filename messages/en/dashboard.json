@@ -603,7 +603,11 @@
       "sseEvent": "Event",
       "sseData": "Data",
       "virtual": {
-        "indexWorking": "Indexing... {percent}%"
+        "indexWorking": "Indexing... {percent}%",
+        "indexFailed": "Failed to build index, switched to plain",
+        "indexCanceled": "Indexing canceled, switched to plain",
+        "indexTooManyLines": "Too many lines ({lineCount}, max {maxLines}), switched to plain",
+        "indexTooManyLinesUnknown": "Too many lines (max {maxLines}), switched to plain"
       },
       "hardLimit": {
         "title": "Content too large",

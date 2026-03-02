@@ -19,18 +19,22 @@ export function getTextKey(text: string): string {
   const FULL_HASH_MAX_CHARS = 200_000;
   const WINDOW_CHARS = 4096;
 
-  let hash = 2166136261;
+  let hashA = 2166136261;
+  let hashB = 2166136261 ^ len;
 
   const update = (code: number) => {
-    hash ^= code;
-    hash = Math.imul(hash, 16777619);
+    hashA ^= code;
+    hashA = Math.imul(hashA, 16777619);
+
+    hashB ^= code;
+    hashB = Math.imul(hashB, 2246822507);
   };
 
   if (len <= FULL_HASH_MAX_CHARS) {
     for (let i = 0; i < len; i += 1) {
       update(text.charCodeAt(i));
     }
-    return `${len}:${(hash >>> 0).toString(36)}`;
+    return `${len}:${(hashA >>> 0).toString(36)}:${(hashB >>> 0).toString(36)}`;
   }
 
   const windowHalf = WINDOW_CHARS >> 1;
@@ -63,5 +67,5 @@ export function getTextKey(text: string): string {
     }
   }
 
-  return `${len}:${(hash >>> 0).toString(36)}`;
+  return `${len}:${(hashA >>> 0).toString(36)}:${(hashB >>> 0).toString(36)}`;
 }

@@ -59,8 +59,10 @@ const dashboardMessages = JSON.parse(
 const codeDisplayMessages = dashboardMessages.sessions.codeDisplay as {
   showAll: string;
   search: { failed: string; indexTooManyLines: string };
+  virtual: { indexTooManyLines: string };
 };
 const tooManyLinesPrefix = codeDisplayMessages.search.indexTooManyLines.split("{")[0];
+const virtualTooManyLinesPrefix = codeDisplayMessages.virtual.indexTooManyLines.split("{")[0];
 
 function renderWithIntl(node: ReactNode, codeDisplayConfig: CodeDisplayConfig) {
   const container = document.createElement("div");
@@ -550,6 +552,7 @@ describe("CodeDisplay - large content performance strategy", () => {
     );
 
     await waitFor(() => container.querySelector("textarea") !== null);
+    await waitFor(() => (container.textContent || "").includes(virtualTooManyLinesPrefix));
 
     const textarea = container.querySelector("textarea");
     expect(textarea).not.toBeNull();

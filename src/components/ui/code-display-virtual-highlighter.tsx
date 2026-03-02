@@ -6,7 +6,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Button } from "@/components/ui/button";
-import { buildLineIndex } from "@/components/ui/code-display-worker-client";
+import {
+  type BuildLineIndexErrorCode,
+  buildLineIndex,
+} from "@/components/ui/code-display-worker-client";
 import { cn, getTextKey } from "@/lib/utils";
 
 type RangeState = {
@@ -43,7 +46,7 @@ export function CodeDisplayVirtualHighlighter({
   maxLines: number;
   perfDebugEnabled: boolean;
   className?: string;
-  onRequestPlainView?: () => void;
+  onRequestPlainView?: (reason?: BuildLineIndexErrorCode, lineCount?: number) => void;
 }) {
   const t = useTranslations("dashboard.sessions");
 
@@ -108,7 +111,7 @@ export function CodeDisplayVirtualHighlighter({
       if (!res.ok) {
         setIndexStatus("error");
         setIndexProgress(null);
-        onRequestPlainViewRef.current?.();
+        onRequestPlainViewRef.current?.(res.errorCode, res.lineCount);
         return;
       }
 
@@ -244,7 +247,7 @@ export function CodeDisplayVirtualHighlighter({
             size="sm"
             onClick={() => {
               indexAbortRef.current?.abort();
-              onRequestPlainViewRef.current?.();
+              onRequestPlainViewRef.current?.("CANCELED");
             }}
             className="h-8"
           >

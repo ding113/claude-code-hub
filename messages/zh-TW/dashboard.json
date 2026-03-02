@@ -603,7 +603,11 @@
       "sseEvent": "事件類型",
       "sseData": "資料",
       "virtual": {
-        "indexWorking": "建立索引中... {percent}%"
+        "indexWorking": "建立索引中... {percent}%",
+        "indexFailed": "建立索引失敗，已回退到純文字",
+        "indexCanceled": "已取消建立索引，已回退到純文字",
+        "indexTooManyLines": "內容行數過多（{lineCount} 行，上限 {maxLines} 行），已回退到純文字",
+        "indexTooManyLinesUnknown": "內容行數過多（上限 {maxLines} 行），已回退到純文字"
       },
       "hardLimit": {
         "title": "內容過大",
