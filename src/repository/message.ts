@@ -122,6 +122,11 @@ export async function updateMessageRequestCost(
     return;
   }
 
+  // costUsd 非终态信息：overflow 时丢弃即可，避免压力峰值下放大同步 DB 写入。
+  if (enqueueResult === "dropped_overflow") {
+    return;
+  }
+
   await writeMessageRequestUpdateToDb(id, { costUsd: formattedCost });
 }
 
