@@ -272,7 +272,9 @@ export function LeaderboardTable<TParent, TSub = TParent>({
                                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                               )}
                             </button>
-                          ) : null}
+                          ) : (
+                            <div className="h-4 w-4" aria-hidden="true" />
+                          )}
                           {getRankBadge(rank)}
                         </div>
                       </TableCell>
