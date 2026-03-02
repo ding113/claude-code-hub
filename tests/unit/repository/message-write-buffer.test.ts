@@ -273,6 +273,35 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("status_code");
   });
 
+  it("遇到暂态错误时，本次 flush 不应因 flushAgainAfterCurrent 忙等重试（交由 timer 退避）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const deferred = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => deferred.promise);
+
+    const {
+      enqueueMessageRequestUpdate,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+
+    enqueueMessageRequestUpdate(1, { durationMs: 123 });
+
+    const flushPromise = flushMessageRequestWriteBuffer();
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    // flush in-flight 期间 enqueue：会把 flushAgainAfterCurrent 置为 true
+    enqueueMessageRequestUpdate(1, { statusCode: 200 });
+
+    // 触发暂态错误：flush 应结束并把重试交给 timer，而不是在同一次 flush 内立即重试
+    deferred.reject(new Error("db down"));
+    await flushPromise;
+
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    await stopMessageRequestWriteBuffer();
+  });
+
   it("enqueueMessageRequestUpdate 的返回值应反映 patch 是否被接受（sanitize 为空时返回 rejected_invalid）", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 

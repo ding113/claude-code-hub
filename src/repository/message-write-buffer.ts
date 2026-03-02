@@ -719,6 +719,7 @@ class MessageRequestWriteBuffer {
     this.flushInFlight = (async () => {
       do {
         this.flushAgainAfterCurrent = false;
+        let shouldYieldToTimer = false;
 
         while (this.pending.size > 0) {
           const batch = takeBatch(this.pending, this.config.batchSize);
@@ -743,6 +744,8 @@ class MessageRequestWriteBuffer {
             // 通过 per-item 写入确保队列可排空，避免 build 失败导致无限重试。
             const shouldRetryLater = await this.flushBatchPerItem(batch);
             if (shouldRetryLater) {
+              // 暂态错误：避免 flushAgainAfterCurrent 在高并发下形成忙等/重试风暴，交由 timer 退避重试。
+              shouldYieldToTimer = true;
               break;
             }
             continue;
@@ -769,6 +772,8 @@ class MessageRequestWriteBuffer {
               const shouldRetryLater = await this.flushBatchPerItem(batch);
 
               if (shouldRetryLater) {
+                // 暂态错误：避免 flushAgainAfterCurrent 在高并发下形成忙等/重试风暴，交由 timer 退避重试。
+                shouldYieldToTimer = true;
                 break;
               }
 
@@ -786,8 +791,13 @@ class MessageRequestWriteBuffer {
             });
 
             // DB 异常时不在当前循环内死磕，留待下一次 timer/手动 flush
+            // 同时避免 flushAgainAfterCurrent 在高并发下形成忙等/重试风暴。
+            shouldYieldToTimer = true;
             break;
           }
+        }
+        if (shouldYieldToTimer) {
+          break;
         }
       } while (this.flushAgainAfterCurrent);
     })().finally(() => {
