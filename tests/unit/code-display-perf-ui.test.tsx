@@ -163,6 +163,36 @@ describe("CodeDisplay - large content performance strategy", () => {
     unmount();
   });
 
+  test("large pretty never uses SyntaxHighlighter above highlightMaxChars (falls back to <pre>)", async () => {
+    const content = "x".repeat(200);
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={content} language="text" />,
+      makeConfig({
+        highlightMaxChars: 10,
+        largePlainEnabled: false,
+        virtualHighlightEnabled: false,
+      })
+    );
+
+    await flushMicrotasks();
+
+    const prettyTab = container.querySelector('[data-testid="code-display-mode-pretty"]');
+    expect(prettyTab).not.toBeNull();
+    click(prettyTab as Element);
+
+    await flushMicrotasks();
+
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(container.querySelector('[data-testid="code-display-virtual-highlighter"]')).toBeNull();
+
+    const pre = container.querySelector("pre.whitespace-pre-wrap.break-words.font-mono");
+    expect(pre).not.toBeNull();
+    expect((pre as HTMLElement).textContent).toContain(content.slice(0, 50));
+
+    unmount();
+  });
+
   test("when virtual highlight is enabled, can switch from plain to virtual view (scheme3)", async () => {
     const obj = { a: Array.from({ length: 30 }, (_, i) => i) };
     const raw = JSON.stringify(obj);
@@ -341,6 +371,30 @@ describe("CodeDisplay - large content performance strategy", () => {
     const list = container.querySelector('[data-testid="code-display-matches-list"]');
     expect(list).not.toBeNull();
     expect((list as HTMLElement).textContent).toContain("abc");
+
+    unmount();
+  });
+
+  test("matches list strips CR-only line endings", async () => {
+    const text = "a\rb\r";
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplayMatchesList
+        text={text}
+        matches={Int32Array.from([0, 1])}
+        lineStarts={Int32Array.from([0, 2, 4])}
+        maxHeight="200px"
+        lineHeightPx={18}
+      />,
+      makeConfig({})
+    );
+
+    await flushMicrotasks();
+
+    const spans = Array.from(container.querySelectorAll("span.whitespace-pre"));
+    expect(spans.length).toBe(2);
+    expect(spans[0]?.textContent).toBe("a");
+    expect(spans[1]?.textContent).toBe("b");
 
     unmount();
   });

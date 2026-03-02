@@ -19,10 +19,15 @@ function getLineRange(
   // - 对非最后一行：nextStart 指向下一行行首（通常是 '\n' 后的索引）
   // - 对最后一行：nextStart === text.length
   let end = nextStart;
-  if (nextStart > start && text.charCodeAt(nextStart - 1) === 10) {
-    end = nextStart - 1; // 去掉 '\n'
-    if (end > start && text.charCodeAt(end - 1) === 13) {
-      end -= 1; // 兼容 CRLF：去掉 '\r'
+  if (nextStart > start) {
+    const last = text.charCodeAt(nextStart - 1);
+    if (last === 10) {
+      end = nextStart - 1; // 去掉 '\n'
+      if (end > start && text.charCodeAt(end - 1) === 13) {
+        end -= 1; // 兼容 CRLF：去掉 '\r'
+      }
+    } else if (last === 13) {
+      end = nextStart - 1; // 兼容 CR：去掉 '\r'
     }
   }
 

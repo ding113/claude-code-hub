@@ -1,5 +1,34 @@
 "use client";
 
+export type FormatJsonPrettyErrorCode =
+  | "INVALID_JSON"
+  | "CANCELED"
+  | "OUTPUT_TOO_LARGE"
+  | "WORKER_UNAVAILABLE"
+  | "UNKNOWN";
+
+export type FormatJsonPrettyResult =
+  | { ok: true; text: string; usedStreaming: boolean }
+  | { ok: false; errorCode: FormatJsonPrettyErrorCode };
+
+export type StringifyJsonPrettyErrorCode = "CANCELED" | "OUTPUT_TOO_LARGE" | "UNKNOWN";
+
+export type StringifyJsonPrettyResult =
+  | { ok: true; text: string }
+  | { ok: false; errorCode: StringifyJsonPrettyErrorCode };
+
+export type BuildLineIndexErrorCode = "CANCELED" | "TOO_MANY_LINES" | "UNKNOWN";
+
+export type BuildLineIndexResult =
+  | { ok: true; lineStarts: Int32Array; lineCount: number }
+  | { ok: false; errorCode: BuildLineIndexErrorCode; lineCount?: number };
+
+export type SearchLinesErrorCode = "CANCELED" | "UNKNOWN";
+
+export type SearchLinesResult =
+  | { ok: true; matches: Int32Array }
+  | { ok: false; errorCode: SearchLinesErrorCode };
+
 type WorkerProgress = {
   stage: "format" | "index" | "search";
   processed: number;
@@ -69,27 +98,21 @@ type WorkerResponse =
 type PendingJob =
   | {
       kind: "formatJsonPretty";
-      resolve: (
-        v: { ok: true; text: string; usedStreaming: boolean } | { ok: false; errorCode: string }
-      ) => void;
+      resolve: (v: FormatJsonPrettyResult) => void;
       onProgress?: (p: WorkerProgress) => void;
     }
   | {
       kind: "stringifyJsonPretty";
-      resolve: (v: { ok: true; text: string } | { ok: false; errorCode: string }) => void;
+      resolve: (v: StringifyJsonPrettyResult) => void;
     }
   | {
       kind: "buildLineIndex";
-      resolve: (
-        v:
-          | { ok: true; lineStarts: Int32Array; lineCount: number }
-          | { ok: false; errorCode: string; lineCount?: number }
-      ) => void;
+      resolve: (v: BuildLineIndexResult) => void;
       onProgress?: (p: WorkerProgress) => void;
     }
   | {
       kind: "searchLines";
-      resolve: (v: { ok: true; matches: Int32Array } | { ok: false; errorCode: string }) => void;
+      resolve: (v: SearchLinesResult) => void;
       onProgress?: (p: WorkerProgress) => void;
     };
 
@@ -243,7 +266,7 @@ export async function formatJsonPretty({
   maxOutputBytes: number;
   onProgress?: (p: WorkerProgress) => void;
   signal?: AbortSignal;
-}): Promise<{ ok: true; text: string; usedStreaming: boolean } | { ok: false; errorCode: string }> {
+}): Promise<FormatJsonPrettyResult> {
   ensureInitialized();
   const w = getWorker();
   if (!w) {
@@ -298,7 +321,7 @@ export async function stringifyJsonPretty({
   indentSize: number;
   maxOutputBytes: number;
   signal?: AbortSignal;
-}): Promise<{ ok: true; text: string } | { ok: false; errorCode: string }> {
+}): Promise<StringifyJsonPrettyResult> {
   ensureInitialized();
   const w = getWorker();
   if (!w) {
@@ -347,10 +370,7 @@ export async function buildLineIndex({
   maxLines: number;
   onProgress?: (p: WorkerProgress) => void;
   signal?: AbortSignal;
-}): Promise<
-  | { ok: true; lineStarts: Int32Array; lineCount: number }
-  | { ok: false; errorCode: string; lineCount?: number }
-> {
+}): Promise<BuildLineIndexResult> {
   ensureInitialized();
   const w = getWorker();
   if (!w) {
@@ -439,7 +459,7 @@ export async function searchLines({
   maxResults: number;
   onProgress?: (p: WorkerProgress) => void;
   signal?: AbortSignal;
-}): Promise<{ ok: true; matches: Int32Array } | { ok: false; errorCode: string }> {
+}): Promise<SearchLinesResult> {
   ensureInitialized();
   const w = getWorker();
   if (!w) {

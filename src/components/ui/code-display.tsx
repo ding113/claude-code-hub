@@ -191,10 +191,15 @@ function buildOnlyMatchesText(text: string, lineStarts: Int32Array, matches: Int
     const nextStart =
       lineNo + 1 < lineCount ? (lineStarts[lineNo + 1] ?? text.length) : text.length;
     let end = nextStart;
-    if (nextStart > start && text.charCodeAt(nextStart - 1) === 10) {
-      end = nextStart - 1;
-      if (end > start && text.charCodeAt(end - 1) === 13) {
-        end -= 1;
+    if (nextStart > start) {
+      const last = text.charCodeAt(nextStart - 1);
+      if (last === 10) {
+        end = nextStart - 1;
+        if (end > start && text.charCodeAt(end - 1) === 13) {
+          end -= 1;
+        }
+      } else if (last === 13) {
+        end = nextStart - 1;
       }
     }
     end = Math.max(start, end);
@@ -1400,6 +1405,17 @@ export function CodeDisplay({
                 lineHeightPx={codeDisplayConfig.virtualLineHeightPx}
                 className="border-0 bg-transparent"
               />
+            ) : isLargePrettyText ? (
+              <div className="overflow-auto" style={{ maxHeight: contentMaxHeight }}>
+                <pre
+                  className="text-xs whitespace-pre-wrap break-words font-mono"
+                  style={{ lineHeight: `${codeDisplayConfig.virtualLineHeightPx}px` }}
+                >
+                  {showOnlyMatches && onlyMatchesQuery
+                    ? (nonSseFilteredText ?? resolvedPrettyText)
+                    : resolvedPrettyText}
+                </pre>
+              </div>
             ) : (
               <div className="overflow-auto" style={{ maxHeight: contentMaxHeight }}>
                 <SyntaxHighlighter

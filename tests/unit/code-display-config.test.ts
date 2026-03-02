@@ -45,4 +45,16 @@ describe("parseCodeDisplayConfigFromEnv", () => {
     expect(cfg.maxPrettyOutputBytes).toBe(1_000_000);
     expect(cfg.maxLineIndexLines).toBe(10_000);
   });
+
+  test("clamps numeric env values to upper bounds", () => {
+    const cfg = parseCodeDisplayConfigFromEnv({
+      CCH_CODEDISPLAY_HIGHLIGHT_MAX_CHARS: "99999999", // max 5_000_000
+      CCH_CODEDISPLAY_MAX_PRETTY_OUTPUT_BYTES: "9999999999", // max 200_000_000
+      CCH_CODEDISPLAY_MAX_LINE_INDEX_LINES: "99999999", // max 2_000_000
+    });
+
+    expect(cfg.highlightMaxChars).toBe(5_000_000);
+    expect(cfg.maxPrettyOutputBytes).toBe(200_000_000);
+    expect(cfg.maxLineIndexLines).toBe(2_000_000);
+  });
 });

@@ -123,7 +123,7 @@ export function parseCodeDisplayConfigFromEnv(
     highlightMaxChars: parseIntEnv(
       env.CCH_CODEDISPLAY_HIGHLIGHT_MAX_CHARS,
       DEFAULT_CODE_DISPLAY_CONFIG.highlightMaxChars,
-      { min: 1000 }
+      { min: 1000, max: 5_000_000 }
     ),
     virtualOverscanLines: parseIntEnv(
       env.CCH_CODEDISPLAY_VIRTUAL_OVERSCAN_LINES,
@@ -143,12 +143,12 @@ export function parseCodeDisplayConfigFromEnv(
     maxPrettyOutputBytes: parseIntEnv(
       env.CCH_CODEDISPLAY_MAX_PRETTY_OUTPUT_BYTES,
       DEFAULT_CODE_DISPLAY_CONFIG.maxPrettyOutputBytes,
-      { min: 1_000_000 }
+      { min: 1_000_000, max: 200_000_000 }
     ),
     maxLineIndexLines: parseIntEnv(
       env.CCH_CODEDISPLAY_MAX_LINE_INDEX_LINES,
       DEFAULT_CODE_DISPLAY_CONFIG.maxLineIndexLines,
-      { min: 10_000 }
+      { min: 10_000, max: 2_000_000 }
     ),
   };
 }
