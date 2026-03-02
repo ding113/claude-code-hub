@@ -135,7 +135,15 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
+  const sanitizedCost = sanitizeMessageRequestUpdatePatch({ costUsd: formattedCost }).costUsd;
+  if (!sanitizedCost) {
+    logger.warn("[MessageRepository] costUsd rejected by sanitize, dropping cost update", {
+      requestId: id,
+    });
+    return;
+  }
+
+  const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: sanitizedCost });
   if (enqueueResult.kind === "enqueued") {
     return;
   }
@@ -153,7 +161,7 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  await writeMessageRequestUpdateToDb(id, { costUsd: formattedCost });
+  await writeMessageRequestUpdateToDb(id, { costUsd: sanitizedCost });
 }
 
 /**

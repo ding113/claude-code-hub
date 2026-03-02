@@ -79,6 +79,15 @@ let _lastRejectedInvalidLogAt = 0;
 const INT32_CLAMP_LOG_THROTTLE_MS = 60_000;
 const _lastInt32ClampLogAt = new Map<string, number>();
 
+const STRING_TRUNCATE_LOG_THROTTLE_MS = 60_000;
+const _lastStringTruncateLogAt = new Map<string, number>();
+
+const MESSAGE_REQUEST_MODEL_MAX_LENGTH = 128;
+const MESSAGE_REQUEST_CACHE_TTL_APPLIED_MAX_LENGTH = 10;
+const MESSAGE_REQUEST_ERROR_MESSAGE_MAX_LENGTH = 8_192;
+const MESSAGE_REQUEST_ERROR_STACK_MAX_LENGTH = 65_536;
+const MESSAGE_REQUEST_ERROR_CAUSE_MAX_LENGTH = 8_192;
+
 const REQUEUE_OVERFLOW_LOG_THROTTLE_MS = 60_000;
 let _lastRequeueOverflowLogAt = 0;
 
@@ -119,6 +128,25 @@ function summarizePatchTypes(patch: MessageRequestUpdatePatch): Record<string, s
     }
   }
   return summary;
+}
+
+function truncateString(value: string, options: { field: string; maxLength: number }): string {
+  if (value.length <= options.maxLength) {
+    return value;
+  }
+
+  const now = Date.now();
+  const lastLogAt = _lastStringTruncateLogAt.get(options.field) ?? 0;
+  if (now - lastLogAt > STRING_TRUNCATE_LOG_THROTTLE_MS) {
+    _lastStringTruncateLogAt.set(options.field, now);
+    logger.warn("[MessageRequestWriteBuffer] String field too long, truncating", {
+      field: options.field,
+      maxLength: options.maxLength,
+      originalLength: value.length,
+    });
+  }
+
+  return value.slice(0, options.maxLength);
 }
 
 function sanitizeInt32(
@@ -299,7 +327,10 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
   if (patch.cacheTtlApplied === null) {
     sanitized.cacheTtlApplied = null;
   } else if (typeof patch.cacheTtlApplied === "string") {
-    sanitized.cacheTtlApplied = patch.cacheTtlApplied;
+    sanitized.cacheTtlApplied = truncateString(patch.cacheTtlApplied, {
+      field: "cacheTtlApplied",
+      maxLength: MESSAGE_REQUEST_CACHE_TTL_APPLIED_MAX_LENGTH,
+    });
   } else if (patch.cacheTtlApplied !== undefined) {
     logger.warn("[MessageRequestWriteBuffer] Invalid cacheTtlApplied type, skipping", {
       cacheTtlAppliedType: typeof patch.cacheTtlApplied,
@@ -329,16 +360,28 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
   }
 
   if (typeof patch.errorMessage === "string") {
-    sanitized.errorMessage = patch.errorMessage;
+    sanitized.errorMessage = truncateString(patch.errorMessage, {
+      field: "errorMessage",
+      maxLength: MESSAGE_REQUEST_ERROR_MESSAGE_MAX_LENGTH,
+    });
   }
   if (typeof patch.errorStack === "string") {
-    sanitized.errorStack = patch.errorStack;
+    sanitized.errorStack = truncateString(patch.errorStack, {
+      field: "errorStack",
+      maxLength: MESSAGE_REQUEST_ERROR_STACK_MAX_LENGTH,
+    });
   }
   if (typeof patch.errorCause === "string") {
-    sanitized.errorCause = patch.errorCause;
+    sanitized.errorCause = truncateString(patch.errorCause, {
+      field: "errorCause",
+      maxLength: MESSAGE_REQUEST_ERROR_CAUSE_MAX_LENGTH,
+    });
   }
   if (typeof patch.model === "string") {
-    sanitized.model = patch.model;
+    sanitized.model = truncateString(patch.model, {
+      field: "model",
+      maxLength: MESSAGE_REQUEST_MODEL_MAX_LENGTH,
+    });
   }
 
   const providerId = sanitizeInt32(patch.providerId, {

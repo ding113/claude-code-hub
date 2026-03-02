@@ -173,13 +173,7 @@ export class ProxyStatusTracker {
       .from(messageRequest)
       .innerJoin(providers, eq(messageRequest.providerId, providers.id))
       .leftJoin(keys, and(eq(keys.key, messageRequest.key), isNull(keys.deletedAt)))
-      .where(
-        and(
-          isNull(messageRequest.deletedAt),
-          isNull(messageRequest.durationMs),
-          isNull(providers.deletedAt)
-        )
-      )
+      .where(and(isNull(messageRequest.deletedAt), isNull(messageRequest.durationMs)))
       // 防御：异常情况下 durationMs 长期为空会导致“活跃请求”无限累积，进而撑爆查询与响应体。
       // 这里对返回明细做上限保护（监控用途不需要无穷列表）。
       .orderBy(desc(messageRequest.createdAt))
@@ -221,7 +215,7 @@ export class ProxyStatusTracker {
            -- 使用 created_at + duration_ms 推导结束时间：避免 async 批量写入导致 updated_at 漂移而“看起来更近”。
            (mr.created_at + (mr.duration_ms * interval '1 millisecond')) AS end_time
          FROM message_request mr
-         JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
+         JOIN providers p ON mr.provider_id = p.id
          WHERE mr.user_id = u.id
           AND mr.deleted_at IS NULL
           -- lastRequest 仅统计已结束请求：activeRequests 已覆盖进行中请求，避免这里误选“请求中”的记录。
