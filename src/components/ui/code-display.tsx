@@ -512,6 +512,13 @@ export function CodeDisplay({
     total: number;
   } | null>(null);
 
+  useEffect(() => {
+    return () => {
+      jsonPrettyAbortRef.current?.abort();
+      jsonPrettyAbortRef.current = null;
+    };
+  }, []);
+
   const cancelJsonPretty = () => {
     jsonPrettyAbortRef.current?.abort();
     jsonPrettyAbortRef.current = null;
@@ -651,10 +658,6 @@ export function CodeDisplay({
           return;
       }
     });
-
-    return () => {
-      controller.abort();
-    };
   }, [
     content,
     codeDisplayConfig.maxPrettyOutputBytes,
@@ -1307,7 +1310,13 @@ export function CodeDisplay({
                             : t("codeDisplay.prettyFailed")}
                   </div>
                   {(jsonPrettyStatus === "canceled" || jsonPrettyStatus === "error") && (
-                    <Button type="button" variant="ghost" size="sm" onClick={retryJsonPretty}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={retryJsonPretty}
+                      data-testid="code-display-json-pretty-retry"
+                    >
                       {t("codeDisplay.retry")}
                     </Button>
                   )}
@@ -1345,6 +1354,7 @@ export function CodeDisplay({
                     variant="ghost"
                     size="sm"
                     onClick={cancelJsonPretty}
+                    data-testid="code-display-json-pretty-cancel"
                     className="h-8"
                   >
                     <X className="h-4 w-4 mr-2" />

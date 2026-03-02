@@ -163,6 +163,55 @@ describe("CodeDisplay - large content performance strategy", () => {
     unmount();
   });
 
+  test("worker pretty can cancel and retry without getting stuck", async () => {
+    const raw = JSON.stringify({ a: "x".repeat(200) });
+
+    let callNo = 0;
+    workerClientMocks.formatJsonPretty.mockImplementation(async ({ signal }) => {
+      callNo += 1;
+
+      if (callNo === 1) {
+        return await new Promise((resolve) => {
+          signal?.addEventListener("abort", () => resolve({ ok: false, errorCode: "CANCELED" }));
+        });
+      }
+
+      return await new Promise((resolve) => {
+        setTimeout(() => resolve({ ok: true, text: '{"a":1}', usedStreaming: false }), 50);
+      });
+    });
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={raw} language="json" />,
+      makeConfig({
+        highlightMaxChars: 10,
+        largePlainEnabled: false,
+        virtualHighlightEnabled: false,
+        workerEnabled: true,
+      })
+    );
+
+    await waitFor(
+      () => container.querySelector('[data-testid="code-display-json-pretty-cancel"]') !== null
+    );
+    expect(workerClientMocks.formatJsonPretty).toHaveBeenCalledTimes(1);
+
+    click(container.querySelector('[data-testid="code-display-json-pretty-cancel"]') as Element);
+
+    await waitFor(
+      () => container.querySelector('[data-testid="code-display-json-pretty-retry"]') !== null
+    );
+
+    click(container.querySelector('[data-testid="code-display-json-pretty-retry"]') as Element);
+
+    await waitFor(() => workerClientMocks.formatJsonPretty.mock.calls.length === 2);
+    await waitFor(
+      () => container.querySelector('[data-testid="code-display-json-pretty-cancel"]') === null
+    );
+
+    unmount();
+  });
+
   test("large pretty never uses SyntaxHighlighter above highlightMaxChars (falls back to <pre>)", async () => {
     const content = "x".repeat(200);
 
