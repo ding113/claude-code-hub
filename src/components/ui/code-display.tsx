@@ -356,17 +356,14 @@ function CodeDisplaySseEvents({
                           className="border-0 bg-transparent p-0"
                         />
                       ) : (
-                        <SyntaxHighlighter
-                          language="text"
-                          style={highlighterStyle}
-                          customStyle={{
-                            margin: 0,
-                            background: "transparent",
-                            fontSize: "12px",
-                          }}
-                        >
-                          {evt.data}
-                        </SyntaxHighlighter>
+                        <div className="overflow-auto" style={{ maxHeight: "260px" }}>
+                          <pre
+                            className="text-xs whitespace-pre-wrap break-words font-mono"
+                            style={{ lineHeight: `${lineHeightPx}px` }}
+                          >
+                            {evt.data}
+                          </pre>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -494,6 +491,15 @@ export function CodeDisplay({
     setJsonPrettyText(null);
     setJsonPrettyTextKey(jsonSourceKey);
     setJsonPrettyStatus("canceled");
+    setJsonPrettyProgress(null);
+  };
+
+  const retryJsonPretty = () => {
+    jsonPrettyAbortRef.current?.abort();
+    jsonPrettyAbortRef.current = null;
+    setJsonPrettyText(null);
+    setJsonPrettyTextKey(null);
+    setJsonPrettyStatus("idle");
     setJsonPrettyProgress(null);
   };
 
@@ -914,8 +920,9 @@ export function CodeDisplay({
 
   const handleDownload = () => {
     const text = resolveTextForAction();
+    const isJsonDownload = language === "json" && !(showOnlyMatches && onlyMatchesQuery);
     const blob = new Blob([text], {
-      type: language === "json" && mode === "pretty" ? "application/json" : "text/plain",
+      type: isJsonDownload ? "application/json" : "text/plain",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1239,6 +1246,21 @@ export function CodeDisplay({
                     className="h-8"
                   >
                     {t("codeDisplay.viewVirtual")}
+                  </Button>
+                </div>
+              )}
+
+            {shouldFormatJsonInWorker &&
+              mode === "pretty" &&
+              (jsonPrettyStatus === "canceled" || jsonPrettyStatus === "error") && (
+                <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/40 p-3">
+                  <div className="text-xs text-muted-foreground">
+                    {jsonPrettyStatus === "canceled"
+                      ? t("codeDisplay.prettyCanceled")
+                      : t("codeDisplay.prettyFailed")}
+                  </div>
+                  <Button type="button" variant="ghost" size="sm" onClick={retryJsonPretty}>
+                    {t("codeDisplay.retry")}
                   </Button>
                 </div>
               )}
