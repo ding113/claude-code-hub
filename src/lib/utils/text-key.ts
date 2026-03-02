@@ -7,7 +7,7 @@
  *
  * 注意：
  * - 对较小文本：使用 FNV-1a 全量哈希，尽量避免碰撞
- * - 对超大文本：使用固定多窗口采样哈希，避免在主线程做 O(n) 扫描导致卡顿，同时尽量降低碰撞概率
+ * - 对超大文本：使用固定多窗口 + 全局步进采样，避免在主线程做 O(n) 扫描导致卡顿，同时尽量降低碰撞概率
  *
  * FULL_HASH_MAX_CHARS 是一个性能阈值：长度刚好跨过该值时，会从“全量哈希”切换为“采样哈希”。
  * 这是有意为之，用于避免极端大文本触发主线程卡顿。
@@ -48,6 +48,20 @@ export function getTextKey(text: string): string {
   cursor = pushWindow(Math.max(cursor, Math.floor(len * 0.5) - windowHalf));
   cursor = pushWindow(Math.max(cursor, Math.floor(len * 0.75) - windowHalf));
   pushWindow(Math.max(cursor, len - WINDOW_CHARS));
+
+  // 全局步进采样：让 hash 覆盖整个文本范围，降低“只修改未覆盖窗口区域”时的碰撞概率。
+  const STRIDE_SAMPLES = 16_384;
+  const step = Math.max(1, Math.floor(len / STRIDE_SAMPLES));
+
+  for (let i = 0; i < len; i += step) {
+    update(text.charCodeAt(i));
+  }
+  if (step > 1) {
+    const offset = step >> 1;
+    for (let i = offset; i < len; i += step) {
+      update(text.charCodeAt(i));
+    }
+  }
 
   return `${len}:${(hash >>> 0).toString(36)}`;
 }

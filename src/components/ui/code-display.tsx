@@ -54,6 +54,33 @@ function stringifyPretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
+function CodeDisplaySseDataSyntaxHighlighter({
+  data,
+  highlighterStyle,
+}: {
+  data: string;
+  highlighterStyle: typeof oneDark;
+}) {
+  const highlightedText = useMemo(() => {
+    const parsed = safeJsonParse(data);
+    return parsed.ok ? stringifyPretty(parsed.value) : data;
+  }, [data]);
+
+  return (
+    <SyntaxHighlighter
+      language="json"
+      style={highlighterStyle}
+      customStyle={{
+        margin: 0,
+        background: "transparent",
+        fontSize: "12px",
+      }}
+    >
+      {highlightedText}
+    </SyntaxHighlighter>
+  );
+}
+
 /**
  * 统计 UTF-8 字节数，最多统计到超过 limitBytes 为止。
  *
@@ -308,6 +335,7 @@ function CodeDisplaySseEvents({
       onScroll={(e) => {
         const next = e.currentTarget.scrollTop;
         scrollTopRef.current = next;
+        if (!useVirtual) return;
         if (rafRef.current !== null) return;
         rafRef.current = requestAnimationFrame(() => {
           rafRef.current = null;
@@ -362,20 +390,10 @@ function CodeDisplaySseEvents({
                     <div className="space-y-1">
                       <div className="text-xs text-muted-foreground">{labels.sseData}</div>
                       {evt.data.length <= highlightMaxChars ? (
-                        <SyntaxHighlighter
-                          language="json"
-                          style={highlighterStyle}
-                          customStyle={{
-                            margin: 0,
-                            background: "transparent",
-                            fontSize: "12px",
-                          }}
-                        >
-                          {(() => {
-                            const parsed = safeJsonParse(evt.data);
-                            return parsed.ok ? stringifyPretty(parsed.value) : evt.data;
-                          })()}
-                        </SyntaxHighlighter>
+                        <CodeDisplaySseDataSyntaxHighlighter
+                          data={evt.data}
+                          highlighterStyle={highlighterStyle}
+                        />
                       ) : largePlainEnabled ? (
                         <CodeDisplayPlainTextarea
                           value={evt.data}

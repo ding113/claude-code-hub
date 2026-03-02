@@ -595,6 +595,8 @@ describe("CodeDisplay - large content performance strategy", () => {
       <CodeDisplayMatchesList
         text={text}
         matches={Int32Array.from([0, 1])}
+        // lineStarts 最后一项 4 === text.length，表示末尾 CR 后存在一个空的尾随行；
+        // 因此 matches 只包含有内容的第 0/1 行（"a" / "b"），不包含空行。
         lineStarts={Int32Array.from([0, 2, 4])}
         maxHeight="200px"
         lineHeightPx={18}

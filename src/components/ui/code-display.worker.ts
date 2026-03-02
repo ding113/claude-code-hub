@@ -597,25 +597,33 @@ function buildLineIndex({
   | { ok: false; errorCode: "CANCELED" | "TOO_MANY_LINES"; lineCount?: number } {
   const total = text.length;
 
-  // 先计数（允许提前发现是否超过上限）
-  let lineCount = 1;
+  const starts: number[] = [0];
   let lastProgressAt = 0;
-  for (let i = 0; i < text.length; i += 1) {
+
+  for (let i = 0; i < total; i += 1) {
     if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+
     const code = text.charCodeAt(i);
     if (code === 10) {
-      lineCount += 1;
-      if (lineCount > maxLines) {
+      const nextLineCount = starts.length + 1;
+      if (nextLineCount > maxLines) {
         post({ type: "progress", jobId, stage: "index", processed: i, total });
-        return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
+        return { ok: false, errorCode: "TOO_MANY_LINES", lineCount: nextLineCount };
       }
+      starts.push(i + 1);
     } else if (code === 13) {
-      lineCount += 1;
-      // CRLF 视为一个换行
-      if (i + 1 < total && text.charCodeAt(i + 1) === 10) i += 1;
-      if (lineCount > maxLines) {
+      const nextLineCount = starts.length + 1;
+      if (nextLineCount > maxLines) {
         post({ type: "progress", jobId, stage: "index", processed: i, total });
-        return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
+        return { ok: false, errorCode: "TOO_MANY_LINES", lineCount: nextLineCount };
+      }
+
+      // CRLF 视为一个换行
+      if (i + 1 < total && text.charCodeAt(i + 1) === 10) {
+        starts.push(i + 2);
+        i += 1;
+      } else {
+        starts.push(i + 1);
       }
     }
 
@@ -628,31 +636,14 @@ function buildLineIndex({
     }
   }
 
-  const starts = new Int32Array(lineCount);
-  starts[0] = 0;
-  let idx = 1;
-  for (let i = 0; i < text.length; i += 1) {
-    if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
-    const code = text.charCodeAt(i);
-    if (code === 10) {
-      starts[idx] = i + 1;
-      idx += 1;
-      continue;
-    }
-    if (code === 13) {
-      if (i + 1 < total && text.charCodeAt(i + 1) === 10) {
-        starts[idx] = i + 2;
-        idx += 1;
-        i += 1;
-      } else {
-        starts[idx] = i + 1;
-        idx += 1;
-      }
-    }
+  const lineCount = starts.length;
+  const lineStarts = new Int32Array(lineCount);
+  for (let i = 0; i < lineCount; i += 1) {
+    lineStarts[i] = starts[i] ?? 0;
   }
 
   post({ type: "progress", jobId, stage: "index", processed: total, total });
-  return { ok: true, lineStarts: starts, lineCount };
+  return { ok: true, lineStarts, lineCount };
 }
 
 function searchLines({
@@ -822,6 +813,10 @@ function searchLines({
       }
 
       const text = stringifyPretty(msg.value, msg.indentSize);
+      if (isCancelled(jobId)) {
+        post({ type: "stringifyJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+        return;
+      }
       if (estimateUtf16Bytes(text.length) > msg.maxOutputBytes) {
         post({
           type: "stringifyJsonPrettyResult",
