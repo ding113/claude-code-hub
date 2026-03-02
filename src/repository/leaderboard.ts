@@ -619,7 +619,12 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   );
 
   // 对齐原 provider 排名 SQL：cacheHitRate desc, count desc
-  entries.sort((a, b) => b.cacheHitRate - a.cacheHitRate || b.totalRequests - a.totalRequests);
+  entries.sort(
+    (a, b) =>
+      b.cacheHitRate - a.cacheHitRate ||
+      b.totalRequests - a.totalRequests ||
+      a.providerId - b.providerId
+  );
 
   return entries;
 }
