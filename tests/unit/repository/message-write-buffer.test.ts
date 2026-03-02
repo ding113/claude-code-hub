@@ -149,8 +149,9 @@ describe("message_request 异步批量写入", () => {
     executeMock.mockImplementation(async (query) => {
       const built = toSqlText(query);
       if (built.sql.includes("::numeric")) {
-        const error: { code?: string } = new Error("invalid input syntax for type numeric");
-        error.code = "22P02";
+        const error = new Error("invalid input syntax for type numeric", {
+          cause: { code: "22P02" },
+        });
         throw error;
       }
       return [];
@@ -338,5 +339,47 @@ describe("message_request 异步批量写入", () => {
     expect(built.params).toContain(2000);
     expect(built.params).toContain(2099);
     expect(built.params).not.toContain(overflowId);
+  });
+
+  it("应接受常见数字字符串输入（避免 patch 被误判为空）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    const result = enqueueMessageRequestUpdate(1, {
+      durationMs: "123" as unknown as number,
+      statusCode: "200" as unknown as number,
+    });
+
+    await stopMessageRequestWriteBuffer();
+
+    expect(result).toBe("enqueued");
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    const query = executeMock.mock.calls[0]?.[0];
+    const built = toSqlText(query);
+    expect(built.sql).toContain("duration_ms");
+    expect(built.sql).toContain("status_code");
+  });
+
+  it("应接受 costUsd number 输入并转换为 numeric", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    const result = enqueueMessageRequestUpdate(7, { costUsd: 0.000123 as unknown as string });
+
+    await stopMessageRequestWriteBuffer();
+
+    expect(result).toBe("enqueued");
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    const query = executeMock.mock.calls[0]?.[0];
+    const built = toSqlText(query);
+    expect(built.sql).toContain("::numeric");
   });
 });

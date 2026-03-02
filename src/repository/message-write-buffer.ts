@@ -71,23 +71,57 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
 };
 
 const INT32_MAX = 2147483647;
+const NUMERIC_LIKE_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 const REJECTED_INVALID_LOG_THROTTLE_MS = 60_000;
 let _lastRejectedInvalidLogAt = 0;
 
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (!NUMERIC_LIKE_RE.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function summarizePatchTypes(patch: MessageRequestUpdatePatch): Record<string, string> {
+  const summary: Record<string, string> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      summary[key] = "null";
+    } else if (Array.isArray(value)) {
+      summary[key] = "array";
+    } else {
+      summary[key] = typeof value;
+    }
+  }
+  return summary;
 }
 
 function sanitizeInt32(
   value: unknown,
   options?: { min?: number; max?: number }
 ): number | undefined {
-  if (!isFiniteNumber(value)) {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) {
     return undefined;
   }
 
-  const truncated = Math.trunc(value);
+  const truncated = Math.trunc(numeric);
   const min = options?.min ?? -INT32_MAX - 1;
   const max = options?.max ?? INT32_MAX;
 
@@ -111,18 +145,31 @@ function sanitizeNullableInt32(
 }
 
 function sanitizeNumericString(value: unknown): string | undefined {
-  if (typeof value !== "string") {
+  let raw: string | undefined;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return undefined;
+    }
+    raw = String(value);
+  } else if (typeof value === "string") {
+    raw = value;
+  } else {
     return undefined;
   }
 
-  const trimmed = value.trim();
+  const trimmed = raw.trim();
   if (trimmed.length === 0) {
     return undefined;
   }
 
   // 允许常见十进制与科学计数法，拒绝 NaN/Infinity/空白/十六进制等异常输入
-  const numericLike = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed);
-  if (!numericLike) {
+  if (!NUMERIC_LIKE_RE.test(trimmed)) {
+    return undefined;
+  }
+
+  // 数值过大（例如 1e309）会变成 Infinity；这种输入对 numeric 列也大概率不可用，直接拒绝。
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
     return undefined;
   }
 
@@ -269,11 +316,27 @@ function isTerminalPatch(patch: MessageRequestUpdatePatch): boolean {
 }
 
 function getErrorCode(error: unknown): string | null {
-  if (!error || typeof error !== "object") {
-    return null;
+  const visited = new Set<unknown>();
+  let current: unknown = error;
+
+  for (let depth = 0; depth < 5; depth++) {
+    if (!current || typeof current !== "object") {
+      return null;
+    }
+    if (visited.has(current)) {
+      return null;
+    }
+    visited.add(current);
+
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string") {
+      return code;
+    }
+
+    current = (current as { cause?: unknown }).cause;
   }
-  const code = (error as { code?: unknown }).code;
-  return typeof code === "string" ? code : null;
+
+  return null;
 }
 
 function isDataRelatedDbError(error: unknown): boolean {
@@ -429,6 +492,7 @@ class MessageRequestWriteBuffer {
         logger.warn("[MessageRequestWriteBuffer] Patch rejected: empty after sanitize", {
           requestId: id,
           originalKeys: Object.keys(patch),
+          originalTypes: summarizePatchTypes(patch),
         });
       }
       return "rejected_invalid";
