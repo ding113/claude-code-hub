@@ -279,11 +279,11 @@ describe("message_request 异步批量写入", () => {
       "@/repository/message-write-buffer"
     );
 
-    const accepted = enqueueMessageRequestUpdate(1, { durationMs: Number.NaN });
+    const result = enqueueMessageRequestUpdate(1, { durationMs: Number.NaN });
 
     await stopMessageRequestWriteBuffer();
 
-    expect(accepted).toBe(false);
+    expect(result).toBe("rejected_invalid");
     expect(executeMock).not.toHaveBeenCalled();
   });
 

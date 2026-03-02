@@ -30,6 +30,12 @@ export type MessageRequestUpdatePatch = {
   specialSettings?: CreateMessageRequestData["special_settings"];
 };
 
+export type MessageRequestUpdateEnqueueResult =
+  | "enqueued"
+  | "rejected_invalid"
+  | "buffer_unavailable"
+  | "dropped_overflow";
+
 type MessageRequestUpdateRecord = {
   id: number;
   patch: MessageRequestUpdatePatch;
@@ -405,15 +411,15 @@ class MessageRequestWriteBuffer {
     this.config = config;
   }
 
-  enqueue(id: number, patch: MessageRequestUpdatePatch): boolean {
+  enqueue(id: number, patch: MessageRequestUpdatePatch): MessageRequestUpdateEnqueueResult {
     const sanitized = sanitizePatch(patch);
     if (Object.keys(sanitized).length === 0) {
-      return false;
+      return "rejected_invalid";
     }
 
     const existing = this.pending.get(id) ?? {};
     this.pending.set(id, { ...existing, ...sanitized });
-    let accepted = true;
+    let result: MessageRequestUpdateEnqueueResult = "enqueued";
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
@@ -442,7 +448,7 @@ class MessageRequestWriteBuffer {
       if (droppedId !== undefined) {
         this.pending.delete(droppedId);
         if (droppedId === id) {
-          accepted = false;
+          result = "dropped_overflow";
         }
         logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
           maxPending: this.config.maxPending,
@@ -456,7 +462,7 @@ class MessageRequestWriteBuffer {
     // flush 过程中有新任务：标记需要再跑一轮（避免刚好 flush 完成时遗漏）
     if (this.flushInFlight) {
       this.flushAgainAfterCurrent = true;
-      return accepted;
+      return result;
     }
 
     // 停止阶段不再调度 timer，避免阻止进程退出
@@ -470,7 +476,7 @@ class MessageRequestWriteBuffer {
       void this.flush();
     }
 
-    return accepted;
+    return result;
   }
 
   private ensureFlushTimer(delayMs?: number): void {
@@ -705,14 +711,17 @@ function getBuffer(): MessageRequestWriteBuffer | null {
   return _buffer;
 }
 
-export function enqueueMessageRequestUpdate(id: number, patch: MessageRequestUpdatePatch): boolean {
+export function enqueueMessageRequestUpdate(
+  id: number,
+  patch: MessageRequestUpdatePatch
+): MessageRequestUpdateEnqueueResult {
   // 只在 async 模式下启用队列，避免额外内存/定时器开销
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
-    return false;
+    return "buffer_unavailable";
   }
   const buffer = getBuffer();
   if (!buffer) {
-    return false;
+    return "buffer_unavailable";
   }
   return buffer.enqueue(id, patch);
 }

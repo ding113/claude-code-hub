@@ -75,7 +75,7 @@ export async function createMessageRequest(
  * 更新消息请求的耗时
  */
 export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
-  if (enqueueMessageRequestUpdate(id, { durationMs })) {
+  if (enqueueMessageRequestUpdate(id, { durationMs }) !== "buffer_unavailable") {
     return;
   }
 
@@ -100,7 +100,7 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  if (enqueueMessageRequestUpdate(id, { costUsd: formattedCost })) {
+  if (enqueueMessageRequestUpdate(id, { costUsd: formattedCost }) !== "buffer_unavailable") {
     return;
   }
 
@@ -139,7 +139,7 @@ export async function updateMessageRequestDetails(
     specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
-  if (enqueueMessageRequestUpdate(id, details)) {
+  if (enqueueMessageRequestUpdate(id, details) !== "buffer_unavailable") {
     return;
   }
 
