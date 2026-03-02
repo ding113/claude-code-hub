@@ -47,6 +47,7 @@ function createLazyFilterHook<T>(
       };
     }, []);
 
+    // fetcher 来自 createLazyFilterHook(...) 的闭包参数，在 hook 生命周期内保持稳定，因此不需要放入 deps。
     const load = useCallback(async () => {
       // 如果已加载或有进行中的请求，跳过
       if (isLoaded || inFlightRef.current) return;
@@ -77,7 +78,7 @@ function createLazyFilterHook<T>(
 
       inFlightRef.current = promise;
       return promise;
-    }, [fetcher, isLoaded]);
+    }, [isLoaded]);
 
     const onOpenChange = useCallback(
       (open: boolean) => {

@@ -7,6 +7,7 @@ import { constantTimeEqual } from "@/lib/security/constant-time-compare";
 import { findKeyList, validateApiKeyAndGetUser } from "@/repository/key";
 import type { Key } from "@/types/key";
 import type { User } from "@/types/user";
+import { AUTH_COOKIE_NAME } from "./auth/constants";
 
 /**
  * Apply no-store / cache-busting headers to auth responses that mutate session state.
@@ -38,7 +39,7 @@ declare global {
   var __cchAuthSessionStorage: AuthSessionStorage | undefined;
 }
 
-export const AUTH_COOKIE_NAME = "auth-token";
+export { AUTH_COOKIE_NAME };
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 export interface AuthSession {

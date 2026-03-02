@@ -29,7 +29,7 @@ const mockSelect = vi.fn(() => {
 
 const mocks = vi.hoisted(() => ({
   resolveSystemTimezone: vi.fn(),
-  getSystemSettings: vi.fn(),
+  getCachedSystemSettings: vi.fn(),
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -82,12 +82,12 @@ vi.mock("@/drizzle/schema", () => ({
   users: {},
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone.server", () => ({
   resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 
-vi.mock("@/repository/system-config", () => ({
-  getSystemSettings: mocks.getSystemSettings,
+vi.mock("@/lib/config", () => ({
+  getCachedSystemSettings: mocks.getCachedSystemSettings,
 }));
 
 describe("Provider Leaderboard Average Cost Metrics", () => {
@@ -97,7 +97,7 @@ describe("Provider Leaderboard Average Cost Metrics", () => {
     chainMocks = [];
     mockSelect.mockClear();
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
-    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+    mocks.getCachedSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
   });
 
   it("computes avgCostPerRequest = totalCost / totalRequests for valid denominators", async () => {
@@ -243,7 +243,7 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     chainMocks = [];
     mockSelect.mockClear();
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
-    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+    mocks.getCachedSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
   });
 
   it("includes modelStats field on cache-hit leaderboard entries", async () => {

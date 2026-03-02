@@ -1,13 +1,13 @@
 import { getCircuitState, isCircuitOpen } from "@/lib/circuit-breaker";
+import { getCachedSystemSettings } from "@/lib/config";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
 import { findAllProviders, findProviderById } from "@/repository/provider";
-import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
 import { isClientAllowedDetailed } from "./client-detector";
@@ -15,22 +15,9 @@ import type { ClientFormat } from "./format-mapper";
 import { ProxyResponses } from "./responses";
 import type { ProxySession } from "./session";
 
-// 系统设置缓存 - 避免每次请求失败都查询数据库
-const SETTINGS_CACHE_TTL_MS = 60_000; // 60 seconds
-let cachedVerboseProviderError: { value: boolean; expiresAt: number } | null = null;
-
 async function getVerboseProviderErrorCached(): Promise<boolean> {
-  const now = Date.now();
-  if (cachedVerboseProviderError && cachedVerboseProviderError.expiresAt > now) {
-    return cachedVerboseProviderError.value;
-  }
-
   try {
-    const systemSettings = await getSystemSettings();
-    cachedVerboseProviderError = {
-      value: systemSettings.verboseProviderError,
-      expiresAt: now + SETTINGS_CACHE_TTL_MS,
-    };
+    const systemSettings = await getCachedSystemSettings();
     return systemSettings.verboseProviderError;
   } catch (e) {
     logger.warn(

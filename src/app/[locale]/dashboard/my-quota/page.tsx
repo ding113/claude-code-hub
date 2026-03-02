@@ -2,7 +2,7 @@ import { AlertCircle } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { getMyQuota } from "@/actions/my-usage";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings } from "@/lib/config";
 import { QuotaCards } from "../../my-usage/_components/quota-cards";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function MyQuotaPage({ params }: { params: Promise<{ locale
 
   const [quotaResult, systemSettings, tNav, tCommon] = await Promise.all([
     getMyQuota(),
-    getSystemSettings(),
+    getCachedSystemSettings(),
     getTranslations("dashboard.nav"),
     getTranslations("common"),
   ]);

@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
-import { AUTH_COOKIE_NAME } from "@/lib/auth";
+import { AUTH_COOKIE_NAME } from "@/lib/auth/constants";
 import { isDevelopment } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 

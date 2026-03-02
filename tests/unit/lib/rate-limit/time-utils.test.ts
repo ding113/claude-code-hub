@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock resolveSystemTimezone before importing time-utils
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone.server", () => ({
   resolveSystemTimezone: vi.fn(async () => "Asia/Shanghai"),
 }));
 
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import {
   getDailyResetTime,
   getResetInfo,

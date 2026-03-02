@@ -270,6 +270,43 @@ export async function getSystemSettings(): Promise<SystemSettings> {
   }
 }
 
+let lastAllowGlobalUsageViewReadErrorAt = 0;
+const ALLOW_GLOBAL_USAGE_VIEW_READ_ERROR_LOG_INTERVAL_MS = 60_000;
+
+/**
+ * 强一致读取 allowGlobalUsageView（权限相关字段不应依赖可过期缓存）
+ *
+ * - 失败时 fail-closed 返回 false（避免短时越权）
+ * - 不会创建默认记录（与 getSystemSettings() 的“自愈创建”行为区分）
+ */
+export async function getAllowGlobalUsageViewFromDB(): Promise<boolean> {
+  try {
+    const [row] = await db
+      .select({ allowGlobalUsageView: systemSettings.allowGlobalUsageView })
+      .from(systemSettings)
+      .limit(1);
+
+    return row?.allowGlobalUsageView ?? false;
+  } catch (error) {
+    if (isTableMissingError(error) || isUndefinedColumnError(error)) {
+      return false;
+    }
+
+    const now = Date.now();
+    if (
+      now - lastAllowGlobalUsageViewReadErrorAt >=
+      ALLOW_GLOBAL_USAGE_VIEW_READ_ERROR_LOG_INTERVAL_MS
+    ) {
+      lastAllowGlobalUsageViewReadErrorAt = now;
+      logger.warn("[SystemSettings] Failed to read allowGlobalUsageView, fallback to false", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return false;
+  }
+}
+
 /**
  * 更新系统设置
  */

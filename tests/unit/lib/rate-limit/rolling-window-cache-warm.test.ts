@@ -31,7 +31,7 @@ vi.mock("@/lib/redis", () => ({
   getRedisClient: () => redisClient,
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone.server", () => ({
   resolveSystemTimezone: vi.fn(async () => "Asia/Shanghai"),
 }));
 

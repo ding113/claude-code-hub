@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings } from "@/lib/config";
 
 // 需要数据库连接
 export const runtime = "nodejs";
@@ -17,7 +17,7 @@ export async function GET() {
       return NextResponse.json({ error: "未授权，请先登录" }, { status: 401 });
     }
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     return NextResponse.json(settings);
   } catch (error) {
     console.error("Failed to fetch system settings:", error);

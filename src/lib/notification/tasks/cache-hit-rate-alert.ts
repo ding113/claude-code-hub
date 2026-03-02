@@ -7,7 +7,7 @@ import {
 } from "@/lib/cache-hit-rate-alert/decision";
 import { logger } from "@/lib/logger";
 import { getRedisClient } from "@/lib/redis/client";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import type {
   CacheHitRateAlertData,
   CacheHitRateAlertSettingsSnapshot,

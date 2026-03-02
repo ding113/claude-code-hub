@@ -260,7 +260,7 @@ function VendorKeyRow(props: {
         const res = await editProvider(props.provider.id, { [fieldName]: value });
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
           queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
           return true;
         }
@@ -299,8 +299,7 @@ function VendorKeyRow(props: {
       if (!res.ok) throw new Error(res.error);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
-      queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
     },
     onError: () => {
@@ -315,8 +314,7 @@ function VendorKeyRow(props: {
       return res.data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
-      queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+      queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
       queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
       setDeleteDialogOpen(false);
@@ -333,8 +331,7 @@ function VendorKeyRow(props: {
               });
               if (undoResult.ok) {
                 toast.success(tBatchEdit("undo.singleDeleteUndone"));
-                await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                await queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
                 await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
                 await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
               } else if (undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED) {

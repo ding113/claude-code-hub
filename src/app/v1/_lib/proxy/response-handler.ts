@@ -1,5 +1,6 @@
 import { ResponseFixer } from "@/app/v1/_lib/proxy/response-fixer";
 import { AsyncTaskManager } from "@/lib/async-task-manager";
+import { getCachedSystemSettings } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater";
@@ -22,7 +23,6 @@ import {
   updateMessageRequestDuration,
 } from "@/repository/message";
 import { findLatestPriceByModel } from "@/repository/model-price";
-import { getSystemSettings } from "@/repository/system-config";
 import type { SessionUsageUpdate } from "@/types/session";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
@@ -2743,7 +2743,7 @@ async function updateRequestCostFromUsage(
 
   try {
     // 获取系统设置中的计费模型来源配置
-    const systemSettings = await getSystemSettings();
+    const systemSettings = await getCachedSystemSettings();
     const billingModelSource = systemSettings.billingModelSource;
 
     // 根据配置决定计费模型优先级

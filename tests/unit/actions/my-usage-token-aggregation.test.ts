@@ -70,9 +70,14 @@ vi.mock("@/repository/system-config", () => ({
   getSystemSettings: mocks.getSystemSettings,
 }));
 
-vi.mock("@/lib/config", () => ({
-  getEnvConfig: mocks.getEnvConfig,
-}));
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return {
+    ...actual,
+    getEnvConfig: mocks.getEnvConfig,
+    getCachedSystemSettings: () => mocks.getSystemSettings(),
+  };
+});
 
 vi.mock("@/lib/rate-limit/time-utils", () => ({
   getTimeRangeForPeriodWithMode: mocks.getTimeRangeForPeriodWithMode,

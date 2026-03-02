@@ -1,10 +1,10 @@
 import { cache } from "react";
 import { ActiveSessionsList } from "@/components/customs/active-sessions-list";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings as getCachedSystemSettingsFromConfig } from "@/lib/config";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import { UsageLogsViewVirtualized } from "./usage-logs-view-virtualized";
 
-const getCachedSystemSettings = cache(getSystemSettings);
+const getCachedSystemSettings = cache(getCachedSystemSettingsFromConfig);
 
 interface UsageLogsDataSectionProps {
   isAdmin: boolean;

@@ -39,6 +39,7 @@ type WriterConfig = {
   flushIntervalMs: number;
   batchSize: number;
   maxPending: number;
+  specialSettingsOnlyFlushIntervalMs: number;
 };
 
 const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
@@ -66,10 +67,15 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
 
 function loadWriterConfig(): WriterConfig {
   const env = getEnvConfig();
+  const flushIntervalMs = env.MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS ?? 250;
   return {
-    flushIntervalMs: env.MESSAGE_REQUEST_ASYNC_FLUSH_INTERVAL_MS ?? 250,
+    flushIntervalMs,
     batchSize: env.MESSAGE_REQUEST_ASYNC_BATCH_SIZE ?? 200,
     maxPending: env.MESSAGE_REQUEST_ASYNC_MAX_PENDING ?? 5000,
+    // special_settings 通常在请求前置阶段写入：若立即 flush，长请求会产生额外 UPDATE。
+    // 这里默认对“仅 special_settings 的 patch”使用更长的 flush 间隔，尽量与最终统计合并落库，
+    // 以降低写放大与 WAL 压力；同时仍保留兜底 flush，避免极端情况下永不落库。
+    specialSettingsOnlyFlushIntervalMs: Math.max(flushIntervalMs, 5000),
   };
 }
 
@@ -154,12 +160,32 @@ class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
   private readonly pending = new Map<number, MessageRequestUpdatePatch>();
   private flushTimer: NodeJS.Timeout | null = null;
+  private flushDueAt = 0;
   private flushAgainAfterCurrent = false;
   private flushInFlight: Promise<void> | null = null;
   private stopping = false;
 
   constructor(config: WriterConfig) {
     this.config = config;
+  }
+
+  private static isSpecialSettingsOnlyPatch(patch: MessageRequestUpdatePatch): boolean {
+    return patch.specialSettings !== undefined && Object.keys(patch).length === 1;
+  }
+
+  private getDesiredFlushIntervalMsForPatch(patch: MessageRequestUpdatePatch): number {
+    return MessageRequestWriteBuffer.isSpecialSettingsOnlyPatch(patch)
+      ? this.config.specialSettingsOnlyFlushIntervalMs
+      : this.config.flushIntervalMs;
+  }
+
+  private getDesiredFlushIntervalMsForPending(): number {
+    for (const patch of this.pending.values()) {
+      if (!MessageRequestWriteBuffer.isSpecialSettingsOnlyPatch(patch)) {
+        return this.config.flushIntervalMs;
+      }
+    }
+    return this.config.specialSettingsOnlyFlushIntervalMs;
   }
 
   enqueue(id: number, patch: MessageRequestUpdatePatch): void {
@@ -217,7 +243,7 @@ class MessageRequestWriteBuffer {
 
     // 停止阶段不再调度 timer，避免阻止进程退出
     if (!this.stopping) {
-      this.ensureFlushTimer();
+      this.ensureFlushTimer(this.getDesiredFlushIntervalMsForPatch(merged));
     }
 
     // 达到批量阈值时尽快 flush，降低 durationMs 为空的“悬挂时间”
@@ -226,21 +252,40 @@ class MessageRequestWriteBuffer {
     }
   }
 
-  private ensureFlushTimer(): void {
-    if (this.stopping || this.flushTimer) {
+  private ensureFlushTimer(intervalMs: number): void {
+    if (this.stopping) {
       return;
     }
 
-    this.flushTimer = setTimeout(() => {
+    const now = Date.now();
+    const dueAt = now + Math.max(0, intervalMs);
+
+    // 若已存在 timer：仅在需要“更早” flush 时重置，避免延长已有更紧急的 flush
+    if (this.flushTimer) {
+      if (this.flushDueAt > 0 && dueAt >= this.flushDueAt) {
+        return;
+      }
+      clearTimeout(this.flushTimer);
       this.flushTimer = null;
-      void this.flush();
-    }, this.config.flushIntervalMs);
+      this.flushDueAt = 0;
+    }
+
+    this.flushDueAt = dueAt;
+    this.flushTimer = setTimeout(
+      () => {
+        this.flushTimer = null;
+        this.flushDueAt = 0;
+        void this.flush();
+      },
+      Math.max(0, dueAt - now)
+    );
   }
 
   private clearFlushTimer(): void {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
+      this.flushDueAt = 0;
     }
   }
 
@@ -289,7 +334,7 @@ class MessageRequestWriteBuffer {
       this.flushInFlight = null;
       // 如果还有积压：运行态下继续用 timer 退避重试；停止阶段不再调度 timer
       if (this.pending.size > 0 && !this.stopping) {
-        this.ensureFlushTimer();
+        this.ensureFlushTimer(this.getDesiredFlushIntervalMsForPending());
       }
     });
 

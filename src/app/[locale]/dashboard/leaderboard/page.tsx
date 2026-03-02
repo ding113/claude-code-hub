@@ -5,7 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getSystemSettings } from "@/repository/system-config";
+import { getAllowGlobalUsageViewFromDB } from "@/repository/system-config";
 import { LeaderboardView } from "./_components/leaderboard-view";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +14,11 @@ export default async function LeaderboardPage() {
   const t = await getTranslations("dashboard");
   // 获取用户 session 和系统设置
   const session = await getSession();
-  const systemSettings = await getSystemSettings();
 
   // 检查权限
   const isAdmin = session?.user.role === "admin";
-  const hasPermission = isAdmin || systemSettings.allowGlobalUsageView;
+  const allowGlobalUsageView = session && !isAdmin ? await getAllowGlobalUsageViewFromDB() : false;
+  const hasPermission = Boolean(isAdmin) || allowGlobalUsageView;
 
   // 无权限时显示友好提示
   if (!hasPermission) {

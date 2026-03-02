@@ -47,6 +47,7 @@ function sqlToString(sqlObj: unknown): string {
 
 const mocks = vi.hoisted(() => ({
   resolveSystemTimezone: vi.fn(),
+  getCachedSystemSettings: vi.fn().mockResolvedValue({ billingModelSource: "redirected" }),
 }));
 
 function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
@@ -127,12 +128,12 @@ vi.mock("@/drizzle/schema", () => ({
   },
 }));
 
-vi.mock("@/lib/utils/timezone", () => ({
+vi.mock("@/lib/utils/timezone.server", () => ({
   resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 
-vi.mock("@/repository/system-config", () => ({
-  getSystemSettings: vi.fn().mockResolvedValue({ billingModelSource: "redirected" }),
+vi.mock("@/lib/config", () => ({
+  getCachedSystemSettings: mocks.getCachedSystemSettings,
 }));
 
 describe("buildDateCondition - timezone parentheses regression", () => {

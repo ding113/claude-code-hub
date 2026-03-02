@@ -10,7 +10,7 @@ import {
 } from "@/lib/notification/tasks/cache-hit-rate-alert";
 import { generateCostAlerts } from "@/lib/notification/tasks/cost-alert";
 import { generateDailyLeaderboard } from "@/lib/notification/tasks/daily-leaderboard";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import {
   buildCacheHitRateAlertMessage,
   buildCircuitBreakerMessage,

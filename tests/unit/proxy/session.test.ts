@@ -9,13 +9,14 @@ vi.mock("@/repository/model-price", () => ({
   findLatestPriceByModel: vi.fn(),
 }));
 
-vi.mock("@/repository/system-config", () => ({
-  getSystemSettings: vi.fn(),
-}));
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return { ...actual, getCachedSystemSettings: vi.fn() };
+});
 
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { getCachedSystemSettings } from "@/lib/config";
 import { findLatestPriceByModel } from "@/repository/model-price";
-import { getSystemSettings } from "@/repository/system-config";
 
 function makeSystemSettings(
   billingModelSource: SystemSettings["billingModelSource"]
@@ -158,7 +159,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
       output_cost_per_token: 4,
     };
 
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("original"));
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
       if (modelName === "original-model") {
         return makePriceRecord(modelName, originalPriceData);
@@ -187,7 +188,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
       output_cost_per_token: 4,
     };
 
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
       if (modelName === "original-model") {
         return makePriceRecord(modelName, originalPriceData);
@@ -215,7 +216,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
       output_cost_per_token: 4,
     };
 
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("original"));
     vi.mocked(findLatestPriceByModel)
       .mockResolvedValueOnce(makePriceRecord("original-model", {}))
       .mockResolvedValueOnce(makePriceRecord("redirected-model", redirectedPriceData));
@@ -238,7 +239,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
       output_cost_per_token: 4,
     };
 
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("original"));
     vi.mocked(findLatestPriceByModel)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(makePriceRecord("redirected-model", redirectedPriceData));
@@ -255,13 +256,13 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     expect(findLatestPriceByModel).toHaveBeenNthCalledWith(2, "redirected-model");
   });
 
-  it("应在 getSystemSettings 失败时回退到 redirected", async () => {
+  it("应在 getCachedSystemSettings 失败时回退到 redirected", async () => {
     const redirectedPriceData: ModelPriceData = {
       input_cost_per_token: 3,
       output_cost_per_token: 4,
     };
 
-    vi.mocked(getSystemSettings).mockRejectedValue(new Error("DB error"));
+    vi.mocked(getCachedSystemSettings).mockRejectedValue(new Error("DB error"));
     vi.mocked(findLatestPriceByModel).mockResolvedValue(
       makePriceRecord("redirected-model", redirectedPriceData)
     );
@@ -273,7 +274,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
 
     const result = await session.getCachedPriceDataByBillingSource();
     expect(result).toEqual(redirectedPriceData);
-    expect(getSystemSettings).toHaveBeenCalledTimes(1);
+    expect(getCachedSystemSettings).toHaveBeenCalledTimes(1);
     expect(findLatestPriceByModel).toHaveBeenCalledTimes(1);
     expect(findLatestPriceByModel).toHaveBeenCalledWith("redirected-model");
 
@@ -287,7 +288,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
       output_cost_per_token: 4,
     };
 
-    vi.mocked(getSystemSettings).mockResolvedValue({
+    vi.mocked(getCachedSystemSettings).mockResolvedValue({
       ...makeSystemSettings("redirected"),
       billingModelSource: "invalid" as any,
     } as any);
@@ -310,7 +311,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
   });
 
   it("当原始模型等于重定向模型时应避免重复查询", async () => {
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("original"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("original"));
     vi.mocked(findLatestPriceByModel).mockResolvedValue(null);
 
     const session = createSession({
@@ -327,7 +328,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
   it("并发调用时应只读取一次配置", async () => {
     const priceData: ModelPriceData = { input_cost_per_token: 1, output_cost_per_token: 2 };
 
-    vi.mocked(getSystemSettings).mockImplementation(async () => {
+    vi.mocked(getCachedSystemSettings).mockImplementation(async () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return makeSystemSettings("redirected");
     });
@@ -344,13 +345,13 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     const p2 = session.getCachedPriceDataByBillingSource();
     await Promise.all([p1, p2]);
 
-    expect(getSystemSettings).toHaveBeenCalledTimes(1);
+    expect(getCachedSystemSettings).toHaveBeenCalledTimes(1);
   });
 
   it("应缓存配置避免重复读取", async () => {
     const priceData: ModelPriceData = { input_cost_per_token: 1, output_cost_per_token: 2 };
 
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(findLatestPriceByModel).mockResolvedValue(
       makePriceRecord("redirected-model", priceData)
     );
@@ -363,13 +364,13 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     await session.getCachedPriceDataByBillingSource();
     await session.getCachedPriceDataByBillingSource();
 
-    expect(getSystemSettings).toHaveBeenCalledTimes(1);
+    expect(getCachedSystemSettings).toHaveBeenCalledTimes(1);
   });
 
   it("应缓存价格数据避免重复查询", async () => {
     const priceData: ModelPriceData = { input_cost_per_token: 1, output_cost_per_token: 2 };
 
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(findLatestPriceByModel).mockResolvedValue(
       makePriceRecord("redirected-model", priceData)
     );
@@ -386,13 +387,13 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
   });
 
   it("应在无模型时返回 null", async () => {
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(getCachedSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
 
     const session = createSession({ redirectedModel: null });
     const result = await session.getCachedPriceDataByBillingSource();
 
     expect(result).toBeNull();
-    expect(getSystemSettings).not.toHaveBeenCalled();
+    expect(getCachedSystemSettings).not.toHaveBeenCalled();
     expect(findLatestPriceByModel).not.toHaveBeenCalled();
   });
 });

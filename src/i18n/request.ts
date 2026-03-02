@@ -4,9 +4,30 @@
  */
 
 import { getRequestConfig } from "next-intl/server";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { isValidIANATimezone } from "@/lib/utils/timezone";
 import type { Locale } from "./config";
 import { routing } from "./routing";
+
+function resolveEnvTimezone(): string {
+  const tz = process.env.TZ?.trim();
+  return tz && isValidIANATimezone(tz) ? tz : "UTC";
+}
+
+async function resolveRequestTimezone(): Promise<string> {
+  const fallback = resolveEnvTimezone();
+
+  // Edge runtime 无法访问数据库/Redis，直接使用 env/UTC
+  if (process.env.NEXT_RUNTIME === "edge") {
+    return fallback;
+  }
+
+  try {
+    const { resolveSystemTimezone } = await import("@/lib/utils/timezone.server");
+    return await resolveSystemTimezone();
+  } catch {
+    return fallback;
+  }
+}
 
 export default getRequestConfig(async ({ requestLocale }) => {
   // This typically corresponds to the `[locale]` segment in the app directory
@@ -22,7 +43,7 @@ export default getRequestConfig(async ({ requestLocale }) => {
   // The `settings` namespace is composed by `messages/<locale>/settings/index.ts` so key paths stay stable.
   const messages = await import(`../../messages/${locale}`).then((module) => module.default);
 
-  const timeZone = await resolveSystemTimezone();
+  const timeZone = await resolveRequestTimezone();
 
   return {
     locale,

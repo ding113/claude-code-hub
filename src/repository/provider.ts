@@ -6,7 +6,7 @@ import { providerEndpoints, providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import type {
   AnthropicAdaptiveThinkingConfig,
   CreateProviderData,

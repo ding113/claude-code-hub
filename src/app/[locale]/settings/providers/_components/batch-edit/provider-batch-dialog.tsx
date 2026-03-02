@@ -224,7 +224,7 @@ function BatchEditDialogContent({
       });
 
       if (result.ok) {
-        await queryClient.invalidateQueries({ queryKey: ["providers"] });
+        await queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         onOpenChange(false);
         onSuccess?.();
 
@@ -239,7 +239,7 @@ function BatchEditDialogContent({
                 const undoResult = await undoProviderPatch({ undoToken, operationId });
                 if (undoResult.ok) {
                   toast.success(t("toast.undoSuccess", { count: undoResult.data.revertedCount }));
-                  queryClient.invalidateQueries({ queryKey: ["providers"] });
+                  queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
                 } else {
                   toast.error(t("toast.undoFailed", { error: undoResult.error }));
                 }
@@ -417,7 +417,7 @@ function BatchConfirmDialog({
                     toast.success(
                       t("undo.batchDeleteUndone", { count: undoResult.data.restoredCount })
                     );
-                    await queryClient.invalidateQueries({ queryKey: ["providers"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
                   } else if (
                     undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
                   ) {
@@ -447,7 +447,7 @@ function BatchConfirmDialog({
         }
       }
 
-      await queryClient.invalidateQueries({ queryKey: ["providers"] });
+      await queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {

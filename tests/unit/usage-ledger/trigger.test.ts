@@ -1,12 +1,30 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const sql = readFileSync(resolve(process.cwd(), "src/lib/ledger-backfill/trigger.sql"), "utf-8");
+// 以实际部署的迁移 SQL 为准（trigger.sql 主要用于回填/参考，不一定与最终迁移完全一致）。
+const MIGRATION_FILENAME = "0079_perf_usage_ledger_trigger_skip_blocked_rows.sql";
+const sql = readFileSync(resolve(process.cwd(), `drizzle/${MIGRATION_FILENAME}`), "utf-8");
 
-describe("fn_upsert_usage_ledger trigger SQL", () => {
+describe("fn_upsert_usage_ledger migration SQL", () => {
+  it("uses latest relevant migration file", () => {
+    const latest = readdirSync(resolve(process.cwd(), "drizzle"))
+      .filter((name) => /^\d+_perf_usage_ledger_trigger_.*\.sql$/.test(name))
+      .sort()
+      .slice(-1)[0];
+
+    expect(latest).toBe(MIGRATION_FILENAME);
+  });
+
   it("contains warmup exclusion check", () => {
     expect(sql).toContain("blocked_by = 'warmup'");
+  });
+
+  it("skips blocked requests to avoid wasted ledger writes", () => {
+    expect(sql).toContain("NEW.blocked_by IS NOT NULL");
+    expect(sql).toContain("UPDATE usage_ledger SET blocked_by = NEW.blocked_by");
+    expect(sql).toContain("blocked_by IS DISTINCT FROM 'warmup'");
+    expect(sql).toContain("blocked_by IS DISTINCT FROM NEW.blocked_by");
   });
 
   it("contains ON CONFLICT UPSERT", () => {
@@ -21,11 +39,27 @@ describe("fn_upsert_usage_ledger trigger SQL", () => {
     expect(sql).toContain("jsonb_typeof");
   });
 
+  it("guards provider_chain id extraction cast range", () => {
+    expect(sql).toContain("2147483647");
+    expect(sql).toContain("length(NEW.provider_chain -> -1 ->> 'id') <= 10");
+    expect(sql).toContain("length(OLD.provider_chain -> -1 ->> 'id') <= 10");
+  });
+
   it("computes is_success from error_message", () => {
     expect(sql).toContain("error_message IS NULL");
   });
 
-  it("creates trigger binding", () => {
-    expect(sql).toContain("CREATE TRIGGER trg_upsert_usage_ledger");
+  it("skips irrelevant updates to reduce write amplification", () => {
+    expect(sql).toContain("TG_OP = 'UPDATE'");
+    expect(sql).toContain("IS NOT DISTINCT FROM");
+    // Ensure the skip logic compares derived values (usage_ledger doesn't persist provider_chain / error_message)
+    expect(sql).toContain("v_final_provider_id IS NOT DISTINCT FROM v_old_final_provider_id");
+    expect(sql).toContain("v_is_success IS NOT DISTINCT FROM v_old_is_success");
+    // Self-heal: if ledger row is missing, later UPDATE can fill it (avoids permanent gaps)
+    expect(sql).toContain("EXISTS (SELECT 1 FROM usage_ledger WHERE request_id = NEW.id)");
+  });
+
+  it("creates function definition", () => {
+    expect(sql).toContain("CREATE OR REPLACE FUNCTION fn_upsert_usage_ledger");
   });
 });

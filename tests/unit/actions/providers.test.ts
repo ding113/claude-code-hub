@@ -25,7 +25,9 @@ vi.mock("@/lib/auth", () => ({
 vi.mock("@/repository/provider", () => ({
   createProvider: createProviderMock,
   deleteProvider: deleteProviderMock,
-  findAllProviders: vi.fn(async () => []),
+  // getProviders() now uses the cached providers entrypoint; keep tests aligned by delegating
+  // to the fresh mock (cache behavior is covered elsewhere).
+  findAllProviders: vi.fn(async () => await findAllProvidersFreshMock()),
   findAllProvidersFresh: findAllProvidersFreshMock,
   findProviderById: findProviderByIdMock,
   getProviderStatistics: getProviderStatisticsMock,

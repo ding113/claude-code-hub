@@ -388,8 +388,7 @@ function ProviderFormContent({
                   const undoResult = await undoProviderPatch({ undoToken, operationId });
                   if (undoResult.ok) {
                     toast.success(tBatchEdit("undo.singleEditUndone"));
-                    await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                    await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                    await queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
                     await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
                     await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
                   } else if (
@@ -406,8 +405,7 @@ function ProviderFormContent({
             },
           });
 
-          void queryClient.invalidateQueries({ queryKey: ["providers"] });
-          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
           void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
           void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         } else {
@@ -419,8 +417,7 @@ function ProviderFormContent({
             return;
           }
 
-          void queryClient.invalidateQueries({ queryKey: ["providers"] });
-          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          void queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
           void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
           void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
 
@@ -480,8 +477,7 @@ function ProviderFormContent({
                 const undoResult = await undoProviderDelete({ undoToken, operationId });
                 if (undoResult.ok) {
                   toast.success(tBatchEdit("undo.singleDeleteUndone"));
-                  await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                  await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+                  await queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
                   await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
                   await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
                 } else if (undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED) {
@@ -496,8 +492,7 @@ function ProviderFormContent({
           },
         });
 
-        void queryClient.invalidateQueries({ queryKey: ["providers"] });
-        void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+        void queryClient.invalidateQueries({ queryKey: ["providers-bootstrap"] });
         void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
         void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
         onSuccess?.();

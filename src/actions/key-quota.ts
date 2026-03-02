@@ -5,13 +5,13 @@ import { getTranslations } from "next-intl/server";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
-import { getSystemSettings } from "@/repository/system-config";
 import { getTotalUsageForKey } from "@/repository/usage-logs";
 import type { ActionResult } from "./types";
 
@@ -83,7 +83,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
       result.userLimitConcurrentSessions ?? null
     );
 
-    const settings = await getSystemSettings();
+    const settings = await getCachedSystemSettings();
     const currencyCode = settings.currencyDisplay;
 
     // Helper to convert numeric string from DB to number

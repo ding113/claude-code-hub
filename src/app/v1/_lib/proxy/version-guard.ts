@@ -1,7 +1,7 @@
 import { ClientVersionChecker } from "@/lib/client-version-checker";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getClientTypeDisplayName, parseUserAgent } from "@/lib/ua-parser";
-import { getSystemSettings } from "@/repository/system-config";
 import type { ProxySession } from "./session";
 
 /**
@@ -29,7 +29,7 @@ export class ProxyVersionGuard {
   static async ensure(session: ProxySession): Promise<Response | null> {
     try {
       // 1. 检查系统配置
-      const settings = await getSystemSettings();
+      const settings = await getCachedSystemSettings();
       if (!settings.enableClientVersionCheck) {
         logger.debug("[ProxyVersionGuard] 版本检查功能已关闭");
         return null; // 功能关闭，放行

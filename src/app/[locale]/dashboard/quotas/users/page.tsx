@@ -6,8 +6,8 @@ import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
+import { getCachedSystemSettings } from "@/lib/config";
 import { sumKeyTotalCostBatchByIds, sumUserTotalCostBatch } from "@/repository/statistics";
-import { getSystemSettings } from "@/repository/system-config";
 import { UsersQuotaSkeleton } from "../_components/users-quota-skeleton";
 import type { UserKeyWithUsage, UserQuotaWithUsage } from "./_components/types";
 import { UsersQuotaClient } from "./_components/users-quota-client";
@@ -116,7 +116,10 @@ export default async function UsersQuotaPage({ params }: { params: Promise<{ loc
 }
 
 async function UsersQuotaContent() {
-  const [users, systemSettings] = await Promise.all([getUsersWithQuotas(), getSystemSettings()]);
+  const [users, systemSettings] = await Promise.all([
+    getUsersWithQuotas(),
+    getCachedSystemSettings(),
+  ]);
   const t = await getTranslations("quota.users");
 
   return (

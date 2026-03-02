@@ -78,6 +78,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { invalidateSystemSettingsCache } from "@/lib/config";
 import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -91,6 +92,7 @@ import { getSystemSettings } from "@/repository/system-config";
 
 beforeEach(() => {
   cloudPriceSyncRequests.splice(0, cloudPriceSyncRequests.length);
+  invalidateSystemSettingsCache();
 });
 
 function makeSystemSettings(
@@ -257,6 +259,8 @@ async function runScenario({
   billingModelSource: SystemSettings["billingModelSource"];
   isStream: boolean;
 }): Promise<{ dbCostUsd: string; sessionCostUsd: string; rateLimitCost: number }> {
+  invalidateSystemSettingsCache();
+
   const usage = { input_tokens: 2, output_tokens: 3 };
   const originalModel = "original-model";
   const redirectedModel = "redirected-model";
@@ -377,6 +381,8 @@ describe("价格表缺失/查询失败：不计费放行", () => {
     isStream: boolean;
     priceLookup: "none" | "throws";
   }): Promise<{ dbCostCalls: number; rateLimitCalls: number }> {
+    invalidateSystemSettingsCache();
+
     const usage = { input_tokens: 2, output_tokens: 3 };
     const originalModel = "original-model";
     const redirectedModel = "redirected-model";

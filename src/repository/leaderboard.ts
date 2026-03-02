@@ -3,10 +3,10 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger, users } from "@/drizzle/schema";
-import { resolveSystemTimezone } from "@/lib/utils/timezone";
+import { getCachedSystemSettings } from "@/lib/config";
+import { resolveSystemTimezone } from "@/lib/utils/timezone.server";
 import type { ProviderType } from "@/types/provider";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
-import { getSystemSettings } from "./system-config";
 
 /**
  * 排行榜条目类型
@@ -527,7 +527,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
 
   // Model-level cache hit breakdown per provider
-  const systemSettings = await getSystemSettings();
+  const systemSettings = await getCachedSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
   const modelField =
     billingModelSource === "original"
@@ -661,7 +661,7 @@ async function findModelLeaderboardWithTimezone(
   dateRange?: DateRangeParams
 ): Promise<ModelLeaderboardEntry[]> {
   // 获取系统设置中的计费模型来源配置
-  const systemSettings = await getSystemSettings();
+  const systemSettings = await getCachedSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
 
   // 根据配置决定模型字段的优先级

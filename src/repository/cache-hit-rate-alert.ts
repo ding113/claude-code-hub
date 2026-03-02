@@ -4,8 +4,8 @@ import { and, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/drizzle/db";
 import { messageRequest, providers } from "@/drizzle/schema";
+import { getCachedSystemSettings } from "@/lib/config";
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
-import { getSystemSettings } from "@/repository/system-config";
 import type { ProviderType } from "@/types/provider";
 
 export interface TimeRange {
@@ -125,7 +125,7 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
   const windowMode = normalizeWindowMode(config);
   const ttlFallback = normalizeTtlFallbackSeconds(config);
 
-  const systemSettings = await getSystemSettings();
+  const systemSettings = await getCachedSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
 
   const modelField =

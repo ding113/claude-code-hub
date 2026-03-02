@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { getProviderLimitUsageBatch, getProviders } from "@/actions/providers";
 import { redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
-import { getSystemSettings } from "@/repository/system-config";
+import { getCachedSystemSettings } from "@/lib/config";
 import { ProvidersQuotaSkeleton } from "../_components/providers-quota-skeleton";
 import { ProvidersQuotaManager } from "./_components/providers-quota-manager";
 
@@ -73,7 +73,7 @@ export default async function ProvidersQuotaPage({
 async function ProvidersQuotaContent() {
   const [providers, systemSettings] = await Promise.all([
     getProvidersWithQuotas(),
-    getSystemSettings(),
+    getCachedSystemSettings(),
   ]);
   const t = await getTranslations("quota.providers");
 
