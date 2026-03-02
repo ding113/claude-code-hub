@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "idx_usage_ledger_cache_required_created_at" ON "usage_ledger" USING btree ("created_at") WHERE "usage_ledger"."blocked_by" IS NULL AND ("usage_ledger"."cache_creation_input_tokens" > 0 OR "usage_ledger"."cache_read_input_tokens" > 0);

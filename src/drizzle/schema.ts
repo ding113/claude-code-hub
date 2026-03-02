@@ -903,6 +903,12 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerProviderCreatedAtIdx: index('idx_usage_ledger_provider_created_at')
     .on(table.finalProviderId, table.createdAt)
     .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: partial index for cache-hit leaderboards (time range + cache required)
+  usageLedgerCacheRequiredCreatedAtIdx: index('idx_usage_ledger_cache_required_created_at')
+    .on(table.createdAt)
+    .where(
+      sql`${table.blockedBy} IS NULL AND (${table.cacheCreationInputTokens} > 0 OR ${table.cacheReadInputTokens} > 0)`
+    ),
   // Expression index on minute truncation - AT TIME ZONE 'UTC' makes date_trunc IMMUTABLE on timestamptz
   usageLedgerCreatedAtMinuteIdx: index('idx_usage_ledger_created_at_minute')
     .on(sql`date_trunc('minute', ${table.createdAt} AT TIME ZONE 'UTC')`),
