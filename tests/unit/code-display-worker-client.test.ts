@@ -118,6 +118,18 @@ describe("code-display-worker-client (no Worker fallback)", () => {
     }
   });
 
+  test("buildLineIndex supports CRLF line endings", async () => {
+    (globalThis as unknown as { Worker?: unknown }).Worker = undefined;
+    const { buildLineIndex } = await importFreshWorkerClient();
+
+    const res = await buildLineIndex({ text: "a\r\nb\r\n", maxLines: 100 });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(Array.from(res.lineStarts)).toEqual([0, 3, 6]);
+      expect(res.lineCount).toBe(3);
+    }
+  });
+
   test("buildLineIndex returns TOO_MANY_LINES when exceeding maxLines", async () => {
     (globalThis as unknown as { Worker?: unknown }).Worker = undefined;
     const { buildLineIndex } = await importFreshWorkerClient();
@@ -131,6 +143,18 @@ describe("code-display-worker-client (no Worker fallback)", () => {
     const { searchLines } = await importFreshWorkerClient();
 
     const text = ["alpha", "beta", "alpha gamma", "delta"].join("\n");
+    const res = await searchLines({ text, query: "alpha", maxResults: 100 });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(Array.from(res.matches)).toEqual([0, 2]);
+    }
+  });
+
+  test("searchLines supports CRLF line endings", async () => {
+    (globalThis as unknown as { Worker?: unknown }).Worker = undefined;
+    const { searchLines } = await importFreshWorkerClient();
+
+    const text = ["alpha", "beta", "alpha gamma", "delta"].join("\r\n");
     const res = await searchLines({ text, query: "alpha", maxResults: 100 });
     expect(res.ok).toBe(true);
     if (res.ok) {

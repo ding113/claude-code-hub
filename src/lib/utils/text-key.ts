@@ -7,14 +7,17 @@
  *
  * 注意：
  * - 对较小文本：使用 FNV-1a 全量哈希，尽量避免碰撞
- * - 对超大文本：使用固定窗口（首/中/尾）哈希，避免在主线程做 O(n) 扫描导致卡顿
+ * - 对超大文本：使用固定多窗口采样哈希，避免在主线程做 O(n) 扫描导致卡顿，同时尽量降低碰撞概率
+ *
+ * FULL_HASH_MAX_CHARS 是一个性能阈值：长度刚好跨过该值时，会从“全量哈希”切换为“采样哈希”。
+ * 这是有意为之，用于避免极端大文本触发主线程卡顿。
  */
 export function getTextKey(text: string): string {
   const len = text.length;
   if (len === 0) return "0:0";
 
   const FULL_HASH_MAX_CHARS = 200_000;
-  const WINDOW_CHARS = 8192;
+  const WINDOW_CHARS = 4096;
 
   let hash = 2166136261;
 
@@ -30,21 +33,21 @@ export function getTextKey(text: string): string {
     return `${len}:${(hash >>> 0).toString(36)}`;
   }
 
-  const firstEnd = Math.min(len, WINDOW_CHARS);
-  for (let i = 0; i < firstEnd; i += 1) {
-    update(text.charCodeAt(i));
-  }
+  const windowHalf = WINDOW_CHARS >> 1;
+  const pushWindow = (start: number) => {
+    const end = Math.min(len, start + WINDOW_CHARS);
+    for (let i = start; i < end; i += 1) {
+      update(text.charCodeAt(i));
+    }
+    return end;
+  };
 
-  const midStart = Math.max(firstEnd, (len >> 1) - (WINDOW_CHARS >> 1));
-  const midEnd = Math.min(len, midStart + WINDOW_CHARS);
-  for (let i = midStart; i < midEnd; i += 1) {
-    update(text.charCodeAt(i));
-  }
-
-  const lastStart = Math.max(midEnd, len - WINDOW_CHARS);
-  for (let i = lastStart; i < len; i += 1) {
-    update(text.charCodeAt(i));
-  }
+  let cursor = 0;
+  cursor = pushWindow(0);
+  cursor = pushWindow(Math.max(cursor, Math.floor(len * 0.25) - windowHalf));
+  cursor = pushWindow(Math.max(cursor, Math.floor(len * 0.5) - windowHalf));
+  cursor = pushWindow(Math.max(cursor, Math.floor(len * 0.75) - windowHalf));
+  pushWindow(Math.max(cursor, len - WINDOW_CHARS));
 
   return `${len}:${(hash >>> 0).toString(36)}`;
 }

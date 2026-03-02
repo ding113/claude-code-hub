@@ -96,6 +96,7 @@ type WorkerResponse =
     };
 
 const cancelledJobs = new Set<number>();
+const CANCELLED_JOB_TTL_MS = 60_000;
 
 function isCancelled(jobId: number): boolean {
   return cancelledJobs.has(jobId);
@@ -181,7 +182,7 @@ function formatJsonPrettyStreaming({
   type Frame = ArrayFrame | ObjectFrame;
 
   const stack: Frame[] = [];
-  let rootState: "value" | "end" = "value";
+  let rootCompleted = false;
 
   let i = 0;
   const total = text.length;
@@ -354,7 +355,7 @@ function formatJsonPrettyStreaming({
 
   const onValueCompleted = () => {
     if (stack.length === 0) {
-      rootState = "end";
+      rootCompleted = true;
       return;
     }
     const top = stack[stack.length - 1];
@@ -425,7 +426,7 @@ function formatJsonPrettyStreaming({
     if (!ws.ok) return ws;
 
     if (stack.length === 0) {
-      if ((rootState as "value" | "end") === "end") {
+      if (rootCompleted) {
         if (i !== total) return { ok: false, errorCode: "INVALID_JSON" };
         post({ type: "progress", jobId, stage: "format", processed: total, total });
         return { ok: true, text: chunks.join("") };
@@ -601,8 +602,17 @@ function buildLineIndex({
   let lastProgressAt = 0;
   for (let i = 0; i < text.length; i += 1) {
     if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
-    if (text.charCodeAt(i) === 10) {
+    const code = text.charCodeAt(i);
+    if (code === 10) {
       lineCount += 1;
+      if (lineCount > maxLines) {
+        post({ type: "progress", jobId, stage: "index", processed: i, total });
+        return { ok: false, errorCode: "TOO_MANY_LINES" };
+      }
+    } else if (code === 13) {
+      lineCount += 1;
+      // CRLF 视为一个换行
+      if (i + 1 < total && text.charCodeAt(i + 1) === 10) i += 1;
       if (lineCount > maxLines) {
         post({ type: "progress", jobId, stage: "index", processed: i, total });
         return { ok: false, errorCode: "TOO_MANY_LINES" };
@@ -623,9 +633,21 @@ function buildLineIndex({
   let idx = 1;
   for (let i = 0; i < text.length; i += 1) {
     if (isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
-    if (text.charCodeAt(i) === 10) {
+    const code = text.charCodeAt(i);
+    if (code === 10) {
       starts[idx] = i + 1;
       idx += 1;
+      continue;
+    }
+    if (code === 13) {
+      if (i + 1 < total && text.charCodeAt(i + 1) === 10) {
+        starts[idx] = i + 2;
+        idx += 1;
+        i += 1;
+      } else {
+        starts[idx] = i + 1;
+        idx += 1;
+      }
     }
   }
 
@@ -660,8 +682,22 @@ function searchLines({
 
     // 更新 lineNo 到 pos 所在行（scan 指针单调前进，整体 O(n)）
     while (scan < pos) {
-      if (text.charCodeAt(scan) === 10) {
+      if ((scan & 0x0fff) === 0 && isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+      const code = text.charCodeAt(scan);
+      if (code === 10) {
         lineNo += 1;
+        scan += 1;
+        continue;
+      }
+      if (code === 13) {
+        lineNo += 1;
+        // CRLF 视为一个换行
+        if (scan + 1 < total && text.charCodeAt(scan + 1) === 10) {
+          scan += 2;
+        } else {
+          scan += 1;
+        }
+        continue;
       }
       scan += 1;
     }
@@ -696,6 +732,7 @@ function searchLines({
 
   if (msg.type === "cancel") {
     cancelledJobs.add(msg.jobId);
+    setTimeout(() => cancelledJobs.delete(msg.jobId), CANCELLED_JOB_TTL_MS);
     return;
   }
 

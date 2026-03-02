@@ -356,11 +356,22 @@ export async function buildLineIndex({
   if (!w) {
     if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
     // fallback：双遍扫描（避免额外依赖）
+    const total = text.length;
     let lineCount = 1;
-    for (let i = 0; i < text.length; i += 1) {
-      if ((i & 0x3fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
-      if (text.charCodeAt(i) === 10) {
+    for (let i = 0; i < total; i += 1) {
+      if ((i & 0x0fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+      const code = text.charCodeAt(i);
+      if (code === 10) {
         lineCount += 1;
+        if (lineCount > maxLines) {
+          return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
+        }
+        continue;
+      }
+      if (code === 13) {
+        lineCount += 1;
+        // CRLF 视为一个换行
+        if (i + 1 < total && text.charCodeAt(i + 1) === 10) i += 1;
         if (lineCount > maxLines) {
           return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
         }
@@ -369,11 +380,23 @@ export async function buildLineIndex({
     const starts = new Int32Array(lineCount);
     starts[0] = 0;
     let idx = 1;
-    for (let i = 0; i < text.length; i += 1) {
-      if ((i & 0x3fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
-      if (text.charCodeAt(i) === 10) {
+    for (let i = 0; i < total; i += 1) {
+      if ((i & 0x0fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+      const code = text.charCodeAt(i);
+      if (code === 10) {
         starts[idx] = i + 1;
         idx += 1;
+        continue;
+      }
+      if (code === 13) {
+        if (i + 1 < total && text.charCodeAt(i + 1) === 10) {
+          starts[idx] = i + 2;
+          idx += 1;
+          i += 1;
+        } else {
+          starts[idx] = i + 1;
+          idx += 1;
+        }
       }
     }
     return { ok: true, lineStarts: starts, lineCount };
@@ -423,6 +446,7 @@ export async function searchLines({
     if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
     if (!query) return { ok: true, matches: new Int32Array(0) };
 
+    const total = text.length;
     const lines: number[] = [];
     let lastLine = -1;
     let scan = 0;
@@ -430,8 +454,22 @@ export async function searchLines({
     let pos = text.indexOf(query, 0);
     while (pos !== -1) {
       while (scan < pos) {
-        if ((scan & 0x3fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
-        if (text.charCodeAt(scan) === 10) lineNo += 1;
+        if ((scan & 0x0fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+        const code = text.charCodeAt(scan);
+        if (code === 10) {
+          lineNo += 1;
+          scan += 1;
+          continue;
+        }
+        if (code === 13) {
+          lineNo += 1;
+          if (scan + 1 < total && text.charCodeAt(scan + 1) === 10) {
+            scan += 2;
+          } else {
+            scan += 1;
+          }
+          continue;
+        }
         scan += 1;
       }
       if (lineNo !== lastLine) {

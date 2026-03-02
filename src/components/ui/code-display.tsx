@@ -52,7 +52,12 @@ function stringifyPretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function estimateUtf8BytesUpToLimit(text: string, limitBytes: number): number {
+/**
+ * 统计 UTF-8 字节数，最多统计到超过 limitBytes 为止。
+ *
+ * 当返回值 > limitBytes 时，表示“已超过上限”（返回值不代表真实总字节数）。
+ */
+function countUtf8BytesUpToLimit(text: string, limitBytes: number): number {
   let bytes = 0;
 
   for (let i = 0; i < text.length; i += 1) {
@@ -80,17 +85,26 @@ function estimateUtf8BytesUpToLimit(text: string, limitBytes: number): number {
 }
 
 function splitLines(text: string): string[] {
-  return text.length === 0 ? [""] : text.split("\n");
+  if (text.length === 0) return [""];
+  // 小内容路径：兼容 CRLF/CR，避免 only-matches 在 Windows 行尾下错判。
+  if (!text.includes("\r")) return text.split("\n");
+  return text.replace(/\r\n?/g, "\n").split("\n");
 }
 
 function countLinesUpTo(text: string, maxLines: number): number {
   if (text.length === 0) return 1;
   let count = 1;
-  for (let i = 0; i < text.length; i += 1) {
-    if (text.charCodeAt(i) === 10) {
+  const total = text.length;
+  for (let i = 0; i < total; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code === 10) {
       count += 1;
-      if (count >= maxLines) return count;
+    } else if (code === 13) {
+      count += 1;
+      // CRLF 视为一个换行
+      if (i + 1 < total && text.charCodeAt(i + 1) === 10) i += 1;
     }
+    if (count >= maxLines) return count;
   }
   return count;
 }
@@ -104,6 +118,8 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+// NOTE: 这里不复用 `parseSSEDataForDisplay`：它会 split 整段文本并尝试 JSON.parse(data)，
+// 对超长 SSE 内容容易造成额外内存/CPU 开销。CodeDisplay 只需要用于展示的轻量解析（保留 string data）。
 function parseSseForCodeDisplay(sseText: string): DisplaySseEvent[] {
   const events: DisplaySseEvent[] = [];
 
@@ -218,10 +234,15 @@ function CodeDisplaySseEvents({
   const [viewportHeight, setViewportHeight] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(() => new Set());
+  const lastEventsRef = useRef<DisplaySseEvent[] | null>(null);
 
   useEffect(() => {
+    if (lastEventsRef.current === null) {
+      lastEventsRef.current = events;
+      return;
+    }
     // events 可能由搜索过滤产生新列表：重置展开状态以避免索引错位
-    void events.length;
+    lastEventsRef.current = events;
     setExpandedRows(new Set());
   }, [events]);
 
@@ -413,7 +434,7 @@ export function CodeDisplay({
   const resolvedMaxLines = maxLines ?? DEFAULT_MAX_LINES;
 
   const contentBytes = useMemo(
-    () => estimateUtf8BytesUpToLimit(content, resolvedMaxContentBytes + 1),
+    () => countUtf8BytesUpToLimit(content, resolvedMaxContentBytes + 1),
     [content, resolvedMaxContentBytes]
   );
   const isOverMaxBytes = contentBytes > resolvedMaxContentBytes;
@@ -480,6 +501,7 @@ export function CodeDisplay({
   const [jsonPrettyStatus, setJsonPrettyStatus] = useState<
     "idle" | "loading" | "ready" | "invalid" | "tooLarge" | "canceled" | "error"
   >("idle");
+  const [jsonPrettyErrorCode, setJsonPrettyErrorCode] = useState<string | null>(null);
   const [jsonPrettyProgress, setJsonPrettyProgress] = useState<{
     processed: number;
     total: number;
@@ -491,6 +513,7 @@ export function CodeDisplay({
     setJsonPrettyText(null);
     setJsonPrettyTextKey(jsonSourceKey);
     setJsonPrettyStatus("canceled");
+    setJsonPrettyErrorCode("CANCELED");
     setJsonPrettyProgress(null);
   };
 
@@ -500,6 +523,7 @@ export function CodeDisplay({
     setJsonPrettyText(null);
     setJsonPrettyTextKey(null);
     setJsonPrettyStatus("idle");
+    setJsonPrettyErrorCode(null);
     setJsonPrettyProgress(null);
   };
 
@@ -510,6 +534,7 @@ export function CodeDisplay({
       setJsonPrettyText(null);
       setJsonPrettyTextKey(null);
       setJsonPrettyStatus("idle");
+      setJsonPrettyErrorCode(null);
       setJsonPrettyProgress(null);
       return;
     }
@@ -555,6 +580,7 @@ export function CodeDisplay({
 
     setJsonPrettyTextKey(jsonSourceKey);
     setJsonPrettyStatus("loading");
+    setJsonPrettyErrorCode(null);
     setJsonPrettyProgress({ processed: 0, total: content.length });
 
     const start = performance.now();
@@ -587,10 +613,12 @@ export function CodeDisplay({
         setJsonPrettyText(res.text);
         setJsonPrettyTextKey(jsonSourceKey);
         setJsonPrettyStatus("ready");
+        setJsonPrettyErrorCode(null);
         setJsonPrettyProgress(null);
         return;
       }
 
+      setJsonPrettyErrorCode(res.errorCode);
       switch (res.errorCode) {
         case "INVALID_JSON":
           setJsonPrettyText(null);
@@ -1247,21 +1275,37 @@ export function CodeDisplay({
                   >
                     {t("codeDisplay.viewVirtual")}
                   </Button>
+                  {forceLargePrettyPlain && (
+                    <span className="text-xs text-muted-foreground">
+                      {t("codeDisplay.virtualFallbackToPlain")}
+                    </span>
+                  )}
                 </div>
               )}
 
             {shouldFormatJsonInWorker &&
               mode === "pretty" &&
-              (jsonPrettyStatus === "canceled" || jsonPrettyStatus === "error") && (
+              (jsonPrettyStatus === "invalid" ||
+                jsonPrettyStatus === "tooLarge" ||
+                jsonPrettyStatus === "canceled" ||
+                jsonPrettyStatus === "error") && (
                 <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/40 p-3">
                   <div className="text-xs text-muted-foreground">
                     {jsonPrettyStatus === "canceled"
                       ? t("codeDisplay.prettyCanceled")
-                      : t("codeDisplay.prettyFailed")}
+                      : jsonPrettyStatus === "invalid"
+                        ? t("codeDisplay.prettyInvalidJson")
+                        : jsonPrettyStatus === "tooLarge"
+                          ? t("codeDisplay.prettyOutputTooLarge")
+                          : jsonPrettyErrorCode === "WORKER_UNAVAILABLE"
+                            ? t("codeDisplay.prettyWorkerUnavailable")
+                            : t("codeDisplay.prettyFailed")}
                   </div>
-                  <Button type="button" variant="ghost" size="sm" onClick={retryJsonPretty}>
-                    {t("codeDisplay.retry")}
-                  </Button>
+                  {(jsonPrettyStatus === "canceled" || jsonPrettyStatus === "error") && (
+                    <Button type="button" variant="ghost" size="sm" onClick={retryJsonPretty}>
+                      {t("codeDisplay.retry")}
+                    </Button>
+                  )}
                 </div>
               )}
 
