@@ -100,6 +100,10 @@ function getDefaultMode(language: CodeDisplayLanguage): "raw" | "pretty" {
   return "pretty";
 }
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseSseForCodeDisplay(sseText: string): DisplaySseEvent[] {
   const events: DisplaySseEvent[] = [];
 
@@ -437,6 +441,19 @@ export function CodeDisplay({
 
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
   const [copied, setCopied] = useState(false);
+
+  const lastLanguageRef = useRef(language);
+  useEffect(() => {
+    const prevLanguage = lastLanguageRef.current;
+    if (prevLanguage === language) return;
+    lastLanguageRef.current = language;
+
+    const prevDefault = getDefaultMode(prevLanguage);
+    const nextDefault = getDefaultMode(language);
+
+    // 仅在用户未显式切换（仍处于上一个语言默认值）时，跟随语言更新默认模式。
+    setMode((current) => (current === prevDefault ? nextDefault : current));
+  }, [language]);
 
   useEffect(() => {
     const getTheme = () => (document.documentElement.classList.contains("dark") ? "dark" : "light");
@@ -943,11 +960,10 @@ export function CodeDisplay({
 
   const filteredSseEvents = useMemo(() => {
     if (!sseEvents) return null;
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQuery.trim();
     if (!q) return sseEvents;
-    return sseEvents.filter(
-      (evt) => evt.event.toLowerCase().includes(q) || evt.data.toLowerCase().includes(q)
-    );
+    const re = new RegExp(escapeRegExp(q), "i");
+    return sseEvents.filter((evt) => re.test(evt.event) || re.test(evt.data));
   }, [searchQuery, sseEvents]);
 
   if (isHardLimited) {

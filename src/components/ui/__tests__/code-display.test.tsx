@@ -20,16 +20,21 @@ function renderWithIntl(node: ReactNode) {
   document.body.appendChild(container);
   const root = createRoot(container);
 
-  act(() => {
-    root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        {node}
-      </NextIntlClientProvider>
-    );
-  });
+  const render = (next: ReactNode) => {
+    act(() => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          {next}
+        </NextIntlClientProvider>
+      );
+    });
+  };
+
+  render(node);
 
   return {
     container,
+    rerender: render,
     unmount: () => {
       act(() => root.unmount());
       container.remove();
@@ -61,6 +66,27 @@ describe("CodeDisplay", () => {
     click(rawTab);
     expect(container.textContent).toContain('{"a":1}');
 
+    unmount();
+  });
+
+  test("updates default mode when language changes", async () => {
+    const raw = '{"a":1,"b":2}';
+    const { container, rerender, unmount } = renderWithIntl(
+      <CodeDisplay content={raw} language="text" fileName="response.txt" />
+    );
+
+    // text 默认 raw
+    expect(container.textContent).toContain(raw);
+    expect(container.textContent).not.toContain('"a": 1');
+
+    rerender(<CodeDisplay content={raw} language="json" fileName="response.json" />);
+
+    // 等待 useEffect 同步默认模式
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(container.textContent).toContain('"a": 1');
     unmount();
   });
 
