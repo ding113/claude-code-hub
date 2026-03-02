@@ -126,7 +126,6 @@ function getWorker(): Worker | null {
 
 function ensureInitialized() {
   if (initialized) return;
-  initialized = true;
 
   const w = getWorker();
   if (!w) return;
@@ -192,6 +191,8 @@ function ensureInitialized() {
     workerSingleton = null;
     initialized = false;
   };
+
+  initialized = true;
 }
 
 function genJobId(): number {
