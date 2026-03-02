@@ -469,6 +469,7 @@ describe("CodeDisplay - large content performance strategy", () => {
     await flushMicrotasks();
     await waitFor(() => workerClientMocks.buildLineIndex.mock.calls.length > 0);
     await waitFor(() => (container.textContent || "").includes(tooManyLinesPrefix));
+    expect(workerClientMocks.searchLines).not.toHaveBeenCalled();
 
     expect(container.querySelector('[data-testid="code-display-matches-list"]')).toBeNull();
 

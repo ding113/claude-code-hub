@@ -774,13 +774,29 @@ function searchLines({
       }
 
       // 回落：严格 JSON.parse（可能较慢/占内存，但能处理部分边界情况）
+      if (isCancelled(jobId)) {
+        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+        return;
+      }
       const parsed = safeJsonParse(msg.text);
+      if (isCancelled(jobId)) {
+        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+        return;
+      }
       if (!parsed.ok) {
         post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "INVALID_JSON" });
         return;
       }
 
+      if (isCancelled(jobId)) {
+        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+        return;
+      }
       const text = stringifyPretty(parsed.value, msg.indentSize);
+      if (isCancelled(jobId)) {
+        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+        return;
+      }
       if (estimateUtf16Bytes(text.length) > msg.maxOutputBytes) {
         post({
           type: "formatJsonPrettyResult",
@@ -791,6 +807,10 @@ function searchLines({
         return;
       }
 
+      if (isCancelled(jobId)) {
+        post({ type: "formatJsonPrettyResult", jobId, ok: false, errorCode: "CANCELED" });
+        return;
+      }
       post({ type: "formatJsonPrettyResult", jobId, ok: true, text, usedStreaming: false });
       return;
     }

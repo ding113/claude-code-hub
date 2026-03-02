@@ -906,6 +906,15 @@ export function CodeDisplay({
 
   useEffect(() => {
     if (!shouldOptimizeOnlyMatches) return;
+    if (onlyMatchesIndexStatus !== "ready" || !onlyMatchesLineStarts) {
+      onlyMatchesSearchAbortRef.current?.abort();
+      onlyMatchesSearchAbortRef.current = null;
+      setOnlyMatchesMatches(null);
+      setOnlyMatchesSearchStatus("idle");
+      setOnlyMatchesSearchProgress(null);
+      setOnlyMatchesSearchErrorCode(null);
+      return;
+    }
 
     const jobId = (onlyMatchesSearchJobRef.current += 1);
     const jobTextKey = nonSseTextKey;
@@ -953,7 +962,14 @@ export function CodeDisplay({
     return () => {
       controller.abort();
     };
-  }, [debouncedOnlyMatchesQuery, nonSseTextKey, resolvedMaxLines, shouldOptimizeOnlyMatches]);
+  }, [
+    debouncedOnlyMatchesQuery,
+    nonSseTextKey,
+    onlyMatchesIndexStatus,
+    onlyMatchesLineStarts,
+    resolvedMaxLines,
+    shouldOptimizeOnlyMatches,
+  ]);
 
   const nonSseFilteredText = useMemo(() => {
     if (language === "sse") return null;
