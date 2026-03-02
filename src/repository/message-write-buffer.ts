@@ -593,6 +593,22 @@ class MessageRequestWriteBuffer {
     }
   }
 
+  private handleTransientPerItemError(
+    error: unknown,
+    batch: MessageRequestUpdateRecord[],
+    startIndex: number,
+    logMessage: string
+  ): true {
+    // 连接/暂态问题：把当前及剩余条目回队列，留待下次 flush
+    this.requeueBatchForRetry(batch.slice(startIndex));
+    logger.error(logMessage, {
+      error: error instanceof Error ? error.message : String(error),
+      errorCode: getErrorCode(error),
+      pending: this.pending.size,
+    });
+    return true;
+  }
+
   async flush(): Promise<void> {
     if (this.flushInFlight) {
       this.flushAgainAfterCurrent = true;
@@ -661,18 +677,12 @@ class MessageRequestWriteBuffer {
                   await tryExecute(item.patch);
                 } catch (singleError) {
                   if (!isDataRelatedDbError(singleError)) {
-                    // 连接/暂态问题：把当前及剩余条目回队列，留待下次 flush
-                    this.requeueBatchForRetry(batch.slice(index));
-                    logger.error(
-                      "[MessageRequestWriteBuffer] Per-item flush hit transient error, will retry",
-                      {
-                        error:
-                          singleError instanceof Error ? singleError.message : String(singleError),
-                        errorCode: getErrorCode(singleError),
-                        pending: this.pending.size,
-                      }
+                    shouldRetryLater = this.handleTransientPerItemError(
+                      singleError,
+                      batch,
+                      index,
+                      "[MessageRequestWriteBuffer] Per-item flush hit transient error, will retry"
                     );
-                    shouldRetryLater = true;
                     break;
                   }
 
@@ -681,16 +691,12 @@ class MessageRequestWriteBuffer {
                     await tryExecute(safePatch);
                   } catch (safeError) {
                     if (!isDataRelatedDbError(safeError)) {
-                      this.requeueBatchForRetry(batch.slice(index));
-                      logger.error(
-                        "[MessageRequestWriteBuffer] Per-item safe flush hit transient error, will retry",
-                        {
-                          error: safeError instanceof Error ? safeError.message : String(safeError),
-                          errorCode: getErrorCode(safeError),
-                          pending: this.pending.size,
-                        }
+                      shouldRetryLater = this.handleTransientPerItemError(
+                        safeError,
+                        batch,
+                        index,
+                        "[MessageRequestWriteBuffer] Per-item safe flush hit transient error, will retry"
                       );
-                      shouldRetryLater = true;
                       break;
                     }
 
@@ -699,19 +705,12 @@ class MessageRequestWriteBuffer {
                       await tryExecute(minimalPatch);
                     } catch (minimalError) {
                       if (!isDataRelatedDbError(minimalError)) {
-                        this.requeueBatchForRetry(batch.slice(index));
-                        logger.error(
-                          "[MessageRequestWriteBuffer] Per-item minimal flush hit transient error, will retry",
-                          {
-                            error:
-                              minimalError instanceof Error
-                                ? minimalError.message
-                                : String(minimalError),
-                            errorCode: getErrorCode(minimalError),
-                            pending: this.pending.size,
-                          }
+                        shouldRetryLater = this.handleTransientPerItemError(
+                          minimalError,
+                          batch,
+                          index,
+                          "[MessageRequestWriteBuffer] Per-item minimal flush hit transient error, will retry"
                         );
-                        shouldRetryLater = true;
                         break;
                       }
 
