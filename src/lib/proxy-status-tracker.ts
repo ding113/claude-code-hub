@@ -69,10 +69,12 @@ export class ProxyStatusTracker {
     providerName: string;
     model: string;
   }): void {
+    // no-op：当前实现基于数据库聚合（getAllUsersStatus），保留方法仅为兼容既有调用点
     void params;
   }
 
   endRequest(userId: number, requestId: number): void {
+    // no-op：当前实现基于数据库聚合（getAllUsersStatus），保留方法仅为兼容既有调用点
     void userId;
     void requestId;
   }
@@ -204,7 +206,8 @@ export class ProxyStatusTracker {
       LEFT JOIN keys k ON k.key = mr.key AND k.deleted_at IS NULL
       WHERE mr.deleted_at IS NULL
         AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-      ORDER BY mr.user_id, mr.updated_at DESC
+      -- 优先按 created_at 取“最后一次请求”，避免 updated_at 去重排序在大表上产生额外 sort 压力
+      ORDER BY mr.user_id, mr.created_at DESC, mr.id DESC
     `;
 
     const result = await db.execute(query);
