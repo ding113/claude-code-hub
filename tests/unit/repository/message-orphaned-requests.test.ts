@@ -82,7 +82,7 @@ describe("sealOrphanedMessageRequests", () => {
     expect(built.sql).toContain("UPDATE message_request");
     expect(built.sql).toContain("duration_ms IS NULL");
     expect(built.sql).toContain("status_code IS NULL");
-    expect(built.sql).toContain("updated_at <");
+    expect((built.sql.match(/updated_at </g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(built.sql).toContain("blocked_by");
     expect(built.sql).toContain("warmup");
     expect(built.sql).toContain("duration_ms = COALESCE");

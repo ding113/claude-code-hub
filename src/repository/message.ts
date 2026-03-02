@@ -266,6 +266,8 @@ export async function sealOrphanedMessageRequests(options?: {
     WHERE id IN (SELECT id FROM candidates)
       AND deleted_at IS NULL
       AND (duration_ms IS NULL OR status_code IS NULL)
+      AND updated_at < ${threshold}
+      AND ${EXCLUDE_WARMUP_CONDITION}
     RETURNING id
   `;
 

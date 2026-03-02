@@ -76,6 +76,9 @@ const NUMERIC_LIKE_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 const REJECTED_INVALID_LOG_THROTTLE_MS = 60_000;
 let _lastRejectedInvalidLogAt = 0;
 
+const INT32_CLAMP_LOG_THROTTLE_MS = 60_000;
+const _lastInt32ClampLogAt = new Map<string, number>();
+
 // 终态 patch（duration/status）尽快刷库，但仍保留极短延迟以便 micro-batch，避免高并发下频繁 flush。
 const TERMINAL_FLUSH_DELAY_MS = 10;
 
@@ -117,7 +120,7 @@ function summarizePatchTypes(patch: MessageRequestUpdatePatch): Record<string, s
 
 function sanitizeInt32(
   value: unknown,
-  options?: { min?: number; max?: number }
+  options?: { min?: number; max?: number; field?: string }
 ): number | undefined {
   const numeric = toFiniteNumber(value);
   if (numeric === null) {
@@ -129,9 +132,39 @@ function sanitizeInt32(
   const max = options?.max ?? INT32_MAX;
 
   if (truncated < min) {
+    const field = options?.field;
+    if (field) {
+      const now = Date.now();
+      const lastLogAt = _lastInt32ClampLogAt.get(field) ?? 0;
+      if (now - lastLogAt > INT32_CLAMP_LOG_THROTTLE_MS) {
+        _lastInt32ClampLogAt.set(field, now);
+        logger.warn("[MessageRequestWriteBuffer] Int32 value out of range, clamping", {
+          field,
+          value: typeof value === "string" ? value.slice(0, 64) : value,
+          clampedTo: min,
+          min,
+          max,
+        });
+      }
+    }
     return min;
   }
   if (truncated > max) {
+    const field = options?.field;
+    if (field) {
+      const now = Date.now();
+      const lastLogAt = _lastInt32ClampLogAt.get(field) ?? 0;
+      if (now - lastLogAt > INT32_CLAMP_LOG_THROTTLE_MS) {
+        _lastInt32ClampLogAt.set(field, now);
+        logger.warn("[MessageRequestWriteBuffer] Int32 value out of range, clamping", {
+          field,
+          value: typeof value === "string" ? value.slice(0, 64) : value,
+          clampedTo: max,
+          min,
+          max,
+        });
+      }
+    }
     return max;
   }
   return truncated;
@@ -139,7 +172,7 @@ function sanitizeInt32(
 
 function sanitizeNullableInt32(
   value: unknown,
-  options?: { min?: number; max?: number }
+  options?: { min?: number; max?: number; field?: string }
 ): number | null | undefined {
   if (value === null) {
     return null;
@@ -187,32 +220,45 @@ function sanitizeNumericString(value: unknown): string | undefined {
 function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePatch {
   const sanitized: MessageRequestUpdatePatch = {};
 
-  const durationMs = sanitizeInt32(patch.durationMs, { min: 0, max: INT32_MAX });
+  const durationMs = sanitizeInt32(patch.durationMs, {
+    field: "durationMs",
+    min: 0,
+    max: INT32_MAX,
+  });
   if (durationMs !== undefined) {
     sanitized.durationMs = durationMs;
   }
 
-  const statusCode = sanitizeInt32(patch.statusCode, { min: 0, max: 999 });
+  const statusCode = sanitizeInt32(patch.statusCode, { field: "statusCode", min: 0, max: 999 });
   if (statusCode !== undefined) {
     sanitized.statusCode = statusCode;
   }
 
-  const inputTokens = sanitizeInt32(patch.inputTokens, { min: 0, max: INT32_MAX });
+  const inputTokens = sanitizeInt32(patch.inputTokens, {
+    field: "inputTokens",
+    min: 0,
+    max: INT32_MAX,
+  });
   if (inputTokens !== undefined) {
     sanitized.inputTokens = inputTokens;
   }
 
-  const outputTokens = sanitizeInt32(patch.outputTokens, { min: 0, max: INT32_MAX });
+  const outputTokens = sanitizeInt32(patch.outputTokens, {
+    field: "outputTokens",
+    min: 0,
+    max: INT32_MAX,
+  });
   if (outputTokens !== undefined) {
     sanitized.outputTokens = outputTokens;
   }
 
-  const ttfbMs = sanitizeNullableInt32(patch.ttfbMs, { min: 0, max: INT32_MAX });
+  const ttfbMs = sanitizeNullableInt32(patch.ttfbMs, { field: "ttfbMs", min: 0, max: INT32_MAX });
   if (ttfbMs !== undefined) {
     sanitized.ttfbMs = ttfbMs;
   }
 
   const cacheCreationInputTokens = sanitizeInt32(patch.cacheCreationInputTokens, {
+    field: "cacheCreationInputTokens",
     min: 0,
     max: INT32_MAX,
   });
@@ -221,6 +267,7 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
   }
 
   const cacheReadInputTokens = sanitizeInt32(patch.cacheReadInputTokens, {
+    field: "cacheReadInputTokens",
     min: 0,
     max: INT32_MAX,
   });
@@ -229,6 +276,7 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
   }
 
   const cacheCreation5mInputTokens = sanitizeInt32(patch.cacheCreation5mInputTokens, {
+    field: "cacheCreation5mInputTokens",
     min: 0,
     max: INT32_MAX,
   });
@@ -237,6 +285,7 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
   }
 
   const cacheCreation1hInputTokens = sanitizeInt32(patch.cacheCreation1hInputTokens, {
+    field: "cacheCreation1hInputTokens",
     min: 0,
     max: INT32_MAX,
   });
@@ -289,7 +338,11 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
     sanitized.model = patch.model;
   }
 
-  const providerId = sanitizeInt32(patch.providerId, { min: 0, max: INT32_MAX });
+  const providerId = sanitizeInt32(patch.providerId, {
+    field: "providerId",
+    min: 0,
+    max: INT32_MAX,
+  });
   if (providerId !== undefined) {
     sanitized.providerId = providerId;
   }
