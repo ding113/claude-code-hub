@@ -4,6 +4,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -31,8 +32,35 @@ vi.mock("@/lib/hooks/use-debounce", () => ({
 }));
 
 const dashboardMessages = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), "messages/en/dashboard.json"), "utf8")
+  fs.readFileSync(
+    (() => {
+      try {
+        const dir = path.dirname(fileURLToPath(import.meta.url));
+        return path.resolve(dir, "../../messages/en/dashboard.json");
+      } catch {
+        try {
+          const u = new URL(import.meta.url);
+          const marker = "/@fs/";
+          const idx = u.pathname.indexOf(marker);
+          if (idx !== -1) {
+            const absPath = decodeURIComponent(u.pathname.slice(idx + marker.length));
+            return path.resolve(path.dirname(absPath), "../../messages/en/dashboard.json");
+          }
+        } catch {
+          // ignore
+        }
+
+        return path.join(process.cwd(), "messages/en/dashboard.json");
+      }
+    })(),
+    "utf8"
+  )
 );
+const codeDisplayMessages = dashboardMessages.sessions.codeDisplay as {
+  showAll: string;
+  search: { failed: string; indexTooManyLines: string };
+};
+const tooManyLinesPrefix = codeDisplayMessages.search.indexTooManyLines.split("{")[0];
 
 function renderWithIntl(node: ReactNode, codeDisplayConfig: CodeDisplayConfig) {
   const container = document.createElement("div");
@@ -368,7 +396,7 @@ describe("CodeDisplay - large content performance strategy", () => {
 
     await waitFor(() => {
       const btn = container.querySelector('[data-testid="code-display-only-matches-toggle"]');
-      return (btn?.textContent || "").includes("Show all");
+      return (btn?.textContent || "").includes(codeDisplayMessages.showAll);
     });
 
     const searchInput = container.querySelector(
@@ -429,7 +457,7 @@ describe("CodeDisplay - large content performance strategy", () => {
 
     await waitFor(() => {
       const btn = container.querySelector('[data-testid="code-display-only-matches-toggle"]');
-      return (btn?.textContent || "").includes("Show all");
+      return (btn?.textContent || "").includes(codeDisplayMessages.showAll);
     });
 
     const searchInput = container.querySelector(
@@ -440,7 +468,7 @@ describe("CodeDisplay - large content performance strategy", () => {
 
     await flushMicrotasks();
     await waitFor(() => workerClientMocks.buildLineIndex.mock.calls.length > 0);
-    await waitFor(() => (container.textContent || "").includes("Too many lines"));
+    await waitFor(() => (container.textContent || "").includes(tooManyLinesPrefix));
 
     expect(container.querySelector('[data-testid="code-display-matches-list"]')).toBeNull();
 
@@ -480,7 +508,7 @@ describe("CodeDisplay - large content performance strategy", () => {
 
     await waitFor(() => {
       const btn = container.querySelector('[data-testid="code-display-only-matches-toggle"]');
-      return (btn?.textContent || "").includes("Show all");
+      return (btn?.textContent || "").includes(codeDisplayMessages.showAll);
     });
 
     const searchInput = container.querySelector(
@@ -491,7 +519,7 @@ describe("CodeDisplay - large content performance strategy", () => {
 
     await flushMicrotasks();
     await waitFor(() => workerClientMocks.searchLines.mock.calls.length > 0);
-    await waitFor(() => (container.textContent || "").includes("Search failed"));
+    await waitFor(() => (container.textContent || "").includes(codeDisplayMessages.search.failed));
 
     expect(container.querySelector('[data-testid="code-display-matches-list"]')).toBeNull();
 

@@ -594,7 +594,7 @@ function buildLineIndex({
   maxLines: number;
 }):
   | { ok: true; lineStarts: Int32Array; lineCount: number }
-  | { ok: false; errorCode: "CANCELED" | "TOO_MANY_LINES" } {
+  | { ok: false; errorCode: "CANCELED" | "TOO_MANY_LINES"; lineCount?: number } {
   const total = text.length;
 
   // 先计数（允许提前发现是否超过上限）
@@ -607,7 +607,7 @@ function buildLineIndex({
       lineCount += 1;
       if (lineCount > maxLines) {
         post({ type: "progress", jobId, stage: "index", processed: i, total });
-        return { ok: false, errorCode: "TOO_MANY_LINES" };
+        return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
       }
     } else if (code === 13) {
       lineCount += 1;
@@ -615,7 +615,7 @@ function buildLineIndex({
       if (i + 1 < total && text.charCodeAt(i + 1) === 10) i += 1;
       if (lineCount > maxLines) {
         post({ type: "progress", jobId, stage: "index", processed: i, total });
-        return { ok: false, errorCode: "TOO_MANY_LINES" };
+        return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
       }
     }
 
@@ -825,6 +825,7 @@ function searchLines({
           jobId,
           ok: false,
           errorCode: result.errorCode,
+          lineCount: result.lineCount,
         });
         return;
       }

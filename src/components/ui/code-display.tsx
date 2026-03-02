@@ -677,10 +677,22 @@ export function CodeDisplay({
     if (isHardLimited) return null;
     if (shouldFormatJsonInWorker) return null;
 
+    // 当 Worker 被禁用时，避免对超大 JSON 在主线程做 parse/stringify 导致卡顿。
+    const maxSyncChars = Math.min(codeDisplayConfig.highlightMaxChars, 200_000);
+    if (!codeDisplayConfig.workerEnabled && content.length > maxSyncChars) return content;
+
     const parsed = safeJsonParse(content);
     if (!parsed.ok) return content;
     return JSON.stringify(parsed.value, null, DEFAULT_JSON_INDENT);
-  }, [content, isHardLimited, language, mode, shouldFormatJsonInWorker]);
+  }, [
+    content,
+    codeDisplayConfig.highlightMaxChars,
+    codeDisplayConfig.workerEnabled,
+    isHardLimited,
+    language,
+    mode,
+    shouldFormatJsonInWorker,
+  ]);
 
   const resolvedPrettyText = useMemo(() => {
     if (language !== "json") return content;
@@ -979,9 +991,21 @@ export function CodeDisplay({
 
   const handleDownload = () => {
     const text = resolveTextForAction();
-    const isJsonDownload = language === "json" && !(showOnlyMatches && onlyMatchesQuery);
+
+    const isCandidateJson = language === "json" && !(showOnlyMatches && onlyMatchesQuery);
+    let downloadType: "application/json" | "text/plain" = isCandidateJson
+      ? "application/json"
+      : "text/plain";
+
+    // 避免对超大内容在主线程 JSON.parse；小内容可用于更准确决定 MIME 类型。
+    const maxValidateJsonChars = 200_000;
+    if (isCandidateJson && text.length <= maxValidateJsonChars) {
+      const parsed = safeJsonParse(text);
+      if (!parsed.ok) downloadType = "text/plain";
+    }
+
     const blob = new Blob([text], {
-      type: isJsonDownload ? "application/json" : "text/plain",
+      type: downloadType,
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
