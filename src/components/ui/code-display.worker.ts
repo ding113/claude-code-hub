@@ -682,7 +682,7 @@ function searchLines({
 
     // 更新 lineNo 到 pos 所在行（scan 指针单调前进，整体 O(n)）
     while (scan < pos) {
-      if ((scan & 0x0fff) === 0 && isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
+      if ((scan & 8191) === 0 && isCancelled(jobId)) return { ok: false, errorCode: "CANCELED" };
       const code = text.charCodeAt(scan);
       if (code === 10) {
         lineNo += 1;

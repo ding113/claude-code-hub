@@ -379,7 +379,7 @@ export async function buildLineIndex({
     const total = text.length;
     let lineCount = 1;
     for (let i = 0; i < total; i += 1) {
-      if ((i & 0x0fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+      if ((i & 8191) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
       const code = text.charCodeAt(i);
       if (code === 10) {
         lineCount += 1;
@@ -401,7 +401,7 @@ export async function buildLineIndex({
     starts[0] = 0;
     let idx = 1;
     for (let i = 0; i < total; i += 1) {
-      if ((i & 0x0fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+      if ((i & 8191) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
       const code = text.charCodeAt(i);
       if (code === 10) {
         starts[idx] = i + 1;
@@ -471,10 +471,11 @@ export async function searchLines({
     let lastLine = -1;
     let scan = 0;
     let lineNo = 0;
+
     let pos = text.indexOf(query, 0);
     while (pos !== -1) {
       while (scan < pos) {
-        if ((scan & 0x0fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+        if ((scan & 8191) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
         const code = text.charCodeAt(scan);
         if (code === 10) {
           lineNo += 1;
@@ -492,11 +493,13 @@ export async function searchLines({
         }
         scan += 1;
       }
+
       if (lineNo !== lastLine) {
         lines.push(lineNo);
         lastLine = lineNo;
         if (lines.length >= maxResults) break;
       }
+
       if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
       pos = text.indexOf(query, pos + 1);
     }

@@ -574,6 +574,14 @@
       "virtualFallbackToPlain": "虛擬高亮不可用，已回退到純文字",
       "searchPlaceholder": "搜尋",
       "searchWorking": "搜尋中... {percent}%",
+      "search": {
+        "indexFailed": "建立搜尋索引失敗",
+        "indexCanceled": "已取消建立搜尋索引",
+        "indexTooManyLines": "內容行數過多（{lineCount} 行，上限 {maxLines} 行）",
+        "indexTooManyLinesUnknown": "內容行數過多（上限 {maxLines} 行）",
+        "failed": "搜尋失敗",
+        "canceled": "已取消搜尋"
+      },
       "cancel": "取消",
       "retry": "重試",
       "prettyCanceled": "已取消美化",

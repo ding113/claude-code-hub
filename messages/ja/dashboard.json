@@ -574,6 +574,14 @@
       "virtualFallbackToPlain": "仮想ハイライトを利用できないため、テキスト表示に切り替えました",
       "searchPlaceholder": "検索",
       "searchWorking": "検索中... {percent}%",
+      "search": {
+        "indexFailed": "検索インデックスの作成に失敗しました",
+        "indexCanceled": "検索インデックスの作成をキャンセルしました",
+        "indexTooManyLines": "行数が多すぎます({lineCount} 行、上限 {maxLines} 行)",
+        "indexTooManyLinesUnknown": "行数が多すぎます(上限 {maxLines} 行)",
+        "failed": "検索に失敗しました",
+        "canceled": "検索をキャンセルしました"
+      },
       "cancel": "キャンセル",
       "retry": "再試行",
       "prettyCanceled": "整形をキャンセルしました",

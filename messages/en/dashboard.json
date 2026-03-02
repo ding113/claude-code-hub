@@ -574,6 +574,14 @@
       "virtualFallbackToPlain": "Virtual highlight unavailable, switched to plain",
       "searchPlaceholder": "Search",
       "searchWorking": "Searching... {percent}%",
+      "search": {
+        "indexFailed": "Failed to build search index",
+        "indexCanceled": "Search index build canceled",
+        "indexTooManyLines": "Too many lines ({lineCount}, limit {maxLines})",
+        "indexTooManyLinesUnknown": "Too many lines (limit {maxLines})",
+        "failed": "Search failed",
+        "canceled": "Search canceled"
+      },
       "cancel": "Cancel",
       "retry": "Retry",
       "prettyCanceled": "Formatting canceled",

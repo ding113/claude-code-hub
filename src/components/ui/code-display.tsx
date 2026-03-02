@@ -22,8 +22,10 @@ import { CodeDisplayMatchesList } from "@/components/ui/code-display-matches-lis
 import { CodeDisplayPlainTextarea } from "@/components/ui/code-display-plain-textarea";
 import { CodeDisplayVirtualHighlighter } from "@/components/ui/code-display-virtual-highlighter";
 import {
+  type BuildLineIndexErrorCode,
   buildLineIndex,
   formatJsonPretty,
+  type SearchLinesErrorCode,
   searchLines,
 } from "@/components/ui/code-display-worker-client";
 import { Input } from "@/components/ui/input";
@@ -793,6 +795,13 @@ export function CodeDisplay({
     processed: number;
     total: number;
   } | null>(null);
+  const [onlyMatchesIndexErrorCode, setOnlyMatchesIndexErrorCode] =
+    useState<BuildLineIndexErrorCode | null>(null);
+  const [onlyMatchesIndexErrorLineCount, setOnlyMatchesIndexErrorLineCount] = useState<
+    number | null
+  >(null);
+  const [onlyMatchesSearchErrorCode, setOnlyMatchesSearchErrorCode] =
+    useState<SearchLinesErrorCode | null>(null);
 
   const onlyMatchesLineIndexCacheRef = useRef<{
     key: string;
@@ -816,6 +825,9 @@ export function CodeDisplay({
       setOnlyMatchesSearchStatus("idle");
       setOnlyMatchesIndexProgress(null);
       setOnlyMatchesSearchProgress(null);
+      setOnlyMatchesIndexErrorCode(null);
+      setOnlyMatchesIndexErrorLineCount(null);
+      setOnlyMatchesSearchErrorCode(null);
       return;
     }
 
@@ -827,6 +839,8 @@ export function CodeDisplay({
       setOnlyMatchesLineStarts(cached.lineStarts);
       setOnlyMatchesIndexStatus("ready");
       setOnlyMatchesIndexProgress(null);
+      setOnlyMatchesIndexErrorCode(null);
+      setOnlyMatchesIndexErrorLineCount(null);
     } else {
       const controller = new AbortController();
       onlyMatchesIndexAbortRef.current?.abort();
@@ -835,6 +849,8 @@ export function CodeDisplay({
       setOnlyMatchesLineStarts(null);
       setOnlyMatchesIndexStatus("loading");
       setOnlyMatchesIndexProgress({ processed: 0, total: text.length });
+      setOnlyMatchesIndexErrorCode(null);
+      setOnlyMatchesIndexErrorLineCount(null);
 
       void buildLineIndex({
         text,
@@ -853,6 +869,8 @@ export function CodeDisplay({
           setOnlyMatchesLineStarts(null);
           setOnlyMatchesIndexStatus("error");
           setOnlyMatchesIndexProgress(null);
+          setOnlyMatchesIndexErrorCode(res.errorCode);
+          setOnlyMatchesIndexErrorLineCount(res.lineCount ?? null);
           return;
         }
 
@@ -864,6 +882,8 @@ export function CodeDisplay({
         setOnlyMatchesLineStarts(res.lineStarts);
         setOnlyMatchesIndexStatus("ready");
         setOnlyMatchesIndexProgress(null);
+        setOnlyMatchesIndexErrorCode(null);
+        setOnlyMatchesIndexErrorLineCount(null);
       });
     }
 
@@ -887,6 +907,7 @@ export function CodeDisplay({
     setOnlyMatchesMatches(null);
     setOnlyMatchesSearchStatus("loading");
     setOnlyMatchesSearchProgress({ processed: 0, total: text.length });
+    setOnlyMatchesSearchErrorCode(null);
 
     void searchLines({
       text,
@@ -907,12 +928,14 @@ export function CodeDisplay({
         setOnlyMatchesMatches(null);
         setOnlyMatchesSearchStatus("error");
         setOnlyMatchesSearchProgress(null);
+        setOnlyMatchesSearchErrorCode(res.errorCode);
         return;
       }
 
       setOnlyMatchesMatches(res.matches);
       setOnlyMatchesSearchStatus("ready");
       setOnlyMatchesSearchProgress(null);
+      setOnlyMatchesSearchErrorCode(null);
     });
 
     return () => {
@@ -1194,6 +1217,50 @@ export function CodeDisplay({
           lineHeightPx={codeDisplayConfig.virtualLineHeightPx}
           overscan={codeDisplayConfig.virtualOverscanLines}
         />
+      );
+    }
+
+    if (onlyMatchesIndexStatus === "error" || onlyMatchesSearchStatus === "error") {
+      const message = (() => {
+        if (onlyMatchesIndexStatus === "error") {
+          if (onlyMatchesIndexErrorCode === "CANCELED")
+            return t("codeDisplay.search.indexCanceled");
+          if (onlyMatchesIndexErrorCode === "TOO_MANY_LINES") {
+            const lineCount = onlyMatchesIndexErrorLineCount;
+            if (typeof lineCount === "number") {
+              return t("codeDisplay.search.indexTooManyLines", {
+                lineCount,
+                maxLines: codeDisplayConfig.maxLineIndexLines,
+              });
+            }
+            return t("codeDisplay.search.indexTooManyLinesUnknown", {
+              maxLines: codeDisplayConfig.maxLineIndexLines,
+            });
+          }
+          return t("codeDisplay.search.indexFailed");
+        }
+
+        if (onlyMatchesSearchErrorCode === "CANCELED") return t("codeDisplay.search.canceled");
+        return t("codeDisplay.search.failed");
+      })();
+
+      return (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background/40 p-3">
+          <div className="text-xs text-destructive">{message}</div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onlyMatchesIndexAbortRef.current?.abort();
+              onlyMatchesSearchAbortRef.current?.abort();
+              setShowOnlyMatches(false);
+            }}
+            className="h-8"
+          >
+            {t("codeDisplay.showAll")}
+          </Button>
+        </div>
       );
     }
 

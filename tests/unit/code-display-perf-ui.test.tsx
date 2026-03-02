@@ -212,6 +212,40 @@ describe("CodeDisplay - large content performance strategy", () => {
     unmount();
   });
 
+  test("worker pretty does not loop when scheme1 is disabled and output is still large", async () => {
+    const obj = { a: Array.from({ length: 200 }, (_, i) => i) };
+    const raw = JSON.stringify(obj);
+    const pretty = JSON.stringify(obj, null, 2);
+
+    workerClientMocks.formatJsonPretty.mockResolvedValue({
+      ok: true,
+      text: pretty,
+      usedStreaming: false,
+    });
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={raw} language="json" />,
+      makeConfig({
+        highlightMaxChars: 10,
+        largePlainEnabled: false,
+        virtualHighlightEnabled: false,
+        workerEnabled: true,
+      })
+    );
+
+    await waitFor(() => workerClientMocks.formatJsonPretty.mock.calls.length === 1);
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+    expect(workerClientMocks.formatJsonPretty).toHaveBeenCalledTimes(1);
+
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(container.querySelector("pre.whitespace-pre-wrap.break-words.font-mono")).not.toBeNull();
+
+    unmount();
+  });
+
   test("large pretty never uses SyntaxHighlighter above highlightMaxChars (falls back to <pre>)", async () => {
     const content = "x".repeat(200);
 
@@ -359,6 +393,107 @@ describe("CodeDisplay - large content performance strategy", () => {
     expect(list).not.toBeNull();
     expect((list as HTMLElement).textContent).toContain("alpha gamma");
     expect((list as HTMLElement).textContent).toContain("alpha");
+
+    unmount();
+  });
+
+  test("only-matches shows index error message when line index build fails", async () => {
+    const content = ["alpha", "beta", "alpha gamma", "delta"].join("\n");
+
+    workerClientMocks.buildLineIndex.mockResolvedValue({
+      ok: false,
+      errorCode: "TOO_MANY_LINES",
+      lineCount: 300_000,
+    });
+    workerClientMocks.searchLines.mockResolvedValue({
+      ok: true,
+      matches: Int32Array.from([0, 2]),
+    });
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={content} language="text" />,
+      makeConfig({
+        highlightMaxChars: 10,
+        workerEnabled: true,
+        largePlainEnabled: true,
+      })
+    );
+
+    await flushMicrotasks();
+
+    const onlyMatchesToggle = container.querySelector(
+      '[data-testid="code-display-only-matches-toggle"]'
+    );
+    expect(onlyMatchesToggle).not.toBeNull();
+    click(onlyMatchesToggle as Element);
+
+    await waitFor(() => {
+      const btn = container.querySelector('[data-testid="code-display-only-matches-toggle"]');
+      return (btn?.textContent || "").includes("Show all");
+    });
+
+    const searchInput = container.querySelector(
+      '[data-testid="code-display-search"]'
+    ) as HTMLInputElement | null;
+    expect(searchInput).not.toBeNull();
+    inputText(searchInput as HTMLInputElement, "alpha");
+
+    await flushMicrotasks();
+    await waitFor(() => workerClientMocks.buildLineIndex.mock.calls.length > 0);
+    await waitFor(() => (container.textContent || "").includes("Too many lines"));
+
+    expect(container.querySelector('[data-testid="code-display-matches-list"]')).toBeNull();
+
+    unmount();
+  });
+
+  test("only-matches shows search error message when worker search fails", async () => {
+    const content = ["alpha", "beta", "alpha gamma", "delta"].join("\n");
+    const starts = buildLineStarts(content);
+
+    workerClientMocks.buildLineIndex.mockResolvedValue({
+      ok: true,
+      lineStarts: starts,
+      lineCount: starts.length,
+    });
+    workerClientMocks.searchLines.mockResolvedValue({
+      ok: false,
+      errorCode: "UNKNOWN",
+    });
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={content} language="text" />,
+      makeConfig({
+        highlightMaxChars: 10,
+        workerEnabled: true,
+        largePlainEnabled: true,
+      })
+    );
+
+    await flushMicrotasks();
+
+    const onlyMatchesToggle = container.querySelector(
+      '[data-testid="code-display-only-matches-toggle"]'
+    );
+    expect(onlyMatchesToggle).not.toBeNull();
+    click(onlyMatchesToggle as Element);
+
+    await waitFor(() => {
+      const btn = container.querySelector('[data-testid="code-display-only-matches-toggle"]');
+      return (btn?.textContent || "").includes("Show all");
+    });
+
+    const searchInput = container.querySelector(
+      '[data-testid="code-display-search"]'
+    ) as HTMLInputElement | null;
+    expect(searchInput).not.toBeNull();
+    inputText(searchInput as HTMLInputElement, "alpha");
+
+    await flushMicrotasks();
+    await waitFor(() => workerClientMocks.searchLines.mock.calls.length > 0);
+    await waitFor(() => (container.textContent || "").includes("Search failed"));
+
+    expect(container.querySelector('[data-testid="code-display-matches-list"]')).toBeNull();
 
     unmount();
   });

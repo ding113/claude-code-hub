@@ -574,6 +574,14 @@
       "virtualFallbackToPlain": "Виртуальная подсветка недоступна — переключено на простой текст",
       "searchPlaceholder": "Поиск",
       "searchWorking": "Поиск... {percent}%",
+      "search": {
+        "indexFailed": "Не удалось построить индекс поиска",
+        "indexCanceled": "Построение индекса поиска отменено",
+        "indexTooManyLines": "Слишком много строк ({lineCount}, лимит {maxLines})",
+        "indexTooManyLinesUnknown": "Слишком много строк (лимит {maxLines})",
+        "failed": "Поиск не удался",
+        "canceled": "Поиск отменён"
+      },
       "cancel": "Отмена",
       "retry": "Повторить",
       "prettyCanceled": "Форматирование отменено",
