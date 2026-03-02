@@ -10,6 +10,14 @@ import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 
 const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(value ?? 0, 0), 1);
 
+function buildNormalizedModelField(billingModelSource: "original" | "redirected") {
+  const rawModelField =
+    billingModelSource === "original"
+      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
+      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  return sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
+}
+
 /**
  * 排行榜条目类型
  */
@@ -498,13 +506,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   ];
 
   // Model-level cache hit breakdown per provider
-  const systemSettings = await getCachedSystemSettings();
-  const billingModelSource = systemSettings.billingModelSource;
-  const rawModelField =
-    billingModelSource === "original"
-      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
-      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
-  const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
+  const { billingModelSource } = await getCachedSystemSettings();
+  const modelField = buildNormalizedModelField(billingModelSource);
 
   const modelTotalInput = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
   const modelCacheRead = sql<number>`COALESCE(sum(COALESCE(${usageLedger.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
@@ -683,17 +686,8 @@ async function findModelLeaderboardWithTimezone(
   dateRange?: DateRangeParams
 ): Promise<ModelLeaderboardEntry[]> {
   // 获取系统设置中的计费模型来源配置
-  const systemSettings = await getCachedSystemSettings();
-  const billingModelSource = systemSettings.billingModelSource;
-
-  // 根据配置决定模型字段的优先级
-  // original: 优先使用 originalModel（用户请求的模型），回退到 model
-  // redirected: 优先使用 model（重定向后的实际模型），回退到 originalModel
-  const rawModelField =
-    billingModelSource === "original"
-      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
-      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
-  const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
+  const { billingModelSource } = await getCachedSystemSettings();
+  const modelField = buildNormalizedModelField(billingModelSource);
 
   const rankings = await db
     .select({
