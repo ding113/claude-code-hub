@@ -223,7 +223,11 @@ export function cancelWorkerJob(jobId: number) {
 
   const w = getWorker();
   if (!w) return;
-  w.postMessage({ type: "cancel", jobId });
+  try {
+    w.postMessage({ type: "cancel", jobId });
+  } catch {
+    // best-effort：Worker 可能已被终止
+  }
 }
 
 export async function formatJsonPretty({
@@ -349,6 +353,7 @@ export async function buildLineIndex({
     // fallback：双遍扫描（避免额外依赖）
     let lineCount = 1;
     for (let i = 0; i < text.length; i += 1) {
+      if ((i & 0x3fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
       if (text.charCodeAt(i) === 10) {
         lineCount += 1;
         if (lineCount > maxLines) {
@@ -360,6 +365,7 @@ export async function buildLineIndex({
     starts[0] = 0;
     let idx = 1;
     for (let i = 0; i < text.length; i += 1) {
+      if ((i & 0x3fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
       if (text.charCodeAt(i) === 10) {
         starts[idx] = i + 1;
         idx += 1;
@@ -419,6 +425,7 @@ export async function searchLines({
     let pos = text.indexOf(query, 0);
     while (pos !== -1) {
       while (scan < pos) {
+        if ((scan & 0x3fff) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
         if (text.charCodeAt(scan) === 10) lineNo += 1;
         scan += 1;
       }
@@ -427,6 +434,7 @@ export async function searchLines({
         lastLine = lineNo;
         if (lines.length >= maxResults) break;
       }
+      if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
       pos = text.indexOf(query, pos + 1);
     }
     return { ok: true, matches: Int32Array.from(lines) };
