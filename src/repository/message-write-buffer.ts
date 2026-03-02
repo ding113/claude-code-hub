@@ -31,10 +31,10 @@ export type MessageRequestUpdatePatch = {
 };
 
 export type MessageRequestUpdateEnqueueResult =
-  | "enqueued"
-  | "rejected_invalid"
-  | "buffer_unavailable"
-  | "dropped_overflow";
+  | { kind: "enqueued" }
+  | { kind: "rejected_invalid" }
+  | { kind: "buffer_unavailable" }
+  | { kind: "dropped_overflow"; patch: MessageRequestUpdatePatch };
 
 type MessageRequestUpdateRecord = {
   id: number;
@@ -262,8 +262,8 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
       });
     } else {
       try {
-        JSON.stringify(patch.providerChain);
-        sanitized.providerChain = patch.providerChain;
+        const json = JSON.stringify(patch.providerChain);
+        sanitized.providerChain = JSON.parse(json) as CreateMessageRequestData["provider_chain"];
       } catch (error) {
         logger.warn("[MessageRequestWriteBuffer] Invalid providerChain, skipping", {
           error: error instanceof Error ? error.message : String(error),
@@ -300,13 +300,21 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
   if (patch.specialSettings === null) {
     sanitized.specialSettings = null;
   } else if (patch.specialSettings !== undefined) {
-    try {
-      JSON.stringify(patch.specialSettings);
-      sanitized.specialSettings = patch.specialSettings;
-    } catch (error) {
-      logger.warn("[MessageRequestWriteBuffer] Invalid specialSettings, skipping", {
-        error: error instanceof Error ? error.message : String(error),
+    if (!Array.isArray(patch.specialSettings)) {
+      logger.warn("[MessageRequestWriteBuffer] Invalid specialSettings type, skipping", {
+        specialSettingsType: typeof patch.specialSettings,
       });
+    } else {
+      try {
+        const json = JSON.stringify(patch.specialSettings);
+        sanitized.specialSettings = JSON.parse(
+          json
+        ) as CreateMessageRequestData["special_settings"];
+      } catch (error) {
+        logger.warn("[MessageRequestWriteBuffer] Invalid specialSettings, skipping", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
@@ -506,7 +514,7 @@ class MessageRequestWriteBuffer {
           originalTypes: summarizePatchTypes(patch),
         });
       }
-      return "rejected_invalid";
+      return { kind: "rejected_invalid" };
     }
 
     const existing = this.pending.get(id) ?? {};
@@ -517,7 +525,7 @@ class MessageRequestWriteBuffer {
     } else {
       this.nonTerminalIds.add(id);
     }
-    let result: MessageRequestUpdateEnqueueResult = "enqueued";
+    let result: MessageRequestUpdateEnqueueResult = { kind: "enqueued" };
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
@@ -547,7 +555,7 @@ class MessageRequestWriteBuffer {
         this.pending.delete(droppedId);
         this.nonTerminalIds.delete(droppedId);
         if (droppedId === id) {
-          result = "dropped_overflow";
+          result = { kind: "dropped_overflow", patch: droppedPatch ?? sanitized };
         }
         logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
           maxPending: this.config.maxPending,
@@ -841,11 +849,11 @@ export function enqueueMessageRequestUpdate(
 ): MessageRequestUpdateEnqueueResult {
   // 只在 async 模式下启用队列，避免额外内存/定时器开销
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
-    return "buffer_unavailable";
+    return { kind: "buffer_unavailable" };
   }
   const buffer = getBuffer();
   if (!buffer) {
-    return "buffer_unavailable";
+    return { kind: "buffer_unavailable" };
   }
   return buffer.enqueue(id, patch);
 }

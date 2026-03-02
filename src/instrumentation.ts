@@ -206,6 +206,12 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
             timeoutMs,
           });
         }
+        if (reason === "startup") {
+          logger.info("[Instrumentation] Orphaned message_request sweeper startup run completed", {
+            sealedCount,
+            durationMs,
+          });
+        }
         if (sealedCount > 0) {
           logger.warn("[Instrumentation] Orphaned message_request records sealed", {
             sealedCount,

@@ -5,6 +5,7 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
+import { logger } from "@/lib/logger";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import {
   ORPHANED_MESSAGE_REQUEST_ERROR_CODE,
@@ -88,13 +89,21 @@ async function writeMessageRequestUpdateToDb(
     return;
   }
 
-  await db
+  const updated = await db
     .update(messageRequest)
     .set({
       ...sanitized,
       updatedAt: new Date(),
     })
-    .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)));
+    .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)))
+    .returning({ id: messageRequest.id });
+
+  if (updated.length === 0) {
+    logger.warn("[MessageRepository] Message request update affected 0 rows", {
+      requestId: id,
+      keys: Object.keys(sanitized),
+    });
+  }
 }
 
 /**
@@ -102,11 +111,13 @@ async function writeMessageRequestUpdateToDb(
  */
 export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
   const enqueueResult = enqueueMessageRequestUpdate(id, { durationMs });
-  if (enqueueResult === "enqueued" || enqueueResult === "rejected_invalid") {
+  if (enqueueResult.kind === "enqueued" || enqueueResult.kind === "rejected_invalid") {
     return;
   }
 
-  await writeMessageRequestUpdateToDb(id, { durationMs });
+  const patchToWrite =
+    enqueueResult.kind === "dropped_overflow" ? enqueueResult.patch : { durationMs };
+  await writeMessageRequestUpdateToDb(id, patchToWrite);
 }
 
 /**
@@ -122,12 +133,18 @@ export async function updateMessageRequestCost(
   }
 
   const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
-  if (enqueueResult === "enqueued" || enqueueResult === "rejected_invalid") {
+  if (enqueueResult.kind === "enqueued" || enqueueResult.kind === "rejected_invalid") {
     return;
   }
 
-  // costUsd 非终态信息：overflow 时丢弃即可，避免压力峰值下放大同步 DB 写入。
-  if (enqueueResult === "dropped_overflow") {
+  // costUsd 非终态信息：overflow 时尽量丢弃即可，避免压力峰值下放大同步 DB 写入。
+  // 但若 overflow 过程中丢失了终态信息（duration/status），则需要同步写入兜底以避免“请求中”悬挂。
+  if (enqueueResult.kind === "dropped_overflow") {
+    const patch = enqueueResult.patch;
+    if (patch.durationMs === undefined && patch.statusCode === undefined) {
+      return;
+    }
+    await writeMessageRequestUpdateToDb(id, patch);
     return;
   }
 
@@ -161,13 +178,18 @@ export async function updateMessageRequestDetails(
   }
 ): Promise<void> {
   const enqueueResult = enqueueMessageRequestUpdate(id, details);
-  if (enqueueResult === "enqueued" || enqueueResult === "rejected_invalid") {
+  if (enqueueResult.kind === "enqueued" || enqueueResult.kind === "rejected_invalid") {
     return;
   }
 
-  // 非终态 patch 在 overflow 场景下丢弃即可，避免在压力峰值时反向放大 DB 写入。
-  // 终态（包含 statusCode）则尽量走同步写入，避免请求长期卡在“请求中”。
-  if (enqueueResult === "dropped_overflow" && details.statusCode === undefined) {
+  // overflow 场景下：尽量丢弃非终态 patch，避免在压力峰值时反向放大 DB 写入。
+  // 但如果 overflow 丢失了终态信息（duration/status），则必须同步写入兜底以避免请求长期卡在“请求中”。
+  if (enqueueResult.kind === "dropped_overflow") {
+    const patch = enqueueResult.patch;
+    if (patch.durationMs === undefined && patch.statusCode === undefined) {
+      return;
+    }
+    await writeMessageRequestUpdateToDb(id, patch);
     return;
   }
 

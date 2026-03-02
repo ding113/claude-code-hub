@@ -313,7 +313,7 @@ describe("message_request 异步批量写入", () => {
 
     await stopMessageRequestWriteBuffer();
 
-    expect(result).toBe("rejected_invalid");
+    expect(result.kind).toBe("rejected_invalid");
     expect(executeMock).not.toHaveBeenCalled();
   });
 
@@ -359,7 +359,7 @@ describe("message_request 异步批量写入", () => {
 
     await stopMessageRequestWriteBuffer();
 
-    expect(result).toBe("dropped_overflow");
+    expect(result.kind).toBe("dropped_overflow");
     expect(executeMock).toHaveBeenCalledTimes(1);
 
     const query = executeMock.mock.calls[0]?.[0];
@@ -384,7 +384,7 @@ describe("message_request 异步批量写入", () => {
 
     await stopMessageRequestWriteBuffer();
 
-    expect(result).toBe("enqueued");
+    expect(result.kind).toBe("enqueued");
     expect(executeMock).toHaveBeenCalledTimes(1);
 
     const query = executeMock.mock.calls[0]?.[0];
@@ -404,7 +404,7 @@ describe("message_request 异步批量写入", () => {
 
     await stopMessageRequestWriteBuffer();
 
-    expect(result).toBe("enqueued");
+    expect(result.kind).toBe("enqueued");
     expect(executeMock).toHaveBeenCalledTimes(1);
 
     const query = executeMock.mock.calls[0]?.[0];

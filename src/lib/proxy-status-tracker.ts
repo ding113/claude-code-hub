@@ -60,6 +60,9 @@ export class ProxyStatusTracker {
     return ProxyStatusTracker.instance;
   }
 
+  /**
+   * @deprecated 已迁移为基于数据库聚合的实现（getAllUsersStatus）。保留仅为兼容既有调用点。
+   */
   startRequest(params: {
     userId: number;
     userName: string;
@@ -73,6 +76,9 @@ export class ProxyStatusTracker {
     void params;
   }
 
+  /**
+   * @deprecated 已迁移为基于数据库聚合的实现（getAllUsersStatus）。保留仅为兼容既有调用点。
+   */
   endRequest(userId: number, requestId: number): void {
     // no-op：当前实现基于数据库聚合（getAllUsersStatus），保留方法仅为兼容既有调用点
     void userId;
