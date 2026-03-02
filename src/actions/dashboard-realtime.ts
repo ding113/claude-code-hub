@@ -224,17 +224,21 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       const modelRankings =
         modelRankingsResult.status === "fulfilled" ? modelRankingsResult.value : [];
 
-      const statisticsData =
-        statisticsResult.status === "fulfilled" && statisticsResult.value.ok
-          ? statisticsResult.value.data
-          : null;
+      const providerSlotsAction =
+        providerSlotsResult.status === "fulfilled" ? providerSlotsResult.value : null;
+      const statisticsAction =
+        statisticsResult.status === "fulfilled" ? statisticsResult.value : null;
+
+      const statisticsData = statisticsAction?.ok ? statisticsAction.data : null;
 
       // 记录部分失败的数据源
-      if (activityStreamResult.status === "rejected" || !activityStreamItems.length) {
+      // 空数据在低流量/空窗口下属于正常情况，避免刷屏
+      if (activityStreamResult.status === "rejected") {
         logger.warn("Failed to get activity stream", {
-          reason:
-            activityStreamResult.status === "rejected" ? activityStreamResult.reason : "empty data",
+          reason: activityStreamResult.reason,
         });
+      } else if (!activityStreamItems.length) {
+        logger.debug("Activity stream is empty", { limit: ACTIVITY_STREAM_LIMIT });
       }
       if (userRankingsResult.status === "rejected") {
         logger.warn("Failed to get user rankings", { reason: userRankingsResult.reason });
@@ -242,24 +246,26 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       if (providerRankingsResult.status === "rejected") {
         logger.warn("Failed to get provider rankings", { reason: providerRankingsResult.reason });
       }
-      if (providerSlotsResult.status === "rejected" || !providerSlots.length) {
+      if (providerSlotsResult.status === "rejected") {
         logger.warn("Failed to get provider slots", {
-          reason:
-            providerSlotsResult.status === "rejected"
-              ? providerSlotsResult.reason
-              : "empty data or action failed",
+          reason: providerSlotsResult.reason,
         });
+      } else if (providerSlotsAction && !providerSlotsAction.ok) {
+        logger.warn("Failed to get provider slots", { reason: providerSlotsAction.error });
+      } else if (!providerSlots.length) {
+        logger.debug("Provider slots is empty");
       }
       if (modelRankingsResult.status === "rejected") {
         logger.warn("Failed to get model rankings", { reason: modelRankingsResult.reason });
       }
-      if (statisticsResult.status === "rejected" || !statisticsData) {
+      if (statisticsResult.status === "rejected") {
         logger.warn("Failed to get statistics", {
-          reason:
-            statisticsResult.status === "rejected"
-              ? statisticsResult.reason
-              : "action failed or empty data",
+          reason: statisticsResult.reason,
         });
+      } else if (statisticsAction && !statisticsAction.ok) {
+        logger.warn("Failed to get statistics", { reason: statisticsAction.error });
+      } else if (!statisticsData) {
+        logger.debug("Statistics is empty");
       }
 
       const providerRankingByProviderId = new Map(
@@ -277,8 +283,8 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
         return {
           id: item.sessionId ?? `req-${item.id}`, // 使用 sessionId，如果没有则用请求ID
           user: item.userName,
-          model: item.originalModel ?? item.model ?? "Unknown", // 优先使用计费模型
-          provider: item.providerName ?? "Unknown",
+          model: item.originalModel ?? item.model ?? "-", // 优先使用计费模型
+          provider: item.providerName ?? "-",
           latency,
           status: item.statusCode ?? 200,
           cost: parseFloat(item.costUsd ?? "0"),

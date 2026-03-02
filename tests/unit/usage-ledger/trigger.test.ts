@@ -1,14 +1,21 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // 以实际部署的迁移 SQL 为准（trigger.sql 主要用于回填/参考，不一定与最终迁移完全一致）。
-const sql = readFileSync(
-  resolve(process.cwd(), "drizzle/0079_perf_usage_ledger_trigger_skip_blocked_rows.sql"),
-  "utf-8"
-);
+const MIGRATION_FILENAME = "0079_perf_usage_ledger_trigger_skip_blocked_rows.sql";
+const sql = readFileSync(resolve(process.cwd(), `drizzle/${MIGRATION_FILENAME}`), "utf-8");
 
 describe("fn_upsert_usage_ledger migration SQL", () => {
+  it("uses latest relevant migration file", () => {
+    const latest = readdirSync(resolve(process.cwd(), "drizzle"))
+      .filter((name) => /^\d+_perf_usage_ledger_trigger_.*\.sql$/.test(name))
+      .sort()
+      .slice(-1)[0];
+
+    expect(latest).toBe(MIGRATION_FILENAME);
+  });
+
   it("contains warmup exclusion check", () => {
     expect(sql).toContain("blocked_by = 'warmup'");
   });
@@ -16,6 +23,8 @@ describe("fn_upsert_usage_ledger migration SQL", () => {
   it("skips blocked requests to avoid wasted ledger writes", () => {
     expect(sql).toContain("NEW.blocked_by IS NOT NULL");
     expect(sql).toContain("UPDATE usage_ledger SET blocked_by = NEW.blocked_by");
+    expect(sql).toContain("blocked_by IS DISTINCT FROM 'warmup'");
+    expect(sql).toContain("blocked_by IS DISTINCT FROM NEW.blocked_by");
   });
 
   it("contains ON CONFLICT UPSERT", () => {
