@@ -28,7 +28,12 @@ import type { LeaderboardPeriod } from "@/repository/leaderboard";
 export interface ColumnDef<T> {
   header: string;
   className?: string;
-  cell: (row: T, index: number) => React.ReactNode;
+  /**
+   * index 语义：
+   * - 父行：按当前排序后的全局行序（从 0 开始）
+   * - 子行：父行内的子行序（从 0 开始）
+   */
+  cell: (row: T, index: number, isSubRow?: boolean) => React.ReactNode;
   sortKey?: string; // 用于排序的字段名
   getValue?: (row: T) => number | string; // 获取排序值的函数
   defaultBold?: boolean; // 默认加粗（无排序时显示加粗）
@@ -285,7 +290,7 @@ export function LeaderboardTable<TParent, TSub = TParent>({
                             key={idx}
                             className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
                           >
-                            {col.cell(row, index)}
+                            {col.cell(row, index, false)}
                           </TableCell>
                         );
                       })}
@@ -310,7 +315,7 @@ export function LeaderboardTable<TParent, TSub = TParent>({
                                   key={idx}
                                   className={`${col.className || ""} ${shouldBold ? "font-bold" : ""}`}
                                 >
-                                  {col.cell(subRow, subIndex)}
+                                  {col.cell(subRow, subIndex, true)}
                                 </TableCell>
                               );
                             })}
