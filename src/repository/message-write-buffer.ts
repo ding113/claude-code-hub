@@ -248,6 +248,10 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
     sanitized.cacheTtlApplied = null;
   } else if (typeof patch.cacheTtlApplied === "string") {
     sanitized.cacheTtlApplied = patch.cacheTtlApplied;
+  } else if (patch.cacheTtlApplied !== undefined) {
+    logger.warn("[MessageRequestWriteBuffer] Invalid cacheTtlApplied type, skipping", {
+      cacheTtlAppliedType: typeof patch.cacheTtlApplied,
+    });
   }
 
   const costUsd = sanitizeNumericString(patch.costUsd);
@@ -292,9 +296,17 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
 
   if (typeof patch.context1mApplied === "boolean") {
     sanitized.context1mApplied = patch.context1mApplied;
+  } else if (patch.context1mApplied !== undefined) {
+    logger.warn("[MessageRequestWriteBuffer] Invalid context1mApplied type, skipping", {
+      context1mAppliedType: typeof patch.context1mApplied,
+    });
   }
   if (typeof patch.swapCacheTtlApplied === "boolean") {
     sanitized.swapCacheTtlApplied = patch.swapCacheTtlApplied;
+  } else if (patch.swapCacheTtlApplied !== undefined) {
+    logger.warn("[MessageRequestWriteBuffer] Invalid swapCacheTtlApplied type, skipping", {
+      swapCacheTtlAppliedType: typeof patch.swapCacheTtlApplied,
+    });
   }
 
   if (patch.specialSettings === null) {

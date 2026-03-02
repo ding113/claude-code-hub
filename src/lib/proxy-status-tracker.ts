@@ -116,6 +116,8 @@ export class ProxyStatusTracker {
       activeMap.set(row.userId, list);
     }
 
+    // lastRequestRows 仅包含已结束请求（duration_ms IS NOT NULL）：
+    // 若用户仅有进行中请求，则 lastRequest 会保持为 null，由 activeRequests 展示进行中状态。
     const lastMap = new Map<number, LastRequestRow>();
     for (const row of lastRequestRows) {
       if (!lastMap.has(row.userId)) {

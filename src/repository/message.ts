@@ -99,10 +99,13 @@ async function writeMessageRequestUpdateToDb(
     .returning({ id: messageRequest.id });
 
   if (updated.length === 0) {
-    logger.warn("[MessageRepository] Message request update affected 0 rows", {
-      requestId: id,
-      keys: Object.keys(sanitized),
-    });
+    logger.warn(
+      "[MessageRepository] Message request update affected 0 rows (missing or soft-deleted)",
+      {
+        requestId: id,
+        keys: Object.keys(sanitized),
+      }
+    );
   }
 }
 
@@ -141,6 +144,8 @@ export async function updateMessageRequestCost(
   // 但若 overflow 过程中丢失了终态信息（duration/status），则需要同步写入兜底以避免“请求中”悬挂。
   if (enqueueResult.kind === "dropped_overflow") {
     const patch = enqueueResult.patch;
+    // 注意：patch 可能携带已合并的非终态字段；当其不含终态字段时这里仍选择丢弃，
+    // 避免压力峰值下放大同步 DB 写入（非终态信息允许在极端情况下丢失）。
     if (patch.durationMs === undefined && patch.statusCode === undefined) {
       return;
     }
@@ -186,6 +191,8 @@ export async function updateMessageRequestDetails(
   // 但如果 overflow 丢失了终态信息（duration/status），则必须同步写入兜底以避免请求长期卡在“请求中”。
   if (enqueueResult.kind === "dropped_overflow") {
     const patch = enqueueResult.patch;
+    // 注意：patch 可能携带已合并的非终态字段；当其不含终态字段时这里仍选择丢弃，
+    // 避免压力峰值下放大同步 DB 写入（非终态信息允许在极端情况下丢失）。
     if (patch.durationMs === undefined && patch.statusCode === undefined) {
       return;
     }
