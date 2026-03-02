@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { Footer } from "@/components/customs/footer";
+import { parseCodeDisplayConfigFromEnv } from "@/components/ui/code-display-config";
 import { Toaster } from "@/components/ui/sonner";
 import { type Locale, locales } from "@/i18n/config";
 import { logger } from "@/lib/logger";
@@ -72,6 +73,7 @@ export default async function RootLayout({
   // Load translation messages
   const messages = await getMessages();
   const timeZone = await resolveSystemTimezone();
+  const codeDisplayConfig = parseCodeDisplayConfigFromEnv(process.env);
   // Create a stable `now` timestamp to avoid SSR/CSR hydration mismatch for relative time
   const now = new Date();
 
@@ -79,7 +81,7 @@ export default async function RootLayout({
     <html lang={locale} suppressHydrationWarning>
       <body className="antialiased">
         <NextIntlClientProvider messages={messages} timeZone={timeZone} now={now}>
-          <AppProviders>
+          <AppProviders codeDisplayConfig={codeDisplayConfig}>
             <div className="flex min-h-[var(--cch-viewport-height,100vh)] flex-col bg-background text-foreground">
               <div className="flex-1">{children}</div>
               <Footer />

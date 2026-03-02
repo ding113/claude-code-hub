@@ -568,7 +568,12 @@
     "codeDisplay": {
       "raw": "Raw",
       "pretty": "Pretty",
+      "prettyWorking": "整形中... {percent}%",
+      "viewPlain": "テキスト",
+      "viewVirtual": "仮想ハイライト",
       "searchPlaceholder": "検索",
+      "searchWorking": "検索中... {percent}%",
+      "cancel": "キャンセル",
       "expand": "展開",
       "collapse": "折りたたむ",
       "themeAuto": "自動",
@@ -582,6 +587,9 @@
       "pageInfo": "{page} / {total} ページ",
       "sseEvent": "イベント",
       "sseData": "データ",
+      "virtual": {
+        "indexWorking": "索引作成中... {percent}%"
+      },
       "hardLimit": {
         "title": "コンテンツが大きすぎます",
         "size": "サイズ: {sizeMB} MB ({sizeBytes} bytes)",

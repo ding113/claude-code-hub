@@ -568,7 +568,12 @@
     "codeDisplay": {
       "raw": "原始",
       "pretty": "美化",
+      "prettyWorking": "美化中... {percent}%",
+      "viewPlain": "纯文本",
+      "viewVirtual": "虚拟高亮",
       "searchPlaceholder": "搜索",
+      "searchWorking": "搜索中... {percent}%",
+      "cancel": "取消",
       "expand": "展开",
       "collapse": "收起",
       "themeAuto": "跟随系统",
@@ -582,6 +587,9 @@
       "pageInfo": "第 {page} / {total} 页",
       "sseEvent": "事件",
       "sseData": "数据",
+      "virtual": {
+        "indexWorking": "建立索引中... {percent}%"
+      },
       "hardLimit": {
         "title": "内容过大",
         "size": "大小：{sizeMB} MB（{sizeBytes} 字节）",

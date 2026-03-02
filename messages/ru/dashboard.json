@@ -568,7 +568,12 @@
     "codeDisplay": {
       "raw": "Сырой",
       "pretty": "Форматированный",
+      "prettyWorking": "Форматирование... {percent}%",
+      "viewPlain": "Текст",
+      "viewVirtual": "Виртуальная подсветка",
       "searchPlaceholder": "Поиск",
+      "searchWorking": "Поиск... {percent}%",
+      "cancel": "Отмена",
       "expand": "Развернуть",
       "collapse": "Свернуть",
       "themeAuto": "Авто",
@@ -582,6 +587,9 @@
       "pageInfo": "Страница {page} / {total}",
       "sseEvent": "Событие",
       "sseData": "Данные",
+      "virtual": {
+        "indexWorking": "Индексация... {percent}%"
+      },
       "hardLimit": {
         "title": "Содержимое слишком большое",
         "size": "Размер: {sizeMB} MB ({sizeBytes} bytes)",

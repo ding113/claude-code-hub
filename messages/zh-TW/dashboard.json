@@ -568,7 +568,12 @@
     "codeDisplay": {
       "raw": "原始內容",
       "pretty": "格式化",
+      "prettyWorking": "格式化中... {percent}%",
+      "viewPlain": "純文字",
+      "viewVirtual": "虛擬高亮",
       "searchPlaceholder": "搜尋",
+      "searchWorking": "搜尋中... {percent}%",
+      "cancel": "取消",
       "expand": "展開",
       "collapse": "摺疊",
       "themeAuto": "跟隨系統",
@@ -582,6 +587,9 @@
       "pageInfo": "第 {page} / {total} 頁",
       "sseEvent": "事件類型",
       "sseData": "資料",
+      "virtual": {
+        "indexWorking": "建立索引中... {percent}%"
+      },
       "hardLimit": {
         "title": "內容過大",
         "size": "大小：{sizeMB} MB（{sizeBytes} 位元組）",

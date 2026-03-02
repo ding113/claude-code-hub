@@ -568,7 +568,12 @@
     "codeDisplay": {
       "raw": "Raw",
       "pretty": "Pretty",
+      "prettyWorking": "Formatting... {percent}%",
+      "viewPlain": "Plain",
+      "viewVirtual": "Virtual highlight",
       "searchPlaceholder": "Search",
+      "searchWorking": "Searching... {percent}%",
+      "cancel": "Cancel",
       "expand": "Expand",
       "collapse": "Collapse",
       "themeAuto": "Auto",
@@ -582,6 +587,9 @@
       "pageInfo": "Page {page} / {total}",
       "sseEvent": "Event",
       "sseData": "Data",
+      "virtual": {
+        "indexWorking": "Indexing... {percent}%"
+      },
       "hardLimit": {
         "title": "Content too large",
         "size": "Size: {sizeMB} MB ({sizeBytes} bytes)",
