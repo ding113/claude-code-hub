@@ -198,7 +198,11 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
 
       if (!overviewData) {
         const errorReason =
-          overviewResult.status === "rejected" ? overviewResult.reason : "Unknown error";
+          overviewResult.status === "rejected"
+            ? overviewResult.reason
+            : overviewResult.value.ok
+              ? "Unknown error"
+              : (overviewResult.value.error ?? "Unknown error");
         logger.error("Failed to get overview data", { reason: errorReason });
         return {
           ok: false,
@@ -279,6 +283,9 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
         // - 如果有 durationMs（已完成的请求），使用实际值
         // - 如果没有（进行中的请求），计算从开始到现在的耗时
         const latency = item.durationMs ?? now - item.startTime;
+        const costRaw = item.costUsd ?? "0";
+        const costParsed = Number.parseFloat(costRaw);
+        const cost = Number.isFinite(costParsed) ? costParsed : 0;
 
         return {
           id: item.sessionId ?? `req-${item.id}`, // 使用 sessionId，如果没有则用请求ID
@@ -287,7 +294,7 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
           provider: item.providerName ?? "-",
           latency,
           status: item.statusCode ?? 200,
-          cost: parseFloat(item.costUsd ?? "0"),
+          cost,
           startTime: item.startTime,
         };
       });
@@ -357,14 +364,15 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
 
       if (redis) {
         try {
-          // 尽量只由“拿到锁”的实例写缓存；未拿到锁时也允许 best-effort 写入兜底（防止锁持有者计算失败）。
-          if (lockAcquired) {
-            await redis.setex(cacheKey, cacheTtlSeconds, JSON.stringify(data));
-          } else {
-            await redis.setex(cacheKey, cacheTtlSeconds, JSON.stringify(data)).catch(() => {});
-          }
+          // 未拿到锁时仍允许 best-effort 写入兜底（防止锁持有者计算失败）。
+          await redis.setex(cacheKey, cacheTtlSeconds, JSON.stringify(data));
         } catch (error) {
-          logger.warn("[DashboardRealtime] Cache write failed", { cacheKey, error });
+          logger.warn("[DashboardRealtime] Cache write failed", {
+            cacheKey,
+            cacheTtlSeconds,
+            lockAcquired,
+            error,
+          });
         }
       }
 
