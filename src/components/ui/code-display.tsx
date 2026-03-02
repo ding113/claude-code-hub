@@ -471,6 +471,15 @@ export function CodeDisplay({
     total: number;
   } | null>(null);
 
+  const cancelJsonPretty = () => {
+    jsonPrettyAbortRef.current?.abort();
+    jsonPrettyAbortRef.current = null;
+    setJsonPrettyText(null);
+    setJsonPrettyTextKey(jsonSourceKey);
+    setJsonPrettyStatus("canceled");
+    setJsonPrettyProgress(null);
+  };
+
   useEffect(() => {
     if (!shouldFormatJsonInWorker) {
       jsonPrettyAbortRef.current?.abort();
@@ -1247,7 +1256,7 @@ export function CodeDisplay({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => jsonPrettyAbortRef.current?.abort()}
+                    onClick={cancelJsonPretty}
                     className="h-8"
                   >
                     <X className="h-4 w-4 mr-2" />

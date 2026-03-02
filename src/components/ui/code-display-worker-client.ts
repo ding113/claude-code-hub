@@ -111,11 +111,17 @@ function getWorker(): Worker | null {
   if (!supportsWorker()) return null;
   if (workerSingleton) return workerSingleton;
 
-  // Next.js 支持用 URL + module worker 方式打包
-  workerSingleton = new Worker(new URL("./code-display.worker.ts", import.meta.url), {
-    type: "module",
-  });
-  return workerSingleton;
+  try {
+    // Next.js 支持用 URL + module worker 方式打包
+    workerSingleton = new Worker(new URL("./code-display.worker.ts", import.meta.url), {
+      type: "module",
+    });
+    return workerSingleton;
+  } catch {
+    // Worker 构造可能因 CSP / 打包资源异常等原因同步抛错：回落主线程实现
+    workerSingleton = null;
+    return null;
+  }
 }
 
 function ensureInitialized() {
