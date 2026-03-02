@@ -1,12 +1,22 @@
 "use server";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger, users } from "@/drizzle/schema";
+import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import type { ProviderType } from "@/types/provider";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
-import { getSystemSettings } from "./system-config";
+
+const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(value ?? 0, 0), 1);
+
+function buildNormalizedModelField(billingModelSource: "original" | "redirected") {
+  const rawModelField =
+    billingModelSource === "original"
+      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
+      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  return sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
+}
 
 /**
  * 排行榜条目类型
@@ -484,17 +494,8 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   )`;
 
   const cacheRequiredCondition = sql`(
-    COALESCE(${usageLedger.cacheCreationInputTokens}, 0) > 0
-    OR COALESCE(${usageLedger.cacheReadInputTokens}, 0) > 0
-  )`;
-
-  const sumTotalInputTokens = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
-  const sumCacheReadTokens = sql<number>`COALESCE(sum(COALESCE(${usageLedger.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
-  const sumCacheCreationCost = sql<string>`COALESCE(sum(CASE WHEN COALESCE(${usageLedger.cacheCreationInputTokens}, 0) > 0 THEN ${usageLedger.costUsd} ELSE 0 END), 0)`;
-
-  const cacheHitRateExpr = sql<number>`COALESCE(
-    ${sumCacheReadTokens} / NULLIF(${sumTotalInputTokens}, 0::double precision),
-    0::double precision
+    ${usageLedger.cacheCreationInputTokens} > 0
+    OR ${usageLedger.cacheReadInputTokens} > 0
   )`;
 
   const whereConditions = [
@@ -504,35 +505,9 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     providerType ? eq(providers.providerType, providerType) : undefined,
   ];
 
-  const rankings = await db
-    .select({
-      providerId: usageLedger.finalProviderId,
-      providerName: providers.name,
-      totalRequests: sql<number>`count(*)::double precision`,
-      totalCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
-      cacheReadTokens: sumCacheReadTokens,
-      cacheCreationCost: sumCacheCreationCost,
-      totalInputTokens: sumTotalInputTokens,
-      cacheHitRate: cacheHitRateExpr,
-    })
-    .from(usageLedger)
-    .innerJoin(
-      providers,
-      and(sql`${usageLedger.finalProviderId} = ${providers.id}`, isNull(providers.deletedAt))
-    )
-    .where(
-      and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
-    )
-    .groupBy(usageLedger.finalProviderId, providers.name)
-    .orderBy(desc(cacheHitRateExpr), desc(sql`count(*)`));
-
   // Model-level cache hit breakdown per provider
-  const systemSettings = await getSystemSettings();
-  const billingModelSource = systemSettings.billingModelSource;
-  const modelField =
-    billingModelSource === "original"
-      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
-      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const { billingModelSource } = await getCachedSystemSettings();
+  const modelField = buildNormalizedModelField(billingModelSource);
 
   const modelTotalInput = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
   const modelCacheRead = sql<number>`COALESCE(sum(COALESCE(${usageLedger.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
@@ -541,12 +516,18 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     0::double precision
   )`;
 
+  const modelTotalCost = sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`;
+  const modelCacheCreationCost = sql<string>`COALESCE(sum(CASE WHEN ${usageLedger.cacheCreationInputTokens} > 0 THEN ${usageLedger.costUsd} ELSE 0 END), 0)`;
+
   const modelRows = await db
     .select({
       providerId: usageLedger.finalProviderId,
+      providerName: providers.name,
       model: modelField,
       totalRequests: sql<number>`count(*)::double precision`,
+      totalCost: modelTotalCost,
       cacheReadTokens: modelCacheRead,
+      cacheCreationCost: modelCacheCreationCost,
       totalInputTokens: modelTotalInput,
       cacheHitRate: modelCacheHitRate,
     })
@@ -558,36 +539,94 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     .where(
       and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
     )
-    .groupBy(usageLedger.finalProviderId, modelField)
+    .groupBy(usageLedger.finalProviderId, providers.name, modelField)
     .orderBy(desc(modelCacheHitRate), desc(sql`count(*)`));
 
-  // Group model stats by providerId
+  if (modelRows.length === 0) {
+    return [];
+  }
+
+  type ProviderAgg = {
+    providerName: string;
+    totalRequests: number;
+    totalCost: number;
+    cacheReadTokens: number;
+    cacheCreationCost: number;
+    totalInputTokens: number;
+  };
+
+  const providerAggById = new Map<number, ProviderAgg>();
   const modelStatsByProvider = new Map<number, ModelCacheHitStat[]>();
+
   for (const row of modelRows) {
-    if (!row.model || row.model.trim() === "") continue;
+    const agg = providerAggById.get(row.providerId) ?? {
+      providerName: row.providerName,
+      totalRequests: 0,
+      totalCost: 0,
+      cacheReadTokens: 0,
+      cacheCreationCost: 0,
+      totalInputTokens: 0,
+    };
+
+    agg.totalRequests += row.totalRequests;
+    agg.totalCost += parseFloat(row.totalCost);
+    agg.cacheReadTokens += row.cacheReadTokens;
+    agg.cacheCreationCost += parseFloat(row.cacheCreationCost);
+    agg.totalInputTokens += row.totalInputTokens;
+    providerAggById.set(row.providerId, agg);
+
+    const model = row.model;
+    if (!model) continue;
     const stats = modelStatsByProvider.get(row.providerId) ?? [];
     stats.push({
-      model: row.model,
+      model,
       totalRequests: row.totalRequests,
       cacheReadTokens: row.cacheReadTokens,
       totalInputTokens: row.totalInputTokens,
-      cacheHitRate: Math.min(Math.max(row.cacheHitRate ?? 0, 0), 1),
+      cacheHitRate: clampRatio01(row.cacheHitRate),
     });
     modelStatsByProvider.set(row.providerId, stats);
   }
 
-  return rankings.map((entry) => ({
-    providerId: entry.providerId,
-    providerName: entry.providerName,
-    totalRequests: entry.totalRequests,
-    totalCost: parseFloat(entry.totalCost),
-    cacheReadTokens: entry.cacheReadTokens,
-    cacheCreationCost: parseFloat(entry.cacheCreationCost),
-    totalInputTokens: entry.totalInputTokens,
-    totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
-    cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
-    modelStats: modelStatsByProvider.get(entry.providerId) ?? [],
-  }));
+  // 基于 model 聚合派生 provider 排名，避免再跑一次 provider 聚合查询
+  const entries: ProviderCacheHitRateLeaderboardEntry[] = Array.from(providerAggById.entries()).map(
+    ([providerId, agg]) => {
+      const cacheHitRate =
+        agg.totalInputTokens > 0 ? agg.cacheReadTokens / agg.totalInputTokens : 0;
+      const modelStats = [...(modelStatsByProvider.get(providerId) ?? [])].sort((a, b) => {
+        const cacheHitRateOrder = b.cacheHitRate - a.cacheHitRate;
+        if (cacheHitRateOrder !== 0) return cacheHitRateOrder;
+
+        const totalRequestsOrder = b.totalRequests - a.totalRequests;
+        if (totalRequestsOrder !== 0) return totalRequestsOrder;
+
+        return a.model < b.model ? -1 : a.model > b.model ? 1 : 0;
+      });
+
+      return {
+        providerId,
+        providerName: agg.providerName,
+        totalRequests: agg.totalRequests,
+        totalCost: agg.totalCost,
+        cacheReadTokens: agg.cacheReadTokens,
+        cacheCreationCost: agg.cacheCreationCost,
+        totalInputTokens: agg.totalInputTokens,
+        totalTokens: agg.totalInputTokens, // deprecated, for backward compatibility
+        cacheHitRate: clampRatio01(cacheHitRate),
+        modelStats,
+      };
+    }
+  );
+
+  // 对齐原 provider 排名 SQL：cacheHitRate desc, count desc
+  entries.sort(
+    (a, b) =>
+      b.cacheHitRate - a.cacheHitRate ||
+      b.totalRequests - a.totalRequests ||
+      a.providerId - b.providerId
+  );
+
+  return entries;
 }
 
 /**
@@ -661,16 +700,8 @@ async function findModelLeaderboardWithTimezone(
   dateRange?: DateRangeParams
 ): Promise<ModelLeaderboardEntry[]> {
   // 获取系统设置中的计费模型来源配置
-  const systemSettings = await getSystemSettings();
-  const billingModelSource = systemSettings.billingModelSource;
-
-  // 根据配置决定模型字段的优先级
-  // original: 优先使用 originalModel（用户请求的模型），回退到 model
-  // redirected: 优先使用 model（重定向后的实际模型），回退到 originalModel
-  const modelField =
-    billingModelSource === "original"
-      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
-      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const { billingModelSource } = await getCachedSystemSettings();
+  const modelField = buildNormalizedModelField(billingModelSource);
 
   const rankings = await db
     .select({
@@ -693,19 +724,23 @@ async function findModelLeaderboardWithTimezone(
       )`,
     })
     .from(usageLedger)
-    .where(and(LEDGER_BILLING_CONDITION, buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        LEDGER_BILLING_CONDITION,
+        buildDateCondition(period, timezone, dateRange),
+        isNotNull(modelField)
+      )
+    )
     .groupBy(modelField)
     .orderBy(desc(sql`count(*)`)); // 按请求数排序
 
-  return rankings
-    .filter((entry) => entry.model !== null && entry.model !== "")
-    .map((entry) => ({
-      model: entry.model as string, // 已过滤 null/空字符串，可安全断言
-      totalRequests: entry.totalRequests,
-      totalCost: parseFloat(entry.totalCost),
-      totalTokens: entry.totalTokens,
-      successRate: entry.successRate ?? 0,
-    }));
+  return rankings.map((entry) => ({
+    model: entry.model,
+    totalRequests: entry.totalRequests,
+    totalCost: parseFloat(entry.totalCost),
+    totalTokens: entry.totalTokens,
+    successRate: entry.successRate ?? 0,
+  }));
 }
 
 /**

@@ -29,7 +29,7 @@ const mockSelect = vi.fn(() => {
 
 const mocks = vi.hoisted(() => ({
   resolveSystemTimezone: vi.fn(),
-  getSystemSettings: vi.fn(),
+  getCachedSystemSettings: vi.fn(),
 }));
 
 vi.mock("@/drizzle/db", () => ({
@@ -86,8 +86,8 @@ vi.mock("@/lib/utils/timezone", () => ({
   resolveSystemTimezone: mocks.resolveSystemTimezone,
 }));
 
-vi.mock("@/repository/system-config", () => ({
-  getSystemSettings: mocks.getSystemSettings,
+vi.mock("@/lib/config/system-settings-cache", () => ({
+  getCachedSystemSettings: mocks.getCachedSystemSettings,
 }));
 
 describe("Provider Leaderboard Average Cost Metrics", () => {
@@ -97,7 +97,7 @@ describe("Provider Leaderboard Average Cost Metrics", () => {
     chainMocks = [];
     mockSelect.mockClear();
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
-    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+    mocks.getCachedSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
   });
 
   it("computes avgCostPerRequest = totalCost / totalRequests for valid denominators", async () => {
@@ -243,7 +243,32 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     chainMocks = [];
     mockSelect.mockClear();
     mocks.resolveSystemTimezone.mockResolvedValue("UTC");
-    mocks.getSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+    mocks.getCachedSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
+  });
+
+  it("supports billingModelSource = original", async () => {
+    mocks.getCachedSystemSettings.mockResolvedValue({ billingModelSource: "original" });
+    chainMocks = [
+      createChainMock([
+        {
+          providerId: 1,
+          providerName: "cache-provider",
+          model: "claude-3-opus",
+          totalRequests: 30,
+          totalCost: "1.5",
+          cacheReadTokens: 8000,
+          cacheCreationCost: "0.6",
+          totalInputTokens: 15000,
+          cacheHitRate: 0.53,
+        },
+      ]),
+    ];
+
+    const { findDailyProviderCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyProviderCacheHitRateLeaderboard();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].providerName).toBe("cache-provider");
   });
 
   it("includes modelStats field on cache-hit leaderboard entries", async () => {
@@ -252,28 +277,22 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
         {
           providerId: 1,
           providerName: "cache-provider",
-          totalRequests: 50,
-          totalCost: "2.5",
-          cacheReadTokens: 10000,
-          cacheCreationCost: "1.0",
-          totalInputTokens: 20000,
-          cacheHitRate: 0.5,
-        },
-      ]),
-      createChainMock([
-        {
-          providerId: 1,
           model: "claude-3-opus",
           totalRequests: 30,
+          totalCost: "1.5",
           cacheReadTokens: 8000,
+          cacheCreationCost: "0.6",
           totalInputTokens: 15000,
           cacheHitRate: 0.53,
         },
         {
           providerId: 1,
+          providerName: "cache-provider",
           model: "claude-3-sonnet",
           totalRequests: 20,
+          totalCost: "1.0",
           cacheReadTokens: 2000,
+          cacheCreationCost: "0.4",
           totalInputTokens: 5000,
           cacheHitRate: 0.4,
         },
@@ -289,6 +308,13 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     expect(Array.isArray(entry.modelStats)).toBe(true);
     expect(entry.modelStats).toHaveLength(2);
     expect(entry.modelStats[0].model).toBe("claude-3-opus");
+    expect(entry.totalRequests).toBe(50);
+    expect(entry.totalCost).toBeCloseTo(2.5);
+    expect(entry.cacheReadTokens).toBe(10000);
+    expect(entry.cacheCreationCost).toBeCloseTo(1.0);
+    expect(entry.totalInputTokens).toBe(20000);
+    expect(entry.totalTokens).toBe(20000);
+    expect(entry.cacheHitRate).toBeCloseTo(0.5);
   });
 
   it("provider cache hit ranking sort stability preserved after adding modelStats", async () => {
@@ -297,6 +323,7 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
         {
           providerId: 1,
           providerName: "high-cache",
+          model: "m1",
           totalRequests: 50,
           totalCost: "2.5",
           cacheReadTokens: 15000,
@@ -307,6 +334,7 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
         {
           providerId: 2,
           providerName: "low-cache",
+          model: "m2",
           totalRequests: 30,
           totalCost: "1.0",
           cacheReadTokens: 2000,
@@ -315,7 +343,6 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
           cacheHitRate: 0.2,
         },
       ]),
-      createChainMock([]),
     ];
 
     const { findDailyProviderCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
@@ -331,36 +358,33 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
         {
           providerId: 1,
           providerName: "provider-a",
-          totalRequests: 50,
-          totalCost: "2.5",
-          cacheReadTokens: 10000,
-          cacheCreationCost: "1.0",
-          totalInputTokens: 20000,
-          cacheHitRate: 0.5,
-        },
-      ]),
-      createChainMock([
-        {
-          providerId: 1,
           model: "claude-3-opus",
           totalRequests: 30,
+          totalCost: "1.5",
           cacheReadTokens: 8000,
+          cacheCreationCost: "0.6",
           totalInputTokens: 15000,
           cacheHitRate: 0.53,
         },
         {
           providerId: 1,
-          model: "",
+          providerName: "provider-a",
+          model: null,
           totalRequests: 5,
+          totalCost: "0.0",
           cacheReadTokens: 100,
+          cacheCreationCost: "0.0",
           totalInputTokens: 500,
           cacheHitRate: 0.2,
         },
         {
           providerId: 1,
+          providerName: "provider-a",
           model: "claude-3-sonnet",
           totalRequests: 15,
+          totalCost: "1.0",
           cacheReadTokens: 1900,
+          cacheCreationCost: "0.4",
           totalInputTokens: 4500,
           cacheHitRate: 0.42,
         },
@@ -374,6 +398,14 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     const entry = result[0];
     // Empty model names must be excluded (only 2 valid models)
     expect(entry.modelStats).toHaveLength(2);
+    // Provider-level aggregates must still include the empty model row
+    expect(entry.totalRequests).toBe(50);
+    expect(entry.totalCost).toBeCloseTo(2.5);
+    expect(entry.cacheReadTokens).toBe(10000);
+    expect(entry.cacheCreationCost).toBeCloseTo(1.0);
+    expect(entry.totalInputTokens).toBe(20000);
+    expect(entry.totalTokens).toBe(20000);
+    expect(entry.cacheHitRate).toBeCloseTo(0.5);
     for (const ms of entry.modelStats) {
       expect(ms.model).toBeTruthy();
       expect(ms.model.trim()).not.toBe("");
@@ -390,6 +422,7 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
         {
           providerId: 1,
           providerName: "full-provider",
+          model: "full-model",
           totalRequests: 50,
           totalCost: "2.5",
           cacheReadTokens: 10000,
@@ -398,7 +431,6 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
           cacheHitRate: 0.5,
         },
       ]),
-      createChainMock([]),
     ];
 
     const { findDailyProviderCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
@@ -423,46 +455,33 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
         {
           providerId: 1,
           providerName: "provider-alpha",
-          totalRequests: 50,
-          totalCost: "2.5",
-          cacheReadTokens: 10000,
-          cacheCreationCost: "1.0",
-          totalInputTokens: 20000,
-          cacheHitRate: 0.5,
-        },
-        {
-          providerId: 2,
-          providerName: "provider-beta",
-          totalRequests: 30,
-          totalCost: "1.0",
-          cacheReadTokens: 5000,
-          cacheCreationCost: "0.5",
-          totalInputTokens: 10000,
-          cacheHitRate: 0.5,
-        },
-      ]),
-      createChainMock([
-        {
-          providerId: 1,
           model: "model-a",
           totalRequests: 30,
+          totalCost: "1.5",
           cacheReadTokens: 6000,
+          cacheCreationCost: "0.6",
           totalInputTokens: 12000,
           cacheHitRate: 0.5,
         },
         {
           providerId: 1,
+          providerName: "provider-alpha",
           model: "model-b",
           totalRequests: 20,
+          totalCost: "1.0",
           cacheReadTokens: 4000,
+          cacheCreationCost: "0.4",
           totalInputTokens: 8000,
           cacheHitRate: 0.5,
         },
         {
           providerId: 2,
+          providerName: "provider-beta",
           model: "model-c",
           totalRequests: 30,
+          totalCost: "1.0",
           cacheReadTokens: 5000,
+          cacheCreationCost: "0.5",
           totalInputTokens: 10000,
           cacheHitRate: 0.5,
         },
