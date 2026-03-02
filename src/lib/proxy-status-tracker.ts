@@ -221,7 +221,10 @@ export class ProxyStatusTracker {
         JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
         WHERE mr.user_id = u.id
           AND mr.deleted_at IS NULL
+          -- lastRequest 仅统计已结束请求：activeRequests 已覆盖进行中请求，避免这里误选“请求中”的记录。
+          AND mr.duration_ms IS NOT NULL
           AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+          -- 这里使用 created_at 排序以更好利用既有索引（user_id, created_at），减少全表排序压力。
         ORDER BY mr.created_at DESC, mr.id DESC
         LIMIT 1
       ) last ON true
