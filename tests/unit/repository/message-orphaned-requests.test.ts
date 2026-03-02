@@ -68,6 +68,8 @@ describe("sealOrphanedMessageRequests", () => {
 
   it("应批量封闭超时仍未落终态的 message_request 并返回 sealedCount", async () => {
     const { sealOrphanedMessageRequests } = await import("@/repository/message");
+    const { ORPHANED_MESSAGE_REQUEST_ERROR_CODE, ORPHANED_MESSAGE_REQUEST_STATUS_CODE } =
+      await import("@/repository/message-orphaned-requests");
 
     const result = await sealOrphanedMessageRequests({ staleAfterMs: 10, limit: 5 });
 
@@ -80,14 +82,14 @@ describe("sealOrphanedMessageRequests", () => {
     expect(built.sql).toContain("UPDATE message_request");
     expect(built.sql).toContain("duration_ms IS NULL");
     expect(built.sql).toContain("status_code IS NULL");
-    expect(built.sql).toContain("created_at <");
+    expect(built.sql).toContain("updated_at <");
     expect(built.sql).toContain("duration_ms = COALESCE");
     expect(built.sql).toContain("status_code =");
     expect(built.sql).toContain("error_message =");
     expect(built.sql).toContain("LIMIT");
 
-    expect(built.params).toContain(520);
-    expect(built.params).toContain("ORPHANED_REQUEST");
+    expect(built.params).toContain(ORPHANED_MESSAGE_REQUEST_STATUS_CODE);
+    expect(built.params).toContain(ORPHANED_MESSAGE_REQUEST_ERROR_CODE);
     expect(built.params).toContain(5);
 
     const threshold = built.params.find((p) => p instanceof Date) as Date | undefined;

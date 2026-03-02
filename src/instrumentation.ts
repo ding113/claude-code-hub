@@ -153,6 +153,29 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
   try {
     const { sealOrphanedMessageRequests } = await import("@/repository/message");
     const intervalMs = 60 * 1000;
+    const timeoutMs = 30 * 1000;
+    const slowLogMs = 5 * 1000;
+
+    const withTimeout = async <T>(
+      promise: Promise<T>,
+      ms: number
+    ): Promise<{ timedOut: true } | { timedOut: false; value: T }> => {
+      let timeoutId: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+        timeoutId = setTimeout(() => resolve({ timedOut: true }), ms);
+      });
+
+      const result = await Promise.race([
+        promise.then((value) => ({ timedOut: false as const, value })),
+        timeoutPromise,
+      ]);
+
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      return result;
+    };
 
     let inFlight = false;
     const runOnce = async (reason: "startup" | "scheduled") => {
@@ -160,12 +183,34 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
         return;
       }
       inFlight = true;
+      const startedAt = Date.now();
       try {
-        const { sealedCount } = await sealOrphanedMessageRequests();
+        const sealPromise = sealOrphanedMessageRequests();
+        const result = await withTimeout(sealPromise, timeoutMs);
+        if (result.timedOut) {
+          // 避免出现 unhandled rejection（promise 仍可能在超时后继续 reject）
+          void sealPromise.catch(() => {});
+          logger.warn("[Instrumentation] Orphaned message_request sweeper timed out", {
+            reason,
+            timeoutMs,
+          });
+          return;
+        }
+
+        const { sealedCount } = result.value;
+        const durationMs = Date.now() - startedAt;
+        if (durationMs > slowLogMs) {
+          logger.warn("[Instrumentation] Orphaned message_request sweeper slow run", {
+            reason,
+            durationMs,
+            timeoutMs,
+          });
+        }
         if (sealedCount > 0) {
           logger.warn("[Instrumentation] Orphaned message_request records sealed", {
             sealedCount,
             reason,
+            durationMs,
           });
         }
       } catch (error) {

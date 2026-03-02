@@ -76,6 +76,9 @@ const NUMERIC_LIKE_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 const REJECTED_INVALID_LOG_THROTTLE_MS = 60_000;
 let _lastRejectedInvalidLogAt = 0;
 
+// 终态 patch（duration/status）尽快刷库，但仍保留极短延迟以便 micro-batch，避免高并发下频繁 flush。
+const TERMINAL_FLUSH_DELAY_MS = 10;
+
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : null;
@@ -170,6 +173,11 @@ function sanitizeNumericString(value: unknown): string | undefined {
   // 数值过大（例如 1e309）会变成 Infinity；这种输入对 numeric 列也大概率不可用，直接拒绝。
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+
+  // 目前仅用于 costUsd（schema: numeric(21, 15)，整数部分最多 6 位：< 1,000,000）
+  if (parsed < 0 || parsed >= 1_000_000) {
     return undefined;
   }
 
@@ -474,7 +482,9 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
 class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
   private readonly pending = new Map<number, MessageRequestUpdatePatch>();
+  private readonly nonTerminalIds = new Set<number>();
   private flushTimer: NodeJS.Timeout | null = null;
+  private flushTimerDueAt: number | null = null;
   private flushAgainAfterCurrent = false;
   private flushInFlight: Promise<void> | null = null;
   private stopping = false;
@@ -499,7 +509,13 @@ class MessageRequestWriteBuffer {
     }
 
     const existing = this.pending.get(id) ?? {};
-    this.pending.set(id, { ...existing, ...sanitized });
+    const merged = { ...existing, ...sanitized };
+    this.pending.set(id, merged);
+    if (isTerminalPatch(merged)) {
+      this.nonTerminalIds.delete(id);
+    } else {
+      this.nonTerminalIds.add(id);
+    }
     let result: MessageRequestUpdateEnqueueResult = "enqueued";
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
@@ -508,12 +524,15 @@ class MessageRequestWriteBuffer {
       let droppedId: number | undefined;
       let droppedPatch: MessageRequestUpdatePatch | undefined;
 
-      for (const [candidateId, candidatePatch] of this.pending) {
-        if (!isTerminalPatch(candidatePatch)) {
-          droppedId = candidateId;
-          droppedPatch = candidatePatch;
-          break;
+      for (const candidateId of this.nonTerminalIds) {
+        const candidatePatch = this.pending.get(candidateId);
+        if (!candidatePatch) {
+          this.nonTerminalIds.delete(candidateId);
+          continue;
         }
+        droppedId = candidateId;
+        droppedPatch = candidatePatch;
+        break;
       }
 
       // 当 pending 全部为终态 patch 时，不应随机淘汰已有终态（会导致其他请求永久缺失完成信息）。
@@ -525,6 +544,7 @@ class MessageRequestWriteBuffer {
 
       if (droppedId !== undefined) {
         this.pending.delete(droppedId);
+        this.nonTerminalIds.delete(droppedId);
         if (droppedId === id) {
           result = "dropped_overflow";
         }
@@ -546,7 +566,7 @@ class MessageRequestWriteBuffer {
     // 停止阶段不再调度 timer，避免阻止进程退出
     if (!this.stopping) {
       // 终态 patch 尽快落库，减少 duration/status 为空的“悬挂窗口”
-      this.ensureFlushTimer(isTerminalPatch(sanitized) ? 0 : undefined);
+      this.ensureFlushTimer(isTerminalPatch(merged) ? TERMINAL_FLUSH_DELAY_MS : undefined);
     }
 
     // 达到批量阈值时尽快 flush，降低 durationMs 为空的“悬挂时间”
@@ -563,17 +583,19 @@ class MessageRequestWriteBuffer {
     }
 
     const delay = Math.max(0, delayMs ?? this.config.flushIntervalMs);
+    const dueAt = Date.now() + delay;
 
     if (this.flushTimer) {
-      if (delay === 0) {
-        this.clearFlushTimer();
-      } else {
+      if (this.flushTimerDueAt !== null && this.flushTimerDueAt <= dueAt) {
         return;
       }
+      this.clearFlushTimer();
     }
 
+    this.flushTimerDueAt = dueAt;
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
+      this.flushTimerDueAt = null;
       void this.flush();
     }, delay);
   }
@@ -582,6 +604,7 @@ class MessageRequestWriteBuffer {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
+      this.flushTimerDueAt = null;
     }
   }
 
@@ -589,7 +612,13 @@ class MessageRequestWriteBuffer {
     // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据
     for (const item of batch) {
       const existing = this.pending.get(item.id) ?? {};
-      this.pending.set(item.id, { ...item.patch, ...existing });
+      const merged = { ...item.patch, ...existing };
+      this.pending.set(item.id, merged);
+      if (isTerminalPatch(merged)) {
+        this.nonTerminalIds.delete(item.id);
+      } else {
+        this.nonTerminalIds.add(item.id);
+      }
     }
   }
 
@@ -609,6 +638,74 @@ class MessageRequestWriteBuffer {
     return true;
   }
 
+  private async flushBatchPerItem(batch: MessageRequestUpdateRecord[]): Promise<boolean> {
+    for (let index = 0; index < batch.length; index++) {
+      const item = batch[index];
+      if (!item) {
+        continue;
+      }
+
+      const patchStrategies = [
+        { name: "full" as const, patch: item.patch },
+        { name: "safe" as const, patch: getSafePatch(item.patch) },
+        { name: "minimal" as const, patch: getMinimalPatch(item.patch) },
+      ];
+
+      let lastFailure: {
+        kind: "build" | "execute";
+        strategy: "full" | "safe" | "minimal";
+        error: unknown;
+      } | null = null;
+
+      for (const { name, patch } of patchStrategies) {
+        let singleQuery: SQL | null = null;
+        try {
+          singleQuery = buildBatchUpdateSql([{ id: item.id, patch }]);
+        } catch (error) {
+          lastFailure = { kind: "build", strategy: name, error };
+          continue;
+        }
+
+        if (!singleQuery) {
+          lastFailure = null;
+          break;
+        }
+
+        try {
+          await db.execute(singleQuery);
+          lastFailure = null;
+          break;
+        } catch (error) {
+          lastFailure = { kind: "execute", strategy: name, error };
+          if (!isDataRelatedDbError(error)) {
+            return this.handleTransientPerItemError(
+              error,
+              batch,
+              index,
+              "[MessageRequestWriteBuffer] Per-item flush hit transient error, will retry"
+            );
+          }
+        }
+      }
+
+      if (lastFailure) {
+        logger.error("[MessageRequestWriteBuffer] Dropping invalid update to unblock queue", {
+          requestId: item.id,
+          keys: Object.keys(item.patch),
+          failureKind: lastFailure.kind,
+          failureStrategy: lastFailure.strategy,
+          error:
+            lastFailure.error instanceof Error
+              ? lastFailure.error.message
+              : String(lastFailure.error),
+          errorCode: getErrorCode(lastFailure.error),
+        });
+      }
+    }
+
+    return false;
+  }
+
   async flush(): Promise<void> {
     if (this.flushInFlight) {
       this.flushAgainAfterCurrent = true;
@@ -624,19 +721,30 @@ class MessageRequestWriteBuffer {
 
         while (this.pending.size > 0) {
           const batch = takeBatch(this.pending, this.config.batchSize);
+          for (const item of batch) {
+            this.nonTerminalIds.delete(item.id);
+          }
           let query: SQL | null = null;
 
           try {
             query = buildBatchUpdateSql(batch);
           } catch (error) {
-            // 极端场景：构建 SQL 失败（例如非预期类型）。回队列稍后重试，避免直接抛错影响请求链路。
-            this.requeueBatchForRetry(batch);
-            logger.error("[MessageRequestWriteBuffer] Build batch SQL failed, will retry later", {
-              error: error instanceof Error ? error.message : String(error),
-              pending: this.pending.size,
-              batchSize: batch.length,
-            });
-            break;
+            logger.error(
+              "[MessageRequestWriteBuffer] Build batch SQL failed, falling back to per-item writes",
+              {
+                error: error instanceof Error ? error.message : String(error),
+                errorCode: getErrorCode(error),
+                pending: this.pending.size,
+                batchSize: batch.length,
+              }
+            );
+
+            // 通过 per-item 写入确保队列可排空，避免 build 失败导致无限重试。
+            const shouldRetryLater = await this.flushBatchPerItem(batch);
+            if (shouldRetryLater) {
+              break;
+            }
+            continue;
           }
 
           if (!query) {
@@ -657,79 +765,7 @@ class MessageRequestWriteBuffer {
                 }
               );
 
-              let shouldRetryLater = false;
-
-              for (let index = 0; index < batch.length; index++) {
-                const item = batch[index];
-                if (!item) {
-                  continue;
-                }
-
-                const tryExecute = async (patch: MessageRequestUpdatePatch) => {
-                  const singleQuery = buildBatchUpdateSql([{ id: item.id, patch }]);
-                  if (!singleQuery) {
-                    return;
-                  }
-                  await db.execute(singleQuery);
-                };
-
-                try {
-                  await tryExecute(item.patch);
-                } catch (singleError) {
-                  if (!isDataRelatedDbError(singleError)) {
-                    shouldRetryLater = this.handleTransientPerItemError(
-                      singleError,
-                      batch,
-                      index,
-                      "[MessageRequestWriteBuffer] Per-item flush hit transient error, will retry"
-                    );
-                    break;
-                  }
-
-                  const safePatch = getSafePatch(item.patch);
-                  try {
-                    await tryExecute(safePatch);
-                  } catch (safeError) {
-                    if (!isDataRelatedDbError(safeError)) {
-                      shouldRetryLater = this.handleTransientPerItemError(
-                        safeError,
-                        batch,
-                        index,
-                        "[MessageRequestWriteBuffer] Per-item safe flush hit transient error, will retry"
-                      );
-                      break;
-                    }
-
-                    const minimalPatch = getMinimalPatch(item.patch);
-                    try {
-                      await tryExecute(minimalPatch);
-                    } catch (minimalError) {
-                      if (!isDataRelatedDbError(minimalError)) {
-                        shouldRetryLater = this.handleTransientPerItemError(
-                          minimalError,
-                          batch,
-                          index,
-                          "[MessageRequestWriteBuffer] Per-item minimal flush hit transient error, will retry"
-                        );
-                        break;
-                      }
-
-                      // 数据持续异常：丢弃该条更新，避免拖死整个队列（后续由 sweeper 兜底封闭）
-                      logger.error(
-                        "[MessageRequestWriteBuffer] Dropping invalid update to unblock queue",
-                        {
-                          requestId: item.id,
-                          error:
-                            minimalError instanceof Error
-                              ? minimalError.message
-                              : String(minimalError),
-                          errorCode: getErrorCode(minimalError),
-                        }
-                      );
-                    }
-                  }
-                }
-              }
+              const shouldRetryLater = await this.flushBatchPerItem(batch);
 
               if (shouldRetryLater) {
                 break;
@@ -779,10 +815,10 @@ let _buffer: MessageRequestWriteBuffer | null = null;
 let _bufferState: "running" | "stopping" | "stopped" = "running";
 
 function getBuffer(): MessageRequestWriteBuffer | null {
+  if (_bufferState !== "running") {
+    return null;
+  }
   if (!_buffer) {
-    if (_bufferState !== "running") {
-      return null;
-    }
     _buffer = new MessageRequestWriteBuffer(loadWriterConfig());
   }
   return _buffer;

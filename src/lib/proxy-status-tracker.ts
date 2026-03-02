@@ -192,22 +192,35 @@ export class ProxyStatusTracker {
 
   private async loadLastRequests(): Promise<LastRequestRow[]> {
     const query = sql<LastRequestRow>`
-      SELECT DISTINCT ON (mr.user_id)
-        mr.user_id AS "userId",
-        mr.id AS "requestId",
-        mr.key AS "keyString",
+      SELECT
+        u.id AS "userId",
+        last.request_id AS "requestId",
+        last.key_string AS "keyString",
         k.name AS "keyName",
-        mr.provider_id AS "providerId",
-        p.name AS "providerName",
-        mr.model AS "model",
-        mr.updated_at AS "endTime"
-      FROM message_request mr
-      JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
-      LEFT JOIN keys k ON k.key = mr.key AND k.deleted_at IS NULL
-      WHERE mr.deleted_at IS NULL
-        AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-      -- 优先按 created_at 取“最后一次请求”，避免 updated_at 去重排序在大表上产生额外 sort 压力
-      ORDER BY mr.user_id, mr.created_at DESC, mr.id DESC
+        last.provider_id AS "providerId",
+        last.provider_name AS "providerName",
+        last.model AS "model",
+        last.end_time AS "endTime"
+      FROM users u
+      -- 使用 LATERAL 为每个用户做一次“取最新请求”的索引扫描，避免在 message_request 大表上做 DISTINCT ON 全表排序去重。
+      JOIN LATERAL (
+        SELECT
+          mr.id AS request_id,
+          mr.key AS key_string,
+          mr.provider_id AS provider_id,
+          p.name AS provider_name,
+          mr.model AS model,
+          mr.updated_at AS end_time
+        FROM message_request mr
+        JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
+        WHERE mr.user_id = u.id
+          AND mr.deleted_at IS NULL
+          AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
+        ORDER BY mr.created_at DESC, mr.id DESC
+        LIMIT 1
+      ) last ON true
+      LEFT JOIN keys k ON k.key = last.key_string AND k.deleted_at IS NULL
+      WHERE u.deleted_at IS NULL
     `;
 
     const result = await db.execute(query);

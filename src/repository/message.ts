@@ -6,6 +6,10 @@ import { keys as keysTable, messageRequest, providers, usageLedger, users } from
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import {
+  ORPHANED_MESSAGE_REQUEST_ERROR_CODE,
+  ORPHANED_MESSAGE_REQUEST_STATUS_CODE,
+} from "@/repository/message-orphaned-requests";
 import type { MessageRequestUpdatePatch } from "@/repository/message-write-buffer";
 import {
   enqueueMessageRequestUpdate,
@@ -204,19 +208,15 @@ export async function sealOrphanedMessageRequests(options?: {
   const limit = Math.max(1, limitCandidate);
   const threshold = new Date(Date.now() - staleAfterMs);
 
-  const ORPHANED_STATUS_CODE = 520;
-  // 注意：这里写入的是稳定的“错误码”，展示层若直接展示 error_message，应做 i18n 映射。
-  const ORPHANED_ERROR_CODE = "ORPHANED_REQUEST";
-
   const query = sql<{ id: number }>`
     WITH candidates AS (
       SELECT id
       FROM message_request
       WHERE deleted_at IS NULL
         AND (duration_ms IS NULL OR status_code IS NULL)
-        AND created_at < ${threshold}
+        AND updated_at < ${threshold}
         AND ${EXCLUDE_WARMUP_CONDITION}
-      ORDER BY created_at ASC
+      ORDER BY updated_at ASC
       LIMIT ${limit}
     )
     UPDATE message_request
@@ -230,8 +230,8 @@ export async function sealOrphanedMessageRequests(options?: {
           )::int
         )
       ),
-      status_code = COALESCE(status_code, ${ORPHANED_STATUS_CODE}),
-      error_message = COALESCE(error_message, ${ORPHANED_ERROR_CODE}),
+      status_code = COALESCE(status_code, ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE}),
+      error_message = COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE}),
       updated_at = NOW()
     WHERE id IN (SELECT id FROM candidates)
       AND deleted_at IS NULL
