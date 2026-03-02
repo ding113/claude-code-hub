@@ -515,7 +515,8 @@ export function CodeDisplay({
 
     if (
       jsonPrettyTextKey === jsonSourceKey &&
-      (jsonPrettyStatus === "ready" ||
+      (jsonPrettyStatus === "loading" ||
+        jsonPrettyStatus === "ready" ||
         jsonPrettyStatus === "invalid" ||
         jsonPrettyStatus === "tooLarge" ||
         jsonPrettyStatus === "canceled" ||

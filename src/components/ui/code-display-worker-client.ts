@@ -270,7 +270,12 @@ export async function formatJsonPretty({
     };
 
     pending.set(jobId, { kind: "formatJsonPretty", resolve: wrappedResolve, onProgress });
-    w.postMessage({ type: "formatJsonPretty", jobId, text, indentSize, maxOutputBytes });
+    try {
+      w.postMessage({ type: "formatJsonPretty", jobId, text, indentSize, maxOutputBytes });
+    } catch {
+      pending.delete(jobId);
+      wrappedResolve({ ok: false, errorCode: "UNKNOWN" });
+    }
   });
 }
 
@@ -314,7 +319,12 @@ export async function stringifyJsonPretty({
     };
 
     pending.set(jobId, { kind: "stringifyJsonPretty", resolve: wrappedResolve });
-    w.postMessage({ type: "stringifyJsonPretty", jobId, value, indentSize, maxOutputBytes });
+    try {
+      w.postMessage({ type: "stringifyJsonPretty", jobId, value, indentSize, maxOutputBytes });
+    } catch {
+      pending.delete(jobId);
+      wrappedResolve({ ok: false, errorCode: "UNKNOWN" });
+    }
   });
 }
 
@@ -374,7 +384,12 @@ export async function buildLineIndex({
     };
 
     pending.set(jobId, { kind: "buildLineIndex", resolve: wrappedResolve, onProgress });
-    w.postMessage({ type: "buildLineIndex", jobId, text, maxLines });
+    try {
+      w.postMessage({ type: "buildLineIndex", jobId, text, maxLines });
+    } catch {
+      pending.delete(jobId);
+      wrappedResolve({ ok: false, errorCode: "UNKNOWN" });
+    }
   });
 }
 
@@ -433,6 +448,11 @@ export async function searchLines({
     };
 
     pending.set(jobId, { kind: "searchLines", resolve: wrappedResolve, onProgress });
-    w.postMessage({ type: "searchLines", jobId, text, query, maxResults });
+    try {
+      w.postMessage({ type: "searchLines", jobId, text, query, maxResults });
+    } catch {
+      pending.delete(jobId);
+      wrappedResolve({ ok: false, errorCode: "UNKNOWN" });
+    }
   });
 }
