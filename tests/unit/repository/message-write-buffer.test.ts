@@ -143,6 +143,40 @@ describe("message_request 异步批量写入", () => {
     expect(built.sql).toContain("::jsonb");
   });
 
+  it("遇到数据类 DB 错误时应降级写入并避免卡死队列", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    executeMock.mockImplementation(async (query) => {
+      const built = toSqlText(query);
+      if (built.sql.includes("::numeric")) {
+        const error: { code?: string } = new Error("invalid input syntax for type numeric");
+        error.code = "22P02";
+        throw error;
+      }
+      return [];
+    });
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    enqueueMessageRequestUpdate(1, { durationMs: 123, statusCode: 200, costUsd: "0.000123" });
+
+    await stopMessageRequestWriteBuffer();
+
+    expect(executeMock).toHaveBeenCalledTimes(3);
+
+    const firstQuery = executeMock.mock.calls[0]?.[0];
+    const thirdQuery = executeMock.mock.calls[2]?.[0];
+    const firstBuilt = toSqlText(firstQuery);
+    const thirdBuilt = toSqlText(thirdQuery);
+
+    expect(firstBuilt.sql).toContain("::numeric");
+    expect(thirdBuilt.sql).not.toContain("::numeric");
+    expect(thirdBuilt.sql).toContain("duration_ms");
+    expect(thirdBuilt.sql).toContain("status_code");
+  });
+
   it("stop 应等待 in-flight flush 完成", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 

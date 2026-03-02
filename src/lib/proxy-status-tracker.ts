@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys, messageRequest, providers, users } from "@/drizzle/schema";
 import { maskKey } from "@/lib/utils/validation";
@@ -166,7 +166,11 @@ export class ProxyStatusTracker {
           isNull(messageRequest.durationMs),
           isNull(providers.deletedAt)
         )
-      );
+      )
+      // 防御：异常情况下 durationMs 长期为空会导致“活跃请求”无限累积，进而撑爆查询与响应体。
+      // 这里对返回明细做上限保护（监控用途不需要无穷列表）。
+      .orderBy(desc(messageRequest.createdAt))
+      .limit(1000);
 
     return rows as ActiveRequestRow[];
   }

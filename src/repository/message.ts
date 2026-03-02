@@ -75,8 +75,7 @@ export async function createMessageRequest(
  * 更新消息请求的耗时
  */
 export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
-    enqueueMessageRequestUpdate(id, { durationMs });
+  if (enqueueMessageRequestUpdate(id, { durationMs })) {
     return;
   }
 
@@ -101,8 +100,7 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
-    enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
+  if (enqueueMessageRequestUpdate(id, { costUsd: formattedCost })) {
     return;
   }
 
@@ -141,8 +139,7 @@ export async function updateMessageRequestDetails(
     specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
-    enqueueMessageRequestUpdate(id, details);
+  if (enqueueMessageRequestUpdate(id, details)) {
     return;
   }
 
@@ -206,6 +203,64 @@ export async function updateMessageRequestDetails(
   }
 
   await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
+}
+
+/**
+ * 封闭“孤儿请求”记录（防御性修复）
+ *
+ * 在 MESSAGE_REQUEST_WRITE_MODE=async 时，请求终态信息（duration/status/tokens/cost 等）会先进入内存队列，
+ * 再异步批量刷入数据库。若进程被 OOM Killer/SIGKILL 等非优雅方式终止，尾部更新会丢失，
+ * 导致 message_request 记录长期保持“请求中”（duration_ms 长期为空；status_code 也可能为空或缺失）。
+ *
+ * 影响：
+ * - Dashboard/统计把这些记录当作“进行中”，导致异常展示与聚合膨胀；
+ * - 某些页面会高频轮询“活跃请求”，在孤儿记录持续累积时可能引发内存与性能风险。
+ *
+ * 本函数会把超过阈值仍未落下终态的记录标记为已结束（未知失败），避免无限累积。
+ */
+export async function sealOrphanedMessageRequests(options?: {
+  staleAfterMs?: number;
+  limit?: number;
+}): Promise<{ sealedCount: number }> {
+  const env = getEnvConfig();
+
+  const staleAfterMs = Math.max(60_000, options?.staleAfterMs ?? env.FETCH_BODY_TIMEOUT + 60_000);
+  const limit = Math.max(1, options?.limit ?? 1000);
+  const threshold = new Date(Date.now() - staleAfterMs);
+
+  const ORPHANED_STATUS_CODE = 520;
+  const ORPHANED_ERROR_MESSAGE = "ORPHANED_REQUEST";
+
+  const query = sql<{ id: number }>`
+    WITH candidates AS (
+      SELECT id
+      FROM message_request
+      WHERE deleted_at IS NULL
+        AND duration_ms IS NULL
+        AND created_at < ${threshold}
+        AND ${EXCLUDE_WARMUP_CONDITION}
+      ORDER BY created_at ASC
+      LIMIT ${limit}
+    )
+    UPDATE message_request
+    SET
+      duration_ms = (
+        LEAST(
+          2147483647,
+          GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
+        )::int
+      ),
+      status_code = COALESCE(status_code, ${ORPHANED_STATUS_CODE}),
+      error_message = COALESCE(error_message, ${ORPHANED_ERROR_MESSAGE}),
+      updated_at = NOW()
+    WHERE id IN (SELECT id FROM candidates)
+    RETURNING id
+  `;
+
+  const result = await db.execute(query);
+  const sealed = Array.from(result);
+
+  return { sealedCount: sealed.length };
 }
 
 /**

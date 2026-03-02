@@ -64,6 +64,238 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   specialSettings: "special_settings",
 };
 
+const INT32_MAX = 2147483647;
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function sanitizeInt32(
+  value: unknown,
+  options?: { min?: number; max?: number }
+): number | undefined {
+  if (!isFiniteNumber(value)) {
+    return undefined;
+  }
+
+  const truncated = Math.trunc(value);
+  const min = options?.min ?? -INT32_MAX - 1;
+  const max = options?.max ?? INT32_MAX;
+
+  if (truncated < min) {
+    return min;
+  }
+  if (truncated > max) {
+    return max;
+  }
+  return truncated;
+}
+
+function sanitizeNullableInt32(
+  value: unknown,
+  options?: { min?: number; max?: number }
+): number | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  return sanitizeInt32(value, options);
+}
+
+function sanitizeNumericString(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  // 允许常见十进制与科学计数法，拒绝 NaN/Infinity/空白/十六进制等异常输入
+  const numericLike = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed);
+  if (!numericLike) {
+    return undefined;
+  }
+
+  return trimmed;
+}
+
+function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePatch {
+  const sanitized: MessageRequestUpdatePatch = {};
+
+  const durationMs = sanitizeInt32(patch.durationMs, { min: 0, max: INT32_MAX });
+  if (durationMs !== undefined) {
+    sanitized.durationMs = durationMs;
+  }
+
+  const statusCode = sanitizeInt32(patch.statusCode, { min: 0, max: 999 });
+  if (statusCode !== undefined) {
+    sanitized.statusCode = statusCode;
+  }
+
+  const inputTokens = sanitizeInt32(patch.inputTokens, { min: 0, max: INT32_MAX });
+  if (inputTokens !== undefined) {
+    sanitized.inputTokens = inputTokens;
+  }
+
+  const outputTokens = sanitizeInt32(patch.outputTokens, { min: 0, max: INT32_MAX });
+  if (outputTokens !== undefined) {
+    sanitized.outputTokens = outputTokens;
+  }
+
+  const ttfbMs = sanitizeNullableInt32(patch.ttfbMs, { min: 0, max: INT32_MAX });
+  if (ttfbMs !== undefined) {
+    sanitized.ttfbMs = ttfbMs;
+  }
+
+  const cacheCreationInputTokens = sanitizeInt32(patch.cacheCreationInputTokens, {
+    min: 0,
+    max: INT32_MAX,
+  });
+  if (cacheCreationInputTokens !== undefined) {
+    sanitized.cacheCreationInputTokens = cacheCreationInputTokens;
+  }
+
+  const cacheReadInputTokens = sanitizeInt32(patch.cacheReadInputTokens, {
+    min: 0,
+    max: INT32_MAX,
+  });
+  if (cacheReadInputTokens !== undefined) {
+    sanitized.cacheReadInputTokens = cacheReadInputTokens;
+  }
+
+  const cacheCreation5mInputTokens = sanitizeInt32(patch.cacheCreation5mInputTokens, {
+    min: 0,
+    max: INT32_MAX,
+  });
+  if (cacheCreation5mInputTokens !== undefined) {
+    sanitized.cacheCreation5mInputTokens = cacheCreation5mInputTokens;
+  }
+
+  const cacheCreation1hInputTokens = sanitizeInt32(patch.cacheCreation1hInputTokens, {
+    min: 0,
+    max: INT32_MAX,
+  });
+  if (cacheCreation1hInputTokens !== undefined) {
+    sanitized.cacheCreation1hInputTokens = cacheCreation1hInputTokens;
+  }
+
+  if (patch.cacheTtlApplied === null) {
+    sanitized.cacheTtlApplied = null;
+  } else if (typeof patch.cacheTtlApplied === "string") {
+    sanitized.cacheTtlApplied = patch.cacheTtlApplied;
+  }
+
+  const costUsd = sanitizeNumericString(patch.costUsd);
+  if (costUsd !== undefined) {
+    sanitized.costUsd = costUsd;
+  }
+
+  if (patch.providerChain !== undefined) {
+    if (!Array.isArray(patch.providerChain)) {
+      logger.warn("[MessageRequestWriteBuffer] Invalid providerChain type, skipping", {
+        providerChainType: typeof patch.providerChain,
+      });
+    } else {
+      try {
+        JSON.stringify(patch.providerChain);
+        sanitized.providerChain = patch.providerChain;
+      } catch (error) {
+        logger.warn("[MessageRequestWriteBuffer] Invalid providerChain, skipping", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  if (typeof patch.errorMessage === "string") {
+    sanitized.errorMessage = patch.errorMessage;
+  }
+  if (typeof patch.errorStack === "string") {
+    sanitized.errorStack = patch.errorStack;
+  }
+  if (typeof patch.errorCause === "string") {
+    sanitized.errorCause = patch.errorCause;
+  }
+  if (typeof patch.model === "string") {
+    sanitized.model = patch.model;
+  }
+
+  const providerId = sanitizeInt32(patch.providerId, { min: 0, max: INT32_MAX });
+  if (providerId !== undefined) {
+    sanitized.providerId = providerId;
+  }
+
+  if (typeof patch.context1mApplied === "boolean") {
+    sanitized.context1mApplied = patch.context1mApplied;
+  }
+  if (typeof patch.swapCacheTtlApplied === "boolean") {
+    sanitized.swapCacheTtlApplied = patch.swapCacheTtlApplied;
+  }
+
+  if (patch.specialSettings === null) {
+    sanitized.specialSettings = null;
+  } else if (patch.specialSettings !== undefined) {
+    try {
+      JSON.stringify(patch.specialSettings);
+      sanitized.specialSettings = patch.specialSettings;
+    } catch (error) {
+      logger.warn("[MessageRequestWriteBuffer] Invalid specialSettings, skipping", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return sanitized;
+}
+
+function isTerminalPatch(patch: MessageRequestUpdatePatch): boolean {
+  return patch.durationMs !== undefined || patch.statusCode !== undefined;
+}
+
+function getErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+function isDataRelatedDbError(error: unknown): boolean {
+  const code = getErrorCode(error);
+  if (!code) {
+    return false;
+  }
+
+  // 仅对“数据/约束类”错误做隔离处理，避免对连接/暂态问题造成额外压力
+  return code.startsWith("22") || code.startsWith("23");
+}
+
+function getSafePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePatch {
+  // 刻意排除 costUsd/providerChain/specialSettings：这些字段更容易引发类型/JSON 异常
+  const {
+    costUsd: _costUsd,
+    providerChain: _providerChain,
+    specialSettings: _specialSettings,
+    ...rest
+  } = patch;
+  return rest;
+}
+
+function getMinimalPatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePatch {
+  const minimal: MessageRequestUpdatePatch = {};
+  if (patch.durationMs !== undefined) {
+    minimal.durationMs = patch.durationMs;
+  }
+  if (patch.statusCode !== undefined) {
+    minimal.statusCode = patch.statusCode;
+  }
+  if (patch.errorMessage !== undefined) {
+    minimal.errorMessage = patch.errorMessage;
+  }
+  return minimal;
+}
+
 function loadWriterConfig(): WriterConfig {
   const env = getEnvConfig();
   return {
@@ -108,8 +340,19 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
           cases.push(sql`WHEN ${update.id} THEN NULL`);
           continue;
         }
-        const json = JSON.stringify(value);
-        cases.push(sql`WHEN ${update.id} THEN ${json}::jsonb`);
+        try {
+          const json = JSON.stringify(value);
+          cases.push(sql`WHEN ${update.id} THEN ${json}::jsonb`);
+        } catch (error) {
+          logger.warn(
+            "[MessageRequestWriteBuffer] Failed to stringify JSON patch field, skipping",
+            {
+              requestId: update.id,
+              field: key,
+              error: error instanceof Error ? error.message : String(error),
+            }
+          );
+        }
         continue;
       }
 
@@ -163,16 +406,13 @@ class MessageRequestWriteBuffer {
   }
 
   enqueue(id: number, patch: MessageRequestUpdatePatch): void {
-    const existing = this.pending.get(id) ?? {};
-    const merged: MessageRequestUpdatePatch = { ...existing };
-    for (const [k, v] of Object.entries(patch) as Array<
-      [keyof MessageRequestUpdatePatch, MessageRequestUpdatePatch[keyof MessageRequestUpdatePatch]]
-    >) {
-      if (v !== undefined) {
-        merged[k] = v as never;
-      }
+    const sanitized = sanitizePatch(patch);
+    if (Object.keys(sanitized).length === 0) {
+      return;
     }
-    this.pending.set(id, merged);
+
+    const existing = this.pending.get(id) ?? {};
+    this.pending.set(id, { ...existing, ...sanitized });
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
@@ -217,7 +457,8 @@ class MessageRequestWriteBuffer {
 
     // 停止阶段不再调度 timer，避免阻止进程退出
     if (!this.stopping) {
-      this.ensureFlushTimer();
+      // 终态 patch 尽快落库，减少 duration/status 为空的“悬挂窗口”
+      this.ensureFlushTimer(isTerminalPatch(sanitized) ? 0 : undefined);
     }
 
     // 达到批量阈值时尽快 flush，降低 durationMs 为空的“悬挂时间”
@@ -226,21 +467,39 @@ class MessageRequestWriteBuffer {
     }
   }
 
-  private ensureFlushTimer(): void {
-    if (this.stopping || this.flushTimer) {
+  private ensureFlushTimer(delayMs?: number): void {
+    if (this.stopping) {
       return;
+    }
+
+    const delay = Math.max(0, delayMs ?? this.config.flushIntervalMs);
+
+    if (this.flushTimer) {
+      if (delay === 0) {
+        this.clearFlushTimer();
+      } else {
+        return;
+      }
     }
 
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
       void this.flush();
-    }, this.config.flushIntervalMs);
+    }, delay);
   }
 
   private clearFlushTimer(): void {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
+    }
+  }
+
+  private requeueBatchForRetry(batch: MessageRequestUpdateRecord[]): void {
+    // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据
+    for (const item of batch) {
+      const existing = this.pending.get(item.id) ?? {};
+      this.pending.set(item.id, { ...item.patch, ...existing });
     }
   }
 
@@ -259,7 +518,21 @@ class MessageRequestWriteBuffer {
 
         while (this.pending.size > 0) {
           const batch = takeBatch(this.pending, this.config.batchSize);
-          const query = buildBatchUpdateSql(batch);
+          let query: SQL | null = null;
+
+          try {
+            query = buildBatchUpdateSql(batch);
+          } catch (error) {
+            // 极端场景：构建 SQL 失败（例如非预期类型）。回队列稍后重试，避免直接抛错影响请求链路。
+            this.requeueBatchForRetry(batch);
+            logger.error("[MessageRequestWriteBuffer] Build batch SQL failed, will retry later", {
+              error: error instanceof Error ? error.message : String(error),
+              pending: this.pending.size,
+              batchSize: batch.length,
+            });
+            break;
+          }
+
           if (!query) {
             continue;
           }
@@ -267,15 +540,121 @@ class MessageRequestWriteBuffer {
           try {
             await db.execute(query);
           } catch (error) {
-            // 失败重试：将 batch 放回队列
-            // 合并策略：保留“更新更晚”的字段（existing 优先），避免覆盖新数据
-            for (const item of batch) {
-              const existing = this.pending.get(item.id) ?? {};
-              this.pending.set(item.id, { ...item.patch, ...existing });
+            if (isDataRelatedDbError(error)) {
+              logger.error(
+                "[MessageRequestWriteBuffer] Flush failed with data error, falling back to per-item writes",
+                {
+                  error: error instanceof Error ? error.message : String(error),
+                  errorCode: getErrorCode(error),
+                  pending: this.pending.size,
+                  batchSize: batch.length,
+                }
+              );
+
+              let shouldRetryLater = false;
+
+              for (let index = 0; index < batch.length; index++) {
+                const item = batch[index];
+                if (!item) {
+                  continue;
+                }
+
+                const tryExecute = async (patch: MessageRequestUpdatePatch) => {
+                  const singleQuery = buildBatchUpdateSql([{ id: item.id, patch }]);
+                  if (!singleQuery) {
+                    return;
+                  }
+                  await db.execute(singleQuery);
+                };
+
+                try {
+                  await tryExecute(item.patch);
+                } catch (singleError) {
+                  if (!isDataRelatedDbError(singleError)) {
+                    // 连接/暂态问题：把当前及剩余条目回队列，留待下次 flush
+                    this.requeueBatchForRetry(batch.slice(index));
+                    logger.error(
+                      "[MessageRequestWriteBuffer] Per-item flush hit transient error, will retry",
+                      {
+                        error:
+                          singleError instanceof Error ? singleError.message : String(singleError),
+                        errorCode: getErrorCode(singleError),
+                        pending: this.pending.size,
+                      }
+                    );
+                    shouldRetryLater = true;
+                    break;
+                  }
+
+                  const safePatch = getSafePatch(item.patch);
+                  try {
+                    await tryExecute(safePatch);
+                  } catch (safeError) {
+                    if (!isDataRelatedDbError(safeError)) {
+                      this.requeueBatchForRetry(batch.slice(index));
+                      logger.error(
+                        "[MessageRequestWriteBuffer] Per-item safe flush hit transient error, will retry",
+                        {
+                          error: safeError instanceof Error ? safeError.message : String(safeError),
+                          errorCode: getErrorCode(safeError),
+                          pending: this.pending.size,
+                        }
+                      );
+                      shouldRetryLater = true;
+                      break;
+                    }
+
+                    const minimalPatch = getMinimalPatch(item.patch);
+                    try {
+                      await tryExecute(minimalPatch);
+                    } catch (minimalError) {
+                      if (!isDataRelatedDbError(minimalError)) {
+                        this.requeueBatchForRetry(batch.slice(index));
+                        logger.error(
+                          "[MessageRequestWriteBuffer] Per-item minimal flush hit transient error, will retry",
+                          {
+                            error:
+                              minimalError instanceof Error
+                                ? minimalError.message
+                                : String(minimalError),
+                            errorCode: getErrorCode(minimalError),
+                            pending: this.pending.size,
+                          }
+                        );
+                        shouldRetryLater = true;
+                        break;
+                      }
+
+                      // 数据持续异常：丢弃该条更新，避免拖死整个队列（后续由 sweeper 兜底封闭）
+                      logger.error(
+                        "[MessageRequestWriteBuffer] Dropping invalid update to unblock queue",
+                        {
+                          requestId: item.id,
+                          error:
+                            minimalError instanceof Error
+                              ? minimalError.message
+                              : String(minimalError),
+                          errorCode: getErrorCode(minimalError),
+                        }
+                      );
+                    }
+                  }
+                }
+              }
+
+              if (shouldRetryLater) {
+                break;
+              }
+
+              continue;
             }
+
+            // 失败重试：将 batch 放回队列
+            this.requeueBatchForRetry(batch);
 
             logger.error("[MessageRequestWriteBuffer] Flush failed, will retry later", {
               error: error instanceof Error ? error.message : String(error),
+              errorCode: getErrorCode(error),
               pending: this.pending.size,
               batchSize: batch.length,
             });
@@ -320,16 +699,17 @@ function getBuffer(): MessageRequestWriteBuffer | null {
   return _buffer;
 }
 
-export function enqueueMessageRequestUpdate(id: number, patch: MessageRequestUpdatePatch): void {
+export function enqueueMessageRequestUpdate(id: number, patch: MessageRequestUpdatePatch): boolean {
   // 只在 async 模式下启用队列，避免额外内存/定时器开销
   if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "async") {
-    return;
+    return false;
   }
   const buffer = getBuffer();
   if (!buffer) {
-    return;
+    return false;
   }
   buffer.enqueue(id, patch);
+  return true;
 }
 
 export async function flushMessageRequestWriteBuffer(): Promise<void> {
