@@ -572,7 +572,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     agg.totalInputTokens += row.totalInputTokens;
     providerAggById.set(row.providerId, agg);
 
-    const model = row.model?.trim();
+    const model = row.model;
     if (!model) continue;
     const stats = modelStatsByProvider.get(row.providerId) ?? [];
     stats.push({
