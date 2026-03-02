@@ -208,6 +208,7 @@ export async function sealOrphanedMessageRequests(options?: {
   const limit = Math.max(1, limitCandidate);
   const threshold = new Date(Date.now() - staleAfterMs);
 
+  // 注意：EXCLUDE_WARMUP_CONDITION 使用 Drizzle 列引用（message_request.blocked_by），这里不要给 message_request 起别名。
   const query = sql<{ id: number }>`
     WITH candidates AS (
       SELECT id

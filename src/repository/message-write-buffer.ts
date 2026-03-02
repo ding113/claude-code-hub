@@ -482,6 +482,7 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
 class MessageRequestWriteBuffer {
   private readonly config: WriterConfig;
   private readonly pending = new Map<number, MessageRequestUpdatePatch>();
+  // 不含终态字段（duration/status）的待写入条目集合；始终与 pending 内合并后的 patch 状态保持一致。
   private readonly nonTerminalIds = new Set<number>();
   private flushTimer: NodeJS.Timeout | null = null;
   private flushTimerDueAt: number | null = null;

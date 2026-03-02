@@ -33,12 +33,6 @@ jobs:
       - name: 📦 Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: 📦 Ensure Biome CLI
-        run: |
-          BIOME_VERSION=$(bun -p 'require("./biome.json")["$schema"].match(/schemas\/(\d+\.\d+\.\d+)\/schema\.json/)[1]')
-          bun install --no-save @biomejs/biome@${BIOME_VERSION}
-          bun install --no-save @biomejs/cli-linux-x64@${BIOME_VERSION}
-
       - name: 🔍 Type check
         run: bun run typecheck
 
