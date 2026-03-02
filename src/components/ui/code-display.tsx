@@ -30,7 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import { cn } from "@/lib/utils";
+import { cn, getTextKey } from "@/lib/utils";
 
 export type CodeDisplayLanguage = "json" | "sse" | "text";
 
@@ -50,19 +50,6 @@ function safeJsonParse(text: string): { ok: true; value: unknown } | { ok: false
 
 function stringifyPretty(value: unknown): string {
   return JSON.stringify(value, null, 2);
-}
-
-function getTextKey(text: string): string {
-  const len = text.length;
-  if (len === 0) return "0:0:0:0:0:0";
-
-  const first = text.charCodeAt(0);
-  const second = len > 1 ? text.charCodeAt(1) : 0;
-  const mid = text.charCodeAt(len >> 1);
-  const penultimate = len > 1 ? text.charCodeAt(len - 2) : 0;
-  const last = text.charCodeAt(len - 1);
-
-  return `${len}:${first}:${second}:${mid}:${penultimate}:${last}`;
 }
 
 function estimateUtf8BytesUpToLimit(text: string, limitBytes: number): number {
@@ -183,7 +170,14 @@ function buildOnlyMatchesText(text: string, lineStarts: Int32Array, matches: Int
     const start = lineStarts[lineNo] ?? 0;
     const nextStart =
       lineNo + 1 < lineCount ? (lineStarts[lineNo + 1] ?? text.length) : text.length;
-    const end = Math.max(start, nextStart - 1);
+    let end = nextStart;
+    if (nextStart > start && text.charCodeAt(nextStart - 1) === 10) {
+      end = nextStart - 1;
+      if (end > start && text.charCodeAt(end - 1) === 13) {
+        end -= 1;
+      }
+    }
+    end = Math.max(start, end);
     out.push(text.slice(start, end));
   }
 
@@ -220,6 +214,12 @@ function CodeDisplaySseEvents({
   const [viewportHeight, setViewportHeight] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(() => new Set());
+
+  useEffect(() => {
+    // events 可能由搜索过滤产生新列表：重置展开状态以避免索引错位
+    void events.length;
+    setExpandedRows(new Set());
+  }, [events]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -292,7 +292,7 @@ function CodeDisplaySseEvents({
 
           return (
             <div
-              key={`${index}-${evt.event}`}
+              key={index}
               data-testid="code-display-sse-row"
               className="rounded-md border bg-background/50"
             >

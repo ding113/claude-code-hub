@@ -12,6 +12,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { CodeDisplay } from "@/components/ui/code-display";
 import type { CodeDisplayConfig } from "@/components/ui/code-display-config";
 import { CodeDisplayConfigProvider } from "@/components/ui/code-display-config-context";
+import { CodeDisplayMatchesList } from "@/components/ui/code-display-matches-list";
 
 const workerClientMocks = vi.hoisted(() => ({
   buildLineIndex: vi.fn(),
@@ -317,6 +318,29 @@ describe("CodeDisplay - large content performance strategy", () => {
     expect(
       container.querySelector('[data-testid="code-display-large-pretty-view-virtual"]')
     ).not.toBeNull();
+
+    unmount();
+  });
+
+  test("matches list does not truncate the last character on final line", async () => {
+    const text = "abc";
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplayMatchesList
+        text={text}
+        matches={Int32Array.from([0])}
+        lineStarts={Int32Array.from([0])}
+        maxHeight="200px"
+        lineHeightPx={18}
+      />,
+      makeConfig({})
+    );
+
+    await flushMicrotasks();
+
+    const list = container.querySelector('[data-testid="code-display-matches-list"]');
+    expect(list).not.toBeNull();
+    expect((list as HTMLElement).textContent).toContain("abc");
 
     unmount();
   });

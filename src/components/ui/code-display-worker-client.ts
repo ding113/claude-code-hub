@@ -249,7 +249,7 @@ export async function formatJsonPretty({
   }
 
   const jobId = genJobId();
-  return await new Promise((resolve) => {
+  return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve({ ok: false, errorCode: "CANCELED" });
       return;
@@ -293,7 +293,7 @@ export async function stringifyJsonPretty({
   }
 
   const jobId = genJobId();
-  return await new Promise((resolve) => {
+  return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve({ ok: false, errorCode: "CANCELED" });
       return;
@@ -353,7 +353,7 @@ export async function buildLineIndex({
   }
 
   const jobId = genJobId();
-  return await new Promise((resolve) => {
+  return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve({ ok: false, errorCode: "CANCELED" });
       return;
@@ -412,7 +412,7 @@ export async function searchLines({
   }
 
   const jobId = genJobId();
-  return await new Promise((resolve) => {
+  return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve({ ok: false, errorCode: "CANCELED" });
       return;

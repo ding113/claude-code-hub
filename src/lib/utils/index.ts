@@ -22,6 +22,8 @@ export {
 
 // SSE 处理
 export { parseSSEData } from "./sse";
+// 大文本 key（用于缓存/依赖触发）
+export { getTextKey } from "./text-key";
 export { formatTokenAmount } from "./token";
 // 验证和格式化
 export {

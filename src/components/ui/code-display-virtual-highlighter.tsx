@@ -7,20 +7,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Button } from "@/components/ui/button";
 import { buildLineIndex } from "@/components/ui/code-display-worker-client";
-import { cn } from "@/lib/utils";
-
-function getTextKey(text: string): string {
-  const len = text.length;
-  if (len === 0) return "0:0:0:0:0:0";
-
-  const first = text.charCodeAt(0);
-  const second = len > 1 ? text.charCodeAt(1) : 0;
-  const mid = text.charCodeAt(len >> 1);
-  const penultimate = len > 1 ? text.charCodeAt(len - 2) : 0;
-  const last = text.charCodeAt(len - 1);
-
-  return `${len}:${first}:${second}:${mid}:${penultimate}:${last}`;
-}
+import { cn, getTextKey } from "@/lib/utils";
 
 type RangeState = {
   startLine: number;
@@ -65,6 +52,8 @@ export function CodeDisplayVirtualHighlighter({
   textRef.current = text;
 
   const textKey = useMemo(() => getTextKey(text), [text]);
+  const onRequestPlainViewRef = useRef(onRequestPlainView);
+  onRequestPlainViewRef.current = onRequestPlainView;
 
   const [indexStatus, setIndexStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [indexProgress, setIndexProgress] = useState<{ processed: number; total: number } | null>(
@@ -119,7 +108,7 @@ export function CodeDisplayVirtualHighlighter({
       if (!res.ok) {
         setIndexStatus("error");
         setIndexProgress(null);
-        onRequestPlainView?.();
+        onRequestPlainViewRef.current?.();
         return;
       }
 
@@ -130,7 +119,7 @@ export function CodeDisplayVirtualHighlighter({
     });
 
     return () => controller.abort();
-  }, [maxLines, onRequestPlainView, perfDebugEnabled, textKey]);
+  }, [maxLines, perfDebugEnabled, textKey]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -255,7 +244,7 @@ export function CodeDisplayVirtualHighlighter({
             size="sm"
             onClick={() => {
               indexAbortRef.current?.abort();
-              onRequestPlainView?.();
+              onRequestPlainViewRef.current?.();
             }}
             className="h-8"
           >

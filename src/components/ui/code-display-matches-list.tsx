@@ -14,7 +14,19 @@ function getLineRange(
 
   const start = lineStarts[lineNo] ?? 0;
   const nextStart = lineNo + 1 < lineCount ? (lineStarts[lineNo + 1] ?? text.length) : text.length;
-  const end = Math.max(start, nextStart - 1); // 去掉 '\n'
+
+  // slice(start, end) 的 end 是排他上界：
+  // - 对非最后一行：nextStart 指向下一行行首（通常是 '\n' 后的索引）
+  // - 对最后一行：nextStart === text.length
+  let end = nextStart;
+  if (nextStart > start && text.charCodeAt(nextStart - 1) === 10) {
+    end = nextStart - 1; // 去掉 '\n'
+    if (end > start && text.charCodeAt(end - 1) === 13) {
+      end -= 1; // 兼容 CRLF：去掉 '\r'
+    }
+  }
+
+  end = Math.max(start, end);
   return [start, end];
 }
 
