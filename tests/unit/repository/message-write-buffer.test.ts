@@ -302,6 +302,44 @@ describe("message_request 异步批量写入", () => {
     await stopMessageRequestWriteBuffer();
   });
 
+  it("requeue 后应收敛到 maxPending，避免后续更新误触发 overflow 丢弃", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+    process.env.MESSAGE_REQUEST_ASYNC_BATCH_SIZE = "100";
+    process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";
+
+    const deferred = createDeferred<unknown[]>();
+    executeMock.mockImplementationOnce(async () => deferred.promise);
+
+    const {
+      enqueueMessageRequestUpdate,
+      flushMessageRequestWriteBuffer,
+      stopMessageRequestWriteBuffer,
+    } = await import("@/repository/message-write-buffer");
+
+    // pending=100 后会触发一次自动 flush（batchSize=100）
+    for (let i = 1; i <= 100; i++) {
+      enqueueMessageRequestUpdate(i, { durationMs: i });
+    }
+
+    const flushPromise = flushMessageRequestWriteBuffer();
+    expect(executeMock).toHaveBeenCalledTimes(1);
+
+    // flush in-flight 期间继续写入（填满 pending）
+    for (let i = 101; i <= 200; i++) {
+      enqueueMessageRequestUpdate(i, { durationMs: i });
+    }
+
+    // 暂态错误：触发 requeue
+    deferred.reject(new Error("db down"));
+    await flushPromise;
+
+    // 若 requeue 不收敛到 maxPending，这里更新“已存在”的 id 也会误触发 overflow 并丢弃当前 patch。
+    const result = enqueueMessageRequestUpdate(100, { durationMs: 999 });
+    expect(result.kind).toBe("enqueued");
+
+    await stopMessageRequestWriteBuffer();
+  });
+
   it("enqueueMessageRequestUpdate 的返回值应反映 patch 是否被接受（sanitize 为空时返回 rejected_invalid）", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
 

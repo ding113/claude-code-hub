@@ -180,7 +180,7 @@ function sanitizeNullableInt32(
   return sanitizeInt32(value, options);
 }
 
-function sanitizeNumericString(value: unknown): string | undefined {
+function sanitizeCostUsdString(value: unknown): string | undefined {
   let raw: string | undefined;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
@@ -303,7 +303,7 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
     });
   }
 
-  const costUsd = sanitizeNumericString(patch.costUsd);
+  const costUsd = sanitizeCostUsdString(patch.costUsd);
   if (costUsd !== undefined) {
     sanitized.costUsd = costUsd;
   }
@@ -594,38 +594,20 @@ class MessageRequestWriteBuffer {
 
     // 队列上限保护：DB 异常时避免无限增长导致 OOM
     if (this.pending.size > this.config.maxPending) {
-      // 优先丢弃非“终态”更新（不含 durationMs/statusCode 的条目），尽量保留请求完成信息
-      let droppedId: number | undefined;
-      let droppedPatch: MessageRequestUpdatePatch | undefined;
-
-      for (const candidateId of this.nonTerminalIds) {
-        const candidatePatch = this.pending.get(candidateId);
-        if (!candidatePatch) {
-          this.nonTerminalIds.delete(candidateId);
-          continue;
+      const trimResult = this.trimPendingToMaxPending(id);
+      if (trimResult.droppedCount > 0) {
+        if (trimResult.droppedCurrent) {
+          result = {
+            kind: "dropped_overflow",
+            patch: trimResult.droppedCurrentPatch ?? sanitized,
+          };
         }
-        droppedId = candidateId;
-        droppedPatch = candidatePatch;
-        break;
-      }
-
-      // 当 pending 全部为终态 patch 时，不应随机淘汰已有终态（会导致其他请求永久缺失完成信息）。
-      // 此时优先丢弃“当前” patch，并让调用方按返回值决定是否走同步写入兜底。
-      if (droppedId === undefined) {
-        droppedId = id;
-        droppedPatch = this.pending.get(id);
-      }
-
-      if (droppedId !== undefined) {
-        this.pending.delete(droppedId);
-        this.nonTerminalIds.delete(droppedId);
-        if (droppedId === id) {
-          result = { kind: "dropped_overflow", patch: droppedPatch ?? sanitized };
-        }
-        logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping update", {
+        logger.warn("[MessageRequestWriteBuffer] Pending queue overflow, dropping updates", {
           maxPending: this.config.maxPending,
-          droppedId,
-          droppedIsTerminal: droppedPatch ? isTerminalPatch(droppedPatch) : undefined,
+          droppedCount: trimResult.droppedCount,
+          droppedTerminalCount: trimResult.droppedTerminalCount,
+          droppedIdsSample: trimResult.droppedIdsSample,
+          droppedCurrent: trimResult.droppedCurrent,
           currentPending: this.pending.size,
         });
       }
@@ -694,6 +676,112 @@ class MessageRequestWriteBuffer {
         this.nonTerminalIds.add(item.id);
       }
     }
+
+    const trimResult = this.trimPendingToMaxPending();
+    if (trimResult.droppedCount > 0) {
+      logger.warn(
+        "[MessageRequestWriteBuffer] Pending queue overflow after requeue, dropping updates",
+        {
+          maxPending: this.config.maxPending,
+          droppedCount: trimResult.droppedCount,
+          droppedTerminalCount: trimResult.droppedTerminalCount,
+          droppedIdsSample: trimResult.droppedIdsSample,
+          currentPending: this.pending.size,
+        }
+      );
+    }
+  }
+
+  private trimPendingToMaxPending(currentId?: number): {
+    droppedCount: number;
+    droppedTerminalCount: number;
+    droppedIdsSample: number[];
+    droppedCurrent: boolean;
+    droppedCurrentPatch?: MessageRequestUpdatePatch;
+  } {
+    let droppedCount = 0;
+    let droppedTerminalCount = 0;
+    const droppedIdsSample: number[] = [];
+    let droppedCurrent = false;
+    let droppedCurrentPatch: MessageRequestUpdatePatch | undefined;
+
+    while (this.pending.size > this.config.maxPending) {
+      let droppedId: number | undefined;
+      let droppedPatch: MessageRequestUpdatePatch | undefined;
+
+      // 优先丢弃非终态更新（不含 durationMs/statusCode 的条目），尽量保留请求完成信息。
+      // 若存在其他可丢弃条目，尽量不要丢弃 currentId（避免本次 enqueue 的 patch 被优先淘汰）。
+      for (const candidateId of this.nonTerminalIds) {
+        if (candidateId === currentId) {
+          continue;
+        }
+        const candidatePatch = this.pending.get(candidateId);
+        if (!candidatePatch) {
+          this.nonTerminalIds.delete(candidateId);
+          continue;
+        }
+        droppedId = candidateId;
+        droppedPatch = candidatePatch;
+        break;
+      }
+
+      if (droppedId === undefined) {
+        for (const candidateId of this.nonTerminalIds) {
+          const candidatePatch = this.pending.get(candidateId);
+          if (!candidatePatch) {
+            this.nonTerminalIds.delete(candidateId);
+            continue;
+          }
+          droppedId = candidateId;
+          droppedPatch = candidatePatch;
+          break;
+        }
+      }
+
+      if (droppedId === undefined) {
+        // 当 pending 全部为终态 patch 时，不应随机淘汰已有终态（会导致其他请求永久缺失完成信息）。
+        // enqueue 路径会优先丢弃“当前” patch 并由调用方决定是否同步兜底；其他场景（如 requeue）则退化为丢弃最早条目。
+        if (currentId !== undefined && this.pending.has(currentId)) {
+          droppedId = currentId;
+          droppedPatch = this.pending.get(currentId);
+        } else {
+          const first = this.pending.keys().next();
+          if (first.done) {
+            break;
+          }
+          droppedId = first.value;
+          droppedPatch = this.pending.get(droppedId);
+        }
+      }
+
+      if (droppedId === undefined) {
+        break;
+      }
+
+      this.pending.delete(droppedId);
+      this.nonTerminalIds.delete(droppedId);
+
+      if (droppedPatch && isTerminalPatch(droppedPatch)) {
+        droppedTerminalCount++;
+      }
+
+      droppedCount++;
+      if (droppedIdsSample.length < 5) {
+        droppedIdsSample.push(droppedId);
+      }
+      if (droppedId === currentId) {
+        droppedCurrent = true;
+        droppedCurrentPatch = droppedPatch;
+      }
+    }
+
+    return {
+      droppedCount,
+      droppedTerminalCount,
+      droppedIdsSample,
+      droppedCurrent,
+      droppedCurrentPatch,
+    };
   }
 
   private handleTransientPerItemError(

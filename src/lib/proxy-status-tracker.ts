@@ -212,16 +212,17 @@ export class ProxyStatusTracker {
       FROM users u
       -- 使用 LATERAL 为每个用户做一次“取最新请求”的索引扫描，避免在 message_request 大表上做 DISTINCT ON 全表排序去重。
       JOIN LATERAL (
-        SELECT
-          mr.id AS request_id,
-          mr.key AS key_string,
-          mr.provider_id AS provider_id,
-          p.name AS provider_name,
-          mr.model AS model,
-          mr.updated_at AS end_time
-        FROM message_request mr
-        JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
-        WHERE mr.user_id = u.id
+         SELECT
+           mr.id AS request_id,
+           mr.key AS key_string,
+           mr.provider_id AS provider_id,
+           p.name AS provider_name,
+           mr.model AS model,
+           -- 使用 created_at + duration_ms 推导结束时间：避免 async 批量写入导致 updated_at 漂移而“看起来更近”。
+           (mr.created_at + (mr.duration_ms * interval '1 millisecond')) AS end_time
+         FROM message_request mr
+         JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
+         WHERE mr.user_id = u.id
           AND mr.deleted_at IS NULL
           -- lastRequest 仅统计已结束请求：activeRequests 已覆盖进行中请求，避免这里误选“请求中”的记录。
           AND mr.duration_ms IS NOT NULL
