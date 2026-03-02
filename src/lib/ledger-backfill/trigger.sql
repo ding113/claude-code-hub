@@ -8,14 +8,16 @@ DECLARE
 BEGIN
   IF NEW.blocked_by = 'warmup' THEN
     -- If a ledger row already exists (row was originally non-warmup), mark it as warmup
-    UPDATE usage_ledger SET blocked_by = 'warmup' WHERE request_id = NEW.id;
+    UPDATE usage_ledger SET blocked_by = 'warmup'
+    WHERE request_id = NEW.id AND blocked_by IS DISTINCT FROM 'warmup';
     RETURN NEW;
   END IF;
 
   IF NEW.blocked_by IS NOT NULL THEN
     -- Blocked requests are excluded from billing stats; avoid creating usage_ledger rows.
     -- If a ledger row already exists (row was originally unblocked), mark it as blocked.
-    UPDATE usage_ledger SET blocked_by = NEW.blocked_by WHERE request_id = NEW.id;
+    UPDATE usage_ledger SET blocked_by = NEW.blocked_by
+    WHERE request_id = NEW.id AND blocked_by IS DISTINCT FROM NEW.blocked_by;
     RETURN NEW;
   END IF;
 
