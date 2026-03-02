@@ -39,6 +39,12 @@ export type CodeDisplayLanguage = "json" | "sse" | "text";
 const DEFAULT_MAX_CONTENT_BYTES = 1_000_000; // 1MB
 const DEFAULT_MAX_LINES = 10_000;
 const DEFAULT_JSON_INDENT = 2;
+const MAX_SYNC_JSON_CHARS = 200_000;
+const LARGE_CONTENT_MAX_CHARS = 4000;
+const LARGE_CONTENT_MAX_LINES = 200;
+const SSE_VIRTUAL_THRESHOLD = 200;
+const SSE_ESTIMATED_ROW_HEIGHT_PX = 44;
+const SSE_OVERSCAN = 12;
 
 type DisplaySseEvent = { event: string; data: string };
 
@@ -311,9 +317,11 @@ function CodeDisplaySseEvents({
     return <div className="text-xs text-muted-foreground">{labels.noMatches}</div>;
   }
 
-  const useVirtual = events.length > 200 && expandedRows.size === 0 && viewportHeight > 0;
-  const estimatedRowHeight = 44;
-  const overscan = 12;
+  const useVirtual =
+    events.length > SSE_VIRTUAL_THRESHOLD && expandedRows.size === 0 && viewportHeight > 0;
+  // SSE 列表的单行高度与代码行高不同，这里使用一个固定估算值用于折叠态虚拟化。
+  const estimatedRowHeight = SSE_ESTIMATED_ROW_HEIGHT_PX;
+  const overscan = SSE_OVERSCAN;
   const total = events.length;
 
   const startIndex = useVirtual
@@ -469,7 +477,8 @@ export function CodeDisplay({
     return countLinesUpTo(content, resolvedMaxLines + 1);
   }, [content, isOverMaxBytes, resolvedMaxLines]);
 
-  const isLargeContent = content.length > 4000 || lineCount > 200;
+  const isLargeContent =
+    content.length > LARGE_CONTENT_MAX_CHARS || lineCount > LARGE_CONTENT_MAX_LINES;
   const [expanded, setExpanded] = useState(defaultExpanded);
   const isExpanded = expanded || !isLargeContent;
   const contentMaxHeight = isExpanded ? expandedMaxHeight : maxHeight;
@@ -696,7 +705,7 @@ export function CodeDisplay({
     if (shouldFormatJsonInWorker) return null;
 
     // 当 Worker 被禁用时，避免对超大 JSON 在主线程做 parse/stringify 导致卡顿。
-    const maxSyncChars = Math.min(codeDisplayConfig.highlightMaxChars, 200_000);
+    const maxSyncChars = Math.min(codeDisplayConfig.highlightMaxChars, MAX_SYNC_JSON_CHARS);
     if (!codeDisplayConfig.workerEnabled && content.length > maxSyncChars) return content;
 
     const parsed = safeJsonParse(content);
@@ -1032,7 +1041,7 @@ export function CodeDisplay({
       : "text/plain";
 
     // 避免对超大内容在主线程 JSON.parse；小内容可用于更准确决定 MIME 类型。
-    const maxValidateJsonChars = 200_000;
+    const maxValidateJsonChars = MAX_SYNC_JSON_CHARS;
     if (isCandidateJson && text.length <= maxValidateJsonChars) {
       const parsed = safeJsonParse(text);
       if (!parsed.ok) downloadType = "text/plain";
