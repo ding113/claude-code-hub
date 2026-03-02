@@ -1,6 +1,6 @@
 "use server";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger, users } from "@/drizzle/schema";
 import { getCachedSystemSettings } from "@/lib/config/system-settings-cache";
@@ -593,6 +593,15 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     ([providerId, agg]) => {
       const cacheHitRate =
         agg.totalInputTokens > 0 ? agg.cacheReadTokens / agg.totalInputTokens : 0;
+      const modelStats = [...(modelStatsByProvider.get(providerId) ?? [])].sort((a, b) => {
+        const cacheHitRateOrder = b.cacheHitRate - a.cacheHitRate;
+        if (cacheHitRateOrder !== 0) return cacheHitRateOrder;
+
+        const totalRequestsOrder = b.totalRequests - a.totalRequests;
+        if (totalRequestsOrder !== 0) return totalRequestsOrder;
+
+        return a.model < b.model ? -1 : a.model > b.model ? 1 : 0;
+      });
 
       return {
         providerId,
@@ -604,7 +613,7 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
         totalInputTokens: agg.totalInputTokens,
         totalTokens: agg.totalInputTokens, // deprecated, for backward compatibility
         cacheHitRate: clampRatio01(cacheHitRate),
-        modelStats: modelStatsByProvider.get(providerId) ?? [],
+        modelStats,
       };
     }
   );
@@ -710,19 +719,23 @@ async function findModelLeaderboardWithTimezone(
       )`,
     })
     .from(usageLedger)
-    .where(and(LEDGER_BILLING_CONDITION, buildDateCondition(period, timezone, dateRange)))
+    .where(
+      and(
+        LEDGER_BILLING_CONDITION,
+        buildDateCondition(period, timezone, dateRange),
+        isNotNull(modelField)
+      )
+    )
     .groupBy(modelField)
     .orderBy(desc(sql`count(*)`)); // 按请求数排序
 
-  return rankings
-    .filter((entry) => entry.model !== null && entry.model !== "")
-    .map((entry) => ({
-      model: entry.model as string, // 已过滤 null/空字符串，可安全断言
-      totalRequests: entry.totalRequests,
-      totalCost: parseFloat(entry.totalCost),
-      totalTokens: entry.totalTokens,
-      successRate: entry.successRate ?? 0,
-    }));
+  return rankings.map((entry) => ({
+    model: entry.model,
+    totalRequests: entry.totalRequests,
+    totalCost: parseFloat(entry.totalCost),
+    totalTokens: entry.totalTokens,
+    successRate: entry.successRate ?? 0,
+  }));
 }
 
 /**

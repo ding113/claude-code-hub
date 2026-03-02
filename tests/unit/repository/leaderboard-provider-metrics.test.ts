@@ -246,6 +246,31 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     mocks.getCachedSystemSettings.mockResolvedValue({ billingModelSource: "redirected" });
   });
 
+  it("supports billingModelSource = original", async () => {
+    mocks.getCachedSystemSettings.mockResolvedValue({ billingModelSource: "original" });
+    chainMocks = [
+      createChainMock([
+        {
+          providerId: 1,
+          providerName: "cache-provider",
+          model: "claude-3-opus",
+          totalRequests: 30,
+          totalCost: "1.5",
+          cacheReadTokens: 8000,
+          cacheCreationCost: "0.6",
+          totalInputTokens: 15000,
+          cacheHitRate: 0.53,
+        },
+      ]),
+    ];
+
+    const { findDailyProviderCacheHitRateLeaderboard } = await import("@/repository/leaderboard");
+    const result = await findDailyProviderCacheHitRateLeaderboard();
+
+    expect(result).toHaveLength(1);
+    expect(result[0].providerName).toBe("cache-provider");
+  });
+
   it("includes modelStats field on cache-hit leaderboard entries", async () => {
     chainMocks = [
       createChainMock([
@@ -373,6 +398,14 @@ describe("Provider Cache Hit Rate Model Breakdown", () => {
     const entry = result[0];
     // Empty model names must be excluded (only 2 valid models)
     expect(entry.modelStats).toHaveLength(2);
+    // Provider-level aggregates must still include the empty model row
+    expect(entry.totalRequests).toBe(50);
+    expect(entry.totalCost).toBeCloseTo(2.5);
+    expect(entry.cacheReadTokens).toBe(10000);
+    expect(entry.cacheCreationCost).toBeCloseTo(1.0);
+    expect(entry.totalInputTokens).toBe(20000);
+    expect(entry.totalTokens).toBe(20000);
+    expect(entry.cacheHitRate).toBeCloseTo(0.5);
     for (const ms of entry.modelStats) {
       expect(ms.model).toBeTruthy();
       expect(ms.model.trim()).not.toBe("");
