@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Badge } from "@/components/ui/badge";
@@ -271,6 +271,27 @@ function CodeDisplaySseEvents({
   const rafRef = useRef<number | null>(null);
   const scrollTopRef = useRef(0);
 
+  const [measuredRowHeight, setMeasuredRowHeight] = useState(SSE_ESTIMATED_ROW_HEIGHT_PX);
+  const measuredRowHeightRef = useRef(measuredRowHeight);
+  measuredRowHeightRef.current = measuredRowHeight;
+
+  const measureFirstRow = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+
+    const prev = measuredRowHeightRef.current;
+    // 避免在用户已滚动时更新估算高度导致列表跳动：仅在初始阶段做一次测量。
+    if (prev !== SSE_ESTIMATED_ROW_HEIGHT_PX && scrollTopRef.current > 0) return;
+
+    const h = el.getBoundingClientRect().height;
+    if (!Number.isFinite(h) || h <= 0) return;
+
+    const next = Math.max(24, Math.min(200, h));
+    if (Math.abs(prev - next) < 1) return;
+
+    measuredRowHeightRef.current = next;
+    setMeasuredRowHeight(next);
+  }, []);
+
   const [viewportHeight, setViewportHeight] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(() => new Set());
@@ -321,7 +342,7 @@ function CodeDisplaySseEvents({
 
   const useVirtual = events.length > SSE_VIRTUAL_THRESHOLD;
   // SSE 列表的单行高度与代码行高不同，这里使用一个固定估算值用于折叠态虚拟化。
-  const estimatedRowHeight = SSE_ESTIMATED_ROW_HEIGHT_PX;
+  const estimatedRowHeight = measuredRowHeight;
   const overscan = SSE_OVERSCAN;
   const total = events.length;
 
@@ -407,6 +428,7 @@ function CodeDisplaySseEvents({
               <div
                 key={index}
                 data-testid="code-display-sse-row"
+                ref={useVirtual && localIdx === 0 ? measureFirstRow : undefined}
                 className={cn(
                   "rounded-md border bg-background/50",
                   useVirtual && active && "ring-1 ring-ring"
