@@ -16,7 +16,9 @@ export function CodeDisplayPlainTextarea({
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
-  // 对超长文本，避免频繁 React 受控更新导致卡顿：直接写入 DOM。
+  // 对超长文本，避免频繁 React 受控更新导致卡顿：
+  // - defaultValue 用于首屏/首次渲染
+  // - 后续变更通过 effect 直接写入 DOM
   useEffect(() => {
     if (!ref.current) return;
     if (ref.current.value === value) return;

@@ -57,6 +57,12 @@ export interface CodeDisplayConfig {
   maxLineIndexLines: number;
 }
 
+/**
+ * Worker 不可用或被禁用时，为避免主线程 JSON.parse/stringify 造成长任务卡顿，
+ * 对同步 JSON pretty 的输入大小做一个硬上限。
+ */
+export const MAX_SYNC_JSON_CHARS = 200_000;
+
 export const DEFAULT_CODE_DISPLAY_CONFIG: CodeDisplayConfig = {
   largePlainEnabled: true,
   virtualHighlightEnabled: false,

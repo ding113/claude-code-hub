@@ -1,5 +1,7 @@
 "use client";
 
+import { MAX_SYNC_JSON_CHARS } from "@/components/ui/code-display-config";
+
 export type FormatJsonPrettyErrorCode =
   | "INVALID_JSON"
   | "CANCELED"
@@ -284,7 +286,6 @@ export async function formatJsonPretty({
     if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
     // Worker 不可用时，对超大 JSON 做同步 parse/stringify 会导致主线程卡顿：
     // 直接返回错误，让上层回退到“纯文本展示/下载”。
-    const MAX_SYNC_JSON_CHARS = 200_000;
     if (text.length > MAX_SYNC_JSON_CHARS) return { ok: false, errorCode: "WORKER_UNAVAILABLE" };
     // fallback（测试环境/不支持 Worker）：小内容可直接 parse/stringify
     try {

@@ -17,6 +17,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MAX_SYNC_JSON_CHARS } from "@/components/ui/code-display-config";
 import { useCodeDisplayConfig } from "@/components/ui/code-display-config-context";
 import { CodeDisplayMatchesList } from "@/components/ui/code-display-matches-list";
 import { CodeDisplayPlainTextarea } from "@/components/ui/code-display-plain-textarea";
@@ -39,7 +40,6 @@ export type CodeDisplayLanguage = "json" | "sse" | "text";
 const DEFAULT_MAX_CONTENT_BYTES = 1_000_000; // 1MB
 const DEFAULT_MAX_LINES = 10_000;
 const DEFAULT_JSON_INDENT = 2;
-const MAX_SYNC_JSON_CHARS = 200_000;
 const LARGE_CONTENT_MAX_CHARS = 4000;
 const LARGE_CONTENT_MAX_LINES = 200;
 const SSE_VIRTUAL_THRESHOLD = 200;
@@ -274,6 +274,7 @@ function CodeDisplaySseEvents({
   const [viewportHeight, setViewportHeight] = useState(0);
   const [scrollTop, setScrollTop] = useState(0);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(() => new Set());
+  const [activeRow, setActiveRow] = useState<number | null>(null);
   const lastEventsRef = useRef<DisplaySseEvent[] | null>(null);
 
   useEffect(() => {
@@ -281,9 +282,10 @@ function CodeDisplaySseEvents({
       lastEventsRef.current = events;
       return;
     }
-    // events 可能由搜索过滤产生新列表：重置展开状态以避免索引错位
+    // events 可能由搜索过滤产生新列表：重置展开状态/选中项以避免索引错位
     lastEventsRef.current = events;
     setExpandedRows(new Set());
+    setActiveRow(null);
   }, [events]);
 
   useEffect(() => {
@@ -317,117 +319,179 @@ function CodeDisplaySseEvents({
     return <div className="text-xs text-muted-foreground">{labels.noMatches}</div>;
   }
 
-  const useVirtual =
-    events.length > SSE_VIRTUAL_THRESHOLD && expandedRows.size === 0 && viewportHeight > 0;
+  const useVirtual = events.length > SSE_VIRTUAL_THRESHOLD;
   // SSE 列表的单行高度与代码行高不同，这里使用一个固定估算值用于折叠态虚拟化。
   const estimatedRowHeight = SSE_ESTIMATED_ROW_HEIGHT_PX;
   const overscan = SSE_OVERSCAN;
   const total = events.length;
 
   const startIndex = useVirtual
-    ? Math.max(0, Math.floor(scrollTop / estimatedRowHeight) - overscan)
+    ? viewportHeight <= 0
+      ? 0
+      : Math.max(0, Math.floor(scrollTop / estimatedRowHeight) - overscan)
     : 0;
   const endIndex = useVirtual
-    ? Math.min(total, Math.ceil((scrollTop + viewportHeight) / estimatedRowHeight) + overscan)
+    ? viewportHeight <= 0
+      ? Math.min(total, 50)
+      : Math.min(total, Math.ceil((scrollTop + viewportHeight) / estimatedRowHeight) + overscan)
     : total;
 
   const topPad = useVirtual ? startIndex * estimatedRowHeight : 0;
   const bottomPad = useVirtual ? (total - endIndex) * estimatedRowHeight : 0;
   const rows = events.slice(startIndex, endIndex);
 
+  const containerMaxHeight = useVirtual ? (maxHeight ?? "600px") : maxHeight;
+  const activeEvent =
+    useVirtual && activeRow !== null && activeRow >= 0 && activeRow < total
+      ? (events[activeRow] ?? null)
+      : null;
+
+  const renderData = (data: string) => {
+    if (data.length <= highlightMaxChars) {
+      return (
+        <CodeDisplaySseDataSyntaxHighlighter data={data} highlighterStyle={highlighterStyle} />
+      );
+    }
+
+    if (largePlainEnabled) {
+      return (
+        <CodeDisplayPlainTextarea
+          value={data}
+          maxHeight="260px"
+          lineHeightPx={lineHeightPx}
+          className="border-0 bg-transparent p-0"
+        />
+      );
+    }
+
+    return (
+      <div className="overflow-auto" style={{ maxHeight: "260px" }}>
+        <pre
+          className="text-xs whitespace-pre-wrap break-words font-mono"
+          style={{ lineHeight: `${lineHeightPx}px` }}
+        >
+          {data}
+        </pre>
+      </div>
+    );
+  };
+
   return (
     <div
-      ref={scrollRef}
-      className="overflow-auto"
-      style={maxHeight ? { maxHeight } : undefined}
-      onScroll={(e) => {
-        const next = e.currentTarget.scrollTop;
-        scrollTopRef.current = next;
-        if (!useVirtual) return;
-        if (rafRef.current !== null) return;
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = null;
-          setScrollTop(scrollTopRef.current);
-        });
-      }}
+      className="flex flex-col gap-2 overflow-hidden min-h-0"
+      style={containerMaxHeight ? { maxHeight: containerMaxHeight } : undefined}
     >
-      <div className="space-y-2">
-        {topPad > 0 && <div style={{ height: topPad }} />}
-        {rows.map((evt, localIdx) => {
-          const index = startIndex + localIdx;
-          const open = expandedRows.has(index);
-          const preview = evt.data.length > 120 ? `${evt.data.slice(0, 120)}...` : evt.data;
+      <div
+        ref={scrollRef}
+        className="overflow-auto min-h-0 flex-1"
+        onScroll={(e) => {
+          const next = e.currentTarget.scrollTop;
+          scrollTopRef.current = next;
+          if (!useVirtual) return;
+          if (rafRef.current !== null) return;
+          rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = null;
+            setScrollTop(scrollTopRef.current);
+          });
+        }}
+      >
+        <div className="space-y-2">
+          {topPad > 0 && <div style={{ height: topPad }} />}
+          {rows.map((evt, localIdx) => {
+            const index = startIndex + localIdx;
+            const open = expandedRows.has(index);
+            const active = activeRow === index;
+            const preview = evt.data.length > 120 ? `${evt.data.slice(0, 120)}...` : evt.data;
 
-          return (
-            <div
-              key={index}
-              data-testid="code-display-sse-row"
-              className="rounded-md border bg-background/50"
-            >
-              <details open={open}>
-                <summary
-                  className="cursor-pointer select-none px-3 py-2"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setExpandedRows((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(index)) next.delete(index);
-                      else next.add(index);
-                      return next;
-                    });
-                  }}
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                      {index + 1}
-                    </span>
-                    <span className="shrink-0 font-mono text-xs">{evt.event}</span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                      {preview}
-                    </span>
-                  </div>
-                </summary>
-
-                {open && (
-                  <div className="px-3 pb-3 pt-2 space-y-2">
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground">{labels.sseEvent}</div>
-                      <div className="font-mono text-xs break-all">{evt.event}</div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <div className="text-xs text-muted-foreground">{labels.sseData}</div>
-                      {evt.data.length <= highlightMaxChars ? (
-                        <CodeDisplaySseDataSyntaxHighlighter
-                          data={evt.data}
-                          highlighterStyle={highlighterStyle}
-                        />
-                      ) : largePlainEnabled ? (
-                        <CodeDisplayPlainTextarea
-                          value={evt.data}
-                          maxHeight="260px"
-                          lineHeightPx={lineHeightPx}
-                          className="border-0 bg-transparent p-0"
-                        />
-                      ) : (
-                        <div className="overflow-auto" style={{ maxHeight: "260px" }}>
-                          <pre
-                            className="text-xs whitespace-pre-wrap break-words font-mono"
-                            style={{ lineHeight: `${lineHeightPx}px` }}
-                          >
-                            {evt.data}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+            return (
+              <div
+                key={index}
+                data-testid="code-display-sse-row"
+                className={cn(
+                  "rounded-md border bg-background/50",
+                  useVirtual && active && "ring-1 ring-ring"
                 )}
-              </details>
-            </div>
-          );
-        })}
-        {bottomPad > 0 && <div style={{ height: bottomPad }} />}
+              >
+                {useVirtual ? (
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer select-none px-3 py-2 text-left"
+                    aria-expanded={active}
+                    onClick={() => setActiveRow((prev) => (prev === index ? null : index))}
+                  >
+                    <div className="flex items-start gap-3 min-w-0">
+                      <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                        {index + 1}
+                      </span>
+                      <span className="shrink-0 font-mono text-xs">{evt.event}</span>
+                      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                        {preview}
+                      </span>
+                    </div>
+                  </button>
+                ) : (
+                  <details open={open}>
+                    <summary
+                      className="cursor-pointer select-none px-3 py-2"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setExpandedRows((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(index)) next.delete(index);
+                          else next.add(index);
+                          return next;
+                        });
+                      }}
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <span className="w-10 shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                          {index + 1}
+                        </span>
+                        <span className="shrink-0 font-mono text-xs">{evt.event}</span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                          {preview}
+                        </span>
+                      </div>
+                    </summary>
+
+                    {open && (
+                      <div className="px-3 pb-3 pt-2 space-y-2">
+                        <div className="space-y-1">
+                          <div className="text-xs text-muted-foreground">{labels.sseEvent}</div>
+                          <div className="font-mono text-xs break-all">{evt.event}</div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="text-xs text-muted-foreground">{labels.sseData}</div>
+                          {renderData(evt.data)}
+                        </div>
+                      </div>
+                    )}
+                  </details>
+                )}
+              </div>
+            );
+          })}
+          {bottomPad > 0 && <div style={{ height: bottomPad }} />}
+        </div>
       </div>
+
+      {useVirtual && activeEvent && (
+        <div
+          data-testid="code-display-sse-details"
+          className="rounded-md border bg-background/50 p-3 space-y-2 shrink-0"
+        >
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">{labels.sseEvent}</div>
+            <div className="font-mono text-xs break-all">{activeEvent.event}</div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-xs text-muted-foreground">{labels.sseData}</div>
+            {renderData(activeEvent.data)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -760,11 +824,7 @@ export function CodeDisplay({
   const lastLargePrettySourceKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (
-      !codeDisplayConfig.virtualHighlightEnabled ||
-      !codeDisplayConfig.workerEnabled ||
-      !isLargePrettyText
-    ) {
+    if (!codeDisplayConfig.virtualHighlightEnabled || !isLargePrettyText) {
       lastLargePrettySourceKeyRef.current = null;
       setForceLargePrettyPlain(false);
       setLargePrettyVirtualFallback(null);
@@ -796,7 +856,6 @@ export function CodeDisplay({
   }, [
     codeDisplayConfig.largePlainEnabled,
     codeDisplayConfig.virtualHighlightEnabled,
-    codeDisplayConfig.workerEnabled,
     forceLargePrettyPlain,
     isLargePrettyText,
     largePrettySourceKey,
@@ -1412,7 +1471,6 @@ export function CodeDisplay({
 
           <TabsContent value="pretty" className="mt-3">
             {codeDisplayConfig.virtualHighlightEnabled &&
-              codeDisplayConfig.workerEnabled &&
               isLargePrettyText &&
               !shouldOptimizeOnlyMatches &&
               (codeDisplayConfig.largePlainEnabled || forceLargePrettyPlain) && (
@@ -1555,7 +1613,6 @@ export function CodeDisplay({
             ) : shouldOptimizeOnlyMatches ? (
               renderOnlyMatchesOptimized()
             ) : isLargePrettyText &&
-              codeDisplayConfig.workerEnabled &&
               codeDisplayConfig.virtualHighlightEnabled &&
               !forceLargePrettyPlain &&
               largePrettyView === "virtual" ? (
@@ -1572,6 +1629,7 @@ export function CodeDisplay({
                 overscanLines={codeDisplayConfig.virtualOverscanLines}
                 contextLines={codeDisplayConfig.virtualContextLines}
                 maxLines={codeDisplayConfig.maxLineIndexLines}
+                workerEnabled={codeDisplayConfig.workerEnabled}
                 perfDebugEnabled={codeDisplayConfig.perfDebugEnabled}
                 className="border-0"
                 onRequestPlainView={(reason, lineCount) => {

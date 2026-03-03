@@ -32,6 +32,7 @@ export function CodeDisplayVirtualHighlighter({
   overscanLines,
   contextLines,
   maxLines,
+  workerEnabled,
   perfDebugEnabled,
   className,
   onRequestPlainView,
@@ -44,6 +45,7 @@ export function CodeDisplayVirtualHighlighter({
   overscanLines: number;
   contextLines: number;
   maxLines: number;
+  workerEnabled: boolean;
   perfDebugEnabled: boolean;
   className?: string;
   onRequestPlainView?: (reason?: BuildLineIndexErrorCode, lineCount?: number) => void;
@@ -92,6 +94,7 @@ export function CodeDisplayVirtualHighlighter({
         setIndexProgress({ processed: p.processed, total: p.total });
       },
       signal: controller.signal,
+      workerEnabled,
     }).then((res) => {
       if (controller.signal.aborted) return;
       if (jobId !== indexJobRef.current) return;
@@ -122,7 +125,7 @@ export function CodeDisplayVirtualHighlighter({
     });
 
     return () => controller.abort();
-  }, [maxLines, perfDebugEnabled, textKey]);
+  }, [maxLines, perfDebugEnabled, textKey, workerEnabled]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
