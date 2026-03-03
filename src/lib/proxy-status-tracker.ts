@@ -11,7 +11,7 @@ type ActiveRequestRow = {
   keyString: string;
   keyName: string | null;
   providerId: number;
-  providerName: string;
+  providerName: string | null;
   model: string | null;
   createdAt: Date | string | null;
 };
@@ -22,7 +22,7 @@ type LastRequestRow = {
   keyString: string;
   keyName: string | null;
   providerId: number;
-  providerName: string;
+  providerName: string | null;
   model: string | null;
   endTime: Date | string | null;
 };
@@ -108,7 +108,7 @@ export class ProxyStatusTracker {
         requestId: row.requestId,
         keyName: row.keyName ?? maskKey(row.keyString),
         providerId: row.providerId,
-        providerName: row.providerName,
+        providerName: row.providerName || "unknown",
         model: row.model || "unknown",
         startTime,
         duration: now - startTime,
@@ -136,7 +136,7 @@ export class ProxyStatusTracker {
               requestId: lastRow.requestId,
               keyName: lastRow.keyName ?? maskKey(lastRow.keyString),
               providerId: lastRow.providerId,
-              providerName: lastRow.providerName,
+              providerName: lastRow.providerName || "unknown",
               model: lastRow.model || "unknown",
               endTime,
               elapsed: now - endTime,
@@ -165,13 +165,16 @@ export class ProxyStatusTracker {
         userId: messageRequest.userId,
         keyString: messageRequest.key,
         keyName: keys.name,
-        providerId: providers.id,
+        providerId: messageRequest.providerId,
         providerName: providers.name,
         model: messageRequest.model,
         createdAt: messageRequest.createdAt,
       })
       .from(messageRequest)
-      .innerJoin(providers, eq(messageRequest.providerId, providers.id))
+      .leftJoin(
+        providers,
+        and(eq(messageRequest.providerId, providers.id), isNull(providers.deletedAt))
+      )
       .leftJoin(keys, and(eq(keys.key, messageRequest.key), isNull(keys.deletedAt)))
       .where(and(isNull(messageRequest.deletedAt), isNull(messageRequest.durationMs)))
       // 防御：异常情况下 durationMs 长期为空会导致“活跃请求”无限累积，进而撑爆查询与响应体。
@@ -215,7 +218,7 @@ export class ProxyStatusTracker {
            -- 使用 created_at + duration_ms 推导结束时间：避免 async 批量写入导致 updated_at 漂移而“看起来更近”。
            (mr.created_at + (mr.duration_ms * interval '1 millisecond')) AS end_time
          FROM message_request mr
-         JOIN providers p ON mr.provider_id = p.id
+         LEFT JOIN providers p ON mr.provider_id = p.id AND p.deleted_at IS NULL
          WHERE mr.user_id = u.id
           AND mr.deleted_at IS NULL
           -- lastRequest 仅统计已结束请求：activeRequests 已覆盖进行中请求，避免这里误选“请求中”的记录。
