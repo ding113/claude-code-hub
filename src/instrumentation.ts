@@ -17,6 +17,8 @@ const instrumentationState = globalThis as unknown as {
   __CCH_SHUTDOWN_IN_PROGRESS__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_STARTED__?: boolean;
   __CCH_CLOUD_PRICE_SYNC_INTERVAL_ID__?: ReturnType<typeof setInterval>;
+  __CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__?: boolean;
+  __CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__?: ReturnType<typeof setInterval>;
   __CCH_API_KEY_VF_SYNC_STARTED__?: boolean;
   __CCH_API_KEY_VF_SYNC_CLEANUP__?: (() => void) | null;
 };
@@ -135,6 +137,129 @@ function warmupApiKeyVacuumFilter(): void {
 
   // 多实例：订阅 key 变更广播以触发本机 filter 重建
   void startApiKeyVacuumFilterSync();
+}
+
+/**
+ * 封闭历史遗留的“孤儿请求”记录（duration/status 长期为空）。
+ *
+ * 这些记录通常来自：进程被非优雅方式终止（OOM/SIGKILL），导致 async 批量写入的尾部更新丢失。
+ * 若不处理，会被 Dashboard/统计视为“进行中”并持续累积，引发页面异常与资源风险。
+ */
+async function startOrphanedMessageRequestSweeper(): Promise<void> {
+  if (instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__) {
+    return;
+  }
+
+  // 先标记 started，避免并发初始化（例如热重载/多入口 init）导致重复注册 interval，
+  // 从而出现“先注册的 intervalId 被后注册覆盖，导致无法停止”的问题。
+  instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__ = true;
+
+  try {
+    const { sealOrphanedMessageRequests } = await import("@/repository/message");
+    const intervalMs = 60 * 1000;
+    const timeoutMs = 30 * 1000;
+    const slowLogMs = 5 * 1000;
+
+    const withTimeout = async <T>(
+      promise: Promise<T>,
+      ms: number
+    ): Promise<{ timedOut: true } | { timedOut: false; value: T }> => {
+      let timeoutId: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise<{ timedOut: true }>((resolve) => {
+        timeoutId = setTimeout(() => resolve({ timedOut: true }), ms);
+      });
+
+      const result = await Promise.race([
+        promise.then((value) => ({ timedOut: false as const, value })),
+        timeoutPromise,
+      ]);
+
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      return result;
+    };
+
+    let inFlight = false;
+    const runOnce = async (reason: "startup" | "scheduled") => {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
+      let timedOut = false;
+      const startedAt = Date.now();
+      const sealPromise = sealOrphanedMessageRequests();
+      try {
+        const result = await withTimeout(sealPromise, timeoutMs);
+        if (result.timedOut) {
+          timedOut = true;
+          // 避免出现 unhandled rejection（promise 仍可能在超时后继续 reject）
+          void sealPromise
+            .catch(() => {})
+            .finally(() => {
+              inFlight = false;
+            });
+          logger.warn("[Instrumentation] Orphaned message_request sweeper timed out", {
+            reason,
+            timeoutMs,
+          });
+          return;
+        }
+
+        const { sealedCount } = result.value;
+        const durationMs = Date.now() - startedAt;
+        if (durationMs > slowLogMs) {
+          logger.warn("[Instrumentation] Orphaned message_request sweeper slow run", {
+            reason,
+            durationMs,
+            timeoutMs,
+          });
+        }
+        if (reason === "startup") {
+          logger.info("[Instrumentation] Orphaned message_request sweeper startup run completed", {
+            sealedCount,
+            durationMs,
+          });
+        }
+        if (sealedCount > 0) {
+          logger.warn("[Instrumentation] Orphaned message_request records sealed", {
+            sealedCount,
+            reason,
+            durationMs,
+          });
+        }
+      } catch (error) {
+        logger.warn("[Instrumentation] Failed to seal orphaned message_request records", {
+          reason,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        if (!timedOut) {
+          inFlight = false;
+        }
+      }
+    };
+
+    void runOnce("startup");
+    instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__ = setInterval(() => {
+      void runOnce("scheduled");
+    }, intervalMs);
+
+    logger.info("[Instrumentation] Orphaned message_request sweeper started", {
+      intervalSeconds: intervalMs / 1000,
+    });
+  } catch (error) {
+    // init 失败：回滚 started 标记，允许后续重试
+    instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__ = false;
+    if (instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__) {
+      clearInterval(instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__);
+      instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__ = undefined;
+    }
+    logger.warn("[Instrumentation] Orphaned message_request sweeper init failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 export async function register() {
@@ -258,6 +383,24 @@ export async function register() {
             error: error instanceof Error ? error.message : String(error),
           });
         }
+
+        try {
+          if (instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__) {
+            clearInterval(
+              instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__
+            );
+            instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__ = undefined;
+            instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__ = false;
+          }
+        } catch (error) {
+          logger.warn("[Instrumentation] Failed to stop orphaned message request sweeper", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+
+        // 重要：注册 SIGTERM/SIGINT handler 会覆盖默认退出行为。
+        // 若不显式退出，进程会在“半关闭”状态继续运行（例如异步写入队列已停止），导致后续日志长期异常。
+        process.exit(0);
       };
 
       process.once("SIGTERM", () => {
@@ -314,6 +457,7 @@ export async function register() {
         });
 
       warmupApiKeyVacuumFilter();
+      await startOrphanedMessageRequestSweeper();
 
       // 回填 provider_vendors/provider_endpoints（幂等）
       // 多实例启动时仅允许一个实例执行，避免重复扫描/写入导致的启动抖动（#779/#781）。
@@ -454,6 +598,7 @@ export async function register() {
           });
 
         warmupApiKeyVacuumFilter();
+        await startOrphanedMessageRequestSweeper();
 
         // 回填 provider_vendors（按域名自动聚合旧 providers）
         try {

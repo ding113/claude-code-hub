@@ -280,7 +280,9 @@ run("usage ledger integration", () => {
   describe("backfill", () => {
     test(
       "backfill copies non-warmup message_request rows when ledger rows are missing",
-      { timeout: 60_000 },
+      {
+        timeout: 60_000,
+      },
       async () => {
         const userId = nextUserId();
         const providerId = nextProviderId();

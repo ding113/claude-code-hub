@@ -5,13 +5,22 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
+import { logger } from "@/lib/logger";
 import { formatCostForStorage } from "@/lib/utils/currency";
+import {
+  ORPHANED_MESSAGE_REQUEST_ERROR_CODE,
+  ORPHANED_MESSAGE_REQUEST_STATUS_CODE,
+} from "@/repository/message-orphaned-requests";
+import type { MessageRequestUpdatePatch } from "@/repository/message-write-buffer";
+import {
+  enqueueMessageRequestUpdate,
+  sanitizeMessageRequestUpdatePatch,
+} from "@/repository/message-write-buffer";
 import type { CreateMessageRequestData, MessageRequest, ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
 import { toMessageRequest } from "./_shared/transformers";
-import { enqueueMessageRequestUpdate } from "./message-write-buffer";
 
 /**
  * 创建消息请求记录
@@ -71,22 +80,58 @@ export async function createMessageRequest(
   return toMessageRequest(result);
 }
 
+async function writeMessageRequestUpdateToDb(
+  id: number,
+  patch: MessageRequestUpdatePatch
+): Promise<void> {
+  // 防御：即使 patch 来源于 buffer 的已清洗数据（例如 dropped_overflow），这里也统一再 sanitize 一次（幂等）。
+  // 这样可避免未来调用点误传未清洗 patch 时把脏数据直接写入数据库。
+  const sanitized = sanitizeMessageRequestUpdatePatch(patch);
+  if (Object.keys(sanitized).length === 0) {
+    const definedKeys = Object.entries(patch)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key);
+    if (definedKeys.length > 0) {
+      logger.warn("[MessageRepository] Message request patch rejected: empty after sanitize", {
+        requestId: id,
+        keys: definedKeys,
+      });
+    }
+    return;
+  }
+
+  const updated = await db
+    .update(messageRequest)
+    .set({
+      ...sanitized,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(messageRequest.id, id), isNull(messageRequest.deletedAt)))
+    .returning({ id: messageRequest.id });
+
+  if (updated.length === 0) {
+    logger.warn(
+      "[MessageRepository] Message request update affected 0 rows (missing or soft-deleted)",
+      {
+        requestId: id,
+        keys: Object.keys(sanitized),
+      }
+    );
+  }
+}
+
 /**
  * 更新消息请求的耗时
  */
 export async function updateMessageRequestDuration(id: number, durationMs: number): Promise<void> {
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
-    enqueueMessageRequestUpdate(id, { durationMs });
+  const enqueueResult = enqueueMessageRequestUpdate(id, { durationMs });
+  if (enqueueResult.kind === "enqueued") {
     return;
   }
 
-  await db
-    .update(messageRequest)
-    .set({
-      durationMs: durationMs,
-      updatedAt: new Date(),
-    })
-    .where(eq(messageRequest.id, id));
+  const patchToWrite =
+    enqueueResult.kind === "dropped_overflow" ? enqueueResult.patch : { durationMs };
+  await writeMessageRequestUpdateToDb(id, patchToWrite);
 }
 
 /**
@@ -101,18 +146,32 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
-    enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
+  const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
+  if (enqueueResult.kind === "rejected_invalid") {
+    logger.warn("[MessageRepository] costUsd update rejected as invalid, skipping", {
+      requestId: id,
+      costUsd: formattedCost,
+    });
+    return;
+  }
+  if (enqueueResult.kind === "enqueued") {
     return;
   }
 
-  await db
-    .update(messageRequest)
-    .set({
-      costUsd: formattedCost,
-      updatedAt: new Date(),
-    })
-    .where(eq(messageRequest.id, id));
+  // costUsd 非终态信息：overflow 时尽量丢弃即可，避免压力峰值下放大同步 DB 写入。
+  // 但若 overflow 过程中丢失了终态信息（duration/status），则需要同步写入兜底以避免“请求中”悬挂。
+  if (enqueueResult.kind === "dropped_overflow") {
+    const patch = enqueueResult.patch;
+    // 注意：patch 可能携带已合并的非终态字段；当其不含终态字段时这里仍选择丢弃，
+    // 避免压力峰值下放大同步 DB 写入（非终态信息允许在极端情况下丢失）。
+    if (patch.durationMs === undefined && patch.statusCode === undefined) {
+      return;
+    }
+    await writeMessageRequestUpdateToDb(id, patch);
+    return;
+  }
+
+  await writeMessageRequestUpdateToDb(id, { costUsd: formattedCost });
 }
 
 /**
@@ -134,78 +193,135 @@ export async function updateMessageRequestDetails(
     errorMessage?: string;
     errorStack?: string; // 完整堆栈信息
     errorCause?: string; // 嵌套错误原因（JSON 格式）
-    model?: string; // ⭐ 新增：支持更新重定向后的模型名称
-    providerId?: number; // ⭐ 新增：支持更新最终供应商ID（重试切换后）
+    model?: string; // 新增：支持更新重定向后的模型名称
+    providerId?: number; // 新增：支持更新最终供应商ID（重试切换后）
     context1mApplied?: boolean; // 是否应用了1M上下文窗口
     swapCacheTtlApplied?: boolean; // Swap Cache TTL Billing active at request time
     specialSettings?: CreateMessageRequestData["special_settings"]; // 特殊设置（审计/展示）
   }
 ): Promise<void> {
-  if (getEnvConfig().MESSAGE_REQUEST_WRITE_MODE === "async") {
-    enqueueMessageRequestUpdate(id, details);
+  const enqueueResult = enqueueMessageRequestUpdate(id, details);
+  if (enqueueResult.kind === "enqueued") {
+    return;
+  }
+  if (enqueueResult.kind === "rejected_invalid") {
+    // patch 在 buffer 内已被 sanitize 并判定为空；避免重复 sanitize/重复告警
     return;
   }
 
-  const updateData: Record<string, unknown> = {
-    updatedAt: new Date(),
+  // overflow 场景下：尽量丢弃非终态 patch，避免在压力峰值时反向放大 DB 写入。
+  // 但如果 overflow 丢失了终态信息（duration/status），则必须同步写入兜底以避免请求长期卡在“请求中”。
+  if (enqueueResult.kind === "dropped_overflow") {
+    const patch = enqueueResult.patch;
+    // 注意：patch 可能携带已合并的非终态字段；当其不含终态字段时这里仍选择丢弃，
+    // 避免压力峰值下放大同步 DB 写入（非终态信息允许在极端情况下丢失）。
+    if (patch.durationMs === undefined && patch.statusCode === undefined) {
+      return;
+    }
+    await writeMessageRequestUpdateToDb(id, patch);
+    return;
+  }
+
+  await writeMessageRequestUpdateToDb(id, details);
+}
+
+/**
+ * 封闭“孤儿请求”记录（防御性修复）
+ *
+ * 在 MESSAGE_REQUEST_WRITE_MODE=async 时，请求终态信息（duration/status/tokens/cost 等）会先进入内存队列，
+ * 再异步批量刷入数据库。若进程被 OOM Killer/SIGKILL 等非优雅方式终止，尾部更新会丢失，
+ * 导致 message_request 记录长期保持“请求中”（duration_ms 长期为空；status_code 也可能为空，或已写入但 duration_ms 缺失）。
+ *
+ * 影响：
+ * - Dashboard/统计把这些记录当作“进行中”，导致异常展示与聚合膨胀；
+ * - 某些页面会高频轮询“活跃请求”，在孤儿记录持续累积时可能引发内存与性能风险。
+ *
+ * 本函数会把超过阈值仍未落下终态的记录标记为已结束（未知失败），避免无限累积。
+ *
+ * 约束：staleAfterMs 最小为 60s（小于会被 clamp），避免误封闭真正的长耗时请求。
+ */
+export async function sealOrphanedMessageRequests(options?: {
+  staleAfterMs?: number;
+  limit?: number;
+}): Promise<{ sealedCount: number }> {
+  const env = getEnvConfig();
+
+  const toFiniteInt = (value: unknown): number | null => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      return null;
+    }
+    return Math.trunc(value);
   };
 
-  if (details.statusCode !== undefined) {
-    updateData.statusCode = details.statusCode;
-  }
-  if (details.inputTokens !== undefined) {
-    updateData.inputTokens = details.inputTokens;
-  }
-  if (details.outputTokens !== undefined) {
-    updateData.outputTokens = details.outputTokens;
-  }
-  if (details.ttfbMs !== undefined) {
-    updateData.ttfbMs = details.ttfbMs;
-  }
-  if (details.cacheCreationInputTokens !== undefined) {
-    updateData.cacheCreationInputTokens = details.cacheCreationInputTokens;
-  }
-  if (details.cacheReadInputTokens !== undefined) {
-    updateData.cacheReadInputTokens = details.cacheReadInputTokens;
-  }
-  if (details.cacheCreation5mInputTokens !== undefined) {
-    updateData.cacheCreation5mInputTokens = details.cacheCreation5mInputTokens;
-  }
-  if (details.cacheCreation1hInputTokens !== undefined) {
-    updateData.cacheCreation1hInputTokens = details.cacheCreation1hInputTokens;
-  }
-  if (details.cacheTtlApplied !== undefined) {
-    updateData.cacheTtlApplied = details.cacheTtlApplied;
-  }
-  if (details.providerChain !== undefined) {
-    updateData.providerChain = details.providerChain;
-  }
-  if (details.errorMessage !== undefined) {
-    updateData.errorMessage = details.errorMessage;
-  }
-  if (details.errorStack !== undefined) {
-    updateData.errorStack = details.errorStack;
-  }
-  if (details.errorCause !== undefined) {
-    updateData.errorCause = details.errorCause;
-  }
-  if (details.model !== undefined) {
-    updateData.model = details.model;
-  }
-  if (details.providerId !== undefined) {
-    updateData.providerId = details.providerId;
-  }
-  if (details.context1mApplied !== undefined) {
-    updateData.context1mApplied = details.context1mApplied;
-  }
-  if (details.swapCacheTtlApplied !== undefined) {
-    updateData.swapCacheTtlApplied = details.swapCacheTtlApplied;
-  }
-  if (details.specialSettings !== undefined) {
-    updateData.specialSettings = details.specialSettings;
-  }
+  const fetchBodyTimeout = toFiniteInt(env.FETCH_BODY_TIMEOUT) ?? 600_000;
+  const staleAfterMsCandidate = toFiniteInt(options?.staleAfterMs) ?? fetchBodyTimeout + 60_000;
+  const staleAfterMs = Math.max(60_000, staleAfterMsCandidate);
 
-  await db.update(messageRequest).set(updateData).where(eq(messageRequest.id, id));
+  const limitCandidate = toFiniteInt(options?.limit) ?? 1000;
+  const limit = Math.max(1, limitCandidate);
+  const threshold = new Date(Date.now() - staleAfterMs);
+
+  // 注意：这里使用 raw SQL，以避免 Drizzle 在大表上的构造开销；同时直接内联 warmup 过滤条件，避免表别名导致列引用失效。
+  const query = sql<{ id: number }>`
+    WITH candidates AS (
+      SELECT id
+      FROM message_request
+      WHERE deleted_at IS NULL
+        AND duration_ms IS NULL
+        AND created_at < ${threshold}
+        AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+      ORDER BY created_at ASC
+      LIMIT ${limit}
+    )
+    UPDATE message_request
+    SET
+      duration_ms = CASE
+        WHEN status_code IS NULL THEN (
+          LEAST(
+            2147483647,
+            GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
+          )::int
+        )
+        ELSE (
+          LEAST(
+            2147483647,
+            GREATEST(0, COALESCE(ttfb_ms, 0))
+          )::int
+        )
+      END,
+      status_code = COALESCE(status_code, ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE}),
+      error_message = CASE
+        WHEN status_code IS NULL THEN COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE})
+        ELSE error_message
+      END,
+      updated_at = NOW()
+    WHERE id IN (SELECT id FROM candidates)
+      AND deleted_at IS NULL
+      AND duration_ms IS NULL
+      AND created_at < ${threshold}
+      AND (blocked_by IS NULL OR blocked_by <> 'warmup')
+    RETURNING id
+  `;
+
+  const result = await db.execute(query);
+  const resultAny = result as unknown as {
+    rows?: unknown[];
+    rowCount?: number;
+    [Symbol.iterator]?: unknown;
+  };
+
+  const sealedCount = Array.isArray(result)
+    ? result.length
+    : typeof resultAny.rowCount === "number"
+      ? resultAny.rowCount
+      : Array.isArray(resultAny.rows)
+        ? resultAny.rows.length
+        : typeof (resultAny as unknown as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
+            "function"
+          ? Array.from(resultAny as unknown as Iterable<unknown>).length
+          : 0;
+
+  return { sealedCount };
 }
 
 /**
