@@ -150,6 +150,10 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
     return;
   }
 
+  // 先标记 started，避免并发初始化（例如热重载/多入口 init）导致重复注册 interval，
+  // 从而出现“先注册的 intervalId 被后注册覆盖，导致无法停止”的问题。
+  instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__ = true;
+
   try {
     const { sealOrphanedMessageRequests } = await import("@/repository/message");
     const intervalMs = 60 * 1000;
@@ -234,11 +238,16 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
       void runOnce("scheduled");
     }, intervalMs);
 
-    instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__ = true;
     logger.info("[Instrumentation] Orphaned message_request sweeper started", {
       intervalSeconds: intervalMs / 1000,
     });
   } catch (error) {
+    // init 失败：回滚 started 标记，允许后续重试
+    instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_STARTED__ = false;
+    if (instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__) {
+      clearInterval(instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__);
+      instrumentationState.__CCH_ORPHANED_MESSAGE_REQUEST_SWEEPER_INTERVAL_ID__ = undefined;
+    }
     logger.warn("[Instrumentation] Orphaned message_request sweeper init failed", {
       error: error instanceof Error ? error.message : String(error),
     });

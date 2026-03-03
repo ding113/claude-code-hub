@@ -79,6 +79,9 @@ let _lastRejectedInvalidLogAt = 0;
 const INT32_CLAMP_LOG_THROTTLE_MS = 60_000;
 const _lastInt32ClampLogAt = new Map<string, number>();
 
+const STATUS_CODE_REJECT_LOG_THROTTLE_MS = 60_000;
+let _lastStatusCodeRejectLogAt = 0;
+
 const STRING_TRUNCATE_LOG_THROTTLE_MS = 60_000;
 const _lastStringTruncateLogAt = new Map<string, number>();
 
@@ -211,6 +214,30 @@ function sanitizeNullableInt32(
   return sanitizeInt32(value, options);
 }
 
+function sanitizeStatusCode(value: unknown): number | undefined {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) {
+    return undefined;
+  }
+
+  const truncated = Math.trunc(numeric);
+  // HTTP status code 正常范围为 100-999（本项目还会写入 520 作为“孤儿请求”哨兵）
+  if (truncated < 100 || truncated > 999) {
+    const now = Date.now();
+    if (now - _lastStatusCodeRejectLogAt > STATUS_CODE_REJECT_LOG_THROTTLE_MS) {
+      _lastStatusCodeRejectLogAt = now;
+      logger.warn("[MessageRequestWriteBuffer] Status code out of expected range, skipping", {
+        value: typeof value === "string" ? value.slice(0, 64) : value,
+        min: 100,
+        max: 999,
+      });
+    }
+    return undefined;
+  }
+
+  return truncated;
+}
+
 function sanitizeCostUsdString(value: unknown): string | undefined {
   let raw: string | undefined;
   if (typeof value === "number") {
@@ -260,7 +287,7 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
     sanitized.durationMs = durationMs;
   }
 
-  const statusCode = sanitizeInt32(patch.statusCode, { field: "statusCode", min: 0, max: 999 });
+  const statusCode = sanitizeStatusCode(patch.statusCode);
   if (statusCode !== undefined) {
     sanitized.statusCode = statusCode;
   }
