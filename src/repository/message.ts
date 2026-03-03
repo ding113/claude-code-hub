@@ -84,6 +84,8 @@ async function writeMessageRequestUpdateToDb(
   id: number,
   patch: MessageRequestUpdatePatch
 ): Promise<void> {
+  // 防御：即使 patch 来源于 buffer 的已清洗数据（例如 dropped_overflow），这里也统一再 sanitize 一次（幂等）。
+  // 这样可避免未来调用点误传未清洗 patch 时把脏数据直接写入数据库。
   const sanitized = sanitizeMessageRequestUpdatePatch(patch);
   if (Object.keys(sanitized).length === 0) {
     const definedKeys = Object.entries(patch)
@@ -257,7 +259,7 @@ export async function sealOrphanedMessageRequests(options?: {
   const limit = Math.max(1, limitCandidate);
   const threshold = new Date(Date.now() - staleAfterMs);
 
-  // 注意：EXCLUDE_WARMUP_CONDITION 使用 Drizzle 列引用（message_request.blocked_by），这里不要给 message_request 起别名。
+  // 注意：这里使用 raw SQL，以避免 Drizzle 在大表上的构造开销；同时直接内联 warmup 过滤条件，避免表别名导致列引用失效。
   const query = sql<{ id: number }>`
     WITH candidates AS (
       SELECT id
@@ -265,7 +267,7 @@ export async function sealOrphanedMessageRequests(options?: {
       WHERE deleted_at IS NULL
         AND duration_ms IS NULL
         AND created_at < ${threshold}
-        AND ${EXCLUDE_WARMUP_CONDITION}
+        AND (blocked_by IS NULL OR blocked_by <> 'warmup')
       ORDER BY created_at ASC
       LIMIT ${limit}
     )
@@ -290,7 +292,7 @@ export async function sealOrphanedMessageRequests(options?: {
       AND deleted_at IS NULL
       AND duration_ms IS NULL
       AND created_at < ${threshold}
-      AND ${EXCLUDE_WARMUP_CONDITION}
+      AND (blocked_by IS NULL OR blocked_by <> 'warmup')
     RETURNING id
   `;
 
