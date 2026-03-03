@@ -125,19 +125,22 @@ export class ProxyStatusTracker {
         this.loadLastRequests(),
       ]);
 
-      return {
+      const snapshot: StatusSnapshot = {
         expiresAt: Date.now() + PROXY_STATUS_SNAPSHOT_TTL_MS,
         dbUsers: dbUsers as unknown as DbUserRow[],
         activeRequestRows,
         lastRequestRows,
       };
+
+      // cache：避免 dashboard 轮询频繁触发全量 users + LATERAL 扫描
+      this.statusSnapshotCache = snapshot;
+
+      return snapshot;
     })().finally(() => {
       this.statusSnapshotInFlight = null;
     });
 
-    const snapshot = await this.statusSnapshotInFlight;
-    this.statusSnapshotCache = snapshot;
-    return snapshot;
+    return await this.statusSnapshotInFlight;
   }
 
   async getAllUsersStatus(): Promise<ProxyStatusResponse> {

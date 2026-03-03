@@ -265,6 +265,7 @@ export async function sealOrphanedMessageRequests(options?: {
       SELECT id
       FROM message_request
       WHERE deleted_at IS NULL
+        AND duration_ms IS NULL
         AND status_code IS NULL
         AND created_at < ${threshold}
         AND (blocked_by IS NULL OR blocked_by <> 'warmup')
@@ -273,20 +274,18 @@ export async function sealOrphanedMessageRequests(options?: {
     )
     UPDATE message_request
     SET
-      duration_ms = COALESCE(
-        duration_ms,
-        (
-          LEAST(
-            2147483647,
-            GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
-          )::int
-        )
+      duration_ms = (
+        LEAST(
+          2147483647,
+          GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
+        )::int
       ),
       status_code = ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE},
       error_message = COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE}),
       updated_at = NOW()
     WHERE id IN (SELECT id FROM candidates)
       AND deleted_at IS NULL
+      AND duration_ms IS NULL
       AND status_code IS NULL
       AND created_at < ${threshold}
       AND (blocked_by IS NULL OR blocked_by <> 'warmup')
@@ -294,9 +293,9 @@ export async function sealOrphanedMessageRequests(options?: {
   `;
 
   const result = await db.execute(query);
-  const sealed = Array.from(result);
+  const sealedCount = Array.isArray(result) ? result.length : Array.from(result).length;
 
-  return { sealedCount: sealed.length };
+  return { sealedCount };
 }
 
 /**
