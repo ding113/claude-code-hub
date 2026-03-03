@@ -970,8 +970,11 @@ class MessageRequestWriteBuffer {
       }
 
       if (lastFailure) {
-        logger.error("[MessageRequestWriteBuffer] Dropping invalid update to unblock queue", {
+        const isTerminal = isTerminalPatch(item.patch);
+        const log = isTerminal ? logger.error : logger.warn;
+        log("[MessageRequestWriteBuffer] Dropping invalid update to unblock queue", {
           requestId: item.id,
+          isTerminal,
           keys: Object.keys(item.patch),
           types: summarizePatchTypes(item.patch),
           sample: (() => {

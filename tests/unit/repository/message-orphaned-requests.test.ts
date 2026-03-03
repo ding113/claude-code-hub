@@ -1,25 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { restoreEnv, snapshotEnv } from "../../helpers/env";
 import { toSqlText } from "../../helpers/drizzle";
-
-type EnvSnapshot = Partial<Record<string, string | undefined>>;
-
-function snapshotEnv(keys: string[]): EnvSnapshot {
-  const snapshot: EnvSnapshot = {};
-  for (const key of keys) {
-    snapshot[key] = process.env[key];
-  }
-  return snapshot;
-}
-
-function restoreEnv(snapshot: EnvSnapshot) {
-  for (const [key, value] of Object.entries(snapshot)) {
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-}
 
 describe("sealOrphanedMessageRequests", () => {
   const envKeys = ["NODE_ENV", "DSN", "FETCH_BODY_TIMEOUT"];

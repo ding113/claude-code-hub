@@ -199,6 +199,7 @@ export class ProxyStatusTracker {
     // 注意：该接口需要返回所有用户状态，因此整体复杂度与 users 数量线性相关。
     // 这里使用 LATERAL + 索引扫描来避免在 message_request 大表上做全表排序去重（DISTINCT ON），
     // 若未来用户规模显著增大（例如 1e4+），建议为该接口增加分页/按需查询，或引入专门的汇总表/物化视图。
+    // 本查询仅返回“存在已结束请求”的用户；其余用户由 getAllUsersStatus 补齐 lastRequest=null。
     const query = sql<LastRequestRow>`
       SELECT
         u.id AS "userId",
