@@ -187,13 +187,19 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
         return;
       }
       inFlight = true;
+      let timedOut = false;
       const startedAt = Date.now();
+      const sealPromise = sealOrphanedMessageRequests();
       try {
-        const sealPromise = sealOrphanedMessageRequests();
         const result = await withTimeout(sealPromise, timeoutMs);
         if (result.timedOut) {
+          timedOut = true;
           // 避免出现 unhandled rejection（promise 仍可能在超时后继续 reject）
-          void sealPromise.catch(() => {});
+          void sealPromise
+            .catch(() => {})
+            .finally(() => {
+              inFlight = false;
+            });
           logger.warn("[Instrumentation] Orphaned message_request sweeper timed out", {
             reason,
             timeoutMs,
@@ -229,7 +235,9 @@ async function startOrphanedMessageRequestSweeper(): Promise<void> {
           error: error instanceof Error ? error.message : String(error),
         });
       } finally {
-        inFlight = false;
+        if (!timedOut) {
+          inFlight = false;
+        }
       }
     };
 

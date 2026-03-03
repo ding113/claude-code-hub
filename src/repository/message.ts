@@ -237,6 +237,8 @@ export async function updateMessageRequestDetails(
  * - 某些页面会高频轮询“活跃请求”，在孤儿记录持续累积时可能引发内存与性能风险。
  *
  * 本函数会把超过阈值仍未落下终态的记录标记为已结束（未知失败），避免无限累积。
+ *
+ * 约束：staleAfterMs 最小为 60s（小于会被 clamp），避免误封闭真正的长耗时请求。
  */
 export async function sealOrphanedMessageRequests(options?: {
   staleAfterMs?: number;

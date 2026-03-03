@@ -876,6 +876,23 @@ class MessageRequestWriteBuffer {
         );
       }
     }
+
+    // 极端防御：若 DB 长时间不可用且流量持续涌入，requeue + enqueue 可能导致队列在短时间内暴涨。
+    // 这里设置一个硬上限，避免进程被 OOM 杀死（OOM 会导致更多终态丢失/孤儿请求放大）。
+    const hardCap = this.config.maxPending * 2;
+    if (hardCap > 0 && this.pending.size > hardCap) {
+      const hardTrim = this.trimPendingToMaxPending({ allowDropTerminal: true });
+      if (hardTrim.droppedCount > 0) {
+        logger.error("[MessageRequestWriteBuffer] Pending queue exceeded hard cap after requeue", {
+          maxPending: this.config.maxPending,
+          hardCap,
+          droppedCount: hardTrim.droppedCount,
+          droppedTerminalCount: hardTrim.droppedTerminalCount,
+          droppedIdsSample: hardTrim.droppedIdsSample,
+          currentPending: this.pending.size,
+        });
+      }
+    }
   }
 
   private pruneNonTerminalIds(): void {
