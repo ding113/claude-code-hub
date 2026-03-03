@@ -164,6 +164,24 @@ describe("code-display-worker-client (no Worker fallback)", () => {
 });
 
 describe("code-display-worker-client (Worker mode)", () => {
+  test("workerEnabled=false forces no-worker fallback even when Worker exists", async () => {
+    (globalThis as unknown as { Worker?: unknown }).Worker = FakeWorker as unknown;
+    const { buildLineIndex } = await importFreshWorkerClient();
+
+    const res = await buildLineIndex({
+      text: "a\nb\n",
+      maxLines: 100,
+      workerEnabled: false,
+    });
+
+    expect(FakeWorker.instances.length).toBe(0);
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(Array.from(res.lineStarts)).toEqual([0, 2, 4]);
+      expect(res.lineCount).toBe(3);
+    }
+  });
+
   test("routes progress messages and resolves buildLineIndex result", async () => {
     (globalThis as unknown as { Worker?: unknown }).Worker = FakeWorker as unknown;
     const { buildLineIndex } = await importFreshWorkerClient();

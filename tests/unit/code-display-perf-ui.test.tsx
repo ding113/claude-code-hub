@@ -427,6 +427,72 @@ describe("CodeDisplay - large content performance strategy", () => {
     unmount();
   });
 
+  test("large only-matches still works when worker is disabled (uses no-worker path)", async () => {
+    const content = ["alpha", "beta", "alpha gamma", "delta"].join("\n");
+    const starts = buildLineStarts(content);
+
+    workerClientMocks.buildLineIndex.mockResolvedValue({
+      ok: true,
+      lineStarts: starts,
+      lineCount: starts.length,
+    });
+    workerClientMocks.searchLines.mockResolvedValue({
+      ok: true,
+      matches: Int32Array.from([0, 2]),
+    });
+
+    const { container, unmount } = renderWithIntl(
+      <CodeDisplay content={content} language="text" />,
+      makeConfig({
+        highlightMaxChars: 10,
+        workerEnabled: false,
+        largePlainEnabled: true,
+      })
+    );
+
+    await flushMicrotasks();
+
+    const onlyMatchesToggle = container.querySelector(
+      '[data-testid="code-display-only-matches-toggle"]'
+    );
+    expect(onlyMatchesToggle).not.toBeNull();
+    click(onlyMatchesToggle as Element);
+
+    await waitFor(() => {
+      const btn = container.querySelector('[data-testid="code-display-only-matches-toggle"]');
+      return (btn?.textContent || "").includes(codeDisplayMessages.showAll);
+    });
+
+    const searchInput = container.querySelector(
+      '[data-testid="code-display-search"]'
+    ) as HTMLInputElement | null;
+    expect(searchInput).not.toBeNull();
+    inputText(searchInput as HTMLInputElement, "alpha");
+
+    await flushMicrotasks();
+    await waitFor(() => workerClientMocks.buildLineIndex.mock.calls.length > 0);
+    await waitFor(() => workerClientMocks.searchLines.mock.calls.length > 0);
+    await waitFor(
+      () => container.querySelector('[data-testid="code-display-matches-list"]') !== null
+    );
+
+    const buildArgs = workerClientMocks.buildLineIndex.mock.calls[0]?.[0] as {
+      workerEnabled?: boolean;
+    };
+    expect(buildArgs.workerEnabled).toBe(false);
+
+    const searchArgs = workerClientMocks.searchLines.mock.calls[0]?.[0] as {
+      workerEnabled?: boolean;
+    };
+    expect(searchArgs.workerEnabled).toBe(false);
+
+    const list = container.querySelector('[data-testid="code-display-matches-list"]');
+    expect(list).not.toBeNull();
+    expect((list as HTMLElement).textContent).toContain("alpha gamma");
+
+    unmount();
+  });
+
   test("only-matches shows index error message when line index build fails", async () => {
     const content = ["alpha", "beta", "alpha gamma", "delta"].join("\n");
 

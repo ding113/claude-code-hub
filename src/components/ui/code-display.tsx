@@ -815,7 +815,6 @@ export function CodeDisplay({
     showOnlyMatches &&
     debouncedOnlyMatchesQuery.length > 0 &&
     !isHardLimited &&
-    codeDisplayConfig.workerEnabled &&
     nonSseTextForMode.length > codeDisplayConfig.highlightMaxChars;
 
   const onlyMatchesIndexAbortRef = useRef<AbortController | null>(null);
@@ -906,6 +905,7 @@ export function CodeDisplay({
           setOnlyMatchesIndexProgress({ processed: p.processed, total: p.total });
         },
         signal: controller.signal,
+        workerEnabled: codeDisplayConfig.workerEnabled,
       }).then((res) => {
         if (controller.signal.aborted) return;
         if (jobId !== onlyMatchesIndexJobRef.current) return;
@@ -935,7 +935,12 @@ export function CodeDisplay({
     return () => {
       onlyMatchesIndexAbortRef.current?.abort();
     };
-  }, [codeDisplayConfig.maxLineIndexLines, nonSseTextKey, shouldOptimizeOnlyMatches]);
+  }, [
+    codeDisplayConfig.maxLineIndexLines,
+    codeDisplayConfig.workerEnabled,
+    nonSseTextKey,
+    shouldOptimizeOnlyMatches,
+  ]);
 
   useEffect(() => {
     if (!shouldOptimizeOnlyMatches) return;
@@ -973,6 +978,7 @@ export function CodeDisplay({
         setOnlyMatchesSearchProgress({ processed: p.processed, total: p.total });
       },
       signal: controller.signal,
+      workerEnabled: codeDisplayConfig.workerEnabled,
     }).then((res) => {
       if (controller.signal.aborted) return;
       if (jobId !== onlyMatchesSearchJobRef.current) return;
@@ -996,6 +1002,7 @@ export function CodeDisplay({
       controller.abort();
     };
   }, [
+    codeDisplayConfig.workerEnabled,
     debouncedOnlyMatchesQuery,
     nonSseTextKey,
     onlyMatchesIndexStatus,

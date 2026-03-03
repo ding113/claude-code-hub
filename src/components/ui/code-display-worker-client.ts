@@ -126,6 +126,17 @@ type StringifyJsonPrettyResolve = Extract<PendingJob, { kind: "stringifyJsonPret
 type BuildLineIndexResolve = Extract<PendingJob, { kind: "buildLineIndex" }>["resolve"];
 type SearchLinesResolve = Extract<PendingJob, { kind: "searchLines" }>["resolve"];
 
+const YIELD_MIN_INTERVAL_MS = 16;
+const PROGRESS_MIN_INTERVAL_MS = 200;
+
+function nowMs(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+async function yieldToEventLoop() {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+}
+
 function supportsWorker(): boolean {
   return typeof Worker !== "undefined";
 }
@@ -365,61 +376,85 @@ export async function buildLineIndex({
   maxLines,
   onProgress,
   signal,
+  workerEnabled = true,
 }: {
   text: string;
   maxLines: number;
   onProgress?: (p: WorkerProgress) => void;
   signal?: AbortSignal;
+  workerEnabled?: boolean;
 }): Promise<BuildLineIndexResult> {
+  const buildLineIndexNoWorker = async (): Promise<BuildLineIndexResult> => {
+    if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+
+    const total = text.length;
+    const starts: number[] = [0];
+    let lastYieldAt = nowMs();
+    let lastProgressAt = lastYieldAt;
+
+    for (let i = 0; i < total; i += 1) {
+      if ((i & 8191) === 0) {
+        if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+
+        const now = nowMs();
+        if (now - lastYieldAt > YIELD_MIN_INTERVAL_MS) {
+          lastYieldAt = now;
+          await yieldToEventLoop();
+          if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+        }
+
+        if (now - lastProgressAt > PROGRESS_MIN_INTERVAL_MS) {
+          lastProgressAt = now;
+          onProgress?.({ stage: "index", processed: i, total });
+        }
+      }
+
+      const code = text.charCodeAt(i);
+      if (code === 10) {
+        const nextLineCount = starts.length + 1;
+        if (nextLineCount > maxLines) {
+          onProgress?.({ stage: "index", processed: i, total });
+          return { ok: false, errorCode: "TOO_MANY_LINES", lineCount: nextLineCount };
+        }
+        starts.push(i + 1);
+        continue;
+      }
+      if (code === 13) {
+        const nextLineCount = starts.length + 1;
+        if (nextLineCount > maxLines) {
+          onProgress?.({ stage: "index", processed: i, total });
+          return { ok: false, errorCode: "TOO_MANY_LINES", lineCount: nextLineCount };
+        }
+
+        // CRLF 视为一个换行
+        if (i + 1 < total && text.charCodeAt(i + 1) === 10) {
+          starts.push(i + 2);
+          i += 1;
+        } else {
+          starts.push(i + 1);
+        }
+      }
+    }
+
+    onProgress?.({ stage: "index", processed: total, total });
+
+    const lineCount = starts.length;
+    const lineStarts = new Int32Array(lineCount);
+    for (let i = 0; i < lineCount; i += 1) {
+      lineStarts[i] = starts[i] ?? 0;
+    }
+
+    return { ok: true, lineStarts, lineCount };
+  };
+
+  if (!workerEnabled) {
+    return await buildLineIndexNoWorker();
+  }
+
   ensureInitialized();
   const w = getWorker();
   if (!w) {
-    if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
-    // fallback：双遍扫描（避免额外依赖）
-    const total = text.length;
-    let lineCount = 1;
-    for (let i = 0; i < total; i += 1) {
-      if ((i & 8191) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
-      const code = text.charCodeAt(i);
-      if (code === 10) {
-        lineCount += 1;
-        if (lineCount > maxLines) {
-          return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
-        }
-        continue;
-      }
-      if (code === 13) {
-        lineCount += 1;
-        // CRLF 视为一个换行
-        if (i + 1 < total && text.charCodeAt(i + 1) === 10) i += 1;
-        if (lineCount > maxLines) {
-          return { ok: false, errorCode: "TOO_MANY_LINES", lineCount };
-        }
-      }
-    }
-    const starts = new Int32Array(lineCount);
-    starts[0] = 0;
-    let idx = 1;
-    for (let i = 0; i < total; i += 1) {
-      if ((i & 8191) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
-      const code = text.charCodeAt(i);
-      if (code === 10) {
-        starts[idx] = i + 1;
-        idx += 1;
-        continue;
-      }
-      if (code === 13) {
-        if (i + 1 < total && text.charCodeAt(i + 1) === 10) {
-          starts[idx] = i + 2;
-          idx += 1;
-          i += 1;
-        } else {
-          starts[idx] = i + 1;
-          idx += 1;
-        }
-      }
-    }
-    return { ok: true, lineStarts: starts, lineCount };
+    return await buildLineIndexNoWorker();
   }
 
   const jobId = genJobId();
@@ -453,16 +488,16 @@ export async function searchLines({
   maxResults,
   onProgress,
   signal,
+  workerEnabled = true,
 }: {
   text: string;
   query: string;
   maxResults: number;
   onProgress?: (p: WorkerProgress) => void;
   signal?: AbortSignal;
+  workerEnabled?: boolean;
 }): Promise<SearchLinesResult> {
-  ensureInitialized();
-  const w = getWorker();
-  if (!w) {
+  const searchLinesNoWorker = async (): Promise<SearchLinesResult> => {
     if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
     if (!query) return { ok: true, matches: new Int32Array(0) };
 
@@ -471,11 +506,28 @@ export async function searchLines({
     let lastLine = -1;
     let scan = 0;
     let lineNo = 0;
+    let lastYieldAt = nowMs();
+    let lastProgressAt = lastYieldAt;
 
     let pos = text.indexOf(query, 0);
     while (pos !== -1) {
       while (scan < pos) {
-        if ((scan & 8191) === 0 && signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+        if ((scan & 8191) === 0) {
+          if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+
+          const now = nowMs();
+          if (now - lastYieldAt > YIELD_MIN_INTERVAL_MS) {
+            lastYieldAt = now;
+            await yieldToEventLoop();
+            if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+          }
+
+          if (now - lastProgressAt > PROGRESS_MIN_INTERVAL_MS) {
+            lastProgressAt = now;
+            onProgress?.({ stage: "search", processed: scan, total });
+          }
+        }
+
         const code = text.charCodeAt(scan);
         if (code === 10) {
           lineNo += 1;
@@ -502,8 +554,36 @@ export async function searchLines({
 
       if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
       pos = text.indexOf(query, pos + 1);
+
+      const now = nowMs();
+      if (now - lastYieldAt > YIELD_MIN_INTERVAL_MS) {
+        lastYieldAt = now;
+        await yieldToEventLoop();
+        if (signal?.aborted) return { ok: false, errorCode: "CANCELED" };
+      }
+
+      if (now - lastProgressAt > PROGRESS_MIN_INTERVAL_MS) {
+        lastProgressAt = now;
+        onProgress?.({
+          stage: "search",
+          processed: Math.min(pos === -1 ? total : pos, total),
+          total,
+        });
+      }
     }
+
+    onProgress?.({ stage: "search", processed: total, total });
     return { ok: true, matches: Int32Array.from(lines) };
+  };
+
+  if (!workerEnabled) {
+    return await searchLinesNoWorker();
+  }
+
+  ensureInitialized();
+  const w = getWorker();
+  if (!w) {
+    return await searchLinesNoWorker();
   }
 
   const jobId = genJobId();
