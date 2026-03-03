@@ -113,29 +113,46 @@ export class ProxyStatusTracker {
     }
 
     this.statusSnapshotInFlight = (async () => {
-      const [dbUsers, activeRequestRows, lastRequestRows] = await Promise.all([
-        db
-          .select({
-            id: users.id,
-            name: users.name,
-          })
-          .from(users)
-          .where(isNull(users.deletedAt)),
-        this.loadActiveRequests(),
-        this.loadLastRequests(),
-      ]);
+      try {
+        const [dbUsers, activeRequestRows, lastRequestRows] = await Promise.all([
+          db
+            .select({
+              id: users.id,
+              name: users.name,
+            })
+            .from(users)
+            .where(isNull(users.deletedAt)),
+          this.loadActiveRequests(),
+          this.loadLastRequests(),
+        ]);
 
-      const snapshot: StatusSnapshot = {
-        expiresAt: Date.now() + PROXY_STATUS_SNAPSHOT_TTL_MS,
-        dbUsers: dbUsers as unknown as DbUserRow[],
-        activeRequestRows,
-        lastRequestRows,
-      };
+        const snapshot: StatusSnapshot = {
+          expiresAt: Date.now() + PROXY_STATUS_SNAPSHOT_TTL_MS,
+          dbUsers: dbUsers as unknown as DbUserRow[],
+          activeRequestRows,
+          lastRequestRows,
+        };
 
-      // cache：避免 dashboard 轮询频繁触发全量 users + LATERAL 扫描
-      this.statusSnapshotCache = snapshot;
+        // cache：避免 dashboard 轮询频繁触发全量 users + LATERAL 扫描
+        this.statusSnapshotCache = snapshot;
 
-      return snapshot;
+        return snapshot;
+      } catch (error) {
+        logger.warn("[ProxyStatusTracker] Failed to refresh status snapshot, serving stale cache", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        if (this.statusSnapshotCache) {
+          // 退化：延长过期时间，避免 DB 抖动时 dashboard 轮询形成错误风暴
+          this.statusSnapshotCache = {
+            ...this.statusSnapshotCache,
+            expiresAt: Date.now() + PROXY_STATUS_SNAPSHOT_TTL_MS,
+          };
+          return this.statusSnapshotCache;
+        }
+
+        throw error;
+      }
     })().finally(() => {
       this.statusSnapshotInFlight = null;
     });

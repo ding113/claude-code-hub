@@ -338,6 +338,21 @@ describe("message_request 异步批量写入", () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
+  it("costUsd 超出范围时应被丢弃并导致 patch 为空（rejected_invalid）", async () => {
+    process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
+
+    const { enqueueMessageRequestUpdate, stopMessageRequestWriteBuffer } = await import(
+      "@/repository/message-write-buffer"
+    );
+
+    const result = enqueueMessageRequestUpdate(1, { costUsd: "1000000" });
+
+    await stopMessageRequestWriteBuffer();
+
+    expect(result.kind).toBe("rejected_invalid");
+    expect(executeMock).not.toHaveBeenCalled();
+  });
+
   it("token 字段应按 bigint（JS safe int）范围 sanitize（不再强制 Int32）", async () => {
     const { sanitizeMessageRequestUpdatePatch } = await import("@/repository/message-write-buffer");
 

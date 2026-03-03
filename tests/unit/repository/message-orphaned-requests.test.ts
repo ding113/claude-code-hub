@@ -52,14 +52,15 @@ describe("sealOrphanedMessageRequests", () => {
 
     expect(built.sql).toContain("UPDATE message_request");
     expect(built.sql).toContain("duration_ms IS NULL");
-    expect(built.sql).toContain("status_code IS NULL");
+    expect(built.sql).toContain("WHEN status_code IS NULL");
+    expect(built.sql).not.toContain("AND status_code IS NULL");
     expect((built.sql.match(/created_at </g) ?? []).length).toBe(2);
     expect(built.sql).toContain("blocked_by");
     expect(built.sql).toContain("warmup");
     expect(built.sql).toContain("duration_ms =");
     expect(built.sql).toContain("LEAST(");
-    expect(built.sql).toContain("status_code =");
-    expect(built.sql).toContain("error_message =");
+    expect(built.sql).toContain("status_code = COALESCE(status_code");
+    expect(built.sql).toContain("error_message = CASE");
     expect(built.sql).toContain("LIMIT");
 
     expect(built.params).toContain(ORPHANED_MESSAGE_REQUEST_STATUS_CODE);
@@ -69,6 +70,16 @@ describe("sealOrphanedMessageRequests", () => {
     const threshold = built.params.find((p) => p instanceof Date) as Date | undefined;
     expect(threshold).toBeInstanceOf(Date);
     expect(threshold?.toISOString()).toBe("2025-12-31T23:59:00.000Z");
+  });
+
+  it("应兼容 db.execute 返回 rowCount 的驱动实现", async () => {
+    executeMock.mockImplementationOnce(async () => ({ rowCount: 3 }) as any);
+
+    const { sealOrphanedMessageRequests } = await import("@/repository/message");
+
+    const result = await sealOrphanedMessageRequests({ staleAfterMs: 10, limit: 5 });
+
+    expect(result.sealedCount).toBe(3);
   });
 
   it("默认 staleAfterMs 应基于 FETCH_BODY_TIMEOUT + 60s 且不低于 60s", async () => {

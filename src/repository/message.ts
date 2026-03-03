@@ -230,7 +230,7 @@ export async function updateMessageRequestDetails(
  *
  * 在 MESSAGE_REQUEST_WRITE_MODE=async 时，请求终态信息（duration/status/tokens/cost 等）会先进入内存队列，
  * 再异步批量刷入数据库。若进程被 OOM Killer/SIGKILL 等非优雅方式终止，尾部更新会丢失，
- * 导致 message_request 记录长期保持“请求中”（duration_ms 长期为空；status_code 也可能为空或缺失）。
+ * 导致 message_request 记录长期保持“请求中”（duration_ms 长期为空；status_code 也可能为空，或已写入但 duration_ms 缺失）。
  *
  * 影响：
  * - Dashboard/统计把这些记录当作“进行中”，导致异常展示与聚合膨胀；
@@ -268,7 +268,6 @@ export async function sealOrphanedMessageRequests(options?: {
       FROM message_request
       WHERE deleted_at IS NULL
         AND duration_ms IS NULL
-        AND status_code IS NULL
         AND created_at < ${threshold}
         AND (blocked_by IS NULL OR blocked_by <> 'warmup')
       ORDER BY created_at ASC
@@ -276,26 +275,51 @@ export async function sealOrphanedMessageRequests(options?: {
     )
     UPDATE message_request
     SET
-      duration_ms = (
-        LEAST(
-          2147483647,
-          GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
-        )::int
-      ),
-      status_code = ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE},
-      error_message = COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE}),
+      duration_ms = CASE
+        WHEN status_code IS NULL THEN (
+          LEAST(
+            2147483647,
+            GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
+          )::int
+        )
+        ELSE (
+          LEAST(
+            2147483647,
+            GREATEST(0, COALESCE(ttfb_ms, 0))
+          )::int
+        )
+      END,
+      status_code = COALESCE(status_code, ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE}),
+      error_message = CASE
+        WHEN status_code IS NULL THEN COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE})
+        ELSE error_message
+      END,
       updated_at = NOW()
     WHERE id IN (SELECT id FROM candidates)
       AND deleted_at IS NULL
       AND duration_ms IS NULL
-      AND status_code IS NULL
       AND created_at < ${threshold}
       AND (blocked_by IS NULL OR blocked_by <> 'warmup')
     RETURNING id
   `;
 
   const result = await db.execute(query);
-  const sealedCount = Array.isArray(result) ? result.length : Array.from(result).length;
+  const resultAny = result as unknown as {
+    rows?: unknown[];
+    rowCount?: number;
+    [Symbol.iterator]?: unknown;
+  };
+
+  const sealedCount = Array.isArray(result)
+    ? result.length
+    : typeof resultAny.rowCount === "number"
+      ? resultAny.rowCount
+      : Array.isArray(resultAny.rows)
+        ? resultAny.rows.length
+        : typeof (resultAny as unknown as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
+            "function"
+          ? Array.from(resultAny as unknown as Iterable<unknown>).length
+          : 0;
 
   return { sealedCount };
 }

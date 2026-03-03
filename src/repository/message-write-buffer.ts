@@ -104,6 +104,9 @@ const _lastSafeIntClampLogAt = new Map<string, number>();
 const STATUS_CODE_REJECT_LOG_THROTTLE_MS = 60_000;
 let _lastStatusCodeRejectLogAt = 0;
 
+const COST_USD_RANGE_LOG_THROTTLE_MS = 60_000;
+let _lastCostUsdRangeLogAt = 0;
+
 const STRING_TRUNCATE_LOG_THROTTLE_MS = 60_000;
 const _lastStringTruncateLogAt = new Map<string, number>();
 
@@ -344,6 +347,15 @@ function sanitizeCostUsdString(value: unknown): string | undefined {
 
   // 目前仅用于 costUsd（schema: numeric(21, 15)，整数部分最多 6 位：< 1,000,000）
   if (parsed < 0 || parsed >= 1_000_000) {
+    const now = Date.now();
+    if (now - _lastCostUsdRangeLogAt > COST_USD_RANGE_LOG_THROTTLE_MS) {
+      _lastCostUsdRangeLogAt = now;
+      logger.warn("[MessageRequestWriteBuffer] costUsd out of accepted range, skipping", {
+        value: trimmed.slice(0, 32),
+        min: 0,
+        max: 1_000_000,
+      });
+    }
     return undefined;
   }
 
