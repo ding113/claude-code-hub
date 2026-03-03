@@ -202,6 +202,10 @@ export async function updateMessageRequestDetails(
   if (enqueueResult.kind === "enqueued") {
     return;
   }
+  if (enqueueResult.kind === "rejected_invalid") {
+    // patch 在 buffer 内已被 sanitize 并判定为空；避免重复 sanitize/重复告警
+    return;
+  }
 
   // overflow 场景下：尽量丢弃非终态 patch，避免在压力峰值时反向放大 DB 写入。
   // 但如果 overflow 丢失了终态信息（duration/status），则必须同步写入兜底以避免请求长期卡在“请求中”。
@@ -260,9 +264,9 @@ export async function sealOrphanedMessageRequests(options?: {
       FROM message_request
       WHERE deleted_at IS NULL
         AND duration_ms IS NULL
-        AND updated_at < ${threshold}
+        AND created_at < ${threshold}
         AND ${EXCLUDE_WARMUP_CONDITION}
-      ORDER BY updated_at ASC
+      ORDER BY created_at ASC
       LIMIT ${limit}
     )
     UPDATE message_request
@@ -285,7 +289,7 @@ export async function sealOrphanedMessageRequests(options?: {
     WHERE id IN (SELECT id FROM candidates)
       AND deleted_at IS NULL
       AND duration_ms IS NULL
-      AND updated_at < ${threshold}
+      AND created_at < ${threshold}
       AND ${EXCLUDE_WARMUP_CONDITION}
     RETURNING id
   `;

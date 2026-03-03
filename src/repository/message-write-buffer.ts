@@ -785,6 +785,20 @@ class MessageRequestWriteBuffer {
     }
   }
 
+  private pruneNonTerminalIds(): void {
+    // 防御：确保 nonTerminalIds 不含 stale/终态条目，避免 overflow 场景下反复扫描“幽灵 id”
+    const toDelete: number[] = [];
+    for (const id of this.nonTerminalIds) {
+      const patch = this.pending.get(id);
+      if (!patch || isTerminalPatch(patch)) {
+        toDelete.push(id);
+      }
+    }
+    for (const id of toDelete) {
+      this.nonTerminalIds.delete(id);
+    }
+  }
+
   private trimPendingToMaxPending(options?: { currentId?: number; allowDropTerminal?: boolean }): {
     droppedCount: number;
     droppedTerminalCount: number;
@@ -792,6 +806,8 @@ class MessageRequestWriteBuffer {
     droppedCurrent: boolean;
     droppedCurrentPatch?: MessageRequestUpdatePatch;
   } {
+    this.pruneNonTerminalIds();
+
     const currentId = options?.currentId;
     const allowDropTerminal = options?.allowDropTerminal ?? true;
     let droppedCount = 0;
@@ -1086,10 +1102,18 @@ class MessageRequestWriteBuffer {
   async stop(): Promise<void> {
     this.stopping = true;
     this.clearFlushTimer();
+    const pendingBefore = this.pending.size;
     await this.flush();
     // stop 期间尽量补刷一次，避免极小概率竞态导致的 tail 更新残留
     if (this.pending.size > 0) {
       await this.flush();
+    }
+    if (this.pending.size > 0) {
+      logger.error("[MessageRequestWriteBuffer] Stop finished with pending updates remaining", {
+        pendingBefore,
+        pendingAfter: this.pending.size,
+        nonTerminalIds: this.nonTerminalIds.size,
+      });
     }
   }
 }

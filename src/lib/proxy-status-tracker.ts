@@ -227,7 +227,7 @@ export class ProxyStatusTracker {
           -- lastRequest 仅统计已结束请求：activeRequests 已覆盖进行中请求，避免这里误选“请求中”的记录。
           AND mr.duration_ms IS NOT NULL
           AND (mr.blocked_by IS NULL OR mr.blocked_by <> 'warmup')
-          -- 这里使用 created_at 排序以更好利用既有索引（user_id, created_at），减少全表排序压力。
+          -- 这里使用 created_at + id 排序以命中 idx_message_request_user_created_at_id_completed，避免孤儿积累时回溯过深。
         ORDER BY mr.created_at DESC, mr.id DESC
         LIMIT 1
       ) last ON true
