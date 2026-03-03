@@ -265,7 +265,7 @@ export async function sealOrphanedMessageRequests(options?: {
       SELECT id
       FROM message_request
       WHERE deleted_at IS NULL
-        AND duration_ms IS NULL
+        AND status_code IS NULL
         AND created_at < ${threshold}
         AND (blocked_by IS NULL OR blocked_by <> 'warmup')
       ORDER BY created_at ASC
@@ -273,19 +273,21 @@ export async function sealOrphanedMessageRequests(options?: {
     )
     UPDATE message_request
     SET
-      duration_ms = LEAST(
-        2147483647,
-        GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
-      )::int,
-      status_code = COALESCE(status_code, ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE}),
-      error_message = CASE
-        WHEN status_code IS NULL THEN COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE})
-        ELSE error_message
-      END,
+      duration_ms = COALESCE(
+        duration_ms,
+        (
+          LEAST(
+            2147483647,
+            GREATEST(0, (EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000))
+          )::int
+        )
+      ),
+      status_code = ${ORPHANED_MESSAGE_REQUEST_STATUS_CODE},
+      error_message = COALESCE(error_message, ${ORPHANED_MESSAGE_REQUEST_ERROR_CODE}),
       updated_at = NOW()
     WHERE id IN (SELECT id FROM candidates)
       AND deleted_at IS NULL
-      AND duration_ms IS NULL
+      AND status_code IS NULL
       AND created_at < ${threshold}
       AND (blocked_by IS NULL OR blocked_by <> 'warmup')
     RETURNING id

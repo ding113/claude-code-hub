@@ -27,6 +27,20 @@ type LastRequestRow = {
   endTime: Date | string | null;
 };
 
+type DbUserRow = {
+  id: number;
+  name: string;
+};
+
+type StatusSnapshot = {
+  expiresAt: number;
+  dbUsers: DbUserRow[];
+  activeRequestRows: ActiveRequestRow[];
+  lastRequestRows: LastRequestRow[];
+};
+
+const PROXY_STATUS_SNAPSHOT_TTL_MS = 5000;
+
 function toTimestamp(value: Date | string | number | null | undefined): number | null {
   if (value == null) {
     return null;
@@ -52,6 +66,9 @@ function toTimestamp(value: Date | string | number | null | undefined): number |
  */
 export class ProxyStatusTracker {
   private static instance: ProxyStatusTracker | null = null;
+
+  private statusSnapshotCache: StatusSnapshot | null = null;
+  private statusSnapshotInFlight: Promise<StatusSnapshot> | null = null;
 
   static getInstance(): ProxyStatusTracker {
     if (!ProxyStatusTracker.instance) {
@@ -85,20 +102,48 @@ export class ProxyStatusTracker {
     void requestId;
   }
 
+  private async getStatusSnapshot(now: number): Promise<StatusSnapshot> {
+    const cached = this.statusSnapshotCache;
+    if (cached && cached.expiresAt > now) {
+      return cached;
+    }
+
+    if (this.statusSnapshotInFlight) {
+      return await this.statusSnapshotInFlight;
+    }
+
+    this.statusSnapshotInFlight = (async () => {
+      const [dbUsers, activeRequestRows, lastRequestRows] = await Promise.all([
+        db
+          .select({
+            id: users.id,
+            name: users.name,
+          })
+          .from(users)
+          .where(isNull(users.deletedAt)),
+        this.loadActiveRequests(),
+        this.loadLastRequests(),
+      ]);
+
+      return {
+        expiresAt: Date.now() + PROXY_STATUS_SNAPSHOT_TTL_MS,
+        dbUsers: dbUsers as unknown as DbUserRow[],
+        activeRequestRows,
+        lastRequestRows,
+      };
+    })().finally(() => {
+      this.statusSnapshotInFlight = null;
+    });
+
+    const snapshot = await this.statusSnapshotInFlight;
+    this.statusSnapshotCache = snapshot;
+    return snapshot;
+  }
+
   async getAllUsersStatus(): Promise<ProxyStatusResponse> {
     const now = Date.now();
 
-    const [dbUsers, activeRequestRows, lastRequestRows] = await Promise.all([
-      db
-        .select({
-          id: users.id,
-          name: users.name,
-        })
-        .from(users)
-        .where(isNull(users.deletedAt)),
-      this.loadActiveRequests(),
-      this.loadLastRequests(),
-    ]);
+    const { dbUsers, activeRequestRows, lastRequestRows } = await this.getStatusSnapshot(now);
 
     const activeMap = new Map<number, ProxyStatusResponse["users"][number]["activeRequests"]>();
     for (const row of activeRequestRows) {
@@ -180,6 +225,7 @@ export class ProxyStatusTracker {
         and(
           isNull(messageRequest.deletedAt),
           isNull(messageRequest.durationMs),
+          isNull(messageRequest.statusCode),
           // warmup 请求仅用于探测/预热：不应污染活跃请求列表与统计
           sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`
         )
