@@ -338,6 +338,20 @@ describe("message_request 异步批量写入", () => {
     expect(executeMock).not.toHaveBeenCalled();
   });
 
+  it("token 字段应按 bigint（JS safe int）范围 sanitize（不再强制 Int32）", async () => {
+    const { sanitizeMessageRequestUpdatePatch } = await import("@/repository/message-write-buffer");
+
+    const sanitized = sanitizeMessageRequestUpdatePatch({
+      inputTokens: 2147483648, // INT32_MAX + 1
+      outputTokens: Number.MAX_SAFE_INTEGER + 1, // 超出 JS safe int：应 clamp
+      cacheCreationInputTokens: -1, // 负数：应 clamp 到 0
+    });
+
+    expect(sanitized.inputTokens).toBe(2147483648);
+    expect(sanitized.outputTokens).toBe(Number.MAX_SAFE_INTEGER);
+    expect(sanitized.cacheCreationInputTokens).toBe(0);
+  });
+
   it("队列溢出时应优先丢弃非终态更新（尽量保留 durationMs）", async () => {
     process.env.MESSAGE_REQUEST_WRITE_MODE = "async";
     process.env.MESSAGE_REQUEST_ASYNC_MAX_PENDING = "100";

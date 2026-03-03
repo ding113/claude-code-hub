@@ -71,6 +71,7 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
 };
 
 const INT32_MAX = 2147483647;
+const BIGINT_JS_MAX = Number.MAX_SAFE_INTEGER; // 2^53 - 1（JS 可精确表示的最大整数）
 const NUMERIC_LIKE_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 const REJECTED_INVALID_LOG_THROTTLE_MS = 60_000;
@@ -78,6 +79,8 @@ let _lastRejectedInvalidLogAt = 0;
 
 const INT32_CLAMP_LOG_THROTTLE_MS = 60_000;
 const _lastInt32ClampLogAt = new Map<string, number>();
+const SAFE_INT_CLAMP_LOG_THROTTLE_MS = INT32_CLAMP_LOG_THROTTLE_MS;
+const _lastSafeIntClampLogAt = new Map<string, number>();
 
 const STATUS_CODE_REJECT_LOG_THROTTLE_MS = 60_000;
 let _lastStatusCodeRejectLogAt = 0;
@@ -214,6 +217,59 @@ function sanitizeNullableInt32(
   return sanitizeInt32(value, options);
 }
 
+function sanitizeSafeInt(
+  value: unknown,
+  options?: { min?: number; max?: number; field?: string }
+): number | undefined {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) {
+    return undefined;
+  }
+
+  const truncated = Math.trunc(numeric);
+  const min = options?.min ?? -BIGINT_JS_MAX;
+  const max = options?.max ?? BIGINT_JS_MAX;
+
+  if (truncated < min) {
+    const field = options?.field;
+    if (field) {
+      const now = Date.now();
+      const lastLogAt = _lastSafeIntClampLogAt.get(field) ?? 0;
+      if (now - lastLogAt > SAFE_INT_CLAMP_LOG_THROTTLE_MS) {
+        _lastSafeIntClampLogAt.set(field, now);
+        logger.warn("[MessageRequestWriteBuffer] Safe integer value out of range, clamping", {
+          field,
+          value: typeof value === "string" ? value.slice(0, 64) : value,
+          clampedTo: min,
+          min,
+          max,
+        });
+      }
+    }
+    return min;
+  }
+  if (truncated > max) {
+    const field = options?.field;
+    if (field) {
+      const now = Date.now();
+      const lastLogAt = _lastSafeIntClampLogAt.get(field) ?? 0;
+      if (now - lastLogAt > SAFE_INT_CLAMP_LOG_THROTTLE_MS) {
+        _lastSafeIntClampLogAt.set(field, now);
+        logger.warn("[MessageRequestWriteBuffer] Safe integer value out of range, clamping", {
+          field,
+          value: typeof value === "string" ? value.slice(0, 64) : value,
+          clampedTo: max,
+          min,
+          max,
+        });
+      }
+    }
+    return max;
+  }
+
+  return truncated;
+}
+
 function sanitizeStatusCode(value: unknown): number | undefined {
   const numeric = toFiniteNumber(value);
   if (numeric === null) {
@@ -292,19 +348,19 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
     sanitized.statusCode = statusCode;
   }
 
-  const inputTokens = sanitizeInt32(patch.inputTokens, {
+  const inputTokens = sanitizeSafeInt(patch.inputTokens, {
     field: "inputTokens",
     min: 0,
-    max: INT32_MAX,
+    max: BIGINT_JS_MAX,
   });
   if (inputTokens !== undefined) {
     sanitized.inputTokens = inputTokens;
   }
 
-  const outputTokens = sanitizeInt32(patch.outputTokens, {
+  const outputTokens = sanitizeSafeInt(patch.outputTokens, {
     field: "outputTokens",
     min: 0,
-    max: INT32_MAX,
+    max: BIGINT_JS_MAX,
   });
   if (outputTokens !== undefined) {
     sanitized.outputTokens = outputTokens;
@@ -315,37 +371,37 @@ function sanitizePatch(patch: MessageRequestUpdatePatch): MessageRequestUpdatePa
     sanitized.ttfbMs = ttfbMs;
   }
 
-  const cacheCreationInputTokens = sanitizeInt32(patch.cacheCreationInputTokens, {
+  const cacheCreationInputTokens = sanitizeSafeInt(patch.cacheCreationInputTokens, {
     field: "cacheCreationInputTokens",
     min: 0,
-    max: INT32_MAX,
+    max: BIGINT_JS_MAX,
   });
   if (cacheCreationInputTokens !== undefined) {
     sanitized.cacheCreationInputTokens = cacheCreationInputTokens;
   }
 
-  const cacheReadInputTokens = sanitizeInt32(patch.cacheReadInputTokens, {
+  const cacheReadInputTokens = sanitizeSafeInt(patch.cacheReadInputTokens, {
     field: "cacheReadInputTokens",
     min: 0,
-    max: INT32_MAX,
+    max: BIGINT_JS_MAX,
   });
   if (cacheReadInputTokens !== undefined) {
     sanitized.cacheReadInputTokens = cacheReadInputTokens;
   }
 
-  const cacheCreation5mInputTokens = sanitizeInt32(patch.cacheCreation5mInputTokens, {
+  const cacheCreation5mInputTokens = sanitizeSafeInt(patch.cacheCreation5mInputTokens, {
     field: "cacheCreation5mInputTokens",
     min: 0,
-    max: INT32_MAX,
+    max: BIGINT_JS_MAX,
   });
   if (cacheCreation5mInputTokens !== undefined) {
     sanitized.cacheCreation5mInputTokens = cacheCreation5mInputTokens;
   }
 
-  const cacheCreation1hInputTokens = sanitizeInt32(patch.cacheCreation1hInputTokens, {
+  const cacheCreation1hInputTokens = sanitizeSafeInt(patch.cacheCreation1hInputTokens, {
     field: "cacheCreation1hInputTokens",
     min: 0,
-    max: INT32_MAX,
+    max: BIGINT_JS_MAX,
   });
   if (cacheCreation1hInputTokens !== undefined) {
     sanitized.cacheCreation1hInputTokens = cacheCreation1hInputTokens;
