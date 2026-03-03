@@ -554,6 +554,13 @@
       "when": 1772505850994,
       "tag": "0078_huge_weapon_omega",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1772511987232,
+      "tag": "0079_special_zarda",
+      "breakpoints": true
     }
   ]
 }

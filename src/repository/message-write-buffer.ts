@@ -70,6 +70,25 @@ const COLUMN_MAP: Record<keyof MessageRequestUpdatePatch, string> = {
   specialSettings: "special_settings",
 };
 
+const INT_CASE_KEYS = new Set<keyof MessageRequestUpdatePatch>([
+  "durationMs",
+  "statusCode",
+  "ttfbMs",
+  "providerId",
+]);
+const BIGINT_CASE_KEYS = new Set<keyof MessageRequestUpdatePatch>([
+  "inputTokens",
+  "outputTokens",
+  "cacheCreationInputTokens",
+  "cacheReadInputTokens",
+  "cacheCreation5mInputTokens",
+  "cacheCreation1hInputTokens",
+]);
+const BOOLEAN_CASE_KEYS = new Set<keyof MessageRequestUpdatePatch>([
+  "context1mApplied",
+  "swapCacheTtlApplied",
+]);
+
 const INT32_MAX = 2147483647;
 const BIGINT_JS_MAX = Number.MAX_SAFE_INTEGER; // 2^53 - 1（JS 可精确表示的最大整数）
 const NUMERIC_LIKE_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
@@ -625,7 +644,7 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
 
       if (key === "providerChain" || key === "specialSettings") {
         if (value === null) {
-          cases.push(sql`WHEN ${update.id} THEN NULL`);
+          cases.push(sql`WHEN ${update.id} THEN NULL::jsonb`);
           continue;
         }
         try {
@@ -647,6 +666,21 @@ function buildBatchUpdateSql(updates: MessageRequestUpdateRecord[]): SQL | null 
       if (key === "costUsd") {
         // numeric 类型，显式 cast 避免隐式类型推断异常
         cases.push(sql`WHEN ${update.id} THEN ${value}::numeric`);
+        continue;
+      }
+
+      if (INT_CASE_KEYS.has(key)) {
+        cases.push(sql`WHEN ${update.id} THEN ${value}::int`);
+        continue;
+      }
+
+      if (BIGINT_CASE_KEYS.has(key)) {
+        cases.push(sql`WHEN ${update.id} THEN ${value}::bigint`);
+        continue;
+      }
+
+      if (BOOLEAN_CASE_KEYS.has(key)) {
+        cases.push(sql`WHEN ${update.id} THEN ${value}::boolean`);
         continue;
       }
 

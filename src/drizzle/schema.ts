@@ -547,6 +547,11 @@ export const messageRequest = pgTable('message_request', {
     table.createdAt.desc(),
     table.id.desc()
   ).where(sql`${table.deletedAt} IS NULL`),
+  // #854：进行中/孤儿请求 created_at 扫描加速（proxy-status activeRequests + orphan sweeper）
+  messageRequestActiveCreatedAtIdIdx: index('idx_message_request_active_created_at_id').on(
+    table.createdAt,
+    table.id
+  ).where(sql`${table.deletedAt} IS NULL AND ${table.durationMs} IS NULL`),
   // #779：筛选器 DISTINCT model / status_code 加速（admin usage logs）
   messageRequestModelActiveIdx: index('idx_message_request_model_active').on(table.model).where(sql`${table.deletedAt} IS NULL AND ${table.model} IS NOT NULL`),
   messageRequestStatusCodeActiveIdx: index('idx_message_request_status_code_active').on(table.statusCode).where(sql`${table.deletedAt} IS NULL AND ${table.statusCode} IS NOT NULL`),
