@@ -1,5 +1,5 @@
-import { CasingCache } from "drizzle-orm/casing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toSqlText } from "../../helpers/drizzle";
 
 type EnvSnapshot = Partial<Record<string, string | undefined>>;
 
@@ -19,16 +19,6 @@ function restoreEnv(snapshot: EnvSnapshot) {
       process.env[key] = value;
     }
   }
-}
-
-function toSqlText(query: { toQuery: (config: any) => { sql: string; params: unknown[] } }) {
-  return query.toQuery({
-    casing: new CasingCache(),
-    escapeName: (name: string) => `"${name}"`,
-    escapeParam: (index: number) => `$${index}`,
-    escapeString: (value: string) => `'${value}'`,
-    paramStartIndex: { value: 1 },
-  });
 }
 
 function createDeferred<T>() {

@@ -86,6 +86,15 @@ async function writeMessageRequestUpdateToDb(
 ): Promise<void> {
   const sanitized = sanitizeMessageRequestUpdatePatch(patch);
   if (Object.keys(sanitized).length === 0) {
+    const definedKeys = Object.entries(patch)
+      .filter(([, value]) => value !== undefined)
+      .map(([key]) => key);
+    if (definedKeys.length > 0) {
+      logger.warn("[MessageRepository] Message request patch rejected: empty after sanitize", {
+        requestId: id,
+        keys: definedKeys,
+      });
+    }
     return;
   }
 
@@ -135,15 +144,14 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  const sanitizedCost = sanitizeMessageRequestUpdatePatch({ costUsd: formattedCost }).costUsd;
-  if (!sanitizedCost) {
-    logger.warn("[MessageRepository] costUsd rejected by sanitize, dropping cost update", {
+  const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: formattedCost });
+  if (enqueueResult.kind === "rejected_invalid") {
+    logger.warn("[MessageRepository] costUsd update rejected as invalid, skipping", {
       requestId: id,
+      costUsd: formattedCost,
     });
     return;
   }
-
-  const enqueueResult = enqueueMessageRequestUpdate(id, { costUsd: sanitizedCost });
   if (enqueueResult.kind === "enqueued") {
     return;
   }
@@ -161,7 +169,7 @@ export async function updateMessageRequestCost(
     return;
   }
 
-  await writeMessageRequestUpdateToDb(id, { costUsd: sanitizedCost });
+  await writeMessageRequestUpdateToDb(id, { costUsd: formattedCost });
 }
 
 /**

@@ -900,8 +900,13 @@ class MessageRequestWriteBuffer {
         }
 
         if (!singleQuery) {
-          lastFailure = null;
-          break;
+          // 本策略未产生任何可更新列（例如字段被过滤/无法序列化）：尝试下一个降级策略。
+          lastFailure = {
+            kind: "build",
+            strategy: name,
+            error: new Error("No SQL columns produced for patch strategy"),
+          };
+          continue;
         }
 
         try {
@@ -925,6 +930,14 @@ class MessageRequestWriteBuffer {
         logger.error("[MessageRequestWriteBuffer] Dropping invalid update to unblock queue", {
           requestId: item.id,
           keys: Object.keys(item.patch),
+          types: summarizePatchTypes(item.patch),
+          sample: (() => {
+            try {
+              return JSON.stringify(item.patch).slice(0, 200);
+            } catch {
+              return undefined;
+            }
+          })(),
           failureKind: lastFailure.kind,
           failureStrategy: lastFailure.strategy,
           error:
