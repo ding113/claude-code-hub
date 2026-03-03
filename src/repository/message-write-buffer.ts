@@ -795,6 +795,9 @@ class MessageRequestWriteBuffer {
 
     // 达到批量阈值时尽快 flush，降低 durationMs 为空的“悬挂时间”
     if (this.pending.size >= this.config.batchSize) {
+      // 若刚刚调度了 timer（尤其是终态 10ms timer），这里直接 flush 会让 timer 变成多余噪声；
+      // 提前清理可避免短时间内重复触发 flush 以及额外的事件循环负担。
+      this.clearFlushTimer();
       void this.flush();
     }
 
@@ -1016,6 +1019,7 @@ class MessageRequestWriteBuffer {
         { name: "safe" as const, patch: getSafePatch(item.patch) },
         { name: "minimal" as const, patch: getMinimalPatch(item.patch) },
       ];
+      const noSqlColumnsStrategies: Array<(typeof patchStrategies)[number]["name"]> = [];
 
       let lastFailure: {
         kind: "build" | "execute";
@@ -1034,11 +1038,8 @@ class MessageRequestWriteBuffer {
 
         if (!singleQuery) {
           // 本策略未产生任何可更新列（例如字段被过滤/无法序列化）：尝试下一个降级策略。
-          lastFailure = {
-            kind: "build",
-            strategy: name,
-            error: new Error("No SQL columns produced for patch strategy"),
-          };
+          // 注意：这不是“错误”，不要覆盖前面真实的 DB/data 错误上下文。
+          noSqlColumnsStrategies.push(name);
           continue;
         }
 
@@ -1059,14 +1060,27 @@ class MessageRequestWriteBuffer {
         }
       }
 
+      if (!lastFailure && noSqlColumnsStrategies.length === patchStrategies.length) {
+        // 所有策略都无法产生 SQL：通常是 patch 字段被过滤/无法序列化，且不含终态字段（duration/status）。
+        // 这类更新对“请求中”问题无关键影响，直接跳过即可；仅用 debug 降噪。
+        logger.debug("[MessageRequestWriteBuffer] Skipping update with no writable columns", {
+          requestId: item.id,
+          keys: Object.keys(item.patch),
+          types: summarizePatchTypes(item.patch),
+          noSqlColumnsStrategies,
+        });
+        continue;
+      }
+
       if (lastFailure) {
         const isTerminal = isTerminalPatch(item.patch);
         const log = isTerminal ? logger.error : logger.warn;
-        log("[MessageRequestWriteBuffer] Dropping invalid update to unblock queue", {
+        log("[MessageRequestWriteBuffer] Dropping update to unblock queue", {
           requestId: item.id,
           isTerminal,
           keys: Object.keys(item.patch),
           types: summarizePatchTypes(item.patch),
+          noSqlColumnsStrategies,
           sample: (() => {
             try {
               return JSON.stringify(item.patch).slice(0, 200);

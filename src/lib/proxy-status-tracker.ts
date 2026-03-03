@@ -176,7 +176,14 @@ export class ProxyStatusTracker {
         and(eq(messageRequest.providerId, providers.id), isNull(providers.deletedAt))
       )
       .leftJoin(keys, and(eq(keys.key, messageRequest.key), isNull(keys.deletedAt)))
-      .where(and(isNull(messageRequest.deletedAt), isNull(messageRequest.durationMs)))
+      .where(
+        and(
+          isNull(messageRequest.deletedAt),
+          isNull(messageRequest.durationMs),
+          // warmup 请求仅用于探测/预热：不应污染活跃请求列表与统计
+          sql`(${messageRequest.blockedBy} IS NULL OR ${messageRequest.blockedBy} <> 'warmup')`
+        )
+      )
       // 防御：异常情况下 durationMs 长期为空会导致“活跃请求”无限累积，进而撑爆查询与响应体。
       // 这里对返回明细做上限保护（监控用途不需要无穷列表）。
       .orderBy(desc(messageRequest.createdAt))
