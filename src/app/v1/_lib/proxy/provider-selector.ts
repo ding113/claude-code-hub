@@ -767,11 +767,13 @@ export class ProxyProviderResolver {
 
       // 2b. 格式类型匹配（新增）
       // 根据 session.originalFormat 限制候选供应商类型，避免格式错配
+      // joinOpenAIPool：允许 claude/claude-auth 供应商加入 openai 调度池
       if (session?.originalFormat) {
-        const isFormatCompatible = checkFormatProviderTypeCompatibility(
-          session.originalFormat,
-          provider.providerType
-        );
+        const isFormatCompatible =
+          checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType) ||
+          (session.originalFormat === "openai" &&
+            (provider.providerType === "claude" || provider.providerType === "claude-auth") &&
+            provider.joinOpenAIPool);
         if (!isFormatCompatible) {
           return false; // 过滤掉格式不兼容的供应商
         }
@@ -810,7 +812,12 @@ export class ProxyProviderResolver {
           details = "已在前序尝试中失败";
         } else if (
           session?.originalFormat &&
-          !checkFormatProviderTypeCompatibility(session.originalFormat, p.providerType)
+          !checkFormatProviderTypeCompatibility(session.originalFormat, p.providerType) &&
+          !(
+            session.originalFormat === "openai" &&
+            (p.providerType === "claude" || p.providerType === "claude-auth") &&
+            p.joinOpenAIPool
+          )
         ) {
           reason = "format_type_mismatch";
           details = `原始格式 ${session.originalFormat} 与供应商类型 ${p.providerType} 不兼容`;

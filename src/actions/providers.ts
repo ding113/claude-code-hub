@@ -246,6 +246,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         modelRedirects: provider.modelRedirects,
         allowedModels: provider.allowedModels,
         joinClaudePool: provider.joinClaudePool,
+        joinOpenAIPool: provider.joinOpenAIPool,
         codexInstructionsStrategy: provider.codexInstructionsStrategy,
         mcpPassthroughType: provider.mcpPassthroughType,
         mcpPassthroughUrl: provider.mcpPassthroughUrl,
@@ -478,6 +479,7 @@ export async function addProvider(data: {
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
+  join_openai_pool?: boolean;
   limit_5h_usd?: number | null;
   limit_daily_usd?: number | null;
   daily_reset_mode?: "fixed" | "rolling";
@@ -649,6 +651,7 @@ export async function editProvider(
     model_redirects?: Record<string, string> | null;
     allowed_models?: string[] | null;
     join_claude_pool?: boolean;
+    join_openai_pool?: boolean;
     limit_5h_usd?: number | null;
     limit_daily_usd?: number | null;
     daily_reset_mode?: "fixed" | "rolling";

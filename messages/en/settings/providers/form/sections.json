@@ -231,6 +231,11 @@
       "help": "Available only when there is a redirect mapping to claude-* models. When users request claude-* models, this provider also joins scheduling.",
       "label": "Join Claude Routing Pool"
     },
+    "joinOpenAIPool": {
+      "desc": "When enabled, this Claude provider will also participate in load balancing for OpenAI-format requests",
+      "help": "Available only when model redirects contain a non-claude-* source mapped to a claude-* target (e.g. gpt-4 → claude-3-5-sonnet). When enabled, this provider also joins scheduling for requests sent to /v1/chat/completions.",
+      "label": "Join OpenAI Routing Pool"
+    },
     "modelRedirects": {
       "label": "Model Redirects",
       "optional": "(optional)"

@@ -231,6 +231,11 @@
       "help": "僅當存在映射至 claude-* 的規則時可用。當用戶請求 claude-* 模型時，此供應商也會被納入調度。",
       "label": "加入 Claude 調度池"
     },
+    "joinOpenAIPool": {
+      "desc": "啟用後，此 Claude 供應商將同時參與 OpenAI 格式請求的負載均衡調度",
+      "help": "僅當模型重定向設定中存在非 claude-* 來源映射至 claude-* 目標時可用（如 gpt-4 → claude-3-5-sonnet）。啟用後，用戶透過 /v1/chat/completions 發送請求時，此供應商也會參與調度。",
+      "label": "加入 OpenAI 調度池"
+    },
     "modelRedirects": {
       "label": "模型重定向設定",
       "optional": "（選填）"

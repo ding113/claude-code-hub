@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ADD COLUMN "join_openai_pool" boolean DEFAULT false;

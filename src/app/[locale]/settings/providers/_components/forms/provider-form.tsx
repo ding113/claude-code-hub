@@ -177,6 +177,9 @@ export function ProviderForm({
   const [joinClaudePool, setJoinClaudePool] = useState<boolean>(
     sourceProvider?.joinClaudePool ?? false
   );
+  const [joinOpenAIPool, setJoinOpenAIPool] = useState<boolean>(
+    sourceProvider?.joinOpenAIPool ?? false
+  );
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
   );
@@ -430,6 +433,7 @@ export function ProviderForm({
             model_redirects?: Record<string, string> | null;
             allowed_models?: string[] | null;
             join_claude_pool?: boolean;
+            join_openai_pool?: boolean;
             priority?: number;
             weight?: number;
             cost_multiplier?: number;
@@ -475,6 +479,7 @@ export function ProviderForm({
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
             join_claude_pool: joinClaudePool,
+            join_openai_pool: joinOpenAIPool,
             priority: priority,
             weight: weight,
             cost_multiplier: costMultiplier,
@@ -540,6 +545,7 @@ export function ProviderForm({
             model_redirects: parsedModelRedirects,
             allowed_models: allowedModels.length > 0 ? allowedModels : null,
             join_claude_pool: joinClaudePool,
+            join_openai_pool: joinOpenAIPool,
             // 使用配置的默认值：默认不启用、权重=1
             is_enabled: PROVIDER_DEFAULTS.IS_ENABLED,
             weight: weight,
@@ -980,6 +986,44 @@ export function ProviderForm({
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {t("sections.routing.joinClaudePool.help")}
+                        </p>
+                      </div>
+                    );
+                  })()}
+
+                {/* joinOpenAIPool 开关 - 仅 Claude/Claude-Auth 供应商显示 */}
+                {(providerType === "claude" || providerType === "claude-auth") &&
+                  (() => {
+                    // 检查是否有从非 Claude 模型名到 Claude 模型的重定向映射
+                    const hasOpenAIRedirects = Object.entries(modelRedirects).some(
+                      ([source, target]) =>
+                        !source.startsWith("claude-") && target.startsWith("claude-")
+                    );
+
+                    if (!hasOpenAIRedirects) return null;
+
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label
+                              htmlFor={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}
+                            >
+                              {t("sections.routing.joinOpenAIPool.label")}
+                            </Label>
+                            <p className="text-xs text-muted-foreground">
+                              {t("sections.routing.joinOpenAIPool.desc")}
+                            </p>
+                          </div>
+                          <Switch
+                            id={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}
+                            checked={joinOpenAIPool}
+                            onCheckedChange={setJoinOpenAIPool}
+                            disabled={isPending}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {t("sections.routing.joinOpenAIPool.help")}
                         </p>
                       </div>
                     );

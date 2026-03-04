@@ -69,6 +69,9 @@ export interface Provider {
   // 加入 Claude 调度池：仅对非 Anthropic 提供商有效
   joinClaudePool: boolean;
 
+  // 加入 OpenAI 调度池：仅对 Claude/Claude-Auth 提供商有效
+  joinOpenAIPool: boolean;
+
   // Codex Instructions 策略：控制如何处理 Codex 请求的 instructions 字段
   // 仅对 providerType = 'codex' 的供应商有效
   codexInstructionsStrategy: CodexInstructionsStrategy;
@@ -170,6 +173,8 @@ export interface ProviderDisplay {
   allowedModels: string[] | null;
   // 加入 Claude 调度池
   joinClaudePool: boolean;
+  // 加入 OpenAI 调度池
+  joinOpenAIPool: boolean;
   // Codex Instructions 策略
   codexInstructionsStrategy: CodexInstructionsStrategy;
   // MCP 透传类型
@@ -245,6 +250,7 @@ export interface CreateProviderData {
   url: string;
   key: string;
   // 是否启用（默认 true）- 数据库字段名
+
   is_enabled?: boolean;
   // 权重（默认 1）
   weight?: number;
@@ -260,6 +266,7 @@ export interface CreateProviderData {
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
+  join_openai_pool?: boolean;
   codex_instructions_strategy?: CodexInstructionsStrategy;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;
@@ -333,6 +340,7 @@ export interface UpdateProviderData {
   model_redirects?: Record<string, string> | null;
   allowed_models?: string[] | null;
   join_claude_pool?: boolean;
+  join_openai_pool?: boolean;
   codex_instructions_strategy?: CodexInstructionsStrategy;
   mcp_passthrough_type?: McpPassthroughType;
   mcp_passthrough_url?: string | null;

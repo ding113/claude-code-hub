@@ -231,6 +231,11 @@
       "help": "claude-* へのリダイレクトがある場合のみ利用できます。ユーザーが claude-* モデルを要求した際に本プロバイダーも選択対象になります。",
       "label": "Claude ルーティングプールに参加"
     },
+    "joinOpenAIPool": {
+      "desc": "有効にすると、この Claude プロバイダーが OpenAI 形式リクエストの負荷分散にも参加します",
+      "help": "モデルリダイレクト設定に claude-* 以外のソースから claude-* へのマッピングがある場合のみ利用できます（例: gpt-4 → claude-3-5-sonnet）。有効にすると、/v1/chat/completions へのリクエスト時もスケジューリング対象になります。",
+      "label": "OpenAI ルーティングプールに参加"
+    },
     "modelRedirects": {
       "label": "モデルリダイレクト設定",
       "optional": "（任意）"
