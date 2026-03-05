@@ -1006,9 +1006,7 @@ export function ProviderForm({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="space-y-0.5">
-                            <Label
-                              htmlFor={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}
-                            >
+                            <Label htmlFor={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}>
                               {t("sections.routing.joinOpenAIPool.label")}
                             </Label>
                             <p className="text-xs text-muted-foreground">
