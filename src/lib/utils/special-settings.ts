@@ -177,3 +177,20 @@ export function buildUnifiedSpecialSettings(
 
   return result.length > 0 ? result : null;
 }
+
+export function hasPriorityServiceTierSpecialSetting(
+  specialSettings?: SpecialSetting[] | null
+): boolean {
+  if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
+    return false;
+  }
+
+  return specialSettings.some(
+    (setting) =>
+      setting.type === "provider_parameter_override" &&
+      setting.providerType === "codex" &&
+      setting.changes.some(
+        (change) => change.path === "service_tier" && change.after === "priority"
+      )
+  );
+}

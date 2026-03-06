@@ -251,6 +251,37 @@ describe("usage-logs-table multiplier badge", () => {
     expect(html).toContain("bg-amber-50");
   });
 
+  test("renders fast badge when codex priority service tier is recorded", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            id: 1,
+            specialSettings: [
+              {
+                type: "provider_parameter_override",
+                scope: "provider",
+                providerId: 1,
+                providerName: "codex-provider",
+                providerType: "codex",
+                hit: true,
+                changed: true,
+                changes: [{ path: "service_tier", before: null, after: "priority", changed: true }],
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain("logs.billingDetails.fast");
+  });
+
   test("does not render swap indicator when swapCacheTtlApplied is false", () => {
     const html = renderToStaticMarkup(
       <UsageLogsTable

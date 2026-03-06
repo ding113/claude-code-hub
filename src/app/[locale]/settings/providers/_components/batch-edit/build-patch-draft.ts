@@ -147,6 +147,13 @@ export function buildPatchDraftFromFormState(
       };
     }
   }
+  if (dirtyFields.has("routing.codexServiceTierPreference")) {
+    if (state.routing.codexServiceTierPreference === "inherit") {
+      draft.codex_service_tier_preference = { clear: true };
+    } else {
+      draft.codex_service_tier_preference = { set: state.routing.codexServiceTierPreference };
+    }
+  }
 
   // Anthropic preferences
   if (dirtyFields.has("routing.anthropicMaxTokensPreference")) {

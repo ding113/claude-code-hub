@@ -283,6 +283,8 @@
         "cacheTtlSwapped": "计费 TTL (已互换)",
         "multiplier": "供应商倍率",
         "totalCost": "总费用",
+        "fast": "fast",
+        "fastPriority": "Priority service tier（fast 模式）",
         "context1m": "1M 上下文",
         "context1mPricing": "输入 2x >200k, 输出 1.5x >200k"
       },
@@ -374,6 +376,8 @@
       "cacheTtlSwapped": "计费 TTL (已互换)",
       "multiplier": "供应商倍率",
       "totalCost": "总费用",
+      "fast": "fast",
+      "fastPriority": "Priority service tier（fast 模式）",
       "context1m": "1M 上下文",
       "context1mPricing": "输入 >200k 2倍, 输出 >200k 1.5倍"
     }

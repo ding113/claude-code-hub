@@ -38,6 +38,7 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_CODEX_REASONING_SUMMARY: "routing.codexReasoningSummaryPreference",
   SET_CODEX_TEXT_VERBOSITY: "routing.codexTextVerbosityPreference",
   SET_CODEX_PARALLEL_TOOL_CALLS: "routing.codexParallelToolCallsPreference",
+  SET_CODEX_SERVICE_TIER: "routing.codexServiceTierPreference",
   SET_ANTHROPIC_MAX_TOKENS: "routing.anthropicMaxTokensPreference",
   SET_ANTHROPIC_THINKING_BUDGET: "routing.anthropicThinkingBudgetPreference",
   SET_ADAPTIVE_THINKING_ENABLED: "routing.anthropicAdaptiveThinking",
@@ -108,6 +109,7 @@ export function createInitialState(
         codexReasoningSummaryPreference: "inherit",
         codexTextVerbosityPreference: "inherit",
         codexParallelToolCallsPreference: "inherit",
+        codexServiceTierPreference: "inherit",
         anthropicMaxTokensPreference: "inherit",
         anthropicThinkingBudgetPreference: "inherit",
         anthropicAdaptiveThinking: null,
@@ -189,6 +191,7 @@ export function createInitialState(
       codexTextVerbosityPreference: sourceProvider?.codexTextVerbosityPreference ?? "inherit",
       codexParallelToolCallsPreference:
         sourceProvider?.codexParallelToolCallsPreference ?? "inherit",
+      codexServiceTierPreference: sourceProvider?.codexServiceTierPreference ?? "inherit",
       anthropicMaxTokensPreference: sourceProvider?.anthropicMaxTokensPreference ?? "inherit",
       anthropicThinkingBudgetPreference:
         sourceProvider?.anthropicThinkingBudgetPreference ?? "inherit",
@@ -311,6 +314,11 @@ export function providerFormReducer(
       return {
         ...state,
         routing: { ...state.routing, codexParallelToolCallsPreference: action.payload },
+      };
+    case "SET_CODEX_SERVICE_TIER":
+      return {
+        ...state,
+        routing: { ...state.routing, codexServiceTierPreference: action.payload },
       };
     case "SET_ANTHROPIC_MAX_TOKENS":
       return {
