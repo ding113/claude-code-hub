@@ -141,7 +141,8 @@ export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPri
                     </div>
                     {typeof providerPricing.input_cost_per_token_priority === "number" ? (
                       <div className="font-mono text-xs text-orange-600 dark:text-orange-400">
-                        {t("providerPricing.priority")}: {formatTokenPrice(
+                        {t("providerPricing.priority")}:{" "}
+                        {formatTokenPrice(
                           providerPricing.input_cost_per_token_priority as number | undefined
                         )}
                       </div>
@@ -150,11 +151,14 @@ export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPri
                   <div>
                     <div className="text-muted-foreground">{t("providerPricing.output")}</div>
                     <div className="font-mono">
-                      {formatTokenPrice(providerPricing.output_cost_per_token as number | undefined)}
+                      {formatTokenPrice(
+                        providerPricing.output_cost_per_token as number | undefined
+                      )}
                     </div>
                     {typeof providerPricing.output_cost_per_token_priority === "number" ? (
                       <div className="font-mono text-xs text-orange-600 dark:text-orange-400">
-                        {t("providerPricing.priority")}: {formatTokenPrice(
+                        {t("providerPricing.priority")}:{" "}
+                        {formatTokenPrice(
                           providerPricing.output_cost_per_token_priority as number | undefined
                         )}
                       </div>
@@ -169,7 +173,8 @@ export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPri
                     </div>
                     {typeof providerPricing.cache_read_input_token_cost_priority === "number" ? (
                       <div className="font-mono text-xs text-orange-600 dark:text-orange-400">
-                        {t("providerPricing.priority")}: {formatTokenPrice(
+                        {t("providerPricing.priority")}:{" "}
+                        {formatTokenPrice(
                           providerPricing.cache_read_input_token_cost_priority as number | undefined
                         )}
                       </div>

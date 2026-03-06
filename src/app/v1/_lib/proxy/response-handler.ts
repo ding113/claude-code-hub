@@ -851,10 +851,7 @@ export class ProxyResponseHandler {
         usageMetrics = usageResult.usageMetrics;
         const actualServiceTier = parseServiceTierFromResponseText(responseText);
         ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
-        const priorityServiceTierApplied = isPriorityServiceTierApplied(
-          session,
-          actualServiceTier
-        );
+        const priorityServiceTierApplied = isPriorityServiceTierApplied(session, actualServiceTier);
 
         if (usageMetrics) {
           usageMetrics = normalizeUsageWithSwap(
@@ -1843,10 +1840,7 @@ export class ProxyResponseHandler {
 
         const actualServiceTier = parseServiceTierFromResponseText(allContent);
         ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
-        const priorityServiceTierApplied = isPriorityServiceTierApplied(
-          session,
-          actualServiceTier
-        );
+        const priorityServiceTierApplied = isPriorityServiceTierApplied(session, actualServiceTier);
 
         if (usageForCost) {
           usageForCost = normalizeUsageWithSwap(
