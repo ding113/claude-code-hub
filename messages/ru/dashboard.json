@@ -572,7 +572,27 @@
     "codeDisplay": {
       "raw": "Сырой",
       "pretty": "Форматированный",
+      "prettyWorking": "Форматирование... {percent}%",
+      "viewPlain": "Текст",
+      "viewVirtual": "Виртуальная подсветка",
+      "virtualFallbackToPlain": "Виртуальная подсветка недоступна — переключено на простой текст",
       "searchPlaceholder": "Поиск",
+      "searchWorking": "Поиск... {percent}%",
+      "search": {
+        "indexFailed": "Не удалось построить индекс поиска",
+        "indexCanceled": "Построение индекса поиска отменено",
+        "indexTooManyLines": "Слишком много строк ({lineCount}, лимит {maxLines})",
+        "indexTooManyLinesUnknown": "Слишком много строк (лимит {maxLines})",
+        "failed": "Поиск не удался",
+        "canceled": "Поиск отменён"
+      },
+      "cancel": "Отмена",
+      "retry": "Повторить",
+      "prettyCanceled": "Форматирование отменено",
+      "prettyFailed": "Ошибка форматирования",
+      "prettyInvalidJson": "Некорректный JSON",
+      "prettyOutputTooLarge": "Результат форматирования слишком большой",
+      "prettyWorkerUnavailable": "Worker недоступен — невозможно отформатировать большой JSON",
       "expand": "Развернуть",
       "collapse": "Свернуть",
       "themeAuto": "Авто",
@@ -586,6 +606,13 @@
       "pageInfo": "Страница {page} / {total}",
       "sseEvent": "Событие",
       "sseData": "Данные",
+      "virtual": {
+        "indexWorking": "Индексация... {percent}%",
+        "indexFailed": "Не удалось построить индекс — переключено на простой текст",
+        "indexCanceled": "Индексация отменена — переключено на простой текст",
+        "indexTooManyLines": "Слишком много строк ({lineCount}, максимум {maxLines}) — переключено на простой текст",
+        "indexTooManyLinesUnknown": "Слишком много строк (максимум {maxLines}) — переключено на простой текст"
+      },
       "hardLimit": {
         "title": "Содержимое слишком большое",
         "size": "Размер: {sizeMB} MB ({sizeBytes} bytes)",

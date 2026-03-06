@@ -572,7 +572,27 @@
     "codeDisplay": {
       "raw": "Raw",
       "pretty": "Pretty",
+      "prettyWorking": "整形中... {percent}%",
+      "viewPlain": "テキスト",
+      "viewVirtual": "仮想ハイライト",
+      "virtualFallbackToPlain": "仮想ハイライトを利用できないため、テキスト表示に切り替えました",
       "searchPlaceholder": "検索",
+      "searchWorking": "検索中... {percent}%",
+      "search": {
+        "indexFailed": "検索インデックスの作成に失敗しました",
+        "indexCanceled": "検索インデックスの作成をキャンセルしました",
+        "indexTooManyLines": "行数が多すぎます({lineCount} 行、上限 {maxLines} 行)",
+        "indexTooManyLinesUnknown": "行数が多すぎます(上限 {maxLines} 行)",
+        "failed": "検索に失敗しました",
+        "canceled": "検索をキャンセルしました"
+      },
+      "cancel": "キャンセル",
+      "retry": "再試行",
+      "prettyCanceled": "整形をキャンセルしました",
+      "prettyFailed": "整形に失敗しました",
+      "prettyInvalidJson": "無効な JSON",
+      "prettyOutputTooLarge": "整形結果が大きすぎます",
+      "prettyWorkerUnavailable": "Worker を利用できないため、大きな JSON を整形できません",
       "expand": "展開",
       "collapse": "折りたたむ",
       "themeAuto": "自動",
@@ -586,6 +606,13 @@
       "pageInfo": "{page} / {total} ページ",
       "sseEvent": "イベント",
       "sseData": "データ",
+      "virtual": {
+        "indexWorking": "索引作成中... {percent}%",
+        "indexFailed": "索引の作成に失敗したため、テキスト表示に切り替えました",
+        "indexCanceled": "索引作成をキャンセルしたため、テキスト表示に切り替えました",
+        "indexTooManyLines": "行数が多すぎます ({lineCount} 行、上限 {maxLines} 行)。テキスト表示に切り替えました",
+        "indexTooManyLinesUnknown": "行数が多すぎます (上限 {maxLines} 行)。テキスト表示に切り替えました"
+      },
       "hardLimit": {
         "title": "コンテンツが大きすぎます",
         "size": "サイズ: {sizeMB} MB ({sizeBytes} bytes)",

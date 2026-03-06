@@ -4,9 +4,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agentation } from "agentation";
 import { ThemeProvider } from "next-themes";
 import { type ReactNode, useState } from "react";
+import type { CodeDisplayConfig } from "@/components/ui/code-display-config";
+import { CodeDisplayConfigProvider } from "@/components/ui/code-display-config-context";
 
 interface AppProvidersProps {
   children: ReactNode;
+  codeDisplayConfig?: CodeDisplayConfig;
 }
 
 export const QUERY_CLIENT_DEFAULTS = {
@@ -18,7 +21,7 @@ export const QUERY_CLIENT_DEFAULTS = {
   },
 };
 
-export function AppProviders({ children }: AppProvidersProps) {
+export function AppProviders({ children, codeDisplayConfig }: AppProvidersProps) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -28,17 +31,19 @@ export function AppProviders({ children }: AppProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        storageKey="claude-code-hub-theme"
-        enableColorScheme
-        disableTransitionOnChange
-      >
-        {children}
-        {process.env.NODE_ENV === "development" && <Agentation />}
-      </ThemeProvider>
+      <CodeDisplayConfigProvider value={codeDisplayConfig}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          storageKey="claude-code-hub-theme"
+          enableColorScheme
+          disableTransitionOnChange
+        >
+          {children}
+          {process.env.NODE_ENV === "development" && <Agentation />}
+        </ThemeProvider>
+      </CodeDisplayConfigProvider>
     </QueryClientProvider>
   );
 }

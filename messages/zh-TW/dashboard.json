@@ -572,7 +572,27 @@
     "codeDisplay": {
       "raw": "原始內容",
       "pretty": "格式化",
+      "prettyWorking": "格式化中... {percent}%",
+      "viewPlain": "純文字",
+      "viewVirtual": "虛擬高亮",
+      "virtualFallbackToPlain": "虛擬高亮不可用，已回退到純文字",
       "searchPlaceholder": "搜尋",
+      "searchWorking": "搜尋中... {percent}%",
+      "search": {
+        "indexFailed": "建立搜尋索引失敗",
+        "indexCanceled": "已取消建立搜尋索引",
+        "indexTooManyLines": "內容行數過多（{lineCount} 行，上限 {maxLines} 行）",
+        "indexTooManyLinesUnknown": "內容行數過多（上限 {maxLines} 行）",
+        "failed": "搜尋失敗",
+        "canceled": "已取消搜尋"
+      },
+      "cancel": "取消",
+      "retry": "重試",
+      "prettyCanceled": "已取消美化",
+      "prettyFailed": "美化失敗",
+      "prettyInvalidJson": "無效的 JSON",
+      "prettyOutputTooLarge": "美化結果過大",
+      "prettyWorkerUnavailable": "目前環境無法使用 Worker，無法美化超大 JSON",
       "expand": "展開",
       "collapse": "摺疊",
       "themeAuto": "跟隨系統",
@@ -586,6 +606,13 @@
       "pageInfo": "第 {page} / {total} 頁",
       "sseEvent": "事件類型",
       "sseData": "資料",
+      "virtual": {
+        "indexWorking": "建立索引中... {percent}%",
+        "indexFailed": "建立索引失敗，已回退到純文字",
+        "indexCanceled": "已取消建立索引，已回退到純文字",
+        "indexTooManyLines": "內容行數過多（{lineCount} 行，上限 {maxLines} 行），已回退到純文字",
+        "indexTooManyLinesUnknown": "內容行數過多（上限 {maxLines} 行），已回退到純文字"
+      },
       "hardLimit": {
         "title": "內容過大",
         "size": "大小：{sizeMB} MB（{sizeBytes} 位元組）",

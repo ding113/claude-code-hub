@@ -572,7 +572,27 @@
     "codeDisplay": {
       "raw": "原始",
       "pretty": "美化",
+      "prettyWorking": "美化中... {percent}%",
+      "viewPlain": "纯文本",
+      "viewVirtual": "虚拟高亮",
+      "virtualFallbackToPlain": "虚拟高亮不可用，已回退到纯文本",
       "searchPlaceholder": "搜索",
+      "searchWorking": "搜索中... {percent}%",
+      "search": {
+        "indexFailed": "建立搜索索引失败",
+        "indexCanceled": "已取消建立搜索索引",
+        "indexTooManyLines": "内容行数过多（{lineCount} 行，上限 {maxLines} 行）",
+        "indexTooManyLinesUnknown": "内容行数过多（上限 {maxLines} 行）",
+        "failed": "搜索失败",
+        "canceled": "已取消搜索"
+      },
+      "cancel": "取消",
+      "retry": "重试",
+      "prettyCanceled": "已取消美化",
+      "prettyFailed": "美化失败",
+      "prettyInvalidJson": "无效的 JSON",
+      "prettyOutputTooLarge": "美化结果过大",
+      "prettyWorkerUnavailable": "当前环境无法使用 Worker，无法美化超大 JSON",
       "expand": "展开",
       "collapse": "收起",
       "themeAuto": "跟随系统",
@@ -586,6 +606,13 @@
       "pageInfo": "第 {page} / {total} 页",
       "sseEvent": "事件",
       "sseData": "数据",
+      "virtual": {
+        "indexWorking": "建立索引中... {percent}%",
+        "indexFailed": "建立索引失败，已回退到纯文本",
+        "indexCanceled": "已取消建立索引，已回退到纯文本",
+        "indexTooManyLines": "内容行数过多（{lineCount} 行，上限 {maxLines} 行），已回退到纯文本",
+        "indexTooManyLinesUnknown": "内容行数过多（上限 {maxLines} 行），已回退到纯文本"
+      },
       "hardLimit": {
         "title": "内容过大",
         "size": "大小：{sizeMB} MB（{sizeBytes} 字节）",
