@@ -38,11 +38,7 @@ function formatTokenPrice(value?: number): string {
   return formatted === "-" ? "-" : `$${formatted}/M`;
 }
 
-export function ProviderPricingDialog({
-  price,
-  trigger,
-  onSuccess,
-}: ProviderPricingDialogProps) {
+export function ProviderPricingDialog({ price, trigger, onSuccess }: ProviderPricingDialogProps) {
   const t = useTranslations("settings.prices");
   const tCommon = useTranslations("common");
   const [open, setOpen] = useState(false);
@@ -147,7 +143,9 @@ export function ProviderPricingDialog({
                   <div>
                     <div className="text-muted-foreground">{t("providerPricing.output")}</div>
                     <div className="font-mono">
-                      {formatTokenPrice(providerPricing.output_cost_per_token as number | undefined)}
+                      {formatTokenPrice(
+                        providerPricing.output_cost_per_token as number | undefined
+                      )}
                     </div>
                   </div>
                   <div>

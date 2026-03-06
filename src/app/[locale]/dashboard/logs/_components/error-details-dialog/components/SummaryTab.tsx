@@ -364,7 +364,9 @@ export function SummaryTab({
                     <span className="text-muted-foreground">
                       {t("billingDetails.pricingProvider")}:
                     </span>
-                    <span className="font-mono">{pricingResolution.resolvedPricingProviderKey}</span>
+                    <span className="font-mono">
+                      {pricingResolution.resolvedPricingProviderKey}
+                    </span>
                   </div>
                   <div className="flex justify-between col-span-2">
                     <span className="text-muted-foreground">

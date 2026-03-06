@@ -118,11 +118,12 @@ function ensurePricingResolutionSpecialSetting(
 
   const existing = session
     .getSpecialSettings()
-    ?.find((setting) =>
-      setting.type === "pricing_resolution" &&
-      setting.resolvedModelName === resolvedPricing.resolvedModelName &&
-      setting.resolvedPricingProviderKey === resolvedPricing.resolvedPricingProviderKey &&
-      setting.source === resolvedPricing.source
+    ?.find(
+      (setting) =>
+        setting.type === "pricing_resolution" &&
+        setting.resolvedModelName === resolvedPricing.resolvedModelName &&
+        setting.resolvedPricingProviderKey === resolvedPricing.resolvedPricingProviderKey &&
+        setting.source === resolvedPricing.source
     );
 
   if (existing) return;
@@ -2810,7 +2811,9 @@ async function updateRequestCostFromUsage(
 
     const primaryRecord = primaryModel ? await findLatestPriceByModel(primaryModel) : null;
     const fallbackRecord =
-      fallbackModel && fallbackModel !== primaryModel ? await findLatestPriceByModel(fallbackModel) : null;
+      fallbackModel && fallbackModel !== primaryModel
+        ? await findLatestPriceByModel(fallbackModel)
+        : null;
 
     const resolvedPricing = resolvePricingForModelRecords({
       provider,

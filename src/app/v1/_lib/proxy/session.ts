@@ -701,7 +701,9 @@ export class ProxySession {
     return this.cachedPriceData ?? null;
   }
 
-  async getResolvedPricingByBillingSource(provider?: Provider | null): Promise<ResolvedPricing | null> {
+  async getResolvedPricingByBillingSource(
+    provider?: Provider | null
+  ): Promise<ResolvedPricing | null> {
     const originalModel = this.getOriginalModel();
     const redirectedModel = this.request.model;
     if (!originalModel && !redirectedModel) {
@@ -740,7 +742,9 @@ export class ProxySession {
 
     const primaryRecord = primaryModel ? await findLatestPriceByModel(primaryModel) : null;
     const fallbackRecord =
-      fallbackModel && fallbackModel !== primaryModel ? await findLatestPriceByModel(fallbackModel) : null;
+      fallbackModel && fallbackModel !== primaryModel
+        ? await findLatestPriceByModel(fallbackModel)
+        : null;
 
     return resolvePricingForModelRecords({
       provider: provider ?? this.provider,
@@ -762,7 +766,9 @@ export class ProxySession {
    *
    * @returns 价格数据；无模型或无价格时返回 null
    */
-  async getCachedPriceDataByBillingSource(provider?: Provider | null): Promise<ModelPriceData | null> {
+  async getCachedPriceDataByBillingSource(
+    provider?: Provider | null
+  ): Promise<ModelPriceData | null> {
     const resolved = await this.getResolvedPricingByBillingSource(provider);
     return resolved?.priceData ?? null;
   }

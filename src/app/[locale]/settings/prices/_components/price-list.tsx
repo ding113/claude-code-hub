@@ -464,225 +464,229 @@ export function PriceList({
                     : null);
 
                 return (
-                <tr
-                  key={price.id}
-                  className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                >
-                  <td className="py-3 px-4 text-sm text-foreground whitespace-normal break-words">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">
-                        {price.priceData.display_name?.trim() || price.modelName}
-                      </span>
-                      {price.priceData.litellm_provider ? (
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          {price.priceData.litellm_provider}
-                        </Badge>
-                      ) : null}
-                      {displayPricingProviderKey &&
-                      displayPricingProviderKey !== price.priceData.litellm_provider ? (
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {displayPricingProviderKey}
-                        </Badge>
-                      ) : null}
-                      {price.priceData.pricing && Object.keys(price.priceData.pricing).length > 1 ? (
-                        <Badge variant="outline">{t("badges.multi")}</Badge>
-                      ) : null}
-                      {price.source === "manual" && (
-                        <Badge variant="outline">{t("badges.local")}</Badge>
-                      )}
-                    </div>
-                    <div className="mt-1">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            type="button"
-                            aria-label={t("table.copyModelId")}
-                            className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                            onClick={() => handleCopyModelId(price.modelName)}
-                          >
-                            {price.modelName}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent sideOffset={4}>{t("table.copyModelId")}</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-sm text-foreground">
-                    <div className="flex flex-wrap gap-1">
-                      {capabilityItems.map(({ key, icon: Icon, label }) => {
-                        const enabled = price.priceData[key] === true;
-                        const status = enabled
-                          ? t("capabilities.statusSupported")
-                          : t("capabilities.statusUnsupported");
-                        const tooltipText = t("capabilities.tooltip", { label, status });
-                        return (
-                          <Tooltip key={key}>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label={tooltipText}
-                                className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                                  enabled
-                                    ? "bg-[#E25706]/10 text-[#E25706] border-[#E25706]/20"
-                                    : "bg-muted/30 text-muted-foreground/40 border-transparent"
-                                }`}
-                              >
-                                <Icon className="h-4 w-4" aria-hidden="true" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent sideOffset={4}>{tooltipText}</TooltipContent>
-                          </Tooltip>
-                        );
-                      })}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 font-mono text-sm text-right">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-end gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {t("table.priceInput")}
+                  <tr
+                    key={price.id}
+                    className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <td className="py-3 px-4 text-sm text-foreground whitespace-normal break-words">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {price.priceData.display_name?.trim() || price.modelName}
                         </span>
-                        <span className="text-muted-foreground">
-                          {displayPriceData.mode === "image_generation"
-                            ? "-"
-                            : formatPerMillionTokenPriceLabel(displayPriceData.input_cost_per_token)}
-                        </span>
+                        {price.priceData.litellm_provider ? (
+                          <Badge variant="secondary" className="font-mono text-xs">
+                            {price.priceData.litellm_provider}
+                          </Badge>
+                        ) : null}
+                        {displayPricingProviderKey &&
+                        displayPricingProviderKey !== price.priceData.litellm_provider ? (
+                          <Badge variant="outline" className="font-mono text-xs">
+                            {displayPricingProviderKey}
+                          </Badge>
+                        ) : null}
+                        {price.priceData.pricing &&
+                        Object.keys(price.priceData.pricing).length > 1 ? (
+                          <Badge variant="outline">{t("badges.multi")}</Badge>
+                        ) : null}
+                        {price.source === "manual" && (
+                          <Badge variant="outline">{t("badges.local")}</Badge>
+                        )}
                       </div>
-                      <div className="flex items-center justify-end gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {t("table.priceOutput")}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {displayPriceData.mode === "image_generation"
-                            ? formatPerImagePriceLabel(displayPriceData.output_cost_per_image)
-                            : formatPerMillionTokenPriceLabel(
-                                displayPriceData.output_cost_per_token
-                              )}
-                        </span>
+                      <div className="mt-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={t("table.copyModelId")}
+                              className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                              onClick={() => handleCopyModelId(price.modelName)}
+                            >
+                              {price.modelName}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent sideOffset={4}>{t("table.copyModelId")}</TooltipContent>
+                        </Tooltip>
                       </div>
-                      {formatPerRequestPriceLabel(displayPriceData.input_cost_per_request) !==
-                      "-" ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="text-xs text-muted-foreground">
-                            {t("table.pricePerRequest")}
-                          </span>
-                          <span className="text-muted-foreground">
-                            {formatPerRequestPriceLabel(displayPriceData.input_cost_per_request)}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 font-mono text-sm text-right">
-                    <span className="text-muted-foreground">
-                      {displayPriceData.supports_prompt_caching === true
-                        ? formatPerMillionTokenPriceLabel(
-                            displayPriceData.cache_read_input_token_cost
-                          )
-                        : "-"}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 font-mono text-sm text-right">
-                    {displayPriceData.supports_prompt_caching === true ? (
+                    </td>
+                    <td className="py-3 px-4 text-sm text-foreground">
+                      <div className="flex flex-wrap gap-1">
+                        {capabilityItems.map(({ key, icon: Icon, label }) => {
+                          const enabled = price.priceData[key] === true;
+                          const status = enabled
+                            ? t("capabilities.statusSupported")
+                            : t("capabilities.statusUnsupported");
+                          const tooltipText = t("capabilities.tooltip", { label, status });
+                          return (
+                            <Tooltip key={key}>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={tooltipText}
+                                  className={`inline-flex h-7 w-7 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                                    enabled
+                                      ? "bg-[#E25706]/10 text-[#E25706] border-[#E25706]/20"
+                                      : "bg-muted/30 text-muted-foreground/40 border-transparent"
+                                  }`}
+                                >
+                                  <Icon className="h-4 w-4" aria-hidden="true" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent sideOffset={4}>{tooltipText}</TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-sm text-right">
                       <div className="space-y-1">
                         <div className="flex items-center justify-end gap-2">
                           <span className="text-xs text-muted-foreground">
-                            {t("table.cache5m")}
+                            {t("table.priceInput")}
                           </span>
                           <span className="text-muted-foreground">
-                            {formatPerMillionTokenPriceLabel(
-                              displayPriceData.cache_creation_input_token_cost
-                            )}
+                            {displayPriceData.mode === "image_generation"
+                              ? "-"
+                              : formatPerMillionTokenPriceLabel(
+                                  displayPriceData.input_cost_per_token
+                                )}
                           </span>
                         </div>
                         <div className="flex items-center justify-end gap-2">
                           <span className="text-xs text-muted-foreground">
-                            {t("table.cache1h")}
+                            {t("table.priceOutput")}
                           </span>
                           <span className="text-muted-foreground">
-                            {formatPerMillionTokenPriceLabel(
-                              displayPriceData.cache_creation_input_token_cost_above_1hr
-                            )}
+                            {displayPriceData.mode === "image_generation"
+                              ? formatPerImagePriceLabel(displayPriceData.output_cost_per_image)
+                              : formatPerMillionTokenPriceLabel(
+                                  displayPriceData.output_cost_per_token
+                                )}
                           </span>
                         </div>
+                        {formatPerRequestPriceLabel(displayPriceData.input_cost_per_request) !==
+                        "-" ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {t("table.pricePerRequest")}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {formatPerRequestPriceLabel(displayPriceData.input_cost_per_request)}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-muted-foreground">
-                    {formatInTimeZone(
-                      new Date(price.updatedAt ?? price.createdAt),
-                      timeZone,
-                      "yyyy-MM-dd"
-                    )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          aria-label={t("actions.more")}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {price.priceData.pricing && Object.keys(price.priceData.pricing).length > 0 ? (
-                          <ProviderPricingDialog
-                            price={price}
+                    </td>
+                    <td className="py-3 px-4 font-mono text-sm text-right">
+                      <span className="text-muted-foreground">
+                        {displayPriceData.supports_prompt_caching === true
+                          ? formatPerMillionTokenPriceLabel(
+                              displayPriceData.cache_read_input_token_cost
+                            )
+                          : "-"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-sm text-right">
+                      {displayPriceData.supports_prompt_caching === true ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {t("table.cache5m")}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {formatPerMillionTokenPriceLabel(
+                                displayPriceData.cache_creation_input_token_cost
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {t("table.cache1h")}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {formatPerMillionTokenPriceLabel(
+                                displayPriceData.cache_creation_input_token_cost_above_1hr
+                              )}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-muted-foreground">
+                      {formatInTimeZone(
+                        new Date(price.updatedAt ?? price.createdAt),
+                        timeZone,
+                        "yyyy-MM-dd"
+                      )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            aria-label={t("actions.more")}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {price.priceData.pricing &&
+                          Object.keys(price.priceData.pricing).length > 0 ? (
+                            <ProviderPricingDialog
+                              price={price}
+                              trigger={
+                                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                  <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                  {t("actions.comparePricing")}
+                                </DropdownMenuItem>
+                              }
+                            />
+                          ) : null}
+                          <ModelPriceDrawer
+                            mode="edit"
+                            initialData={price}
                             trigger={
                               <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                                <ArrowRightLeft className="h-4 w-4 mr-2" />
-                                {t("actions.comparePricing")}
+                                <Pencil className="h-4 w-4 mr-2" />
+                                {t("actions.edit")}
                               </DropdownMenuItem>
                             }
                           />
-                        ) : null}
-                        <ModelPriceDrawer
-                          mode="edit"
-                          initialData={price}
-                          trigger={
-                            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                              <Pencil className="h-4 w-4 mr-2" />
-                              {t("actions.edit")}
-                            </DropdownMenuItem>
-                          }
-                        />
-                        <DeleteModelDialog
-                          modelName={price.modelName}
-                          onSuccess={() => {
-                            const willBeEmpty = filteredPrices.length <= 1 && page > 1;
-                            const targetPage = willBeEmpty ? page - 1 : page;
-                            if (targetPage !== page) {
-                              pendingRefreshPage.current = targetPage;
-                              setPage(targetPage);
-                              updateURL(
-                                debouncedSearchTerm,
-                                targetPage,
-                                pageSize,
-                                sourceFilter,
-                                litellmProviderFilter
-                              );
+                          <DeleteModelDialog
+                            modelName={price.modelName}
+                            onSuccess={() => {
+                              const willBeEmpty = filteredPrices.length <= 1 && page > 1;
+                              const targetPage = willBeEmpty ? page - 1 : page;
+                              if (targetPage !== page) {
+                                pendingRefreshPage.current = targetPage;
+                                setPage(targetPage);
+                                updateURL(
+                                  debouncedSearchTerm,
+                                  targetPage,
+                                  pageSize,
+                                  sourceFilter,
+                                  litellmProviderFilter
+                                );
+                              }
+                            }}
+                            trigger={
+                              <DropdownMenuItem
+                                onSelect={(e) => e.preventDefault()}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                {t("actions.delete")}
+                              </DropdownMenuItem>
                             }
-                          }}
-                          trigger={
-                            <DropdownMenuItem
-                              onSelect={(e) => e.preventDefault()}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              {t("actions.delete")}
-                            </DropdownMenuItem>
-                          }
-                        />
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </td>
-                </tr>
-              );
+                          />
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
               })
             ) : (
               <tr>

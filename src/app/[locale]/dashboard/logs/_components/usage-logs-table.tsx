@@ -421,7 +421,7 @@ export function UsageLogsTable({
                               {pricingResolution && (
                                 <>
                                   <div>
-                                    {t("logs.billingDetails.pricingProvider")}: {" "}
+                                    {t("logs.billingDetails.pricingProvider")}:{" "}
                                     <span className="font-mono">
                                       {pricingResolution.resolvedPricingProviderKey}
                                     </span>
@@ -430,7 +430,7 @@ export function UsageLogsTable({
                                 </>
                               )}
                               <div>
-                                {t("logs.billingDetails.input")}: {" "}
+                                {t("logs.billingDetails.input")}:{" "}
                                 {formatTokenAmount(log.inputTokens)} tokens
                                 {log.context1mApplied && (log.inputTokens ?? 0) > 200000 && (
                                   <span className="text-purple-600 dark:text-purple-400">

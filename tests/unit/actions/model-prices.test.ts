@@ -37,7 +37,8 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/repository/model-price", () => ({
   findLatestPriceByModel: () => findLatestPriceByModelMock(),
-  findLatestPriceByModelAndSource: (...args: unknown[]) => findLatestPriceByModelAndSourceMock(...args),
+  findLatestPriceByModelAndSource: (...args: unknown[]) =>
+    findLatestPriceByModelAndSourceMock(...args),
   createModelPrice: (...args: unknown[]) => createModelPriceMock(...args),
   upsertModelPrice: (...args: unknown[]) => upsertModelPriceMock(...args),
   deleteModelPriceByName: (...args: unknown[]) => deleteModelPriceByNameMock(...args),

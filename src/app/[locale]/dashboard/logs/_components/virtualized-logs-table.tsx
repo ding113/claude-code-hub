@@ -75,8 +75,7 @@ export function VirtualizedLogsTable({
   serverTimeZone: _serverTimeZone,
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
-  const getPricingSourceLabel = (source: string) =>
-    t(`logs.billingDetails.pricingSource.`);
+  const getPricingSourceLabel = (source: string) => t(`logs.billingDetails.pricingSource.`);
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
@@ -340,9 +339,7 @@ export function VirtualizedLogsTable({
 
                 const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
                 const _isWarmupSkipped = log.blockedBy === "warmup";
-                const pricingResolution = getPricingResolutionSpecialSetting(
-                  log.specialSettings
-                );
+                const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
 
                 return (
                   <div
@@ -679,7 +676,7 @@ export function VirtualizedLogsTable({
                                 {pricingResolution && (
                                   <>
                                     <div>
-                                      {t("logs.billingDetails.pricingProvider")}: {" "}
+                                      {t("logs.billingDetails.pricingProvider")}:{" "}
                                       <span className="font-mono">
                                         {pricingResolution.resolvedPricingProviderKey}
                                       </span>

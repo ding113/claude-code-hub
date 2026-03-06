@@ -400,9 +400,11 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     });
 
     const dbCosts: string[] = [];
-    vi.mocked(updateMessageRequestCost).mockImplementation(async (_id: number, costUsd: unknown) => {
-      dbCosts.push(String(costUsd));
-    });
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
 
     const sessionCosts: string[] = [];
     vi.mocked(SessionManager.updateSessionUsage).mockImplementation(

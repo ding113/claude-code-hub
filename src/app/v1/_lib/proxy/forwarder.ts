@@ -2891,7 +2891,10 @@ export class ProxyForwarder {
     // - 'disabled': 不应用（已在调度阶段被过滤）
     // - 'force_enable': 强制应用（仅对支持的模型）
     // - 'inherit' 或 null: 遵循客户端请求
-    if (session.getContext1mApplied?.() && (provider.providerType === "claude" || provider.providerType === "claude-auth")) {
+    if (
+      session.getContext1mApplied?.() &&
+      (provider.providerType === "claude" || provider.providerType === "claude-auth")
+    ) {
       session.addSpecialSetting({
         type: "anthropic_context_1m_header_override",
         scope: "request_header",

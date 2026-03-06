@@ -68,7 +68,11 @@ const DETAIL_TIE_BREAK_ORDER = [
   "chatgpt",
 ] as const;
 
-function pushUnique(candidates: PricingKeyCandidate[], key: string, type: PricingKeyCandidate["type"]) {
+function pushUnique(
+  candidates: PricingKeyCandidate[],
+  key: string,
+  type: PricingKeyCandidate["type"]
+) {
   if (!key || candidates.some((candidate) => candidate.key === key)) {
     return;
   }
@@ -88,8 +92,13 @@ function extractHost(urlValue: string | null | undefined): string {
   }
 }
 
-function getOfficialProviderKeys(modelName: string | null | undefined, priceData?: ModelPriceData): string[] {
-  const family = normalizeText(typeof priceData?.model_family === "string" ? priceData.model_family : "");
+function getOfficialProviderKeys(
+  modelName: string | null | undefined,
+  priceData?: ModelPriceData
+): string[] {
+  const family = normalizeText(
+    typeof priceData?.model_family === "string" ? priceData.model_family : ""
+  );
   const normalizedModelName = normalizeText(modelName);
 
   if (
@@ -198,7 +207,11 @@ function getDetailScore(pricingNode: Record<string, unknown>): number {
   }, 0);
 }
 
-function compareDetailKeys(a: string, b: string, pricingMap: Record<string, Record<string, unknown>>): number {
+function compareDetailKeys(
+  a: string,
+  b: string,
+  pricingMap: Record<string, Record<string, unknown>>
+): number {
   const scoreDiff = getDetailScore(pricingMap[b] ?? {}) - getDetailScore(pricingMap[a] ?? {});
   if (scoreDiff !== 0) return scoreDiff;
 
@@ -214,7 +227,10 @@ function compareDetailKeys(a: string, b: string, pricingMap: Record<string, Reco
   return a.localeCompare(b);
 }
 
-function resolveManualPricing(record: ModelPrice, modelName: string | null): ResolvedPricing | null {
+function resolveManualPricing(
+  record: ModelPrice,
+  modelName: string | null
+): ResolvedPricing | null {
   if (!hasValidPriceData(record.priceData)) {
     return null;
   }
@@ -224,10 +240,15 @@ function resolveManualPricing(record: ModelPrice, modelName: string | null): Res
     resolvedPricingProviderKey:
       (typeof record.priceData.selected_pricing_provider === "string" &&
         record.priceData.selected_pricing_provider.trim()) ||
-      (typeof record.priceData.litellm_provider === "string" && record.priceData.litellm_provider.trim()) ||
+      (typeof record.priceData.litellm_provider === "string" &&
+        record.priceData.litellm_provider.trim()) ||
       "manual",
     source: "local_manual",
-    priceData: mergePriceData(record.priceData, null, record.priceData.selected_pricing_provider as string),
+    priceData: mergePriceData(
+      record.priceData,
+      null,
+      record.priceData.selected_pricing_provider as string
+    ),
     pricingNode: null,
   };
 }
@@ -247,7 +268,11 @@ function resolveFromPricingMap(
     const pricingNode = pricingMap[keyCandidate.key];
     if (!pricingNode) continue;
 
-    const mergedPriceData = mergePriceData(candidate.record.priceData, pricingNode, keyCandidate.key);
+    const mergedPriceData = mergePriceData(
+      candidate.record.priceData,
+      pricingNode,
+      keyCandidate.key
+    );
     if (!hasValidPriceData(mergedPriceData)) {
       continue;
     }

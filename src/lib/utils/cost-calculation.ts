@@ -196,7 +196,8 @@ export function calculateRequestCostBreakdown(
   }
 
   const inputAboveThreshold =
-    priceData.input_cost_per_token_above_272k_tokens ?? priceData.input_cost_per_token_above_200k_tokens;
+    priceData.input_cost_per_token_above_272k_tokens ??
+    priceData.input_cost_per_token_above_200k_tokens;
   const outputAboveThreshold =
     priceData.output_cost_per_token_above_272k_tokens ??
     priceData.output_cost_per_token_above_200k_tokens;
@@ -217,11 +218,7 @@ export function calculateRequestCostBreakdown(
   const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
   // Input tokens -> input bucket
-  if (
-    longContextThresholdExceeded &&
-    inputAboveThreshold != null &&
-    usage.input_tokens != null
-  ) {
+  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
     inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
@@ -237,11 +234,7 @@ export function calculateRequestCostBreakdown(
   }
 
   // Output tokens -> output bucket
-  if (
-    longContextThresholdExceeded &&
-    outputAboveThreshold != null &&
-    usage.output_tokens != null
-  ) {
+  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
     outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
@@ -265,7 +258,9 @@ export function calculateRequestCostBreakdown(
     cacheCreationAboveThreshold != null &&
     cache5mTokens != null
   ) {
-    cacheCreationBucket = cacheCreationBucket.add(multiplyCost(cache5mTokens, cacheCreationAboveThreshold));
+    cacheCreationBucket = cacheCreationBucket.add(
+      multiplyCost(cache5mTokens, cacheCreationAboveThreshold)
+    );
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
@@ -408,7 +403,8 @@ export function calculateRequestCost(
   }
 
   const inputAboveThreshold =
-    priceData.input_cost_per_token_above_272k_tokens ?? priceData.input_cost_per_token_above_200k_tokens;
+    priceData.input_cost_per_token_above_272k_tokens ??
+    priceData.input_cost_per_token_above_200k_tokens;
   const outputAboveThreshold =
     priceData.output_cost_per_token_above_272k_tokens ??
     priceData.output_cost_per_token_above_200k_tokens;
@@ -428,11 +424,7 @@ export function calculateRequestCost(
   const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
   const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
-  if (
-    longContextThresholdExceeded &&
-    inputAboveThreshold != null &&
-    usage.input_tokens != null
-  ) {
+  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
     segments.push(multiplyCost(usage.input_tokens, inputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
@@ -447,11 +439,7 @@ export function calculateRequestCost(
     segments.push(multiplyCost(usage.input_tokens, inputCostPerToken));
   }
 
-  if (
-    longContextThresholdExceeded &&
-    outputAboveThreshold != null &&
-    usage.output_tokens != null
-  ) {
+  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
     segments.push(multiplyCost(usage.output_tokens, outputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
