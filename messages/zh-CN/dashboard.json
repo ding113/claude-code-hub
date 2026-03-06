@@ -283,8 +283,20 @@
         "cacheTtlSwapped": "计费 TTL (已互换)",
         "multiplier": "供应商倍率",
         "totalCost": "总费用",
+        "fast": "fast",
+        "fastPriority": "优先服务等级（fast 模式）",
         "context1m": "1M 上下文",
-        "context1mPricing": "输入 2x >200k, 输出 1.5x >200k"
+        "context1mPricing": "输入 2x >200k, 输出 1.5x >200k",
+        "pricingProvider": "计费价格提供商",
+        "pricingSourceLabel": "计费价格来源",
+        "pricingSource": {
+          "local_manual": "本地手动价格",
+          "cloud_exact": "云端精确提供商价格",
+          "cloud_model_fallback": "回退模型的提供商价格",
+          "priority_fallback": "优先级回退价格",
+          "single_provider_top_level": "顶层单提供商价格",
+          "official_fallback": "官方价格"
+        }
       },
       "performance": {
         "title": "性能数据",
@@ -357,12 +369,12 @@
       "targetModel": "目标模型"
     },
     "statusCodes": {
-      "not200": "非 200（全部非成功请求）",
       "200": "200 (成功)",
       "400": "400 (错误请求)",
       "401": "401 (未授权)",
       "429": "429 (限流)",
-      "500": "500 (服务器错误)"
+      "500": "500 (服务器错误)",
+      "not200": "非 200（全部非成功请求）"
     },
     "billingDetails": {
       "input": "输入",
@@ -374,8 +386,20 @@
       "cacheTtlSwapped": "计费 TTL (已互换)",
       "multiplier": "供应商倍率",
       "totalCost": "总费用",
+      "fast": "fast",
+      "fastPriority": "优先服务等级（fast 模式）",
       "context1m": "1M 上下文",
-      "context1mPricing": "输入 >200k 2倍, 输出 >200k 1.5倍"
+      "context1mPricing": "输入 >200k 2倍, 输出 >200k 1.5倍",
+      "pricingProvider": "计费价格提供商",
+      "pricingSourceLabel": "计费价格来源",
+      "pricingSource": {
+        "local_manual": "本地手动价格",
+        "cloud_exact": "云端精确提供商价格",
+        "cloud_model_fallback": "回退模型的提供商价格",
+        "priority_fallback": "优先级回退价格",
+        "single_provider_top_level": "顶层单提供商价格",
+        "official_fallback": "官方价格"
+      }
     }
   },
   "leaderboard": {
@@ -1641,11 +1665,11 @@
         "rolling": "滚动窗口（24h）"
       },
       "quickValues": {
-        "unlimited": "无限",
         "10": "$10",
         "50": "$50",
         "100": "$100",
-        "500": "$500"
+        "500": "$500",
+        "unlimited": "无限"
       },
       "alreadySet": "已配置",
       "confirmAdd": "添加",

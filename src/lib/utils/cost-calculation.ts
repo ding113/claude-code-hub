@@ -6,6 +6,8 @@ import {
 import type { ModelPriceData } from "@/types/model-price";
 import { COST_SCALE, Decimal, toDecimal } from "./currency";
 
+const OPENAI_LONG_CONTEXT_TOKEN_THRESHOLD = 272000;
+
 type UsageMetrics = {
   input_tokens?: number;
   output_tokens?: number;
@@ -39,7 +41,7 @@ function multiplyCost(quantity: number | undefined, unitCost: number | undefined
  * @param threshold - 阈值（默认200k）
  * @returns 费用
  */
-function calculateTieredCost(
+function _calculateTieredCost(
   tokens: number,
   baseCostPerToken: number,
   premiumMultiplier: number,
@@ -55,13 +57,7 @@ function calculateTieredCost(
     return new Decimal(tokens).mul(baseCostDecimal);
   }
 
-  // 阈值内的token按基础费率计算
-  const baseCost = new Decimal(threshold).mul(baseCostDecimal);
-  // 超出阈值的token按溢价费率计算
-  const premiumTokens = tokens - threshold;
-  const premiumCost = new Decimal(premiumTokens).mul(baseCostDecimal).mul(premiumMultiplier);
-
-  return baseCost.add(premiumCost);
+  return new Decimal(tokens).mul(baseCostDecimal).mul(premiumMultiplier);
 }
 
 /**
@@ -72,7 +68,7 @@ function calculateTieredCost(
  * @param threshold - 阈值（默认 200K）
  * @returns 费用
  */
-function calculateTieredCostWithSeparatePrices(
+function __calculateTieredCostWithSeparatePrices(
   tokens: number,
   baseCostPerToken: number,
   premiumCostPerToken: number,
@@ -89,13 +85,41 @@ function calculateTieredCostWithSeparatePrices(
     return new Decimal(tokens).mul(baseCostDecimal);
   }
 
-  // 阈值内的 token 按基础费率计算
-  const baseCost = new Decimal(threshold).mul(baseCostDecimal);
-  // 超出阈值的 token 按溢价费率计算
-  const premiumTokens = tokens - threshold;
-  const premiumCost = new Decimal(premiumTokens).mul(premiumCostDecimal);
+  return new Decimal(tokens).mul(premiumCostDecimal);
+}
 
-  return baseCost.add(premiumCost);
+function resolveLongContextThreshold(priceData: ModelPriceData): number {
+  const has272kFields =
+    typeof priceData.input_cost_per_token_above_272k_tokens === "number" ||
+    typeof priceData.output_cost_per_token_above_272k_tokens === "number" ||
+    typeof priceData.cache_creation_input_token_cost_above_272k_tokens === "number" ||
+    typeof priceData.cache_read_input_token_cost_above_272k_tokens === "number" ||
+    typeof priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens === "number";
+
+  const modelFamily = typeof priceData.model_family === "string" ? priceData.model_family : "";
+  if (has272kFields || modelFamily === "gpt" || modelFamily === "gpt-pro") {
+    return OPENAI_LONG_CONTEXT_TOKEN_THRESHOLD;
+  }
+
+  return CONTEXT_1M_TOKEN_THRESHOLD;
+}
+
+function getRequestInputContextTokens(
+  usage: UsageMetrics,
+  cache5mTokens?: number,
+  cache1hTokens?: number
+): number {
+  const cacheCreationInputTokens =
+    typeof usage.cache_creation_input_tokens === "number"
+      ? usage.cache_creation_input_tokens
+      : (cache5mTokens ?? 0) + (cache1hTokens ?? 0);
+
+  return (
+    (usage.input_tokens ?? 0) +
+    cacheCreationInputTokens +
+    (usage.cache_read_input_tokens ?? 0) +
+    (usage.input_image_tokens ?? 0)
+  );
 }
 
 export interface CostBreakdown {
@@ -113,15 +137,24 @@ export interface CostBreakdown {
 export function calculateRequestCostBreakdown(
   usage: UsageMetrics,
   priceData: ModelPriceData,
-  context1mApplied: boolean = false
+  context1mApplied: boolean = false,
+  priorityServiceTierApplied: boolean = false
 ): CostBreakdown {
   let inputBucket = new Decimal(0);
   let outputBucket = new Decimal(0);
   let cacheCreationBucket = new Decimal(0);
   let cacheReadBucket = new Decimal(0);
 
-  const inputCostPerToken = priceData.input_cost_per_token;
-  const outputCostPerToken = priceData.output_cost_per_token;
+  const baseInputCostPerToken = priceData.input_cost_per_token;
+  const baseOutputCostPerToken = priceData.output_cost_per_token;
+  const inputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.input_cost_per_token_priority === "number"
+      ? priceData.input_cost_per_token_priority
+      : baseInputCostPerToken;
+  const outputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.output_cost_per_token_priority === "number"
+      ? priceData.output_cost_per_token_priority
+      : baseOutputCostPerToken;
   const inputCostPerRequest = priceData.input_cost_per_request;
 
   // Per-request cost -> input bucket
@@ -138,19 +171,22 @@ export function calculateRequestCostBreakdown(
 
   const cacheCreation5mCost =
     priceData.cache_creation_input_token_cost ??
-    (inputCostPerToken != null ? inputCostPerToken * 1.25 : undefined);
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 1.25 : undefined);
 
   const cacheCreation1hCost =
     priceData.cache_creation_input_token_cost_above_1hr ??
-    (inputCostPerToken != null ? inputCostPerToken * 2 : undefined) ??
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 2 : undefined) ??
     cacheCreation5mCost;
 
   const cacheReadCost =
-    priceData.cache_read_input_token_cost ??
-    (inputCostPerToken != null
-      ? inputCostPerToken * 0.1
-      : outputCostPerToken != null
-        ? outputCostPerToken * 0.1
+    (priorityServiceTierApplied &&
+    typeof priceData.cache_read_input_token_cost_priority === "number"
+      ? priceData.cache_read_input_token_cost_priority
+      : priceData.cache_read_input_token_cost) ??
+    (baseInputCostPerToken != null
+      ? baseInputCostPerToken * 0.1
+      : baseOutputCostPerToken != null
+        ? baseOutputCostPerToken * 0.1
         : undefined);
 
   // Derive cache creation tokens by TTL
@@ -171,92 +207,110 @@ export function calculateRequestCostBreakdown(
     }
   }
 
-  const inputAbove200k = priceData.input_cost_per_token_above_200k_tokens;
-  const outputAbove200k = priceData.output_cost_per_token_above_200k_tokens;
+  const inputAboveThreshold =
+    priceData.input_cost_per_token_above_272k_tokens ??
+    priceData.input_cost_per_token_above_200k_tokens;
+  const outputAboveThreshold =
+    priceData.output_cost_per_token_above_272k_tokens ??
+    priceData.output_cost_per_token_above_200k_tokens;
+  const cacheCreationAboveThreshold =
+    priceData.cache_creation_input_token_cost_above_272k_tokens ??
+    priceData.cache_creation_input_token_cost_above_200k_tokens;
+  const cacheCreation1hAboveThreshold =
+    priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
+    priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
+    cacheCreationAboveThreshold;
+  const cacheReadAboveThreshold =
+    priceData.cache_read_input_token_cost_above_272k_tokens ??
+    priceData.cache_read_input_token_cost_above_200k_tokens;
+  const longContextThreshold = resolveLongContextThreshold(priceData);
+  const longContextThresholdExceeded =
+    getRequestInputContextTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
+  const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
+  const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
   // Input tokens -> input bucket
-  if (context1mApplied && inputCostPerToken != null && usage.input_tokens != null) {
+  // 注意：一旦请求的“输入上下文总量”超过阈值，供应商官方定价按整次请求的全量 token
+  // 应用 long-context 价格，而不是仅对超过阈值的部分加价。
+  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
+    inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputAboveThreshold));
+  } else if (
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
+    inputCostPerToken != null &&
+    usage.input_tokens != null
+  ) {
     inputBucket = inputBucket.add(
-      calculateTieredCost(
-        usage.input_tokens,
-        inputCostPerToken,
-        CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER
-      )
-    );
-  } else if (inputAbove200k != null && inputCostPerToken != null && usage.input_tokens != null) {
-    inputBucket = inputBucket.add(
-      calculateTieredCostWithSeparatePrices(usage.input_tokens, inputCostPerToken, inputAbove200k)
+      multiplyCost(usage.input_tokens, inputCostPerToken * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
     inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputCostPerToken));
   }
 
   // Output tokens -> output bucket
-  if (context1mApplied && outputCostPerToken != null && usage.output_tokens != null) {
+  // 与 input 相同：阈值判断基于整次请求的输入上下文，而不是 output bucket 自己的 token 数。
+  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
+    outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputAboveThreshold));
+  } else if (
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
+    outputCostPerToken != null &&
+    usage.output_tokens != null
+  ) {
     outputBucket = outputBucket.add(
-      calculateTieredCost(
-        usage.output_tokens,
-        outputCostPerToken,
-        CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER
-      )
-    );
-  } else if (outputAbove200k != null && outputCostPerToken != null && usage.output_tokens != null) {
-    outputBucket = outputBucket.add(
-      calculateTieredCostWithSeparatePrices(
-        usage.output_tokens,
-        outputCostPerToken,
-        outputAbove200k
-      )
+      multiplyCost(usage.output_tokens, outputCostPerToken * CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER)
     );
   } else {
     outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputCostPerToken));
   }
 
   // Cache costs
-  const cacheCreationAbove200k = priceData.cache_creation_input_token_cost_above_200k_tokens;
-  const cacheReadAbove200k = priceData.cache_read_input_token_cost_above_200k_tokens;
-  const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
-  const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
   // Cache creation 5m -> cache_creation bucket
-  if (context1mApplied && cacheCreation5mCost != null && cache5mTokens != null) {
+  if (
+    longContextThresholdExceeded &&
+    hasRealCacheCreationBase &&
+    cacheCreationAboveThreshold != null &&
+    cache5mTokens != null
+  ) {
     cacheCreationBucket = cacheCreationBucket.add(
-      calculateTieredCost(cache5mTokens, cacheCreation5mCost, CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
+      multiplyCost(cache5mTokens, cacheCreationAboveThreshold)
     );
   } else if (
-    hasRealCacheCreationBase &&
-    cacheCreationAbove200k != null &&
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
     cacheCreationBucket = cacheCreationBucket.add(
-      calculateTieredCostWithSeparatePrices(
-        cache5mTokens,
-        cacheCreation5mCost,
-        cacheCreationAbove200k
-      )
+      multiplyCost(cache5mTokens, cacheCreation5mCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
     cacheCreationBucket = cacheCreationBucket.add(multiplyCost(cache5mTokens, cacheCreation5mCost));
   }
 
   // Cache creation 1h -> cache_creation bucket
-  if (context1mApplied && cacheCreation1hCost != null && cache1hTokens != null) {
+  if (
+    longContextThresholdExceeded &&
+    hasRealCacheCreationBase &&
+    cacheCreation1hAboveThreshold != null &&
+    cache1hTokens != null
+  ) {
     cacheCreationBucket = cacheCreationBucket.add(
-      calculateTieredCost(cache1hTokens, cacheCreation1hCost, CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
+      multiplyCost(cache1hTokens, cacheCreation1hAboveThreshold)
     );
   } else if (
-    hasRealCacheCreationBase &&
-    cacheCreationAbove200k != null &&
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {
     cacheCreationBucket = cacheCreationBucket.add(
-      calculateTieredCostWithSeparatePrices(
-        cache1hTokens,
-        cacheCreation1hCost,
-        cacheCreationAbove200k
-      )
+      multiplyCost(cache1hTokens, cacheCreation1hCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
     cacheCreationBucket = cacheCreationBucket.add(multiplyCost(cache1hTokens, cacheCreation1hCost));
@@ -264,17 +318,13 @@ export function calculateRequestCostBreakdown(
 
   // Cache read -> cache_read bucket
   if (
+    longContextThresholdExceeded &&
     hasRealCacheReadBase &&
-    cacheReadAbove200k != null &&
-    cacheReadCost != null &&
+    cacheReadAboveThreshold != null &&
     usage.cache_read_input_tokens != null
   ) {
     cacheReadBucket = cacheReadBucket.add(
-      calculateTieredCostWithSeparatePrices(
-        usage.cache_read_input_tokens,
-        cacheReadCost,
-        cacheReadAbove200k
-      )
+      multiplyCost(usage.cache_read_input_tokens, cacheReadAboveThreshold)
     );
   } else {
     cacheReadBucket = cacheReadBucket.add(
@@ -318,12 +368,21 @@ export function calculateRequestCost(
   usage: UsageMetrics,
   priceData: ModelPriceData,
   multiplier: number = 1.0,
-  context1mApplied: boolean = false
+  context1mApplied: boolean = false,
+  priorityServiceTierApplied: boolean = false
 ): Decimal {
   const segments: Decimal[] = [];
 
-  const inputCostPerToken = priceData.input_cost_per_token;
-  const outputCostPerToken = priceData.output_cost_per_token;
+  const baseInputCostPerToken = priceData.input_cost_per_token;
+  const baseOutputCostPerToken = priceData.output_cost_per_token;
+  const inputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.input_cost_per_token_priority === "number"
+      ? priceData.input_cost_per_token_priority
+      : baseInputCostPerToken;
+  const outputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.output_cost_per_token_priority === "number"
+      ? priceData.output_cost_per_token_priority
+      : baseOutputCostPerToken;
   const inputCostPerRequest = priceData.input_cost_per_request;
 
   if (
@@ -339,19 +398,22 @@ export function calculateRequestCost(
 
   const cacheCreation5mCost =
     priceData.cache_creation_input_token_cost ??
-    (inputCostPerToken != null ? inputCostPerToken * 1.25 : undefined);
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 1.25 : undefined);
 
   const cacheCreation1hCost =
     priceData.cache_creation_input_token_cost_above_1hr ??
-    (inputCostPerToken != null ? inputCostPerToken * 2 : undefined) ??
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 2 : undefined) ??
     cacheCreation5mCost;
 
   const cacheReadCost =
-    priceData.cache_read_input_token_cost ??
-    (inputCostPerToken != null
-      ? inputCostPerToken * 0.1
-      : outputCostPerToken != null
-        ? outputCostPerToken * 0.1
+    (priorityServiceTierApplied &&
+    typeof priceData.cache_read_input_token_cost_priority === "number"
+      ? priceData.cache_read_input_token_cost_priority
+      : priceData.cache_read_input_token_cost) ??
+    (baseInputCostPerToken != null
+      ? baseInputCostPerToken * 0.1
+      : baseOutputCostPerToken != null
+        ? baseOutputCostPerToken * 0.1
         : undefined);
 
   // Derive cache creation tokens by TTL
@@ -372,126 +434,119 @@ export function calculateRequestCost(
     }
   }
 
-  // 检查是否有 200K 分层价格（Gemini 等模型）
-  const inputAbove200k = priceData.input_cost_per_token_above_200k_tokens;
-  const outputAbove200k = priceData.output_cost_per_token_above_200k_tokens;
+  const inputAboveThreshold =
+    priceData.input_cost_per_token_above_272k_tokens ??
+    priceData.input_cost_per_token_above_200k_tokens;
+  const outputAboveThreshold =
+    priceData.output_cost_per_token_above_272k_tokens ??
+    priceData.output_cost_per_token_above_200k_tokens;
+  const cacheCreationAboveThreshold =
+    priceData.cache_creation_input_token_cost_above_272k_tokens ??
+    priceData.cache_creation_input_token_cost_above_200k_tokens;
+  const cacheCreation1hAboveThreshold =
+    priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
+    priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
+    cacheCreationAboveThreshold;
+  const cacheReadAboveThreshold =
+    priceData.cache_read_input_token_cost_above_272k_tokens ??
+    priceData.cache_read_input_token_cost_above_200k_tokens;
+  const longContextThreshold = resolveLongContextThreshold(priceData);
+  const longContextThresholdExceeded =
+    getRequestInputContextTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
+  const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
+  const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
-  // 计算 input 费用：优先级 context1mApplied > 200K分层 > 普通
-  if (context1mApplied && inputCostPerToken != null && usage.input_tokens != null) {
-    // Claude 1M context: 使用倍数计算
+  // Input tokens
+  // 注意：阈值命中后按整次请求的全量 token 应用 long-context 价格。
+  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
+    segments.push(multiplyCost(usage.input_tokens, inputAboveThreshold));
+  } else if (
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
+    inputCostPerToken != null &&
+    usage.input_tokens != null
+  ) {
     segments.push(
-      calculateTieredCost(
-        usage.input_tokens,
-        inputCostPerToken,
-        CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER
-      )
-    );
-  } else if (inputAbove200k != null && inputCostPerToken != null && usage.input_tokens != null) {
-    // Gemini 等: 使用独立价格字段
-    segments.push(
-      calculateTieredCostWithSeparatePrices(usage.input_tokens, inputCostPerToken, inputAbove200k)
+      multiplyCost(usage.input_tokens, inputCostPerToken * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
-    // 普通计算
     segments.push(multiplyCost(usage.input_tokens, inputCostPerToken));
   }
 
-  // 计算 output 费用：优先级 context1mApplied > 200K分层 > 普通
-  if (context1mApplied && outputCostPerToken != null && usage.output_tokens != null) {
-    // Claude 1M context: 使用倍数计算
+  // Output tokens
+  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
+    segments.push(multiplyCost(usage.output_tokens, outputAboveThreshold));
+  } else if (
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
+    outputCostPerToken != null &&
+    usage.output_tokens != null
+  ) {
     segments.push(
-      calculateTieredCost(
-        usage.output_tokens,
-        outputCostPerToken,
-        CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER
-      )
-    );
-  } else if (outputAbove200k != null && outputCostPerToken != null && usage.output_tokens != null) {
-    // Gemini 等: 使用独立价格字段
-    segments.push(
-      calculateTieredCostWithSeparatePrices(
-        usage.output_tokens,
-        outputCostPerToken,
-        outputAbove200k
-      )
+      multiplyCost(usage.output_tokens, outputCostPerToken * CONTEXT_1M_OUTPUT_PREMIUM_MULTIPLIER)
     );
   } else {
-    // 普通计算
     segments.push(multiplyCost(usage.output_tokens, outputCostPerToken));
   }
 
   // 缓存相关费用
   // 检查是否有 200K 分层的缓存价格
   // 注意：只有当价格表中的原始基础价格存在时才启用分层计费，避免派生价格与分层价格混用导致误计费
-  const cacheCreationAbove200k = priceData.cache_creation_input_token_cost_above_200k_tokens;
-  const cacheReadAbove200k = priceData.cache_read_input_token_cost_above_200k_tokens;
-  const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
-  const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
-  // 缓存创建费用（5分钟 TTL）：优先级 context1mApplied > 200K分层 > 普通
-  if (context1mApplied && cacheCreation5mCost != null && cache5mTokens != null) {
-    // Claude 1M context: 使用 input 倍数计算（cache creation 属于 input 类别）
-    segments.push(
-      calculateTieredCost(cache5mTokens, cacheCreation5mCost, CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
-    );
-  } else if (
+  // 缓存创建费用（5分钟 TTL）：优先级 explicit long-context > context1m fallback > 普通
+  if (
+    longContextThresholdExceeded &&
     hasRealCacheCreationBase &&
-    cacheCreationAbove200k != null &&
+    cacheCreationAboveThreshold != null &&
+    cache5mTokens != null
+  ) {
+    segments.push(multiplyCost(cache5mTokens, cacheCreationAboveThreshold));
+  } else if (
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
-    // Gemini 等: 使用独立价格字段
     segments.push(
-      calculateTieredCostWithSeparatePrices(
-        cache5mTokens,
-        cacheCreation5mCost,
-        cacheCreationAbove200k
-      )
+      multiplyCost(cache5mTokens, cacheCreation5mCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
-    // 普通计算
     segments.push(multiplyCost(cache5mTokens, cacheCreation5mCost));
   }
 
-  // 缓存创建费用（1小时 TTL）：优先级 context1mApplied > 200K分层 > 普通
-  if (context1mApplied && cacheCreation1hCost != null && cache1hTokens != null) {
-    // Claude 1M context: 使用 input 倍数计算（cache creation 属于 input 类别）
-    segments.push(
-      calculateTieredCost(cache1hTokens, cacheCreation1hCost, CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
-    );
-  } else if (
+  // 缓存创建费用（1小时 TTL）：优先级 explicit long-context > context1m fallback > 普通
+  if (
+    longContextThresholdExceeded &&
     hasRealCacheCreationBase &&
-    cacheCreationAbove200k != null &&
+    cacheCreation1hAboveThreshold != null &&
+    cache1hTokens != null
+  ) {
+    segments.push(multiplyCost(cache1hTokens, cacheCreation1hAboveThreshold));
+  } else if (
+    longContextThresholdExceeded &&
+    context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {
-    // Gemini 等: 使用独立价格字段
     segments.push(
-      calculateTieredCostWithSeparatePrices(
-        cache1hTokens,
-        cacheCreation1hCost,
-        cacheCreationAbove200k
-      )
+      multiplyCost(cache1hTokens, cacheCreation1hCost * CONTEXT_1M_INPUT_PREMIUM_MULTIPLIER)
     );
   } else {
-    // 普通计算
     segments.push(multiplyCost(cache1hTokens, cacheCreation1hCost));
   }
 
   // 缓存读取费用
   if (
+    longContextThresholdExceeded &&
     hasRealCacheReadBase &&
-    cacheReadAbove200k != null &&
-    cacheReadCost != null &&
+    cacheReadAboveThreshold != null &&
     usage.cache_read_input_tokens != null
   ) {
-    segments.push(
-      calculateTieredCostWithSeparatePrices(
-        usage.cache_read_input_tokens,
-        cacheReadCost,
-        cacheReadAbove200k
-      )
-    );
+    segments.push(multiplyCost(usage.cache_read_input_tokens, cacheReadAboveThreshold));
   } else {
     segments.push(multiplyCost(usage.cache_read_input_tokens, cacheReadCost));
   }

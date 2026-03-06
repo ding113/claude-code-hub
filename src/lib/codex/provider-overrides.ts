@@ -2,6 +2,7 @@ import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
+  CodexServiceTierPreference,
   CodexTextVerbosityPreference,
 } from "@/types/provider";
 import type { ProviderParameterOverrideSpecialSetting } from "@/types/special-settings";
@@ -14,6 +15,7 @@ type CodexProviderOverrideConfig = {
   codexReasoningSummaryPreference?: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference?: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference?: CodexParallelToolCallsPreference | null;
+  codexServiceTierPreference?: CodexServiceTierPreference | null;
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -49,6 +51,7 @@ function normalizeParallelToolCallsPreference(
  * - 覆写仅影响以下字段：
  *   - parallel_tool_calls
  *   - reasoning.effort / reasoning.summary
+ *   - service_tier
  *   - text.verbosity
  */
 export function applyCodexProviderOverrides(
@@ -97,6 +100,12 @@ export function applyCodexProviderOverrides(
     output.text = nextText;
   }
 
+  const serviceTier = normalizeStringPreference(provider.codexServiceTierPreference);
+  if (serviceTier !== null) {
+    ensureCloned();
+    output.service_tier = serviceTier;
+  }
+
   return output;
 }
 
@@ -114,12 +123,17 @@ export function applyCodexProviderOverridesWithAudit(
   const reasoningEffort = normalizeStringPreference(provider.codexReasoningEffortPreference);
   const reasoningSummary = normalizeStringPreference(provider.codexReasoningSummaryPreference);
   const textVerbosity = normalizeStringPreference(provider.codexTextVerbosityPreference);
+  const serviceTier = normalizeStringPreference(provider.codexServiceTierPreference);
+
+  const beforeServiceTier = toAuditValue(request.service_tier);
 
   const hit =
     parallelToolCalls !== null ||
     reasoningEffort !== null ||
     reasoningSummary !== null ||
-    textVerbosity !== null;
+    textVerbosity !== null ||
+    serviceTier !== null ||
+    beforeServiceTier === "priority";
 
   if (!hit) {
     return { request, audit: null };
@@ -133,6 +147,8 @@ export function applyCodexProviderOverridesWithAudit(
   const beforeTextVerbosity = toAuditValue(beforeText?.verbosity);
 
   const nextRequest = applyCodexProviderOverrides(provider, request);
+
+  const afterServiceTier = toAuditValue(nextRequest.service_tier);
 
   const afterParallelToolCalls = toAuditValue(nextRequest.parallel_tool_calls);
   const afterReasoning = isPlainObject(nextRequest.reasoning) ? nextRequest.reasoning : null;
@@ -159,6 +175,12 @@ export function applyCodexProviderOverridesWithAudit(
       before: beforeReasoningSummary,
       after: afterReasoningSummary,
       changed: !Object.is(beforeReasoningSummary, afterReasoningSummary),
+    },
+    {
+      path: "service_tier",
+      before: beforeServiceTier,
+      after: afterServiceTier,
+      changed: !Object.is(beforeServiceTier, afterServiceTier),
     },
     {
       path: "text.verbosity",

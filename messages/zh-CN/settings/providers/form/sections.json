@@ -175,6 +175,17 @@
           "true": "强制开启",
           "false": "强制关闭"
         }
+      },
+      "serviceTier": {
+        "label": "Service Tier 覆写",
+        "help": "控制 Codex（Responses API）请求的 OpenAI service_tier。priority 对应 fast 模式；选择“跟随客户端”表示不改写 service_tier，其他值则强制覆写。若上游不支持所选档位，可能返回错误。",
+        "options": {
+          "inherit": "不覆写（跟随客户端）",
+          "auto": "auto（项目默认）",
+          "default": "default（标准档）",
+          "flex": "flex（弹性）",
+          "priority": "priority（fast）"
+        }
       }
     },
     "anthropicOverrides": {

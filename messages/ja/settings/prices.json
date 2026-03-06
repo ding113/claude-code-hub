@@ -196,7 +196,8 @@
   "actions": {
     "edit": "編集",
     "more": "その他の操作",
-    "delete": "削除"
+    "delete": "削除",
+    "comparePricing": "価格を比較"
   },
   "toast": {
     "createSuccess": "モデルを追加しました",
@@ -204,5 +205,17 @@
     "deleteSuccess": "モデルを削除しました",
     "saveFailed": "保存に失敗しました",
     "deleteFailed": "削除に失敗しました"
+  },
+  "providerPricing": {
+    "title": "プロバイダー価格 · {model}",
+    "description": "プロバイダー別のクラウド価格を比較し、そのうち一つをローカルモデル価格として固定します。",
+    "input": "入力",
+    "output": "出力",
+    "cacheRead": "キャッシュ読取",
+    "pinAction": "ローカル価格として固定",
+    "pinSuccess": "{provider} の価格をローカルモデル価格として固定しました",
+    "pinFailed": "プロバイダー価格の固定に失敗しました",
+    "pinned": "固定済み",
+    "priority": "高速モード価格"
   }
 }

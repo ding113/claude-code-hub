@@ -1,4 +1,3 @@
-import { CONTEXT_1M_BETA_HEADER } from "@/lib/special-attributes";
 import type { SpecialSetting } from "@/types/special-settings";
 
 type BuildUnifiedSpecialSettingsParams = {
@@ -23,7 +22,7 @@ type BuildUnifiedSpecialSettingsParams = {
    */
   cacheTtlApplied?: string | null;
   /**
-   * 1M 上下文是否应用（用于展示 1M 标头覆写命中）
+   * 1M 上下文是否应用（保留参数用于兼容调用方；不再自动派生 header 覆写审计）
    */
   context1mApplied?: boolean | null;
 };
@@ -108,6 +107,23 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.preference,
         setting.hadGoogleSearchInRequest,
       ]);
+    case "pricing_resolution":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.modelName,
+        setting.resolvedModelName,
+        setting.resolvedPricingProviderKey,
+        setting.source,
+      ]);
+    case "codex_service_tier_result":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.requestedServiceTier,
+        setting.actualServiceTier,
+        setting.effectivePriority,
+      ]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;
@@ -152,13 +168,21 @@ export function buildUnifiedSpecialSettings(
     });
   }
 
-  if (params.context1mApplied === true) {
+  const hasExplicitAnthropicContext1m = base.some(
+    (item) => item.type === "anthropic_context_1m_header_override"
+  );
+  const hasCodexServiceTierResult = base.some((item) => item.type === "codex_service_tier_result");
+  if (
+    params.context1mApplied === true &&
+    !hasExplicitAnthropicContext1m &&
+    !hasCodexServiceTierResult
+  ) {
     derived.push({
       type: "anthropic_context_1m_header_override",
       scope: "request_header",
       hit: true,
       header: "anthropic-beta",
-      flag: CONTEXT_1M_BETA_HEADER,
+      flag: "context-1m-2025-08-07",
     });
   }
 
@@ -176,4 +200,62 @@ export function buildUnifiedSpecialSettings(
   }
 
   return result.length > 0 ? result : null;
+}
+
+export function hasPriorityServiceTierSpecialSetting(
+  specialSettings?: SpecialSetting[] | null
+): boolean {
+  if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
+    return false;
+  }
+
+  const codexServiceTierResult = specialSettings.find(
+    (setting): setting is Extract<SpecialSetting, { type: "codex_service_tier_result" }> =>
+      setting.type === "codex_service_tier_result"
+  );
+  if (codexServiceTierResult) {
+    if (codexServiceTierResult.actualServiceTier != null) {
+      return codexServiceTierResult.actualServiceTier === "priority";
+    }
+    return codexServiceTierResult.effectivePriority;
+  }
+
+  return specialSettings.some(
+    (setting) =>
+      setting.type === "provider_parameter_override" &&
+      setting.providerType === "codex" &&
+      setting.changes.some(
+        (change) => change.path === "service_tier" && change.after === "priority"
+      )
+  );
+}
+
+export function getPriorityServiceTierSpecialSetting(
+  specialSettings?: SpecialSetting[] | null
+): Extract<SpecialSetting, { type: "codex_service_tier_result" }> | null {
+  if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
+    return null;
+  }
+
+  return (
+    specialSettings.find(
+      (setting): setting is Extract<SpecialSetting, { type: "codex_service_tier_result" }> =>
+        setting.type === "codex_service_tier_result"
+    ) ?? null
+  );
+}
+
+export function getPricingResolutionSpecialSetting(
+  specialSettings?: SpecialSetting[] | null
+): Extract<SpecialSetting, { type: "pricing_resolution" }> | null {
+  if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
+    return null;
+  }
+
+  return (
+    specialSettings.find(
+      (setting): setting is Extract<SpecialSetting, { type: "pricing_resolution" }> =>
+        setting.type === "pricing_resolution"
+    ) ?? null
+  );
 }

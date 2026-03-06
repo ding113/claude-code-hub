@@ -7,6 +7,7 @@ const revalidatePathMock = vi.fn();
 
 // Repository mocks
 const findLatestPriceByModelMock = vi.fn();
+const findLatestPriceByModelAndSourceMock = vi.fn();
 const findAllLatestPricesMock = vi.fn();
 const createModelPriceMock = vi.fn();
 const upsertModelPriceMock = vi.fn();
@@ -36,6 +37,8 @@ vi.mock("@/lib/logger", () => ({
 
 vi.mock("@/repository/model-price", () => ({
   findLatestPriceByModel: () => findLatestPriceByModelMock(),
+  findLatestPriceByModelAndSource: (...args: unknown[]) =>
+    findLatestPriceByModelAndSourceMock(...args),
   createModelPrice: (...args: unknown[]) => createModelPriceMock(...args),
   upsertModelPrice: (...args: unknown[]) => upsertModelPriceMock(...args),
   deleteModelPriceByName: (...args: unknown[]) => deleteModelPriceByNameMock(...args),
@@ -488,6 +491,63 @@ describe("Model Price Actions", () => {
       expect(result.ok).toBe(true);
       expect(result.data?.unchanged).toContain("safe-model");
       expect(createModelPriceMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("pinModelPricingProviderAsManual", () => {
+    it("should pin a cloud provider pricing node as a local manual model price", async () => {
+      findLatestPriceByModelAndSourceMock.mockResolvedValue(
+        makeMockPrice(
+          "gpt-5.4",
+          {
+            mode: "responses",
+            display_name: "GPT-5.4",
+            model_family: "gpt",
+            pricing: {
+              openrouter: {
+                input_cost_per_token: 0.0000025,
+                output_cost_per_token: 0.000015,
+                cache_read_input_token_cost: 2.5e-7,
+              },
+            },
+          },
+          "litellm"
+        )
+      );
+      upsertModelPriceMock.mockResolvedValue(
+        makeMockPrice(
+          "gpt-5.4",
+          {
+            mode: "responses",
+            input_cost_per_token: 0.0000025,
+            output_cost_per_token: 0.000015,
+            cache_read_input_token_cost: 2.5e-7,
+            selected_pricing_provider: "openrouter",
+          },
+          "manual"
+        )
+      );
+
+      const { pinModelPricingProviderAsManual } = await import("@/actions/model-prices");
+      const result = await pinModelPricingProviderAsManual({
+        modelName: "gpt-5.4",
+        pricingProviderKey: "openrouter",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(findLatestPriceByModelAndSourceMock).toHaveBeenCalledWith("gpt-5.4", "litellm");
+      expect(upsertModelPriceMock).toHaveBeenCalledWith(
+        "gpt-5.4",
+        expect.objectContaining({
+          mode: "responses",
+          input_cost_per_token: 0.0000025,
+          output_cost_per_token: 0.000015,
+          cache_read_input_token_cost: 2.5e-7,
+          selected_pricing_provider: "openrouter",
+          selected_pricing_source_model: "gpt-5.4",
+          selected_pricing_resolution: "manual_pin",
+        })
+      );
     });
   });
 });

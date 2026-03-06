@@ -278,47 +278,45 @@ run("usage ledger integration", () => {
   });
 
   describe("backfill", () => {
-    test(
-      "backfill copies non-warmup message_request rows when ledger rows are missing",
-      { timeout: 60_000 },
-      async () => {
-        const userId = nextUserId();
-        const providerId = nextProviderId();
-        const keepA = await insertMessageRequestRow({
-          key: nextKey("backfill-a"),
-          userId,
-          providerId,
-          costUsd: "1.100000000000000",
-        });
-        const keepB = await insertMessageRequestRow({
-          key: nextKey("backfill-b"),
-          userId,
-          providerId,
-          costUsd: "2.200000000000000",
-        });
-        const warmup = await insertMessageRequestRow({
-          key: nextKey("backfill-warmup"),
-          userId,
-          providerId,
-          blockedBy: "warmup",
-        });
+    test("backfill copies non-warmup message_request rows when ledger rows are missing", {
+      timeout: 60_000,
+    }, async () => {
+      const userId = nextUserId();
+      const providerId = nextProviderId();
+      const keepA = await insertMessageRequestRow({
+        key: nextKey("backfill-a"),
+        userId,
+        providerId,
+        costUsd: "1.100000000000000",
+      });
+      const keepB = await insertMessageRequestRow({
+        key: nextKey("backfill-b"),
+        userId,
+        providerId,
+        costUsd: "2.200000000000000",
+      });
+      const warmup = await insertMessageRequestRow({
+        key: nextKey("backfill-warmup"),
+        userId,
+        providerId,
+        blockedBy: "warmup",
+      });
 
-        await db.delete(usageLedger).where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
+      await db.delete(usageLedger).where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
 
-        const summary = await backfillUsageLedger();
-        expect(summary.totalProcessed).toBeGreaterThanOrEqual(2);
+      const summary = await backfillUsageLedger();
+      expect(summary.totalProcessed).toBeGreaterThanOrEqual(2);
 
-        const rows = await db
-          .select({ requestId: usageLedger.requestId })
-          .from(usageLedger)
-          .where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
-        const requestIds = rows.map((row) => row.requestId);
+      const rows = await db
+        .select({ requestId: usageLedger.requestId })
+        .from(usageLedger)
+        .where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
+      const requestIds = rows.map((row) => row.requestId);
 
-        expect(requestIds).toContain(keepA);
-        expect(requestIds).toContain(keepB);
-        expect(requestIds).not.toContain(warmup);
-      }
-    );
+      expect(requestIds).toContain(keepA);
+      expect(requestIds).toContain(keepB);
+      expect(requestIds).not.toContain(warmup);
+    });
 
     test("backfill is idempotent when running twice", { timeout: 60_000 }, async () => {
       const requestId = await insertMessageRequestRow({

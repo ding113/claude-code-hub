@@ -17,6 +17,19 @@ export interface ModelPriceData {
   output_cost_per_token_above_200k_tokens?: number;
   cache_creation_input_token_cost_above_200k_tokens?: number;
   cache_read_input_token_cost_above_200k_tokens?: number;
+  cache_creation_input_token_cost_above_1hr_above_200k_tokens?: number;
+
+  // 272K 分层价格（GPT-5.4 等模型保留扩展）
+  input_cost_per_token_above_272k_tokens?: number;
+  output_cost_per_token_above_272k_tokens?: number;
+  cache_creation_input_token_cost_above_272k_tokens?: number;
+  cache_read_input_token_cost_above_272k_tokens?: number;
+  cache_creation_input_token_cost_above_1hr_above_272k_tokens?: number;
+
+  // 优先服务等级价格（例如 OpenAI priority tier）
+  input_cost_per_token_priority?: number;
+  output_cost_per_token_priority?: number;
+  cache_read_input_token_cost_priority?: number;
 
   // 图片生成价格
   output_cost_per_image?: number;
@@ -38,10 +51,14 @@ export interface ModelPriceData {
   display_name?: string;
   litellm_provider?: string;
   providers?: string[];
+  pricing?: Record<string, Record<string, unknown>>;
+  selected_pricing_provider?: string;
+  selected_pricing_source_model?: string;
+  selected_pricing_resolution?: "manual_pin";
   max_input_tokens?: number;
   max_output_tokens?: number;
   max_tokens?: number;
-  mode?: "chat" | "image_generation" | "completion";
+  mode?: "chat" | "image_generation" | "completion" | "responses";
 
   // 支持的功能
   supports_assistant_prefill?: boolean;
