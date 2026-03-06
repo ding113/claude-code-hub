@@ -1,4 +1,3 @@
-import { CONTEXT_1M_BETA_HEADER } from "@/lib/special-attributes";
 import type { SpecialSetting } from "@/types/special-settings";
 
 type BuildUnifiedSpecialSettingsParams = {
@@ -23,7 +22,7 @@ type BuildUnifiedSpecialSettingsParams = {
    */
   cacheTtlApplied?: string | null;
   /**
-   * 1M 上下文是否应用（用于展示 1M 标头覆写命中）
+   * 1M 上下文是否应用（保留参数用于兼容调用方；不再自动派生 header 覆写审计）
    */
   context1mApplied?: boolean | null;
 };
@@ -108,6 +107,14 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.preference,
         setting.hadGoogleSearchInRequest,
       ]);
+    case "pricing_resolution":
+      return JSON.stringify([
+        setting.type,
+        setting.modelName,
+        setting.resolvedModelName,
+        setting.resolvedPricingProviderKey,
+        setting.source,
+      ]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;
@@ -152,16 +159,6 @@ export function buildUnifiedSpecialSettings(
     });
   }
 
-  if (params.context1mApplied === true) {
-    derived.push({
-      type: "anthropic_context_1m_header_override",
-      scope: "request_header",
-      hit: true,
-      header: "anthropic-beta",
-      flag: CONTEXT_1M_BETA_HEADER,
-    });
-  }
-
   if (base.length === 0 && derived.length === 0) {
     return null;
   }
@@ -192,5 +189,20 @@ export function hasPriorityServiceTierSpecialSetting(
       setting.changes.some(
         (change) => change.path === "service_tier" && change.after === "priority"
       )
+  );
+}
+
+export function getPricingResolutionSpecialSetting(
+  specialSettings?: SpecialSetting[] | null
+): Extract<SpecialSetting, { type: "pricing_resolution" }> | null {
+  if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
+    return null;
+  }
+
+  return (
+    specialSettings.find(
+      (setting): setting is Extract<SpecialSetting, { type: "pricing_resolution" }> =>
+        setting.type === "pricing_resolution"
+    ) ?? null
   );
 }

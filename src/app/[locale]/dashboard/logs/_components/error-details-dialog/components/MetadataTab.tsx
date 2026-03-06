@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Link } from "@/i18n/routing";
+import { getPricingResolutionSpecialSetting } from "@/lib/utils/special-settings";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
@@ -49,6 +50,10 @@ export function MetadataTab({
 
   const specialSettingsContent =
     specialSettings && specialSettings.length > 0 ? JSON.stringify(specialSettings, null, 2) : null;
+  const pricingResolution = getPricingResolutionSpecialSetting(specialSettings);
+  const pricingSourceLabel = pricingResolution
+    ? t(`billingDetails.pricingSource.${pricingResolution.source}`)
+    : null;
 
   const handleCopyTimeline = () => {
     if (!providerChain) return;
@@ -239,6 +244,23 @@ export function MetadataTab({
                   </div>
                 </div>
               )}
+
+              {pricingResolution && pricingSourceLabel ? (
+                <>
+                  <div className="flex justify-between col-span-2">
+                    <span className="text-muted-foreground">
+                      {t("billingDetails.pricingProvider")}:
+                    </span>
+                    <span className="font-mono">{pricingResolution.resolvedPricingProviderKey}</span>
+                  </div>
+                  <div className="flex justify-between col-span-2">
+                    <span className="text-muted-foreground">
+                      {t("billingDetails.pricingSourceLabel")}:
+                    </span>
+                    <span>{pricingSourceLabel}</span>
+                  </div>
+                </>
+              ) : null}
 
               {/* Cost Multiplier */}
               {(() => {

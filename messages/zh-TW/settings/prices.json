@@ -196,7 +196,8 @@
   "actions": {
     "edit": "編輯",
     "more": "更多動作",
-    "delete": "刪除"
+    "delete": "刪除",
+    "comparePricing": "比較價格"
   },
   "toast": {
     "createSuccess": "模型已新增",
@@ -204,5 +205,16 @@
     "deleteSuccess": "模型已刪除",
     "saveFailed": "儲存失敗",
     "deleteFailed": "刪除失敗"
+  },
+  "providerPricing": {
+    "title": "多供應商價格 · {model}",
+    "description": "比較不同供應商的雲端價格，並將其中一項固化為本地模型價格。",
+    "input": "輸入",
+    "output": "輸出",
+    "cacheRead": "快取讀取",
+    "pinAction": "固化為本地價格",
+    "pinSuccess": "已將 {provider} 價格固化為本地模型價格",
+    "pinFailed": "固化供應商價格失敗",
+    "pinned": "已固化"
   }
 }

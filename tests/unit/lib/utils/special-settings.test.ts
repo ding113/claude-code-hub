@@ -72,23 +72,13 @@ describe("buildUnifiedSpecialSettings", () => {
     );
   });
 
-  test("context1mApplied=true 时应派生 anthropic_context_1m_header_override 特殊设置", () => {
+  test("context1mApplied=true 时不应自动派生 anthropic_context_1m_header_override 特殊设置", () => {
     const settings = buildUnifiedSpecialSettings({
       existing: null,
       context1mApplied: true,
     });
 
-    expect(settings).not.toBeNull();
-    expect(settings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "anthropic_context_1m_header_override",
-          scope: "request_header",
-          hit: true,
-          header: "anthropic-beta",
-        }),
-      ])
-    );
+    expect(settings).toBeNull();
   });
 
   test("应合并 existing specialSettings 与派生 specialSettings", () => {

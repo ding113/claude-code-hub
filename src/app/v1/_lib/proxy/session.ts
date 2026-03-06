@@ -1,7 +1,10 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
-import { hasValidPriceData } from "@/lib/utils/price-data";
+import {
+  resolvePricingForModelRecords,
+  type ResolvedPricing,
+} from "@/lib/utils/pricing-resolution";
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { findAllProviders } from "@/repository/provider";
 import type { CacheTtlResolved } from "@/types/cache";
@@ -119,9 +122,6 @@ export class ProxySession {
    * Ensures system settings are loaded at most once per request/session.
    */
   private billingModelSourcePromise?: Promise<"original" | "redirected">;
-
-  // Cached price data for billing model source (lazy loaded: undefined=not loaded, null=no data)
-  private cachedBillingPriceData?: ModelPriceData | null;
 
   /**
    * 请求级 Provider 快照
@@ -701,30 +701,13 @@ export class ProxySession {
     return this.cachedPriceData ?? null;
   }
 
-  /**
-   * 根据系统配置的计费模型来源获取价格数据（带缓存）
-   *
-   * billingModelSource:
-   * - "original": 优先使用重定向前模型（getOriginalModel）
-   * - "redirected": 优先使用重定向后模型（request.model）
-   *
-   * Fallback：主模型无价格时尝试备选模型。
-   *
-   * @returns 价格数据；无模型或无价格时返回 null
-   */
-  async getCachedPriceDataByBillingSource(): Promise<ModelPriceData | null> {
-    if (this.cachedBillingPriceData !== undefined) {
-      return this.cachedBillingPriceData;
-    }
-
+  async getResolvedPricingByBillingSource(provider?: Provider | null): Promise<ResolvedPricing | null> {
     const originalModel = this.getOriginalModel();
     const redirectedModel = this.request.model;
     if (!originalModel && !redirectedModel) {
-      this.cachedBillingPriceData = null;
       return null;
     }
 
-    // 懒加载配置（每请求只读取一次；并发安全）
     if (this.cachedBillingModelSource === undefined) {
       if (!this.billingModelSourcePromise) {
         this.billingModelSourcePromise = (async () => {
@@ -755,26 +738,33 @@ export class ProxySession {
     const primaryModel = useOriginal ? originalModel : redirectedModel;
     const fallbackModel = useOriginal ? redirectedModel : originalModel;
 
-    const findValidPriceDataByModel = async (modelName: string): Promise<ModelPriceData | null> => {
-      const result = await findLatestPriceByModel(modelName);
-      const data = result?.priceData;
-      if (!data || !hasValidPriceData(data)) {
-        return null;
-      }
-      return data;
-    };
+    const primaryRecord = primaryModel ? await findLatestPriceByModel(primaryModel) : null;
+    const fallbackRecord =
+      fallbackModel && fallbackModel !== primaryModel ? await findLatestPriceByModel(fallbackModel) : null;
 
-    let priceData: ModelPriceData | null = null;
-    if (primaryModel) {
-      priceData = await findValidPriceDataByModel(primaryModel);
-    }
+    return resolvePricingForModelRecords({
+      provider: provider ?? this.provider,
+      primaryModelName: primaryModel,
+      fallbackModelName: fallbackModel,
+      primaryRecord,
+      fallbackRecord,
+    });
+  }
 
-    if (!priceData && fallbackModel && fallbackModel !== primaryModel) {
-      priceData = await findValidPriceDataByModel(fallbackModel);
-    }
-
-    this.cachedBillingPriceData = priceData;
-    return this.cachedBillingPriceData;
+  /**
+   * 根据系统配置的计费模型来源获取价格数据（带缓存）
+   *
+   * billingModelSource:
+   * - "original": 优先使用重定向前模型（getOriginalModel）
+   * - "redirected": 优先使用重定向后模型（request.model）
+   *
+   * Fallback：主模型无价格时尝试备选模型。
+   *
+   * @returns 价格数据；无模型或无价格时返回 null
+   */
+  async getCachedPriceDataByBillingSource(provider?: Provider | null): Promise<ModelPriceData | null> {
+    const resolved = await this.getResolvedPricingByBillingSource(provider);
+    return resolved?.priceData ?? null;
   }
 }
 

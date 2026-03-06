@@ -2,6 +2,7 @@
 
 import { formatInTimeZone } from "date-fns-tz";
 import {
+  ArrowRightLeft,
   Braces,
   ChevronLeft,
   ChevronRight,
@@ -41,10 +42,12 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { PRICE_FILTER_VENDORS } from "@/lib/model-vendor-icons";
+import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import { copyToClipboard } from "@/lib/utils/clipboard";
 import type { ModelPrice, ModelPriceSource } from "@/types/model-price";
 import { DeleteModelDialog } from "./delete-model-dialog";
 import { ModelPriceDrawer } from "./model-price-drawer";
+import { ProviderPricingDialog } from "./provider-pricing-dialog";
 
 interface PriceListProps {
   initialPrices: ModelPrice[];
@@ -445,7 +448,22 @@ export function PriceList({
                 </td>
               </tr>
             ) : filteredPrices.length > 0 ? (
-              filteredPrices.map((price) => (
+              filteredPrices.map((price) => {
+                const displayPricing = resolvePricingForModelRecords({
+                  provider: null,
+                  primaryModelName: price.modelName,
+                  fallbackModelName: null,
+                  primaryRecord: price,
+                  fallbackRecord: null,
+                });
+                const displayPriceData = displayPricing?.priceData ?? price.priceData;
+                const displayPricingProviderKey =
+                  displayPricing?.resolvedPricingProviderKey ??
+                  (typeof displayPriceData.selected_pricing_provider === "string"
+                    ? displayPriceData.selected_pricing_provider
+                    : null);
+
+                return (
                 <tr
                   key={price.id}
                   className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
@@ -459,6 +477,15 @@ export function PriceList({
                         <Badge variant="secondary" className="font-mono text-xs">
                           {price.priceData.litellm_provider}
                         </Badge>
+                      ) : null}
+                      {displayPricingProviderKey &&
+                      displayPricingProviderKey !== price.priceData.litellm_provider ? (
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {displayPricingProviderKey}
+                        </Badge>
+                      ) : null}
+                      {price.priceData.pricing && Object.keys(price.priceData.pricing).length > 1 ? (
+                        <Badge variant="outline">{t("badges.multi")}</Badge>
                       ) : null}
                       {price.source === "manual" && (
                         <Badge variant="outline">{t("badges.local")}</Badge>
@@ -516,9 +543,9 @@ export function PriceList({
                           {t("table.priceInput")}
                         </span>
                         <span className="text-muted-foreground">
-                          {price.priceData.mode === "image_generation"
+                          {displayPriceData.mode === "image_generation"
                             ? "-"
-                            : formatPerMillionTokenPriceLabel(price.priceData.input_cost_per_token)}
+                            : formatPerMillionTokenPriceLabel(displayPriceData.input_cost_per_token)}
                         </span>
                       </div>
                       <div className="flex items-center justify-end gap-2">
@@ -526,21 +553,21 @@ export function PriceList({
                           {t("table.priceOutput")}
                         </span>
                         <span className="text-muted-foreground">
-                          {price.priceData.mode === "image_generation"
-                            ? formatPerImagePriceLabel(price.priceData.output_cost_per_image)
+                          {displayPriceData.mode === "image_generation"
+                            ? formatPerImagePriceLabel(displayPriceData.output_cost_per_image)
                             : formatPerMillionTokenPriceLabel(
-                                price.priceData.output_cost_per_token
+                                displayPriceData.output_cost_per_token
                               )}
                         </span>
                       </div>
-                      {formatPerRequestPriceLabel(price.priceData.input_cost_per_request) !==
+                      {formatPerRequestPriceLabel(displayPriceData.input_cost_per_request) !==
                       "-" ? (
                         <div className="flex items-center justify-end gap-2">
                           <span className="text-xs text-muted-foreground">
                             {t("table.pricePerRequest")}
                           </span>
                           <span className="text-muted-foreground">
-                            {formatPerRequestPriceLabel(price.priceData.input_cost_per_request)}
+                            {formatPerRequestPriceLabel(displayPriceData.input_cost_per_request)}
                           </span>
                         </div>
                       ) : null}
@@ -548,15 +575,15 @@ export function PriceList({
                   </td>
                   <td className="py-3 px-4 font-mono text-sm text-right">
                     <span className="text-muted-foreground">
-                      {price.priceData.supports_prompt_caching === true
+                      {displayPriceData.supports_prompt_caching === true
                         ? formatPerMillionTokenPriceLabel(
-                            price.priceData.cache_read_input_token_cost
+                            displayPriceData.cache_read_input_token_cost
                           )
                         : "-"}
                     </span>
                   </td>
                   <td className="py-3 px-4 font-mono text-sm text-right">
-                    {price.priceData.supports_prompt_caching === true ? (
+                    {displayPriceData.supports_prompt_caching === true ? (
                       <div className="space-y-1">
                         <div className="flex items-center justify-end gap-2">
                           <span className="text-xs text-muted-foreground">
@@ -564,7 +591,7 @@ export function PriceList({
                           </span>
                           <span className="text-muted-foreground">
                             {formatPerMillionTokenPriceLabel(
-                              price.priceData.cache_creation_input_token_cost
+                              displayPriceData.cache_creation_input_token_cost
                             )}
                           </span>
                         </div>
@@ -574,7 +601,7 @@ export function PriceList({
                           </span>
                           <span className="text-muted-foreground">
                             {formatPerMillionTokenPriceLabel(
-                              price.priceData.cache_creation_input_token_cost_above_1hr
+                              displayPriceData.cache_creation_input_token_cost_above_1hr
                             )}
                           </span>
                         </div>
@@ -603,6 +630,17 @@ export function PriceList({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        {price.priceData.pricing && Object.keys(price.priceData.pricing).length > 0 ? (
+                          <ProviderPricingDialog
+                            price={price}
+                            trigger={
+                              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                                {t("actions.comparePricing")}
+                              </DropdownMenuItem>
+                            }
+                          />
+                        ) : null}
                         <ModelPriceDrawer
                           mode="edit"
                           initialData={price}
@@ -644,7 +682,8 @@ export function PriceList({
                     </DropdownMenu>
                   </td>
                 </tr>
-              ))
+              );
+              })
             ) : (
               <tr>
                 <td colSpan={7} className="text-center py-8">
