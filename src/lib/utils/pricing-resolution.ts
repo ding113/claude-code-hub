@@ -7,7 +7,8 @@ export type ResolvedPricingSource =
   | "cloud_exact"
   | "cloud_model_fallback"
   | "priority_fallback"
-  | "single_provider_top_level";
+  | "single_provider_top_level"
+  | "official_fallback";
 
 export interface ResolvedPricing {
   resolvedModelName: string;
@@ -183,13 +184,12 @@ function mergePriceData(
   pricingProviderKey: string
 ): ModelPriceData {
   if (!pricingNode) {
-    return {
-      ...base,
-      selected_pricing_provider:
-        typeof base.selected_pricing_provider === "string"
-          ? base.selected_pricing_provider
-          : pricingProviderKey,
-    };
+    return typeof base.selected_pricing_provider === "string"
+      ? {
+          ...base,
+          selected_pricing_provider: base.selected_pricing_provider,
+        }
+      : { ...base };
   }
 
   return {
@@ -235,20 +235,18 @@ function resolveManualPricing(
     return null;
   }
 
+  const resolvedPricingProviderKey =
+    (typeof record.priceData.selected_pricing_provider === "string" &&
+      record.priceData.selected_pricing_provider.trim()) ||
+    (typeof record.priceData.litellm_provider === "string" &&
+      record.priceData.litellm_provider.trim()) ||
+    "manual";
+
   return {
     resolvedModelName: modelName ?? record.modelName,
-    resolvedPricingProviderKey:
-      (typeof record.priceData.selected_pricing_provider === "string" &&
-        record.priceData.selected_pricing_provider.trim()) ||
-      (typeof record.priceData.litellm_provider === "string" &&
-        record.priceData.litellm_provider.trim()) ||
-      "manual",
+    resolvedPricingProviderKey,
     source: "local_manual",
-    priceData: mergePriceData(
-      record.priceData,
-      null,
-      record.priceData.selected_pricing_provider as string
-    ),
+    priceData: mergePriceData(record.priceData, null, resolvedPricingProviderKey),
     pricingNode: null,
   };
 }
@@ -277,13 +275,12 @@ function resolveFromPricingMap(
       continue;
     }
 
-    const source: ResolvedPricingSource = candidate.isPrimary
-      ? type === "exact"
-        ? "cloud_exact"
-        : "priority_fallback"
-      : type === "exact"
-        ? "cloud_model_fallback"
-        : "priority_fallback";
+    const source: ResolvedPricingSource =
+      type === "official"
+        ? "official_fallback"
+        : candidate.isPrimary
+          ? "cloud_exact"
+          : "cloud_model_fallback";
 
     return {
       resolvedModelName: candidate.modelName ?? candidate.record.modelName,

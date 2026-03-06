@@ -52,7 +52,7 @@ describe("resolvePricingForModelRecords", () => {
 
     expect(resolved).not.toBeNull();
     expect(resolved?.resolvedPricingProviderKey).toBe("openai");
-    expect(resolved?.source).toBe("priority_fallback");
+    expect(resolved?.source).toBe("official_fallback");
     expect(resolved?.priceData.input_cost_per_token).toBe(0.0000025);
   });
 

@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ModelPriceData } from "@/types/model-price";
 import type { SystemSettings } from "@/types/system-config";
 
-const { cloudSyncRequests, requestCloudPriceTableSyncMock } = vi.hoisted(() => {
-  const cloudSyncRequests: Array<{ reason: string }> = [];
+const asyncTasks: Promise<void>[] = [];
+const cloudSyncRequests: Array<{ reason: string }> = [];
+
+const { requestCloudPriceTableSyncMock } = vi.hoisted(() => {
   const requestCloudPriceTableSyncMock = vi.fn((payload: { reason: string }) => {
     cloudSyncRequests.push(payload);
   });
-  return { cloudSyncRequests, requestCloudPriceTableSyncMock };
+  return { requestCloudPriceTableSyncMock };
 });
 
 vi.mock("@/lib/price-sync/cloud-price-updater", () => ({
@@ -64,7 +67,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 import { finalizeRequestStats } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { RateLimitService } from "@/lib/rate-limit";
-import { updateMessageRequestCost } from "@/repository/message";
+import { updateMessageRequestCost, updateMessageRequestDetails } from "@/repository/message";
 import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
 
@@ -180,6 +183,25 @@ describe("价格表缺失/查询失败：请求不计费且不报错", () => {
   beforeEach(() => {
     cloudSyncRequests.splice(0, cloudSyncRequests.length);
     vi.clearAllMocks();
+  });
+
+  it("无 usageMetrics 时仍应写入 request details", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(findLatestPriceByModel).mockResolvedValue(null);
+
+    const session = createSession({ originalModel: "m1", redirectedModel: "m2" });
+    await finalizeRequestStats(session, JSON.stringify({ type: "message", usage: null }), 502, 9, "bad upstream");
+
+    expect(updateMessageRequestDetails).toHaveBeenCalledWith(
+      2000,
+      expect.objectContaining({
+        statusCode: 502,
+        errorMessage: "bad upstream",
+        model: "m2",
+        providerId: 99,
+      })
+    );
+    expect(updateMessageRequestCost).not.toHaveBeenCalled();
   });
 
   it("无价格：应跳过 DB cost 更新与限流 cost 追踪，并触发异步同步", async () => {

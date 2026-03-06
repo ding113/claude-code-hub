@@ -123,6 +123,9 @@ export class ProxySession {
    */
   private billingModelSourcePromise?: Promise<"original" | "redirected">;
 
+  // Resolved pricing cache (per request/provider combination)
+  private resolvedPricingCache = new Map<string, ResolvedPricing | null>();
+
   /**
    * 请求级 Provider 快照
    *
@@ -736,23 +739,46 @@ export class ProxySession {
       this.cachedBillingModelSource = await this.billingModelSourcePromise;
     }
 
+    const providerIdentity = provider ?? this.provider;
+    const cacheKey = [
+      this.cachedBillingModelSource,
+      originalModel ?? "",
+      redirectedModel ?? "",
+      providerIdentity?.id ?? 0,
+      providerIdentity?.name ?? "",
+      providerIdentity?.url ?? "",
+    ].join("|");
+
+    if (this.resolvedPricingCache.has(cacheKey)) {
+      return this.resolvedPricingCache.get(cacheKey) ?? null;
+    }
+
     const useOriginal = this.cachedBillingModelSource === "original";
     const primaryModel = useOriginal ? originalModel : redirectedModel;
     const fallbackModel = useOriginal ? redirectedModel : originalModel;
 
     const primaryRecord = primaryModel ? await findLatestPriceByModel(primaryModel) : null;
-    const fallbackRecord =
-      fallbackModel && fallbackModel !== primaryModel
-        ? await findLatestPriceByModel(fallbackModel)
-        : null;
-
-    return resolvePricingForModelRecords({
-      provider: provider ?? this.provider,
+    let resolved = resolvePricingForModelRecords({
+      provider: providerIdentity,
       primaryModelName: primaryModel,
-      fallbackModelName: fallbackModel,
+      fallbackModelName: null,
       primaryRecord,
-      fallbackRecord,
+      fallbackRecord: null,
     });
+
+    if (!resolved && fallbackModel && fallbackModel !== primaryModel) {
+      const fallbackRecord = await findLatestPriceByModel(fallbackModel);
+      resolved = resolvePricingForModelRecords({
+        provider: providerIdentity,
+        primaryModelName: primaryModel,
+        fallbackModelName: fallbackModel,
+        primaryRecord,
+        fallbackRecord,
+      });
+    }
+
+    this.resolvedPricingCache.set(cacheKey, resolved ?? null);
+    return resolved ?? null;
   }
 
   /**

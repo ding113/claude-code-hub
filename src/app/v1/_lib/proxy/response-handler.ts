@@ -1221,13 +1221,14 @@ export class ProxyResponseHandler {
 
                 pushChunk(headPart, remainingHeadBytes);
 
-                pushToTail();
+                inTailMode = true;
                 pushChunk(tailPart, bytes - remainingHeadBytes);
               } else {
                 headChunks.push(text);
                 headBufferedBytes += bytes;
               }
             } else {
+              inTailMode = true;
               pushToTail();
             }
           };
@@ -1344,6 +1345,7 @@ export class ProxyResponseHandler {
                     const headText = decoder.decode(headPart, { stream: true });
                     pushChunk(headText, remainingHeadBytes);
 
+                    inTailMode = true;
                     const tailText = decoder.decode(tailPart, { stream: true });
                     pushChunk(tailText, chunkSize - remainingHeadBytes);
                   } else {
@@ -2898,6 +2900,17 @@ export async function finalizeRequestStats(
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
   const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
   if (!usageMetrics) {
+    await updateMessageRequestDetails(messageContext.id, {
+      statusCode: statusCode,
+      ...(errorMessage ? { errorMessage } : {}),
+      ttfbMs: session.ttfbMs ?? duration,
+      providerChain: session.getProviderChain(),
+      model: session.getCurrentModel() ?? undefined,
+      providerId: providerIdForPersistence,
+      context1mApplied: session.getContext1mApplied(),
+      swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
+      specialSettings: session.getSpecialSettings() ?? undefined,
+    });
     return null;
   }
 
