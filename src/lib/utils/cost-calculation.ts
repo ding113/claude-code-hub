@@ -220,11 +220,7 @@ export function calculateRequestCostBreakdown(
   // Input tokens -> input bucket
   // 注意：一旦请求的“输入上下文总量”超过阈值，供应商官方定价按整次请求的全量 token
   // 应用 long-context 价格，而不是仅对超过阈值的部分加价。
-  if (
-    longContextThresholdExceeded &&
-    inputAboveThreshold != null &&
-    usage.input_tokens != null
-  ) {
+  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
     inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
@@ -241,11 +237,7 @@ export function calculateRequestCostBreakdown(
 
   // Output tokens -> output bucket
   // 与 input 相同：阈值判断基于整次请求的输入上下文，而不是 output bucket 自己的 token 数。
-  if (
-    longContextThresholdExceeded &&
-    outputAboveThreshold != null &&
-    usage.output_tokens != null
-  ) {
+  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
     outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
@@ -437,11 +429,7 @@ export function calculateRequestCost(
 
   // Input tokens
   // 注意：阈值命中后按整次请求的全量 token 应用 long-context 价格。
-  if (
-    longContextThresholdExceeded &&
-    inputAboveThreshold != null &&
-    usage.input_tokens != null
-  ) {
+  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
     segments.push(multiplyCost(usage.input_tokens, inputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
@@ -457,11 +445,7 @@ export function calculateRequestCost(
   }
 
   // Output tokens
-  if (
-    longContextThresholdExceeded &&
-    outputAboveThreshold != null &&
-    usage.output_tokens != null
-  ) {
+  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
     segments.push(multiplyCost(usage.output_tokens, outputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&

@@ -190,7 +190,13 @@ describe("价格表缺失/查询失败：请求不计费且不报错", () => {
     vi.mocked(findLatestPriceByModel).mockResolvedValue(null);
 
     const session = createSession({ originalModel: "m1", redirectedModel: "m2" });
-    await finalizeRequestStats(session, JSON.stringify({ type: "message", usage: null }), 502, 9, "bad upstream");
+    await finalizeRequestStats(
+      session,
+      JSON.stringify({ type: "message", usage: null }),
+      502,
+      9,
+      "bad upstream"
+    );
 
     expect(updateMessageRequestDetails).toHaveBeenCalledWith(
       2000,

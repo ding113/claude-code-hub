@@ -405,7 +405,6 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     const session = createSession({
       originalModel: "original-model",
       redirectedModel: "redirected-model",
-       
     });
 
     const provider = {
