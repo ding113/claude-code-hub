@@ -881,6 +881,9 @@ function applyPatchField<T>(
     case "codex_parallel_tool_calls_preference":
       updates.codex_parallel_tool_calls_preference = "inherit";
       return { ok: true, data: undefined };
+    case "codex_service_tier_preference":
+      updates.codex_service_tier_preference = "inherit";
+      return { ok: true, data: undefined };
     case "anthropic_max_tokens_preference":
       updates.anthropic_max_tokens_preference = "inherit";
       return { ok: true, data: undefined };

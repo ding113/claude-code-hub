@@ -2166,6 +2166,7 @@ export interface BatchUpdateProvidersParams {
     allowed_models?: string[] | null;
     allowed_clients?: string[];
     blocked_clients?: string[];
+    codex_service_tier_preference?: CodexServiceTierPreference | null;
     anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
     anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
   };
@@ -2219,6 +2220,9 @@ export async function batchUpdateProviders(
     }
     if (updates.blocked_clients !== undefined) {
       repositoryUpdates.blockedClients = updates.blocked_clients;
+    }
+    if (updates.codex_service_tier_preference !== undefined) {
+      repositoryUpdates.codexServiceTierPreference = updates.codex_service_tier_preference;
     }
     if (updates.anthropic_thinking_budget_preference !== undefined) {
       repositoryUpdates.anthropicThinkingBudgetPreference =
