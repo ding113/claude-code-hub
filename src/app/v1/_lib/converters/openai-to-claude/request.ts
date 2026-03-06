@@ -135,16 +135,32 @@ export function transformOpenAIRequestToClaude(
     toolsCount: req.tools?.length || 0,
   });
 
-  // 1. 提取 system 消息（从 messages 中提取 role: "system"）
+  // 1. 提取 system 消息（优先合并 request filter 注入的顶层 system 字段 + messages 中的 role: "system"）
   const systemMessages = req.messages?.filter((m) => m.role === "system") || [];
-  if (systemMessages.length > 0) {
-    const systemText = systemMessages
-      .map((m) => (typeof m.content === "string" ? m.content : ""))
-      .join("\n");
+  const messagesSystemText = systemMessages
+    .map((m) => (typeof m.content === "string" ? m.content : ""))
+    .filter(Boolean)
+    .join("\n");
 
-    if (systemText) {
-      output.system = systemText;
+  // 检查是否有 request filter 注入的顶层 system 字段
+  // OpenAI 格式本身没有顶层 system 字段，但 request filter 的 json_path 操作可能注入
+  let injectedSystemText: string | null = null;
+  const rawSystem = req.system;
+  if (typeof rawSystem === "string" && rawSystem) {
+    injectedSystemText = rawSystem;
+  } else if (Array.isArray(rawSystem)) {
+    const parts = (rawSystem as Array<{ type?: string; text?: string }>)
+      .filter((s) => s.type === "text" && typeof s.text === "string")
+      .map((s) => s.text as string);
+    if (parts.length > 0) {
+      injectedSystemText = parts.join("\n");
     }
+  }
+
+  // 合并系统提示：注入的系统提示词放在前面（优先），messages 中的系统消息追加在后
+  const systemParts = [injectedSystemText, messagesSystemText].filter(Boolean);
+  if (systemParts.length > 0) {
+    output.system = systemParts.join("\n");
   }
 
   // 2. 转换 messages（跳过 system 消息）
@@ -321,6 +337,8 @@ export function transformOpenAIRequestToClaude(
   logger.debug("[OpenAI→Claude] Request transformation completed", {
     messageCount: output.messages.length,
     hasSystem: !!output.system,
+    hasInjectedSystem: !!injectedSystemText,
+    hasMessagesSystem: !!messagesSystemText,
     hasTools: !!output.tools,
     toolsCount: output.tools?.length || 0,
     maxTokens: output.max_tokens,

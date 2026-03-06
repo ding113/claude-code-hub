@@ -1588,11 +1588,36 @@ export class ProxyForwarder {
       // ⭐ 直接使用原始请求路径，让 buildProxyUrl() 智能处理路径拼接
       // 移除了强制 /v1/responses 路径重写，解决 Issue #139
       // buildProxyUrl() 会检测 base_url 是否已包含完整路径，避免重复拼接
-      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
+      //
+      // 当发生跨格式转换时（如 openai-compatible → claude），需要将请求路径
+      // 重写为目标格式的标准端点，否则会把 Claude 格式的请求体发到 /v1/chat/completions
+      let effectiveRequestUrl = session.requestUrl;
+      if (fromFormat && toFormat && fromFormat !== toFormat && !isMcpRequest) {
+        const formatEndpointMap: Partial<Record<string, string>> = {
+          claude: "/v1/messages",
+          "openai-compatible": "/v1/chat/completions",
+          codex: "/v1/responses",
+        };
+        const targetPath = formatEndpointMap[toFormat];
+        if (targetPath && targetPath !== session.requestUrl.pathname) {
+          const rewritten = new URL(session.requestUrl);
+          rewritten.pathname = targetPath;
+          effectiveRequestUrl = rewritten;
+          logger.debug("ProxyForwarder: Rewrote request path for format conversion", {
+            from: fromFormat,
+            to: toFormat,
+            originalPath: session.requestUrl.pathname,
+            rewrittenPath: targetPath,
+          });
+        }
+      }
+
+      proxyUrl = buildProxyUrl(effectiveBaseUrl, effectiveRequestUrl);
 
       logger.debug("ProxyForwarder: Final proxy URL", {
         url: proxyUrl,
         originalPath: session.requestUrl.pathname,
+        effectivePath: effectiveRequestUrl.pathname,
         providerType: provider.providerType,
         mcpPassthroughType: provider.mcpPassthroughType,
         usedBaseUrl: effectiveBaseUrl,

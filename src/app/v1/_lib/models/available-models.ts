@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { request as undiciRequest } from "undici";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
+import { findAllProviders } from "@/repository/provider";
 import { validateApiKeyAndGetUser } from "@/repository/key";
 import type {
   AnthropicModelsResponse,
@@ -11,7 +12,7 @@ import type {
 import type { Provider } from "@/types/provider";
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
 import type { ClientFormat } from "../proxy/format-mapper";
-import { ProxyProviderResolver } from "../proxy/provider-selector";
+import { checkProviderGroupMatch, ProxyProviderResolver } from "../proxy/provider-selector";
 
 type ResponseFormat = "openai" | "anthropic" | "gemini" | "codex";
 
@@ -305,7 +306,110 @@ async function getAvailableModels(
   clientFormat: ClientFormat
 ): Promise<{ models: FetchedModel[]; providerName?: string }> {
   const providerTypes = getProviderTypesForFormat(clientFormat);
-  return getAvailableModelsByProviderTypes(authState, providerTypes);
+  const result = await getAvailableModelsByProviderTypes(authState, providerTypes);
+
+  // 当 clientFormat 为 openai 时，额外聚合 joinOpenAIPool=true 的 claude/claude-auth 服务商模型
+  if (clientFormat === "openai") {
+    const joinOpenAIResult = await getOpenAIPoolClaudeModels(authState);
+    if (joinOpenAIResult.models.length > 0) {
+      const seenIds = new Set(result.models.map((m) => m.id));
+      for (const model of joinOpenAIResult.models) {
+        if (!seenIds.has(model.id)) {
+          seenIds.add(model.id);
+          result.models.push(model);
+        }
+      }
+      result.models.sort((a, b) => a.id.localeCompare(b.id));
+      if (joinOpenAIResult.providerName) {
+        result.providerName = result.providerName
+          ? `${result.providerName}, ${joinOpenAIResult.providerName}`
+          : joinOpenAIResult.providerName;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 为 joinOpenAIPool 的 claude 服务商获取模型列表
+ *
+ * 这类服务商是 Claude 中转站，通常使用 Bearer Token 认证（而非 Anthropic 原生的 x-api-key）。
+ * 优先用 OpenAI 兼容格式获取；若失败则回退到 Anthropic 原生格式；若仍失败则返回空。
+ */
+async function fetchModelsFromOpenAIPoolProvider(provider: Provider): Promise<FetchedModel[]> {
+  if (provider.allowedModels && provider.allowedModels.length > 0) {
+    return provider.allowedModels.map((id) => ({ id }));
+  }
+
+  // 优先尝试 OpenAI 兼容格式（Bearer Token），适用于 Claude 中转站
+  try {
+    return await fetchModelsWithConfig(provider, UPSTREAM_CONFIGS.openai);
+  } catch {
+    logger.debug(
+      `[AvailableModels] OpenAI auth failed for joinOpenAIPool provider ${provider.name}, trying Anthropic auth`
+    );
+  }
+
+  // 回退到 Anthropic 原生格式
+  try {
+    return await fetchModelsWithConfig(provider, UPSTREAM_CONFIGS.claude);
+  } catch (error) {
+    logger.warn(`[AvailableModels] Failed to fetch from joinOpenAIPool provider ${provider.name}:`, error);
+    return [];
+  }
+}
+
+/**
+ * 获取所有 joinOpenAIPool=true 的 claude/claude-auth 服务商的模型列表
+ *
+ * 这些服务商配置了加入 OpenAI 调度池，其 claude 模型应在 /v1/models 中对外暴露。
+ */
+async function getOpenAIPoolClaudeModels(authState: {
+  user: { id: number; providerGroup: string | null };
+  key: { providerGroup: string | null };
+}): Promise<{ models: FetchedModel[]; providerName?: string }> {
+  const allProviders = await findAllProviders();
+
+  // 分组过滤（复用主流程的分组逻辑）
+  const effectiveGroupPick =
+    authState.key.providerGroup || authState.user.providerGroup || null;
+  let candidates = allProviders;
+  if (effectiveGroupPick) {
+    candidates = allProviders.filter((p) => checkProviderGroupMatch(p.groupTag, effectiveGroupPick));
+  }
+
+  const joinOpenAIProviders = candidates.filter(
+    (p) =>
+      p.isEnabled &&
+      p.joinOpenAIPool &&
+      (p.providerType === "claude" || p.providerType === "claude-auth")
+  );
+
+  if (joinOpenAIProviders.length === 0) {
+    return { models: [] };
+  }
+
+  const allModels: FetchedModel[] = [];
+  const seenIds = new Set<string>();
+
+  const fetchResults = await Promise.all(
+    joinOpenAIProviders.map((provider) => fetchModelsFromOpenAIPoolProvider(provider))
+  );
+
+  for (const models of fetchResults) {
+    for (const model of models) {
+      if (!seenIds.has(model.id)) {
+        seenIds.add(model.id);
+        allModels.push(model);
+      }
+    }
+  }
+
+  return {
+    models: allModels,
+    providerName: joinOpenAIProviders.map((p) => p.name).join(", "),
+  };
 }
 
 /**

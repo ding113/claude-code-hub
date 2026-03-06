@@ -992,40 +992,29 @@ export function ProviderForm({
                   })()}
 
                 {/* joinOpenAIPool 开关 - 仅 Claude/Claude-Auth 供应商显示 */}
-                {(providerType === "claude" || providerType === "claude-auth") &&
-                  (() => {
-                    // 检查是否有从非 Claude 模型名到 Claude 模型的重定向映射
-                    const hasOpenAIRedirects = Object.entries(modelRedirects).some(
-                      ([source, target]) =>
-                        !source.startsWith("claude-") && target.startsWith("claude-")
-                    );
-
-                    if (!hasOpenAIRedirects) return null;
-
-                    return (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <Label htmlFor={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}>
-                              {t("sections.routing.joinOpenAIPool.label")}
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                              {t("sections.routing.joinOpenAIPool.desc")}
-                            </p>
-                          </div>
-                          <Switch
-                            id={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}
-                            checked={joinOpenAIPool}
-                            onCheckedChange={setJoinOpenAIPool}
-                            disabled={isPending}
-                          />
-                        </div>
+                {(providerType === "claude" || providerType === "claude-auth") && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}>
+                          {t("sections.routing.joinOpenAIPool.label")}
+                        </Label>
                         <p className="text-xs text-muted-foreground">
-                          {t("sections.routing.joinOpenAIPool.help")}
+                          {t("sections.routing.joinOpenAIPool.desc")}
                         </p>
                       </div>
-                    );
-                  })()}
+                      <Switch
+                        id={isEdit ? "edit-join-openai-pool" : "join-openai-pool"}
+                        checked={joinOpenAIPool}
+                        onCheckedChange={setJoinOpenAIPool}
+                        disabled={isPending}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.joinOpenAIPool.help")}
+                    </p>
+                  </div>
+                )}
 
                 {/* 模型白名单配置 */}
                 <div className="space-y-1">

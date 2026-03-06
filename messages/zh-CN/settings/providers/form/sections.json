@@ -24,8 +24,8 @@
     },
     "joinOpenAIPool": {
       "label": "加入 OpenAI 调度池",
-      "desc": "启用后，此 Claude 供应商将同时参与 OpenAI 格式请求的负载均衡调度",
-      "help": "仅当模型重定向配置中存在非 claude-* 源映射到 claude-* 目标时可用（如 gpt-4 → claude-3-5-sonnet）。启用后，当用户通过 /v1/chat/completions 发送请求时，此供应商也会参与调度。"
+      "desc": "启用后，此 Claude 供应商将同时参与 OpenAI 格式（/v1/chat/completions）请求的负载均衡调度",
+      "help": "启用后，客户端可直接通过 /v1/chat/completions 使用 Claude 模型名发起请求，系统自动完成格式转换。/v1/models 接口也会返回此供应商的模型列表。"
     },
     "preserveClientIp": {
       "label": "透传客户端 IP",

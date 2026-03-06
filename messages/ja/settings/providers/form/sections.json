@@ -232,9 +232,9 @@
       "label": "Claude ルーティングプールに参加"
     },
     "joinOpenAIPool": {
-      "desc": "有効にすると、この Claude プロバイダーが OpenAI 形式リクエストの負荷分散にも参加します",
-      "help": "モデルリダイレクト設定に claude-* 以外のソースから claude-* へのマッピングがある場合のみ利用できます（例: gpt-4 → claude-3-5-sonnet）。有効にすると、/v1/chat/completions へのリクエスト時もスケジューリング対象になります。",
-      "label": "OpenAI ルーティングプールに参加"
+      "label": "OpenAI ルーティングプールに参加",
+      "desc": "有効にすると、この Claude プロバイダーが OpenAI 形式（/v1/chat/completions）リクエストの負荷分散にも参加します",
+      "help": "有効にすると、クライアントは /v1/chat/completions を通じて Claude モデル名で直接リクエストを送信でき、フォーマット変換は自動的に処理されます。/v1/models エンドポイントもこのプロバイダーのモデル一覧を返します。"
     },
     "modelRedirects": {
       "label": "モデルリダイレクト設定",
