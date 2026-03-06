@@ -216,6 +216,7 @@
     "pinAction": "Pin as local price",
     "pinSuccess": "Pinned {provider} pricing as local model price",
     "pinFailed": "Failed to pin provider pricing",
-    "pinned": "Pinned"
+    "pinned": "Pinned",
+    "priority": "Priority"
   }
 }

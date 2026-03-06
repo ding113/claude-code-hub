@@ -110,10 +110,19 @@ function buildSettingKey(setting: SpecialSetting): string {
     case "pricing_resolution":
       return JSON.stringify([
         setting.type,
+        setting.hit,
         setting.modelName,
         setting.resolvedModelName,
         setting.resolvedPricingProviderKey,
         setting.source,
+      ]);
+    case "codex_service_tier_result":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.requestedServiceTier,
+        setting.actualServiceTier,
+        setting.effectivePriority,
       ]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
@@ -182,6 +191,17 @@ export function hasPriorityServiceTierSpecialSetting(
     return false;
   }
 
+  const codexServiceTierResult = specialSettings.find(
+    (setting): setting is Extract<SpecialSetting, { type: "codex_service_tier_result" }> =>
+      setting.type === "codex_service_tier_result"
+  );
+  if (codexServiceTierResult) {
+    if (codexServiceTierResult.actualServiceTier != null) {
+      return codexServiceTierResult.actualServiceTier === "priority";
+    }
+    return codexServiceTierResult.effectivePriority;
+  }
+
   return specialSettings.some(
     (setting) =>
       setting.type === "provider_parameter_override" &&
@@ -189,6 +209,21 @@ export function hasPriorityServiceTierSpecialSetting(
       setting.changes.some(
         (change) => change.path === "service_tier" && change.after === "priority"
       )
+  );
+}
+
+export function getPriorityServiceTierSpecialSetting(
+  specialSettings?: SpecialSetting[] | null
+): Extract<SpecialSetting, { type: "codex_service_tier_result" }> | null {
+  if (!Array.isArray(specialSettings) || specialSettings.length === 0) {
+    return null;
+  }
+
+  return (
+    specialSettings.find(
+      (setting): setting is Extract<SpecialSetting, { type: "codex_service_tier_result" }> =>
+        setting.type === "codex_service_tier_result"
+    ) ?? null
   );
 }
 

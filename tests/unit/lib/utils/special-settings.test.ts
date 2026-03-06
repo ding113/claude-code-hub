@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { SpecialSetting } from "@/types/special-settings";
-import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
+import {
+  buildUnifiedSpecialSettings,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 
 describe("buildUnifiedSpecialSettings", () => {
   test("无任何输入时应返回 null", () => {
@@ -157,5 +160,47 @@ describe("buildUnifiedSpecialSettings", () => {
 
     expect(settings).not.toBeNull();
     expect(settings?.filter((s) => s.type === "guard_intercept").length).toBe(1);
+  });
+});
+
+describe("hasPriorityServiceTierSpecialSetting", () => {
+  test("returns true when codex actual service tier is priority", () => {
+    expect(
+      hasPriorityServiceTierSpecialSetting([
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "default",
+          actualServiceTier: "priority",
+          effectivePriority: true,
+        },
+      ])
+    ).toBe(true);
+  });
+
+  test("returns false when codex actual service tier is non-priority even if request was priority", () => {
+    expect(
+      hasPriorityServiceTierSpecialSetting([
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 1,
+          providerName: "p",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "service_tier", before: null, after: "priority", changed: true }],
+        },
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "priority",
+          actualServiceTier: "default",
+          effectivePriority: false,
+        },
+      ])
+    ).toBe(false);
   });
 });

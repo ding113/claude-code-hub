@@ -20,7 +20,10 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
-import { getPricingResolutionSpecialSetting } from "@/lib/utils/special-settings";
+import {
+  getPricingResolutionSpecialSetting,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 import { getFake200ReasonKey } from "../../fake200-reason";
 import {
   calculateOutputRate,
@@ -72,6 +75,7 @@ export function SummaryTab({
   const pricingSourceLabel = pricingResolution
     ? t(`billingDetails.pricingSource.${pricingResolution.source}`)
     : null;
+  const hasPriorityServiceTier = hasPriorityServiceTierSpecialSetting(specialSettings);
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
   const fake200Code =
@@ -357,6 +361,18 @@ export function SummaryTab({
                   </div>
                 </div>
               )}
+
+              {hasPriorityServiceTier ? (
+                <div className="flex justify-between items-center col-span-2">
+                  <span className="text-muted-foreground">{t("billingDetails.fast")}:</span>
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                  >
+                    {t("billingDetails.fastPriority")}
+                  </Badge>
+                </div>
+              ) : null}
 
               {pricingResolution && pricingSourceLabel ? (
                 <>

@@ -17,7 +17,8 @@ export type SpecialSetting =
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting
   | GeminiGoogleSearchOverrideSpecialSetting
-  | PricingResolutionSpecialSetting;
+  | PricingResolutionSpecialSetting
+  | CodexServiceTierResultSpecialSetting;
 
 export type SpecialSettingChangeValue = string | number | boolean | null;
 
@@ -214,4 +215,13 @@ export type PricingResolutionSpecialSetting = {
     | "priority_fallback"
     | "single_provider_top_level"
     | "official_fallback";
+};
+
+export type CodexServiceTierResultSpecialSetting = {
+  type: "codex_service_tier_result";
+  scope: "response";
+  hit: boolean;
+  requestedServiceTier: string | null;
+  actualServiceTier: string | null;
+  effectivePriority: boolean;
 };

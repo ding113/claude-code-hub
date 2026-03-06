@@ -215,6 +215,7 @@
     "pinAction": "固化為本地價格",
     "pinSuccess": "已將 {provider} 價格固化為本地模型價格",
     "pinFailed": "固化供應商價格失敗",
-    "pinned": "已固化"
+    "pinned": "已固化",
+    "priority": "優先"
   }
 }

@@ -137,15 +137,24 @@ export interface CostBreakdown {
 export function calculateRequestCostBreakdown(
   usage: UsageMetrics,
   priceData: ModelPriceData,
-  context1mApplied: boolean = false
+  context1mApplied: boolean = false,
+  priorityServiceTierApplied: boolean = false
 ): CostBreakdown {
   let inputBucket = new Decimal(0);
   let outputBucket = new Decimal(0);
   let cacheCreationBucket = new Decimal(0);
   let cacheReadBucket = new Decimal(0);
 
-  const inputCostPerToken = priceData.input_cost_per_token;
-  const outputCostPerToken = priceData.output_cost_per_token;
+  const baseInputCostPerToken = priceData.input_cost_per_token;
+  const baseOutputCostPerToken = priceData.output_cost_per_token;
+  const inputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.input_cost_per_token_priority === "number"
+      ? priceData.input_cost_per_token_priority
+      : baseInputCostPerToken;
+  const outputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.output_cost_per_token_priority === "number"
+      ? priceData.output_cost_per_token_priority
+      : baseOutputCostPerToken;
   const inputCostPerRequest = priceData.input_cost_per_request;
 
   // Per-request cost -> input bucket
@@ -162,19 +171,22 @@ export function calculateRequestCostBreakdown(
 
   const cacheCreation5mCost =
     priceData.cache_creation_input_token_cost ??
-    (inputCostPerToken != null ? inputCostPerToken * 1.25 : undefined);
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 1.25 : undefined);
 
   const cacheCreation1hCost =
     priceData.cache_creation_input_token_cost_above_1hr ??
-    (inputCostPerToken != null ? inputCostPerToken * 2 : undefined) ??
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 2 : undefined) ??
     cacheCreation5mCost;
 
   const cacheReadCost =
-    priceData.cache_read_input_token_cost ??
-    (inputCostPerToken != null
-      ? inputCostPerToken * 0.1
-      : outputCostPerToken != null
-        ? outputCostPerToken * 0.1
+    (priorityServiceTierApplied &&
+    typeof priceData.cache_read_input_token_cost_priority === "number"
+      ? priceData.cache_read_input_token_cost_priority
+      : priceData.cache_read_input_token_cost) ??
+    (baseInputCostPerToken != null
+      ? baseInputCostPerToken * 0.1
+      : baseOutputCostPerToken != null
+        ? baseOutputCostPerToken * 0.1
         : undefined);
 
   // Derive cache creation tokens by TTL
@@ -225,6 +237,7 @@ export function calculateRequestCostBreakdown(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     inputCostPerToken != null &&
     usage.input_tokens != null
   ) {
@@ -242,6 +255,7 @@ export function calculateRequestCostBreakdown(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     outputCostPerToken != null &&
     usage.output_tokens != null
   ) {
@@ -267,6 +281,7 @@ export function calculateRequestCostBreakdown(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
@@ -280,6 +295,7 @@ export function calculateRequestCostBreakdown(
   // Cache creation 1h -> cache_creation bucket
   if (
     longContextThresholdExceeded &&
+    hasRealCacheCreationBase &&
     cacheCreation1hAboveThreshold != null &&
     cache1hTokens != null
   ) {
@@ -289,6 +305,7 @@ export function calculateRequestCostBreakdown(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {
@@ -351,12 +368,21 @@ export function calculateRequestCost(
   usage: UsageMetrics,
   priceData: ModelPriceData,
   multiplier: number = 1.0,
-  context1mApplied: boolean = false
+  context1mApplied: boolean = false,
+  priorityServiceTierApplied: boolean = false
 ): Decimal {
   const segments: Decimal[] = [];
 
-  const inputCostPerToken = priceData.input_cost_per_token;
-  const outputCostPerToken = priceData.output_cost_per_token;
+  const baseInputCostPerToken = priceData.input_cost_per_token;
+  const baseOutputCostPerToken = priceData.output_cost_per_token;
+  const inputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.input_cost_per_token_priority === "number"
+      ? priceData.input_cost_per_token_priority
+      : baseInputCostPerToken;
+  const outputCostPerToken =
+    priorityServiceTierApplied && typeof priceData.output_cost_per_token_priority === "number"
+      ? priceData.output_cost_per_token_priority
+      : baseOutputCostPerToken;
   const inputCostPerRequest = priceData.input_cost_per_request;
 
   if (
@@ -372,19 +398,22 @@ export function calculateRequestCost(
 
   const cacheCreation5mCost =
     priceData.cache_creation_input_token_cost ??
-    (inputCostPerToken != null ? inputCostPerToken * 1.25 : undefined);
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 1.25 : undefined);
 
   const cacheCreation1hCost =
     priceData.cache_creation_input_token_cost_above_1hr ??
-    (inputCostPerToken != null ? inputCostPerToken * 2 : undefined) ??
+    (baseInputCostPerToken != null ? baseInputCostPerToken * 2 : undefined) ??
     cacheCreation5mCost;
 
   const cacheReadCost =
-    priceData.cache_read_input_token_cost ??
-    (inputCostPerToken != null
-      ? inputCostPerToken * 0.1
-      : outputCostPerToken != null
-        ? outputCostPerToken * 0.1
+    (priorityServiceTierApplied &&
+    typeof priceData.cache_read_input_token_cost_priority === "number"
+      ? priceData.cache_read_input_token_cost_priority
+      : priceData.cache_read_input_token_cost) ??
+    (baseInputCostPerToken != null
+      ? baseInputCostPerToken * 0.1
+      : baseOutputCostPerToken != null
+        ? baseOutputCostPerToken * 0.1
         : undefined);
 
   // Derive cache creation tokens by TTL
@@ -434,6 +463,7 @@ export function calculateRequestCost(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     inputCostPerToken != null &&
     usage.input_tokens != null
   ) {
@@ -450,6 +480,7 @@ export function calculateRequestCost(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     outputCostPerToken != null &&
     usage.output_tokens != null
   ) {
@@ -475,6 +506,7 @@ export function calculateRequestCost(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
@@ -488,6 +520,7 @@ export function calculateRequestCost(
   // 缓存创建费用（1小时 TTL）：优先级 explicit long-context > context1m fallback > 普通
   if (
     longContextThresholdExceeded &&
+    hasRealCacheCreationBase &&
     cacheCreation1hAboveThreshold != null &&
     cache1hTokens != null
   ) {
@@ -495,6 +528,7 @@ export function calculateRequestCost(
   } else if (
     longContextThresholdExceeded &&
     context1mApplied &&
+    !priorityServiceTierApplied &&
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {

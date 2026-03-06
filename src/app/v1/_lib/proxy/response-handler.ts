@@ -139,6 +139,94 @@ function ensurePricingResolutionSpecialSetting(
   });
 }
 
+function getRequestedCodexServiceTier(session: ProxySession): string | null {
+  if (session.provider?.providerType !== "codex") {
+    return null;
+  }
+
+  const request = session.request.message as Record<string, unknown>;
+  return typeof request.service_tier === "string" ? request.service_tier : null;
+}
+
+export function parseServiceTierFromResponseText(responseText: string): string | null {
+  let lastSeenServiceTier: string | null = null;
+
+  const applyValue = (value: unknown) => {
+    if (typeof value === "string" && value.trim()) {
+      lastSeenServiceTier = value.trim();
+    }
+  };
+
+  try {
+    const parsedValue = JSON.parse(responseText);
+    if (parsedValue && typeof parsedValue === "object" && !Array.isArray(parsedValue)) {
+      const parsed = parsedValue as Record<string, unknown>;
+      applyValue(parsed.service_tier);
+      if (parsed.response && typeof parsed.response === "object") {
+        applyValue((parsed.response as Record<string, unknown>).service_tier);
+      }
+    }
+  } catch {
+    // ignore, fallback to SSE parsing below
+  }
+
+  if (lastSeenServiceTier) {
+    return lastSeenServiceTier;
+  }
+
+  if (isSSEText(responseText)) {
+    const events = parseSSEData(responseText);
+    for (const event of events) {
+      if (!event.data || typeof event.data !== "object") continue;
+      const data = event.data as Record<string, unknown>;
+      applyValue(data.service_tier);
+      if (data.response && typeof data.response === "object") {
+        applyValue((data.response as Record<string, unknown>).service_tier);
+      }
+    }
+  }
+
+  return lastSeenServiceTier;
+}
+
+function isPriorityServiceTierApplied(
+  session: ProxySession,
+  actualServiceTier: string | null
+): boolean {
+  if (actualServiceTier != null) {
+    return actualServiceTier === "priority";
+  }
+  return getRequestedCodexServiceTier(session) === "priority";
+}
+
+function ensureCodexServiceTierResultSpecialSetting(
+  session: ProxySession,
+  actualServiceTier: string | null
+): void {
+  if (session.provider?.providerType !== "codex") {
+    return;
+  }
+
+  const requestedServiceTier = getRequestedCodexServiceTier(session);
+  const effectivePriority = isPriorityServiceTierApplied(session, actualServiceTier);
+  const existing = session
+    .getSpecialSettings()
+    ?.find((setting) => setting.type === "codex_service_tier_result");
+
+  if (existing && existing.type === "codex_service_tier_result") {
+    return;
+  }
+
+  session.addSpecialSetting({
+    type: "codex_service_tier_result",
+    scope: "response",
+    hit: effectivePriority || requestedServiceTier != null || actualServiceTier != null,
+    requestedServiceTier,
+    actualServiceTier,
+    effectivePriority,
+  });
+}
+
 type FinalizeDeferredStreamingResult = {
   /**
    * “内部结算用”的状态码。
@@ -761,6 +849,12 @@ export class ProxyResponseHandler {
         const usageResult = parseUsageFromResponseText(responseText, provider.providerType);
         usageRecord = usageResult.usageRecord;
         usageMetrics = usageResult.usageMetrics;
+        const actualServiceTier = parseServiceTierFromResponseText(responseText);
+        ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
+        const priorityServiceTierApplied = isPriorityServiceTierApplied(
+          session,
+          actualServiceTier
+        );
 
         if (usageMetrics) {
           usageMetrics = normalizeUsageWithSwap(
@@ -808,11 +902,12 @@ export class ProxyResponseHandler {
             usageMetrics,
             provider,
             provider.costMultiplier,
-            session.getContext1mApplied()
+            session.getContext1mApplied(),
+            priorityServiceTierApplied
           );
 
           // 追踪消费到 Redis（用于限流）
-          await trackCostToRedis(session, usageMetrics);
+          await trackCostToRedis(session, usageMetrics, priorityServiceTierApplied);
         }
 
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
@@ -829,7 +924,8 @@ export class ProxyResponseHandler {
                   usageMetrics,
                   resolvedPricing.priceData,
                   provider.costMultiplier,
-                  session.getContext1mApplied()
+                  session.getContext1mApplied(),
+                  priorityServiceTierApplied
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
@@ -840,7 +936,8 @@ export class ProxyResponseHandler {
                     usageMetrics,
                     resolvedPricing.priceData,
                     1.0,
-                    session.getContext1mApplied()
+                    session.getContext1mApplied(),
+                    priorityServiceTierApplied
                   );
                   if (rawCost.gt(0)) {
                     rawCostUsdStr = rawCost.toString();
@@ -853,7 +950,8 @@ export class ProxyResponseHandler {
                   costBreakdown = calculateRequestCostBreakdown(
                     usageMetrics,
                     resolvedPricing.priceData,
-                    session.getContext1mApplied()
+                    session.getContext1mApplied(),
+                    priorityServiceTierApplied
                   );
                 } catch {
                   /* non-critical */
@@ -1228,8 +1326,7 @@ export class ProxyResponseHandler {
                 headBufferedBytes += bytes;
               }
             } else {
-              inTailMode = true;
-              pushToTail();
+              pushChunk(text, bytes);
             }
           };
           const decoder = new TextDecoder();
@@ -1617,7 +1714,7 @@ export class ProxyResponseHandler {
     const statusCode = response.status;
 
     // 使用 AsyncTaskManager 管理后台处理任务
-    const taskId = `stream-${messageContext.id}`;
+    const taskId = `stream-${messageContext?.id || `unknown-${Date.now()}`}`;
     const abortController = new AbortController();
 
     // ⭐ 提升 idleTimeoutId 到外部作用域，以便客户端断开时能清除
@@ -1744,6 +1841,13 @@ export class ProxyResponseHandler {
         const usageResult = parseUsageFromResponseText(allContent, provider.providerType);
         usageForCost = usageResult.usageMetrics;
 
+        const actualServiceTier = parseServiceTierFromResponseText(allContent);
+        ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
+        const priorityServiceTierApplied = isPriorityServiceTierApplied(
+          session,
+          actualServiceTier
+        );
+
         if (usageForCost) {
           usageForCost = normalizeUsageWithSwap(
             usageForCost,
@@ -1785,11 +1889,12 @@ export class ProxyResponseHandler {
           usageForCost,
           provider,
           provider.costMultiplier,
-          session.getContext1mApplied()
+          session.getContext1mApplied(),
+          priorityServiceTierApplied
         );
 
         // 追踪消费到 Redis（用于限流）
-        await trackCostToRedis(session, usageForCost);
+        await trackCostToRedis(session, usageForCost, priorityServiceTierApplied);
 
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
         let costUsdStr: string | undefined;
@@ -1805,7 +1910,8 @@ export class ProxyResponseHandler {
                   usageForCost,
                   resolvedPricing.priceData,
                   provider.costMultiplier,
-                  session.getContext1mApplied()
+                  session.getContext1mApplied(),
+                  priorityServiceTierApplied
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
@@ -1816,7 +1922,8 @@ export class ProxyResponseHandler {
                     usageForCost,
                     resolvedPricing.priceData,
                     1.0,
-                    session.getContext1mApplied()
+                    session.getContext1mApplied(),
+                    priorityServiceTierApplied
                   );
                   if (rawCost.gt(0)) {
                     rawCostUsdStr = rawCost.toString();
@@ -1829,7 +1936,8 @@ export class ProxyResponseHandler {
                   costBreakdown = calculateRequestCostBreakdown(
                     usageForCost,
                     resolvedPricing.priceData,
-                    session.getContext1mApplied()
+                    session.getContext1mApplied(),
+                    priorityServiceTierApplied
                   );
                 } catch {
                   /* non-critical */
@@ -2219,7 +2327,7 @@ export class ProxyResponseHandler {
   }
 }
 
-function extractUsageMetrics(value: unknown): UsageMetrics | null {
+export function extractUsageMetrics(value: unknown): UsageMetrics | null {
   if (!value || typeof value !== "object") {
     return null;
   }
@@ -2775,7 +2883,8 @@ async function updateRequestCostFromUsage(
   usage: UsageMetrics | null,
   provider: Provider | null,
   costMultiplier: number = 1.0,
-  context1mApplied: boolean = false
+  context1mApplied: boolean = false,
+  priorityServiceTierApplied: boolean = false
 ): Promise<void> {
   if (!usage) {
     logger.warn("[CostCalculation] No usage data, skipping cost update", {
@@ -2841,7 +2950,8 @@ async function updateRequestCostFromUsage(
       usage,
       resolvedPricing.priceData,
       costMultiplier,
-      context1mApplied
+      context1mApplied,
+      priorityServiceTierApplied
     );
 
     logger.info("[CostCalculation] Cost calculated successfully", {
@@ -2899,6 +3009,9 @@ export async function finalizeRequestStats(
 
   const providerIdForPersistence = providerIdOverride ?? session.provider?.id;
   const { usageMetrics } = parseUsageFromResponseText(responseText, provider.providerType);
+  const actualServiceTier = parseServiceTierFromResponseText(responseText);
+  ensureCodexServiceTierResultSpecialSetting(session, actualServiceTier);
+  const priorityServiceTierApplied = isPriorityServiceTierApplied(session, actualServiceTier);
   if (!usageMetrics) {
     await updateMessageRequestDetails(messageContext.id, {
       statusCode: statusCode,
@@ -2930,11 +3043,12 @@ export async function finalizeRequestStats(
     normalizedUsage,
     provider,
     provider.costMultiplier,
-    session.getContext1mApplied()
+    session.getContext1mApplied(),
+    priorityServiceTierApplied
   );
 
   // 5. 追踪消费到 Redis（用于限流）
-  await trackCostToRedis(session, normalizedUsage);
+  await trackCostToRedis(session, normalizedUsage, priorityServiceTierApplied);
 
   // 6. 更新 session usage
   if (session.sessionId) {
@@ -2948,7 +3062,8 @@ export async function finalizeRequestStats(
             normalizedUsage,
             resolvedPricing.priceData,
             provider.costMultiplier,
-            session.getContext1mApplied()
+            session.getContext1mApplied(),
+            priorityServiceTierApplied
           );
           if (cost.gt(0)) {
             costUsdStr = cost.toString();
@@ -3001,7 +3116,11 @@ export async function finalizeRequestStats(
 /**
  * 追踪消费到 Redis（用于限流）
  */
-async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | null): Promise<void> {
+async function trackCostToRedis(
+  session: ProxySession,
+  usage: UsageMetrics | null,
+  priorityServiceTierApplied: boolean = false
+): Promise<void> {
   if (!usage || !session.sessionId) return;
 
   try {
@@ -3015,7 +3134,6 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
     const modelName = session.request.model;
     if (!modelName) return;
 
-    // 计算成本（应用倍率）- 使用 session 缓存避免重复查询
     const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
     if (!resolvedPricing) return;
 
@@ -3025,7 +3143,8 @@ async function trackCostToRedis(session: ProxySession, usage: UsageMetrics | nul
       usage,
       resolvedPricing.priceData,
       provider.costMultiplier,
-      session.getContext1mApplied()
+      session.getContext1mApplied(),
+      priorityServiceTierApplied
     );
     if (cost.lte(0)) return;
 

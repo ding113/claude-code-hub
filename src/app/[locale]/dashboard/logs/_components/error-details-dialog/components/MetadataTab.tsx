@@ -20,7 +20,10 @@ import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
-import { getPricingResolutionSpecialSetting } from "@/lib/utils/special-settings";
+import {
+  getPricingResolutionSpecialSetting,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 import type { MetadataTabProps } from "../types";
 
 export function MetadataTab({
@@ -54,6 +57,7 @@ export function MetadataTab({
   const pricingSourceLabel = pricingResolution
     ? t(`billingDetails.pricingSource.${pricingResolution.source}`)
     : null;
+  const hasPriorityServiceTier = hasPriorityServiceTierSpecialSetting(specialSettings);
 
   const handleCopyTimeline = () => {
     if (!providerChain) return;
@@ -244,6 +248,18 @@ export function MetadataTab({
                   </div>
                 </div>
               )}
+
+              {hasPriorityServiceTier ? (
+                <div className="flex justify-between items-center col-span-2">
+                  <span className="text-muted-foreground">{t("billingDetails.fast")}:</span>
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                  >
+                    {t("billingDetails.fastPriority")}
+                  </Badge>
+                </div>
+              ) : null}
 
               {pricingResolution && pricingSourceLabel ? (
                 <>
