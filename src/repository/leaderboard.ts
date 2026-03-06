@@ -8,6 +8,8 @@ import type { ProviderType } from "@/types/provider";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { getSystemSettings } from "./system-config";
 
+const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(value ?? 0, 0), 1);
+
 /**
  * 排行榜条目类型
  */
@@ -43,6 +45,27 @@ export interface ProviderLeaderboardEntry {
   avgTokensPerSecond: number; // tok/s（仅统计流式且可计算的请求）
   avgCostPerRequest: number | null; // totalCost / totalRequests, null when totalRequests === 0
   avgCostPerMillionTokens: number | null; // totalCost * 1_000_000 / totalTokens, null when totalTokens === 0
+  /**
+   * 可选：按模型拆分
+   * - undefined: 未请求 includeModelStats
+   * - []: 已请求 includeModelStats，但该 provider 下无可用模型统计
+   */
+  modelStats?: ModelProviderStat[];
+}
+
+/**
+ * 供应商消耗排行榜 - 模型级统计
+ */
+export interface ModelProviderStat {
+  model: string;
+  totalRequests: number;
+  totalCost: number;
+  totalTokens: number;
+  successRate: number; // 0-1
+  avgTtfbMs: number; // 毫秒
+  avgTokensPerSecond: number; // tok/s
+  avgCostPerRequest: number | null;
+  avgCostPerMillionTokens: number | null;
 }
 
 /**
@@ -284,43 +307,75 @@ export async function findCustomRangeLeaderboard(
 /**
  * 查询今日供应商消耗排行榜（不限制数量）
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于系统时区
+ * includeModelStats=true 时会额外返回按模型拆分的统计数据（modelStats）
  */
 export async function findDailyProviderLeaderboard(
-  providerType?: ProviderType
+  providerType?: ProviderType,
+  includeModelStats?: boolean
 ): Promise<ProviderLeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findProviderLeaderboardWithTimezone("daily", timezone, undefined, providerType);
+  return findProviderLeaderboardWithTimezone(
+    "daily",
+    timezone,
+    undefined,
+    providerType,
+    includeModelStats
+  );
 }
 
 /**
  * 查询本月供应商消耗排行榜（不限制数量）
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于系统时区
+ * includeModelStats=true 时会额外返回按模型拆分的统计数据（modelStats）
  */
 export async function findMonthlyProviderLeaderboard(
-  providerType?: ProviderType
+  providerType?: ProviderType,
+  includeModelStats?: boolean
 ): Promise<ProviderLeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findProviderLeaderboardWithTimezone("monthly", timezone, undefined, providerType);
+  return findProviderLeaderboardWithTimezone(
+    "monthly",
+    timezone,
+    undefined,
+    providerType,
+    includeModelStats
+  );
 }
 
 /**
  * 查询本周供应商消耗排行榜（不限制数量）
+ * includeModelStats=true 时会额外返回按模型拆分的统计数据（modelStats）
  */
 export async function findWeeklyProviderLeaderboard(
-  providerType?: ProviderType
+  providerType?: ProviderType,
+  includeModelStats?: boolean
 ): Promise<ProviderLeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findProviderLeaderboardWithTimezone("weekly", timezone, undefined, providerType);
+  return findProviderLeaderboardWithTimezone(
+    "weekly",
+    timezone,
+    undefined,
+    providerType,
+    includeModelStats
+  );
 }
 
 /**
  * 查询全部时间供应商消耗排行榜（不限制数量）
+ * includeModelStats=true 时会额外返回按模型拆分的统计数据（modelStats）
  */
 export async function findAllTimeProviderLeaderboard(
-  providerType?: ProviderType
+  providerType?: ProviderType,
+  includeModelStats?: boolean
 ): Promise<ProviderLeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findProviderLeaderboardWithTimezone("allTime", timezone, undefined, providerType);
+  return findProviderLeaderboardWithTimezone(
+    "allTime",
+    timezone,
+    undefined,
+    providerType,
+    includeModelStats
+  );
 }
 
 /**
@@ -385,12 +440,14 @@ export async function findAllTimeProviderCacheHitRateLeaderboard(
 
 /**
  * 通用供应商排行榜查询函数（使用 SQL AT TIME ZONE 确保时区正确）
+ * includeModelStats=true 时会额外返回按模型拆分的统计数据（modelStats）
  */
 async function findProviderLeaderboardWithTimezone(
   period: LeaderboardPeriod,
   timezone: string,
   dateRange?: DateRangeParams,
-  providerType?: ProviderType
+  providerType?: ProviderType,
+  includeModelStats?: boolean
 ): Promise<ProviderLeaderboardEntry[]> {
   const whereConditions = [
     LEDGER_BILLING_CONDITION,
@@ -398,41 +455,53 @@ async function findProviderLeaderboardWithTimezone(
     providerType ? eq(providers.providerType, providerType) : undefined,
   ];
 
+  const totalRequestsExpr = sql<number>`count(*)::double precision`;
+  const totalCostExpr = sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`;
+  const totalTokensExpr = sql<number>`COALESCE(
+    sum(
+      ${usageLedger.inputTokens} +
+      ${usageLedger.outputTokens} +
+      COALESCE(${usageLedger.cacheCreationInputTokens}, 0) +
+      COALESCE(${usageLedger.cacheReadInputTokens}, 0)
+    )::double precision,
+    0::double precision
+  )`;
+  const successRateExpr = sql<number>`COALESCE(
+    count(CASE WHEN ${usageLedger.isSuccess} THEN 1 END)::double precision
+    / NULLIF(count(*)::double precision, 0),
+    0::double precision
+  )`;
+  const avgTtfbMsExpr = sql<number>`COALESCE(avg(${usageLedger.ttfbMs})::double precision, 0::double precision)`;
+  const avgTokensPerSecondExpr = sql<number>`COALESCE(
+    avg(
+      CASE
+        WHEN ${usageLedger.outputTokens} > 0
+          AND ${usageLedger.durationMs} IS NOT NULL
+          AND ${usageLedger.ttfbMs} IS NOT NULL
+          AND ${usageLedger.ttfbMs} < ${usageLedger.durationMs}
+          AND (${usageLedger.durationMs} - ${usageLedger.ttfbMs}) >= 100
+        THEN (${usageLedger.outputTokens}::double precision)
+          / ((${usageLedger.durationMs} - ${usageLedger.ttfbMs}) / 1000.0)
+      END
+    )::double precision,
+    0::double precision
+  )`;
+
+  const computeAvgCosts = (totalCost: number, totalRequests: number, totalTokens: number) => ({
+    avgCostPerRequest: totalRequests > 0 ? totalCost / totalRequests : null,
+    avgCostPerMillionTokens: totalTokens > 0 ? (totalCost * 1_000_000) / totalTokens : null,
+  });
+
   const rankings = await db
     .select({
       providerId: usageLedger.finalProviderId,
       providerName: providers.name,
-      totalRequests: sql<number>`count(*)::double precision`,
-      totalCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
-      totalTokens: sql<number>`COALESCE(
-        sum(
-          ${usageLedger.inputTokens} +
-          ${usageLedger.outputTokens} +
-          COALESCE(${usageLedger.cacheCreationInputTokens}, 0) +
-          COALESCE(${usageLedger.cacheReadInputTokens}, 0)
-        )::double precision,
-        0::double precision
-      )`,
-      successRate: sql<number>`COALESCE(
-        count(CASE WHEN ${usageLedger.isSuccess} THEN 1 END)::double precision
-        / NULLIF(count(*)::double precision, 0),
-        0::double precision
-      )`,
-      avgTtfbMs: sql<number>`COALESCE(avg(${usageLedger.ttfbMs})::double precision, 0::double precision)`,
-      avgTokensPerSecond: sql<number>`COALESCE(
-        avg(
-          CASE
-            WHEN ${usageLedger.outputTokens} > 0
-              AND ${usageLedger.durationMs} IS NOT NULL
-              AND ${usageLedger.ttfbMs} IS NOT NULL
-              AND ${usageLedger.ttfbMs} < ${usageLedger.durationMs}
-              AND (${usageLedger.durationMs} - ${usageLedger.ttfbMs}) >= 100
-            THEN (${usageLedger.outputTokens}::double precision)
-              / ((${usageLedger.durationMs} - ${usageLedger.ttfbMs}) / 1000.0)
-          END
-        )::double precision,
-        0::double precision
-      )`,
+      totalRequests: totalRequestsExpr,
+      totalCost: totalCostExpr,
+      totalTokens: totalTokensExpr,
+      successRate: successRateExpr,
+      avgTtfbMs: avgTtfbMsExpr,
+      avgTokensPerSecond: avgTokensPerSecondExpr,
     })
     .from(usageLedger)
     .innerJoin(
@@ -445,23 +514,82 @@ async function findProviderLeaderboardWithTimezone(
     .groupBy(usageLedger.finalProviderId, providers.name)
     .orderBy(desc(sql`sum(${usageLedger.costUsd})`));
 
-  return rankings.map((entry) => {
+  const baseEntries: ProviderLeaderboardEntry[] = rankings.map((entry) => {
     const totalCost = parseFloat(entry.totalCost);
     const totalRequests = entry.totalRequests;
     const totalTokens = entry.totalTokens;
+    const avgCosts = computeAvgCosts(totalCost, totalRequests, totalTokens);
     return {
       providerId: entry.providerId,
       providerName: entry.providerName,
       totalRequests,
       totalCost,
       totalTokens,
-      successRate: entry.successRate ?? 0,
+      successRate: clampRatio01(entry.successRate),
       avgTtfbMs: entry.avgTtfbMs ?? 0,
       avgTokensPerSecond: entry.avgTokensPerSecond ?? 0,
-      avgCostPerRequest: totalRequests > 0 ? totalCost / totalRequests : null,
-      avgCostPerMillionTokens: totalTokens > 0 ? (totalCost * 1_000_000) / totalTokens : null,
+      ...avgCosts,
     };
   });
+
+  if (!includeModelStats) return baseEntries;
+
+  // Model breakdown per provider
+  const systemSettings = await getSystemSettings();
+  const billingModelSource = systemSettings.billingModelSource;
+  const rawModelField =
+    billingModelSource === "original"
+      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
+      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
+
+  const modelRows = await db
+    .select({
+      providerId: usageLedger.finalProviderId,
+      model: modelField,
+      totalRequests: totalRequestsExpr,
+      totalCost: totalCostExpr,
+      totalTokens: totalTokensExpr,
+      successRate: successRateExpr,
+      avgTtfbMs: avgTtfbMsExpr,
+      avgTokensPerSecond: avgTokensPerSecondExpr,
+    })
+    .from(usageLedger)
+    .innerJoin(
+      providers,
+      and(sql`${usageLedger.finalProviderId} = ${providers.id}`, isNull(providers.deletedAt))
+    )
+    .where(
+      and(...whereConditions.filter((c): c is NonNullable<(typeof whereConditions)[number]> => !!c))
+    )
+    .groupBy(usageLedger.finalProviderId, modelField)
+    .orderBy(desc(sql`sum(${usageLedger.costUsd})`), desc(sql`count(*)`));
+
+  const modelStatsByProvider = new Map<number, ModelProviderStat[]>();
+  for (const row of modelRows) {
+    if (!row.model) continue;
+    const totalCost = parseFloat(row.totalCost);
+    const totalRequests = row.totalRequests;
+    const totalTokens = row.totalTokens;
+    const avgCosts = computeAvgCosts(totalCost, totalRequests, totalTokens);
+    const stats = modelStatsByProvider.get(row.providerId) ?? [];
+    stats.push({
+      model: row.model,
+      totalRequests,
+      totalCost,
+      totalTokens,
+      successRate: clampRatio01(row.successRate),
+      avgTtfbMs: row.avgTtfbMs ?? 0,
+      avgTokensPerSecond: row.avgTokensPerSecond ?? 0,
+      ...avgCosts,
+    });
+    modelStatsByProvider.set(row.providerId, stats);
+  }
+
+  return baseEntries.map((entry) => ({
+    ...entry,
+    modelStats: modelStatsByProvider.get(entry.providerId) ?? [],
+  }));
 }
 
 /**
@@ -529,10 +657,11 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   // Model-level cache hit breakdown per provider
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
-  const modelField =
+  const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
       : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
 
   const modelTotalInput = sql<number>`COALESCE(sum(${totalInputTokensExpr})::double precision, 0::double precision)`;
   const modelCacheRead = sql<number>`COALESCE(sum(COALESCE(${usageLedger.cacheReadInputTokens}, 0))::double precision, 0::double precision)`;
@@ -564,14 +693,14 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
   // Group model stats by providerId
   const modelStatsByProvider = new Map<number, ModelCacheHitStat[]>();
   for (const row of modelRows) {
-    if (!row.model || row.model.trim() === "") continue;
+    if (!row.model) continue;
     const stats = modelStatsByProvider.get(row.providerId) ?? [];
     stats.push({
       model: row.model,
       totalRequests: row.totalRequests,
       cacheReadTokens: row.cacheReadTokens,
       totalInputTokens: row.totalInputTokens,
-      cacheHitRate: Math.min(Math.max(row.cacheHitRate ?? 0, 0), 1),
+      cacheHitRate: clampRatio01(row.cacheHitRate),
     });
     modelStatsByProvider.set(row.providerId, stats);
   }
@@ -585,20 +714,28 @@ async function findProviderCacheHitRateLeaderboardWithTimezone(
     cacheCreationCost: parseFloat(entry.cacheCreationCost),
     totalInputTokens: entry.totalInputTokens,
     totalTokens: entry.totalInputTokens, // deprecated, for backward compatibility
-    cacheHitRate: Math.min(Math.max(entry.cacheHitRate ?? 0, 0), 1),
+    cacheHitRate: clampRatio01(entry.cacheHitRate),
     modelStats: modelStatsByProvider.get(entry.providerId) ?? [],
   }));
 }
 
 /**
  * 查询自定义日期范围供应商消耗排行榜
+ * includeModelStats=true 时会额外返回按模型拆分的统计数据（modelStats）
  */
 export async function findCustomRangeProviderLeaderboard(
   dateRange: DateRangeParams,
-  providerType?: ProviderType
+  providerType?: ProviderType,
+  includeModelStats?: boolean
 ): Promise<ProviderLeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findProviderLeaderboardWithTimezone("custom", timezone, dateRange, providerType);
+  return findProviderLeaderboardWithTimezone(
+    "custom",
+    timezone,
+    dateRange,
+    providerType,
+    includeModelStats
+  );
 }
 
 /**
@@ -704,7 +841,7 @@ async function findModelLeaderboardWithTimezone(
       totalRequests: entry.totalRequests,
       totalCost: parseFloat(entry.totalCost),
       totalTokens: entry.totalTokens,
-      successRate: entry.successRate ?? 0,
+      successRate: clampRatio01(entry.successRate),
     }));
 }
 
