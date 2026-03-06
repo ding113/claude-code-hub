@@ -355,7 +355,10 @@ async function fetchModelsFromOpenAIPoolProvider(provider: Provider): Promise<Fe
   try {
     return await fetchModelsWithConfig(provider, UPSTREAM_CONFIGS.claude);
   } catch (error) {
-    logger.warn(`[AvailableModels] Failed to fetch from joinOpenAIPool provider ${provider.name}:`, error);
+    logger.warn(
+      `[AvailableModels] Failed to fetch from joinOpenAIPool provider ${provider.name}:`,
+      error
+    );
     return [];
   }
 }
@@ -372,11 +375,12 @@ async function getOpenAIPoolClaudeModels(authState: {
   const allProviders = await findAllProviders();
 
   // 分组过滤（复用主流程的分组逻辑）
-  const effectiveGroupPick =
-    authState.key.providerGroup || authState.user.providerGroup || null;
+  const effectiveGroupPick = authState.key.providerGroup || authState.user.providerGroup || null;
   let candidates = allProviders;
   if (effectiveGroupPick) {
-    candidates = allProviders.filter((p) => checkProviderGroupMatch(p.groupTag, effectiveGroupPick));
+    candidates = allProviders.filter((p) =>
+      checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
+    );
   }
 
   const joinOpenAIProviders = candidates.filter(
