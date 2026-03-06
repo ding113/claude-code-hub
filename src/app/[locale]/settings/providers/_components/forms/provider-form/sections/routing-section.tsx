@@ -670,7 +670,11 @@ export function RoutingSection() {
                         disabled={state.ui.isPending}
                       >
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="inherit" />
+                          <SelectValue
+                            placeholder={t(
+                              "sections.routing.codexOverrides.serviceTier.options.inherit"
+                            )}
+                          />
                         </SelectTrigger>
                         <SelectContent>
                           {["inherit", "auto", "default", "flex", "priority"].map((val) => (

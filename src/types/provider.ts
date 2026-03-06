@@ -372,7 +372,7 @@ export interface Provider {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
-  codexServiceTierPreference?: CodexServiceTierPreference | null;
+  codexServiceTierPreference: CodexServiceTierPreference | null;
 
   // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
@@ -459,7 +459,7 @@ export interface ProviderDisplay {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
-  codexServiceTierPreference?: CodexServiceTierPreference | null;
+  codexServiceTierPreference: CodexServiceTierPreference | null;
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
   anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
