@@ -1428,7 +1428,11 @@ export class ProxyForwarder {
         logger.debug("ProxyForwarder: Injected Claude Code system prompt for OpenAI->Claude", {
           providerId: provider.id,
           providerName: provider.name,
-          existingSystemType: existingSystem ? (Array.isArray(existingSystem) ? "array" : typeof existingSystem) : "none",
+          existingSystemType: existingSystem
+            ? Array.isArray(existingSystem)
+              ? "array"
+              : typeof existingSystem
+            : "none",
         });
       }
 
