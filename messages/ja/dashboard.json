@@ -295,7 +295,7 @@
           "cloud_model_fallback": "フォールバックモデルのプロバイダー価格",
           "priority_fallback": "優先フォールバック価格",
           "single_provider_top_level": "トップレベル単一プロバイダー価格",
-          "official_fallback": "公式フォールバック価格"
+          "official_fallback": "公式価格"
         }
       },
       "performance": {
@@ -398,7 +398,7 @@
         "cloud_model_fallback": "フォールバックモデルのプロバイダー価格",
         "priority_fallback": "優先フォールバック価格",
         "single_provider_top_level": "トップレベル単一プロバイダー価格",
-        "official_fallback": "公式フォールバック価格"
+        "official_fallback": "公式価格"
       }
     }
   },

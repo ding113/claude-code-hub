@@ -217,6 +217,6 @@
     "pinSuccess": "已将 {provider} 价格固化为本地模型价格",
     "pinFailed": "固化供应商价格失败",
     "pinned": "已固化",
-    "priority": "优先"
+    "priority": "快速模式价格"
   }
 }

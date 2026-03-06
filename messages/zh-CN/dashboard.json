@@ -295,7 +295,7 @@
           "cloud_model_fallback": "回退模型的提供商价格",
           "priority_fallback": "优先级回退价格",
           "single_provider_top_level": "顶层单提供商价格",
-          "official_fallback": "官方兜底价格"
+          "official_fallback": "官方价格"
         }
       },
       "performance": {
@@ -398,7 +398,7 @@
         "cloud_model_fallback": "回退模型的提供商价格",
         "priority_fallback": "优先级回退价格",
         "single_provider_top_level": "顶层单提供商价格",
-        "official_fallback": "官方兜底价格"
+        "official_fallback": "官方价格"
       }
     }
   },

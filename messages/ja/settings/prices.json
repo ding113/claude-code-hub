@@ -216,6 +216,6 @@
     "pinSuccess": "{provider} の価格をローカルモデル価格として固定しました",
     "pinFailed": "プロバイダー価格の固定に失敗しました",
     "pinned": "固定済み",
-    "priority": "priority"
+    "priority": "高速モード価格"
   }
 }

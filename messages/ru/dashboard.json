@@ -295,7 +295,7 @@
           "cloud_model_fallback": "Цена провайдера из резервной модели",
           "priority_fallback": "Приоритетная резервная цена",
           "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
-          "official_fallback": "Официальная резервная цена"
+          "official_fallback": "Официальная цена"
         }
       },
       "performance": {
@@ -398,7 +398,7 @@
         "cloud_model_fallback": "Цена провайдера из резервной модели",
         "priority_fallback": "Приоритетная резервная цена",
         "single_provider_top_level": "Цена верхнего уровня для одного провайдера",
-        "official_fallback": "Официальная резервная цена"
+        "official_fallback": "Официальная цена"
       }
     }
   },
