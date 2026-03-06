@@ -348,6 +348,11 @@ export function transformClaudeStreamResponseToOpenAI(
       break;
     }
 
+    case "ping": {
+      // Claude SSE 心跳事件，静默跳过
+      break;
+    }
+
     default:
       // 未知事件类型，跳过
       logger.debug("[Claude→OpenAI] Unknown event type", { eventType });

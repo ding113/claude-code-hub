@@ -1510,6 +1510,14 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
+  // OpenAI 格式支持：prompt_tokens / completion_tokens
+  // joinOpenAIPool 场景下，流经过 Claude→OpenAI 转换后，
+  // 内部流读取器收到的是 OpenAI 格式的 usage，需要兼容识别
+  if (result.input_tokens === undefined && typeof usage.prompt_tokens === "number") {
+    result.input_tokens = usage.prompt_tokens;
+    hasAny = true;
+  }
+
   // Gemini support
   // 注意：promptTokenCount 包含 cachedContentTokenCount，需要减去以避免重复计费
   // 计费公式：input = (promptTokenCount - cachedContentTokenCount) × input_price
@@ -1532,6 +1540,11 @@ function extractUsageMetrics(value: unknown): UsageMetrics | null {
 
   if (typeof usage.output_tokens === "number") {
     result.output_tokens = usage.output_tokens;
+    hasAny = true;
+  }
+
+  if (result.output_tokens === undefined && typeof usage.completion_tokens === "number") {
+    result.output_tokens = usage.completion_tokens;
     hasAny = true;
   }
 
