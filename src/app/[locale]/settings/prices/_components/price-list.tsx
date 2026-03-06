@@ -42,8 +42,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { PRICE_FILTER_VENDORS } from "@/lib/model-vendor-icons";
-import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import { copyToClipboard } from "@/lib/utils/clipboard";
+import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import type { ModelPrice, ModelPriceSource } from "@/types/model-price";
 import { DeleteModelDialog } from "./delete-model-dialog";
 import { ModelPriceDrawer } from "./model-price-drawer";

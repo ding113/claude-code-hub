@@ -10,8 +10,8 @@ import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
 import { calculateRequestCost, calculateRequestCostBreakdown } from "@/lib/utils/cost-calculation";
-import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import { hasValidPriceData } from "@/lib/utils/price-data";
+import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
 import {
   detectUpstreamErrorFromSseOrJsonText,
@@ -1152,7 +1152,7 @@ export class ProxyResponseHandler {
           let tailHead = 0;
           let tailBufferedBytes = 0;
           let wasTruncated = false;
-          let inTailMode = false;
+          const inTailMode = false;
 
           const joinTailChunks = (): string => {
             if (tailHead <= 0) return tailChunks.join("");

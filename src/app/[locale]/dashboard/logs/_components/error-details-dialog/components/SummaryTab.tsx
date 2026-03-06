@@ -18,9 +18,9 @@ import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
-import { getPricingResolutionSpecialSetting } from "@/lib/utils/special-settings";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
+import { getPricingResolutionSpecialSetting } from "@/lib/utils/special-settings";
 import { getFake200ReasonKey } from "../../fake200-reason";
 import {
   calculateOutputRate,
