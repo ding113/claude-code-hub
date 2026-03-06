@@ -168,6 +168,24 @@ export function buildUnifiedSpecialSettings(
     });
   }
 
+  const hasExplicitAnthropicContext1m = base.some(
+    (item) => item.type === "anthropic_context_1m_header_override"
+  );
+  const hasCodexServiceTierResult = base.some((item) => item.type === "codex_service_tier_result");
+  if (
+    params.context1mApplied === true &&
+    !hasExplicitAnthropicContext1m &&
+    !hasCodexServiceTierResult
+  ) {
+    derived.push({
+      type: "anthropic_context_1m_header_override",
+      scope: "request_header",
+      hit: true,
+      header: "anthropic-beta",
+      flag: "context-1m-2025-08-07",
+    });
+  }
+
   if (base.length === 0 && derived.length === 0) {
     return null;
   }
