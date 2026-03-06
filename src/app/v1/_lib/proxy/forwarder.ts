@@ -60,6 +60,17 @@ const STANDARD_ENDPOINTS = [
   "/v1/models",
 ];
 
+// Claude Code CLI 默认 beta flags（用于 joinOpenAIPool 场景：OpenAI 客户端 -> Claude 供应商）
+// 当 OpenAI 客户端请求被路由到 Claude 供应商时，客户端不会发送 anthropic-beta 头，
+// 需要由代理注入这些 flags 以满足上游供应商对 Claude Code 请求的验证要求
+const CLAUDE_CODE_DEFAULT_BETA_FLAGS = [
+  "claude-code-20250219",
+  "adaptive-thinking-2026-01-28",
+  "prompt-caching-scope-2026-01-05",
+  "advanced-tool-use-2025-11-20",
+  "effort-2025-11-24",
+];
+
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
@@ -1388,6 +1399,39 @@ export class ProxyForwarder {
         }
       }
 
+      // joinOpenAIPool: 注入 Claude Code 身份系统提示词
+      // OpenAI 客户端不会包含 Claude Code 的身份提示，需要由代理自动补充
+      // 确保上游 Claude API 将请求识别为 Claude Code 请求
+      if (
+        session.originalFormat === "openai" &&
+        (provider.providerType === "claude" || provider.providerType === "claude-auth")
+      ) {
+        const message = session.request.message as Record<string, unknown>;
+        const claudeCodeSystemBlock = {
+          type: "text",
+          text: "You are Claude Code, Anthropic's official CLI for Claude.",
+          cache_control: { type: "ephemeral" },
+        };
+
+        const existingSystem = message.system;
+        if (!existingSystem) {
+          // 无现有系统提示，直接设置
+          message.system = [claudeCodeSystemBlock];
+        } else if (typeof existingSystem === "string") {
+          // 字符串格式：转为数组并前置 Claude Code 身份提示
+          message.system = [claudeCodeSystemBlock, { type: "text", text: existingSystem }];
+        } else if (Array.isArray(existingSystem)) {
+          // 数组格式：前置 Claude Code 身份提示
+          (message.system as unknown[]).unshift(claudeCodeSystemBlock);
+        }
+
+        logger.debug("ProxyForwarder: Injected Claude Code system prompt for OpenAI->Claude", {
+          providerId: provider.id,
+          providerName: provider.name,
+          existingSystemType: existingSystem ? (Array.isArray(existingSystem) ? "array" : typeof existingSystem) : "none",
+        });
+      }
+
       if (
         resolvedCacheTtl &&
         (provider.providerType === "claude" || provider.providerType === "claude-auth")
@@ -2487,6 +2531,55 @@ export class ProxyForwarder {
       );
       betaFlags.add(CONTEXT_1M_BETA_HEADER);
       overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
+    }
+
+    // joinOpenAIPool: OpenAI 客户端请求路由到 Claude 供应商时，注入必要的 Claude API 头
+    // OpenAI 客户端不会发送 anthropic-version/anthropic-beta 等 Claude 特有头，
+    // 需要由代理补充，否则上游 Claude API 会拒绝请求（如 "invalid claude code request"）
+    const isOpenAIToClaudeConversion =
+      session.originalFormat === "openai" &&
+      (provider.providerType === "claude" || provider.providerType === "claude-auth");
+
+    if (isOpenAIToClaudeConversion) {
+      // Claude API 版本（必需，Claude API 要求该头存在）
+      if (!overrides["anthropic-version"] && !session.headers.has("anthropic-version")) {
+        overrides["anthropic-version"] = "2023-06-01";
+      }
+
+      // anthropic-beta: 合并现有 flags 与 Claude Code 默认 flags
+      const existingBeta =
+        overrides["anthropic-beta"] || session.headers.get("anthropic-beta") || "";
+      const betaFlags = new Set(
+        existingBeta
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      );
+      for (const flag of CLAUDE_CODE_DEFAULT_BETA_FLAGS) {
+        betaFlags.add(flag);
+      }
+      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
+
+      // User-Agent: 使用 Claude CLI 标识（上游供应商可能根据 UA 验证请求来源）
+      overrides["user-agent"] = "claude-cli/2.1.69 (external, cli)";
+
+      // Claude Code 请求标识头（部分上游供应商会验证这些头以确认 Claude Code 请求合法性）
+      overrides["anthropic-dangerous-direct-browser-access"] = "true";
+      overrides["x-app"] = "cli";
+      overrides["x-stainless-lang"] = "js";
+      overrides["x-stainless-runtime"] = "node";
+      overrides["x-stainless-arch"] = "x64";
+      overrides["x-stainless-os"] = "Linux";
+      overrides["x-stainless-package-version"] = "0.74.0";
+      overrides["x-stainless-retry-count"] = "0";
+      overrides["x-stainless-runtime-version"] = `v${process.versions.node || "22.19.0"}`;
+      overrides["x-stainless-timeout"] = "600";
+
+      logger.debug("ProxyForwarder: Injected Claude API headers for OpenAI->Claude conversion", {
+        providerId: provider.id,
+        providerName: provider.name,
+        betaFlagsCount: betaFlags.size,
+      });
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({

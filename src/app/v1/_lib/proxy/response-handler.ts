@@ -844,34 +844,76 @@ export class ProxyResponseHandler {
 
       // 创建转换流
       const transformState: TransformState = {}; // 状态对象，用于在多个 chunk 之间保持状态
+      // TextDecoder 必须在 transform 外部创建，保持跨 chunk 的 UTF-8 解码状态
+      // 否则多字节字符（如中文，3 字节/字符）跨 chunk 切割时会产生乱码
+      const decoder = new TextDecoder();
+      let sseBuffer = ""; // SSE 事件缓冲区：处理跨 chunk 的不完整 SSE 事件
+      const encoder = new TextEncoder();
       const transformStream = new TransformStream<Uint8Array, Uint8Array>({
         transform(chunk, controller) {
           try {
-            const decoder = new TextDecoder();
             const text = decoder.decode(chunk, { stream: true });
+            sseBuffer += text;
 
-            // 使用转换器注册表转换 chunk
-            const transformedChunks = defaultRegistry.transformStreamResponse(
-              session.context,
-              fromFormat,
-              toFormat,
-              session.request.model || "",
-              session.request.message, // original request
-              session.request.message, // transformed request (same as original if no transform)
-              text,
-              transformState
-            );
+            // SSE 事件以 \n\n 分隔，按此拆分为独立事件
+            const events = sseBuffer.split("\n\n");
+            // 最后一段可能是不完整事件，保留到下一个 chunk
+            sseBuffer = events.pop() || "";
 
-            // transformedChunks 是字符串数组
-            for (const transformedChunk of transformedChunks) {
-              if (transformedChunk) {
-                controller.enqueue(new TextEncoder().encode(transformedChunk));
+            for (const event of events) {
+              if (!event.trim()) continue;
+
+              // 每个完整的 SSE 事件独立传给转换器
+              const transformedChunks = defaultRegistry.transformStreamResponse(
+                session.context,
+                fromFormat,
+                toFormat,
+                session.request.model || "",
+                session.request.message,
+                session.request.message,
+                event,
+                transformState
+              );
+
+              for (const transformedChunk of transformedChunks) {
+                if (transformedChunk) {
+                  controller.enqueue(encoder.encode(transformedChunk));
+                }
               }
             }
           } catch (error) {
             logger.error("[ResponseHandler] Stream transform error:", error);
             // 出错时传递原始 chunk
             controller.enqueue(chunk);
+          }
+        },
+        flush(controller) {
+          // 流结束时处理缓冲区中的剩余数据
+          try {
+            // 刷新 decoder 中可能残留的字节
+            const remaining = decoder.decode();
+            if (remaining) {
+              sseBuffer += remaining;
+            }
+            if (sseBuffer.trim()) {
+              const transformedChunks = defaultRegistry.transformStreamResponse(
+                session.context,
+                fromFormat,
+                toFormat,
+                session.request.model || "",
+                session.request.message,
+                session.request.message,
+                sseBuffer,
+                transformState
+              );
+              for (const transformedChunk of transformedChunks) {
+                if (transformedChunk) {
+                  controller.enqueue(encoder.encode(transformedChunk));
+                }
+              }
+            }
+          } catch (error) {
+            logger.error("[ResponseHandler] Stream flush error:", error);
           }
         },
       });
