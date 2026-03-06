@@ -286,7 +286,17 @@
         "fast": "fast",
         "fastPriority": "優先服務層級（fast 模式）",
         "context1m": "1M 上下文",
-        "context1mPricing": "輸入 2x >200k, 輸出 1.5x >200k"
+        "context1mPricing": "輸入 2x >200k, 輸出 1.5x >200k",
+        "pricingProvider": "計費價格供應商",
+        "pricingSourceLabel": "計費價格來源",
+        "pricingSource": {
+          "local_manual": "本地手動價格",
+          "cloud_exact": "雲端精確供應商價格",
+          "cloud_model_fallback": "回退模型的供應商價格",
+          "priority_fallback": "優先級回退價格",
+          "single_provider_top_level": "頂層單供應商價格",
+          "official_fallback": "官方兜底價格"
+        }
       },
       "performance": {
         "title": "效能資料",
@@ -359,12 +369,12 @@
       "targetModel": "目標模型"
     },
     "statusCodes": {
-      "not200": "非 200（所有非成功請求）",
       "200": "200（成功）",
       "400": "400（錯誤請求）",
       "401": "401（未授權）",
       "429": "429（限流）",
-      "500": "500（服務器錯誤）"
+      "500": "500（服務器錯誤）",
+      "not200": "非 200（所有非成功請求）"
     },
     "billingDetails": {
       "input": "輸入",
@@ -379,7 +389,17 @@
       "fast": "fast",
       "fastPriority": "優先服務層級（fast 模式）",
       "context1m": "1M 上下文長度",
-      "context1mPricing": "輸入 >200k 2倍, 輸出 >200k 1.5倍"
+      "context1mPricing": "輸入 >200k 2倍, 輸出 >200k 1.5倍",
+      "pricingProvider": "計費價格供應商",
+      "pricingSourceLabel": "計費價格來源",
+      "pricingSource": {
+        "local_manual": "本地手動價格",
+        "cloud_exact": "雲端精確供應商價格",
+        "cloud_model_fallback": "回退模型的供應商價格",
+        "priority_fallback": "優先級回退價格",
+        "single_provider_top_level": "頂層單供應商價格",
+        "official_fallback": "官方兜底價格"
+      }
     }
   },
   "leaderboard": {
@@ -1630,11 +1650,11 @@
         "rolling": "滾動視窗（24h）"
       },
       "quickValues": {
-        "unlimited": "無限",
         "10": "$10",
         "50": "$50",
         "100": "$100",
-        "500": "$500"
+        "500": "$500",
+        "unlimited": "無限"
       },
       "alreadySet": "已設定",
       "confirmAdd": "新增",

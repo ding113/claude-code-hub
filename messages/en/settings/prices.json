@@ -31,7 +31,8 @@
     "openrouter": "OpenRouter"
   },
   "badges": {
-    "local": "Local"
+    "local": "Local",
+    "multi": "Multi"
   },
   "capabilities": {
     "assistantPrefill": "Assistant prefill",
@@ -196,7 +197,8 @@
   "actions": {
     "edit": "Edit",
     "more": "More actions",
-    "delete": "Delete"
+    "delete": "Delete",
+    "comparePricing": "Compare pricing"
   },
   "toast": {
     "createSuccess": "Model added",
@@ -204,5 +206,17 @@
     "deleteSuccess": "Model deleted",
     "saveFailed": "Failed to save",
     "deleteFailed": "Failed to delete"
+  },
+  "providerPricing": {
+    "title": "Provider pricing · {model}",
+    "description": "Compare provider-specific cloud prices and pin one as a local model price.",
+    "input": "Input",
+    "output": "Output",
+    "cacheRead": "Cache Read",
+    "pinAction": "Pin as local price",
+    "pinSuccess": "Pinned {provider} pricing as local model price",
+    "pinFailed": "Failed to pin provider pricing",
+    "pinned": "Pinned",
+    "priority": "Priority"
   }
 }

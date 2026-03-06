@@ -22,7 +22,10 @@ import {
   NON_BILLING_ENDPOINT,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
-import { hasPriorityServiceTierSpecialSetting } from "@/lib/utils/special-settings";
+import {
+  getPricingResolutionSpecialSetting,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
@@ -56,6 +59,7 @@ interface VirtualizedLogsTableProps {
   hideScrollToTop?: boolean;
   hiddenColumns?: LogsTableColumn[];
   bodyClassName?: string;
+  serverTimeZone?: string;
 }
 
 export function VirtualizedLogsTable({
@@ -68,8 +72,10 @@ export function VirtualizedLogsTable({
   hideScrollToTop = false,
   hiddenColumns,
   bodyClassName,
+  serverTimeZone: _serverTimeZone,
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
+  const getPricingSourceLabel = (source: string) => t(`logs.billingDetails.pricingSource.`);
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
@@ -332,6 +338,8 @@ export function VirtualizedLogsTable({
                 }
 
                 const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const _isWarmupSkipped = log.blockedBy === "warmup";
+                const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
 
                 return (
                   <div
@@ -664,6 +672,17 @@ export function VirtualizedLogsTable({
                                   <div className="text-purple-600 dark:text-purple-400 font-medium">
                                     {t("logs.billingDetails.context1m")}
                                   </div>
+                                )}
+                                {pricingResolution && (
+                                  <>
+                                    <div>
+                                      {t("logs.billingDetails.pricingProvider")}:{" "}
+                                      <span className="font-mono">
+                                        {pricingResolution.resolvedPricingProviderKey}
+                                      </span>
+                                    </div>
+                                    <div>{getPricingSourceLabel(pricingResolution.source)}</div>
+                                  </>
                                 )}
                                 <div>
                                   {t("logs.billingDetails.input")}:{" "}

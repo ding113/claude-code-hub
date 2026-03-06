@@ -348,3 +348,37 @@ describe("usage-logs-table multiplier badge", () => {
     container.remove();
   });
 });
+
+describe("usage-logs-table pricing resolution", () => {
+  test("renders pricing provider and source details when pricing_resolution special setting exists", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable
+        logs={[
+          makeLog({
+            id: 1,
+            specialSettings: [
+              {
+                type: "pricing_resolution",
+                scope: "billing",
+                hit: true,
+                modelName: "gpt-5.4",
+                resolvedModelName: "gpt-5.4",
+                resolvedPricingProviderKey: "openai",
+                source: "priority_fallback",
+              },
+            ],
+          }),
+        ]}
+        total={1}
+        page={1}
+        pageSize={50}
+        onPageChange={() => {}}
+        isPending={false}
+      />
+    );
+
+    expect(html).toContain("logs.billingDetails.pricingProvider");
+    expect(html).toContain("openai");
+    expect(html).toContain("logs.billingDetails.pricingSource.priority_fallback");
+  });
+});

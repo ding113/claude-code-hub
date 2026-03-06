@@ -13,6 +13,7 @@ import {
   findAllLatestPrices,
   findAllLatestPricesPaginated,
   findAllManualPrices,
+  findLatestPriceByModelAndSource,
   hasAnyPriceRecords,
   type PaginatedResult,
   type PaginationParams,
@@ -64,6 +65,32 @@ function isPriceDataEqual(data1: ModelPriceData, data2: ModelPriceData): boolean
   };
 
   return stableStringify(data1) === stableStringify(data2);
+}
+
+function buildManualPriceDataFromProviderPricing(
+  modelName: string,
+  basePriceData: ModelPriceData,
+  pricingProviderKey: string
+): ModelPriceData | null {
+  const pricing = basePriceData.pricing;
+  if (!pricing || typeof pricing !== "object" || Array.isArray(pricing)) {
+    return null;
+  }
+
+  const pricingNode = pricing[pricingProviderKey];
+  if (!pricingNode || typeof pricingNode !== "object" || Array.isArray(pricingNode)) {
+    return null;
+  }
+
+  return {
+    ...basePriceData,
+    ...pricingNode,
+    pricing: undefined,
+    litellm_provider: pricingProviderKey,
+    selected_pricing_provider: pricingProviderKey,
+    selected_pricing_source_model: modelName,
+    selected_pricing_resolution: "manual_pin",
+  };
 }
 
 /**
@@ -587,7 +614,6 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
     try {
       revalidatePath("/settings/prices");
     } catch (error) {
-      // 在后台任务/启动阶段可能没有 Next.js 的请求上下文，此处允许降级
       logger.debug("[ModelPrices] revalidatePath skipped", {
         error: error instanceof Error ? error.message : String(error),
       });
@@ -597,6 +623,57 @@ export async function deleteSingleModelPrice(modelName: string): Promise<ActionR
   } catch (error) {
     logger.error("删除模型价格失败:", error);
     const message = error instanceof Error ? error.message : "删除失败，请稍后重试";
+    return { ok: false, error: message };
+  }
+}
+
+export async function pinModelPricingProviderAsManual(input: {
+  modelName: string;
+  pricingProviderKey: string;
+}): Promise<ActionResult<ModelPrice>> {
+  try {
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return { ok: false, error: "无权限执行此操作" };
+    }
+
+    const modelName = input.modelName?.trim();
+    const pricingProviderKey = input.pricingProviderKey?.trim();
+    if (!modelName) {
+      return { ok: false, error: "模型名称不能为空" };
+    }
+    if (!pricingProviderKey) {
+      return { ok: false, error: "价格提供商不能为空" };
+    }
+
+    const latestCloudPrice = await findLatestPriceByModelAndSource(modelName, "litellm");
+    if (!latestCloudPrice) {
+      return { ok: false, error: "未找到云端模型价格" };
+    }
+
+    const manualPriceData = buildManualPriceDataFromProviderPricing(
+      modelName,
+      latestCloudPrice.priceData,
+      pricingProviderKey
+    );
+    if (!manualPriceData) {
+      return { ok: false, error: "未找到对应的多供应商价格节点" };
+    }
+
+    const result = await upsertModelPrice(modelName, manualPriceData);
+
+    try {
+      revalidatePath("/settings/prices");
+    } catch (error) {
+      logger.debug("[ModelPrices] revalidatePath skipped", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    return { ok: true, data: result };
+  } catch (error) {
+    logger.error("固化多供应商价格失败:", error);
+    const message = error instanceof Error ? error.message : "操作失败，请稍后重试";
     return { ok: false, error: message };
   }
 }

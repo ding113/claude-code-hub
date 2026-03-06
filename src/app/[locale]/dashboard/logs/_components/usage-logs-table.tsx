@@ -26,7 +26,10 @@ import {
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
-import { hasPriorityServiceTierSpecialSetting } from "@/lib/utils/special-settings";
+import {
+  getPricingResolutionSpecialSetting,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 import type { UsageLogRow } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
@@ -59,6 +62,8 @@ export function UsageLogsTable({
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
   const totalPages = Math.ceil(total / pageSize);
+  const getPricingSourceLabel = (source: string) =>
+    t(`logs.billingDetails.pricingSource.${source}`);
 
   // 弹窗状态管理：记录当前打开的行 ID 和是否需要滚动到重定向部分
   const [dialogState, setDialogState] = useState<{
@@ -111,6 +116,7 @@ export function UsageLogsTable({
                 const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
                 const isWarmupSkipped = log.blockedBy === "warmup";
                 const isMutedRow = isNonBilling || isWarmupSkipped;
+                const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
 
                 // 计算倍率（用于 Provider 列 Badge 和成本明细）
                 const successfulProvider =
@@ -411,6 +417,17 @@ export function UsageLogsTable({
                                 <div className="text-purple-600 dark:text-purple-400 font-medium">
                                   {t("logs.billingDetails.context1m")}
                                 </div>
+                              )}
+                              {pricingResolution && (
+                                <>
+                                  <div>
+                                    {t("logs.billingDetails.pricingProvider")}:{" "}
+                                    <span className="font-mono">
+                                      {pricingResolution.resolvedPricingProviderKey}
+                                    </span>
+                                  </div>
+                                  <div>{getPricingSourceLabel(pricingResolution.source)}</div>
+                                </>
                               )}
                               <div>
                                 {t("logs.billingDetails.input")}:{" "}

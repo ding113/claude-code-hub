@@ -31,7 +31,8 @@
     "openrouter": "OpenRouter"
   },
   "badges": {
-    "local": "本地"
+    "local": "本地",
+    "multi": "多供应商"
   },
   "capabilities": {
     "assistantPrefill": "助手预填充",
@@ -196,7 +197,8 @@
   "actions": {
     "edit": "编辑",
     "more": "更多操作",
-    "delete": "删除"
+    "delete": "删除",
+    "comparePricing": "对比价格"
   },
   "toast": {
     "createSuccess": "模型已添加",
@@ -204,5 +206,17 @@
     "deleteSuccess": "模型已删除",
     "saveFailed": "保存失败",
     "deleteFailed": "删除失败"
+  },
+  "providerPricing": {
+    "title": "多供应商价格 · {model}",
+    "description": "对比不同供应商的云端价格，并将其中一项固化为本地模型价格。",
+    "input": "输入",
+    "output": "输出",
+    "cacheRead": "缓存读取",
+    "pinAction": "固化为本地价格",
+    "pinSuccess": "已将 {provider} 价格固化为本地模型价格",
+    "pinFailed": "固化供应商价格失败",
+    "pinned": "已固化",
+    "priority": "优先"
   }
 }
