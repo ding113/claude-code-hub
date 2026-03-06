@@ -1152,7 +1152,7 @@ export class ProxyResponseHandler {
           let tailHead = 0;
           let tailBufferedBytes = 0;
           let wasTruncated = false;
-          const inTailMode = false;
+          let inTailMode = false;
 
           const joinTailChunks = (): string => {
             if (tailHead <= 0) return tailChunks.join("");
