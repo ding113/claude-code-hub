@@ -77,6 +77,7 @@ import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
+  CodexServiceTierPreference,
   CodexTextVerbosityPreference,
   Provider,
   ProviderBatchApplyUpdates,
@@ -307,6 +308,7 @@ export async function getProviders(): Promise<ProviderDisplay[]> {
         codexReasoningSummaryPreference: provider.codexReasoningSummaryPreference,
         codexTextVerbosityPreference: provider.codexTextVerbosityPreference,
         codexParallelToolCallsPreference: provider.codexParallelToolCallsPreference,
+        codexServiceTierPreference: provider.codexServiceTierPreference ?? null,
         anthropicMaxTokensPreference: provider.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: provider.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: provider.anthropicAdaptiveThinking,
@@ -501,6 +503,7 @@ export async function addProvider(data: {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  codex_service_tier_preference?: CodexServiceTierPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
@@ -594,6 +597,7 @@ export async function addProvider(data: {
       codex_text_verbosity_preference: validated.codex_text_verbosity_preference ?? "inherit",
       codex_parallel_tool_calls_preference:
         validated.codex_parallel_tool_calls_preference ?? "inherit",
+      codex_service_tier_preference: validated.codex_service_tier_preference ?? "inherit",
       website_url: validated.website_url ?? null,
       favicon_url: faviconUrl,
       tpm: validated.tpm ?? null,
@@ -676,6 +680,7 @@ export async function editProvider(
     codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
     codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
     codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+    codex_service_tier_preference?: CodexServiceTierPreference | null;
     anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
     anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
     anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
@@ -1291,6 +1296,7 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   codex_reasoning_summary_preference: "codexReasoningSummaryPreference",
   codex_text_verbosity_preference: "codexTextVerbosityPreference",
   codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
+  codex_service_tier_preference: "codexServiceTierPreference",
   anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
   anthropic_thinking_budget_preference: "anthropicThinkingBudgetPreference",
   anthropic_adaptive_thinking: "anthropicAdaptiveThinking",
@@ -1465,6 +1471,9 @@ function mapApplyUpdatesToRepositoryFormat(
   if (applyUpdates.codex_parallel_tool_calls_preference !== undefined) {
     result.codexParallelToolCallsPreference = applyUpdates.codex_parallel_tool_calls_preference;
   }
+  if (applyUpdates.codex_service_tier_preference !== undefined) {
+    result.codexServiceTierPreference = applyUpdates.codex_service_tier_preference;
+  }
   if (applyUpdates.anthropic_max_tokens_preference !== undefined) {
     result.anthropicMaxTokensPreference = applyUpdates.anthropic_max_tokens_preference;
   }
@@ -1560,6 +1569,7 @@ const PATCH_FIELD_TO_PROVIDER_KEY: Record<ProviderBatchPatchField, keyof Provide
   codex_reasoning_summary_preference: "codexReasoningSummaryPreference",
   codex_text_verbosity_preference: "codexTextVerbosityPreference",
   codex_parallel_tool_calls_preference: "codexParallelToolCallsPreference",
+  codex_service_tier_preference: "codexServiceTierPreference",
   anthropic_max_tokens_preference: "anthropicMaxTokensPreference",
   gemini_google_search_preference: "geminiGoogleSearchPreference",
   limit_5h_usd: "limit5hUsd",
@@ -1593,6 +1603,7 @@ const PATCH_FIELD_CLEAR_VALUE: Partial<Record<ProviderBatchPatchField, unknown>>
   codex_reasoning_summary_preference: "inherit",
   codex_text_verbosity_preference: "inherit",
   codex_parallel_tool_calls_preference: "inherit",
+  codex_service_tier_preference: "inherit",
   anthropic_max_tokens_preference: "inherit",
   gemini_google_search_preference: "inherit",
   mcp_passthrough_type: "none",
@@ -1610,6 +1621,7 @@ const CODEX_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
   "codex_reasoning_summary_preference",
   "codex_text_verbosity_preference",
   "codex_parallel_tool_calls_preference",
+  "codex_service_tier_preference",
 ]);
 
 const GEMINI_ONLY_FIELDS: ReadonlySet<ProviderBatchPatchField> = new Set([
@@ -1646,6 +1658,7 @@ const CODEX_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([
   "codexReasoningSummaryPreference",
   "codexTextVerbosityPreference",
   "codexParallelToolCallsPreference",
+  "codexServiceTierPreference",
 ]);
 
 const GEMINI_ONLY_REPO_KEYS: ReadonlySet<keyof BatchProviderUpdates> = new Set([

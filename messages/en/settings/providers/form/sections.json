@@ -189,6 +189,17 @@
           "true": "Force enable"
         }
       },
+      "serviceTier": {
+        "help": "Controls the OpenAI service_tier for Codex (Responses API) requests. \"priority\" corresponds to fast mode. \"inherit\" follows the client request; other values force override service_tier. Unsupported tiers may cause upstream errors.",
+        "label": "Service Tier Override",
+        "options": {
+          "auto": "auto (project default)",
+          "default": "default (standard)",
+          "flex": "flex (best-effort)",
+          "inherit": "No override (follow client)",
+          "priority": "priority (fast)"
+        }
+      },
       "reasoningEffort": {
         "help": "Controls how much reasoning effort the model uses before answering. \"inherit\" follows the client request; other values force override reasoning.effort. Note: \"none\" is only supported on GPT-5.1 models; \"xhigh\" is only supported on GPT-5.1-Codex-Max. Using an unsupported value will cause an upstream error.",
         "label": "Reasoning Effort Override",

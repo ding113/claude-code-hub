@@ -283,6 +283,8 @@
         "cacheTtlSwapped": "Billing TTL (swapped)",
         "multiplier": "Provider Multiplier",
         "totalCost": "Total Cost",
+        "fast": "fast",
+        "fastPriority": "Priority service tier (fast mode)",
         "context1m": "1M Context",
         "context1mPricing": "Input 2x >200k, Output 1.5x >200k"
       },
@@ -374,6 +376,8 @@
       "cacheTtlSwapped": "Billing TTL (swapped)",
       "multiplier": "Provider Multiplier",
       "totalCost": "Total Cost",
+      "fast": "fast",
+      "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Context",
       "context1mPricing": "Input 2x >200k, Output 1.5x >200k"
     }

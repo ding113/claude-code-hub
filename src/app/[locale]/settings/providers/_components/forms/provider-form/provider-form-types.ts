@@ -8,6 +8,7 @@ import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
+  CodexServiceTierPreference,
   CodexTextVerbosityPreference,
   GeminiGoogleSearchPreference,
   McpPassthroughType,
@@ -56,6 +57,7 @@ export interface RoutingState {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference;
   codexTextVerbosityPreference: CodexTextVerbosityPreference;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference;
+  codexServiceTierPreference: CodexServiceTierPreference;
   // Anthropic-specific
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference;
@@ -146,6 +148,7 @@ export type ProviderFormAction =
   | { type: "SET_CODEX_REASONING_SUMMARY"; payload: CodexReasoningSummaryPreference }
   | { type: "SET_CODEX_TEXT_VERBOSITY"; payload: CodexTextVerbosityPreference }
   | { type: "SET_CODEX_PARALLEL_TOOL_CALLS"; payload: CodexParallelToolCallsPreference }
+  | { type: "SET_CODEX_SERVICE_TIER"; payload: CodexServiceTierPreference }
   | { type: "SET_ANTHROPIC_MAX_TOKENS"; payload: AnthropicMaxTokensPreference }
   | { type: "SET_ANTHROPIC_THINKING_BUDGET"; payload: AnthropicThinkingBudgetPreference }
   | { type: "SET_ADAPTIVE_THINKING_EFFORT"; payload: AnthropicAdaptiveThinkingEffort }

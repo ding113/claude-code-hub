@@ -22,6 +22,7 @@ import {
   NON_BILLING_ENDPOINT,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
+import { hasPriorityServiceTierSpecialSetting } from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
@@ -631,6 +632,15 @@ export function VirtualizedLogsTable({
                               <TooltipTrigger asChild>
                                 <span className="cursor-help inline-flex items-center gap-1">
                                   {formatCurrency(log.costUsd, currencyCode, 6)}
+                                  {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                                      title={t("logs.billingDetails.fastPriority")}
+                                    >
+                                      {t("logs.billingDetails.fast")}
+                                    </Badge>
+                                  )}
                                   {log.context1mApplied && (
                                     <Badge
                                       variant="outline"
@@ -645,6 +655,11 @@ export function VirtualizedLogsTable({
                                 align="end"
                                 className="text-xs space-y-1 max-w-[300px]"
                               >
+                                {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
+                                  <div className="text-orange-600 dark:text-orange-400 font-medium">
+                                    {t("logs.billingDetails.fastPriority")}
+                                  </div>
+                                )}
                                 {log.context1mApplied && (
                                   <div className="text-purple-600 dark:text-purple-400 font-medium">
                                     {t("logs.billingDetails.context1m")}

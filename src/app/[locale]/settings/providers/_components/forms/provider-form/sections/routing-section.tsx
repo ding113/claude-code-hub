@@ -23,6 +23,7 @@ import type {
   CodexParallelToolCallsPreference,
   CodexReasoningEffortPreference,
   CodexReasoningSummaryPreference,
+  CodexServiceTierPreference,
   CodexTextVerbosityPreference,
   GeminiGoogleSearchPreference,
   ProviderType,
@@ -652,6 +653,45 @@ export function RoutingSection() {
                     ))}
                   </SelectContent>
                 </Select>
+              </SmartInputWrapper>
+
+              <SmartInputWrapper label={t("sections.routing.codexOverrides.serviceTier.label")}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="relative">
+                      <Select
+                        value={state.routing.codexServiceTierPreference}
+                        onValueChange={(val) =>
+                          dispatch({
+                            type: "SET_CODEX_SERVICE_TIER",
+                            payload: val as CodexServiceTierPreference,
+                          })
+                        }
+                        disabled={state.ui.isPending}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="inherit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["inherit", "auto", "default", "flex", "priority"].map((val) => (
+                            <SelectItem key={val} value={val}>
+                              {t(`sections.routing.codexOverrides.serviceTier.options.${val}`)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Info
+                        aria-hidden="true"
+                        className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <p className="text-sm">
+                      {t("sections.routing.codexOverrides.serviceTier.help")}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
               </SmartInputWrapper>
             </div>
           </SectionCard>

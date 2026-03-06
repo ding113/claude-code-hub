@@ -283,6 +283,8 @@
         "cacheTtlSwapped": "TTL биллинга (инверсия)",
         "multiplier": "Множитель поставщика",
         "totalCost": "Общая стоимость",
+        "fast": "fast",
+        "fastPriority": "Priority service tier (fast mode)",
         "context1m": "1M контекст",
         "context1mPricing": "Вход 2x >200k, Выход 1.5x >200k"
       },
@@ -374,6 +376,8 @@
       "cacheTtlSwapped": "TTL биллинга (инверсия)",
       "multiplier": "Множитель поставщика",
       "totalCost": "Общая стоимость",
+      "fast": "fast",
+      "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Контекст",
       "context1mPricing": "Вход >200k 2x, Выход >200k 1.5x"
     }

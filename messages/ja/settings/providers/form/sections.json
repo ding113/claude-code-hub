@@ -190,6 +190,17 @@
           "true": "強制有効"
         }
       },
+      "serviceTier": {
+        "help": "Codex（Responses API）リクエストの OpenAI service_tier を制御します。priority は fast モードに相当します。「クライアントに従う」は service_tier を上書きせず、その他の値は強制上書きします。上流が未対応の tier ではエラーになる場合があります。",
+        "label": "Service Tier オーバーライド",
+        "options": {
+          "auto": "auto（プロジェクト既定）",
+          "default": "default（標準）",
+          "flex": "flex（ベストエフォート）",
+          "inherit": "オーバーライドしない（クライアントに従う）",
+          "priority": "priority（fast）"
+        }
+      },
       "reasoningEffort": {
         "help": "回答前にモデルが使う推論の強度（推論トークン量）を制御します。「クライアントに従う」はリクエストを変更しません。その他の値は reasoning.effort を強制します。注意: none は GPT-5.1 のみ、xhigh は GPT-5.1-Codex-Max のみ対応で、未対応モデルではエラーになります。",
         "label": "推論強度オーバーライド",
