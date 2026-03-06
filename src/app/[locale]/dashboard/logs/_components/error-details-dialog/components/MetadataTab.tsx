@@ -17,10 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Link } from "@/i18n/routing";
-import { getPricingResolutionSpecialSetting } from "@/lib/utils/special-settings";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { formatCurrency } from "@/lib/utils/currency";
 import { formatProviderTimeline } from "@/lib/utils/provider-chain-formatter";
+import { getPricingResolutionSpecialSetting } from "@/lib/utils/special-settings";
 import type { MetadataTabProps } from "../types";
 
 export function MetadataTab({
