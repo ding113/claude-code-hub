@@ -543,19 +543,24 @@ function ProviderFormContent({
     }
 
     if (
+      // Advanced options
       state.routing.preserveClientIp ||
       state.routing.cacheTtlPreference !== "inherit" ||
       state.routing.swapCacheTtlBilling ||
       state.routing.context1mPreference !== "inherit" ||
+      // Codex overrides
       state.routing.codexReasoningEffortPreference !== "inherit" ||
       state.routing.codexReasoningSummaryPreference !== "inherit" ||
       state.routing.codexTextVerbosityPreference !== "inherit" ||
       state.routing.codexParallelToolCallsPreference !== "inherit" ||
       state.routing.codexServiceTierPreference !== "inherit" ||
+      // Anthropic overrides
       state.routing.anthropicMaxTokensPreference !== "inherit" ||
       state.routing.anthropicThinkingBudgetPreference !== "inherit" ||
       state.routing.anthropicAdaptiveThinking !== null ||
+      // Gemini overrides
       state.routing.geminiGoogleSearchPreference !== "inherit" ||
+      // Active time
       state.routing.activeTimeStart !== null
     ) {
       status.options = "configured";

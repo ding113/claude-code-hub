@@ -479,8 +479,6 @@ export function providerFormReducer(
     // UI
     case "SET_ACTIVE_TAB":
       return { ...state, ui: { ...state.ui, activeTab: action.payload, activeSubTab: null } };
-    case "SET_ACTIVE_SUB_TAB":
-      return { ...state, ui: { ...state.ui, activeSubTab: action.payload } };
     case "SET_ACTIVE_NAV":
       return {
         ...state,
