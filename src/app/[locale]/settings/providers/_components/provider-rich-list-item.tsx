@@ -11,6 +11,7 @@ import {
   Key,
   MoreHorizontal,
   RotateCcw,
+  ShieldCheck,
   Trash,
   XCircle,
 } from "lucide-react";
@@ -55,6 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_GROUP, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
@@ -762,6 +764,20 @@ export function ProviderRichListItem({
                   {vendor.displayName || vendor.websiteDomain}
                 </span>
                 <ProviderEndpointHover vendorId={vendor.id} providerType={provider.providerType} />
+                {provider.proxyUrl && (
+                  <TooltipProvider>
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex cursor-help">
+                          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="text-xs">
+                        {tList("proxyEnabled")}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </div>
             ) : (
               <span className="truncate max-w-[300px]">{provider.url}</span>

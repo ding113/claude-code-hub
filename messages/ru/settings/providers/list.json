@@ -42,5 +42,6 @@
   "actionResetUsage": "Сбросить использование",
   "actionDelete": "Удалить",
   "selectProvider": "Выбрать {name}",
-  "schedule": "Расписание"
+  "schedule": "Расписание",
+  "proxyEnabled": "Прокси включен"
 }
