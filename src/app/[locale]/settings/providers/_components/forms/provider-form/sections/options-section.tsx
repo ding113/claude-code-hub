@@ -29,7 +29,6 @@ import { useProviderForm } from "../provider-form-context";
 
 interface OptionsSectionProps {
   subSectionRefs?: {
-    options?: (el: HTMLDivElement | null) => void;
     activeTime?: (el: HTMLDivElement | null) => void;
   };
 }
@@ -51,7 +50,7 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
         transition={{ duration: 0.2 }}
         className="space-y-6"
       >
-        <div ref={subSectionRefs?.options} className="space-y-6">
+        <div className="space-y-6">
           {/* Advanced Settings */}
           <SectionCard
             title={t("sections.routing.options.title")}

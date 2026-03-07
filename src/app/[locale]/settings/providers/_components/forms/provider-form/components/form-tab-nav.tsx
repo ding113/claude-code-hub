@@ -72,11 +72,6 @@ export const PARENT_MAP = Object.fromEntries(
   NAV_CONFIG.flatMap((item) => (item.children ?? []).map((child) => [child.id, item.id]))
 ) as Record<SubTabId, TabId>;
 
-const NAV_BY_ID = Object.fromEntries(NAV_CONFIG.map((item) => [item.id, item])) as Record<
-  TabId,
-  NavItemConfig
->;
-
 interface FormTabNavProps {
   activeTab: TabId;
   activeSubTab?: SubTabId | null;
@@ -319,7 +314,7 @@ export function FormTabNav({
           })}
         </div>
         {(() => {
-          const activeItem = NAV_BY_ID[activeTab];
+          const activeItem = filteredNav.find((item) => item.id === activeTab);
           if (!activeItem?.children?.length) return null;
           return (
             <div className="flex items-center gap-1 px-6 pb-2 overflow-x-auto scrollbar-hide border-t border-border/30">
@@ -357,7 +352,7 @@ export function FormTabNav({
       {/* Mobile: Bottom Navigation */}
       <nav className="flex flex-col md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
         {(() => {
-          const activeItem = NAV_BY_ID[activeTab];
+          const activeItem = filteredNav.find((item) => item.id === activeTab);
           if (!activeItem?.children?.length) return null;
           return (
             <div className="flex items-center justify-center gap-2 px-4 py-1.5 border-b border-border/30">

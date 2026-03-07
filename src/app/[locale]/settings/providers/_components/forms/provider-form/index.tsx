@@ -225,7 +225,7 @@ function ProviderFormContent({
         isScrollingToSection.current = false;
       };
       const onScrollEnd = () => {
-        clearTimeout(scrollLockTimerRef.current!);
+        if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
         scrollEndListenerRef.current = null;
         unlock();
       };
