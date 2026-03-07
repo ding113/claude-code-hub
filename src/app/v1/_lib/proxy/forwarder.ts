@@ -2650,8 +2650,26 @@ export class ProxyForwarder {
       }
     }
 
+    // joinOpenAIPool: 移除浏览器/OpenAI 客户端特有的头，
+    // 真正的 Claude Code CLI 不会发送这些头
+    const blacklist = ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY];
+    if (isOpenAIToClaudeConversion) {
+      blacklist.push(
+        "http-referer",
+        "referer",
+        "origin",
+        "x-title",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+        "sec-fetch-dest",
+        "sec-fetch-mode",
+        "sec-fetch-site",
+      );
+    }
+
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY],
+      blacklist,
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
