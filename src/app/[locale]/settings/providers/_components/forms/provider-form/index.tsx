@@ -561,7 +561,8 @@ function ProviderFormContent({
       // Gemini overrides
       state.routing.geminiGoogleSearchPreference !== "inherit" ||
       // Active time
-      state.routing.activeTimeStart !== null
+      state.routing.activeTimeStart !== null ||
+      state.routing.activeTimeEnd !== null
     ) {
       status.options = "configured";
     }

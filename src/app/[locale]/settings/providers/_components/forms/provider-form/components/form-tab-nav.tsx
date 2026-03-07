@@ -334,7 +334,7 @@ export function FormTabNav({
                     disabled={disabled}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap",
-                      "hover:bg-accent/50 focus-visible:outline-none",
+                      "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       isChildActive ? "text-primary bg-primary/10" : "text-muted-foreground",
                       disabled && "opacity-50 cursor-not-allowed"
                     )}
@@ -372,7 +372,7 @@ export function FormTabNav({
                     disabled={disabled}
                     className={cn(
                       "flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md transition-all whitespace-nowrap",
-                      "hover:bg-accent/50 focus-visible:outline-none",
+                      "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       isChildActive ? "text-primary bg-primary/10" : "text-muted-foreground",
                       disabled && "opacity-50 cursor-not-allowed"
                     )}

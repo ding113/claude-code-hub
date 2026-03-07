@@ -42,7 +42,7 @@
     },
     "options": {
       "title": "选项",
-      "desc": "附加提供者选项和覆盖设置"
+      "desc": "附加供应商选项和覆写设置"
     },
     "modelWhitelist": {
       "title": "模型白名单",
