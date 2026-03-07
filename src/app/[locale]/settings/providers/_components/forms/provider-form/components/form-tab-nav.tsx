@@ -15,16 +15,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import type { SubTabId, TabId } from "../provider-form-types";
-
-const TAB_CONFIG: { id: TabId; icon: typeof FileText; labelKey: string }[] = [
-  { id: "basic", icon: FileText, labelKey: "tabs.basic" },
-  { id: "routing", icon: Route, labelKey: "tabs.routing" },
-  { id: "options", icon: Settings, labelKey: "tabs.options" },
-  { id: "limits", icon: Gauge, labelKey: "tabs.limits" },
-  { id: "network", icon: Network, labelKey: "tabs.network" },
-  { id: "testing", icon: FlaskConical, labelKey: "tabs.testing" },
-];
+import type { NavTargetId, SubTabId, TabId } from "../provider-form-types";
 
 type NavItemConfig = {
   id: TabId;
@@ -65,6 +56,21 @@ const NAV_CONFIG: NavItemConfig[] = [
   },
   { id: "testing", icon: FlaskConical, labelKey: "tabs.testing" },
 ];
+
+const TAB_CONFIG: { id: TabId; icon: typeof FileText; labelKey: string }[] = NAV_CONFIG.map(
+  ({ id, icon, labelKey }) => ({ id, icon, labelKey })
+);
+
+export const TAB_ORDER: TabId[] = NAV_CONFIG.map((item) => item.id);
+
+export const NAV_ORDER: NavTargetId[] = NAV_CONFIG.flatMap((item) => [
+  item.id,
+  ...(item.children?.map((c) => c.id) ?? []),
+]);
+
+export const PARENT_MAP = Object.fromEntries(
+  NAV_CONFIG.flatMap((item) => (item.children ?? []).map((child) => [child.id, item.id]))
+) as Record<SubTabId, TabId>;
 
 interface FormTabNavProps {
   activeTab: TabId;
@@ -248,7 +254,7 @@ export function FormTabNav({
       </nav>
 
       {/* Tablet: Horizontal Tabs */}
-      <nav className="hidden md:flex lg:hidden sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md">
+      <nav className="hidden md:flex md:flex-col lg:hidden sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md">
         <div className="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
           {TAB_CONFIG.map((tab) => {
             const Icon = tab.icon;
@@ -298,10 +304,78 @@ export function FormTabNav({
             );
           })}
         </div>
+        {(() => {
+          const activeItem = NAV_CONFIG.find((item) => item.id === activeTab);
+          if (!activeItem?.children?.length) return null;
+          return (
+            <div className="flex items-center gap-1 px-6 pb-2 overflow-x-auto scrollbar-hide border-t border-border/30">
+              {activeItem.children.map((child) => {
+                const ChildIcon = child.icon;
+                const isChildActive = activeSubTab === child.id;
+                return (
+                  <button
+                    key={child.id}
+                    type="button"
+                    onClick={() => onSubTabChange?.(child.id)}
+                    disabled={disabled}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap",
+                      "hover:bg-accent/50 focus-visible:outline-none",
+                      isChildActive ? "text-primary bg-primary/10" : "text-muted-foreground",
+                      disabled && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <ChildIcon
+                      className={cn(
+                        "h-3 w-3",
+                        isChildActive ? "text-primary" : "text-muted-foreground/50"
+                      )}
+                    />
+                    <span>{t(child.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
       </nav>
 
       {/* Mobile: Bottom Navigation */}
-      <nav className="flex md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
+      <nav className="flex flex-col md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
+        {(() => {
+          const activeItem = NAV_CONFIG.find((item) => item.id === activeTab);
+          if (!activeItem?.children?.length) return null;
+          return (
+            <div className="flex items-center justify-center gap-2 px-4 py-1.5 border-b border-border/30">
+              {activeItem.children.map((child) => {
+                const ChildIcon = child.icon;
+                const isChildActive = activeSubTab === child.id;
+                return (
+                  <button
+                    key={child.id}
+                    type="button"
+                    onClick={() => onSubTabChange?.(child.id)}
+                    disabled={disabled}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md transition-all whitespace-nowrap",
+                      "hover:bg-accent/50 focus-visible:outline-none",
+                      isChildActive ? "text-primary bg-primary/10" : "text-muted-foreground",
+                      disabled && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <ChildIcon
+                      className={cn(
+                        "h-3 w-3",
+                        isChildActive ? "text-primary" : "text-muted-foreground/50"
+                      )}
+                    />
+                    <span>{t(child.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
         <div className="flex items-center justify-around w-full px-2 py-1">
           {TAB_CONFIG.map((tab) => {
             const Icon = tab.icon;

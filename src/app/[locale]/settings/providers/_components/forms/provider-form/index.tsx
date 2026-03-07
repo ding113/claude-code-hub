@@ -33,29 +33,14 @@ import type {
   ProviderType,
   ProviderVendor,
 } from "@/types/provider";
-import { FormTabNav } from "./components/form-tab-nav";
+import { FormTabNav, NAV_ORDER, PARENT_MAP, TAB_ORDER } from "./components/form-tab-nav";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { NavTargetId, SubTabId, TabId } from "./provider-form-types";
-import { PARENT_MAP } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
 import { LimitsSection } from "./sections/limits-section";
 import { NetworkSection } from "./sections/network-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
-
-const TAB_ORDER: TabId[] = ["basic", "routing", "options", "limits", "network", "testing"];
-const NAV_ORDER: NavTargetId[] = [
-  "basic",
-  "routing",
-  "scheduling",
-  "options",
-  "activeTime",
-  "limits",
-  "circuitBreaker",
-  "network",
-  "timeout",
-  "testing",
-];
 
 function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
@@ -214,8 +199,6 @@ function ProviderFormContent({
     testing: null,
   });
   const isScrollingToSection = useRef(false);
-  const [activeSubTab, setActiveSubTab] = useState<SubTabId | null>(null);
-
   // Scroll to section when tab is clicked
   const scrollToSection = useCallback((tab: NavTargetId) => {
     const section = sectionRefs.current[tab];
@@ -256,19 +239,20 @@ function ProviderFormContent({
     if (state.ui.activeTab !== parentTab) {
       dispatch({ type: "SET_ACTIVE_TAB", payload: parentTab });
     }
-    setActiveSubTab(subTab);
-  }, [dispatch, state.ui.activeTab]);
+    if (state.ui.activeSubTab !== subTab) {
+      dispatch({ type: "SET_ACTIVE_SUB_TAB", payload: subTab });
+    }
+  }, [dispatch, state.ui.activeSubTab, state.ui.activeTab]);
 
   const handleTabChange = (tab: TabId) => {
     dispatch({ type: "SET_ACTIVE_TAB", payload: tab });
-    setActiveSubTab(null);
     scrollToSection(tab);
   };
 
   const handleSubTabChange = (subTab: SubTabId) => {
     const parentTab = PARENT_MAP[subTab];
     dispatch({ type: "SET_ACTIVE_TAB", payload: parentTab });
-    setActiveSubTab(subTab);
+    dispatch({ type: "SET_ACTIVE_SUB_TAB", payload: subTab });
     scrollToSection(subTab);
   };
 
@@ -552,7 +536,24 @@ function ProviderFormContent({
       status.routing = "configured";
     }
 
-    status.options = "default";
+    if (
+      state.routing.preserveClientIp ||
+      state.routing.cacheTtlPreference !== "inherit" ||
+      state.routing.swapCacheTtlBilling ||
+      state.routing.context1mPreference !== "inherit" ||
+      state.routing.codexReasoningEffortPreference !== "inherit" ||
+      state.routing.codexReasoningSummaryPreference !== "inherit" ||
+      state.routing.codexTextVerbosityPreference !== "inherit" ||
+      state.routing.codexParallelToolCallsPreference !== "inherit" ||
+      state.routing.codexServiceTierPreference !== "inherit" ||
+      state.routing.anthropicMaxTokensPreference !== "inherit" ||
+      state.routing.anthropicThinkingBudgetPreference !== "inherit" ||
+      state.routing.anthropicAdaptiveThinking !== null ||
+      state.routing.geminiGoogleSearchPreference !== "inherit" ||
+      state.routing.activeTimeStart !== null
+    ) {
+      status.options = "configured";
+    }
 
     // Limits - configured if any limit set
     if (
@@ -590,7 +591,7 @@ function ProviderFormContent({
           {/* Tab Navigation */}
           <FormTabNav
             activeTab={state.ui.activeTab}
-            activeSubTab={activeSubTab}
+            activeSubTab={state.ui.activeSubTab}
             onTabChange={handleTabChange}
             onSubTabChange={handleSubTabChange}
             disabled={isPending}

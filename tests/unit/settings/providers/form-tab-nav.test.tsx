@@ -39,7 +39,12 @@ vi.mock("lucide-react", () => {
   };
 });
 
-import { FormTabNav } from "@/app/[locale]/settings/providers/_components/forms/provider-form/components/form-tab-nav";
+import {
+  FormTabNav,
+  NAV_ORDER,
+  PARENT_MAP,
+  TAB_ORDER,
+} from "@/app/[locale]/settings/providers/_components/forms/provider-form/components/form-tab-nav";
 
 // ---------------------------------------------------------------------------
 // Render helper (matches project convention)
@@ -76,7 +81,7 @@ describe("FormTabNav", () => {
   // -- Default (vertical) layout -------------------------------------------
 
   describe("default vertical layout", () => {
-    it("renders all tabs across 3 responsive breakpoints (22 total)", () => {
+    it("renders all tabs across 3 responsive breakpoints (22 total when no children on active tab)", () => {
       const { container, unmount } = render(<FormTabNav {...defaultProps} />);
 
       // Desktop (10) + Tablet (6) + Mobile (6) = 22
@@ -146,6 +151,77 @@ describe("FormTabNav", () => {
       const desktopNav = container.querySelector("nav");
       const desktopButtons = desktopNav!.querySelectorAll("button");
       expect(desktopButtons[2].className).toContain("text-primary");
+      unmount();
+    });
+
+    it("renders sub-items in tablet nav when active tab has children", () => {
+      const { container, unmount } = render(<FormTabNav {...defaultProps} activeTab="routing" />);
+      const navs = container.querySelectorAll("nav");
+      // Second nav is tablet (hidden md:flex md:flex-col lg:hidden)
+      const tabletNav = navs[1];
+      const schedulingBtn = Array.from(tabletNav!.querySelectorAll("button")).find((btn) =>
+        btn.textContent?.includes("tabs.scheduling")
+      );
+      expect(schedulingBtn).toBeTruthy();
+      unmount();
+    });
+
+    it("renders sub-items in mobile nav when active tab has children", () => {
+      const { container, unmount } = render(<FormTabNav {...defaultProps} activeTab="routing" />);
+      const navs = container.querySelectorAll("nav");
+      // Third nav is mobile (flex md:hidden)
+      const mobileNav = navs[2];
+      const schedulingBtn = Array.from(mobileNav!.querySelectorAll("button")).find((btn) =>
+        btn.textContent?.includes("tabs.scheduling")
+      );
+      expect(schedulingBtn).toBeTruthy();
+      unmount();
+    });
+
+    it("does not render sub-items in tablet/mobile when active tab has no children", () => {
+      const { container, unmount } = render(<FormTabNav {...defaultProps} activeTab="basic" />);
+      const navs = container.querySelectorAll("nav");
+      const tabletNav = navs[1];
+      const mobileNav = navs[2];
+      // basic has no children, so no sub-item buttons beyond the main 6
+      const tabletButtons = tabletNav!.querySelectorAll("button");
+      expect(tabletButtons.length).toBe(6);
+      const mobileButtons = mobileNav!.querySelectorAll("button");
+      expect(mobileButtons.length).toBe(6);
+      unmount();
+    });
+
+    it("calls onSubTabChange from tablet sub-item click", () => {
+      const onSubTabChange = vi.fn();
+      const { container, unmount } = render(
+        <FormTabNav {...defaultProps} activeTab="routing" onSubTabChange={onSubTabChange} />
+      );
+      const navs = container.querySelectorAll("nav");
+      const tabletNav = navs[1];
+      const schedulingBtn = Array.from(tabletNav!.querySelectorAll("button")).find((btn) =>
+        btn.textContent?.includes("tabs.scheduling")
+      );
+      act(() => {
+        schedulingBtn!.click();
+      });
+      expect(onSubTabChange).toHaveBeenCalledWith("scheduling");
+      unmount();
+    });
+
+    it("calls onSubTabChange from mobile sub-item click", () => {
+      const onSubTabChange = vi.fn();
+      const { container, unmount } = render(
+        <FormTabNav {...defaultProps} activeTab="routing" onSubTabChange={onSubTabChange} />
+      );
+      const navs = container.querySelectorAll("nav");
+      const mobileNav = navs[2];
+      const schedulingBtn = Array.from(mobileNav!.querySelectorAll("button")).find((btn) =>
+        btn.textContent?.includes("tabs.scheduling")
+      );
+      act(() => {
+        schedulingBtn!.click();
+      });
+      expect(onSubTabChange).toHaveBeenCalledWith("scheduling");
       unmount();
     });
   });
@@ -272,6 +348,37 @@ describe("FormTabNav", () => {
       expect(basicDot).toBeNull();
 
       unmount();
+    });
+  });
+
+  describe("derived constants", () => {
+    it("TAB_ORDER has correct length matching NAV_CONFIG", () => {
+      expect(TAB_ORDER.length).toBe(6);
+      expect(TAB_ORDER).toEqual(["basic", "routing", "options", "limits", "network", "testing"]);
+    });
+
+    it("NAV_ORDER includes all tabs and sub-tabs", () => {
+      expect(NAV_ORDER).toEqual([
+        "basic",
+        "routing",
+        "scheduling",
+        "options",
+        "activeTime",
+        "limits",
+        "circuitBreaker",
+        "network",
+        "timeout",
+        "testing",
+      ]);
+    });
+
+    it("PARENT_MAP maps each sub-tab to its parent", () => {
+      expect(PARENT_MAP).toEqual({
+        scheduling: "routing",
+        activeTime: "options",
+        circuitBreaker: "limits",
+        timeout: "network",
+      });
     });
   });
 });

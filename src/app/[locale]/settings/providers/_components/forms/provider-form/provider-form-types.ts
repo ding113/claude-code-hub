@@ -28,14 +28,6 @@ export type SubTabId = "scheduling" | "activeTime" | "circuitBreaker" | "timeout
 // Combined navigation target (parent tab or sub-tab)
 export type NavTargetId = TabId | SubTabId;
 
-// Maps each sub-tab to its parent tab
-export const PARENT_MAP: Record<SubTabId, TabId> = {
-  scheduling: "routing",
-  activeTime: "options",
-  circuitBreaker: "limits",
-  timeout: "network",
-};
-
 // Tab configuration
 export interface TabConfig {
   id: TabId;
@@ -120,6 +112,7 @@ export interface BatchState {
 
 export interface UIState {
   activeTab: TabId;
+  activeSubTab: SubTabId | null;
   isPending: boolean;
   showFailureThresholdConfirm: boolean;
 }
@@ -200,6 +193,7 @@ export type ProviderFormAction =
   | { type: "SET_MCP_PASSTHROUGH_URL"; payload: string }
   // UI actions
   | { type: "SET_ACTIVE_TAB"; payload: TabId }
+  | { type: "SET_ACTIVE_SUB_TAB"; payload: SubTabId | null }
   | { type: "SET_IS_PENDING"; payload: boolean }
   | { type: "SET_SHOW_FAILURE_THRESHOLD_CONFIRM"; payload: boolean }
   // Bulk actions

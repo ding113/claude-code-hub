@@ -10,7 +10,7 @@
     "options": "Параметры",
     "activeTime": "Активное время",
     "circuitBreaker": "Автовыключатель",
-    "timeout": "Таймауты",
+    "timeout": "Таймаут",
     "stepProgress": "Прогресс шагов"
   }
 }
