@@ -1371,7 +1371,12 @@ export class ProxyForwarder {
         ? mapProviderTypeToTransformer(provider.providerType)
         : null;
 
-      if (fromFormat !== toFormat && fromFormat && toFormat && !(session as any)._formatTransformed) {
+      if (
+        fromFormat !== toFormat &&
+        fromFormat &&
+        toFormat &&
+        !(session as any)._formatTransformed
+      ) {
         // joinOpenAIPool: 在转换前捕获客户端原始 stream 偏好
         // 转换后 stream 会被硬编码为 true，原始值丢失
         const clientWantsStream =
