@@ -214,9 +214,18 @@ function ProviderFormContent({
       const offset = sectionTop - containerTop + contentRef.current.scrollTop;
       contentRef.current.scrollTo({ top: offset, behavior: "smooth" });
       if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
-      scrollLockTimerRef.current = setTimeout(() => {
+      const unlock = () => {
         isScrollingToSection.current = false;
-      }, 500);
+      };
+      const onScrollEnd = () => {
+        clearTimeout(scrollLockTimerRef.current!);
+        unlock();
+      };
+      contentRef.current.addEventListener("scrollend", onScrollEnd, { once: true });
+      scrollLockTimerRef.current = setTimeout(() => {
+        contentRef.current?.removeEventListener("scrollend", onScrollEnd);
+        unlock();
+      }, 1000);
     }
   }, []);
 

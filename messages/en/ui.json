@@ -52,7 +52,8 @@
     "maxTags": "Maximum number of tags reached",
     "tooLong": "Tag length cannot exceed {max} characters",
     "invalidFormat": "Tags can only contain letters, numbers, underscores and hyphens",
-    "removeTag": "Remove tag {tag}"
+    "removeTag": "Remove tag {tag}",
+    "unknownError": "Invalid input"
   },
   "providerGroupSelect": {
     "placeholder": "Select provider groups",

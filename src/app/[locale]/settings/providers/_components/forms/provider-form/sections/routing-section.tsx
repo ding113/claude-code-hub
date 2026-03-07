@@ -160,7 +160,7 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                     invalid_format: tUI("invalidFormat"),
                     max_tags: tUI("maxTags"),
                   };
-                  toast.error(messages[reason] || reason);
+                  toast.error(messages[reason] || tUI("unknownError"));
                 }}
               />
             </SmartInputWrapper>
@@ -294,7 +294,7 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                     invalid_format: tUI("invalidFormat"),
                     max_tags: tUI("maxTags"),
                   };
-                  toast.error(messages[reason] || reason);
+                  toast.error(messages[reason] || tUI("unknownError"));
                 }}
               />
             </div>
