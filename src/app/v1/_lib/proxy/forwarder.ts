@@ -1372,6 +1372,11 @@ export class ProxyForwarder {
         : null;
 
       if (fromFormat !== toFormat && fromFormat && toFormat) {
+        // joinOpenAIPool: 在转换前捕获客户端原始 stream 偏好
+        // 转换后 stream 会被硬编码为 true，原始值丢失
+        const clientWantsStream =
+          (session.request.message as Record<string, unknown>).stream === true;
+
         try {
           const transformed = defaultRegistry.transformRequest(
             fromFormat,
@@ -1389,6 +1394,20 @@ export class ProxyForwarder {
 
           // 更新 session 中的请求体
           session.request.message = transformed;
+
+          // joinOpenAIPool: 客户端要求非流式，但上游收到 stream=true 返回 SSE，
+          // 需要在响应阶段缓冲 SSE 转为非流式 JSON
+          if (
+            !clientWantsStream &&
+            session.originalFormat === "openai" &&
+            (provider.providerType === "claude" || provider.providerType === "claude-auth")
+          ) {
+            (session as any)._joinPoolNonStream = true;
+            logger.debug("ProxyForwarder: joinOpenAIPool non-stream client detected", {
+              providerId: provider.id,
+              providerName: provider.name,
+            });
+          }
         } catch (error) {
           logger.error("ProxyForwarder: Request transformation failed", {
             from: fromFormat,

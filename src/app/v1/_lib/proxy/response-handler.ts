@@ -150,11 +150,281 @@ export class ProxyResponseHandler {
     const contentType = fixedResponse.headers.get("content-type") || "";
     const isSSE = contentType.includes("text/event-stream");
 
+    // joinOpenAIPool 非流式：客户端要求非流式，但上游返回 SSE（stream 硬编码 true）
+    // 需要缓冲整个 SSE 流，转换为非流式 JSON 返回
+    const isJoinPoolNonStream = !!(session as any)._joinPoolNonStream;
+
+    if (isSSE && isJoinPoolNonStream) {
+      logger.info("[ResponseHandler] joinOpenAIPool: Buffering SSE for non-stream client", {
+        sessionId: session.sessionId,
+        providerId: session.provider?.id,
+      });
+      return await ProxyResponseHandler.handleStreamToNonStream(session, fixedResponse);
+    }
+
     if (!isSSE) {
       return await ProxyResponseHandler.handleNonStream(session, fixedResponse);
     }
 
     return await ProxyResponseHandler.handleStream(session, fixedResponse);
+  }
+
+  /**
+   * joinOpenAIPool 非流式处理：缓冲上游 SSE 流，转换为非流式 JSON 返回
+   *
+   * 背景：上游 Claude API 的 stream 硬编码为 true，返回 SSE 格式。
+   * 但客户端要求非流式 (stream=false/undefined)，需要缓冲全部 SSE 事件，
+   * 提取最终内容，构建 OpenAI Chat Completions 非流式 JSON 响应。
+   */
+  private static async handleStreamToNonStream(
+    session: ProxySession,
+    response: Response
+  ): Promise<Response> {
+    const provider = session.provider;
+    if (!provider || !response.body) {
+      return response;
+    }
+
+    // 清除响应超时
+    const sessionWithCleanup = session as typeof session & {
+      clearResponseTimeout?: () => void;
+    };
+    if (sessionWithCleanup.clearResponseTimeout) {
+      sessionWithCleanup.clearResponseTimeout();
+    }
+
+    // 读取整个 SSE 流
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+      fullText += decoder.decode(); // flush
+    } catch (error) {
+      logger.error("[ResponseHandler] Failed to buffer SSE for non-stream conversion", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return new Response(
+        JSON.stringify({ error: { message: "Failed to read upstream response" } }),
+        { status: 502, headers: { "content-type": "application/json" } }
+      );
+    }
+
+    // 解析 Claude SSE 事件
+    let model = session.request.model || "";
+    let messageId = "";
+    let textContent = "";
+    let reasoningContent = "";
+    let stopReason = "end_turn";
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheCreationInputTokens = 0;
+    let cacheReadInputTokens = 0;
+    const toolCalls: Array<{
+      id: string;
+      type: string;
+      function: { name: string; arguments: string };
+    }> = [];
+    const toolUseInputBuffers: Map<number, string> = new Map();
+
+    const events = fullText.split("\n\n");
+    for (const event of events) {
+      if (!event.trim()) continue;
+
+      let eventType = "";
+      let eventData = "";
+
+      for (const line of event.split("\n")) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          eventData = line.slice(6);
+        }
+      }
+
+      if (!eventData || eventType === "ping") continue;
+
+      try {
+        const data = JSON.parse(eventData) as Record<string, unknown>;
+
+        switch (eventType) {
+          case "message_start": {
+            const message = data.message as Record<string, unknown> | undefined;
+            if (message) {
+              messageId = (message.id as string) || "";
+              model = (message.model as string) || model;
+              const usage = message.usage as Record<string, unknown> | undefined;
+              if (usage) {
+                inputTokens = (usage.input_tokens as number) || 0;
+                cacheCreationInputTokens =
+                  (usage.cache_creation_input_tokens as number) || 0;
+                cacheReadInputTokens = (usage.cache_read_input_tokens as number) || 0;
+              }
+            }
+            break;
+          }
+
+          case "content_block_start": {
+            const contentBlock = data.content_block as
+              | Record<string, unknown>
+              | undefined;
+            const index = data.index as number;
+            if (contentBlock?.type === "tool_use") {
+              toolCalls.push({
+                id: contentBlock.id as string,
+                type: "function",
+                function: {
+                  name: contentBlock.name as string,
+                  arguments: "",
+                },
+              });
+              toolUseInputBuffers.set(index, "");
+            }
+            break;
+          }
+
+          case "content_block_delta": {
+            const delta = data.delta as Record<string, unknown> | undefined;
+            const index = data.index as number;
+            if (delta) {
+              if (delta.type === "text_delta") {
+                textContent += (delta.text as string) || "";
+              } else if (delta.type === "thinking_delta") {
+                reasoningContent += (delta.thinking as string) || "";
+              } else if (delta.type === "input_json_delta") {
+                const existing = toolUseInputBuffers.get(index) || "";
+                toolUseInputBuffers.set(
+                  index,
+                  existing + ((delta.partial_json as string) || "")
+                );
+              }
+            }
+            break;
+          }
+
+          case "content_block_stop": {
+            const index = data.index as number;
+            if (toolUseInputBuffers.has(index)) {
+              const jsonStr = toolUseInputBuffers.get(index) || "{}";
+              const toolCallIndex = Array.from(toolUseInputBuffers.keys())
+                .sort((a, b) => a - b)
+                .indexOf(index);
+              if (toolCallIndex >= 0 && toolCallIndex < toolCalls.length) {
+                toolCalls[toolCallIndex].function.arguments = jsonStr;
+              }
+              toolUseInputBuffers.delete(index);
+            }
+            break;
+          }
+
+          case "message_delta": {
+            const delta = data.delta as Record<string, unknown> | undefined;
+            if (delta) {
+              stopReason = (delta.stop_reason as string) || stopReason;
+            }
+            const usage = data.usage as Record<string, unknown> | undefined;
+            if (usage) {
+              outputTokens = (usage.output_tokens as number) || outputTokens;
+            }
+            break;
+          }
+        }
+      } catch (_parseError) {
+        // skip unparseable events
+      }
+    }
+
+    // 映射 stop_reason
+    let finishReason = "stop";
+    switch (stopReason) {
+      case "end_turn":
+        finishReason = "stop";
+        break;
+      case "max_tokens":
+        finishReason = "length";
+        break;
+      case "tool_use":
+        finishReason = "tool_calls";
+        break;
+      case "stop_sequence":
+        finishReason = "stop";
+        break;
+    }
+
+    // 构建 OpenAI Chat Completions 非流式响应
+    const openAIResponse = {
+      id: messageId || `chatcmpl-${Date.now()}`,
+      object: "chat.completion",
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: textContent || null,
+            ...(reasoningContent && { reasoning_content: reasoningContent }),
+            ...(toolCalls.length > 0 && { tool_calls: toolCalls }),
+          },
+          finish_reason: finishReason,
+        },
+      ],
+      usage: {
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: inputTokens + outputTokens,
+        ...(cacheCreationInputTokens > 0 && {
+          cache_creation_input_tokens: cacheCreationInputTokens,
+        }),
+        ...(cacheReadInputTokens > 0 && {
+          cache_read_input_tokens: cacheReadInputTokens,
+        }),
+      },
+    };
+
+    logger.info("[ResponseHandler] joinOpenAIPool: SSE buffered to non-stream JSON", {
+      sessionId: session.sessionId,
+      providerId: provider.id,
+      model,
+      inputTokens,
+      outputTokens,
+      textLength: textContent.length,
+      toolCallsCount: toolCalls.length,
+    });
+
+    const responseBody = JSON.stringify(openAIResponse);
+
+    // 后台统计
+    const messageContext = session.messageContext;
+    const taskId = `non-stream-join-${messageContext?.id || `unknown-${Date.now()}`}`;
+
+    const processingPromise = (async () => {
+      try {
+        const duration = Date.now() - session.startTime;
+        await finalizeRequestStats(session, responseBody, 200, duration);
+      } catch (error) {
+        if (!isClientAbortError(error as Error)) {
+          logger.error("[ResponseHandler] joinPool non-stream stats failed:", error);
+        }
+      } finally {
+        AsyncTaskManager.cleanup(taskId);
+      }
+    })();
+
+    AsyncTaskManager.register(taskId, processingPromise, "join-pool-non-stream-stats");
+    processingPromise.catch((error) => {
+      logger.error("[ResponseHandler] joinPool non-stream stats uncaught error:", error);
+    });
+
+    return new Response(responseBody, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   }
 
   private static async handleNonStream(
