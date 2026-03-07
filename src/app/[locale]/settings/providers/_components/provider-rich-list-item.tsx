@@ -764,21 +764,21 @@ export function ProviderRichListItem({
                   {vendor.displayName || vendor.websiteDomain}
                 </span>
                 <ProviderEndpointHover vendorId={vendor.id} providerType={provider.providerType} />
-                {provider.proxyUrl && (
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <span className="inline-flex cursor-help">
-                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      {tList("proxyEnabled")}
-                    </TooltipContent>
-                  </Tooltip>
-                )}
               </div>
             ) : (
               <span className="truncate max-w-[300px]">{provider.url}</span>
+            )}
+            {provider.proxyUrl && (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex cursor-help">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {tList("proxyEnabled")}
+                </TooltipContent>
+              </Tooltip>
             )}
 
             {/* 官网链接 */}
