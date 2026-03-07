@@ -31,7 +31,8 @@
     "openrouter": "OpenRouter"
   },
   "badges": {
-    "local": "Локальная"
+    "local": "Локальная",
+    "multi": "Мульти"
   },
   "capabilities": {
     "assistantPrefill": "Предзаполнение ассистента",

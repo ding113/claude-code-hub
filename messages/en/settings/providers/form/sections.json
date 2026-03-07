@@ -343,6 +343,10 @@
       "help": "Keep off by default for privacy. Enable only when upstream must see the end-user IP.",
       "label": "Forward client IP"
     },
+    "options": {
+      "title": "Options",
+      "desc": "Additional provider options and overrides"
+    },
     "providerType": {
       "desc": "(determines scheduling policy)",
       "label": "Provider Type",

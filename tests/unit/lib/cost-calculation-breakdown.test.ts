@@ -80,10 +80,10 @@ describe("calculateRequestCostBreakdown", () => {
       true // context1mApplied
     );
 
-    // input: 200000 * 0.000003 + 100000 * 0.000003 * 2.0 = 0.6 + 0.6 = 1.2
-    expect(result.input).toBeCloseTo(1.2, 4);
-    // output: 100 tokens, below 200k threshold
-    expect(result.output).toBeCloseTo(0.0015, 6);
+    // input: 300000 * 0.000003 * 2.0 = 1.8 (all tokens at premium when context > 200K)
+    expect(result.input).toBeCloseTo(1.8, 4);
+    // output: 100 * 0.000015 * 1.5 = 0.00225 (output also at premium when context > 200K)
+    expect(result.output).toBeCloseTo(0.00225, 6);
   });
 
   test("200k tier pricing (Gemini style)", () => {
@@ -97,8 +97,8 @@ describe("calculateRequestCostBreakdown", () => {
       })
     );
 
-    // input: 200000 * 0.000003 + 100000 * 0.000006 = 0.6 + 0.6 = 1.2
-    expect(result.input).toBeCloseTo(1.2, 4);
+    // input: 300000 * 0.000006 = 1.8 (all tokens at above-200k rate when context > 200K)
+    expect(result.input).toBeCloseTo(1.8, 4);
   });
 
   test("categories sum to total", () => {

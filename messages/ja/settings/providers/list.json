@@ -42,5 +42,6 @@
   "actionResetUsage": "使用量リセット",
   "actionDelete": "削除",
   "selectProvider": "{name} を選択",
-  "schedule": "スケジュール"
+  "schedule": "スケジュール",
+  "proxyEnabled": "プロキシ有効"
 }

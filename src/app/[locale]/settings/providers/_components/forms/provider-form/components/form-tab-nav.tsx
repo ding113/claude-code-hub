@@ -1,22 +1,83 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { FileText, FlaskConical, Gauge, Network, Route } from "lucide-react";
+import {
+  Clock,
+  FileText,
+  FlaskConical,
+  Gauge,
+  Network,
+  Route,
+  Scale,
+  Settings,
+  Shield,
+  Timer,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import type { TabId } from "../provider-form-types";
+import type { NavTargetId, SubTabId, TabId } from "../provider-form-types";
 
-const TAB_CONFIG: { id: TabId; icon: typeof FileText; labelKey: string }[] = [
+type NavItemConfig = {
+  id: TabId;
+  icon: typeof FileText;
+  labelKey: string;
+  children?: {
+    id: SubTabId;
+    icon: typeof FileText;
+    labelKey: string;
+  }[];
+};
+
+const NAV_CONFIG: NavItemConfig[] = [
   { id: "basic", icon: FileText, labelKey: "tabs.basic" },
-  { id: "routing", icon: Route, labelKey: "tabs.routing" },
-  { id: "limits", icon: Gauge, labelKey: "tabs.limits" },
-  { id: "network", icon: Network, labelKey: "tabs.network" },
+  {
+    id: "routing",
+    icon: Route,
+    labelKey: "tabs.routing",
+    children: [{ id: "scheduling", icon: Scale, labelKey: "tabs.scheduling" }],
+  },
+  {
+    id: "options",
+    icon: Settings,
+    labelKey: "tabs.options",
+    children: [{ id: "activeTime", icon: Clock, labelKey: "tabs.activeTime" }],
+  },
+  {
+    id: "limits",
+    icon: Gauge,
+    labelKey: "tabs.limits",
+    children: [{ id: "circuitBreaker", icon: Shield, labelKey: "tabs.circuitBreaker" }],
+  },
+  {
+    id: "network",
+    icon: Network,
+    labelKey: "tabs.network",
+    children: [{ id: "timeout", icon: Timer, labelKey: "tabs.timeout" }],
+  },
   { id: "testing", icon: FlaskConical, labelKey: "tabs.testing" },
 ];
 
+const TAB_CONFIG: { id: TabId; icon: typeof FileText; labelKey: string }[] = NAV_CONFIG.map(
+  ({ id, icon, labelKey }) => ({ id, icon, labelKey })
+);
+
+export const TAB_ORDER: TabId[] = NAV_CONFIG.map((item) => item.id);
+
+export const NAV_ORDER: NavTargetId[] = NAV_CONFIG.flatMap((item) => [
+  item.id,
+  ...(item.children?.map((c) => c.id) ?? []),
+]);
+
+export const PARENT_MAP = Object.fromEntries(
+  NAV_CONFIG.flatMap((item) => (item.children ?? []).map((child) => [child.id, item.id]))
+) as Record<SubTabId, TabId>;
+
 interface FormTabNavProps {
   activeTab: TabId;
+  activeSubTab?: SubTabId | null;
+  excludeTabs?: TabId[];
   onTabChange: (tab: TabId) => void;
+  onSubTabChange?: (subTab: SubTabId) => void;
   disabled?: boolean;
   tabStatus?: Partial<Record<TabId, "default" | "warning" | "configured">>;
   layout?: "vertical" | "horizontal";
@@ -24,12 +85,22 @@ interface FormTabNavProps {
 
 export function FormTabNav({
   activeTab,
+  activeSubTab = null,
   onTabChange,
+  onSubTabChange,
   disabled,
   tabStatus = {},
   layout = "vertical",
+  excludeTabs,
 }: FormTabNavProps) {
   const t = useTranslations("settings.providers.form");
+
+  const filteredTabs = excludeTabs?.length
+    ? TAB_CONFIG.filter((tab) => !excludeTabs.includes(tab.id))
+    : TAB_CONFIG;
+  const filteredNav = excludeTabs?.length
+    ? NAV_CONFIG.filter((item) => !excludeTabs.includes(item.id))
+    : NAV_CONFIG;
 
   const getStatusColor = (status?: "default" | "warning" | "configured") => {
     switch (status) {
@@ -42,15 +113,15 @@ export function FormTabNav({
     }
   };
 
-  const activeTabIndex = TAB_CONFIG.findIndex((tab) => tab.id === activeTab);
+  const activeTabIndex = filteredTabs.findIndex((tab) => tab.id === activeTab);
   const stepNumber = activeTabIndex >= 0 ? activeTabIndex + 1 : 0;
-  const stepProgressWidth = `${(stepNumber / TAB_CONFIG.length) * 100}%`;
+  const stepProgressWidth = `${(stepNumber / filteredTabs.length) * 100}%`;
 
   if (layout === "horizontal") {
     return (
       <nav className="sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
-          {TAB_CONFIG.map((tab) => {
+          {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
@@ -107,64 +178,94 @@ export function FormTabNav({
       {/* Desktop: Vertical Sidebar */}
       <nav className="hidden lg:flex flex-col w-[200px] shrink-0 border-r border-border/50 bg-card/30">
         <div className="p-4 space-y-1">
-          {TAB_CONFIG.map((tab) => {
+          {filteredNav.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
             const statusColor = getStatusColor(status);
 
             return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onTabChange(tab.id)}
-                disabled={disabled}
-                className={cn(
-                  "relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                  "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  isActive
-                    ? "bg-primary/10 text-primary border border-primary/20"
-                    : "text-muted-foreground hover:text-foreground",
-                  disabled && "opacity-50 cursor-not-allowed"
-                )}
-              >
-                <span
+              <div key={tab.id} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => onTabChange(tab.id)}
+                  disabled={disabled}
                   className={cn(
-                    "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
-                    isActive ? "bg-primary/20" : "bg-muted/50"
+                    "relative w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                    "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    isActive
+                      ? "bg-primary/10 text-primary border border-primary/20"
+                      : "text-muted-foreground hover:text-foreground",
+                    disabled && "opacity-50 cursor-not-allowed"
                   )}
                 >
-                  <Icon
-                    className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")}
-                  />
-                </span>
-                <span className="flex-1 text-left">{t(tab.labelKey)}</span>
-                {statusColor && (
                   <span
                     className={cn(
-                      "w-2 h-2 rounded-full",
-                      statusColor,
-                      status === "warning" && "animate-pulse"
+                      "flex items-center justify-center w-8 h-8 rounded-lg transition-colors",
+                      isActive ? "bg-primary/20" : "bg-muted/50"
                     )}
-                  />
-                )}
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTabIndicator"
-                    className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-l-full"
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  />
-                )}
-              </button>
+                  >
+                    <Icon
+                      className={cn("h-4 w-4", isActive ? "text-primary" : "text-muted-foreground")}
+                    />
+                  </span>
+                  <span className="flex-1 text-left">{t(tab.labelKey)}</span>
+                  {statusColor && (
+                    <span
+                      className={cn(
+                        "w-2 h-2 rounded-full",
+                        statusColor,
+                        status === "warning" && "animate-pulse"
+                      )}
+                    />
+                  )}
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeTabIndicator"
+                      className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary rounded-l-full"
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    />
+                  )}
+                </button>
+                {tab.children?.map((child) => {
+                  const ChildIcon = child.icon;
+                  const isChildActive = activeSubTab === child.id;
+
+                  return (
+                    <button
+                      key={child.id}
+                      type="button"
+                      onClick={() => onSubTabChange?.(child.id)}
+                      disabled={disabled}
+                      className={cn(
+                        "relative w-full flex items-center gap-2 pl-11 pr-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                        "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        isChildActive
+                          ? "text-primary bg-primary/5"
+                          : "text-muted-foreground/70 hover:text-foreground",
+                        disabled && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <ChildIcon
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0",
+                          isChildActive ? "text-primary" : "text-muted-foreground/50"
+                        )}
+                      />
+                      <span className="truncate">{t(child.labelKey)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             );
           })}
         </div>
       </nav>
 
       {/* Tablet: Horizontal Tabs */}
-      <nav className="hidden md:flex lg:hidden sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md">
+      <nav className="hidden md:flex md:flex-col lg:hidden sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md">
         <div className="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
-          {TAB_CONFIG.map((tab) => {
+          {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
@@ -212,12 +313,80 @@ export function FormTabNav({
             );
           })}
         </div>
+        {(() => {
+          const activeItem = filteredNav.find((item) => item.id === activeTab);
+          if (!activeItem?.children?.length) return null;
+          return (
+            <div className="flex items-center gap-1 px-6 pb-2 overflow-x-auto scrollbar-hide border-t border-border/30">
+              {activeItem.children.map((child) => {
+                const ChildIcon = child.icon;
+                const isChildActive = activeSubTab === child.id;
+                return (
+                  <button
+                    key={child.id}
+                    type="button"
+                    onClick={() => onSubTabChange?.(child.id)}
+                    disabled={disabled}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap",
+                      "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isChildActive ? "text-primary bg-primary/10" : "text-muted-foreground",
+                      disabled && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <ChildIcon
+                      className={cn(
+                        "h-3 w-3",
+                        isChildActive ? "text-primary" : "text-muted-foreground/50"
+                      )}
+                    />
+                    <span>{t(child.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
       </nav>
 
       {/* Mobile: Bottom Navigation */}
-      <nav className="flex md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
+      <nav className="flex flex-col md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
+        {(() => {
+          const activeItem = filteredNav.find((item) => item.id === activeTab);
+          if (!activeItem?.children?.length) return null;
+          return (
+            <div className="flex items-center justify-center gap-2 px-4 py-1.5 border-b border-border/30">
+              {activeItem.children.map((child) => {
+                const ChildIcon = child.icon;
+                const isChildActive = activeSubTab === child.id;
+                return (
+                  <button
+                    key={child.id}
+                    type="button"
+                    onClick={() => onSubTabChange?.(child.id)}
+                    disabled={disabled}
+                    className={cn(
+                      "flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md transition-all whitespace-nowrap",
+                      "hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isChildActive ? "text-primary bg-primary/10" : "text-muted-foreground",
+                      disabled && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <ChildIcon
+                      className={cn(
+                        "h-3 w-3",
+                        isChildActive ? "text-primary" : "text-muted-foreground/50"
+                      )}
+                    />
+                    <span>{t(child.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })()}
         <div className="flex items-center justify-around w-full px-2 py-1">
-          {TAB_CONFIG.map((tab) => {
+          {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
@@ -269,7 +438,7 @@ export function FormTabNav({
           role="progressbar"
           aria-valuenow={stepNumber}
           aria-valuemin={0}
-          aria-valuemax={TAB_CONFIG.length}
+          aria-valuemax={filteredTabs.length}
           aria-label={t("tabs.stepProgress")}
         >
           <motion.div
@@ -284,4 +453,4 @@ export function FormTabNav({
   );
 }
 
-export { TAB_CONFIG };
+export { NAV_CONFIG, TAB_CONFIG };

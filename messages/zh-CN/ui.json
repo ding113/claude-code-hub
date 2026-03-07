@@ -52,7 +52,8 @@
     "maxTags": "已达到最大标签数量",
     "tooLong": "标签长度不能超过 {max} 个字符",
     "invalidFormat": "标签只能包含字母、数字、下划线和连字符",
-    "removeTag": "移除标签 {tag}"
+    "removeTag": "移除标签 {tag}",
+    "unknownError": "输入无效"
   },
   "providerGroupSelect": {
     "placeholder": "选择供应商分组",
