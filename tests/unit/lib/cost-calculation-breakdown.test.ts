@@ -80,10 +80,9 @@ describe("calculateRequestCostBreakdown", () => {
       true // context1mApplied
     );
 
-    // input: 200000 * 0.000003 + 100000 * 0.000003 * 2.0 = 0.6 + 0.6 = 1.2
-    expect(result.input).toBeCloseTo(1.2, 4);
-    // output: 100 tokens, below 200k threshold
-    expect(result.output).toBeCloseTo(0.0015, 6);
+    // current rule: once the request crosses the threshold, the whole request uses long-context pricing
+    expect(result.input).toBeCloseTo(1.8, 4);
+    expect(result.output).toBeCloseTo(0.00225, 6);
   });
 
   test("200k tier pricing (Gemini style)", () => {
@@ -97,8 +96,8 @@ describe("calculateRequestCostBreakdown", () => {
       })
     );
 
-    // input: 200000 * 0.000003 + 100000 * 0.000006 = 0.6 + 0.6 = 1.2
-    expect(result.input).toBeCloseTo(1.2, 4);
+    // current rule: once the request crosses the threshold, the whole request uses the >200k price
+    expect(result.input).toBeCloseTo(1.8, 4);
   });
 
   test("categories sum to total", () => {

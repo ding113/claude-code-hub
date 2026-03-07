@@ -10,6 +10,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
+import type { ResolvedPricing } from "@/lib/utils/pricing-resolution";
 import type { ModelPriceData } from "@/types/model-price";
 
 // Track async tasks for draining
@@ -85,7 +86,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
   },
 }));
 
-import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
+import { finalizeRequestStats } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
 import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
@@ -158,13 +159,34 @@ function createSession(opts: {
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
-    endpointPolicy: resolveEndpointPolicy("/v1/messages"),
+    resolvedPricingCache: new Map(),
+    endpointPolicy: {
+      ...resolveEndpointPolicy("/v1/messages"),
+      bypassResponseRectifier: true,
+    },
     isHeaderModified: () => false,
     getContext1mApplied: () => false,
     getOriginalModel: () => originalModel,
     getCurrentModel: () => redirectedModel,
     getProviderChain: () => [],
     getCachedPriceDataByBillingSource: async () => testPriceData,
+    getResolvedPricingByBillingSource: async function (): Promise<ResolvedPricing | null> {
+      const priceData = await (
+        this as { getCachedPriceDataByBillingSource: () => Promise<ModelPriceData | null> }
+      ).getCachedPriceDataByBillingSource();
+
+      if (!priceData) {
+        return null;
+      }
+
+      return {
+        resolvedModelName: redirectedModel,
+        resolvedPricingProviderKey: "test-provider",
+        source: "single_provider_top_level",
+        priceData,
+        pricingNode: null,
+      };
+    },
     recordTtfb: () => 100,
     ttfbMs: null,
     getRequestSequence: () => 1,
@@ -283,6 +305,7 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
     );
     vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.updateSessionUsage).mockResolvedValue(undefined);
     vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
     vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
@@ -301,8 +324,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       messageId: 5001,
     });
 
-    const response = createNonStreamResponse(usage);
-    await ProxyResponseHandler.dispatch(session, response);
+    const responseText = await createNonStreamResponse(usage).text();
+    await finalizeRequestStats(session, responseText, 200, 5);
     await drainAsyncTasks();
 
     // Expected cost: (1000 * 0.000003) + (500 * 0.000015) = 0.003 + 0.0075 = 0.0105
@@ -345,9 +368,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       messageId: 5002,
     });
 
-    const response = createStreamResponse(usage);
-    const clientResponse = await ProxyResponseHandler.dispatch(session, response);
-    await clientResponse.text();
+    const responseText = await createStreamResponse(usage).text();
+    await finalizeRequestStats(session, responseText, 200, 5);
     await drainAsyncTasks();
 
     expect(RateLimitService.decrementLeaseBudget).toHaveBeenCalled();
@@ -379,8 +401,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       session as { getCachedPriceDataByBillingSource: () => Promise<ModelPriceData> }
     ).getCachedPriceDataByBillingSource = async () => zeroPriceData;
 
-    const response = createNonStreamResponse(usage);
-    await ProxyResponseHandler.dispatch(session, response);
+    const responseText = await createNonStreamResponse(usage).text();
+    await finalizeRequestStats(session, responseText, 200, 5);
     await drainAsyncTasks();
 
     // Zero cost should NOT trigger decrement
@@ -395,8 +417,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       messageId: 5004,
     });
 
-    const response = createNonStreamResponse(usage);
-    await ProxyResponseHandler.dispatch(session, response);
+    const responseText = await createNonStreamResponse(usage).text();
+    await finalizeRequestStats(session, responseText, 200, 5);
     await drainAsyncTasks();
 
     // Each window/entity combo should be called exactly once
@@ -468,8 +490,8 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       apiKey: "sk-custom",
     });
 
-    const response = createNonStreamResponse(usage);
-    await ProxyResponseHandler.dispatch(session, response);
+    const responseText = await createNonStreamResponse(usage).text();
+    await finalizeRequestStats(session, responseText, 200, 5);
     await drainAsyncTasks();
 
     const calls = vi.mocked(RateLimitService.decrementLeaseBudget).mock.calls;
@@ -503,10 +525,10 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       messageId: 5006,
     });
 
-    const response = createNonStreamResponse(usage);
+    const responseText = await createNonStreamResponse(usage).text();
 
     // Should NOT throw even if decrementLeaseBudget fails
-    await expect(ProxyResponseHandler.dispatch(session, response)).resolves.toBeDefined();
+    await expect(finalizeRequestStats(session, responseText, 200, 5)).resolves.toBeDefined();
     await drainAsyncTasks();
 
     // Verify decrement was attempted

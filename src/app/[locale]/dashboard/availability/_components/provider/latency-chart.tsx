@@ -3,7 +3,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { useTimeZone, useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, type TooltipContentProps, XAxis, YAxis } from "recharts";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import type { ProviderAvailabilitySummary } from "@/lib/availability";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,19 @@ const chartConfig = {
     color: "var(--chart-1)",
   },
 } satisfies ChartConfig;
+
+type TooltipPayloadEntry = NonNullable<TooltipContentProps<number, string>["payload"]>[number];
+
+function normalizeTooltipKey(
+  value: TooltipPayloadEntry["dataKey"] | string | undefined,
+  fallback: string
+) {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  return fallback;
+}
 
 export function LatencyChart({ providers, className }: LatencyChartProps) {
   const t = useTranslations("dashboard.availability.latencyChart");
@@ -150,20 +163,22 @@ export function LatencyChart({ providers, className }: LatencyChartProps) {
                 <div className="border-border/50 bg-background rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
                   <div className="font-medium mb-1">{formatTime(label as string)}</div>
                   <div className="space-y-1">
-                    {payload.map((item) => (
-                      <div key={item.dataKey} className="flex items-center gap-2">
-                        <div
-                          className="w-2 h-2 rounded-full"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        <span className="text-muted-foreground">
-                          {chartConfig[item.dataKey as keyof typeof chartConfig]?.label ||
-                            item.dataKey}
-                          :
-                        </span>
-                        <span className="font-mono">{formatLatency(item.value as number)}</span>
-                      </div>
-                    ))}
+                    {payload.map((item, index) => {
+                      const itemKey = normalizeTooltipKey(item.dataKey, `series-${index}`);
+                      const itemLabel =
+                        chartConfig[itemKey as keyof typeof chartConfig]?.label || itemKey;
+
+                      return (
+                        <div key={itemKey} className="flex items-center gap-2">
+                          <div
+                            className="w-2 h-2 rounded-full"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span className="text-muted-foreground">{itemLabel}:</span>
+                          <span className="font-mono">{formatLatency(item.value as number)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

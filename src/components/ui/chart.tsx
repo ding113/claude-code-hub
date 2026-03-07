@@ -103,6 +103,18 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
+type TooltipPayloadEntry = NonNullable<
+  TooltipContentProps<number | string, string>["payload"]
+>[number];
+
+function normalizePayloadKey(value: unknown, fallback: string): string {
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  return fallback;
+}
+
 function ChartTooltipContent({
   active,
   payload,
@@ -133,7 +145,7 @@ function ChartTooltipContent({
     }
 
     const [item] = payload;
-    const key = `${labelKey || item?.dataKey || item?.name || "value"}`;
+    const key = normalizePayloadKey(labelKey || item?.dataKey || item?.name, "value");
     const itemConfig = getPayloadConfigFromPayload(config, item, key);
     const value =
       !labelKey && typeof label === "string"
@@ -169,88 +181,79 @@ function ChartTooltipContent({
       {!nestLabel ? tooltipLabel : null}
       <div className="grid gap-1.5">
         {payload
-          .filter((item: { type?: string }) => item.type !== "none")
-          .map(
-            (
-              item: {
-                dataKey?: string | number;
-                name?: string;
-                payload?: { fill?: string };
-                color?: string;
-                value?: number | string;
-              },
-              index: number
-            ) => {
-              const key = `${nameKey || item.name || item.dataKey || "value"}`;
-              const itemConfig = getPayloadConfigFromPayload(config, item, key);
-              const indicatorColor = color || item.payload?.fill || item.color;
+          .filter((item: TooltipPayloadEntry) => item.type !== "none")
+          .map((item: TooltipPayloadEntry, index: number) => {
+            const key = normalizePayloadKey(nameKey || item.name || item.dataKey, "value");
+            const itemConfig = getPayloadConfigFromPayload(config, item, key);
+            const indicatorColor = color || item.payload?.fill || item.color;
+            const itemKey = normalizePayloadKey(item.dataKey, `${key}-${index}`);
+            const itemName = normalizePayloadKey(item.name, key);
 
-              return (
-                <div
-                  key={item.dataKey}
-                  className={cn(
-                    "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
-                    indicator === "dot" && "items-center"
-                  )}
-                >
-                  {formatter && item?.value !== undefined && item.name ? (
-                    formatter(
-                      item.value,
-                      item.name,
-                      item as Parameters<typeof formatter>[2],
-                      index,
-                      payload
-                    )
-                  ) : (
-                    <>
-                      {itemConfig?.icon ? (
-                        <itemConfig.icon />
-                      ) : (
-                        !hideIndicator && (
-                          <div
-                            className={cn(
-                              "shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)",
-                              {
-                                "h-2.5 w-2.5": indicator === "dot",
-                                "w-1": indicator === "line",
-                                "w-0 border-[1.5px] border-dashed bg-transparent":
-                                  indicator === "dashed",
-                                "my-0.5": nestLabel && indicator === "dashed",
-                              }
-                            )}
-                            style={
-                              {
-                                "--color-bg": indicatorColor,
-                                "--color-border": indicatorColor,
-                              } as React.CSSProperties
+            return (
+              <div
+                key={itemKey}
+                className={cn(
+                  "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
+                  indicator === "dot" && "items-center"
+                )}
+              >
+                {formatter && item?.value !== undefined && item.name ? (
+                  formatter(
+                    item.value,
+                    item.name,
+                    item as Parameters<typeof formatter>[2],
+                    index,
+                    payload
+                  )
+                ) : (
+                  <>
+                    {itemConfig?.icon ? (
+                      <itemConfig.icon />
+                    ) : (
+                      !hideIndicator && (
+                        <div
+                          className={cn(
+                            "shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)",
+                            {
+                              "h-2.5 w-2.5": indicator === "dot",
+                              "w-1": indicator === "line",
+                              "w-0 border-[1.5px] border-dashed bg-transparent":
+                                indicator === "dashed",
+                              "my-0.5": nestLabel && indicator === "dashed",
                             }
-                          />
-                        )
+                          )}
+                          style={
+                            {
+                              "--color-bg": indicatorColor,
+                              "--color-border": indicatorColor,
+                            } as React.CSSProperties
+                          }
+                        />
+                      )
+                    )}
+                    <div
+                      className={cn(
+                        "flex flex-1 justify-between leading-none",
+                        nestLabel ? "items-end" : "items-center"
                       )}
-                      <div
-                        className={cn(
-                          "flex flex-1 justify-between leading-none",
-                          nestLabel ? "items-end" : "items-center"
-                        )}
-                      >
-                        <div className="grid gap-1.5">
-                          {nestLabel ? tooltipLabel : null}
-                          <span className="text-muted-foreground">
-                            {itemConfig?.label || item.name}
-                          </span>
-                        </div>
-                        {item.value && (
-                          <span className="text-foreground font-mono font-medium tabular-nums">
-                            {item.value.toLocaleString()}
-                          </span>
-                        )}
+                    >
+                      <div className="grid gap-1.5">
+                        {nestLabel ? tooltipLabel : null}
+                        <span className="text-muted-foreground">
+                          {itemConfig?.label || itemName}
+                        </span>
                       </div>
-                    </>
-                  )}
-                </div>
-              );
-            }
-          )}
+                      {item.value !== undefined && item.value !== null && (
+                        <span className="text-foreground font-mono font-medium tabular-nums">
+                          {item.value.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
       </div>
     </div>
   );
