@@ -103,8 +103,9 @@ ${colorConfig
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 
+type ChartTooltipValue = number | string | ReadonlyArray<number | string>;
 type TooltipPayloadEntry = NonNullable<
-  TooltipContentProps<number | string, string>["payload"]
+  TooltipContentProps<ChartTooltipValue, string>["payload"]
 >[number];
 
 function normalizePayloadKey(value: unknown, fallback: string): string {
@@ -129,7 +130,7 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: TooltipContentProps<number | string, string> &
+}: TooltipContentProps<ChartTooltipValue, string> &
   React.ComponentProps<"div"> & {
     hideLabel?: boolean;
     hideIndicator?: boolean;
