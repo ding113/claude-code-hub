@@ -6,6 +6,10 @@
     "limits": "限制",
     "network": "网络",
     "testing": "测试",
+    "scheduling": "调度",
+    "options": "选项",
+    "circuitBreaker": "断路器",
+    "timeout": "超时",
     "stepProgress": "步骤进度"
   }
 }

@@ -6,6 +6,10 @@
     "limits": "制限",
     "network": "ネットワーク",
     "testing": "テスト",
+    "scheduling": "スケジューリング",
+    "options": "オプション",
+    "circuitBreaker": "サーキットブレーカー",
+    "timeout": "タイムアウト",
     "stepProgress": "ステップ進捗"
   }
 }

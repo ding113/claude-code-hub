@@ -31,6 +31,10 @@ vi.mock("lucide-react", () => {
     Gauge: stub,
     Network: stub,
     FlaskConical: stub,
+    Scale: stub,
+    Settings: stub,
+    Shield: stub,
+    Timer: stub,
   };
 });
 
@@ -71,12 +75,12 @@ describe("FormTabNav", () => {
   // -- Default (vertical) layout -------------------------------------------
 
   describe("default vertical layout", () => {
-    it("renders all 5 tabs across 3 responsive breakpoints (15 total)", () => {
+    it("renders all tabs across 3 responsive breakpoints (21 total)", () => {
       const { container, unmount } = render(<FormTabNav {...defaultProps} />);
 
-      // Desktop (5) + Tablet (5) + Mobile (5) = 15
+      // Desktop (9) + Tablet (6) + Mobile (6) = 21
       const buttons = container.querySelectorAll("button");
-      expect(buttons.length).toBe(15);
+      expect(buttons.length).toBe(21);
 
       unmount();
     });
@@ -89,6 +93,38 @@ describe("FormTabNav", () => {
       expect(nav!.className).toContain("lg:flex");
       expect(nav!.className).toContain("flex-col");
 
+      unmount();
+    });
+
+    it("renders sub-items only in the desktop sidebar", () => {
+      const { container, unmount } = render(<FormTabNav {...defaultProps} />);
+      const desktopNav = container.querySelector("nav");
+      const desktopButtons = desktopNav!.querySelectorAll("button");
+      expect(desktopButtons.length).toBe(9);
+      unmount();
+    });
+
+    it("calls onSubTabChange when a sub-item is clicked", () => {
+      const onSubTabChange = vi.fn();
+      const { container, unmount } = render(
+        <FormTabNav {...defaultProps} onSubTabChange={onSubTabChange} />
+      );
+      const desktopNav = container.querySelector("nav");
+      const desktopButtons = desktopNav!.querySelectorAll("button");
+      act(() => {
+        desktopButtons[2].click();
+      });
+      expect(onSubTabChange).toHaveBeenCalledWith("scheduling");
+      unmount();
+    });
+
+    it("highlights active sub-item with text-primary", () => {
+      const { container, unmount } = render(
+        <FormTabNav {...defaultProps} activeTab="routing" activeSubTab="scheduling" />
+      );
+      const desktopNav = container.querySelector("nav");
+      const desktopButtons = desktopNav!.querySelectorAll("button");
+      expect(desktopButtons[2].className).toContain("text-primary");
       unmount();
     });
   });
@@ -115,6 +151,13 @@ describe("FormTabNav", () => {
       expect(scrollContainer).toBeTruthy();
       expect(scrollContainer!.className).toContain("overflow-x-auto");
 
+      unmount();
+    });
+
+    it("does not render sub-items in horizontal layout", () => {
+      const { container, unmount } = render(<FormTabNav {...defaultProps} layout="horizontal" />);
+      const buttons = container.querySelectorAll("button");
+      expect(buttons.length).toBe(6);
       unmount();
     });
 
@@ -153,9 +196,9 @@ describe("FormTabNav", () => {
       );
 
       const buttons = container.querySelectorAll("button");
-      // Click the "network" tab (index 3)
+      // Click the "network" tab (index 4)
       act(() => {
-        buttons[3].click();
+        buttons[4].click();
       });
 
       expect(onTabChange).toHaveBeenCalledWith("network");
@@ -199,8 +242,8 @@ describe("FormTabNav", () => {
       const routingDot = buttons[1].querySelector(".bg-yellow-500");
       expect(routingDot).toBeTruthy();
 
-      // limits (index 2) should have a primary dot
-      const limitsDot = buttons[2].querySelector(".bg-primary");
+      // limits (index 3) should have a primary dot
+      const limitsDot = buttons[3].querySelector(".bg-primary");
       expect(limitsDot).toBeTruthy();
 
       // basic (index 0) should have no status dot

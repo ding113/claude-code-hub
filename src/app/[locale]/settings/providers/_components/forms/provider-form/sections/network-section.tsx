@@ -110,7 +110,13 @@ function TimeoutInput({
   );
 }
 
-export function NetworkSection() {
+interface NetworkSectionProps {
+  subSectionRefs?: {
+    timeout?: (el: HTMLDivElement | null) => void;
+  };
+}
+
+export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
   const t = useTranslations("settings.providers.form");
   const { state, dispatch, mode } = useProviderForm();
   const isEdit = mode === "edit";
@@ -198,88 +204,90 @@ export function NetworkSection() {
       </SectionCard>
 
       {/* Timeout Configuration */}
-      <SectionCard
-        title={t("sections.timeout.title")}
-        description={t("sections.timeout.desc")}
-        icon={Timer}
-      >
-        <div className="space-y-4">
-          <FieldGroup>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <TimeoutInput
-                id={isEdit ? "edit-first-byte-timeout" : "first-byte-timeout"}
-                label={t("sections.timeout.streamingFirstByte.label")}
-                description={t("sections.timeout.streamingFirstByte.desc")}
-                value={state.network.firstByteTimeoutStreamingSeconds}
-                defaultValue={PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000}
-                placeholder={t("sections.timeout.streamingFirstByte.placeholder")}
-                onChange={(value) =>
-                  dispatch({ type: "SET_FIRST_BYTE_TIMEOUT_STREAMING", payload: value })
-                }
-                disabled={state.ui.isPending}
-                min="0"
-                max="180"
-                icon={Clock}
-                isCore={true}
-              />
+      <div ref={subSectionRefs?.timeout}>
+        <SectionCard
+          title={t("sections.timeout.title")}
+          description={t("sections.timeout.desc")}
+          icon={Timer}
+        >
+          <div className="space-y-4">
+            <FieldGroup>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <TimeoutInput
+                  id={isEdit ? "edit-first-byte-timeout" : "first-byte-timeout"}
+                  label={t("sections.timeout.streamingFirstByte.label")}
+                  description={t("sections.timeout.streamingFirstByte.desc")}
+                  value={state.network.firstByteTimeoutStreamingSeconds}
+                  defaultValue={PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000}
+                  placeholder={t("sections.timeout.streamingFirstByte.placeholder")}
+                  onChange={(value) =>
+                    dispatch({ type: "SET_FIRST_BYTE_TIMEOUT_STREAMING", payload: value })
+                  }
+                  disabled={state.ui.isPending}
+                  min="0"
+                  max="180"
+                  icon={Clock}
+                  isCore={true}
+                />
 
-              <TimeoutInput
-                id={isEdit ? "edit-streaming-idle" : "streaming-idle"}
-                label={t("sections.timeout.streamingIdle.label")}
-                description={t("sections.timeout.streamingIdle.desc")}
-                value={state.network.streamingIdleTimeoutSeconds}
-                defaultValue={PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000}
-                placeholder={t("sections.timeout.streamingIdle.placeholder")}
-                onChange={(value) =>
-                  dispatch({ type: "SET_STREAMING_IDLE_TIMEOUT", payload: value })
-                }
-                disabled={state.ui.isPending}
-                min="0"
-                max="600"
-                icon={Timer}
-                isCore={true}
-              />
+                <TimeoutInput
+                  id={isEdit ? "edit-streaming-idle" : "streaming-idle"}
+                  label={t("sections.timeout.streamingIdle.label")}
+                  description={t("sections.timeout.streamingIdle.desc")}
+                  value={state.network.streamingIdleTimeoutSeconds}
+                  defaultValue={PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000}
+                  placeholder={t("sections.timeout.streamingIdle.placeholder")}
+                  onChange={(value) =>
+                    dispatch({ type: "SET_STREAMING_IDLE_TIMEOUT", payload: value })
+                  }
+                  disabled={state.ui.isPending}
+                  min="0"
+                  max="600"
+                  icon={Timer}
+                  isCore={true}
+                />
 
-              <TimeoutInput
-                id={isEdit ? "edit-non-streaming-timeout" : "non-streaming-timeout"}
-                label={t("sections.timeout.nonStreamingTotal.label")}
-                description={t("sections.timeout.nonStreamingTotal.desc")}
-                value={state.network.requestTimeoutNonStreamingSeconds}
-                defaultValue={PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000}
-                placeholder={t("sections.timeout.nonStreamingTotal.placeholder")}
-                onChange={(value) =>
-                  dispatch({ type: "SET_REQUEST_TIMEOUT_NON_STREAMING", payload: value })
-                }
-                disabled={state.ui.isPending}
-                min="0"
-                max="1200"
-                icon={Clock}
-                isCore={true}
-              />
+                <TimeoutInput
+                  id={isEdit ? "edit-non-streaming-timeout" : "non-streaming-timeout"}
+                  label={t("sections.timeout.nonStreamingTotal.label")}
+                  description={t("sections.timeout.nonStreamingTotal.desc")}
+                  value={state.network.requestTimeoutNonStreamingSeconds}
+                  defaultValue={PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000}
+                  placeholder={t("sections.timeout.nonStreamingTotal.placeholder")}
+                  onChange={(value) =>
+                    dispatch({ type: "SET_REQUEST_TIMEOUT_NON_STREAMING", payload: value })
+                  }
+                  disabled={state.ui.isPending}
+                  min="0"
+                  max="1200"
+                  icon={Clock}
+                  isCore={true}
+                />
+              </div>
+            </FieldGroup>
+
+            {/* Timeout Summary */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+              <Timer className="h-4 w-4 text-primary" />
+              <div className="flex-1 text-xs text-muted-foreground">
+                {t("sections.timeout.summary", {
+                  streaming:
+                    state.network.firstByteTimeoutStreamingSeconds ??
+                    PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000,
+                  idle:
+                    state.network.streamingIdleTimeoutSeconds ??
+                    PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000,
+                  nonStreaming:
+                    state.network.requestTimeoutNonStreamingSeconds ??
+                    PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000,
+                })}
+              </div>
             </div>
-          </FieldGroup>
 
-          {/* Timeout Summary */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-            <Timer className="h-4 w-4 text-primary" />
-            <div className="flex-1 text-xs text-muted-foreground">
-              {t("sections.timeout.summary", {
-                streaming:
-                  state.network.firstByteTimeoutStreamingSeconds ??
-                  PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS / 1000,
-                idle:
-                  state.network.streamingIdleTimeoutSeconds ??
-                  PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS / 1000,
-                nonStreaming:
-                  state.network.requestTimeoutNonStreamingSeconds ??
-                  PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000,
-              })}
-            </div>
+            <p className="text-xs text-amber-600">{t("sections.timeout.disableHint")}</p>
           </div>
-
-          <p className="text-xs text-amber-600">{t("sections.timeout.disableHint")}</p>
-        </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
     </motion.div>
   );
 }

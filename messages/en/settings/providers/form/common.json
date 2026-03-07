@@ -6,6 +6,10 @@
     "limits": "Limits",
     "network": "Network",
     "testing": "Testing",
+    "scheduling": "Scheduling",
+    "options": "Options",
+    "circuitBreaker": "Circuit Breaker",
+    "timeout": "Timeout",
     "stepProgress": "Step progress"
   }
 }

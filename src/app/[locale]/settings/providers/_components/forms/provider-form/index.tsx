@@ -35,14 +35,26 @@ import type {
 } from "@/types/provider";
 import { FormTabNav } from "./components/form-tab-nav";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
-import type { TabId } from "./provider-form-types";
+import type { NavTargetId, SubTabId, TabId } from "./provider-form-types";
+import { PARENT_MAP } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
 import { LimitsSection } from "./sections/limits-section";
 import { NetworkSection } from "./sections/network-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
 
-const TAB_ORDER: TabId[] = ["basic", "routing", "limits", "network", "testing"];
+const TAB_ORDER: TabId[] = ["basic", "routing", "options", "limits", "network", "testing"];
+const NAV_ORDER: NavTargetId[] = [
+  "basic",
+  "routing",
+  "scheduling",
+  "options",
+  "limits",
+  "circuitBreaker",
+  "network",
+  "timeout",
+  "testing",
+];
 
 function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
@@ -188,17 +200,22 @@ function ProviderFormContent({
 
   // Scroll navigation state - all sections stacked vertically
   const contentRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({
+  const sectionRefs = useRef<Record<NavTargetId, HTMLDivElement | null>>({
     basic: null,
     routing: null,
+    scheduling: null,
+    options: null,
     limits: null,
+    circuitBreaker: null,
     network: null,
+    timeout: null,
     testing: null,
   });
   const isScrollingToSection = useRef(false);
+  const [activeSubTab, setActiveSubTab] = useState<SubTabId | null>(null);
 
   // Scroll to section when tab is clicked
-  const scrollToSection = useCallback((tab: TabId) => {
+  const scrollToSection = useCallback((tab: NavTargetId) => {
     const section = sectionRefs.current[tab];
     if (section && contentRef.current) {
       isScrollingToSection.current = true;
@@ -215,36 +232,42 @@ function ProviderFormContent({
   // Detect active section based on scroll position
   const handleScroll = useCallback(() => {
     if (isScrollingToSection.current || !contentRef.current) return;
-
     const container = contentRef.current;
     const containerRect = container.getBoundingClientRect();
-    const _scrollTop = container.scrollTop;
-
-    // Find which section is at the top of the viewport
-    let activeSection: TabId = "basic";
+    let activeSection: NavTargetId = TAB_ORDER[0] ?? "basic";
     let minDistance = Infinity;
-
-    for (const tab of TAB_ORDER) {
-      const section = sectionRefs.current[tab];
+    for (const id of NAV_ORDER) {
+      const section = sectionRefs.current[id];
       if (!section) continue;
-
       const sectionRect = section.getBoundingClientRect();
       const distanceFromTop = Math.abs(sectionRect.top - containerRect.top);
-
       if (distanceFromTop < minDistance) {
         minDistance = distanceFromTop;
-        activeSection = tab;
+        activeSection = id;
       }
     }
-
-    if (state.ui.activeTab !== activeSection) {
-      dispatch({ type: "SET_ACTIVE_TAB", payload: activeSection });
+    const parentTab =
+      activeSection in PARENT_MAP
+        ? PARENT_MAP[activeSection as SubTabId]
+        : (activeSection as TabId);
+    const subTab = activeSection in PARENT_MAP ? (activeSection as SubTabId) : null;
+    if (state.ui.activeTab !== parentTab) {
+      dispatch({ type: "SET_ACTIVE_TAB", payload: parentTab });
     }
+    setActiveSubTab(subTab);
   }, [dispatch, state.ui.activeTab]);
 
   const handleTabChange = (tab: TabId) => {
     dispatch({ type: "SET_ACTIVE_TAB", payload: tab });
+    setActiveSubTab(null);
     scrollToSection(tab);
+  };
+
+  const handleSubTabChange = (subTab: SubTabId) => {
+    const parentTab = PARENT_MAP[subTab];
+    dispatch({ type: "SET_ACTIVE_TAB", payload: parentTab });
+    setActiveSubTab(subTab);
+    scrollToSection(subTab);
   };
 
   // Sync isPending to context
@@ -527,6 +550,8 @@ function ProviderFormContent({
       status.routing = "configured";
     }
 
+    status.options = "default";
+
     // Limits - configured if any limit set
     if (
       state.rateLimit.limit5hUsd ||
@@ -563,7 +588,9 @@ function ProviderFormContent({
           {/* Tab Navigation */}
           <FormTabNav
             activeTab={state.ui.activeTab}
+            activeSubTab={activeSubTab}
             onTabChange={handleTabChange}
+            onSubTabChange={handleSubTabChange}
             disabled={isPending}
             tabStatus={getTabStatus()}
           />
@@ -602,7 +629,16 @@ function ProviderFormContent({
                 sectionRefs.current.routing = el;
               }}
             >
-              <RoutingSection />
+              <RoutingSection
+                subSectionRefs={{
+                  scheduling: (el) => {
+                    sectionRefs.current.scheduling = el;
+                  },
+                  options: (el) => {
+                    sectionRefs.current.options = el;
+                  },
+                }}
+              />
             </div>
 
             {/* Limits Section */}
@@ -611,7 +647,13 @@ function ProviderFormContent({
                 sectionRefs.current.limits = el;
               }}
             >
-              <LimitsSection />
+              <LimitsSection
+                subSectionRefs={{
+                  circuitBreaker: (el) => {
+                    sectionRefs.current.circuitBreaker = el;
+                  },
+                }}
+              />
             </div>
 
             {/* Network Section */}
@@ -620,7 +662,13 @@ function ProviderFormContent({
                 sectionRefs.current.network = el;
               }}
             >
-              <NetworkSection />
+              <NetworkSection
+                subSectionRefs={{
+                  timeout: (el) => {
+                    sectionRefs.current.timeout = el;
+                  },
+                }}
+              />
             </div>
 
             {/* Testing Section */}

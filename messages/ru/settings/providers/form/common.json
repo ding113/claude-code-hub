@@ -6,6 +6,10 @@
     "limits": "Лимиты",
     "network": "Сеть",
     "testing": "Тестирование",
+    "scheduling": "Планирование",
+    "options": "Параметры",
+    "circuitBreaker": "Автовыключатель",
+    "timeout": "Таймауты",
     "stepProgress": "Прогресс шагов"
   }
 }
