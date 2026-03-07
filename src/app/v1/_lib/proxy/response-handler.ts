@@ -261,8 +261,7 @@ export class ProxyResponseHandler {
               const usage = message.usage as Record<string, unknown> | undefined;
               if (usage) {
                 inputTokens = (usage.input_tokens as number) || 0;
-                cacheCreationInputTokens =
-                  (usage.cache_creation_input_tokens as number) || 0;
+                cacheCreationInputTokens = (usage.cache_creation_input_tokens as number) || 0;
                 cacheReadInputTokens = (usage.cache_read_input_tokens as number) || 0;
               }
             }
@@ -270,9 +269,7 @@ export class ProxyResponseHandler {
           }
 
           case "content_block_start": {
-            const contentBlock = data.content_block as
-              | Record<string, unknown>
-              | undefined;
+            const contentBlock = data.content_block as Record<string, unknown> | undefined;
             const index = data.index as number;
             if (contentBlock?.type === "tool_use") {
               toolCalls.push({
@@ -298,10 +295,7 @@ export class ProxyResponseHandler {
                 reasoningContent += (delta.thinking as string) || "";
               } else if (delta.type === "input_json_delta") {
                 const existing = toolUseInputBuffers.get(index) || "";
-                toolUseInputBuffers.set(
-                  index,
-                  existing + ((delta.partial_json as string) || "")
-                );
+                toolUseInputBuffers.set(index, existing + ((delta.partial_json as string) || ""));
               }
             }
             break;
