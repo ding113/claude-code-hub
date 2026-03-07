@@ -1371,7 +1371,12 @@ export class ProxyForwarder {
         ? mapProviderTypeToTransformer(provider.providerType)
         : null;
 
-      if (fromFormat !== toFormat && fromFormat && toFormat && !(session as any)._formatTransformed) {
+      if (
+        fromFormat !== toFormat &&
+        fromFormat &&
+        toFormat &&
+        !(session as any)._formatTransformed
+      ) {
         // joinOpenAIPool: 在转换前捕获客户端原始 stream 偏好
         // 转换后 stream 会被硬编码为 true，原始值丢失
         const clientWantsStream =
@@ -1429,8 +1434,7 @@ export class ProxyForwarder {
         !(session as any)._systemPromptInjected
       ) {
         const message = session.request.message as Record<string, unknown>;
-        const claudeCodeIdentity =
-          "You are Claude Code, Anthropic's official CLI for Claude.";
+        const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
         const claudeCodeSystemBlock = {
           type: "text",
           text: claudeCodeIdentity,
@@ -1441,10 +1445,7 @@ export class ProxyForwarder {
         if (!existingSystem) {
           // 无现有系统提示：添加带 cache_control 的身份 block + 纯文本 block
           // 部分上游网关要求 system 数组包含多个 block 才能通过 Claude Code 请求验证
-          message.system = [
-            claudeCodeSystemBlock,
-            { type: "text", text: claudeCodeIdentity },
-          ];
+          message.system = [claudeCodeSystemBlock, { type: "text", text: claudeCodeIdentity }];
         } else if (typeof existingSystem === "string") {
           // 字符串格式：转为数组并前置 Claude Code 身份提示
           message.system = [claudeCodeSystemBlock, { type: "text", text: existingSystem }];
