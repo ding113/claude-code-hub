@@ -1371,7 +1371,7 @@ export class ProxyForwarder {
         ? mapProviderTypeToTransformer(provider.providerType)
         : null;
 
-      if (fromFormat !== toFormat && fromFormat && toFormat) {
+      if (fromFormat !== toFormat && fromFormat && toFormat && !(session as any)._formatTransformed) {
         // joinOpenAIPool: 在转换前捕获客户端原始 stream 偏好
         // 转换后 stream 会被硬编码为 true，原始值丢失
         const clientWantsStream =
@@ -1394,6 +1394,8 @@ export class ProxyForwarder {
 
           // 更新 session 中的请求体
           session.request.message = transformed;
+          // 标记已完成格式转换，防止重试时重复转换导致数据损坏
+          (session as any)._formatTransformed = true;
 
           // joinOpenAIPool: 客户端要求非流式，但上游收到 stream=true 返回 SSE，
           // 需要在响应阶段缓冲 SSE 转为非流式 JSON
@@ -1423,19 +1425,26 @@ export class ProxyForwarder {
       // 确保上游 Claude API 将请求识别为 Claude Code 请求
       if (
         session.originalFormat === "openai" &&
-        (provider.providerType === "claude" || provider.providerType === "claude-auth")
+        (provider.providerType === "claude" || provider.providerType === "claude-auth") &&
+        !(session as any)._systemPromptInjected
       ) {
         const message = session.request.message as Record<string, unknown>;
+        const claudeCodeIdentity =
+          "You are Claude Code, Anthropic's official CLI for Claude.";
         const claudeCodeSystemBlock = {
           type: "text",
-          text: "You are Claude Code, Anthropic's official CLI for Claude.",
+          text: claudeCodeIdentity,
           cache_control: { type: "ephemeral" },
         };
 
         const existingSystem = message.system;
         if (!existingSystem) {
-          // 无现有系统提示，直接设置
-          message.system = [claudeCodeSystemBlock];
+          // 无现有系统提示：添加带 cache_control 的身份 block + 纯文本 block
+          // 部分上游网关要求 system 数组包含多个 block 才能通过 Claude Code 请求验证
+          message.system = [
+            claudeCodeSystemBlock,
+            { type: "text", text: claudeCodeIdentity },
+          ];
         } else if (typeof existingSystem === "string") {
           // 字符串格式：转为数组并前置 Claude Code 身份提示
           message.system = [claudeCodeSystemBlock, { type: "text", text: existingSystem }];
@@ -1443,6 +1452,8 @@ export class ProxyForwarder {
           // 数组格式：前置 Claude Code 身份提示
           (message.system as unknown[]).unshift(claudeCodeSystemBlock);
         }
+
+        (session as any)._systemPromptInjected = true;
 
         logger.debug("ProxyForwarder: Injected Claude Code system prompt for OpenAI->Claude", {
           providerId: provider.id,
