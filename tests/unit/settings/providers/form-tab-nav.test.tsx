@@ -381,4 +381,28 @@ describe("FormTabNav", () => {
       });
     });
   });
+
+  describe("excludeTabs", () => {
+    it("hides excluded tabs in horizontal layout", () => {
+      const { container, unmount } = render(
+        <FormTabNav {...defaultProps} layout="horizontal" excludeTabs={["options"]} />
+      );
+      const buttons = container.querySelectorAll("button");
+      expect(buttons.length).toBe(5);
+      const labels = Array.from(buttons).map((btn) => btn.textContent);
+      expect(labels).not.toContain("tabs.options");
+      unmount();
+    });
+
+    it("hides excluded tabs in desktop sidebar", () => {
+      const { container, unmount } = render(
+        <FormTabNav {...defaultProps} excludeTabs={["options"]} />
+      );
+      const desktopNav = container.querySelector("nav");
+      const desktopButtons = desktopNav!.querySelectorAll("button");
+      const labels = Array.from(desktopButtons).map((btn) => btn.textContent);
+      expect(labels).not.toContain("tabs.options");
+      unmount();
+    });
+  });
 });

@@ -72,9 +72,15 @@ export const PARENT_MAP = Object.fromEntries(
   NAV_CONFIG.flatMap((item) => (item.children ?? []).map((child) => [child.id, item.id]))
 ) as Record<SubTabId, TabId>;
 
+const NAV_BY_ID = Object.fromEntries(NAV_CONFIG.map((item) => [item.id, item])) as Record<
+  TabId,
+  NavItemConfig
+>;
+
 interface FormTabNavProps {
   activeTab: TabId;
   activeSubTab?: SubTabId | null;
+  excludeTabs?: TabId[];
   onTabChange: (tab: TabId) => void;
   onSubTabChange?: (subTab: SubTabId) => void;
   disabled?: boolean;
@@ -90,8 +96,16 @@ export function FormTabNav({
   disabled,
   tabStatus = {},
   layout = "vertical",
+  excludeTabs,
 }: FormTabNavProps) {
   const t = useTranslations("settings.providers.form");
+
+  const filteredTabs = excludeTabs?.length
+    ? TAB_CONFIG.filter((tab) => !excludeTabs.includes(tab.id))
+    : TAB_CONFIG;
+  const filteredNav = excludeTabs?.length
+    ? NAV_CONFIG.filter((item) => !excludeTabs.includes(item.id))
+    : NAV_CONFIG;
 
   const getStatusColor = (status?: "default" | "warning" | "configured") => {
     switch (status) {
@@ -104,15 +118,15 @@ export function FormTabNav({
     }
   };
 
-  const activeTabIndex = TAB_CONFIG.findIndex((tab) => tab.id === activeTab);
+  const activeTabIndex = filteredTabs.findIndex((tab) => tab.id === activeTab);
   const stepNumber = activeTabIndex >= 0 ? activeTabIndex + 1 : 0;
-  const stepProgressWidth = `${(stepNumber / TAB_CONFIG.length) * 100}%`;
+  const stepProgressWidth = `${(stepNumber / filteredTabs.length) * 100}%`;
 
   if (layout === "horizontal") {
     return (
       <nav className="sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
-          {TAB_CONFIG.map((tab) => {
+          {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
@@ -169,7 +183,7 @@ export function FormTabNav({
       {/* Desktop: Vertical Sidebar */}
       <nav className="hidden lg:flex flex-col w-[200px] shrink-0 border-r border-border/50 bg-card/30">
         <div className="p-4 space-y-1">
-          {NAV_CONFIG.map((tab) => {
+          {filteredNav.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
@@ -256,7 +270,7 @@ export function FormTabNav({
       {/* Tablet: Horizontal Tabs */}
       <nav className="hidden md:flex md:flex-col lg:hidden sticky top-0 z-10 border-b border-border/50 bg-card/80 backdrop-blur-md">
         <div className="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
-          {TAB_CONFIG.map((tab) => {
+          {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
@@ -305,7 +319,7 @@ export function FormTabNav({
           })}
         </div>
         {(() => {
-          const activeItem = NAV_CONFIG.find((item) => item.id === activeTab);
+          const activeItem = NAV_BY_ID[activeTab];
           if (!activeItem?.children?.length) return null;
           return (
             <div className="flex items-center gap-1 px-6 pb-2 overflow-x-auto scrollbar-hide border-t border-border/30">
@@ -343,7 +357,7 @@ export function FormTabNav({
       {/* Mobile: Bottom Navigation */}
       <nav className="flex flex-col md:hidden shrink-0 relative border-t border-border/50 bg-card/95 backdrop-blur-md safe-area-bottom">
         {(() => {
-          const activeItem = NAV_CONFIG.find((item) => item.id === activeTab);
+          const activeItem = NAV_BY_ID[activeTab];
           if (!activeItem?.children?.length) return null;
           return (
             <div className="flex items-center justify-center gap-2 px-4 py-1.5 border-b border-border/30">
@@ -377,7 +391,7 @@ export function FormTabNav({
           );
         })()}
         <div className="flex items-center justify-around w-full px-2 py-1">
-          {TAB_CONFIG.map((tab) => {
+          {filteredTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             const status = tabStatus[tab.id];
@@ -429,7 +443,7 @@ export function FormTabNav({
           role="progressbar"
           aria-valuenow={stepNumber}
           aria-valuemin={0}
-          aria-valuemax={TAB_CONFIG.length}
+          aria-valuemax={filteredTabs.length}
           aria-label={t("tabs.stepProgress")}
         >
           <motion.div

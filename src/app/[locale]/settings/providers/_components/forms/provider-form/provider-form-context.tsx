@@ -481,6 +481,11 @@ export function providerFormReducer(
       return { ...state, ui: { ...state.ui, activeTab: action.payload, activeSubTab: null } };
     case "SET_ACTIVE_SUB_TAB":
       return { ...state, ui: { ...state.ui, activeSubTab: action.payload } };
+    case "SET_ACTIVE_NAV":
+      return {
+        ...state,
+        ui: { ...state.ui, activeTab: action.payload.tab, activeSubTab: action.payload.subTab },
+      };
     case "SET_IS_PENDING":
       return { ...state, ui: { ...state.ui, isPending: action.payload } };
     case "SET_SHOW_FAILURE_THRESHOLD_CONFIRM":

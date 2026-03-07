@@ -39,6 +39,7 @@ import type { NavTargetId, SubTabId, TabId } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
 import { LimitsSection } from "./sections/limits-section";
 import { NetworkSection } from "./sections/network-section";
+import { OptionsSection } from "./sections/options-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
 
@@ -186,19 +187,23 @@ function ProviderFormContent({
 
   // Scroll navigation state - all sections stacked vertically
   const contentRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Record<NavTargetId, HTMLDivElement | null>>({
-    basic: null,
-    routing: null,
-    scheduling: null,
-    options: null,
-    activeTime: null,
-    limits: null,
-    circuitBreaker: null,
-    network: null,
-    timeout: null,
-    testing: null,
-  });
+  const sectionRefs = useRef<Record<NavTargetId, HTMLDivElement | null>>(
+    Object.fromEntries(NAV_ORDER.map((id) => [id, null])) as Record<
+      NavTargetId,
+      HTMLDivElement | null
+    >
+  );
   const isScrollingToSection = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const scrollLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+    };
+  }, []);
+
   // Scroll to section when tab is clicked
   const scrollToSection = useCallback((tab: NavTargetId) => {
     const section = sectionRefs.current[tab];
@@ -208,40 +213,42 @@ function ProviderFormContent({
       const sectionTop = section.getBoundingClientRect().top;
       const offset = sectionTop - containerTop + contentRef.current.scrollTop;
       contentRef.current.scrollTo({ top: offset, behavior: "smooth" });
-      setTimeout(() => {
+      if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+      scrollLockTimerRef.current = setTimeout(() => {
         isScrollingToSection.current = false;
       }, 500);
     }
   }, []);
 
-  // Detect active section based on scroll position
+  // Detect active section based on scroll position (throttled via rAF)
   const handleScroll = useCallback(() => {
-    if (isScrollingToSection.current || !contentRef.current) return;
-    const container = contentRef.current;
-    const containerRect = container.getBoundingClientRect();
-    let activeSection: NavTargetId = TAB_ORDER[0] ?? "basic";
-    let minDistance = Infinity;
-    for (const id of NAV_ORDER) {
-      const section = sectionRefs.current[id];
-      if (!section) continue;
-      const sectionRect = section.getBoundingClientRect();
-      const distanceFromTop = Math.abs(sectionRect.top - containerRect.top);
-      if (distanceFromTop < minDistance) {
-        minDistance = distanceFromTop;
-        activeSection = id;
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (isScrollingToSection.current || !contentRef.current) return;
+      const container = contentRef.current;
+      const containerRect = container.getBoundingClientRect();
+      let activeSection: NavTargetId = TAB_ORDER[0] ?? "basic";
+      let minDistance = Infinity;
+      for (const id of NAV_ORDER) {
+        const section = sectionRefs.current[id];
+        if (!section) continue;
+        const sectionRect = section.getBoundingClientRect();
+        const distanceFromTop = Math.abs(sectionRect.top - containerRect.top);
+        if (distanceFromTop < minDistance) {
+          minDistance = distanceFromTop;
+          activeSection = id;
+        }
       }
-    }
-    const parentTab =
-      activeSection in PARENT_MAP
-        ? PARENT_MAP[activeSection as SubTabId]
-        : (activeSection as TabId);
-    const subTab = activeSection in PARENT_MAP ? (activeSection as SubTabId) : null;
-    if (state.ui.activeTab !== parentTab) {
-      dispatch({ type: "SET_ACTIVE_TAB", payload: parentTab });
-    }
-    if (state.ui.activeSubTab !== subTab) {
-      dispatch({ type: "SET_ACTIVE_SUB_TAB", payload: subTab });
-    }
+      const parentTab =
+        activeSection in PARENT_MAP
+          ? PARENT_MAP[activeSection as SubTabId]
+          : (activeSection as TabId);
+      const subTab = activeSection in PARENT_MAP ? (activeSection as SubTabId) : null;
+      if (state.ui.activeTab !== parentTab || state.ui.activeSubTab !== subTab) {
+        dispatch({ type: "SET_ACTIVE_NAV", payload: { tab: parentTab, subTab } });
+      }
+    });
   }, [dispatch, state.ui.activeSubTab, state.ui.activeTab]);
 
   const handleTabChange = (tab: TabId) => {
@@ -251,8 +258,7 @@ function ProviderFormContent({
 
   const handleSubTabChange = (subTab: SubTabId) => {
     const parentTab = PARENT_MAP[subTab];
-    dispatch({ type: "SET_ACTIVE_TAB", payload: parentTab });
-    dispatch({ type: "SET_ACTIVE_SUB_TAB", payload: subTab });
+    dispatch({ type: "SET_ACTIVE_NAV", payload: { tab: parentTab, subTab } });
     scrollToSection(subTab);
   };
 
@@ -555,7 +561,7 @@ function ProviderFormContent({
       status.options = "configured";
     }
 
-    // Limits - configured if any limit set
+    // Limits - configured if any rate limit set
     if (
       state.rateLimit.limit5hUsd ||
       state.rateLimit.limitDailyUsd ||
@@ -637,9 +643,18 @@ function ProviderFormContent({
                   scheduling: (el) => {
                     sectionRefs.current.scheduling = el;
                   },
-                  options: (el) => {
-                    sectionRefs.current.options = el;
-                  },
+                }}
+              />
+            </div>
+
+            {/* Options Section */}
+            <div
+              ref={(el) => {
+                sectionRefs.current.options = el;
+              }}
+            >
+              <OptionsSection
+                subSectionRefs={{
                   activeTime: (el) => {
                     sectionRefs.current.activeTime = el;
                   },

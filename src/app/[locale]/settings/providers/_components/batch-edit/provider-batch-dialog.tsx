@@ -289,6 +289,7 @@ function BatchEditDialogContent({
             activeTab={state.ui.activeTab}
             onTabChange={(tab) => dispatch({ type: "SET_ACTIVE_TAB", payload: tab })}
             layout="horizontal"
+            excludeTabs={["options"]}
           />
           <div className="flex-1 overflow-y-auto pr-1">
             {state.ui.activeTab === "basic" && <BasicInfoSection />}

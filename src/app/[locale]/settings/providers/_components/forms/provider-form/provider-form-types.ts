@@ -194,6 +194,7 @@ export type ProviderFormAction =
   // UI actions
   | { type: "SET_ACTIVE_TAB"; payload: TabId }
   | { type: "SET_ACTIVE_SUB_TAB"; payload: SubTabId | null }
+  | { type: "SET_ACTIVE_NAV"; payload: { tab: TabId; subTab: SubTabId | null } }
   | { type: "SET_IS_PENDING"; payload: boolean }
   | { type: "SET_SHOW_FAILURE_THRESHOLD_CONFIRM"; payload: boolean }
   // Bulk actions
