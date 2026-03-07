@@ -2619,7 +2619,7 @@ export class ProxyForwarder {
         "sec-ch-ua-platform",
         "sec-fetch-dest",
         "sec-fetch-mode",
-        "sec-fetch-site",
+        "sec-fetch-site"
       );
     }
 
