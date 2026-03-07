@@ -8,6 +8,7 @@
     "testing": "テスト",
     "scheduling": "スケジューリング",
     "options": "オプション",
+    "activeTime": "アクティブ時間",
     "circuitBreaker": "サーキットブレーカー",
     "timeout": "タイムアウト",
     "stepProgress": "ステップ進捗"

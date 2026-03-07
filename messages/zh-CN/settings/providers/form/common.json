@@ -8,6 +8,7 @@
     "testing": "测试",
     "scheduling": "调度",
     "options": "选项",
+    "activeTime": "活跃时间",
     "circuitBreaker": "断路器",
     "timeout": "超时",
     "stepProgress": "步骤进度"

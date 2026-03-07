@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import {
+  Clock,
   FileText,
   FlaskConical,
   Gauge,
@@ -44,7 +45,12 @@ const NAV_CONFIG: NavItemConfig[] = [
     labelKey: "tabs.routing",
     children: [{ id: "scheduling", icon: Scale, labelKey: "tabs.scheduling" }],
   },
-  { id: "options", icon: Settings, labelKey: "tabs.options" },
+  {
+    id: "options",
+    icon: Settings,
+    labelKey: "tabs.options",
+    children: [{ id: "activeTime", icon: Clock, labelKey: "tabs.activeTime" }],
+  },
   {
     id: "limits",
     icon: Gauge,

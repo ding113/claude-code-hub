@@ -49,6 +49,7 @@ const NAV_ORDER: NavTargetId[] = [
   "routing",
   "scheduling",
   "options",
+  "activeTime",
   "limits",
   "circuitBreaker",
   "network",
@@ -205,6 +206,7 @@ function ProviderFormContent({
     routing: null,
     scheduling: null,
     options: null,
+    activeTime: null,
     limits: null,
     circuitBreaker: null,
     network: null,
@@ -636,6 +638,9 @@ function ProviderFormContent({
                   },
                   options: (el) => {
                     sectionRefs.current.options = el;
+                  },
+                  activeTime: (el) => {
+                    sectionRefs.current.activeTime = el;
                   },
                 }}
               />

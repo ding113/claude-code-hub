@@ -26,6 +26,7 @@ vi.mock("framer-motion", () => ({
 vi.mock("lucide-react", () => {
   const stub = ({ className }: any) => <span data-testid="icon" className={className} />;
   return {
+    Clock: stub,
     FileText: stub,
     Route: stub,
     Gauge: stub,
@@ -75,12 +76,12 @@ describe("FormTabNav", () => {
   // -- Default (vertical) layout -------------------------------------------
 
   describe("default vertical layout", () => {
-    it("renders all tabs across 3 responsive breakpoints (21 total)", () => {
+    it("renders all tabs across 3 responsive breakpoints (22 total)", () => {
       const { container, unmount } = render(<FormTabNav {...defaultProps} />);
 
-      // Desktop (9) + Tablet (6) + Mobile (6) = 21
+      // Desktop (10) + Tablet (6) + Mobile (6) = 22
       const buttons = container.querySelectorAll("button");
-      expect(buttons.length).toBe(21);
+      expect(buttons.length).toBe(22);
 
       unmount();
     });
@@ -100,7 +101,7 @@ describe("FormTabNav", () => {
       const { container, unmount } = render(<FormTabNav {...defaultProps} />);
       const desktopNav = container.querySelector("nav");
       const desktopButtons = desktopNav!.querySelectorAll("button");
-      expect(desktopButtons.length).toBe(9);
+      expect(desktopButtons.length).toBe(10);
       unmount();
     });
 
@@ -115,6 +116,26 @@ describe("FormTabNav", () => {
         desktopButtons[2].click();
       });
       expect(onSubTabChange).toHaveBeenCalledWith("scheduling");
+      unmount();
+    });
+
+    it("calls onSubTabChange when the activeTime sub-item is clicked", () => {
+      const onSubTabChange = vi.fn();
+      const { container, unmount } = render(
+        <FormTabNav {...defaultProps} onSubTabChange={onSubTabChange} />
+      );
+      const desktopNav = container.querySelector("nav");
+      const activeTimeButton = Array.from(desktopNav!.querySelectorAll("button")).find((button) =>
+        button.textContent?.includes("tabs.activeTime")
+      );
+
+      expect(activeTimeButton).toBeTruthy();
+
+      act(() => {
+        activeTimeButton!.click();
+      });
+
+      expect(onSubTabChange).toHaveBeenCalledWith("activeTime");
       unmount();
     });
 

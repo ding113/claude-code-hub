@@ -41,6 +41,7 @@ interface RoutingSectionProps {
   subSectionRefs?: {
     scheduling?: (el: HTMLDivElement | null) => void;
     options?: (el: HTMLDivElement | null) => void;
+    activeTime?: (el: HTMLDivElement | null) => void;
   };
 }
 
@@ -447,6 +448,7 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
             title={t("sections.routing.options.title")}
             description={t("sections.routing.options.desc")}
             icon={Settings}
+            variant="highlight"
           >
             <div className="space-y-4">
               <ToggleRow
@@ -886,72 +888,74 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
           )}
 
           {/* Scheduled Active Time */}
-          <SectionCard
-            title={t("sections.routing.activeTime.title")}
-            description={t("sections.routing.activeTime.description")}
-            icon={Clock}
-          >
-            <div className="space-y-4">
-              <ToggleRow
-                label={t("sections.routing.activeTime.toggleLabel")}
-                description={t("sections.routing.activeTime.toggleDescription")}
-              >
-                <Switch
-                  checked={
-                    state.routing.activeTimeStart !== null && state.routing.activeTimeEnd !== null
-                  }
-                  onCheckedChange={(checked) => {
-                    if (checked) {
-                      dispatch({ type: "SET_ACTIVE_TIME_START", payload: "09:00" });
-                      dispatch({ type: "SET_ACTIVE_TIME_END", payload: "22:00" });
-                    } else {
-                      dispatch({ type: "SET_ACTIVE_TIME_START", payload: null });
-                      dispatch({ type: "SET_ACTIVE_TIME_END", payload: null });
+          <div ref={subSectionRefs?.activeTime}>
+            <SectionCard
+              title={t("sections.routing.activeTime.title")}
+              description={t("sections.routing.activeTime.description")}
+              icon={Clock}
+            >
+              <div className="space-y-4">
+                <ToggleRow
+                  label={t("sections.routing.activeTime.toggleLabel")}
+                  description={t("sections.routing.activeTime.toggleDescription")}
+                >
+                  <Switch
+                    checked={
+                      state.routing.activeTimeStart !== null && state.routing.activeTimeEnd !== null
                     }
-                  }}
-                  disabled={state.ui.isPending}
-                />
-              </ToggleRow>
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        dispatch({ type: "SET_ACTIVE_TIME_START", payload: "09:00" });
+                        dispatch({ type: "SET_ACTIVE_TIME_END", payload: "22:00" });
+                      } else {
+                        dispatch({ type: "SET_ACTIVE_TIME_START", payload: null });
+                        dispatch({ type: "SET_ACTIVE_TIME_END", payload: null });
+                      }
+                    }}
+                    disabled={state.ui.isPending}
+                  />
+                </ToggleRow>
 
-              {state.routing.activeTimeStart !== null && state.routing.activeTimeEnd !== null && (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-4">
-                    <SmartInputWrapper label={t("sections.routing.activeTime.startLabel")}>
-                      <Input
-                        type="time"
-                        value={state.routing.activeTimeStart}
-                        onChange={(e) =>
-                          dispatch({ type: "SET_ACTIVE_TIME_START", payload: e.target.value })
-                        }
-                        disabled={state.ui.isPending}
-                      />
-                    </SmartInputWrapper>
-                    <SmartInputWrapper label={t("sections.routing.activeTime.endLabel")}>
-                      <Input
-                        type="time"
-                        value={state.routing.activeTimeEnd}
-                        onChange={(e) =>
-                          dispatch({ type: "SET_ACTIVE_TIME_END", payload: e.target.value })
-                        }
-                        disabled={state.ui.isPending}
-                      />
-                    </SmartInputWrapper>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t("sections.routing.activeTime.timezoneNote")}
-                  </p>
-                  {state.routing.activeTimeStart > state.routing.activeTimeEnd && (
-                    <p className="text-xs text-amber-600">
-                      {t("sections.routing.activeTime.crossDayHint", {
-                        start: state.routing.activeTimeStart,
-                        end: state.routing.activeTimeEnd,
-                      })}
+                {state.routing.activeTimeStart !== null && state.routing.activeTimeEnd !== null && (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <SmartInputWrapper label={t("sections.routing.activeTime.startLabel")}>
+                        <Input
+                          type="time"
+                          value={state.routing.activeTimeStart}
+                          onChange={(e) =>
+                            dispatch({ type: "SET_ACTIVE_TIME_START", payload: e.target.value })
+                          }
+                          disabled={state.ui.isPending}
+                        />
+                      </SmartInputWrapper>
+                      <SmartInputWrapper label={t("sections.routing.activeTime.endLabel")}>
+                        <Input
+                          type="time"
+                          value={state.routing.activeTimeEnd}
+                          onChange={(e) =>
+                            dispatch({ type: "SET_ACTIVE_TIME_END", payload: e.target.value })
+                          }
+                          disabled={state.ui.isPending}
+                        />
+                      </SmartInputWrapper>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {t("sections.routing.activeTime.timezoneNote")}
                     </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </SectionCard>
+                    {state.routing.activeTimeStart > state.routing.activeTimeEnd && (
+                      <p className="text-xs text-amber-600">
+                        {t("sections.routing.activeTime.crossDayHint", {
+                          start: state.routing.activeTimeStart,
+                          end: state.routing.activeTimeEnd,
+                        })}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          </div>
         </div>
       </motion.div>
     </TooltipProvider>

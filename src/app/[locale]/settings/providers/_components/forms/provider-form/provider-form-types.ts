@@ -23,7 +23,7 @@ export type FormMode = "create" | "edit" | "batch";
 export type TabId = "basic" | "routing" | "options" | "limits" | "network" | "testing";
 
 // Sub-tab identifiers for sub-navigation within parent sections
-export type SubTabId = "scheduling" | "circuitBreaker" | "timeout";
+export type SubTabId = "scheduling" | "activeTime" | "circuitBreaker" | "timeout";
 
 // Combined navigation target (parent tab or sub-tab)
 export type NavTargetId = TabId | SubTabId;
@@ -31,6 +31,7 @@ export type NavTargetId = TabId | SubTabId;
 // Maps each sub-tab to its parent tab
 export const PARENT_MAP: Record<SubTabId, TabId> = {
   scheduling: "routing",
+  activeTime: "options",
   circuitBreaker: "limits",
   timeout: "network",
 };
