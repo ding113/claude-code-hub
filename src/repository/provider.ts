@@ -222,6 +222,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
     codexReasoningSummaryPreference: providerData.codex_reasoning_summary_preference ?? null,
     codexTextVerbosityPreference: providerData.codex_text_verbosity_preference ?? null,
     codexParallelToolCallsPreference: providerData.codex_parallel_tool_calls_preference ?? null,
+    codexServiceTierPreference: providerData.codex_service_tier_preference ?? null,
     anthropicMaxTokensPreference: providerData.anthropic_max_tokens_preference ?? null,
     anthropicThinkingBudgetPreference: providerData.anthropic_thinking_budget_preference ?? null,
     anthropicAdaptiveThinking: providerData.anthropic_adaptive_thinking ?? null,
@@ -297,6 +298,7 @@ export async function createProvider(providerData: CreateProviderData): Promise<
         codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
         codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
         codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+        codexServiceTierPreference: providers.codexServiceTierPreference,
         anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
@@ -381,6 +383,7 @@ export async function findProviderList(
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
       codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+      codexServiceTierPreference: providers.codexServiceTierPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
@@ -465,6 +468,7 @@ export async function findAllProvidersFresh(): Promise<Provider[]> {
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
       codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+      codexServiceTierPreference: providers.codexServiceTierPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
@@ -553,6 +557,7 @@ export async function findProviderById(id: number): Promise<Provider | null> {
       codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
       codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
       codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+      codexServiceTierPreference: providers.codexServiceTierPreference,
       anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
       anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
       anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
@@ -671,6 +676,8 @@ export async function updateProvider(
   if (providerData.codex_parallel_tool_calls_preference !== undefined)
     dbData.codexParallelToolCallsPreference =
       providerData.codex_parallel_tool_calls_preference ?? null;
+  if (providerData.codex_service_tier_preference !== undefined)
+    dbData.codexServiceTierPreference = providerData.codex_service_tier_preference ?? null;
   if (providerData.anthropic_max_tokens_preference !== undefined)
     dbData.anthropicMaxTokensPreference = providerData.anthropic_max_tokens_preference ?? null;
   if (providerData.anthropic_thinking_budget_preference !== undefined)
@@ -788,6 +795,7 @@ export async function updateProvider(
         codexReasoningSummaryPreference: providers.codexReasoningSummaryPreference,
         codexTextVerbosityPreference: providers.codexTextVerbosityPreference,
         codexParallelToolCallsPreference: providers.codexParallelToolCallsPreference,
+        codexServiceTierPreference: providers.codexServiceTierPreference,
         anthropicMaxTokensPreference: providers.anthropicMaxTokensPreference,
         anthropicThinkingBudgetPreference: providers.anthropicThinkingBudgetPreference,
         anthropicAdaptiveThinking: providers.anthropicAdaptiveThinking,
@@ -1024,6 +1032,7 @@ export interface BatchProviderUpdates {
   codexReasoningSummaryPreference?: string | null;
   codexTextVerbosityPreference?: string | null;
   codexParallelToolCallsPreference?: string | null;
+  codexServiceTierPreference?: string | null;
   anthropicMaxTokensPreference?: string | null;
   geminiGoogleSearchPreference?: string | null;
   // Rate Limit
@@ -1129,6 +1138,9 @@ export async function updateProvidersBatch(
   }
   if (updates.codexParallelToolCallsPreference !== undefined) {
     setClauses.codexParallelToolCallsPreference = updates.codexParallelToolCallsPreference;
+  }
+  if (updates.codexServiceTierPreference !== undefined) {
+    setClauses.codexServiceTierPreference = updates.codexServiceTierPreference;
   }
   if (updates.anthropicMaxTokensPreference !== undefined) {
     setClauses.anthropicMaxTokensPreference = updates.anthropicMaxTokensPreference;

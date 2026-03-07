@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { SpecialSetting } from "@/types/special-settings";
-import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
+import {
+  buildUnifiedSpecialSettings,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 
 describe("buildUnifiedSpecialSettings", () => {
   test("无任何输入时应返回 null", () => {
@@ -72,7 +75,7 @@ describe("buildUnifiedSpecialSettings", () => {
     );
   });
 
-  test("context1mApplied=true 时应派生 anthropic_context_1m_header_override 特殊设置", () => {
+  test("context1mApplied=true 时应在无显式记录时回退派生 anthropic_context_1m_header_override", () => {
     const settings = buildUnifiedSpecialSettings({
       existing: null,
       context1mApplied: true,
@@ -88,6 +91,26 @@ describe("buildUnifiedSpecialSettings", () => {
           header: "anthropic-beta",
         }),
       ])
+    );
+  });
+
+  test("context1mApplied=true 但已有 codex service tier result 时不应回退派生 anthropic_context_1m_header_override", () => {
+    const settings = buildUnifiedSpecialSettings({
+      existing: [
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "priority",
+          actualServiceTier: null,
+          effectivePriority: true,
+        },
+      ],
+      context1mApplied: true,
+    });
+
+    expect(settings?.some((item) => item.type === "anthropic_context_1m_header_override")).toBe(
+      false
     );
   });
 
@@ -167,5 +190,47 @@ describe("buildUnifiedSpecialSettings", () => {
 
     expect(settings).not.toBeNull();
     expect(settings?.filter((s) => s.type === "guard_intercept").length).toBe(1);
+  });
+});
+
+describe("hasPriorityServiceTierSpecialSetting", () => {
+  test("returns true when codex actual service tier is priority", () => {
+    expect(
+      hasPriorityServiceTierSpecialSetting([
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "default",
+          actualServiceTier: "priority",
+          effectivePriority: true,
+        },
+      ])
+    ).toBe(true);
+  });
+
+  test("returns false when codex actual service tier is non-priority even if request was priority", () => {
+    expect(
+      hasPriorityServiceTierSpecialSetting([
+        {
+          type: "provider_parameter_override",
+          scope: "provider",
+          providerId: 1,
+          providerName: "p",
+          providerType: "codex",
+          hit: true,
+          changed: true,
+          changes: [{ path: "service_tier", before: null, after: "priority", changed: true }],
+        },
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "priority",
+          actualServiceTier: "default",
+          effectivePriority: false,
+        },
+      ])
+    ).toBe(false);
   });
 });

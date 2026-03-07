@@ -283,8 +283,20 @@
         "cacheTtlSwapped": "Billing TTL (swapped)",
         "multiplier": "Provider Multiplier",
         "totalCost": "Total Cost",
+        "fast": "fast",
+        "fastPriority": "Priority service tier (fast mode)",
         "context1m": "1M Context",
-        "context1mPricing": "Input 2x >200k, Output 1.5x >200k"
+        "context1mPricing": "Input 2x >200k, Output 1.5x >200k",
+        "pricingProvider": "Pricing provider",
+        "pricingSourceLabel": "Pricing source",
+        "pricingSource": {
+          "local_manual": "Local manual pricing",
+          "cloud_exact": "Exact cloud provider pricing",
+          "cloud_model_fallback": "Fallback model provider pricing",
+          "priority_fallback": "Priority provider fallback pricing",
+          "single_provider_top_level": "Top-level single-provider pricing",
+          "official_fallback": "Official pricing"
+        }
       },
       "performance": {
         "title": "Performance",
@@ -357,12 +369,12 @@
       "targetModel": "Target Model"
     },
     "statusCodes": {
-      "not200": "Non-200 (errors/blocked)",
       "200": "200 (Success)",
       "400": "400 (Bad Request)",
       "401": "401 (Unauthorized)",
       "429": "429 (Rate Limited)",
-      "500": "500 (Server Error)"
+      "500": "500 (Server Error)",
+      "not200": "Non-200 (errors/blocked)"
     },
     "billingDetails": {
       "input": "Input",
@@ -374,8 +386,20 @@
       "cacheTtlSwapped": "Billing TTL (swapped)",
       "multiplier": "Provider Multiplier",
       "totalCost": "Total Cost",
+      "fast": "fast",
+      "fastPriority": "Priority service tier (fast mode)",
       "context1m": "1M Context",
-      "context1mPricing": "Input 2x >200k, Output 1.5x >200k"
+      "context1mPricing": "Input 2x >200k, Output 1.5x >200k",
+      "pricingProvider": "Pricing provider",
+      "pricingSourceLabel": "Pricing source",
+      "pricingSource": {
+        "local_manual": "Local manual pricing",
+        "cloud_exact": "Exact cloud provider pricing",
+        "cloud_model_fallback": "Fallback model provider pricing",
+        "priority_fallback": "Priority provider fallback pricing",
+        "single_provider_top_level": "Top-level single-provider pricing",
+        "official_fallback": "Official pricing"
+      }
     }
   },
   "leaderboard": {
@@ -1681,11 +1705,11 @@
         "rolling": "Rolling window (24h)"
       },
       "quickValues": {
-        "unlimited": "Unlimited",
         "10": "$10",
         "50": "$50",
         "100": "$100",
-        "500": "$500"
+        "500": "$500",
+        "unlimited": "Unlimited"
       },
       "alreadySet": "Configured",
       "confirmAdd": "Add"

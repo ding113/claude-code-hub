@@ -67,7 +67,7 @@ vi.mock("@/actions/usage-logs", () => ({
               providerType: "codex",
               hit: true,
               changed: true,
-              changes: [{ path: "temperature", before: 1, after: 0.2, changed: true }],
+              changes: [{ path: "service_tier", before: null, after: "priority", changed: true }],
             },
           ],
         } satisfies UsageLogRow,
@@ -172,6 +172,21 @@ describe("VirtualizedLogsTable - cache badge alignment", () => {
 
     expect(container.innerHTML).toContain("1h");
     expect(container.innerHTML).toContain("ml-auto");
+
+    unmount();
+  });
+});
+
+describe("VirtualizedLogsTable - fast badge", () => {
+  test("renders fast badge when priority service_tier is present", async () => {
+    const { container, unmount } = renderWithIntl(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+
+    await flushMicrotasks();
+    await waitForText(container, "Loaded 1 records");
+
+    expect(container.textContent).toContain("fast");
 
     unmount();
   });

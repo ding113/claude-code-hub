@@ -1,6 +1,6 @@
 "use server";
 
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { modelPrices } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -48,7 +48,6 @@ export async function findLatestPriceByModel(modelName: string): Promise<ModelPr
       .from(modelPrices)
       .where(eq(modelPrices.modelName, modelName))
       .orderBy(
-        // 本地手动配置优先（哪怕云端数据更新得更晚）
         sql`(${modelPrices.source} = 'manual') DESC`,
         sql`${modelPrices.createdAt} DESC NULLS LAST`,
         desc(modelPrices.id)
@@ -64,6 +63,69 @@ export async function findLatestPriceByModel(modelName: string): Promise<ModelPr
     });
     return null;
   }
+}
+
+export async function findLatestPriceByModelAndSource(
+  modelName: string,
+  source: ModelPriceSource
+): Promise<ModelPrice | null> {
+  try {
+    const selection = {
+      id: modelPrices.id,
+      modelName: modelPrices.modelName,
+      priceData: modelPrices.priceData,
+      source: modelPrices.source,
+      createdAt: modelPrices.createdAt,
+      updatedAt: modelPrices.updatedAt,
+    };
+
+    const [price] = await db
+      .select(selection)
+      .from(modelPrices)
+      .where(sql`${modelPrices.modelName} = ${modelName} AND ${modelPrices.source} = ${source}`)
+      .orderBy(sql`${modelPrices.createdAt} DESC NULLS LAST`, desc(modelPrices.id))
+      .limit(1);
+
+    if (!price) return null;
+    return toModelPrice(price);
+  } catch (error) {
+    logger.error("[ModelPrice] Failed to query latest price by model and source", {
+      modelName,
+      source,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+export async function findLatestPricesByModels(
+  modelNames: string[]
+): Promise<Map<string, ModelPrice>> {
+  const uniqueNames = Array.from(new Set(modelNames.map((name) => name.trim()).filter(Boolean)));
+  if (uniqueNames.length === 0) {
+    return new Map();
+  }
+
+  const query = sql`
+    SELECT DISTINCT ON (model_name)
+      id,
+      model_name as "modelName",
+      price_data as "priceData",
+      source,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    FROM model_prices
+    WHERE ${inArray(modelPrices.modelName, uniqueNames)}
+    ORDER BY
+      model_name,
+      (source = 'manual') DESC,
+      created_at DESC NULLS LAST,
+      id DESC
+  `;
+
+  const result = await db.execute(query);
+  const rows = Array.from(result).map(toModelPrice);
+  return new Map(rows.map((row) => [row.modelName, row]));
 }
 
 /**

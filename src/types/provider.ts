@@ -30,6 +30,8 @@ export type CodexTextVerbosityPreference = "inherit" | "low" | "medium" | "high"
 // 由于 Select 的 value 需要是字符串，这里用 "true"/"false" 表示布尔值
 export type CodexParallelToolCallsPreference = "inherit" | "true" | "false";
 
+export type CodexServiceTierPreference = "inherit" | "auto" | "default" | "flex" | "priority";
+
 // Anthropic (Messages API) parameter overrides
 // - "inherit": follow client request (default)
 // - numeric string: force override to that value
@@ -81,6 +83,7 @@ export type ProviderBatchPatchField =
   | "codex_reasoning_summary_preference"
   | "codex_text_verbosity_preference"
   | "codex_parallel_tool_calls_preference"
+  | "codex_service_tier_preference"
   | "anthropic_max_tokens_preference"
   | "gemini_google_search_preference"
   // Rate Limit
@@ -132,6 +135,7 @@ export interface ProviderBatchPatchDraft {
   codex_reasoning_summary_preference?: ProviderPatchDraftInput<CodexReasoningSummaryPreference>;
   codex_text_verbosity_preference?: ProviderPatchDraftInput<CodexTextVerbosityPreference>;
   codex_parallel_tool_calls_preference?: ProviderPatchDraftInput<CodexParallelToolCallsPreference>;
+  codex_service_tier_preference?: ProviderPatchDraftInput<CodexServiceTierPreference>;
   anthropic_max_tokens_preference?: ProviderPatchDraftInput<AnthropicMaxTokensPreference>;
   gemini_google_search_preference?: ProviderPatchDraftInput<GeminiGoogleSearchPreference>;
   // Rate Limit
@@ -184,6 +188,7 @@ export interface ProviderBatchPatch {
   codex_reasoning_summary_preference: ProviderPatchOperation<CodexReasoningSummaryPreference>;
   codex_text_verbosity_preference: ProviderPatchOperation<CodexTextVerbosityPreference>;
   codex_parallel_tool_calls_preference: ProviderPatchOperation<CodexParallelToolCallsPreference>;
+  codex_service_tier_preference: ProviderPatchOperation<CodexServiceTierPreference>;
   anthropic_max_tokens_preference: ProviderPatchOperation<AnthropicMaxTokensPreference>;
   gemini_google_search_preference: ProviderPatchOperation<GeminiGoogleSearchPreference>;
   // Rate Limit
@@ -236,6 +241,7 @@ export interface ProviderBatchApplyUpdates {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  codex_service_tier_preference?: CodexServiceTierPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   gemini_google_search_preference?: GeminiGoogleSearchPreference | null;
   // Rate Limit
@@ -366,6 +372,7 @@ export interface Provider {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
+  codexServiceTierPreference: CodexServiceTierPreference | null;
 
   // Anthropic (Messages API) parameter overrides (only for claude/claude-auth providers)
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
@@ -452,6 +459,7 @@ export interface ProviderDisplay {
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
   codexParallelToolCallsPreference: CodexParallelToolCallsPreference | null;
+  codexServiceTierPreference: CodexServiceTierPreference | null;
   anthropicMaxTokensPreference: AnthropicMaxTokensPreference | null;
   anthropicThinkingBudgetPreference: AnthropicThinkingBudgetPreference | null;
   anthropicAdaptiveThinking: AnthropicAdaptiveThinkingConfig | null;
@@ -548,6 +556,7 @@ export interface CreateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  codex_service_tier_preference?: CodexServiceTierPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;
@@ -626,6 +635,7 @@ export interface UpdateProviderData {
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
   codex_parallel_tool_calls_preference?: CodexParallelToolCallsPreference | null;
+  codex_service_tier_preference?: CodexServiceTierPreference | null;
   anthropic_max_tokens_preference?: AnthropicMaxTokensPreference | null;
   anthropic_thinking_budget_preference?: AnthropicThinkingBudgetPreference | null;
   anthropic_adaptive_thinking?: AnthropicAdaptiveThinkingConfig | null;

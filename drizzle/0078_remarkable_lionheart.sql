@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ADD COLUMN "codex_service_tier_preference" varchar(20);

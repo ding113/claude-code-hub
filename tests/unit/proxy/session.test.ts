@@ -385,15 +385,46 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     expect(findLatestPriceByModel).toHaveBeenCalledTimes(1);
   });
 
-  it("应在无模型时返回 null", async () => {
-    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+  it("应缓存 resolved pricing 避免重复查询", async () => {
+    const redirectedPriceData: ModelPriceData = {
+      mode: "responses",
+      model_family: "gpt",
+      pricing: {
+        openai: {
+          input_cost_per_token: 3,
+          output_cost_per_token: 4,
+        },
+      },
+    };
 
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(findLatestPriceByModel).mockResolvedValue(
+      makePriceRecord("redirected-model", redirectedPriceData)
+    );
+
+    const session = createSession({
+      originalModel: "original-model",
+      redirectedModel: "redirected-model",
+    });
+
+    const provider = {
+      id: 77,
+      name: "ChatGPT",
+      url: "https://chatgpt.com/backend-api/codex",
+      providerType: "codex",
+    } as any;
+
+    await session.getResolvedPricingByBillingSource(provider);
+    await session.getResolvedPricingByBillingSource(provider);
+
+    expect(findLatestPriceByModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("无模型时应返回 null", async () => {
     const session = createSession({ redirectedModel: null });
     const result = await session.getCachedPriceDataByBillingSource();
 
     expect(result).toBeNull();
-    expect(getSystemSettings).not.toHaveBeenCalled();
-    expect(findLatestPriceByModel).not.toHaveBeenCalled();
   });
 });
 

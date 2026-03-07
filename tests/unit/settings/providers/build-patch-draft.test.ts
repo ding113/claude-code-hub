@@ -28,6 +28,7 @@ function createBatchState(): ProviderFormState {
       codexReasoningSummaryPreference: "inherit",
       codexTextVerbosityPreference: "inherit",
       codexParallelToolCallsPreference: "inherit",
+      codexServiceTierPreference: "inherit",
       anthropicMaxTokensPreference: "inherit",
       anthropicThinkingBudgetPreference: "inherit",
       anthropicAdaptiveThinking: null,
@@ -278,6 +279,25 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.codex_reasoning_effort_preference).toEqual({ set: "high" });
+  });
+
+  it("clears codexServiceTierPreference when dirty and inherit", () => {
+    const state = createBatchState();
+    const dirty = new Set(["routing.codexServiceTierPreference"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.codex_service_tier_preference).toEqual({ clear: true });
+  });
+
+  it("sets codexServiceTierPreference when dirty and not inherit", () => {
+    const state = createBatchState();
+    state.routing.codexServiceTierPreference = "priority";
+    const dirty = new Set(["routing.codexServiceTierPreference"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.codex_service_tier_preference).toEqual({ set: "priority" });
   });
 
   it("clears anthropicThinkingBudgetPreference when dirty and inherit", () => {

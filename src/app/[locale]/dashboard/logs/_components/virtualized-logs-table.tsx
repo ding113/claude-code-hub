@@ -22,6 +22,10 @@ import {
   NON_BILLING_ENDPOINT,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
+import {
+  getPricingResolutionSpecialSetting,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
@@ -55,6 +59,7 @@ interface VirtualizedLogsTableProps {
   hideScrollToTop?: boolean;
   hiddenColumns?: LogsTableColumn[];
   bodyClassName?: string;
+  serverTimeZone?: string;
 }
 
 export function VirtualizedLogsTable({
@@ -67,8 +72,10 @@ export function VirtualizedLogsTable({
   hideScrollToTop = false,
   hiddenColumns,
   bodyClassName,
+  serverTimeZone: _serverTimeZone,
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
+  const getPricingSourceLabel = (source: string) => t(`logs.billingDetails.pricingSource.`);
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
@@ -331,6 +338,8 @@ export function VirtualizedLogsTable({
                 }
 
                 const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
+                const _isWarmupSkipped = log.blockedBy === "warmup";
+                const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
 
                 return (
                   <div
@@ -631,6 +640,15 @@ export function VirtualizedLogsTable({
                               <TooltipTrigger asChild>
                                 <span className="cursor-help inline-flex items-center gap-1">
                                   {formatCurrency(log.costUsd, currencyCode, 6)}
+                                  {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                                      title={t("logs.billingDetails.fastPriority")}
+                                    >
+                                      {t("logs.billingDetails.fast")}
+                                    </Badge>
+                                  )}
                                   {log.context1mApplied && (
                                     <Badge
                                       variant="outline"
@@ -645,10 +663,26 @@ export function VirtualizedLogsTable({
                                 align="end"
                                 className="text-xs space-y-1 max-w-[300px]"
                               >
+                                {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
+                                  <div className="text-orange-600 dark:text-orange-400 font-medium">
+                                    {t("logs.billingDetails.fastPriority")}
+                                  </div>
+                                )}
                                 {log.context1mApplied && (
                                   <div className="text-purple-600 dark:text-purple-400 font-medium">
                                     {t("logs.billingDetails.context1m")}
                                   </div>
+                                )}
+                                {pricingResolution && (
+                                  <>
+                                    <div>
+                                      {t("logs.billingDetails.pricingProvider")}:{" "}
+                                      <span className="font-mono">
+                                        {pricingResolution.resolvedPricingProviderKey}
+                                      </span>
+                                    </div>
+                                    <div>{getPricingSourceLabel(pricingResolution.source)}</div>
+                                  </>
                                 )}
                                 <div>
                                   {t("logs.billingDetails.input")}:{" "}

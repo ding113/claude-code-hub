@@ -26,6 +26,10 @@ import {
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
+import {
+  getPricingResolutionSpecialSetting,
+  hasPriorityServiceTierSpecialSetting,
+} from "@/lib/utils/special-settings";
 import type { UsageLogRow } from "@/repository/usage-logs";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
@@ -58,6 +62,8 @@ export function UsageLogsTable({
   const t = useTranslations("dashboard");
   const tChain = useTranslations("provider-chain");
   const totalPages = Math.ceil(total / pageSize);
+  const getPricingSourceLabel = (source: string) =>
+    t(`logs.billingDetails.pricingSource.${source}`);
 
   // 弹窗状态管理：记录当前打开的行 ID 和是否需要滚动到重定向部分
   const [dialogState, setDialogState] = useState<{
@@ -110,6 +116,7 @@ export function UsageLogsTable({
                 const isNonBilling = log.endpoint === NON_BILLING_ENDPOINT;
                 const isWarmupSkipped = log.blockedBy === "warmup";
                 const isMutedRow = isNonBilling || isWarmupSkipped;
+                const pricingResolution = getPricingResolutionSpecialSetting(log.specialSettings);
 
                 // 计算倍率（用于 Provider 列 Badge 和成本明细）
                 const successfulProvider =
@@ -381,6 +388,15 @@ export function UsageLogsTable({
                             <TooltipTrigger asChild>
                               <span className="cursor-help inline-flex items-center gap-1">
                                 {formatCurrency(log.costUsd, currencyCode, 6)}
+                                {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] leading-tight px-1 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800"
+                                    title={t("logs.billingDetails.fastPriority")}
+                                  >
+                                    {t("logs.billingDetails.fast")}
+                                  </Badge>
+                                )}
                                 {log.context1mApplied && (
                                   <Badge
                                     variant="outline"
@@ -392,10 +408,26 @@ export function UsageLogsTable({
                               </span>
                             </TooltipTrigger>
                             <TooltipContent align="end" className="text-xs space-y-1 max-w-[300px]">
+                              {hasPriorityServiceTierSpecialSetting(log.specialSettings) && (
+                                <div className="text-orange-600 dark:text-orange-400 font-medium">
+                                  {t("logs.billingDetails.fastPriority")}
+                                </div>
+                              )}
                               {log.context1mApplied && (
                                 <div className="text-purple-600 dark:text-purple-400 font-medium">
                                   {t("logs.billingDetails.context1m")}
                                 </div>
+                              )}
+                              {pricingResolution && (
+                                <>
+                                  <div>
+                                    {t("logs.billingDetails.pricingProvider")}:{" "}
+                                    <span className="font-mono">
+                                      {pricingResolution.resolvedPricingProviderKey}
+                                    </span>
+                                  </div>
+                                  <div>{getPricingSourceLabel(pricingResolution.source)}</div>
+                                </>
                               )}
                               <div>
                                 {t("logs.billingDetails.input")}:{" "}

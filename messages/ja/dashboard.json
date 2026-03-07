@@ -283,8 +283,20 @@
         "cacheTtlSwapped": "課金 TTL (スワップ済み)",
         "multiplier": "プロバイダー倍率",
         "totalCost": "総コスト",
+        "fast": "fast",
+        "fastPriority": "Priority service tier (fast モード)",
         "context1m": "1M コンテキスト",
-        "context1mPricing": "入力 2x >200k, 出力 1.5x >200k"
+        "context1mPricing": "入力 2x >200k, 出力 1.5x >200k",
+        "pricingProvider": "課金価格プロバイダー",
+        "pricingSourceLabel": "課金価格ソース",
+        "pricingSource": {
+          "local_manual": "ローカル手動価格",
+          "cloud_exact": "クラウドの正確なプロバイダー価格",
+          "cloud_model_fallback": "フォールバックモデルのプロバイダー価格",
+          "priority_fallback": "優先フォールバック価格",
+          "single_provider_top_level": "トップレベル単一プロバイダー価格",
+          "official_fallback": "公式価格"
+        }
       },
       "performance": {
         "title": "パフォーマンス",
@@ -357,12 +369,12 @@
       "targetModel": "ターゲットモデル"
     },
     "statusCodes": {
-      "not200": "非 200(エラー／ブロック)",
       "200": "200(成功)",
       "400": "400 (不正なリクエスト)",
       "401": "401 (未認証)",
       "429": "429 (レート制限)",
-      "500": "500 (サーバーエラー)"
+      "500": "500 (サーバーエラー)",
+      "not200": "非 200(エラー／ブロック)"
     },
     "billingDetails": {
       "input": "入力",
@@ -374,8 +386,20 @@
       "cacheTtlSwapped": "課金 TTL (スワップ済み)",
       "multiplier": "プロバイダー倍率",
       "totalCost": "合計費用",
+      "fast": "fast",
+      "fastPriority": "Priority service tier (fast モード)",
       "context1m": "1M コンテキスト",
-      "context1mPricing": "入力 >200k 2倍, 出力 >200k 1.5倍"
+      "context1mPricing": "入力 >200k 2倍, 出力 >200k 1.5倍",
+      "pricingProvider": "課金価格プロバイダー",
+      "pricingSourceLabel": "課金価格ソース",
+      "pricingSource": {
+        "local_manual": "ローカル手動価格",
+        "cloud_exact": "クラウドの正確なプロバイダー価格",
+        "cloud_model_fallback": "フォールバックモデルのプロバイダー価格",
+        "priority_fallback": "優先フォールバック価格",
+        "single_provider_top_level": "トップレベル単一プロバイダー価格",
+        "official_fallback": "公式価格"
+      }
     }
   },
   "leaderboard": {
@@ -1618,11 +1642,11 @@
         "rolling": "ローリングウィンドウ(24時間)"
       },
       "quickValues": {
-        "unlimited": "無制限",
         "10": "$10",
         "50": "$50",
         "100": "$100",
-        "500": "$500"
+        "500": "$500",
+        "unlimited": "無制限"
       },
       "alreadySet": "設定済み",
       "confirmAdd": "追加",

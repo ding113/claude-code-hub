@@ -4,6 +4,25 @@
 
 ---
 
+## v0.6.2 (2026-03-06)
+
+### 新增
+
+- 多供应商模型计费解析：支持为同一模型的不同供应商配置独立定价，实现供应商级别的精准计费 (#873)
+- Codex 服务等级供应商覆写：支持供应商级别覆写 parallel_tool_calls、reasoning.effort/summary、service_tier、text.verbosity 等参数 (#870)
+- 供应商榜单支持展开查看模型明细，可查看供应商下各模型的详细使用统计 (#852) [@tesgth032](https://github.com/tesgth032)
+
+### 优化
+
+- 重命名 official 和 fast 定价标签，提升定价来源标识的清晰度
+
+### 修复
+
+- 修复启动时环境变量缺失导致的问题 (#872) [@PA733](https://github.com/PA733)
+- 修复 Codex 服务等级 PR 的 Bugbot 审查问题 (#871)
+
+---
+
 ## v0.5.8 (2026-02-15)
 
 ### 优化

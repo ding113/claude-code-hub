@@ -16,7 +16,9 @@ export type SpecialSetting =
   | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting
-  | GeminiGoogleSearchOverrideSpecialSetting;
+  | GeminiGoogleSearchOverrideSpecialSetting
+  | PricingResolutionSpecialSetting
+  | CodexServiceTierResultSpecialSetting;
 
 export type SpecialSettingChangeValue = string | number | boolean | null;
 
@@ -197,4 +199,29 @@ export type GeminiGoogleSearchOverrideSpecialSetting = {
   action: "inject" | "remove" | "passthrough";
   preference: "enabled" | "disabled";
   hadGoogleSearchInRequest: boolean;
+};
+
+export type PricingResolutionSpecialSetting = {
+  type: "pricing_resolution";
+  scope: "billing";
+  hit: boolean;
+  modelName: string;
+  resolvedModelName: string;
+  resolvedPricingProviderKey: string;
+  source:
+    | "local_manual"
+    | "cloud_exact"
+    | "cloud_model_fallback"
+    | "priority_fallback"
+    | "single_provider_top_level"
+    | "official_fallback";
+};
+
+export type CodexServiceTierResultSpecialSetting = {
+  type: "codex_service_tier_result";
+  scope: "response";
+  hit: boolean;
+  requestedServiceTier: string | null;
+  actualServiceTier: string | null;
+  effectivePriority: boolean;
 };

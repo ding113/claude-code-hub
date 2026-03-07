@@ -141,11 +141,15 @@ function createSession({
   redirectedModel,
   sessionId,
   messageId,
+  providerOverrides,
+  requestMessage,
 }: {
   originalModel: string;
   redirectedModel: string;
   sessionId: string;
   messageId: number;
+  providerOverrides?: Record<string, unknown>;
+  requestMessage?: Record<string, unknown>;
 }): ProxySession {
   const session = new (
     ProxySession as unknown as {
@@ -167,7 +171,7 @@ function createSession({
     requestUrl: new URL("http://localhost/v1/messages"),
     headers: new Headers(),
     headerLog: "",
-    request: { message: {}, log: "(test)", model: redirectedModel },
+    request: { message: requestMessage ?? {}, log: "(test)", model: redirectedModel },
     userAgent: null,
     context: {},
     clientAbortSignal: null,
@@ -179,9 +183,11 @@ function createSession({
   const provider = {
     id: 99,
     name: "test-provider",
+    url: "https://api.anthropic.com",
     providerType: "claude",
     costMultiplier: 1.0,
     streamingIdleTimeoutMs: 0,
+    ...providerOverrides,
   } as any;
 
   const user = {
@@ -216,11 +222,15 @@ function createSession({
   return session;
 }
 
-function createNonStreamResponse(usage: { input_tokens: number; output_tokens: number }): Response {
+function createNonStreamResponse(
+  usage: { input_tokens: number; output_tokens: number },
+  extras?: Record<string, unknown>
+): Response {
   return new Response(
     JSON.stringify({
       type: "message",
       usage,
+      ...(extras ?? {}),
     }),
     {
       status: 200,
@@ -368,6 +378,245 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(original.sessionCostUsd).toBe("5");
     expect(redirected.sessionCostUsd).toBe("50");
     expect(original.sessionCostUsd).not.toBe(redirected.sessionCostUsd);
+  });
+
+  it("nested pricing: gpt-5.4 alias model should bill from pricing.openai when provider is chatgpt", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 2.5,
+              output_cost_per_token: 15,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const sessionCosts: string[] = [];
+    vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
+      async (_sessionId: string, payload: Record<string, unknown>) => {
+        if (typeof payload.costUsd === "string") {
+          sessionCosts.push(payload.costUsd);
+        }
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-chatgpt",
+      messageId: 3100,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+    });
+
+    const response = createNonStreamResponse({ input_tokens: 2, output_tokens: 3 });
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("50");
+    expect(sessionCosts[0]).toBe("50");
+  });
+
+  it("codex fast: uses priority pricing when response reports service_tier=priority", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 1,
+              output_cost_per_token: 10,
+              input_cost_per_token_priority: 2,
+              output_cost_per_token_priority: 20,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const sessionCosts: string[] = [];
+    vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
+      async (_sessionId: string, payload: Record<string, unknown>) => {
+        if (typeof payload.costUsd === "string") {
+          sessionCosts.push(payload.costUsd);
+        }
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-priority-actual",
+      messageId: 3200,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "default" },
+    });
+
+    const response = createNonStreamResponse(
+      { input_tokens: 2, output_tokens: 3 },
+      { service_tier: "priority" }
+    );
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("64");
+    expect(sessionCosts[0]).toBe("64");
+  });
+
+  it("codex fast: falls back to requested priority pricing when response omits service_tier", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 1,
+              output_cost_per_token: 10,
+              input_cost_per_token_priority: 2,
+              output_cost_per_token_priority: 20,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-priority-requested",
+      messageId: 3201,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "priority" },
+    });
+
+    const response = createNonStreamResponse({ input_tokens: 2, output_tokens: 3 });
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("64");
+  });
+
+  it("codex fast: does not use priority pricing when response explicitly reports non-priority tier", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 1,
+              output_cost_per_token: 10,
+              input_cost_per_token_priority: 2,
+              output_cost_per_token_priority: 20,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-priority-downgraded",
+      messageId: 3202,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "priority" },
+    });
+
+    const response = createNonStreamResponse(
+      { input_tokens: 2, output_tokens: 3 },
+      { service_tier: "default" }
+    );
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("32");
   });
 });
 

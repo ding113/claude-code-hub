@@ -125,6 +125,24 @@ describe("Codex 供应商级参数覆写", () => {
     expect(output.text).toEqual({ verbosity: "high" });
   });
 
+  it("当强制 service_tier 时，应覆写顶层 service_tier 字段", () => {
+    const provider = {
+      providerType: "codex",
+      codexServiceTierPreference: "priority",
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5-codex",
+      input: [],
+      service_tier: "default",
+    };
+
+    const output = applyCodexProviderOverrides(provider as any, input);
+
+    expect(output.service_tier).toBe("priority");
+    expect(input.service_tier).toBe("default");
+  });
+
   it("审计：当 providerType 不是 codex 时，应返回 audit=null 且保持引用不变", () => {
     const provider = {
       id: 123,
@@ -227,5 +245,35 @@ describe("Codex 供应商级参数覆写", () => {
       "reasoning.summary",
       "text.verbosity",
     ]);
+  });
+
+  it("审计：当客户端原本就携带 priority service_tier 时，也应保留 fast 命中记录", () => {
+    const provider = {
+      id: 2,
+      name: "codex-provider",
+      providerType: "codex",
+      codexReasoningEffortPreference: "inherit",
+      codexReasoningSummaryPreference: null,
+      codexTextVerbosityPreference: null,
+      codexParallelToolCallsPreference: null,
+      codexServiceTierPreference: null,
+    };
+
+    const input: Record<string, unknown> = {
+      model: "gpt-5-codex",
+      input: [],
+      service_tier: "priority",
+    };
+
+    const result = applyCodexProviderOverridesWithAudit(provider as any, input);
+
+    expect(result.audit?.hit).toBe(true);
+    expect(result.audit?.changed).toBe(false);
+    expect(result.audit?.changes).toContainEqual({
+      path: "service_tier",
+      before: "priority",
+      after: "priority",
+      changed: false,
+    });
   });
 });
