@@ -196,11 +196,15 @@ function ProviderFormContent({
   const isScrollingToSection = useRef(false);
   const rafRef = useRef<number | null>(null);
   const scrollLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollEndListenerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+      if (scrollEndListenerRef.current) {
+        contentRef.current?.removeEventListener("scrollend", scrollEndListenerRef.current);
+      }
     };
   }, []);
 
@@ -214,16 +218,22 @@ function ProviderFormContent({
       const offset = sectionTop - containerTop + contentRef.current.scrollTop;
       contentRef.current.scrollTo({ top: offset, behavior: "smooth" });
       if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+      if (scrollEndListenerRef.current) {
+        contentRef.current.removeEventListener("scrollend", scrollEndListenerRef.current);
+      }
       const unlock = () => {
         isScrollingToSection.current = false;
       };
       const onScrollEnd = () => {
         clearTimeout(scrollLockTimerRef.current!);
+        scrollEndListenerRef.current = null;
         unlock();
       };
+      scrollEndListenerRef.current = onScrollEnd;
       contentRef.current.addEventListener("scrollend", onScrollEnd, { once: true });
       scrollLockTimerRef.current = setTimeout(() => {
         contentRef.current?.removeEventListener("scrollend", onScrollEnd);
+        scrollEndListenerRef.current = null;
         unlock();
       }, 1000);
     }
