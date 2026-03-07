@@ -107,6 +107,13 @@ type ChartTooltipValue = number | string | ReadonlyArray<number | string>;
 type TooltipPayloadEntry = NonNullable<
   TooltipContentProps<ChartTooltipValue, string>["payload"]
 >[number];
+type TooltipFormatter = (
+  value: ChartTooltipValue | undefined,
+  name: string,
+  item: TooltipPayloadEntry,
+  index: number,
+  payload: ReadonlyArray<TooltipPayloadEntry>
+) => React.ReactNode;
 
 function normalizePayloadKey(value: unknown, fallback: string): string {
   if (typeof value === "string" || typeof value === "number") {
@@ -171,6 +178,7 @@ function ChartTooltipContent({
   }
 
   const nestLabel = payload.length === 1 && indicator !== "dot";
+  const tooltipFormatter = formatter as TooltipFormatter | undefined;
 
   return (
     <div
@@ -198,13 +206,13 @@ function ChartTooltipContent({
                   indicator === "dot" && "items-center"
                 )}
               >
-                {formatter && item?.value !== undefined && item.name ? (
-                  formatter(
+                {tooltipFormatter && item?.value !== undefined && item.name !== undefined ? (
+                  tooltipFormatter(
                     item.value,
-                    item.name,
-                    item as Parameters<typeof formatter>[2],
+                    itemName,
+                    item,
                     index,
-                    payload
+                    payload as ReadonlyArray<TooltipPayloadEntry>
                   )
                 ) : (
                   <>
