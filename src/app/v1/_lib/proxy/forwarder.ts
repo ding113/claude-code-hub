@@ -2652,7 +2652,12 @@ export class ProxyForwarder {
 
     // joinOpenAIPool: 移除浏览器/OpenAI 客户端特有的头，
     // 真正的 Claude Code CLI 不会发送这些头
-    const blacklist = ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY];
+    const blacklist = [
+      "content-length",
+      "connection",
+      "x-api-key",
+      GEMINI_PROTOCOL.HEADERS.API_KEY,
+    ];
     if (isOpenAIToClaudeConversion) {
       blacklist.push(
         "http-referer",
@@ -2664,7 +2669,7 @@ export class ProxyForwarder {
         "sec-ch-ua-platform",
         "sec-fetch-dest",
         "sec-fetch-mode",
-        "sec-fetch-site",
+        "sec-fetch-site"
       );
     }
 
