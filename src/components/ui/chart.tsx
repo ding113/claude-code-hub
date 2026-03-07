@@ -170,24 +170,14 @@ function ChartTooltipContent({
       <div className="grid gap-1.5">
         {payload
           .filter((item: { type?: string }) => item.type !== "none")
-          .map(
-            (
-              item: {
-                dataKey?: string | number;
-                name?: string;
-                payload?: { fill?: string };
-                color?: string;
-                value?: number | string;
-              },
-              index: number
-            ) => {
-              const key = `${nameKey || item.name || item.dataKey || "value"}`;
+          .map((item, index) => {
+              const key = `${nameKey || item.name || String(item.dataKey ?? "") || "value"}`;
               const itemConfig = getPayloadConfigFromPayload(config, item, key);
               const indicatorColor = color || item.payload?.fill || item.color;
 
               return (
                 <div
-                  key={item.dataKey}
+                  key={String(item.dataKey)}
                   className={cn(
                     "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
                     indicator === "dot" && "items-center"
