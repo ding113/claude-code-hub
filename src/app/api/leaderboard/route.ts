@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
     const includeModelStatsParam = searchParams.get("includeModelStats");
     const userTagsParam = searchParams.get("userTags");
     const userGroupsParam = searchParams.get("userGroups");
+    const includeUserModelStatsParam = searchParams.get("includeUserModelStats");
 
     if (!VALID_PERIODS.includes(period)) {
       return NextResponse.json(
@@ -135,6 +136,19 @@ export async function GET(request: NextRequest) {
         includeModelStatsParam === "true" ||
         includeModelStatsParam === "yes");
 
+    const includeUserModelStats =
+      scope === "user" &&
+      (includeUserModelStatsParam === "1" ||
+        includeUserModelStatsParam === "true" ||
+        includeUserModelStatsParam === "yes");
+
+    if (includeUserModelStats && !isAdmin) {
+      return NextResponse.json(
+        { error: "includeUserModelStats requires admin privileges" },
+        { status: 403 }
+      );
+    }
+
     const parseListParam = (param: string | null): string[] | undefined => {
       if (!param) return undefined;
       const items = param
@@ -158,7 +172,12 @@ export async function GET(request: NextRequest) {
       systemSettings.currencyDisplay,
       scope,
       dateRange,
-      { providerType, userTags, userGroups, includeModelStats }
+      {
+        providerType,
+        userTags,
+        userGroups,
+        includeModelStats: includeModelStats || includeUserModelStats,
+      }
     );
 
     // 格式化金额字段
@@ -227,11 +246,26 @@ export async function GET(request: NextRequest) {
             })
           : undefined;
 
+      const userModelStatsFormatted =
+        scope === "user" && Array.isArray(typedEntry.modelStats)
+          ? typedEntry.modelStats.map((ms) => {
+              const stat = ms as {
+                totalCost: number;
+                model: string | null;
+              } & Record<string, unknown>;
+              return {
+                ...stat,
+                totalCostFormatted: formatCurrency(stat.totalCost, systemSettings.currencyDisplay),
+              };
+            })
+          : undefined;
+
       return {
         ...base,
         ...providerFields,
         ...cacheFields,
         ...(modelStatsFormatted !== undefined ? { modelStats: modelStatsFormatted } : {}),
+        ...(userModelStatsFormatted !== undefined ? { modelStats: userModelStatsFormatted } : {}),
       };
     });
 
@@ -251,7 +285,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+        "Cache-Control": includeUserModelStats
+          ? "private, no-store"
+          : "public, s-maxage=60, stale-while-revalidate=120",
       },
     });
   } catch (error) {

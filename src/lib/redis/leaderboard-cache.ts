@@ -46,7 +46,7 @@ export interface LeaderboardFilters {
   providerType?: ProviderType;
   userTags?: string[];
   userGroups?: string[];
-  /** 仅 scope=provider 生效：是否包含按模型拆分的数据（ProviderLeaderboardEntry.modelStats） */
+  /** scope=provider 或 scope=user 时生效：是否包含按模型拆分的数据 */
   includeModelStats?: boolean;
 }
 
@@ -65,7 +65,9 @@ function buildCacheKey(
   const now = new Date();
   const providerTypeSuffix = filters?.providerType ? `:providerType:${filters.providerType}` : "";
   const includeModelStatsSuffix =
-    scope === "provider" && filters?.includeModelStats ? ":includeModelStats" : "";
+    (scope === "provider" || scope === "user") && filters?.includeModelStats
+      ? ":includeModelStats"
+      : "";
 
   let userFilterSuffix = "";
   if (scope === "user") {
@@ -116,7 +118,7 @@ async function queryDatabase(
   // 处理自定义日期范围
   if (period === "custom" && dateRange) {
     if (scope === "user") {
-      return await findCustomRangeLeaderboard(dateRange, userFilters);
+      return await findCustomRangeLeaderboard(dateRange, userFilters, filters?.includeModelStats);
     }
     if (scope === "provider") {
       return await findCustomRangeProviderLeaderboard(
@@ -134,15 +136,15 @@ async function queryDatabase(
   if (scope === "user") {
     switch (period) {
       case "daily":
-        return await findDailyLeaderboard(userFilters);
+        return await findDailyLeaderboard(userFilters, filters?.includeModelStats);
       case "weekly":
-        return await findWeeklyLeaderboard(userFilters);
+        return await findWeeklyLeaderboard(userFilters, filters?.includeModelStats);
       case "monthly":
-        return await findMonthlyLeaderboard(userFilters);
+        return await findMonthlyLeaderboard(userFilters, filters?.includeModelStats);
       case "allTime":
-        return await findAllTimeLeaderboard(userFilters);
+        return await findAllTimeLeaderboard(userFilters, filters?.includeModelStats);
       default:
-        return await findDailyLeaderboard(userFilters);
+        return await findDailyLeaderboard(userFilters, filters?.includeModelStats);
     }
   }
   if (scope === "provider") {

@@ -1,0 +1,321 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockGetSession = vi.hoisted(() => vi.fn());
+const mockFindUserById = vi.hoisted(() => vi.fn());
+const mockGetOverviewWithCache = vi.hoisted(() => vi.fn());
+const mockGetStatisticsWithCache = vi.hoisted(() => vi.fn());
+const mockGetUserModelBreakdown = vi.hoisted(() => vi.fn());
+const mockGetSystemSettings = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/auth", () => ({
+  getSession: mockGetSession,
+}));
+
+vi.mock("@/repository/user", () => ({
+  findUserById: mockFindUserById,
+}));
+
+vi.mock("@/lib/redis/overview-cache", () => ({
+  getOverviewWithCache: mockGetOverviewWithCache,
+}));
+
+vi.mock("@/lib/redis/statistics-cache", () => ({
+  getStatisticsWithCache: mockGetStatisticsWithCache,
+}));
+
+vi.mock("@/repository/admin-user-insights", () => ({
+  getUserModelBreakdown: mockGetUserModelBreakdown,
+}));
+
+vi.mock("@/repository/system-config", () => ({
+  getSystemSettings: mockGetSystemSettings,
+}));
+
+function createAdminSession() {
+  return {
+    user: { id: 1, name: "Admin", role: "admin" },
+    key: { id: 1, key: "sk-admin" },
+  };
+}
+
+function createUserSession() {
+  return {
+    user: { id: 2, name: "User", role: "user" },
+    key: { id: 2, key: "sk-user" },
+  };
+}
+
+function createMockUser() {
+  return {
+    id: 10,
+    name: "Target User",
+    description: "",
+    role: "user" as const,
+    rpm: null,
+    dailyQuota: null,
+    providerGroup: "default",
+    isEnabled: true,
+    expiresAt: null,
+    dailyResetMode: "fixed" as const,
+    dailyResetTime: "00:00",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+function createMockOverview() {
+  return {
+    todayRequests: 50,
+    todayCost: 5.5,
+    avgResponseTime: 200,
+    todayErrorRate: 2.0,
+    yesterdaySamePeriodRequests: 40,
+    yesterdaySamePeriodCost: 4.0,
+    yesterdaySamePeriodAvgResponseTime: 220,
+    recentMinuteRequests: 2,
+  };
+}
+
+function createMockSettings() {
+  return {
+    id: 1,
+    siteTitle: "Claude Code Hub",
+    allowGlobalUsageView: false,
+    currencyDisplay: "USD",
+    billingModelSource: "original",
+    timezone: null,
+    enableAutoCleanup: false,
+    cleanupRetentionDays: 30,
+    cleanupSchedule: "0 2 * * *",
+    cleanupBatchSize: 10000,
+    enableClientVersionCheck: false,
+    verboseProviderError: false,
+    enableHttp2: false,
+    interceptAnthropicWarmupRequests: false,
+    enableThinkingSignatureRectifier: true,
+    enableThinkingBudgetRectifier: true,
+    enableBillingHeaderRectifier: true,
+    enableCodexSessionIdCompletion: true,
+    enableClaudeMetadataUserIdInjection: true,
+    enableResponseFixer: true,
+    responseFixerConfig: {
+      fixTruncatedJson: true,
+      fixSseFormat: true,
+      fixEncoding: true,
+      maxJsonDepth: 50,
+      maxFixSize: 1048576,
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+function createMockBreakdown() {
+  return [
+    {
+      model: "claude-sonnet-4-20250514",
+      requests: 30,
+      cost: 3.5,
+      inputTokens: 10000,
+      outputTokens: 5000,
+      cacheCreationTokens: 2000,
+      cacheReadTokens: 8000,
+    },
+    {
+      model: "claude-opus-4-20250514",
+      requests: 20,
+      cost: 2.0,
+      inputTokens: 8000,
+      outputTokens: 3000,
+      cacheCreationTokens: 1000,
+      cacheReadTokens: 5000,
+    },
+  ];
+}
+
+describe("getUserInsightsOverview", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns unauthorized for non-admin", async () => {
+    mockGetSession.mockResolvedValueOnce(createUserSession());
+
+    const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsOverview(10);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unauthorized");
+    }
+    expect(mockFindUserById).not.toHaveBeenCalled();
+  });
+
+  it("returns unauthorized when not logged in", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+
+    const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsOverview(10);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unauthorized");
+    }
+  });
+
+  it("returns error for non-existent user", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockFindUserById.mockResolvedValueOnce(null);
+
+    const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsOverview(999);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("User not found");
+    }
+    expect(mockFindUserById).toHaveBeenCalledWith(999);
+  });
+
+  it("returns overview data for valid admin request", async () => {
+    const user = createMockUser();
+    const overview = createMockOverview();
+    const settings = createMockSettings();
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockFindUserById.mockResolvedValueOnce(user);
+    mockGetOverviewWithCache.mockResolvedValueOnce(overview);
+    mockGetSystemSettings.mockResolvedValueOnce(settings);
+
+    const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsOverview(10);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.user).toEqual(user);
+      expect(result.data.overview).toEqual(overview);
+      expect(result.data.currencyCode).toBe("USD");
+    }
+    expect(mockFindUserById).toHaveBeenCalledWith(10);
+    expect(mockGetOverviewWithCache).toHaveBeenCalledWith(10);
+  });
+});
+
+describe("getUserInsightsKeyTrend", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns unauthorized for non-admin", async () => {
+    mockGetSession.mockResolvedValueOnce(createUserSession());
+
+    const { getUserInsightsKeyTrend } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsKeyTrend(10, "today");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unauthorized");
+    }
+    expect(mockGetStatisticsWithCache).not.toHaveBeenCalled();
+  });
+
+  it("validates timeRange parameter", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsKeyTrend } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsKeyTrend(10, "invalidRange");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("Invalid timeRange");
+    }
+    expect(mockGetStatisticsWithCache).not.toHaveBeenCalled();
+  });
+
+  it("returns trend data for valid request", async () => {
+    const mockStats = [
+      { date: "2026-03-09", cost: 1.5, requests: 10 },
+      { date: "2026-03-08", cost: 2.0, requests: 15 },
+    ];
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetStatisticsWithCache.mockResolvedValueOnce(mockStats);
+
+    const { getUserInsightsKeyTrend } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsKeyTrend(10, "7days");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data).toEqual(mockStats);
+    }
+    expect(mockGetStatisticsWithCache).toHaveBeenCalledWith("7days", "keys", 10);
+  });
+
+  it("accepts all valid timeRange values", async () => {
+    const validRanges = ["today", "7days", "30days", "thisMonth"];
+
+    for (const range of validRanges) {
+      vi.clearAllMocks();
+      mockGetSession.mockResolvedValueOnce(createAdminSession());
+      mockGetStatisticsWithCache.mockResolvedValueOnce([]);
+
+      const { getUserInsightsKeyTrend } = await import("@/actions/admin-user-insights");
+      const result = await getUserInsightsKeyTrend(10, range);
+
+      expect(result.ok).toBe(true);
+    }
+  });
+});
+
+describe("getUserInsightsModelBreakdown", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns unauthorized for non-admin", async () => {
+    mockGetSession.mockResolvedValueOnce(createUserSession());
+
+    const { getUserInsightsModelBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsModelBreakdown(10);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unauthorized");
+    }
+    expect(mockGetUserModelBreakdown).not.toHaveBeenCalled();
+  });
+
+  it("returns breakdown data for valid request", async () => {
+    const breakdown = createMockBreakdown();
+    const settings = createMockSettings();
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetUserModelBreakdown.mockResolvedValueOnce(breakdown);
+    mockGetSystemSettings.mockResolvedValueOnce(settings);
+
+    const { getUserInsightsModelBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsModelBreakdown(10);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.breakdown).toEqual(breakdown);
+      expect(result.data.currencyCode).toBe("USD");
+    }
+    expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(10, undefined, undefined);
+  });
+
+  it("passes date range to getUserModelBreakdown", async () => {
+    const breakdown = createMockBreakdown();
+    const settings = createMockSettings();
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetUserModelBreakdown.mockResolvedValueOnce(breakdown);
+    mockGetSystemSettings.mockResolvedValueOnce(settings);
+
+    const { getUserInsightsModelBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsModelBreakdown(10, "2026-03-01", "2026-03-09");
+
+    expect(result.ok).toBe(true);
+    expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(10, "2026-03-01", "2026-03-09");
+  });
+});

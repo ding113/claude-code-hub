@@ -13,12 +13,20 @@ const clampRatio01 = (value: number | null | undefined) => Math.min(Math.max(val
 /**
  * 排行榜条目类型
  */
+export interface UserModelStat {
+  model: string | null;
+  totalRequests: number;
+  totalCost: number;
+  totalTokens: number;
+}
+
 export interface LeaderboardEntry {
   userId: number;
   userName: string;
   totalRequests: number;
   totalCost: number;
   totalTokens: number;
+  modelStats?: UserModelStat[];
 }
 
 /**
@@ -113,10 +121,11 @@ export interface ModelLeaderboardEntry {
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"今日"基于系统时区
  */
 export async function findDailyLeaderboard(
-  userFilters?: UserLeaderboardFilters
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
 ): Promise<LeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findLeaderboardWithTimezone("daily", timezone, undefined, userFilters);
+  return findLeaderboardWithTimezone("daily", timezone, undefined, userFilters, includeModelStats);
 }
 
 /**
@@ -124,10 +133,17 @@ export async function findDailyLeaderboard(
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"本月"基于系统时区
  */
 export async function findMonthlyLeaderboard(
-  userFilters?: UserLeaderboardFilters
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
 ): Promise<LeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findLeaderboardWithTimezone("monthly", timezone, undefined, userFilters);
+  return findLeaderboardWithTimezone(
+    "monthly",
+    timezone,
+    undefined,
+    userFilters,
+    includeModelStats
+  );
 }
 
 /**
@@ -135,20 +151,28 @@ export async function findMonthlyLeaderboard(
  * 使用 SQL AT TIME ZONE 进行时区转换，确保"本周"基于系统时区
  */
 export async function findWeeklyLeaderboard(
-  userFilters?: UserLeaderboardFilters
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
 ): Promise<LeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findLeaderboardWithTimezone("weekly", timezone, undefined, userFilters);
+  return findLeaderboardWithTimezone("weekly", timezone, undefined, userFilters, includeModelStats);
 }
 
 /**
  * 查询全部时间消耗排行榜（不限制数量）
  */
 export async function findAllTimeLeaderboard(
-  userFilters?: UserLeaderboardFilters
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
 ): Promise<LeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findLeaderboardWithTimezone("allTime", timezone, undefined, userFilters);
+  return findLeaderboardWithTimezone(
+    "allTime",
+    timezone,
+    undefined,
+    userFilters,
+    includeModelStats
+  );
 }
 
 /**
@@ -230,7 +254,8 @@ async function findLeaderboardWithTimezone(
   period: LeaderboardPeriod,
   timezone: string,
   dateRange?: DateRangeParams,
-  userFilters?: UserLeaderboardFilters
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
 ): Promise<LeaderboardEntry[]> {
   const whereConditions = [
     LEDGER_BILLING_CONDITION,
@@ -284,12 +309,61 @@ async function findLeaderboardWithTimezone(
     .groupBy(usageLedger.userId, users.name)
     .orderBy(desc(sql`sum(${usageLedger.costUsd})`));
 
-  return rankings.map((entry) => ({
+  const baseEntries: LeaderboardEntry[] = rankings.map((entry) => ({
     userId: entry.userId,
     userName: entry.userName,
     totalRequests: entry.totalRequests,
     totalCost: parseFloat(entry.totalCost),
     totalTokens: entry.totalTokens,
+  }));
+
+  if (!includeModelStats) return baseEntries;
+
+  const systemSettings = await getSystemSettings();
+  const billingModelSource = systemSettings.billingModelSource;
+  const rawModelField =
+    billingModelSource === "original"
+      ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
+      : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const modelField = sql<string | null>`NULLIF(TRIM(${rawModelField}), '')`;
+
+  const modelRows = await db
+    .select({
+      userId: usageLedger.userId,
+      model: modelField,
+      totalRequests: sql<number>`count(*)::double precision`,
+      totalCost: sql<string>`COALESCE(sum(${usageLedger.costUsd}), 0)`,
+      totalTokens: sql<number>`COALESCE(
+        sum(
+          ${usageLedger.inputTokens} +
+          ${usageLedger.outputTokens} +
+          COALESCE(${usageLedger.cacheCreationInputTokens}, 0) +
+          COALESCE(${usageLedger.cacheReadInputTokens}, 0)
+        )::double precision,
+        0::double precision
+      )`,
+    })
+    .from(usageLedger)
+    .innerJoin(users, and(sql`${usageLedger.userId} = ${users.id}`, isNull(users.deletedAt)))
+    .where(and(...whereConditions))
+    .groupBy(usageLedger.userId, modelField)
+    .orderBy(desc(sql`sum(${usageLedger.costUsd})`));
+
+  const modelStatsByUser = new Map<number, UserModelStat[]>();
+  for (const row of modelRows) {
+    const stats = modelStatsByUser.get(row.userId) ?? [];
+    stats.push({
+      model: row.model,
+      totalRequests: row.totalRequests,
+      totalCost: parseFloat(row.totalCost),
+      totalTokens: row.totalTokens,
+    });
+    modelStatsByUser.set(row.userId, stats);
+  }
+
+  return baseEntries.map((entry) => ({
+    ...entry,
+    modelStats: modelStatsByUser.get(entry.userId) ?? [],
   }));
 }
 
@@ -298,10 +372,11 @@ async function findLeaderboardWithTimezone(
  */
 export async function findCustomRangeLeaderboard(
   dateRange: DateRangeParams,
-  userFilters?: UserLeaderboardFilters
+  userFilters?: UserLeaderboardFilters,
+  includeModelStats?: boolean
 ): Promise<LeaderboardEntry[]> {
   const timezone = await resolveSystemTimezone();
-  return findLeaderboardWithTimezone("custom", timezone, dateRange, userFilters);
+  return findLeaderboardWithTimezone("custom", timezone, dateRange, userFilters, includeModelStats);
 }
 
 /**
