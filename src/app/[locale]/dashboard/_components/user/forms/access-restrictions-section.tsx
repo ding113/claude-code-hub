@@ -1,23 +1,9 @@
 "use client";
 
-import { ChevronDown, Shield } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { Shield } from "lucide-react";
+import { useCallback } from "react";
+import { ClientRestrictionsEditor } from "@/components/form/client-restrictions-editor";
 import { ArrayTagInputField } from "@/components/form/form-field";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import {
-  CLIENT_RESTRICTION_PRESET_OPTIONS,
-  getSelectedChildren,
-  isAllChildrenSelected,
-  isPresetSelected,
-  mergePresetAndCustomClients,
-  removePresetValues,
-  setChildSelection,
-  splitPresetAndCustomClients,
-  togglePresetSelection,
-} from "@/lib/client-restrictions/client-presets";
 
 // Model name validation pattern
 const MODEL_NAME_PATTERN = /^[a-zA-Z0-9._:/-]+$/;
@@ -74,50 +60,6 @@ export function AccessRestrictionsSection({
   const allowed = allowedClients || [];
   const blocked = blockedClients || [];
 
-  const { customValues: customAllowed } = useMemo(
-    () => splitPresetAndCustomClients(allowed),
-    [allowed]
-  );
-
-  const { customValues: customBlocked } = useMemo(
-    () => splitPresetAndCustomClients(blocked),
-    [blocked]
-  );
-
-  const handleAllowToggle = (presetValue: string, checked: boolean) => {
-    onChange("allowedClients", togglePresetSelection(allowed, presetValue, checked));
-    if (checked) {
-      onChange("blockedClients", removePresetValues(blocked, presetValue));
-    }
-  };
-
-  const handleBlockToggle = (presetValue: string, checked: boolean) => {
-    onChange("blockedClients", togglePresetSelection(blocked, presetValue, checked));
-    if (checked) {
-      onChange("allowedClients", removePresetValues(allowed, presetValue));
-    }
-  };
-
-  const handleChildSelectionChange = (presetValue: string, selectedChildren: string[]) => {
-    const preset = CLIENT_RESTRICTION_PRESET_OPTIONS.find((p) => p.value === presetValue);
-    if (!preset) return;
-    const isInAllowed = isPresetSelected(allowed, presetValue);
-    const isInBlocked = isPresetSelected(blocked, presetValue);
-    if (isInAllowed) {
-      onChange("allowedClients", setChildSelection(allowed, preset, selectedChildren));
-    } else if (isInBlocked) {
-      onChange("blockedClients", setChildSelection(blocked, preset, selectedChildren));
-    }
-  };
-
-  const handleCustomAllowedChange = (newCustom: string[]) => {
-    onChange("allowedClients", mergePresetAndCustomClients(allowed, newCustom));
-  };
-
-  const handleCustomBlockedChange = (newCustom: string[]) => {
-    onChange("blockedClients", mergePresetAndCustomClients(blocked, newCustom));
-  };
-
   const validateModelTag = useCallback(
     (tag: string): boolean => {
       if (!tag || tag.trim().length === 0) return false;
@@ -129,135 +71,6 @@ export function AccessRestrictionsSection({
     },
     [allowedModels]
   );
-
-  const getChildDisplayText = (preset: (typeof CLIENT_RESTRICTION_PRESET_OPTIONS)[number]) => {
-    if (!preset.children) return null;
-    const activeList = isPresetSelected(allowed, preset.value)
-      ? allowed
-      : isPresetSelected(blocked, preset.value)
-        ? blocked
-        : null;
-    if (!activeList) return translations.presetClients["sub-all"] ?? "All";
-    const selected = getSelectedChildren(activeList, preset);
-    if (selected.length === 0 || selected.length === preset.children.length) {
-      return translations.subClients?.all ?? "All";
-    }
-    if (selected.length <= 2) {
-      return selected
-        .map((v) => {
-          const child = preset.children!.find((c) => c.value === v);
-          return child ? (translations.subClients?.[child.labelKey] ?? child.labelKey) : v;
-        })
-        .join(", ");
-    }
-    return (
-      translations.nSelected?.replace("{count}", String(selected.length)) ?? `${selected.length}`
-    );
-  };
-
-  const renderPresetRow = (preset: (typeof CLIENT_RESTRICTION_PRESET_OPTIONS)[number]) => {
-    const { value } = preset;
-    const isAllowed = isPresetSelected(allowed, value);
-    const isBlocked = isPresetSelected(blocked, value);
-    const displayLabel = translations.presetClients[value] ?? value;
-
-    return (
-      <div key={value} className="flex items-center gap-4 py-1">
-        <span className="text-sm flex-1 text-foreground">{displayLabel}</span>
-        {preset.children && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 px-2">
-                {getChildDisplayText(preset)}
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-52 p-2" align="start">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 py-1">
-                  <Checkbox
-                    id={`sub-all-${value}`}
-                    checked={
-                      !isAllowed && !isBlocked
-                        ? true
-                        : isAllChildrenSelected(isAllowed ? allowed : blocked, preset)
-                    }
-                    onCheckedChange={(checked) => {
-                      const allChildren = preset.children!.map((c) => c.value);
-                      handleChildSelectionChange(value, checked ? allChildren : []);
-                    }}
-                    disabled={!isAllowed && !isBlocked}
-                  />
-                  <Label
-                    htmlFor={`sub-all-${value}`}
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    {translations.subClients?.all ?? "All"}
-                  </Label>
-                </div>
-                <div className="border-t my-1" />
-                {preset.children.map((child) => {
-                  const activeList = isAllowed ? allowed : isBlocked ? blocked : [];
-                  const isChildChecked =
-                    activeList.includes(preset.value) || activeList.includes(child.value);
-                  return (
-                    <div key={child.value} className="flex items-center gap-2 py-1 pl-2">
-                      <Checkbox
-                        id={`sub-${child.value}`}
-                        checked={isChildChecked}
-                        onCheckedChange={(checked) => {
-                          const currentSelected = getSelectedChildren(activeList, preset);
-                          const next = checked
-                            ? [...currentSelected, child.value]
-                            : currentSelected.filter((v) => v !== child.value);
-                          handleChildSelectionChange(value, next);
-                        }}
-                        disabled={!isAllowed && !isBlocked}
-                      />
-                      <Label
-                        htmlFor={`sub-${child.value}`}
-                        className="text-sm font-normal cursor-pointer"
-                      >
-                        {translations.subClients?.[child.labelKey] ?? child.labelKey}
-                      </Label>
-                    </div>
-                  );
-                })}
-              </div>
-            </PopoverContent>
-          </Popover>
-        )}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <Checkbox
-              id={`allow-${value}`}
-              checked={isAllowed}
-              onCheckedChange={(checked) => handleAllowToggle(value, checked === true)}
-            />
-            <Label
-              htmlFor={`allow-${value}`}
-              className="text-xs font-normal cursor-pointer text-muted-foreground"
-            >
-              {translations.actions.allow}
-            </Label>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Checkbox
-              id={`block-${value}`}
-              checked={isBlocked}
-              onCheckedChange={(checked) => handleBlockToggle(value, checked === true)}
-            />
-            <Label
-              htmlFor={`block-${value}`}
-              className="text-xs font-normal cursor-pointer text-muted-foreground"
-            >
-              {translations.actions.block}
-            </Label>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   return (
     <section className="space-y-4">
@@ -275,30 +88,23 @@ export function AccessRestrictionsSection({
           </p>
         </div>
 
-        <div className="space-y-0.5 border rounded-md p-2">
-          {CLIENT_RESTRICTION_PRESET_OPTIONS.map((client) => renderPresetRow(client))}
-        </div>
-
-        {/* Custom allowed patterns */}
-        <ArrayTagInputField
-          label={translations.fields.allowedClients.customLabel}
-          description={translations.fields.allowedClients.customHelp}
-          maxTagLength={64}
-          maxTags={50}
-          placeholder={translations.fields.allowedClients.customPlaceholder}
-          value={customAllowed}
-          onChange={handleCustomAllowedChange}
-        />
-
-        {/* Custom blocked patterns */}
-        <ArrayTagInputField
-          label={translations.fields.blockedClients.customLabel}
-          description={translations.fields.blockedClients.customHelp}
-          maxTagLength={64}
-          maxTags={50}
-          placeholder={translations.fields.blockedClients.customPlaceholder}
-          value={customBlocked}
-          onChange={handleCustomBlockedChange}
+        <ClientRestrictionsEditor
+          allowed={allowed}
+          blocked={blocked}
+          onAllowedChange={(next) => onChange("allowedClients", next)}
+          onBlockedChange={(next) => onChange("blockedClients", next)}
+          translations={{
+            allowAction: translations.actions.allow,
+            blockAction: translations.actions.block,
+            customAllowedLabel: translations.fields.allowedClients.customLabel,
+            customAllowedPlaceholder: translations.fields.allowedClients.customPlaceholder,
+            customBlockedLabel: translations.fields.blockedClients.customLabel,
+            customBlockedPlaceholder: translations.fields.blockedClients.customPlaceholder,
+            customHelp: translations.fields.allowedClients.customHelp,
+            presetClients: translations.presetClients,
+            subClients: translations.subClients,
+            nSelected: translations.nSelected,
+          }}
         />
       </div>
 
