@@ -2133,51 +2133,63 @@ export class ProxyForwarder {
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
       if (hasBody) {
-        const filteredMessage = filterPrivateParameters(session.request.message) as Record<
-          string,
-          unknown
-        >;
+        if (session.getEndpointPolicy().bypassForwarderPreprocessing && session.request.buffer) {
+          // Raw passthrough: preserve original request body bytes as-is
+          requestBody = session.request.buffer;
+          session.forwardedRequestBody = session.request.log;
 
-        // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
-        let messageToSend: Record<string, unknown> = filteredMessage;
-        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
-          const settings = await getCachedSystemSettings();
-          const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
-          const injection = applyClaudeMetadataUserIdInjectionWithAudit(
-            filteredMessage,
-            session,
-            enabled
-          );
-
-          if (injection) {
-            messageToSend = injection.message;
-            session.addSpecialSetting(injection.audit);
-            await persistSpecialSettings(session);
+          try {
+            isStreaming = (session.request.message as Record<string, unknown>).stream === true;
+          } catch {
+            isStreaming = false;
           }
-        }
+        } else {
+          const filteredMessage = filterPrivateParameters(session.request.message) as Record<
+            string,
+            unknown
+          >;
 
-        const bodyString = JSON.stringify(messageToSend);
-        requestBody = bodyString;
-        session.forwardedRequestBody = bodyString;
+          // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
+          let messageToSend: Record<string, unknown> = filteredMessage;
+          if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+            const settings = await getCachedSystemSettings();
+            const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
+            const injection = applyClaudeMetadataUserIdInjectionWithAudit(
+              filteredMessage,
+              session,
+              enabled
+            );
 
-        try {
-          const parsed = JSON.parse(bodyString);
-          isStreaming = parsed.stream === true;
-        } catch {
-          isStreaming = false;
-        }
+            if (injection) {
+              messageToSend = injection.message;
+              session.addSpecialSetting(injection.audit);
+              await persistSpecialSettings(session);
+            }
+          }
 
-        if (process.env.NODE_ENV === "development") {
-          logger.trace("ProxyForwarder: Forwarding request", {
-            provider: provider.name,
-            providerId: provider.id,
-            proxyUrl: proxyUrl,
-            format: session.originalFormat,
-            method: session.method,
-            bodyLength: bodyString.length,
-            bodyPreview: bodyString.slice(0, 1000),
-            isStreaming,
-          });
+          const bodyString = JSON.stringify(messageToSend);
+          requestBody = bodyString;
+          session.forwardedRequestBody = bodyString;
+
+          try {
+            const parsed = JSON.parse(bodyString);
+            isStreaming = parsed.stream === true;
+          } catch {
+            isStreaming = false;
+          }
+
+          if (process.env.NODE_ENV === "development") {
+            logger.trace("ProxyForwarder: Forwarding request", {
+              provider: provider.name,
+              providerId: provider.id,
+              proxyUrl: proxyUrl,
+              format: session.originalFormat,
+              method: session.method,
+              bodyLength: bodyString.length,
+              bodyPreview: bodyString.slice(0, 1000),
+              isStreaming,
+            });
+          }
         }
       }
     }
