@@ -185,7 +185,7 @@ function ChartTooltipContent({
               >
                 {formatter && item?.value !== undefined && item.name ? (
                   formatter(
-                    item.value,
+                    item.value as string | number,
                     item.name,
                     item as Parameters<typeof formatter>[2],
                     index,
