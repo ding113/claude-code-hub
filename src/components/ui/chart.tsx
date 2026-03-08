@@ -174,7 +174,7 @@ function ChartTooltipContent({
             (
               item: {
                 dataKey?: string | number | ((obj: unknown) => unknown);
-                name?: string;
+                name?: string | number;
                 payload?: { fill?: string };
                 color?: string;
                 value?: number | string;
