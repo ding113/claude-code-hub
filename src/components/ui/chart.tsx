@@ -170,24 +170,15 @@ function ChartTooltipContent({
       <div className="grid gap-1.5">
         {payload
           .filter((item: { type?: string }) => item.type !== "none")
-          .map(
-            (
-              item: {
-                dataKey?: string | number;
-                name?: string;
-                payload?: { fill?: string };
-                color?: string;
-                value?: number | string;
-              },
-              index: number
-            ) => {
-              const key = `${nameKey || item.name || item.dataKey || "value"}`;
+          .map((item, index: number) => {
+              const dataKeyStr = String(item.dataKey);
+              const key = `${nameKey || item.name || dataKeyStr || "value"}`;
               const itemConfig = getPayloadConfigFromPayload(config, item, key);
               const indicatorColor = color || item.payload?.fill || item.color;
 
               return (
                 <div
-                  key={item.dataKey}
+                  key={dataKeyStr}
                   className={cn(
                     "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
                     indicator === "dot" && "items-center"
@@ -195,8 +186,10 @@ function ChartTooltipContent({
                 >
                   {formatter && item?.value !== undefined && item.name ? (
                     formatter(
-                      item.value,
-                      item.name,
+                      (Array.isArray(item.value)
+                        ? item.value.join(", ")
+                        : item.value) as string | number,
+                      String(item.name),
                       item as Parameters<typeof formatter>[2],
                       index,
                       payload
@@ -241,7 +234,9 @@ function ChartTooltipContent({
                         </div>
                         {item.value && (
                           <span className="text-foreground font-mono font-medium tabular-nums">
-                            {item.value.toLocaleString()}
+                            {typeof item.value === "number"
+                              ? item.value.toLocaleString()
+                              : String(item.value)}
                           </span>
                         )}
                       </div>
