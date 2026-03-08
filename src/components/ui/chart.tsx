@@ -173,7 +173,7 @@ function ChartTooltipContent({
           .map(
             (
               item: {
-                dataKey?: string | number;
+                dataKey?: string | number | ((obj: unknown) => unknown);
                 name?: string;
                 payload?: { fill?: string };
                 color?: string;
@@ -187,7 +187,7 @@ function ChartTooltipContent({
 
               return (
                 <div
-                  key={item.dataKey}
+                  key={String(item.dataKey)}
                   className={cn(
                     "[&>svg]:text-muted-foreground flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5",
                     indicator === "dot" && "items-center"
