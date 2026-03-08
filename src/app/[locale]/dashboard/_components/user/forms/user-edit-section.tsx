@@ -120,6 +120,8 @@ export interface UserEditSectionProps {
       block: string;
     };
     presetClients: Record<string, string>;
+    subClients?: Record<string, string>;
+    nSelected?: string;
     limitRules: {
       addRule: string;
       ruleTypes: Record<string, string>;
@@ -509,6 +511,8 @@ export function UserEditSection({
           },
           actions: translations.actions,
           presetClients: translations.presetClients,
+          subClients: translations.subClients,
+          nSelected: translations.nSelected,
         }}
       />
     </div>

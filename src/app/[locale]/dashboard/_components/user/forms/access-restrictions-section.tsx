@@ -1,15 +1,20 @@
 "use client";
 
-import { Shield } from "lucide-react";
+import { ChevronDown, Shield } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { ArrayTagInputField } from "@/components/form/form-field";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   CLIENT_RESTRICTION_PRESET_OPTIONS,
+  getSelectedChildren,
+  isAllChildrenSelected,
   isPresetSelected,
   mergePresetAndCustomClients,
   removePresetValues,
+  setChildSelection,
   splitPresetAndCustomClients,
   togglePresetSelection,
 } from "@/lib/client-restrictions/client-presets";
@@ -53,6 +58,8 @@ export interface AccessRestrictionsSectionProps {
       block: string;
     };
     presetClients: Record<string, string>;
+    subClients?: Record<string, string>;
+    nSelected?: string;
   };
 }
 
@@ -91,6 +98,18 @@ export function AccessRestrictionsSection({
     }
   };
 
+  const handleChildSelectionChange = (presetValue: string, selectedChildren: string[]) => {
+    const preset = CLIENT_RESTRICTION_PRESET_OPTIONS.find((p) => p.value === presetValue);
+    if (!preset) return;
+    const isInAllowed = isPresetSelected(allowed, presetValue);
+    const isInBlocked = isPresetSelected(blocked, presetValue);
+    if (isInAllowed) {
+      onChange("allowedClients", setChildSelection(allowed, preset, selectedChildren));
+    } else if (isInBlocked) {
+      onChange("blockedClients", setChildSelection(blocked, preset, selectedChildren));
+    }
+  };
+
   const handleCustomAllowedChange = (newCustom: string[]) => {
     onChange("allowedClients", mergePresetAndCustomClients(allowed, newCustom));
   };
@@ -111,7 +130,33 @@ export function AccessRestrictionsSection({
     [allowedModels]
   );
 
-  const renderPresetRow = (value: string) => {
+  const getChildDisplayText = (preset: (typeof CLIENT_RESTRICTION_PRESET_OPTIONS)[number]) => {
+    if (!preset.children) return null;
+    const activeList = isPresetSelected(allowed, preset.value)
+      ? allowed
+      : isPresetSelected(blocked, preset.value)
+        ? blocked
+        : null;
+    if (!activeList) return translations.presetClients["sub-all"] ?? "All";
+    const selected = getSelectedChildren(activeList, preset);
+    if (selected.length === 0 || selected.length === preset.children.length) {
+      return translations.subClients?.all ?? "All";
+    }
+    if (selected.length <= 2) {
+      return selected
+        .map((v) => {
+          const child = preset.children!.find((c) => c.value === v);
+          return child ? (translations.subClients?.[child.labelKey] ?? child.labelKey) : v;
+        })
+        .join(", ");
+    }
+    return (
+      translations.nSelected?.replace("{count}", String(selected.length)) ?? `${selected.length}`
+    );
+  };
+
+  const renderPresetRow = (preset: (typeof CLIENT_RESTRICTION_PRESET_OPTIONS)[number]) => {
+    const { value } = preset;
     const isAllowed = isPresetSelected(allowed, value);
     const isBlocked = isPresetSelected(blocked, value);
     const displayLabel = translations.presetClients[value] ?? value;
@@ -119,6 +164,69 @@ export function AccessRestrictionsSection({
     return (
       <div key={value} className="flex items-center gap-4 py-1">
         <span className="text-sm flex-1 text-foreground">{displayLabel}</span>
+        {preset.children && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs gap-1 px-2">
+                {getChildDisplayText(preset)}
+                <ChevronDown className="h-3 w-3 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-2" align="start">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 py-1">
+                  <Checkbox
+                    id={`sub-all-${value}`}
+                    checked={
+                      !isAllowed && !isBlocked
+                        ? true
+                        : isAllChildrenSelected(isAllowed ? allowed : blocked, preset)
+                    }
+                    onCheckedChange={(checked) => {
+                      const allChildren = preset.children!.map((c) => c.value);
+                      handleChildSelectionChange(value, checked ? allChildren : []);
+                    }}
+                    disabled={!isAllowed && !isBlocked}
+                  />
+                  <Label
+                    htmlFor={`sub-all-${value}`}
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    {translations.subClients?.all ?? "All"}
+                  </Label>
+                </div>
+                <div className="border-t my-1" />
+                {preset.children.map((child) => {
+                  const activeList = isAllowed ? allowed : isBlocked ? blocked : [];
+                  const isChildChecked =
+                    activeList.includes(preset.value) || activeList.includes(child.value);
+                  return (
+                    <div key={child.value} className="flex items-center gap-2 py-1 pl-2">
+                      <Checkbox
+                        id={`sub-${child.value}`}
+                        checked={isChildChecked}
+                        onCheckedChange={(checked) => {
+                          const currentSelected = getSelectedChildren(activeList, preset);
+                          const next = checked
+                            ? [...currentSelected, child.value]
+                            : currentSelected.filter((v) => v !== child.value);
+                          handleChildSelectionChange(value, next);
+                        }}
+                        disabled={!isAllowed && !isBlocked}
+                      />
+                      <Label
+                        htmlFor={`sub-${child.value}`}
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        {translations.subClients?.[child.labelKey] ?? child.labelKey}
+                      </Label>
+                    </div>
+                  );
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <Checkbox
@@ -168,7 +276,7 @@ export function AccessRestrictionsSection({
         </div>
 
         <div className="space-y-0.5 border rounded-md p-2">
-          {CLIENT_RESTRICTION_PRESET_OPTIONS.map((client) => renderPresetRow(client.value))}
+          {CLIENT_RESTRICTION_PRESET_OPTIONS.map((client) => renderPresetRow(client))}
         </div>
 
         {/* Custom allowed patterns */}

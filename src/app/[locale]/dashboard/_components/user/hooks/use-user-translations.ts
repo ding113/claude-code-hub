@@ -76,6 +76,8 @@ export interface UserEditTranslations {
     block: string;
   };
   presetClients: Record<string, string>;
+  subClients: Record<string, string>;
+  nSelected: string;
   limitRules: {
     addRule: string;
     ruleTypes: {
@@ -203,6 +205,16 @@ export function useUserTranslations(
         "factory-cli": t("userEditSection.presetClients.factory-cli"),
         "codex-cli": t("userEditSection.presetClients.codex-cli"),
       },
+      subClients: {
+        all: t("userEditSection.subClients.all"),
+        cli: t("userEditSection.subClients.cli"),
+        vscode: t("userEditSection.subClients.vscode"),
+        "sdk-ts": t("userEditSection.subClients.sdk-ts"),
+        "sdk-py": t("userEditSection.subClients.sdk-py"),
+        "cli-sdk": t("userEditSection.subClients.cli-sdk"),
+        "gh-action": t("userEditSection.subClients.gh-action"),
+      },
+      nSelected: t("userEditSection.nSelected", { count: "{count}" }),
       limitRules: {
         addRule: t("limitRules.addRule"),
         ruleTypes: {

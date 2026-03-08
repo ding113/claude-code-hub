@@ -337,7 +337,17 @@
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "Все",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "Выбрано: {count}"
     },
     "preserveClientIp": {
       "desc": "Передавать x-forwarded-for / x-real-ip в апстрим (может раскрыть реальный IP клиента)",

@@ -337,7 +337,17 @@
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "すべて",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "{count} 件選択"
     },
     "preserveClientIp": {
       "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",

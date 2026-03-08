@@ -1883,7 +1883,17 @@
         "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
         "claude-code-sdk-py": "Claude Code SDK (Python)",
         "claude-code-gh-action": "Claude Code GitHub Action"
-      }
+      },
+      "subClients": {
+        "all": "Все",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "Выбрано: {count}"
     },
     "keyEditSection": {
       "sections": {

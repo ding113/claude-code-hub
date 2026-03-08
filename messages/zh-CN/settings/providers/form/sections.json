@@ -73,7 +73,17 @@
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "全部",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "已选 {count} 项"
     },
     "scheduleParams": {
       "title": "调度参数",
