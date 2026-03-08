@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Loader2, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { addKey } from "@/actions/keys";
@@ -134,6 +134,8 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
   const keyEditTranslations = useKeyTranslations();
 
   const defaultValues = useMemo(() => buildDefaultValues(), []);
+  const latestUserRef = useRef(defaultValues.user);
+  const latestKeyRef = useRef(defaultValues.key);
 
   const form = useZodForm({
     schema: CreateFormSchema,
@@ -224,9 +226,11 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
 
   const currentUserDraft = form.values.user || defaultValues.user;
   const currentKeyDraft = form.values.key || defaultValues.key;
+  latestUserRef.current = form.values.user || defaultValues.user;
+  latestKeyRef.current = form.values.key || defaultValues.key;
 
   const handleUserChange = (field: string | Record<string, any>, value?: any) => {
-    const prev = form.values.user || defaultValues.user;
+    const prev = latestUserRef.current;
     const next = { ...prev };
 
     if (typeof field === "object") {
@@ -244,11 +248,12 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
     }
 
     // 直接替换整个 user 对象，因为 useZodForm.setValue 不支持嵌套路径
+    latestUserRef.current = next;
     form.setValue("user" as any, next);
   };
 
   const handleKeyChange = (field: string | Record<string, any>, value?: any) => {
-    const prev = form.values.key || defaultValues.key;
+    const prev = latestKeyRef.current;
     const next = { ...prev };
 
     if (typeof field === "object") {
@@ -264,6 +269,7 @@ function CreateUserDialogInner({ onOpenChange, onSuccess }: CreateUserDialogProp
     }
 
     // 直接替换整个 key 对象，因为 useZodForm.setValue 不支持嵌套路径
+    latestKeyRef.current = next;
     form.setValue("key" as any, next);
   };
 
