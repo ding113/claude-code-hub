@@ -67,7 +67,7 @@
       "customAllowedPlaceholder": "例如 my-ide、internal-tool",
       "customBlockedLabel": "自定义黑名单模式",
       "customBlockedPlaceholder": "例如 legacy-client",
-      "customHelp": "自定义模式使用 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。",
+      "customHelp": "不含 '*'：不区分大小写的子串匹配（忽略 '-' 和 '_'）。含 '*'：glob 通配符匹配（不区分大小写，字符按原样匹配）。",
       "presetClients": {
         "claude-code": "Claude Code（全部）",
         "gemini-cli": "Gemini CLI",

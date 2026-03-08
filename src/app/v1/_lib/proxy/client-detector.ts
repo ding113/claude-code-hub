@@ -33,6 +33,15 @@ export interface ClientRestrictionResult {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
 
+function globToRegex(pattern: string): RegExp {
+  const escaped = pattern
+    .toLowerCase()
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${escaped}$`, "i");
+}
+
 const ENTRYPOINT_MAP: Record<string, string> = {
   cli: "claude-code-cli",
   "sdk-cli": "claude-code-cli-sdk",
@@ -104,6 +113,10 @@ export function matchClientPattern(session: ProxySession, pattern: string): bool
       return false;
     }
 
+    if (pattern.includes("*")) {
+      return globToRegex(pattern).test(ua);
+    }
+
     const normalizedPattern = normalize(pattern);
     if (normalizedPattern === "") {
       return false;
@@ -138,9 +151,13 @@ export function detectClientFull(session: ProxySession, pattern: string): Client
   } else {
     const ua = session.userAgent?.trim();
     if (ua) {
-      const normalizedPattern = normalize(pattern);
-      if (normalizedPattern !== "") {
-        matched = normalize(ua).includes(normalizedPattern);
+      if (pattern.includes("*")) {
+        matched = globToRegex(pattern).test(ua);
+      } else {
+        const normalizedPattern = normalize(pattern);
+        if (normalizedPattern !== "") {
+          matched = normalize(ua).includes(normalizedPattern);
+        }
       }
     }
   }
@@ -188,10 +205,22 @@ export function isClientAllowedDetailed(
   const detectedClient = subClient || ua || undefined;
   const hasBuiltinKeyword =
     checkedAllowlist.some(isBuiltinKeyword) || checkedBlocklist.some(isBuiltinKeyword);
+  const globCache = new Map<string, RegExp>();
+  const getGlobRegex = (p: string) => {
+    let re = globCache.get(p);
+    if (!re) {
+      re = globToRegex(p);
+      globCache.set(p, re);
+    }
+    return re;
+  };
 
   const matches = (pattern: string): boolean => {
     if (!isBuiltinKeyword(pattern)) {
       if (!ua) return false;
+      if (pattern.includes("*")) {
+        return getGlobRegex(pattern).test(ua);
+      }
       const normalizedPattern = normalize(pattern);
       return normalizedPattern !== "" && normalizedUa.includes(normalizedPattern);
     }

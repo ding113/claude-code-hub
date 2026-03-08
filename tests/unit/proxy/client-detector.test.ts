@@ -297,6 +297,53 @@ describe("client-detector", () => {
     });
   });
 
+  describe("matchClientPattern glob wildcard path", () => {
+    test("should match codex-* against codex-cli/2.0", () => {
+      const session = createMockSession({ userAgent: "codex-cli/2.0" });
+      expect(matchClientPattern(session, "codex-*")).toBe(true);
+    });
+
+    test("should not match codex-* against GeminiCLI/1.0", () => {
+      const session = createMockSession({ userAgent: "GeminiCLI/1.0" });
+      expect(matchClientPattern(session, "codex-*")).toBe(false);
+    });
+
+    test("should match *-cli* against codex-cli/2.0", () => {
+      const session = createMockSession({ userAgent: "codex-cli/2.0" });
+      expect(matchClientPattern(session, "*-cli*")).toBe(true);
+    });
+
+    test("should match bare * against any non-empty UA", () => {
+      const session = createMockSession({ userAgent: "AnyClient/1.0" });
+      expect(matchClientPattern(session, "*")).toBe(true);
+    });
+
+    test("should match My*App against MyCustomApp/1.0", () => {
+      const session = createMockSession({ userAgent: "MyCustomApp/1.0" });
+      expect(matchClientPattern(session, "My*App*")).toBe(true);
+    });
+
+    test("should be case-insensitive for glob", () => {
+      const session = createMockSession({ userAgent: "codex-cli/1.0" });
+      expect(matchClientPattern(session, "CODEX-*")).toBe(true);
+    });
+
+    test("should return false for glob when UA is empty", () => {
+      const session = createMockSession({ userAgent: "   " });
+      expect(matchClientPattern(session, "codex-*")).toBe(false);
+    });
+
+    test("should NOT normalize hyphens/underscores in glob mode", () => {
+      const session = createMockSession({ userAgent: "codex_cli/2.0" });
+      expect(matchClientPattern(session, "codex-*")).toBe(false);
+    });
+
+    test("should match glob with underscores literally", () => {
+      const session = createMockSession({ userAgent: "codex_cli/2.0" });
+      expect(matchClientPattern(session, "codex_*")).toBe(true);
+    });
+  });
+
   describe("isClientAllowed", () => {
     test("should reject when blocked matches even if allowed also matches", () => {
       const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, cli)");
@@ -450,6 +497,30 @@ describe("client-detector", () => {
       const result = isClientAllowedDetailed(session, ["gemini-cli"], []);
       expect(result.signals).toBeUndefined();
       expect(result.hubConfirmed).toBeUndefined();
+    });
+
+    test("should allow when glob pattern in allowlist matches", () => {
+      const session = createMockSession({ userAgent: "codex-cli/2.0" });
+      const result = isClientAllowedDetailed(session, ["codex-*"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchType).toBe("allowed");
+      expect(result.matchedPattern).toBe("codex-*");
+    });
+
+    test("should reject when glob pattern in blocklist matches", () => {
+      const session = createMockSession({ userAgent: "codex-cli/2.0" });
+      const result = isClientAllowedDetailed(session, [], ["codex-*"]);
+      expect(result.allowed).toBe(false);
+      expect(result.matchType).toBe("blocklist_hit");
+      expect(result.matchedPattern).toBe("codex-*");
+    });
+
+    test("should work with mix of glob and substring patterns", () => {
+      const session = createMockSession({ userAgent: "my-custom-tool/3.0" });
+      const result = isClientAllowedDetailed(session, ["codex-*", "custom"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchType).toBe("allowed");
+      expect(result.matchedPattern).toBe("custom");
     });
   });
 

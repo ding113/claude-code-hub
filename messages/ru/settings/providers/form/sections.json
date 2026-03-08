@@ -331,7 +331,7 @@
       "customAllowedPlaceholder": "напр. my-ide, internal-tool",
       "customBlockedLabel": "Пользовательские шаблоны блокировки",
       "customBlockedPlaceholder": "напр. legacy-client",
-      "customHelp": "Пользовательские шаблоны проверяются по вхождению в User-Agent без учёта регистра. '-' и '_' считаются эквивалентными.",
+      "customHelp": "Без '*': поиск подстроки без учёта регистра ('-' и '_' игнорируются). С '*': glob-шаблон (без учёта регистра, символы буквальные).",
       "presetClients": {
         "claude-code": "Claude Code (все)",
         "gemini-cli": "Gemini CLI",

@@ -41,7 +41,7 @@ export interface TagInputProps extends Omit<React.ComponentProps<"input">, "valu
 }
 
 const DEFAULT_SEPARATOR = /[,，\n]/; // 逗号、中文逗号、换行符
-const DEFAULT_TAG_PATTERN = /^[a-zA-Z0-9_-]+$/; // 字母、数字、下划线、连字符
+const DEFAULT_TAG_PATTERN = /^[a-zA-Z0-9_*-]+$/; // 字母、数字、下划线、连字符
 
 export function TagInput({
   value = [],

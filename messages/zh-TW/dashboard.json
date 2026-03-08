@@ -1038,7 +1038,7 @@
       "label": "允許的用戶端",
       "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
       "customLabel": "自訂用戶端模式",
-      "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+      "customPlaceholder": "輸入模式（如 'my-ide'、'codex-*'）"
     },
     "allowedModels": {
       "label": "允許的模型",
@@ -1798,15 +1798,15 @@
           "label": "用戶端限制",
           "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
           "customLabel": "自訂用戶端模式",
-          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）",
-          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
+          "customPlaceholder": "輸入模式（如 'my-ide'、'codex-*'）",
+          "customHelp": "不含 '*'：不區分大小寫的子串比對（忽略 '-' 和 '_'）。含 '*'：glob 萬用字元比對（不區分大小寫，字元按原樣比對）。"
         },
         "blockedClients": {
           "label": "黑名單客戶端",
           "description": "符合這些模式的客戶端將被拒絕，即使它們也符合白名單。",
           "customLabel": "自訂黑名單模式",
-          "customPlaceholder": "輸入模式（如 'xcode'、'my-ide'）",
-          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
+          "customPlaceholder": "輸入模式（如 'my-ide'、'codex-*'）",
+          "customHelp": "不含 '*'：不區分大小寫的子串比對（忽略 '-' 和 '_'）。含 '*'：glob 萬用字元比對（不區分大小寫，字元按原樣比對）。"
         },
         "allowedModels": {
           "label": "Model 限制",

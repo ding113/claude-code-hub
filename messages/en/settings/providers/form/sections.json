@@ -330,7 +330,7 @@
       "customAllowedPlaceholder": "e.g. my-ide, internal-tool",
       "customBlockedLabel": "Custom Blocked Patterns",
       "customBlockedPlaceholder": "e.g. legacy-client",
-      "customHelp": "Custom patterns use case-insensitive User-Agent contains matching. '-' and '_' are treated as equivalent.",
+      "customHelp": "Without '*': case-insensitive substring match ('-'/'_' ignored). With '*': glob pattern matching (case-insensitive, characters are literal).",
       "presetClients": {
         "claude-code": "Claude Code (all)",
         "gemini-cli": "Gemini CLI",
