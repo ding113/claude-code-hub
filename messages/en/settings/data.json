@@ -29,7 +29,9 @@
     },
     "rangeLabel": "Cleanup Range",
     "statisticsRetained": "✓ Statistics data will be retained (for trend analysis)",
+    "softDeletePurged": "{count} soft-deleted records also purged",
     "successMessage": "Successfully cleaned {count} log records ({batches} batches, took {duration}s)",
+    "vacuumComplete": "Database space reclaimed",
     "willClean": "Will clean all log records from {range}"
   },
   "description": "Manage database backup and recovery with full data import/export and log cleanup.",
