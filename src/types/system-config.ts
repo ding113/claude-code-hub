@@ -58,6 +58,11 @@ export interface SystemSettings {
   // 防止 Amazon Bedrock 等非原生 Anthropic 上游返回 400 错误
   enableBillingHeaderRectifier: boolean;
 
+  // Response API input 整流器（默认开启）
+  // 目标：当 /v1/responses 端点收到非数组 input（字符串或单对象）时，
+  // 自动规范化为数组格式，确保下游处理兼容 OpenAI 完整规范
+  enableResponseInputRectifier: boolean;
+
   // Codex Session ID 补全（默认开启）
   // 目标：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean;
@@ -122,6 +127,9 @@ export interface UpdateSystemSettingsInput {
 
   // billing header 整流器（可选）
   enableBillingHeaderRectifier?: boolean;
+
+  // Response API input 整流器（可选）
+  enableResponseInputRectifier?: boolean;
 
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion?: boolean;

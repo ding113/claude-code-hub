@@ -715,6 +715,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // Response API input 整流器（默认开启）
+  // 开启后：当 /v1/responses 端点收到非数组 input 时，自动规范化为数组格式
+  enableResponseInputRectifier: boolean('enable_response_input_rectifier')
+    .notNull()
+    .default(true),
+
   // Codex Session ID 补全（默认开启）
   // 开启后：当 Codex 请求缺少 session_id / prompt_cache_key 时，自动补全或生成稳定的会话标识
   enableCodexSessionIdCompletion: boolean('enable_codex_session_id_completion')

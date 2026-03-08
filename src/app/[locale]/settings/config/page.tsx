@@ -51,6 +51,7 @@ async function SettingsConfigContent() {
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,
             enableThinkingBudgetRectifier: settings.enableThinkingBudgetRectifier,
             enableBillingHeaderRectifier: settings.enableBillingHeaderRectifier,
+            enableResponseInputRectifier: settings.enableResponseInputRectifier,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableClaudeMetadataUserIdInjection: settings.enableClaudeMetadataUserIdInjection,
             enableResponseFixer: settings.enableResponseFixer,

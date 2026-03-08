@@ -121,7 +121,14 @@ export function detectClientFormat(requestBody: Record<string, unknown>): Client
   }
 
   // 3. 检测 Response API (Codex) 格式
-  if (Array.isArray(requestBody.input)) {
+  // input 支持数组、字符串简写、单对象三种格式
+  if (
+    Array.isArray(requestBody.input) ||
+    typeof requestBody.input === "string" ||
+    (typeof requestBody.input === "object" &&
+      requestBody.input !== null &&
+      ("role" in (requestBody.input as object) || "type" in (requestBody.input as object)))
+  ) {
     return "response";
   }
 
