@@ -42,6 +42,9 @@ export interface SystemSettings {
   // 启用 HTTP/2 连接供应商
   enableHttp2: boolean;
 
+  // 启用 Responses WebSocket 传输
+  enableResponsesWebSocket: boolean;
+
   // 可选拦截 Anthropic Warmup 请求（默认关闭）
   interceptAnthropicWarmupRequests: boolean;
 
@@ -110,6 +113,9 @@ export interface UpdateSystemSettingsInput {
 
   // 启用 HTTP/2 连接供应商（可选）
   enableHttp2?: boolean;
+
+  // 启用 Responses WebSocket 传输（可选）
+  enableResponsesWebSocket?: boolean;
 
   // 可选拦截 Anthropic Warmup 请求（可选）
   interceptAnthropicWarmupRequests?: boolean;

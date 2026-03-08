@@ -47,6 +47,8 @@
     "enableAutoCleanupDesc": "Automatically clean up historical log data on schedule",
     "enableHttp2": "Enable HTTP/2",
     "enableHttp2Desc": "When enabled, proxy requests will prefer HTTP/2 protocol. Automatically falls back to HTTP/1.1 on failure.",
+    "enableResponsesWebSocket": "Enable Responses WebSocket",
+    "enableResponsesWebSocketDesc": "When enabled, /v1/responses requests will attempt WebSocket transport first, falling back to HTTP if WebSocket setup fails.",
     "enableResponseFixer": "Enable Response Fixer",
     "enableResponseFixerDesc": "Automatically repairs common upstream response issues (encoding, SSE, truncated JSON). Enabled by default.",
     "enableThinkingSignatureRectifier": "Enable Thinking Signature Rectifier",

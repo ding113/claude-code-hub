@@ -52,4 +52,6 @@ COPY --from=build --chown=node:node /app/.next/static ./.next/static
 USER node
 EXPOSE 3000
 
+# TODO: Switch to custom server entry for WebSocket support once ingress handler is ready
+# CMD ["node", "src/server/index.js"]
 CMD ["node", "server.js"]

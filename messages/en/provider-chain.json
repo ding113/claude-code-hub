@@ -52,6 +52,7 @@
     "client_error_non_retryable": "Client Error",
     "concurrent_limit_failed": "Concurrent Limit",
     "http2_fallback": "HTTP/2 Fallback",
+    "ws_fallback": "WebSocket Fallback",
     "session_reuse": "Session Reuse",
     "initial_selection": "Initial Selection",
     "endpoint_pool_exhausted": "Endpoint Pool Exhausted",

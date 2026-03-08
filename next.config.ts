@@ -21,13 +21,18 @@ const nextConfig: NextConfig = {
     "ioredis",
     "postgres",
     "drizzle-orm",
+    "ws",
   ],
 
   // 强制包含 undici 和 fetch-socks 到 standalone 输出
   // Next.js 依赖追踪无法正确追踪动态导入和类型导入的传递依赖
   // 参考: https://nextjs.org/docs/app/api-reference/config/next-config-js/output
   outputFileTracingIncludes: {
-    "/**": ["./node_modules/undici/**/*", "./node_modules/fetch-socks/**/*"],
+    "/**": [
+      "./node_modules/undici/**/*",
+      "./node_modules/fetch-socks/**/*",
+      "./node_modules/ws/**/*",
+    ],
   },
 
   // 文件上传大小限制（用于数据库备份导入）

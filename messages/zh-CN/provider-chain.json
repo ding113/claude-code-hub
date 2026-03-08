@@ -52,6 +52,7 @@
     "client_error_non_retryable": "客户端错误",
     "concurrent_limit_failed": "并发限制",
     "http2_fallback": "HTTP/2 回退",
+    "ws_fallback": "WebSocket 回退",
     "session_reuse": "会话复用",
     "initial_selection": "首次选择",
     "endpoint_pool_exhausted": "端点池耗尽",

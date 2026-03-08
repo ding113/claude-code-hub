@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "enable_responses_websocket" boolean DEFAULT false NOT NULL;
