@@ -29,7 +29,7 @@ export function normalizeResponsesWsTerminalEvent(
     "response.completed": "completed",
     "response.failed": "failed",
     "response.incomplete": "incomplete",
-    "error": "failed",
+    error: "failed",
   };
 
   const terminalState = TERMINAL_STATE_MAP[event.type];
