@@ -153,5 +153,14 @@
   "truncatedPreview": "Showing first {length} characters, copy to see full content",
   "unknown": "Unknown",
   "usage": "Token usage",
-  "viewDetails": "View Details"
+  "viewDetails": "View Details",
+  "ws": {
+    "eventCount": "Events",
+    "fallback": "HTTP Fallback",
+    "fallbackReason": "Fallback Reason",
+    "handshakeMs": "Handshake",
+    "status": "WebSocket Status",
+    "supported": "Supported",
+    "unsupported": "Unsupported"
+  }
 }

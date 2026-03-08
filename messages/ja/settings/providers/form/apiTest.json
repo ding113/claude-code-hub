@@ -153,5 +153,14 @@
   "truncatedPreview": "先頭 {length} 文字を表示、全文はコピーして確認",
   "unknown": "不明",
   "usage": "トークン使用量",
-  "viewDetails": "詳細を見る"
+  "viewDetails": "詳細を見る",
+  "ws": {
+    "eventCount": "イベント数",
+    "fallback": "HTTP フォールバック",
+    "fallbackReason": "フォールバック理由",
+    "handshakeMs": "ハンドシェイク",
+    "status": "WebSocket ステータス",
+    "supported": "サポート済み",
+    "unsupported": "非対応"
+  }
 }
