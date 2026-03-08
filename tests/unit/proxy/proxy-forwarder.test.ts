@@ -153,6 +153,28 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     // 空字符串应该被保留（使用 ?? 而非 ||）
     expect(resultHeaders.get("user-agent")).toBe("");
   });
+
+  it("应该剥离 transfer-encoding 这类传输层 header，避免向上游继续透传", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([
+        ["user-agent", "Original-UA/1.0"],
+        ["connection", "keep-alive"],
+        ["transfer-encoding", "chunked"],
+        ["content-length", "123"],
+      ]),
+    });
+
+    const provider = createCodexProvider();
+    const { buildHeaders } = ProxyForwarder as unknown as {
+      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+    };
+    const resultHeaders = buildHeaders(session, provider);
+
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("transfer-encoding")).toBeNull();
+    expect(resultHeaders.get("content-length")).toBeNull();
+  });
 });
 
 describe("ProxyForwarder - buildGeminiHeaders headers passthrough", () => {
@@ -306,5 +328,39 @@ describe("ProxyForwarder - buildGeminiHeaders headers passthrough", () => {
     );
 
     expect(resultHeaders.get("x-goog-api-client")).toBe("GeminiCLI/1.0");
+  });
+
+  it("Gemini 路径也应该剥离 transfer-encoding，避免请求体透传回归污染上游", () => {
+    const session = createSession({
+      userAgent: "Original-UA/1.0",
+      headers: new Headers([
+        ["user-agent", "Original-UA/1.0"],
+        ["connection", "keep-alive"],
+        ["transfer-encoding", "chunked"],
+        ["content-length", "123"],
+      ]),
+    });
+
+    const provider = createGeminiProvider("gemini");
+    const { buildGeminiHeaders } = ProxyForwarder as unknown as {
+      buildGeminiHeaders: (
+        session: ProxySession,
+        provider: Provider,
+        baseUrl: string,
+        accessToken: string,
+        isApiKey: boolean
+      ) => Headers;
+    };
+    const resultHeaders = buildGeminiHeaders(
+      session,
+      provider,
+      "https://generativelanguage.googleapis.com/v1beta",
+      "upstream-api-key",
+      true
+    );
+
+    expect(resultHeaders.get("connection")).toBeNull();
+    expect(resultHeaders.get("transfer-encoding")).toBeNull();
+    expect(resultHeaders.get("content-length")).toBeNull();
   });
 });

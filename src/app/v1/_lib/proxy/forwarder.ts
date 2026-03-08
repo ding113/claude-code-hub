@@ -84,6 +84,8 @@ const STANDARD_ENDPOINTS = [
 
 const STRICT_STANDARD_ENDPOINTS = ["/v1/messages", "/v1/responses", "/v1/chat/completions"];
 
+const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
+
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
@@ -2131,51 +2133,63 @@ export class ProxyForwarder {
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
       if (hasBody) {
-        const filteredMessage = filterPrivateParameters(session.request.message) as Record<
-          string,
-          unknown
-        >;
+        if (session.getEndpointPolicy().bypassForwarderPreprocessing && session.request.buffer) {
+          // Raw passthrough: preserve original request body bytes as-is
+          requestBody = session.request.buffer;
+          session.forwardedRequestBody = session.request.log;
 
-        // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
-        let messageToSend: Record<string, unknown> = filteredMessage;
-        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
-          const settings = await getCachedSystemSettings();
-          const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
-          const injection = applyClaudeMetadataUserIdInjectionWithAudit(
-            filteredMessage,
-            session,
-            enabled
-          );
-
-          if (injection) {
-            messageToSend = injection.message;
-            session.addSpecialSetting(injection.audit);
-            await persistSpecialSettings(session);
+          try {
+            isStreaming = (session.request.message as Record<string, unknown>).stream === true;
+          } catch {
+            isStreaming = false;
           }
-        }
+        } else {
+          const filteredMessage = filterPrivateParameters(session.request.message) as Record<
+            string,
+            unknown
+          >;
 
-        const bodyString = JSON.stringify(messageToSend);
-        requestBody = bodyString;
-        session.forwardedRequestBody = bodyString;
+          // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
+          let messageToSend: Record<string, unknown> = filteredMessage;
+          if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+            const settings = await getCachedSystemSettings();
+            const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
+            const injection = applyClaudeMetadataUserIdInjectionWithAudit(
+              filteredMessage,
+              session,
+              enabled
+            );
 
-        try {
-          const parsed = JSON.parse(bodyString);
-          isStreaming = parsed.stream === true;
-        } catch {
-          isStreaming = false;
-        }
+            if (injection) {
+              messageToSend = injection.message;
+              session.addSpecialSetting(injection.audit);
+              await persistSpecialSettings(session);
+            }
+          }
 
-        if (process.env.NODE_ENV === "development") {
-          logger.trace("ProxyForwarder: Forwarding request", {
-            provider: provider.name,
-            providerId: provider.id,
-            proxyUrl: proxyUrl,
-            format: session.originalFormat,
-            method: session.method,
-            bodyLength: bodyString.length,
-            bodyPreview: bodyString.slice(0, 1000),
-            isStreaming,
-          });
+          const bodyString = JSON.stringify(messageToSend);
+          requestBody = bodyString;
+          session.forwardedRequestBody = bodyString;
+
+          try {
+            const parsed = JSON.parse(bodyString);
+            isStreaming = parsed.stream === true;
+          } catch {
+            isStreaming = false;
+          }
+
+          if (process.env.NODE_ENV === "development") {
+            logger.trace("ProxyForwarder: Forwarding request", {
+              provider: provider.name,
+              providerId: provider.id,
+              proxyUrl: proxyUrl,
+              format: session.originalFormat,
+              method: session.method,
+              bodyLength: bodyString.length,
+              bodyPreview: bodyString.slice(0, 1000),
+              isStreaming,
+            });
+          }
         }
       }
     }
@@ -2915,7 +2929,7 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
+      blacklist: OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
@@ -2960,7 +2974,11 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY],
+      blacklist: [
+        ...OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
+        "x-api-key",
+        GEMINI_PROTOCOL.HEADERS.API_KEY,
+      ],
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
