@@ -84,6 +84,8 @@ const STANDARD_ENDPOINTS = [
 
 const STRICT_STANDARD_ENDPOINTS = ["/v1/messages", "/v1/responses", "/v1/chat/completions"];
 
+const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
+
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
@@ -2915,7 +2917,7 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
+      blacklist: OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
@@ -2960,7 +2962,11 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY],
+      blacklist: [
+        ...OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
+        "x-api-key",
+        GEMINI_PROTOCOL.HEADERS.API_KEY,
+      ],
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
