@@ -44,6 +44,7 @@ export interface SendResponsesWsRequestParams {
   isStreaming: boolean;
   handshakeTimeoutMs?: number;
   firstEventTimeoutMs?: number;
+  abortSignal?: AbortSignal;
   onOpen?: (handshakeLatencyMs: number) => void;
   onEvent?: (event: ResponsesWsServerEvent) => void;
 }
@@ -54,9 +55,10 @@ function stripTypeField(event: ResponsesWsServerEvent): Record<string, unknown> 
   return payload;
 }
 
+const sseEncoder = new TextEncoder();
 function toSseChunk(event: ResponsesWsServerEvent): Uint8Array {
   const payload = JSON.stringify(stripTypeField(event));
-  return new TextEncoder().encode(`event: ${event.type}\ndata: ${payload}\n\n`);
+  return sseEncoder.encode(`event: ${event.type}\ndata: ${payload}\n\n`);
 }
 
 function normalizeTerminalPayload(event: ResponsesWsServerEvent): Record<string, unknown> {
@@ -163,6 +165,19 @@ export async function sendResponsesWsRequest(
       handshakeTimeout: timeoutProfile.handshakeTimeoutMs,
     });
 
+    const onAbort = params.abortSignal
+      ? () => {
+          socket.close();
+        }
+      : null;
+    if (params.abortSignal && onAbort) {
+      if (params.abortSignal.aborted) {
+        socket.close();
+      } else {
+        params.abortSignal.addEventListener("abort", onAbort, { once: true });
+      }
+    }
+
     handshakeTimeoutId = setTimeout(() => {
       socket.terminate();
       rejectTransport(
@@ -247,6 +262,9 @@ export async function sendResponsesWsRequest(
     socket.once("close", () => {
       if (handshakeTimeoutId) clearTimeout(handshakeTimeoutId);
       if (firstEventTimeoutId) clearTimeout(firstEventTimeoutId);
+      if (params.abortSignal && onAbort) {
+        params.abortSignal.removeEventListener("abort", onAbort);
+      }
 
       if (terminalSeen) {
         return;

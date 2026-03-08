@@ -1,3 +1,4 @@
+import { CONTEXT_1M_BETA_HEADER } from "@/lib/special-attributes";
 import type { SpecialSetting } from "@/types/special-settings";
 
 type BuildUnifiedSpecialSettingsParams = {
@@ -191,7 +192,7 @@ export function buildUnifiedSpecialSettings(
       scope: "request_header",
       hit: true,
       header: "anthropic-beta",
-      flag: "context-1m-2025-08-07",
+      flag: CONTEXT_1M_BETA_HEADER,
     });
   }
 

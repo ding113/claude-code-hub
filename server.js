@@ -212,6 +212,11 @@ function createResponsesWebSocketConnectionHandler(options) {
       activeAbortController: null,
     };
 
+    const pingInterval = setInterval(() => {
+      if (socket.readyState === socket.OPEN) socket.ping();
+    }, 30000);
+    socket.on("close", () => clearInterval(pingInterval));
+
     socket.on("message", async (raw) => {
       let parsedFrame;
       try {
@@ -365,6 +370,7 @@ function createResponsesUpgradeServer(options) {
   const wss = new WebSocketServer({
     noServer: true,
     perMessageDeflate: false,
+    maxPayload: 1 * 1024 * 1024,
   });
 
   const handleConnection = createResponsesWebSocketConnectionHandler(options);

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   parseResponsesWsInitialFrame,
+  parseResponsesWsClientFrame,
+  isResponsesWsTerminalEvent,
   serializeResponsesWsFrame,
 } from "@/app/v1/_lib/proxy/responses-ws-schema";
 
@@ -69,5 +71,36 @@ describe("responses websocket frame schema", () => {
 
     expect(frame.response.reasoning?.encrypted_content).toBe(encryptedContent);
     expect(serializeResponsesWsFrame(frame)).toContain(encryptedContent);
+  });
+
+  it("accepts response.cancel client frame", () => {
+    const frame = parseResponsesWsClientFrame({ type: "response.cancel" });
+    expect(frame.type).toBe("response.cancel");
+  });
+
+  it("accepts response.cancel client frame with response_id", () => {
+    const frame = parseResponsesWsClientFrame({
+      type: "response.cancel",
+      response_id: "resp_abc123",
+    });
+    expect(frame.type).toBe("response.cancel");
+    expect((frame as { response_id?: string }).response_id).toBe("resp_abc123");
+  });
+
+  it("identifies terminal and non-terminal events", () => {
+    const terminalTypes = ["response.completed", "response.failed", "response.incomplete", "error"];
+    for (const type of terminalTypes) {
+      expect(isResponsesWsTerminalEvent({ type })).toBe(true);
+    }
+
+    const nonTerminalTypes = [
+      "response.created",
+      "response.output_text.delta",
+      "response.reasoning.delta",
+      "response.output_item.added",
+    ];
+    for (const type of nonTerminalTypes) {
+      expect(isResponsesWsTerminalEvent({ type })).toBe(false);
+    }
   });
 });

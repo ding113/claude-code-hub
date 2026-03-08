@@ -2332,6 +2332,7 @@ export class ProxyForwarder {
             isStreaming,
             handshakeTimeoutMs: responseTimeoutMs > 0 ? responseTimeoutMs : undefined,
             firstEventTimeoutMs: responseTimeoutMs > 0 ? responseTimeoutMs : undefined,
+            abortSignal: combinedSignal,
           });
 
           session.addSpecialSetting(transportDecision.specialSetting);

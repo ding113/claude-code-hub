@@ -66,10 +66,22 @@ export const ResponsesWsServerEventSchema = z
   })
   .passthrough();
 
+/**
+ * Terminal event types that end a Responses WebSocket turn.
+ * Keep in sync with RESPONSES_WS_TERMINAL_TYPES in server.js.
+ *
+ * "error" covers application-level protocol errors from the upstream provider.
+ * Known error codes include:
+ *   - previous_response_not_found   (invalid previous_response_id)
+ *   - websocket_connection_limit_reached  (too many concurrent connections)
+ * These are NOT transport failures -- they are authoritative rejection signals
+ * and must NOT trigger HTTP fallback.
+ */
 export const RESPONSES_WS_TERMINAL_EVENT_TYPES = new Set([
   "response.completed",
   "response.failed",
   "response.incomplete",
+  "error",
 ]);
 
 export type ResponsesWsCreatePayload = z.infer<typeof ResponsesWsCreatePayloadSchema>;

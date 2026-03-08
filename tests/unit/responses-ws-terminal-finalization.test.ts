@@ -57,4 +57,45 @@ describe("responses websocket terminal finalization", () => {
       response: expect.objectContaining({ status: "failed" }),
     });
   });
+
+  it("settles response.incomplete to deterministic terminal state", () => {
+    const normalized = normalizeResponsesWsTerminalEvent({
+      type: "response.incomplete",
+      response: {
+        id: "resp_3",
+        object: "response",
+        status: "incomplete",
+        incomplete_details: { reason: "max_output_tokens" },
+      },
+    });
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        terminalState: "incomplete",
+      })
+    );
+    expect(normalized?.payload).toMatchObject({
+      response: expect.objectContaining({ status: "incomplete" }),
+    });
+  });
+
+  it("normalizes error event to failed terminal state", () => {
+    const normalized = normalizeResponsesWsTerminalEvent({
+      type: "error",
+      error: {
+        type: "previous_response_not_found",
+        code: "previous_response_not_found",
+        message: "No response found with id 'resp_nonexistent'.",
+      },
+    });
+
+    expect(normalized).toEqual(
+      expect.objectContaining({
+        terminalState: "failed",
+      })
+    );
+    expect(normalized?.payload).toMatchObject({
+      error: expect.objectContaining({ code: "previous_response_not_found" }),
+    });
+  });
 });

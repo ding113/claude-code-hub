@@ -1,5 +1,5 @@
 import net from "node:net";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -58,7 +58,10 @@ vi.mock("@/lib/session-manager", () => ({
 }));
 
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
-import { sendResponsesWsRequest } from "@/app/v1/_lib/proxy/responses-ws-adapter";
+import {
+  sendResponsesWsRequest,
+  ResponsesWsTransportError,
+} from "@/app/v1/_lib/proxy/responses-ws-adapter";
 import { SessionManager } from "@/lib/session-manager";
 import { WebSocketServer } from "ws";
 import { parseSSEData } from "@/lib/utils/sse";
@@ -270,5 +273,135 @@ describe("responses websocket session continuity", () => {
 
     await expect(response.text()).rejects.toThrow("closed before terminal event");
     await new Promise((resolve) => wss.close(() => resolve(undefined)));
+  });
+});
+
+describe("responses websocket protocol error relay", () => {
+  let wss: WebSocketServer | null = null;
+
+  afterEach(async () => {
+    if (wss) {
+      await new Promise((resolve) => wss?.close(() => resolve(undefined)));
+      wss = null;
+    }
+  });
+
+  it("relays previous_response_not_found error without HTTP fallback (streaming)", async () => {
+    const port = await getFreePort();
+    wss = new WebSocketServer({ port, host: "127.0.0.1" });
+    wss.on("connection", (socket) => {
+      socket.once("message", () => {
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "previous_response_not_found",
+              code: "previous_response_not_found",
+              message: "No response found with id 'resp_nonexistent'.",
+            },
+          })
+        );
+      });
+    });
+
+    const response = await sendResponsesWsRequest({
+      websocketUrl: `ws://127.0.0.1:${port}/v1/responses`,
+      frame: {
+        type: "response.create",
+        response: {
+          model: "gpt-5-codex",
+          previous_response_id: "resp_nonexistent",
+        },
+      },
+      isStreaming: true,
+      handshakeTimeoutMs: 1000,
+      firstEventTimeoutMs: 1000,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const body = await response.text();
+    expect(body).toContain("event: error");
+    expect(body).toContain("previous_response_not_found");
+  });
+
+  it("relays websocket_connection_limit_reached error without HTTP fallback (streaming)", async () => {
+    const port = await getFreePort();
+    wss = new WebSocketServer({ port, host: "127.0.0.1" });
+    wss.on("connection", (socket) => {
+      socket.once("message", () => {
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "websocket_connection_limit_reached",
+              code: "websocket_connection_limit_reached",
+              message: "WebSocket connection limit reached.",
+            },
+          })
+        );
+      });
+    });
+
+    const response = await sendResponsesWsRequest({
+      websocketUrl: `ws://127.0.0.1:${port}/v1/responses`,
+      frame: {
+        type: "response.create",
+        response: {
+          model: "gpt-5-codex",
+        },
+      },
+      isStreaming: true,
+      handshakeTimeoutMs: 1000,
+      firstEventTimeoutMs: 1000,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const body = await response.text();
+    expect(body).toContain("event: error");
+    expect(body).toContain("websocket_connection_limit_reached");
+  });
+
+  it("resolves non-streaming response with error payload (not transport error)", async () => {
+    const port = await getFreePort();
+    wss = new WebSocketServer({ port, host: "127.0.0.1" });
+    wss.on("connection", (socket) => {
+      socket.once("message", () => {
+        socket.send(
+          JSON.stringify({
+            type: "error",
+            error: {
+              type: "previous_response_not_found",
+              code: "previous_response_not_found",
+              message: "No response found with id 'resp_nonexistent'.",
+            },
+          })
+        );
+      });
+    });
+
+    const response = await sendResponsesWsRequest({
+      websocketUrl: `ws://127.0.0.1:${port}/v1/responses`,
+      frame: {
+        type: "response.create",
+        response: {
+          model: "gpt-5-codex",
+          previous_response_id: "resp_nonexistent",
+        },
+      },
+      isStreaming: false,
+      handshakeTimeoutMs: 1000,
+      firstEventTimeoutMs: 1000,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("application/json");
+
+    const json = await response.json();
+    expect(json.error).toBeDefined();
+    expect(json.error.code).toBe("previous_response_not_found");
   });
 });

@@ -2,6 +2,7 @@ import { isResponsesWebSocketEnabled } from "@/lib/config";
 import type { ProviderChainItem } from "@/types/message";
 import type { Provider } from "@/types/provider";
 import type { ResponsesWebSocketTransportSpecialSetting } from "@/types/special-settings";
+import { sanitizeUrl } from "./errors";
 
 export type ResponsesTransportKind = "http" | "responses_websocket";
 
@@ -88,7 +89,7 @@ export function buildResponsesWsTransportSpecialSetting(
     requestedTransport: "responses_websocket",
     effectiveTransport: result.effectiveTransport,
     attempted: result.effectiveTransport === "responses_websocket",
-    websocketUrl: result.websocketUrl,
+    websocketUrl: result.websocketUrl ? sanitizeUrl(result.websocketUrl) : null,
     fallbackReason: result.fallbackReason,
   };
 }

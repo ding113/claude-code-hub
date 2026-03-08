@@ -203,6 +203,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setTimezone(result.data.timezone);
         setVerboseProviderError(result.data.verboseProviderError);
         setEnableHttp2(result.data.enableHttp2);
+        setEnableResponsesWebSocket(result.data.enableResponsesWebSocket);
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableBillingHeaderRectifier(result.data.enableBillingHeaderRectifier);

@@ -52,4 +52,38 @@ describe("responses websocket transport selector", () => {
     expect(fallback.allowHttpFallback).toBe(false);
     expect(fallback.providerChainReason).toBeNull();
   });
+
+  it("returns disabled fallback when toggle is off", () => {
+    const decision = evaluateResponsesWsTransport({
+      enableResponsesWebSocket: false,
+      provider: {
+        id: 1,
+        name: "Codex Provider",
+        providerType: "codex",
+        proxyUrl: null,
+      },
+      upstreamUrl: "https://api.openai.com/v1/responses",
+    });
+
+    expect(decision.effectiveTransport).toBe("http");
+    expect(decision.fallbackReason).toBe("disabled");
+    expect(decision.websocketUrl).toBeNull();
+  });
+
+  it("returns unsupported_provider_type for non-codex provider", () => {
+    const decision = evaluateResponsesWsTransport({
+      enableResponsesWebSocket: true,
+      provider: {
+        id: 2,
+        name: "OpenAI Provider",
+        providerType: "openai",
+        proxyUrl: null,
+      },
+      upstreamUrl: "https://api.openai.com/v1/responses",
+    });
+
+    expect(decision.effectiveTransport).toBe("http");
+    expect(decision.fallbackReason).toBe("unsupported_provider_type");
+    expect(decision.websocketUrl).toBeNull();
+  });
 });

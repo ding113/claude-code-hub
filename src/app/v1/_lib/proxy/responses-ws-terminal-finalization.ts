@@ -25,10 +25,18 @@ export function normalizeResponsesWsTerminalEvent(
     return null;
   }
 
-  const terminalState = event.type.replace("response.", "") as
-    | "completed"
-    | "failed"
-    | "incomplete";
+  const TERMINAL_STATE_MAP: Record<string, "completed" | "failed" | "incomplete"> = {
+    "response.completed": "completed",
+    "response.failed": "failed",
+    "response.incomplete": "incomplete",
+    "error": "failed",
+  };
+
+  const terminalState = TERMINAL_STATE_MAP[event.type];
+  if (!terminalState) {
+    return null;
+  }
+
   const payload = { ...event } as Record<string, unknown>;
   delete payload.type;
 
