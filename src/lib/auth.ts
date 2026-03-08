@@ -291,6 +291,13 @@ export async function validateAuthToken(
     return validateKey(token, options);
   }
 
+  // Opaque mode: allow raw ADMIN_TOKEN for backward-compatible programmatic API access.
+  // Safe because admin token is a server-side env secret, not a user-issued DB key.
+  const adminToken = config.auth.adminToken;
+  if (adminToken && constantTimeEqual(token, adminToken)) {
+    return validateKey(token, options);
+  }
+
   return null;
 }
 
