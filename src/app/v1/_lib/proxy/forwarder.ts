@@ -1485,9 +1485,22 @@ export class ProxyForwarder {
           const is35Series = modelLower.includes("claude-3-5-");
           if (!isHaiku && !is35Series) {
             message.thinking = { type: "adaptive" };
+            // Claude API 要求启用 thinking 时 temperature 必须为 1，top_p/top_k 不可设置
+            // OpenAI 客户端可能传入 temperature=0.8 等值，需要强制覆盖
+            const originalTemp = message.temperature;
+            const originalTopP = message.top_p;
+            const originalTopK = message.top_k;
+            message.temperature = 1;
+            delete message.top_p;
+            delete message.top_k;
             logger.debug("ProxyForwarder: Injected thinking for OpenAI->Claude", {
               providerId: provider.id,
               model: session.request.model,
+              overrides: {
+                temperature: originalTemp !== undefined ? `${originalTemp} -> 1` : undefined,
+                top_p: originalTopP !== undefined ? `${originalTopP} -> removed` : undefined,
+                top_k: originalTopK !== undefined ? `${originalTopK} -> removed` : undefined,
+              },
             });
           }
         }
