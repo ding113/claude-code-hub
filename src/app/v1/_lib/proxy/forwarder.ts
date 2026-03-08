@@ -1,3 +1,4 @@
+import { randomBytes, randomUUID } from "node:crypto";
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
@@ -1465,6 +1466,44 @@ export class ProxyForwarder {
               : typeof existingSystem
             : "none",
         });
+      }
+
+      // joinOpenAIPool: 注入 thinking 和 metadata 字段
+      // OpenAI 客户端不会发送这些 Claude Code 特有字段，需要由代理补充
+      // 部分上游中转站会验证这些字段以确认请求来自 Claude Code
+      if (
+        session.originalFormat === "openai" &&
+        (provider.providerType === "claude" || provider.providerType === "claude-auth")
+      ) {
+        const message = session.request.message as Record<string, unknown>;
+
+        // 注入 thinking: { type: "adaptive" }（仅限支持 adaptive thinking 的模型）
+        // haiku 系列和 claude-3-5-* 系列不支持 adaptive thinking，跳过注入
+        if (!message.thinking) {
+          const modelLower = (session.request.model || "").toLowerCase();
+          const isHaiku = modelLower.includes("haiku");
+          const is35Series = modelLower.includes("claude-3-5-");
+          if (!isHaiku && !is35Series) {
+            message.thinking = { type: "adaptive" };
+            logger.debug("ProxyForwarder: Injected thinking for OpenAI->Claude", {
+              providerId: provider.id,
+              model: session.request.model,
+            });
+          }
+        }
+
+        // 注入 metadata.user_id（Claude Code 请求标识）
+        // 格式: user_{64位hex}_account__session_{uuid}
+        const metadata = (message.metadata ?? {}) as Record<string, unknown>;
+        if (!metadata.user_id) {
+          const hex = randomBytes(32).toString("hex");
+          const sessionId = randomUUID();
+          metadata.user_id = `user_${hex}_account__session_${sessionId}`;
+          message.metadata = metadata;
+          logger.debug("ProxyForwarder: Injected metadata.user_id for OpenAI->Claude", {
+            providerId: provider.id,
+          });
+        }
       }
 
       if (
