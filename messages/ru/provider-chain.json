@@ -52,6 +52,7 @@
     "client_error_non_retryable": "Ошибка клиента",
     "concurrent_limit_failed": "Лимит параллельных запросов",
     "http2_fallback": "Откат HTTP/2",
+    "ws_fallback": "Откат WebSocket",
     "session_reuse": "Повторное использование сессии",
     "initial_selection": "Первоначальный выбор",
     "endpoint_pool_exhausted": "Пул конечных точек исчерпан",

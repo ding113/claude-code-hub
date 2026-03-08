@@ -153,5 +153,14 @@
       "contentCheck": "内容验证"
     },
     "judgment": "判定"
+  },
+  "ws": {
+    "eventCount": "事件数",
+    "fallback": "HTTP 回退",
+    "fallbackReason": "回退原因",
+    "handshakeMs": "握手延迟",
+    "status": "WebSocket 状态",
+    "supported": "已支持",
+    "unsupported": "不支持"
   }
 }

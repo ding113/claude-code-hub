@@ -25,4 +25,6 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/VERSION ./VERSION
 
+# TODO: Switch to custom server entry for WebSocket support once ingress handler is ready
+# CMD ["node", "src/server/index.js"]
 CMD ["node", "server.js"]

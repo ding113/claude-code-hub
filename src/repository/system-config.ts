@@ -148,6 +148,7 @@ function createFallbackSettings(): SystemSettings {
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    enableResponsesWebSocket: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
@@ -192,6 +193,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableClientVersionCheck: systemSettings.enableClientVersionCheck,
       verboseProviderError: systemSettings.verboseProviderError,
       enableHttp2: systemSettings.enableHttp2,
+      enableResponsesWebSocket: systemSettings.enableResponsesWebSocket,
       interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
@@ -334,6 +336,11 @@ export async function updateSystemSettings(
     // HTTP/2 配置字段（如果提供）
     if (payload.enableHttp2 !== undefined) {
       updates.enableHttp2 = payload.enableHttp2;
+    }
+
+    // Responses WebSocket 配置字段（如果提供）
+    if (payload.enableResponsesWebSocket !== undefined) {
+      updates.enableResponsesWebSocket = payload.enableResponsesWebSocket;
     }
 
     // Warmup 拦截开关（如果提供）
