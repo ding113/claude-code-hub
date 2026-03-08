@@ -540,7 +540,9 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 检查模型支持（使用新的模型匹配逻辑）
+    // 检查模型支持
+    // 注意：此处不检查格式兼容性（checkFormatProviderTypeCompatibility），
+    // 因为 session binding 仅由 pickRandomProvider 创建，该路径已保证格式兼容。
     const requestedModel = session.getOriginalModel();
     if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
       logger.debug("ProviderSelector: Session provider does not support requested model", {
@@ -1354,4 +1356,4 @@ export class ProxyProviderResolver {
 }
 
 // Export for testing
-export { checkProviderGroupMatch };
+export { checkProviderGroupMatch, providerSupportsModel };
