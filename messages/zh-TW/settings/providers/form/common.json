@@ -6,6 +6,11 @@
     "limits": "限制",
     "network": "網路",
     "testing": "測試",
+    "scheduling": "排程",
+    "options": "選項",
+    "activeTime": "活躍時間",
+    "circuitBreaker": "斷路器",
+    "timeout": "逾時",
     "stepProgress": "步驟進度"
   }
 }

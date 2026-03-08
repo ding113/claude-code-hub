@@ -43,6 +43,7 @@ import {
 import { BasicInfoSection } from "../forms/provider-form/sections/basic-info-section";
 import { LimitsSection } from "../forms/provider-form/sections/limits-section";
 import { NetworkSection } from "../forms/provider-form/sections/network-section";
+import { OptionsSection } from "../forms/provider-form/sections/options-section";
 import { RoutingSection } from "../forms/provider-form/sections/routing-section";
 import { TestingSection } from "../forms/provider-form/sections/testing-section";
 import { buildPatchDraftFromFormState } from "./build-patch-draft";
@@ -293,6 +294,7 @@ function BatchEditDialogContent({
           <div className="flex-1 overflow-y-auto pr-1">
             {state.ui.activeTab === "basic" && <BasicInfoSection />}
             {state.ui.activeTab === "routing" && <RoutingSection />}
+            {state.ui.activeTab === "options" && <OptionsSection />}
             {state.ui.activeTab === "limits" && <LimitsSection />}
             {state.ui.activeTab === "network" && <NetworkSection />}
             {state.ui.activeTab === "testing" && <TestingSection />}

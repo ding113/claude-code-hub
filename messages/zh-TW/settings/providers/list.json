@@ -42,5 +42,6 @@
   "actionResetUsage": "重設用量",
   "actionDelete": "刪除",
   "selectProvider": "選擇 {name}",
-  "schedule": "排程"
+  "schedule": "排程",
+  "proxyEnabled": "已啟用代理"
 }

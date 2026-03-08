@@ -4,6 +4,7 @@ import { Globe } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { getProviderVendors } from "@/actions/provider-endpoints";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { ProviderDisplay, ProviderStatisticsMap } from "@/types/provider";
 import type { User } from "@/types/user";
@@ -81,30 +82,34 @@ export function ProviderList({
   }
 
   return (
-    <div className="grid gap-3 md:block md:border md:rounded-lg md:overflow-hidden md:gap-0">
-      {providers.map((provider) => (
-        <ProviderRichListItem
-          key={provider.id}
-          provider={provider}
-          vendor={provider.providerVendorId ? vendorById.get(provider.providerVendorId) : undefined}
-          currentUser={currentUser}
-          healthStatus={healthStatus[provider.id]}
-          endpointCircuitInfo={endpointCircuitInfo[provider.id]}
-          statistics={statistics[provider.id]}
-          statisticsLoading={statisticsLoading}
-          currencyCode={currencyCode}
-          enableMultiProviderTypes={enableMultiProviderTypes}
-          activeGroupFilter={activeGroupFilter}
-          isMultiSelectMode={isMultiSelectMode}
-          isSelected={selectedProviderIds.has(provider.id)}
-          onSelectChange={
-            onSelectProvider ? (checked) => onSelectProvider(provider.id, checked) : undefined
-          }
-          allGroups={allGroups}
-          userGroups={userGroups}
-          isAdmin={isAdmin}
-        />
-      ))}
-    </div>
+    <TooltipProvider delayDuration={200}>
+      <div className="grid gap-3 md:block md:border md:rounded-lg md:overflow-hidden md:gap-0">
+        {providers.map((provider) => (
+          <ProviderRichListItem
+            key={provider.id}
+            provider={provider}
+            vendor={
+              provider.providerVendorId ? vendorById.get(provider.providerVendorId) : undefined
+            }
+            currentUser={currentUser}
+            healthStatus={healthStatus[provider.id]}
+            endpointCircuitInfo={endpointCircuitInfo[provider.id]}
+            statistics={statistics[provider.id]}
+            statisticsLoading={statisticsLoading}
+            currencyCode={currencyCode}
+            enableMultiProviderTypes={enableMultiProviderTypes}
+            activeGroupFilter={activeGroupFilter}
+            isMultiSelectMode={isMultiSelectMode}
+            isSelected={selectedProviderIds.has(provider.id)}
+            onSelectChange={
+              onSelectProvider ? (checked) => onSelectProvider(provider.id, checked) : undefined
+            }
+            allGroups={allGroups}
+            userGroups={userGroups}
+            isAdmin={isAdmin}
+          />
+        ))}
+      </div>
+    </TooltipProvider>
   );
 }
