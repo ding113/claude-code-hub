@@ -47,6 +47,8 @@
     "enableAutoCleanupDesc": "Автоматически очищать исторические логи по расписанию",
     "enableHttp2": "Включить HTTP/2",
     "enableHttp2Desc": "При включении прокси-запросы будут отдавать приоритет HTTP/2. Если HTTP/2 не удастся, произойдёт автоматическое понижение до HTTP/1.1.",
+    "enableResponsesWebSocket": "Включить Responses WebSocket",
+    "enableResponsesWebSocketDesc": "Если включено, провайдеры Codex и Responses предпочитают WebSocket для /v1/responses. Если настройка транспорта не удаётся, запрос откатывается на HTTP до начала потоковой передачи.",
     "enableResponseFixer": "Включить исправление ответов",
     "enableResponseFixerDesc": "Автоматически исправляет распространённые проблемы ответа у провайдеров (кодировка, SSE, обрезанный JSON). Включено по умолчанию.",
     "enableThinkingSignatureRectifier": "Включить исправление thinking-signature",

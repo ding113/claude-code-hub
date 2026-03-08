@@ -38,6 +38,7 @@ describe("SystemSettings：数据库缺列时的保存兜底", () => {
         enableClientVersionCheck: false,
         verboseProviderError: false,
         enableHttp2: false,
+        enableResponsesWebSocket: false,
         interceptAnthropicWarmupRequests: false,
         createdAt: now,
         updatedAt: now,

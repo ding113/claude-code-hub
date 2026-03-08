@@ -68,6 +68,10 @@
     "confirmConfig": "请确认供应商 URL、API 密钥及模型配置正确"
   },
   "resultCard": {
+    "transportKind": {
+      "http": "HTTP",
+      "responses_websocket": "Responses WebSocket"
+    },
     "status": {
       "green": "可用",
       "yellow": "波动",
@@ -103,6 +107,10 @@
       "latency": "延迟",
       "content": "内容",
       "model": "模型",
+      "transport": "传输方式",
+      "websocketEvents": "WS 事件数",
+      "websocketFallbackReason": "WS 回退原因",
+      "websocketHandshake": "WS 握手",
       "firstByte": "首字节",
       "totalLatency": "总延迟",
       "error": "错误",
@@ -142,6 +150,10 @@
       "latency": "延迟",
       "httpStatus": "HTTP 状态",
       "model": "模型",
+      "transport": "传输方式",
+      "websocketEvents": "WS 事件数",
+      "websocketFallbackReason": "WS 回退原因",
+      "websocketHandshake": "WS 握手",
       "usage": "用量",
       "inputOutput": "输入 {input} / 输出 {output} tokens",
       "response": "响应",

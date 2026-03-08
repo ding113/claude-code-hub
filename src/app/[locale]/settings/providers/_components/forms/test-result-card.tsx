@@ -54,6 +54,10 @@ export interface UnifiedTestResultData {
   };
   errorMessage?: string;
   errorType?: string;
+  transportKind?: "http" | "responses_websocket";
+  websocketHandshakeMs?: number;
+  websocketEventCount?: number;
+  websocketFallbackReason?: string;
   testedAt: string;
   validationDetails: {
     httpPassed: boolean;
@@ -105,6 +109,9 @@ export function TestResultCard({ result }: TestResultCardProps) {
   const colors = STATUS_COLORS[result.status];
   const icon = STATUS_ICONS[result.status];
   const statusLabel = t(`resultCard.status.${result.status}`);
+  const transportKindLabel = result.transportKind
+    ? t(`resultCard.transportKind.${result.transportKind}`)
+    : null;
 
   const handleCopyResult = async () => {
     const ct = (key: string) => t(`resultCard.copyText.${key}`);
@@ -163,6 +170,7 @@ export function TestResultCard({ result }: TestResultCardProps) {
           <Badge variant="outline" className={colors.text}>
             {result.subStatus}
           </Badge>
+          {transportKindLabel && <Badge variant="outline">{transportKindLabel}</Badge>}
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
@@ -229,6 +237,34 @@ export function TestResultCard({ result }: TestResultCardProps) {
           <span className="text-muted-foreground">{t("resultCard.labels.totalLatency")}:</span>
           <span>{result.latencyMs}ms</span>
         </div>
+        {transportKindLabel && (
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground">{t("resultCard.labels.transport")}:</span>
+            <span>{transportKindLabel}</span>
+          </div>
+        )}
+        {result.websocketHandshakeMs !== undefined && (
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground">
+              {t("resultCard.labels.websocketHandshake")}:
+            </span>
+            <span>{result.websocketHandshakeMs}ms</span>
+          </div>
+        )}
+        {result.websocketEventCount !== undefined && (
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground">{t("resultCard.labels.websocketEvents")}:</span>
+            <span>{result.websocketEventCount}</span>
+          </div>
+        )}
+        {result.websocketFallbackReason && (
+          <div className="flex items-center gap-1">
+            <span className="text-muted-foreground">
+              {t("resultCard.labels.websocketFallbackReason")}:
+            </span>
+            <span>{result.websocketFallbackReason}</span>
+          </div>
+        )}
       </div>
 
       {/* Error message if failed */}
@@ -296,6 +332,9 @@ function TestResultDetails({
   onCopy: () => void;
 }) {
   const t = useTranslations("settings.providers.form.apiTest");
+  const transportKindLabel = result.transportKind
+    ? t(`resultCard.transportKind.${result.transportKind}`)
+    : null;
   const timeZone = useTimeZone() ?? "UTC";
 
   return (
@@ -381,6 +420,36 @@ function TestResultDetails({
               {formatInTimeZone(new Date(result.testedAt), timeZone, "yyyy-MM-dd HH:mm:ss")}
             </span>
           </div>
+          {transportKindLabel && (
+            <div>
+              <span className="text-muted-foreground">{t("resultCard.labels.transport")}:</span>{" "}
+              <span className="font-mono">{transportKindLabel}</span>
+            </div>
+          )}
+          {result.websocketHandshakeMs !== undefined && (
+            <div>
+              <span className="text-muted-foreground">
+                {t("resultCard.labels.websocketHandshake")}:
+              </span>{" "}
+              <span className="font-mono">{result.websocketHandshakeMs}ms</span>
+            </div>
+          )}
+          {result.websocketEventCount !== undefined && (
+            <div>
+              <span className="text-muted-foreground">
+                {t("resultCard.labels.websocketEvents")}:
+              </span>{" "}
+              <span className="font-mono">{result.websocketEventCount}</span>
+            </div>
+          )}
+          {result.websocketFallbackReason && (
+            <div className="col-span-2">
+              <span className="text-muted-foreground">
+                {t("resultCard.labels.websocketFallbackReason")}:
+              </span>{" "}
+              <span className="font-mono">{result.websocketFallbackReason}</span>
+            </div>
+          )}
         </div>
       </div>
 

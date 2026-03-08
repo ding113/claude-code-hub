@@ -35,6 +35,7 @@ function makeSystemSettings(
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    enableResponsesWebSocket: false,
     interceptAnthropicWarmupRequests: false,
     enableResponseFixer: true,
     responseFixerConfig: {

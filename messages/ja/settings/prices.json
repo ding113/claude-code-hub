@@ -31,7 +31,8 @@
     "openrouter": "OpenRouter"
   },
   "badges": {
-    "local": "ローカル"
+    "local": "ローカル",
+    "multi": "マルチプロバイダー"
   },
   "capabilities": {
     "assistantPrefill": "アシスタント事前入力",

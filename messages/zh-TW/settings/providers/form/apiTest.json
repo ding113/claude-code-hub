@@ -52,6 +52,10 @@
       "latencyCheck": "延遲檢查",
       "message": "訊息",
       "model": "Model",
+      "transport": "傳輸方式",
+      "websocketEvents": "WS 事件數",
+      "websocketFallbackReason": "WS 回退原因",
+      "websocketHandshake": "WS 握手",
       "response": "回應",
       "status": "狀態",
       "testedAt": "測試時間",
@@ -71,12 +75,20 @@
       "http": "HTTP",
       "latency": "延遲",
       "model": "Model",
+      "transport": "傳輸方式",
+      "websocketEvents": "WS 事件數",
+      "websocketFallbackReason": "WS 回退原因",
+      "websocketHandshake": "WS 握手",
       "responsePreview": "回應預覽",
       "totalLatency": "總延遲"
     },
     "rawResponse": {
       "hint": "此處顯示原始回應內容，您可以在此檢查關鍵字是否存在於回應中",
       "title": "完整回應內容"
+    },
+    "transportKind": {
+      "http": "HTTP",
+      "responses_websocket": "Responses WebSocket"
     },
     "status": {
       "green": "可用中",

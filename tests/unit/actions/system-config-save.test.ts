@@ -63,6 +63,7 @@ describe("saveSystemSettings", () => {
       enableClientVersionCheck: false,
       verboseProviderError: false,
       enableHttp2: false,
+      enableResponsesWebSocket: false,
       interceptAnthropicWarmupRequests: false,
       enableThinkingSignatureRectifier: false,
       enableThinkingBudgetRectifier: false,
@@ -187,6 +188,7 @@ describe("saveSystemSettings", () => {
       enableClientVersionCheck: false,
       verboseProviderError: true,
       enableHttp2: true,
+      enableResponsesWebSocket: false,
       interceptAnthropicWarmupRequests: false,
       enableThinkingSignatureRectifier: false,
       enableThinkingBudgetRectifier: false,
@@ -220,6 +222,7 @@ describe("saveSystemSettings", () => {
       timezone: "America/New_York",
       verboseProviderError: true,
       enableHttp2: true,
+      enableResponsesWebSocket: false,
     });
 
     expect(result.ok).toBe(true);

@@ -18,7 +18,8 @@ export type SpecialSetting =
   | AnthropicContext1mHeaderOverrideSpecialSetting
   | GeminiGoogleSearchOverrideSpecialSetting
   | PricingResolutionSpecialSetting
-  | CodexServiceTierResultSpecialSetting;
+  | CodexServiceTierResultSpecialSetting
+  | ResponsesWebSocketTransportSpecialSetting;
 
 export type SpecialSettingChangeValue = string | number | boolean | null;
 
@@ -224,4 +225,28 @@ export type CodexServiceTierResultSpecialSetting = {
   requestedServiceTier: string | null;
   actualServiceTier: string | null;
   effectivePriority: boolean;
+};
+
+export type ResponsesWebSocketTransportSpecialSetting = {
+  type: "responses_websocket_transport";
+  scope: "request";
+  hit: boolean;
+  providerId: number | null;
+  providerName: string | null;
+  requestedTransport: "responses_websocket";
+  effectiveTransport: "http" | "responses_websocket";
+  attempted: boolean;
+  websocketUrl: string | null;
+  fallbackReason:
+    | "disabled"
+    | "unsupported_provider_type"
+    | "unsupported_protocol"
+    | "unsupported_endpoint"
+    | "proxy_incompatible"
+    | "transport_setup_failed"
+    | "handshake_failed"
+    | "handshake_timeout"
+    | "first_event_timeout"
+    | "upstream_request_started"
+    | null;
 };

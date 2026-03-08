@@ -52,6 +52,7 @@ function createSettings(overrides: Partial<SystemSettings> = {}): SystemSettings
     enableClientVersionCheck: false,
     verboseProviderError: false,
     enableHttp2: false,
+    enableResponsesWebSocket: false,
     interceptAnthropicWarmupRequests: false,
     enableThinkingSignatureRectifier: true,
     enableCodexSessionIdCompletion: true,

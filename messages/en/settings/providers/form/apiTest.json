@@ -52,6 +52,10 @@
       "latencyCheck": "Latency Check",
       "message": "Message",
       "model": "Model",
+      "transport": "Transport",
+      "websocketEvents": "WS Events",
+      "websocketFallbackReason": "WS Fallback",
+      "websocketHandshake": "WS Handshake",
       "response": "Response",
       "status": "Status",
       "testedAt": "Tested At",
@@ -71,12 +75,20 @@
       "http": "HTTP",
       "latency": "Latency",
       "model": "Model",
+      "transport": "Transport",
+      "websocketEvents": "WS Events",
+      "websocketFallbackReason": "WS Fallback",
+      "websocketHandshake": "WS Handshake",
       "responsePreview": "Response Preview",
       "totalLatency": "Total Latency"
     },
     "rawResponse": {
       "hint": "This shows the raw response content. You can check if the keyword exists in the response here.",
       "title": "Raw Response Body"
+    },
+    "transportKind": {
+      "http": "HTTP",
+      "responses_websocket": "Responses WebSocket"
     },
     "status": {
       "green": "Available",

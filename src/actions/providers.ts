@@ -4246,6 +4246,10 @@ export type UnifiedTestResult = ActionResult<{
   };
   errorMessage?: string;
   errorType?: string;
+  transportKind?: "http" | "responses_websocket";
+  websocketHandshakeMs?: number;
+  websocketEventCount?: number;
+  websocketFallbackReason?: string;
   testedAt: string;
   validationDetails: {
     httpPassed: boolean;
@@ -4361,6 +4365,10 @@ export async function testProviderUnified(data: UnifiedTestArgs): Promise<Unifie
         streamInfo: result.streamInfo,
         errorMessage: result.errorMessage,
         errorType: result.errorType,
+        transportKind: result.transportKind,
+        websocketHandshakeMs: result.websocketHandshakeMs,
+        websocketEventCount: result.websocketEventCount,
+        websocketFallbackReason: result.websocketFallbackReason,
         testedAt: result.testedAt.toISOString(),
         validationDetails: result.validationDetails,
       },

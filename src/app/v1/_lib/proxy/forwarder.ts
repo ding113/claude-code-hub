@@ -58,6 +58,9 @@ import {
 } from "./errors";
 import { ModelRedirector } from "./model-redirector";
 import { ProxyProviderResolver } from "./provider-selector";
+import { ResponsesWsTransportError, sendResponsesWsRequest } from "./responses-ws-adapter";
+import { parseResponsesWsInitialFrame } from "./responses-ws-schema";
+import { selectResponsesWsTransport } from "./responses-ws-transport";
 import type { ProxySession } from "./session";
 import { setDeferredStreamingFinalization } from "./stream-finalization";
 import {
@@ -94,6 +97,23 @@ type CacheTtlOption = CacheTtlPreference | null | undefined;
 // - 该检查仅用于“空响应/假 200”启发式判定，不用于业务逻辑解析；
 // - 超过上限时，仍认为“非空”，但会跳过 JSON 内容结构检查（避免截断导致误判）。
 const NON_STREAM_BODY_INSPECTION_MAX_BYTES = 32 * 1024; // 32 KiB
+
+function buildResponsesWsRequestHeaders(headers: Headers): Record<string, string> {
+  const blocked = new Set([
+    "host",
+    "connection",
+    "upgrade",
+    "content-length",
+    "sec-websocket-key",
+    "sec-websocket-version",
+    "sec-websocket-protocol",
+    "sec-websocket-extensions",
+  ]);
+
+  return Object.fromEntries(
+    Array.from(headers.entries()).filter(([key]) => !blocked.has(key.toLowerCase()))
+  );
+}
 
 /**
  * 读取响应体文本，但最多读取 `maxBytes` 字节（用于非流式 2xx 的“空响应/假 200”嗅探）。
@@ -2283,6 +2303,94 @@ export class ProxyForwarder {
       signal: combinedSignal, // 使用组合信号
       ...(requestBody ? { body: requestBody } : {}),
     };
+
+    if (requestBody && isStreaming && session.originalFormat === "response") {
+      const transportDecision = await selectResponsesWsTransport({
+        provider,
+        upstreamUrl: proxyUrl,
+      });
+
+      if (
+        transportDecision.effectiveTransport === "responses_websocket" &&
+        transportDecision.websocketUrl
+      ) {
+        try {
+          const frame = parseResponsesWsInitialFrame({
+            type: "response.create",
+            response: JSON.parse(String(requestBody)),
+          });
+
+          if (responseTimeoutId) {
+            clearTimeout(responseTimeoutId);
+            responseTimeoutId = null;
+          }
+
+          const response = await sendResponsesWsRequest({
+            websocketUrl: transportDecision.websocketUrl,
+            frame,
+            headers: buildResponsesWsRequestHeaders(processedHeaders),
+            isStreaming,
+            handshakeTimeoutMs: responseTimeoutMs > 0 ? responseTimeoutMs : undefined,
+            firstEventTimeoutMs: responseTimeoutMs > 0 ? responseTimeoutMs : undefined,
+          });
+
+          session.addSpecialSetting(transportDecision.specialSetting);
+          await persistSpecialSettings(session);
+
+          const sessionWithTimeout = session as ProxySession & {
+            clearResponseTimeout?: () => void;
+            responseController?: AbortController;
+          };
+          sessionWithTimeout.clearResponseTimeout = () => undefined;
+          sessionWithTimeout.responseController = responseController;
+
+          return response;
+        } catch (error) {
+          if (error instanceof ResponsesWsTransportError && error.allowHttpFallback) {
+            if (responseTimeoutMs > 0) {
+              responseTimeoutId = setTimeout(() => {
+                responseController.abort();
+                logger.warn("ProxyForwarder: Response timeout after Responses WebSocket fallback", {
+                  providerId: provider.id,
+                  providerName: provider.name,
+                  responseTimeoutMs,
+                });
+              }, responseTimeoutMs);
+            }
+
+            session.addSpecialSetting({
+              ...transportDecision.specialSetting,
+              effectiveTransport: "http",
+              attempted: false,
+              fallbackReason: error.fallbackReason,
+            });
+            await persistSpecialSettings(session);
+            session.addProviderToChain(provider, {
+              ...(endpointAudit ?? { endpointId: null, endpointUrl: sanitizeUrl(baseUrl) }),
+              reason: "responses_websocket_fallback",
+              circuitState: getCircuitState(provider.id),
+              attemptNumber: attemptNumber ?? 1,
+              errorMessage: `Responses WebSocket fallback: ${error.message}`,
+            });
+          } else {
+            throw error;
+          }
+        }
+      } else if (
+        transportDecision.fallbackReason &&
+        transportDecision.fallbackReason !== "disabled"
+      ) {
+        session.addSpecialSetting(transportDecision.specialSetting);
+        await persistSpecialSettings(session);
+        session.addProviderToChain(provider, {
+          ...(endpointAudit ?? { endpointId: null, endpointUrl: sanitizeUrl(baseUrl) }),
+          reason: "responses_websocket_fallback",
+          circuitState: getCircuitState(provider.id),
+          attemptNumber: attemptNumber ?? 1,
+          errorMessage: `Responses WebSocket fallback: ${transportDecision.fallbackReason}`,
+        });
+      }
+    }
 
     // ⭐ 获取 HTTP/2 全局开关设置
     const enableHttp2 = await isHttp2Enabled();

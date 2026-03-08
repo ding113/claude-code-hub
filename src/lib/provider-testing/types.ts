@@ -181,6 +181,14 @@ export interface ProviderTestResult {
   validationDetails: ValidationDetails;
   /** Whether proxy was used */
   usedProxy?: boolean;
+  /** Actual transport used by the probe */
+  transportKind?: "http" | "responses_websocket";
+  /** WebSocket handshake latency in ms */
+  websocketHandshakeMs?: number;
+  /** Number of WS events received */
+  websocketEventCount?: number;
+  /** Fallback or unsupported reason when HTTP was used instead of WS */
+  websocketFallbackReason?: string;
 }
 
 // ============================================================================

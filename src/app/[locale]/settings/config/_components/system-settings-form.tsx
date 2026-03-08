@@ -53,6 +53,7 @@ interface SystemSettingsFormProps {
     | "timezone"
     | "verboseProviderError"
     | "enableHttp2"
+    | "enableResponsesWebSocket"
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
     | "enableBillingHeaderRectifier"
@@ -96,6 +97,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
     initialSettings.verboseProviderError
   );
   const [enableHttp2, setEnableHttp2] = useState(initialSettings.enableHttp2);
+  const [enableResponsesWebSocket, setEnableResponsesWebSocket] = useState(
+    initialSettings.enableResponsesWebSocket
+  );
   const [interceptAnthropicWarmupRequests, setInterceptAnthropicWarmupRequests] = useState(
     initialSettings.interceptAnthropicWarmupRequests
   );
@@ -169,6 +173,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         timezone,
         verboseProviderError,
         enableHttp2,
+        enableResponsesWebSocket,
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
         enableBillingHeaderRectifier,
@@ -380,6 +385,27 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-http2"
             checked={enableHttp2}
             onCheckedChange={(checked) => setEnableHttp2(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Enable Responses WebSocket */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-400 shrink-0">
+              <Network className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">{t("enableResponsesWebSocket")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableResponsesWebSocketDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-responses-websocket"
+            checked={enableResponsesWebSocket}
+            onCheckedChange={(checked) => setEnableResponsesWebSocket(checked)}
             disabled={isPending}
           />
         </div>

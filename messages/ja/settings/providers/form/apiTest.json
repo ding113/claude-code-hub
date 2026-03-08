@@ -52,6 +52,10 @@
       "latencyCheck": "レイテンシチェック",
       "message": "メッセージ",
       "model": "モデル",
+      "transport": "転送方式",
+      "websocketEvents": "WS イベント数",
+      "websocketFallbackReason": "WS フォールバック理由",
+      "websocketHandshake": "WS ハンドシェイク",
       "response": "応答",
       "status": "ステータス",
       "testedAt": "テスト日時",
@@ -71,12 +75,20 @@
       "http": "HTTP",
       "latency": "レイテンシ",
       "model": "モデル",
+      "transport": "転送方式",
+      "websocketEvents": "WS イベント数",
+      "websocketFallbackReason": "WS フォールバック理由",
+      "websocketHandshake": "WS ハンドシェイク",
       "responsePreview": "応答プレビュー",
       "totalLatency": "合計レイテンシ"
     },
     "rawResponse": {
       "hint": "ここに生のレスポンス内容が表示されます。キーワードがレスポンスに含まれているか確認できます。",
       "title": "生のレスポンスボディ"
+    },
+    "transportKind": {
+      "http": "HTTP",
+      "responses_websocket": "Responses WebSocket"
     },
     "status": {
       "green": "利用可能",

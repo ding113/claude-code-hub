@@ -14,6 +14,8 @@ export interface ResponseRequest {
   parallel_tool_calls?: boolean;
   previous_response_id?: string;
   reasoning?: ReasoningConfig;
+  prompt_cache_key?: string;
+  generate?: boolean;
   store?: boolean;
   stream?: boolean;
   temperature?: number;
@@ -26,8 +28,10 @@ export interface ResponseRequest {
 }
 
 export interface ReasoningConfig {
-  effort?: "minimal" | "low" | "medium" | "high";
+  effort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
   summary?: "auto" | "concise" | "detailed";
+  encrypted_content?: string;
+  [key: string]: unknown;
 }
 
 export interface ToolChoiceObject {

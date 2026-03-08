@@ -52,6 +52,10 @@
       "latencyCheck": "Проверка задержки",
       "message": "Сообщение",
       "model": "Модель",
+      "transport": "Транспорт",
+      "websocketEvents": "События WS",
+      "websocketFallbackReason": "Причина отката WS",
+      "websocketHandshake": "WS-рукопожатие",
       "response": "Ответ",
       "status": "Статус",
       "testedAt": "Время теста",
@@ -71,12 +75,20 @@
       "http": "HTTP",
       "latency": "Задержка",
       "model": "Модель",
+      "transport": "Транспорт",
+      "websocketEvents": "События WS",
+      "websocketFallbackReason": "Причина отката WS",
+      "websocketHandshake": "WS-рукопожатие",
       "responsePreview": "Предпросмотр ответа",
       "totalLatency": "Общая задержка"
     },
     "rawResponse": {
       "hint": "Здесь отображается необработанное содержимое ответа. Вы можете проверить, содержит ли ответ ключевое слово.",
       "title": "Тело ответа"
+    },
+    "transportKind": {
+      "http": "HTTP",
+      "responses_websocket": "Responses WebSocket"
     },
     "status": {
       "green": "Доступен",

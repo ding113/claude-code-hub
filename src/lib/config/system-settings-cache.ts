@@ -27,6 +27,7 @@ let cachedAt: number = 0;
 const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
+  | "enableResponsesWebSocket"
   | "interceptAnthropicWarmupRequests"
   | "enableThinkingSignatureRectifier"
   | "enableThinkingBudgetRectifier"
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: Pick<
   | "responseFixerConfig"
 > = {
   enableHttp2: false,
+  enableResponsesWebSocket: false,
   interceptAnthropicWarmupRequests: false,
   enableThinkingSignatureRectifier: true,
   enableThinkingBudgetRectifier: true,
@@ -79,6 +81,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 
     logger.debug("[SystemSettingsCache] Settings cached", {
       enableHttp2: settings.enableHttp2,
+      enableResponsesWebSocket: settings.enableResponsesWebSocket,
       ttl: CACHE_TTL_MS,
     });
 
@@ -110,6 +113,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       cleanupBatchSize: 10000,
       enableClientVersionCheck: false,
       enableHttp2: DEFAULT_SETTINGS.enableHttp2,
+      enableResponsesWebSocket: DEFAULT_SETTINGS.enableResponsesWebSocket,
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: DEFAULT_SETTINGS.enableThinkingBudgetRectifier,
@@ -138,6 +142,16 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 export async function isHttp2Enabled(): Promise<boolean> {
   const settings = await getCachedSystemSettings();
   return settings.enableHttp2;
+}
+
+/**
+ * Get only the Responses WebSocket enabled setting (optimized for proxy path)
+ *
+ * @returns Whether Responses WebSocket mode is enabled
+ */
+export async function isResponsesWebSocketEnabled(): Promise<boolean> {
+  const settings = await getCachedSystemSettings();
+  return settings.enableResponsesWebSocket;
 }
 
 /**
