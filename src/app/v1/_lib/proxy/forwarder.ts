@@ -1054,7 +1054,7 @@ export class ProxyForwarder {
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
               ...endpointAudit,
-              reason: "system_error", // 使用 system_error 作为客户端中断的原因
+              reason: "client_abort",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
               errorMessage: "Client aborted request",
@@ -2906,6 +2906,13 @@ export class ProxyForwarder {
         attempt.thresholdTimer = null;
       }
       attempts.delete(attempt);
+      if (reason === "hedge_loser") {
+        attempt.session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "hedge_loser_cancelled",
+          attemptNumber: attempt.sequence,
+        });
+      }
       try {
         attempt.responseController?.abort(new Error(reason));
       } catch {
@@ -3016,7 +3023,7 @@ export class ProxyForwarder {
       if (errorCategory === ErrorCategory.CLIENT_ABORT) {
         session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
-          reason: "system_error",
+          reason: "client_abort",
           attemptNumber: attempt.sequence,
           errorMessage: "Client aborted request",
           circuitState: getCircuitState(attempt.provider.id),
@@ -3066,6 +3073,13 @@ export class ProxyForwarder {
         ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
       }
       session.setProvider(attempt.provider);
+
+      session.addProviderToChain(attempt.provider, {
+        ...attempt.endpointAudit,
+        reason: "hedge_winner",
+        attemptNumber: attempt.sequence,
+        statusCode: attempt.response.status,
+      });
 
       abortAllAttempts(attempt, "hedge_loser");
 
@@ -3175,6 +3189,12 @@ export class ProxyForwarder {
         attempt.thresholdTimer = setTimeout(() => {
           if (settled || attempt.settled || attempt.thresholdTriggered) return;
           attempt.thresholdTriggered = true;
+          attempt.session.addProviderToChain(attempt.provider, {
+            ...attempt.endpointAudit,
+            reason: "hedge_triggered",
+            attemptNumber: attempt.sequence,
+            circuitState: getCircuitState(attempt.provider.id),
+          });
           void launchAlternative();
         }, attempt.firstByteTimeoutMs);
       }
@@ -3257,6 +3277,16 @@ export class ProxyForwarder {
           if (settled || winnerCommitted) return;
           noMoreProviders = true;
           lastError = new ProxyError("Request aborted by client", 499);
+          for (const attempt of Array.from(attempts)) {
+            if (!attempt.settled) {
+              session.addProviderToChain(attempt.provider, {
+                ...attempt.endpointAudit,
+                reason: "client_abort",
+                attemptNumber: attempt.sequence,
+                errorMessage: "Client aborted request",
+              });
+            }
+          }
           abortAllAttempts(undefined, "client_abort");
           void finishIfExhausted();
         },

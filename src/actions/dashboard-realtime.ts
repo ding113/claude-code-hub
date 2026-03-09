@@ -207,14 +207,17 @@ export async function getDashboardRealtimeData(): Promise<ActionResult<Dashboard
       // - 如果有 durationMs（已完成的请求），使用实际值
       // - 如果没有（进行中的请求），计算从开始到现在的耗时
       const latency = item.durationMs ?? now - item.startTime;
+      // Provider/status are unreliable before finalization (may change due to fallback/hedge).
+      // Use durationMs or statusCode as a finalization signal.
+      const isFinalized = item.statusCode != null || item.durationMs != null;
 
       return {
         id: item.sessionId ?? `req-${item.id}`, // 使用 sessionId，如果没有则用请求ID
         user: item.userName,
         model: item.originalModel ?? item.model ?? "Unknown", // 优先使用计费模型
-        provider: item.providerName ?? "Unknown",
+        provider: isFinalized ? (item.providerName ?? "Unknown") : "",
         latency,
-        status: item.statusCode ?? 200,
+        status: isFinalized ? (item.statusCode ?? 200) : 0,
         cost: parseFloat(item.costUsd ?? "0"),
         startTime: item.startTime,
       };

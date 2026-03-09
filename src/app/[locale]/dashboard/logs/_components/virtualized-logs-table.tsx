@@ -14,6 +14,7 @@ import { useVirtualizer } from "@/hooks/use-virtualizer";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
+import { isProviderFinalized } from "@/lib/utils/provider-display";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
@@ -418,6 +419,11 @@ export function VirtualizedLogsTable({
                           <span className="inline-flex items-center gap-1 rounded-md bg-orange-100 dark:bg-orange-950 px-2 py-1 text-xs font-medium text-orange-700 dark:text-orange-300">
                             <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
                             {t("logs.table.blocked")}
+                          </span>
+                        ) : !isProviderFinalized(log) ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            {t("logs.details.inProgress")}
                           </span>
                         ) : (
                           <div className="flex flex-col items-start gap-0.5 min-w-0">

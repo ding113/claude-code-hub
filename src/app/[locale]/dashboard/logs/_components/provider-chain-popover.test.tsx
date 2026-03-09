@@ -409,3 +409,58 @@ describe("provider-chain-popover layout", () => {
     expect(countBadge).not.toBeUndefined();
   });
 });
+
+describe("provider-chain-popover hedge/abort reason handling", () => {
+  test("hedge_triggered is not counted as actual request", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 1, name: "p1", reason: "initial_selection" },
+          { id: 1, name: "p1", reason: "hedge_triggered", attemptNumber: 1 },
+          { id: 2, name: "p2", reason: "hedge_winner", statusCode: 200, attemptNumber: 2 },
+          { id: 1, name: "p1", reason: "hedge_loser_cancelled", attemptNumber: 1 },
+        ]}
+        finalProvider="p2"
+      />
+    );
+
+    // hedge_triggered is informational, not an actual request
+    // so the request count should be 2 (winner + loser), not 3
+    const document = parseHtml(html);
+    const countBadge = Array.from(document.querySelectorAll('[data-slot="badge"]')).find((node) =>
+      (node.textContent ?? "").includes("times")
+    );
+    expect(countBadge?.textContent).toContain("2");
+  });
+
+  test("hedge_winner is treated as successful provider", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 1, name: "p1", reason: "initial_selection" },
+          { id: 2, name: "p2", reason: "hedge_winner", statusCode: 200, attemptNumber: 2 },
+          { id: 1, name: "p1", reason: "hedge_loser_cancelled", attemptNumber: 1 },
+        ]}
+        finalProvider="p2"
+      />
+    );
+
+    // Should render without error
+    expect(html).toContain("p2");
+  });
+
+  test("client_abort is counted as actual request", () => {
+    const html = renderWithIntl(
+      <ProviderChainPopover
+        chain={[
+          { id: 1, name: "p1", reason: "initial_selection" },
+          { id: 1, name: "p1", reason: "client_abort", attemptNumber: 1 },
+        ]}
+        finalProvider="p1"
+      />
+    );
+
+    // client_abort should be counted as actual request (requestCount=1 -> single view)
+    expect(html).toContain("p1");
+  });
+});

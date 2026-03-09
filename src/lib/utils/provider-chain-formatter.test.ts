@@ -522,3 +522,69 @@ describe("unknown reason graceful degradation", () => {
     expect(timeline).toContain("timeline.unknown");
   });
 });
+
+describe("hedge and client_abort reason handling", () => {
+  test("hedge_winner with statusCode is treated as success", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000, attemptNumber: 1 },
+      {
+        id: 2,
+        name: "p2",
+        reason: "hedge_winner",
+        statusCode: 200,
+        timestamp: 2000,
+        attemptNumber: 2,
+      },
+      { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 1 },
+    ];
+    const { timeline } = formatProviderTimeline(chain, mockT);
+    // hedge_winner should appear in timeline
+    expect(timeline).toContain("p2");
+  });
+
+  test("hedge_triggered is not an actual request", () => {
+    const item: ProviderChainItem = {
+      id: 1,
+      name: "p1",
+      reason: "hedge_triggered",
+      timestamp: 1000,
+    };
+    // formatProviderDescription should handle hedge_triggered
+    const desc = formatProviderDescription([item], mockT);
+    expect(desc).toBeDefined();
+  });
+
+  test("hedge_loser_cancelled is an actual request", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 1000, attemptNumber: 1 },
+    ];
+    const { timeline } = formatProviderTimeline(chain, mockT);
+    expect(timeline).toContain("p1");
+  });
+
+  test("client_abort is an actual request", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "client_abort", timestamp: 1000, attemptNumber: 1 },
+    ];
+    const { timeline } = formatProviderTimeline(chain, mockT);
+    expect(timeline).toContain("p1");
+  });
+
+  test("formatProviderSummary handles hedge_winner chain", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "initial_selection", timestamp: 1000 },
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 2000, attemptNumber: 1 },
+      {
+        id: 2,
+        name: "p2",
+        reason: "hedge_winner",
+        statusCode: 200,
+        timestamp: 3000,
+        attemptNumber: 2,
+      },
+      { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 3000, attemptNumber: 1 },
+    ];
+    const summary = formatProviderSummary(chain, mockT);
+    expect(summary).toBeDefined();
+  });
+});

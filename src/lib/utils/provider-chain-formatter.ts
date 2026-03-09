@@ -56,7 +56,12 @@ export function formatProbabilityCompact(probability: number | undefined | null)
  */
 function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "↓" | null {
   // 成功标记：必须有 statusCode 且是成功状态码
-  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
+  if (
+    (item.reason === "request_success" ||
+      item.reason === "retry_success" ||
+      item.reason === "hedge_winner") &&
+    item.statusCode
+  ) {
     return "✓";
   }
   // 失败标记
@@ -66,8 +71,13 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
     item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
-    item.reason === "vendor_type_all_timeout"
+    item.reason === "vendor_type_all_timeout" ||
+    item.reason === "client_abort"
   ) {
+    return "✗";
+  }
+  // Hedge 输家：取消标记
+  if (item.reason === "hedge_loser_cancelled") {
     return "✗";
   }
   // 并发限制失败
@@ -77,6 +87,10 @@ function getProviderStatus(item: ProviderChainItem): "✓" | "✗" | "⚡" | "�
   // HTTP/2 回退（协议降级，不是失败）
   if (item.reason === "http2_fallback") {
     return "↓";
+  }
+  // Hedge 触发（信息性事件，不是请求结果）
+  if (item.reason === "hedge_triggered") {
+    return null;
   }
   // 中间状态（选择成功但还没有请求结果）
   return null;
@@ -96,10 +110,17 @@ function isActualRequest(item: ProviderChainItem): boolean {
     item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
-    item.reason === "vendor_type_all_timeout"
+    item.reason === "vendor_type_all_timeout" ||
+    item.reason === "client_abort"
   ) {
     return true;
   }
+
+  // Hedge 相关：winner 和 loser 都是实际请求
+  if (item.reason === "hedge_winner" || item.reason === "hedge_loser_cancelled") return true;
+
+  // Hedge 触发：信息性事件，不算实际请求
+  if (item.reason === "hedge_triggered") return false;
 
   // HTTP/2 回退：算作一次中间事件（显示但不计入失败）
   if (item.reason === "http2_fallback") return true;

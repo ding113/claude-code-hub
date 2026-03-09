@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle,
   ChevronRight,
+  GitBranch,
   InfoIcon,
   Link2,
   MinusCircle,
@@ -35,6 +36,7 @@ interface ProviderChainPopoverProps {
  */
 function isActualRequest(item: ProviderChainItem): boolean {
   if (item.reason === "client_restriction_filtered") return false;
+  if (item.reason === "hedge_triggered") return false;
 
   if (item.reason === "concurrent_limit_failed") return true;
 
@@ -43,6 +45,9 @@ function isActualRequest(item: ProviderChainItem): boolean {
   if (item.reason === "endpoint_pool_exhausted") return true;
   if (item.reason === "vendor_type_all_timeout") return true;
   if (item.reason === "client_error_non_retryable") return true;
+  if (item.reason === "hedge_winner") return true;
+  if (item.reason === "hedge_loser_cancelled") return true;
+  if (item.reason === "client_abort") return true;
   if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
     return true;
   }
@@ -70,7 +75,12 @@ function getItemStatus(item: ProviderChainItem): {
   color: string;
   bgColor: string;
 } {
-  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
+  if (
+    (item.reason === "request_success" ||
+      item.reason === "retry_success" ||
+      item.reason === "hedge_winner") &&
+    item.statusCode
+  ) {
     return {
       icon: CheckCircle,
       color: "text-emerald-600",
@@ -109,6 +119,27 @@ function getItemStatus(item: ProviderChainItem): {
       icon: MinusCircle,
       color: "text-muted-foreground",
       bgColor: "bg-muted/30",
+    };
+  }
+  if (item.reason === "hedge_triggered") {
+    return {
+      icon: GitBranch,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50 dark:bg-indigo-950/30",
+    };
+  }
+  if (item.reason === "hedge_loser_cancelled") {
+    return {
+      icon: XCircle,
+      color: "text-slate-500",
+      bgColor: "bg-slate-50 dark:bg-slate-800/50",
+    };
+  }
+  if (item.reason === "client_abort") {
+    return {
+      icon: MinusCircle,
+      color: "text-amber-600",
+      bgColor: "bg-amber-50 dark:bg-amber-950/30",
     };
   }
   return {
@@ -378,7 +409,12 @@ export function ProviderChainPopover({
   // Get the successful provider's costMultiplier and groupTag
   const successfulProvider = [...chain]
     .reverse()
-    .find((item) => item.reason === "request_success" || item.reason === "retry_success");
+    .find(
+      (item) =>
+        item.reason === "request_success" ||
+        item.reason === "retry_success" ||
+        item.reason === "hedge_winner"
+    );
   const finalCostMultiplier = successfulProvider?.costMultiplier;
   const finalGroupTag = successfulProvider?.groupTag;
   const finalGroupTags = parseGroupTags(finalGroupTag);
