@@ -234,8 +234,8 @@ describe("getUserInsightsKeyTrend", () => {
 
   it("returns trend data for valid request", async () => {
     const mockStats = [
-      { date: "2026-03-09", cost: 1.5, requests: 10 },
-      { date: "2026-03-08", cost: 2.0, requests: 15 },
+      { key_id: 1, key_name: "sk-key-1", date: "2026-03-09", api_calls: 10, total_cost: 1.5 },
+      { key_id: 2, key_name: "sk-key-2", date: "2026-03-08", api_calls: 15, total_cost: 2.0 },
     ];
 
     mockGetSession.mockResolvedValueOnce(createAdminSession());
@@ -247,15 +247,25 @@ describe("getUserInsightsKeyTrend", () => {
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data).toHaveLength(2);
-      // Date strings should be preserved as-is
       expect(result.data[0].date).toBe("2026-03-09");
+      expect(result.data[0].key_id).toBe(1);
+      expect(result.data[0].key_name).toBe("sk-key-1");
+      expect(result.data[0].api_calls).toBe(10);
       expect(result.data[1].date).toBe("2026-03-08");
     }
     expect(mockGetStatisticsWithCache).toHaveBeenCalledWith("7days", "keys", 10);
   });
 
   it("normalizes Date objects to ISO strings", async () => {
-    const mockStats = [{ date: new Date("2026-03-09T12:00:00Z"), cost: 1.5, requests: 10 }];
+    const mockStats = [
+      {
+        key_id: 1,
+        key_name: "sk-key-1",
+        date: new Date("2026-03-09T12:00:00Z"),
+        api_calls: 10,
+        total_cost: 1.5,
+      },
+    ];
 
     mockGetSession.mockResolvedValueOnce(createAdminSession());
     mockGetStatisticsWithCache.mockResolvedValueOnce(mockStats);
