@@ -154,12 +154,23 @@ describe("providerSupportsModel - direct unit tests (#832)", () => {
 
     // modelRedirects
     {
-      name: "modelRedirects contains model (allowedModels does not) -> true",
+      name: "modelRedirects + null allowedModels -> true (wildcard)",
       providerType: "openai-compatible",
-      allowedModels: ["gpt-4o"],
+      allowedModels: null,
       modelRedirects: { "claude-opus-4-6": "custom-opus" },
       requestedModel: "claude-opus-4-6",
       expected: true,
+    },
+    {
+      name: "modelRedirects does not bypass explicit allowedModels mismatch -> false",
+      providerType: "claude",
+      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      modelRedirects: {
+        "claude-haiku-4-5-20251001": "glm-4.6",
+        "claude-opus-4-5-20251001": "glm-4.6",
+      },
+      requestedModel: "claude-opus-4-5-20251001",
+      expected: false,
     },
     {
       name: "neither allowedModels nor modelRedirects contains model -> false",
@@ -298,37 +309,36 @@ describe("findReusable - cross-type model routing (#832)", () => {
     );
   });
 
-  test("modelRedirects match overrides allowedModels mismatch -> reuse succeeds", async () => {
+  test("modelRedirects do not bypass explicit allowedModels during reuse", async () => {
     const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
 
     const provider = createProvider({
       id: 15,
-      allowedModels: ["gpt-4o"],
-      modelRedirects: { "claude-opus-4-6": "custom-opus" },
+      providerType: "claude",
+      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      modelRedirects: {
+        "claude-haiku-4-5-20251001": "glm-4.6",
+        "claude-opus-4-5-20251001": "glm-4.6",
+      },
     });
 
     sessionManagerMocks.SessionManager.getSessionProvider.mockResolvedValueOnce(15);
     providerRepositoryMocks.findProviderById.mockResolvedValueOnce(provider);
-    rateLimitMocks.RateLimitService.checkCostLimitsWithLease.mockResolvedValueOnce({
-      allowed: true,
-    });
-    rateLimitMocks.RateLimitService.checkTotalCostLimit.mockResolvedValueOnce({
-      allowed: true,
-      current: 0,
-    });
 
     const session = {
       sessionId: "cross-type-6",
       shouldReuseProvider: () => true,
-      getOriginalModel: () => "claude-opus-4-6",
+      getOriginalModel: () => "claude-opus-4-5-20251001",
       authState: null,
       getCurrentModel: () => null,
     } as any;
 
     const result = await (ProxyProviderResolver as any).findReusable(session);
 
-    expect(result).not.toBeNull();
-    expect(result?.id).toBe(15);
+    expect(result).toBeNull();
+    expect(sessionManagerMocks.SessionManager.clearSessionProvider).toHaveBeenCalledWith(
+      "cross-type-6"
+    );
   });
 });
 
@@ -455,5 +465,71 @@ describe("pickRandomProvider - cross-type model routing (#832)", () => {
       (fp: any) => fp.id === 31 && fp.reason === "model_not_allowed"
     );
     expect(modelMismatch).toBeDefined();
+  });
+
+  test("claude format + explicit allowlist rejects opus request even when redirect points to allowed glm", async () => {
+    const Resolver = await setupResolverMocks();
+
+    const provider = createProvider({
+      id: 33,
+      providerType: "claude",
+      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      modelRedirects: {
+        "claude-haiku-4-5-20251001": "glm-4.6",
+        "claude-opus-4-5-20251001": "glm-4.6",
+      },
+    });
+    const session = createPickSession("claude", [provider], "claude-opus-4-5-20251001");
+
+    const { provider: picked, context } = await (Resolver as any).pickRandomProvider(session, []);
+
+    expect(picked).toBeNull();
+    const mismatch = context.filteredProviders.find(
+      (fp: any) => fp.id === 33 && fp.reason === "model_not_allowed"
+    );
+    expect(mismatch).toBeDefined();
+  });
+
+  test("claude format skips priority-0 redirect-only provider and selects lower-priority allowed provider", async () => {
+    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
+
+    vi.spyOn(ProxyProviderResolver as any, "filterByLimits").mockImplementation(
+      async (...args: unknown[]) => args[0] as Provider[]
+    );
+
+    const priorityZeroProvider = createProvider({
+      id: 40,
+      providerType: "claude",
+      priority: 0,
+      allowedModels: ["claude-haiku-4-5-20251001", "glm-4.6"],
+      modelRedirects: {
+        "claude-haiku-4-5-20251001": "glm-4.6",
+        "claude-opus-4-5-20251001": "glm-4.6",
+      },
+    });
+    const fallbackProvider = createProvider({
+      id: 41,
+      providerType: "claude",
+      priority: 1,
+      allowedModels: ["claude-opus-4-5-20251001"],
+    });
+
+    const session = createPickSession(
+      "claude",
+      [priorityZeroProvider, fallbackProvider],
+      "claude-opus-4-5-20251001"
+    );
+
+    const { provider: picked, context } = await (ProxyProviderResolver as any).pickRandomProvider(
+      session,
+      []
+    );
+
+    expect(picked?.id).toBe(41);
+    expect(context.selectedPriority).toBe(1);
+    const mismatch = context.filteredProviders.find(
+      (fp: any) => fp.id === 40 && fp.reason === "model_not_allowed"
+    );
+    expect(mismatch).toBeDefined();
   });
 });

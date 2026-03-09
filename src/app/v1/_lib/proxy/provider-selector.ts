@@ -99,9 +99,9 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
  * 检查供应商是否支持指定模型（用于调度器匹配）
  *
  * 核心逻辑（统一所有供应商类型）：
- * 1. 显式声明优先：allowedModels 包含或 modelRedirects 包含 -> 支持
- * 2. 未设置 allowedModels（null 或空数组）：接受任意模型（格式兼容性由 checkFormatProviderTypeCompatibility 保证）
- * 3. 设置了 allowedModels 但不包含该模型 -> 不支持
+ * 1. 未设置 allowedModels（null 或空数组）：接受任意模型（格式兼容性由 checkFormatProviderTypeCompatibility 保证）
+ * 2. 设置了 allowedModels：仅当原始请求模型命中 allowedModels 时才支持
+ * 3. modelRedirects 仅在供应商已被选中后用于改写上游模型，不参与调度放行
  *
  * 注意：allowedModels 是声明性列表（用户可填写任意字符串），用于调度器匹配，不是真实模型校验。
  * 格式兼容性（如 claude 格式请求只路由到 claude 类型供应商）由 checkFormatProviderTypeCompatibility 独立保证。
@@ -111,21 +111,13 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
  * @returns 是否支持该模型（用于调度器筛选）
  */
 function providerSupportsModel(provider: Provider, requestedModel: string): boolean {
-  // 1. 显式声明优先（allowedModels 或 modelRedirects）
-  if (
-    provider.allowedModels?.includes(requestedModel) ||
-    provider.modelRedirects?.[requestedModel]
-  ) {
-    return true;
-  }
-
-  // 2. 未设置 allowedModels（null 或空数组）：接受任意模型
+  // 1. 未设置 allowedModels（null 或空数组）：接受任意模型
   if (!provider.allowedModels || provider.allowedModels.length === 0) {
     return true;
   }
 
-  // 3. 设置了 allowedModels 但不包含该模型，且无 modelRedirects
-  return false;
+  // 2. 设置了 allowedModels：只按原始请求模型做白名单匹配
+  return provider.allowedModels.includes(requestedModel);
 }
 
 /**
