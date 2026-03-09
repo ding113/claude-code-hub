@@ -2528,15 +2528,24 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
-  // OpenAI Response API 格式：input_tokens_details.cached_tokens（嵌套结构）
-  // 仅在顶层字段不存在时使用（避免重复计算）
-  if (!result.cache_read_input_tokens) {
+  if (result.cache_read_input_tokens === undefined) {
     const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
     if (inputTokensDetails && typeof inputTokensDetails.cached_tokens === "number") {
       result.cache_read_input_tokens = inputTokensDetails.cached_tokens;
       hasAny = true;
       logger.debug("[ResponseHandler] Parsed cached tokens from OpenAI Response API format", {
         cachedTokens: inputTokensDetails.cached_tokens,
+      });
+    }
+  }
+
+  if (result.cache_read_input_tokens === undefined) {
+    const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
+    if (promptTokensDetails && typeof promptTokensDetails.cached_tokens === "number") {
+      result.cache_read_input_tokens = promptTokensDetails.cached_tokens;
+      hasAny = true;
+      logger.debug("[ResponseHandler] Parsed cached tokens from OpenAI Chat Completions format", {
+        cachedTokens: promptTokensDetails.cached_tokens,
       });
     }
   }
