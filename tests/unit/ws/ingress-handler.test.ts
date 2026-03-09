@@ -19,6 +19,36 @@ vi.mock("@/app/v1/_lib/proxy/auth-guard", () => ({
   extractApiKeyFromHeaders: vi.fn(),
 }));
 
+// Mock handleTurn dependencies (lifecycle tests don't exercise the full pipeline;
+// these stubs prevent real DB/network imports from executing)
+vi.mock("@/app/v1/_lib/proxy/session", () => ({
+  ProxySession: { fromWebSocket: vi.fn() },
+}));
+vi.mock("@/app/v1/_lib/proxy/guard-pipeline", () => ({
+  GuardPipelineBuilder: { build: vi.fn() },
+}));
+vi.mock("@/app/v1/_lib/proxy/transport-classifier", () => ({
+  classifyTransport: vi.fn(),
+}));
+vi.mock("@/app/v1/_lib/ws/outbound-adapter", () => ({
+  OutboundWsAdapter: vi.fn(),
+}));
+vi.mock("@/app/v1/_lib/ws/event-bridge", () => ({
+  WsEventBridge: vi.fn(),
+}));
+vi.mock("@/app/v1/_lib/ws/billing-parity", () => ({
+  settleWsTurnBilling: vi.fn(),
+  buildWsTraceMetadata: vi.fn(),
+}));
+vi.mock("@/app/v1/_lib/ws/session-continuity", () => ({
+  createWsTurnContext: vi.fn(),
+  updateSessionFromTerminal: vi.fn(),
+}));
+vi.mock("@/repository/message", () => ({
+  updateMessageRequestCost: vi.fn(),
+  updateMessageRequestDetails: vi.fn(),
+}));
+
 vi.mock("@/lib/logger", () => ({
   logger: {
     debug: vi.fn(),

@@ -1,3 +1,4 @@
+import type { IncomingMessage } from "node:http";
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
@@ -233,6 +234,68 @@ export class ProxySession {
       context: c,
       clientAbortSignal,
     });
+  }
+
+  /**
+   * Create a ProxySession from a WebSocket upgrade request.
+   *
+   * Used by the WS ingress handler (delayed bridging) to run
+   * deferred guard steps (model, provider, messageContext) without
+   * a Hono Context. Auth is pre-populated from upgrade-time validation.
+   *
+   * The synthetic URL is http://localhost/v1/responses so that:
+   * - classifyTransport() recognises the /responses endpoint
+   * - resolveEndpointPolicy() returns the default chat policy
+   */
+  static fromWebSocket(params: {
+    req: IncomingMessage;
+    auth: { user: User; key: Key; apiKey: string };
+    model: string;
+    requestBody: Record<string, unknown>;
+  }): ProxySession {
+    const startTime = Date.now();
+    const requestUrl = new URL("http://localhost/v1/responses");
+
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(params.req.headers)) {
+      if (typeof value === "string") {
+        headers.set(key, value);
+      } else if (Array.isArray(value)) {
+        headers.set(key, value.join(", "));
+      }
+    }
+
+    const headerLog = formatHeadersForLog(headers);
+    const userAgent = headers.get("user-agent") || null;
+
+    const request: ProxyRequestPayload = {
+      message: params.requestBody,
+      log: JSON.stringify(params.requestBody).slice(0, 2000),
+      model: params.model,
+    };
+
+    const session = new ProxySession({
+      startTime,
+      method: "POST",
+      requestUrl,
+      headers,
+      headerLog,
+      request,
+      userAgent,
+      // WS path never touches Hono context; guards that need it are skipped
+      context: null as unknown as Context,
+      // WS lifecycle managed separately via activeAdapter
+      clientAbortSignal: null,
+    });
+
+    session.setAuthState({
+      user: params.auth.user,
+      key: params.auth.key,
+      apiKey: params.auth.apiKey,
+      success: true,
+    });
+
+    return session;
   }
 
   /**

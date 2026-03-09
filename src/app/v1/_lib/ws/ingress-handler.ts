@@ -6,10 +6,19 @@ import { logger } from "@/lib/logger";
 import { parseClientFrame } from "@/lib/ws/frame-parser";
 import type { ResponseCreateFrame } from "@/lib/ws/frames";
 import { validateApiKeyAndGetUser } from "@/repository/key";
+import { updateMessageRequestCost, updateMessageRequestDetails } from "@/repository/message";
 import type { Key } from "@/types/key";
+import type { Provider } from "@/types/provider";
 import type { User } from "@/types/user";
 
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
+import { GuardPipelineBuilder } from "../proxy/guard-pipeline";
+import { ProxySession } from "../proxy/session";
+import { classifyTransport } from "../proxy/transport-classifier";
+import { buildWsTraceMetadata, settleWsTurnBilling } from "./billing-parity";
+import { type SettlementResult, WsEventBridge } from "./event-bridge";
+import { OutboundWsAdapter } from "./outbound-adapter";
+import { createWsTurnContext, updateSessionFromTerminal } from "./session-continuity";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +76,7 @@ export class WsIngressHandler {
   private currentMeta: TurnMeta | null = null;
   private auth: WsAuthContext | null = null;
   private ip: string;
+  private activeAdapter: OutboundWsAdapter | null = null;
 
   constructor(
     private ws: WebSocket,
@@ -224,7 +234,10 @@ export class WsIngressHandler {
       if (frame.type === "response.cancel") {
         if (this.state === "processing") {
           logger.debug("[WsIngress] Cancel received for active turn", { turn: this.turnCount });
-          // TODO (T7): Signal cancellation to outbound adapter
+          if (this.activeAdapter) {
+            this.activeAdapter.close();
+            this.activeAdapter = null;
+          }
           this.state = "waiting";
           this.currentMeta = null;
         } else {
@@ -263,20 +276,176 @@ export class WsIngressHandler {
    * State management: the caller (.finally()) sets state back to "waiting".
    * handleTurn does NOT manage connection state.
    *
-   * For T6, this implements the delayed bridging skeleton.
-   * The actual outbound adapter integration happens in T7 (event bridge).
+   * Pipeline:
+   *  1. Create synthetic ProxySession from WS upgrade request + auth
+   *  2. Run deferred guard pipeline (model, provider, messageContext)
+   *  3. Classify transport (must be WS-eligible)
+   *  4. Execute turn via OutboundWsAdapter
+   *  5. Relay events to client via WsEventBridge
+   *  6. Settle billing + session continuity
    */
-  async handleTurn(_frame: ResponseCreateFrame): Promise<void> {
-    // TODO (T7/T8): Create synthetic ProxySession from this.req + this.auth
-    // TODO (T7/T8): Run deferred guard pipeline (model, rateLimit, provider)
-    // TODO (T7/T8): Use outbound adapter or HTTP fallback
-    // TODO (T7/T8): Relay events back to client
+  async handleTurn(frame: ResponseCreateFrame): Promise<void> {
+    if (!this.auth) {
+      throw new Error("Not authenticated");
+    }
 
-    // Placeholder: WS ingress operational but bridging not connected
-    this.sendError(
-      "server_error",
-      "WebSocket ingress operational but upstream bridging not yet implemented (pending T7/T8)"
-    );
+    // Capture meta early -- cancel can clear this.currentMeta mid-turn
+    const turnMeta = this.currentMeta!;
+
+    // 1. Create synthetic ProxySession
+    const session = ProxySession.fromWebSocket({
+      req: this.req,
+      auth: this.auth,
+      model: frame.response.model,
+      requestBody: frame.response as Record<string, unknown>,
+    });
+
+    // 2. Run deferred guard pipeline (model validation, provider selection, billing record)
+    const pipeline = GuardPipelineBuilder.build({
+      steps: ["model", "provider", "messageContext"],
+    });
+    const guardResponse = await pipeline.run(session);
+    if (guardResponse) {
+      let errorType = "guard_error";
+      let errorMessage = `Request rejected (${guardResponse.status})`;
+      try {
+        const body = await guardResponse.text();
+        const parsed = JSON.parse(body) as {
+          error?: { type?: string; message?: string };
+        };
+        if (parsed.error?.type) errorType = parsed.error.type;
+        if (parsed.error?.message) errorMessage = parsed.error.message;
+      } catch {
+        // Use defaults
+      }
+      this.sendError(errorType, errorMessage);
+      return;
+    }
+
+    // 3. Verify provider selected
+    const provider = session.provider;
+    if (!provider) {
+      this.sendError("server_error", "No provider available for the requested model");
+      return;
+    }
+
+    // 4. Classify transport
+    const decision = await classifyTransport(session, provider);
+    if (decision.transport !== "websocket") {
+      this.sendError(
+        "invalid_request_error",
+        `WebSocket transport not available for this provider (${decision.reason}); use the HTTP endpoint instead`
+      );
+      return;
+    }
+
+    // 5. Execute turn via outbound adapter
+    const adapter = new OutboundWsAdapter({
+      providerBaseUrl: provider.url,
+      apiKey: provider.key,
+    });
+    this.activeAdapter = adapter;
+
+    try {
+      const turnResult = await adapter.executeTurn(frame.response as Record<string, unknown>);
+
+      // 6. Relay all events to client via event bridge
+      const bridge = new WsEventBridge();
+      for (const event of turnResult.events) {
+        bridge.relayEvent(
+          this.ws,
+          event as { type: string; data: unknown },
+          JSON.stringify(event.data)
+        );
+      }
+
+      // Settle error if bridge didn't receive a terminal event
+      if (!bridge.isSettled) {
+        if (turnResult.error) {
+          const msg =
+            turnResult.error instanceof Error ? turnResult.error.message : "Upstream error";
+          bridge.settleError(msg);
+          // Network errors weren't in the event stream; notify client
+          if (turnResult.error instanceof Error) {
+            this.sendError("server_error", msg);
+          }
+        } else {
+          bridge.settleError("Turn ended without terminal event");
+        }
+      }
+
+      // 7. Billing settlement
+      const settlement = bridge.getSettlement();
+      if (settlement && session.messageContext) {
+        await this.settleBilling(session, settlement, provider, turnMeta, turnResult.handshakeMs);
+      }
+    } finally {
+      this.activeAdapter = null;
+    }
+  }
+
+  /**
+   * Settle billing, persist cost/details, update session binding.
+   * Best-effort: errors are logged but do not fail the turn.
+   */
+  private async settleBilling(
+    session: ProxySession,
+    settlement: SettlementResult,
+    provider: Provider,
+    turnMeta: TurnMeta,
+    handshakeMs?: number
+  ): Promise<void> {
+    try {
+      const turnContext = createWsTurnContext(this.auth!, turnMeta);
+
+      const priceData = await session.getCachedPriceDataByBillingSource(provider);
+      const billingResult = settleWsTurnBilling({
+        usage: settlement.usage,
+        serviceTier: settlement.serviceTier,
+        requestedServiceTier: turnMeta.serviceTier,
+        priceData: priceData ?? undefined,
+        costMultiplier: provider.costMultiplier ?? 1.0,
+      });
+
+      await updateMessageRequestCost(session.messageContext!.id, billingResult.costUsd);
+
+      const statusCode =
+        settlement.status === "completed" || settlement.status === "incomplete" ? 200 : 500;
+
+      await updateMessageRequestDetails(session.messageContext!.id, {
+        statusCode,
+        inputTokens: billingResult.inputTokens,
+        outputTokens: billingResult.outputTokens,
+        cacheCreationInputTokens: billingResult.cacheCreationInputTokens,
+        cacheReadInputTokens: billingResult.cacheReadInputTokens,
+        model: settlement.model ?? turnMeta.model,
+        providerId: provider.id,
+        providerChain: session.getProviderChain(),
+      });
+
+      await updateSessionFromTerminal(turnContext, settlement, session.sessionId, provider.id);
+
+      // Best-effort trace metadata (non-blocking)
+      try {
+        buildWsTraceMetadata({
+          handshakeMs,
+          eventCount: settlement.eventCount,
+          terminalType: settlement.terminalType,
+          model: settlement.model,
+          serviceTier: settlement.serviceTier,
+          durationMs: settlement.durationMs,
+          statusCode,
+          errorMessage: settlement.errorMessage,
+        });
+      } catch {
+        // Best-effort, swallow errors
+      }
+    } catch (error) {
+      logger.error("[WsIngress] Billing settlement failed", {
+        error,
+        turn: this.turnCount,
+      });
+    }
   }
 
   /** Send an error frame to the client */
