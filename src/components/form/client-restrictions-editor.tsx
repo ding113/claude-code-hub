@@ -20,6 +20,8 @@ import {
 } from "@/lib/client-restrictions/client-presets";
 import { cn } from "@/lib/utils";
 
+const CLIENT_TAG_PATTERN = /^[a-zA-Z0-9_./*-]+$/;
+
 export interface ClientRestrictionsEditorProps {
   allowed: string[];
   blocked: string[];
@@ -244,7 +246,7 @@ export function ClientRestrictionsEditor({
         maxTagLength={64}
         maxTags={50}
         placeholder={translations.customAllowedPlaceholder}
-        validateTag={(tag: string) => /^[a-zA-Z0-9_./*-]+$/.test(tag)}
+        validateTag={(tag: string) => CLIENT_TAG_PATTERN.test(tag)}
         value={customAllowed}
         onChange={handleCustomAllowedChange}
         disabled={disabled}
@@ -258,7 +260,7 @@ export function ClientRestrictionsEditor({
         maxTagLength={64}
         maxTags={50}
         placeholder={translations.customBlockedPlaceholder}
-        validateTag={(tag: string) => /^[a-zA-Z0-9_./*-]+$/.test(tag)}
+        validateTag={(tag: string) => CLIENT_TAG_PATTERN.test(tag)}
         value={customBlocked}
         onChange={handleCustomBlockedChange}
         disabled={disabled}
