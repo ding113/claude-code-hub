@@ -31,6 +31,14 @@ describe("Provider timeout schemas", () => {
     ).toThrow("流式首字节超时不能少于1秒");
   });
 
+  test("UpdateProviderSchema accepts 0 as disabled for streaming first-byte timeout", () => {
+    const parsed = UpdateProviderSchema.parse({
+      first_byte_timeout_streaming_ms: 0,
+    });
+
+    expect(parsed.first_byte_timeout_streaming_ms).toBe(0);
+  });
+
   test("UpdateProviderSchema accepts 1800 second non-streaming timeout upper bound", () => {
     const parsed = UpdateProviderSchema.parse({
       request_timeout_non_streaming_ms: 1_800_000,
