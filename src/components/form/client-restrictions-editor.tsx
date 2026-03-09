@@ -137,7 +137,7 @@ export function ClientRestrictionsEditor({
                 variant="outline"
                 size="sm"
                 className="h-7 text-xs gap-1 px-2"
-                disabled={disabled}
+                disabled={disabled || (!isAllowed && !isBlocked)}
               >
                 {getChildDisplayText(preset)}
                 <ChevronDown className="h-3 w-3 opacity-50" />
@@ -246,7 +246,7 @@ export function ClientRestrictionsEditor({
         maxTagLength={64}
         maxTags={50}
         placeholder={translations.customAllowedPlaceholder}
-        validateTag={(tag: string) => /^[a-zA-Z0-9_*-]+$/.test(tag)}
+        validateTag={(tag: string) => /^[a-zA-Z0-9_./*-]+$/.test(tag)}
         value={customAllowed}
         onChange={handleCustomAllowedChange}
         disabled={disabled}
@@ -260,7 +260,7 @@ export function ClientRestrictionsEditor({
         maxTagLength={64}
         maxTags={50}
         placeholder={translations.customBlockedPlaceholder}
-        validateTag={(tag: string) => /^[a-zA-Z0-9_*-]+$/.test(tag)}
+        validateTag={(tag: string) => /^[a-zA-Z0-9_./*-]+$/.test(tag)}
         value={customBlocked}
         onChange={handleCustomBlockedChange}
         disabled={disabled}
