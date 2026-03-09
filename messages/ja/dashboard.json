@@ -500,7 +500,17 @@
       "unknownModel": "不明なモデル",
       "noData": "データがありません",
       "dateRange": "期間",
-      "allTime": "全期間"
+      "allTime": "全期間",
+      "providerBreakdown": "プロバイダー内訳",
+      "unknownProvider": "不明なプロバイダー",
+      "apiKey": "APIキー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "allKeys": "すべてのキー",
+      "allProviders": "すべてのプロバイダー",
+      "allModels": "すべてのモデル",
+      "dimensions": "ディメンション",
+      "filters": "フィルター"
     }
   },
   "sessions": {

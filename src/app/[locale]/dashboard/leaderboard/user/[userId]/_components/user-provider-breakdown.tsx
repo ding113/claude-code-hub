@@ -1,9 +1,9 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3 } from "lucide-react";
+import { Server } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { getUserInsightsModelBreakdown } from "@/actions/admin-user-insights";
+import { getUserInsightsProviderBreakdown } from "@/actions/admin-user-insights";
 import {
   ModelBreakdownColumn,
   type ModelBreakdownItem,
@@ -13,37 +13,37 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CurrencyCode } from "@/lib/utils/currency";
 
-interface UserModelBreakdownProps {
+interface UserProviderBreakdownProps {
   userId: number;
   startDate?: string;
   endDate?: string;
   keyId?: number;
-  providerId?: number;
+  model?: string;
 }
 
-export function UserModelBreakdown({
+export function UserProviderBreakdown({
   userId,
   startDate,
   endDate,
   keyId,
-  providerId,
-}: UserModelBreakdownProps) {
+  model,
+}: UserProviderBreakdownProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
   const tStats = useTranslations("myUsage.stats");
 
-  const filters = keyId || providerId ? { keyId, providerId } : undefined;
+  const filters = keyId || model ? { keyId, model } : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["user-insights-model-breakdown", userId, startDate, endDate, keyId, providerId],
+    queryKey: ["user-insights-provider-breakdown", userId, startDate, endDate, keyId, model],
     queryFn: async () => {
-      const result = await getUserInsightsModelBreakdown(userId, startDate, endDate, filters);
+      const result = await getUserInsightsProviderBreakdown(userId, startDate, endDate, filters);
       if (!result.ok) throw new Error(result.error);
       return result.data;
     },
   });
 
   const labels: ModelBreakdownLabels = {
-    unknownModel: t("unknownModel"),
+    unknownModel: t("unknownProvider"),
     modal: {
       requests: tStats("modal.requests"),
       cost: tStats("modal.cost"),
@@ -63,7 +63,7 @@ export function UserModelBreakdown({
 
   const items: ModelBreakdownItem[] = data
     ? data.breakdown.map((item) => ({
-        model: item.model,
+        model: item.providerName,
         requests: item.requests,
         cost: item.cost,
         inputTokens: item.inputTokens,
@@ -79,8 +79,8 @@ export function UserModelBreakdown({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center gap-2">
-        <BarChart3 className="h-4 w-4 text-muted-foreground" />
-        <CardTitle className="text-base font-semibold">{t("modelBreakdown")}</CardTitle>
+        <Server className="h-4 w-4 text-muted-foreground" />
+        <CardTitle className="text-base font-semibold">{t("providerBreakdown")}</CardTitle>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -94,12 +94,12 @@ export function UserModelBreakdown({
             {t("noData")}
           </div>
         ) : (
-          <div data-testid="user-insights-model-breakdown-list">
+          <div data-testid="user-insights-provider-breakdown-list">
             <ModelBreakdownColumn
               pageItems={items}
               currencyCode={currencyCode}
               totalCost={totalCost}
-              keyPrefix="user-insights"
+              keyPrefix="user-insights-provider"
               pageOffset={0}
               labels={labels}
             />

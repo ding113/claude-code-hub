@@ -2,27 +2,27 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { getUserInsightsKeyTrend } from "@/actions/admin-user-insights";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { type ChartConfig, ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DatabaseKeyStatRow } from "@/types/statistics";
+import type { TimeRangePreset } from "./filters/types";
 
 interface UserKeyTrendChartProps {
   userId: number;
+  timeRange: TimeRangePreset;
+  keyId?: number;
 }
 
-type TimeRangeKey = "today" | "7days" | "30days" | "thisMonth";
-
 const CHART_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
   "#8b5cf6",
   "#ec4899",
   "#f97316",
@@ -34,10 +34,9 @@ interface ChartKey {
   dataKey: string;
 }
 
-export function UserKeyTrendChart({ userId }: UserKeyTrendChartProps) {
+export function UserKeyTrendChart({ userId, timeRange, keyId }: UserKeyTrendChartProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
   const tStats = useTranslations("dashboard.stats");
-  const [timeRange, setTimeRange] = useState<TimeRangeKey>("7days");
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: ["user-insights-key-trend", userId, timeRange],
@@ -53,9 +52,12 @@ export function UserKeyTrendChart({ userId }: UserKeyTrendChartProps) {
       return { chartData: [], keys: [] as ChartKey[], chartConfig: {} as ChartConfig };
     }
 
+    // Client-side filter by keyId if specified
+    const filtered = keyId ? rawData.filter((row) => row.key_id === keyId) : rawData;
+
     // Extract unique keys
     const keyMap = new Map<number, string>();
-    for (const row of rawData) {
+    for (const row of filtered) {
       if (!keyMap.has(row.key_id)) {
         keyMap.set(row.key_id, row.key_name);
       }
@@ -69,7 +71,7 @@ export function UserKeyTrendChart({ userId }: UserKeyTrendChartProps) {
 
     // Build chart data grouped by date
     const dataByDate = new Map<string, Record<string, string | number>>();
-    for (const row of rawData) {
+    for (const row of filtered) {
       const dateStr =
         timeRange === "today" ? new Date(row.date).toISOString() : row.date.split("T")[0];
 
@@ -103,33 +105,12 @@ export function UserKeyTrendChart({ userId }: UserKeyTrendChartProps) {
       keys: uniqueKeys,
       chartConfig: config,
     };
-  }, [rawData, timeRange, tStats]);
-
-  const timeRangeOptions: { key: TimeRangeKey; labelKey: string }[] = [
-    { key: "today", labelKey: "timeRange.today" },
-    { key: "7days", labelKey: "timeRange.7days" },
-    { key: "30days", labelKey: "timeRange.30days" },
-    { key: "thisMonth", labelKey: "timeRange.thisMonth" },
-  ];
+  }, [rawData, timeRange, keyId, tStats]);
 
   return (
     <Card>
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <CardHeader>
         <CardTitle className="text-base font-semibold">{t("keyTrend")}</CardTitle>
-        <div className="flex gap-1">
-          {timeRangeOptions.map((opt) => (
-            <Button
-              key={opt.key}
-              variant={timeRange === opt.key ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setTimeRange(opt.key)}
-              data-testid={`user-insights-time-range-${opt.key}`}
-            >
-              {t(opt.labelKey)}
-            </Button>
-          ))}
-        </div>
       </CardHeader>
       <CardContent>
         {isLoading ? (

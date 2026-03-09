@@ -500,7 +500,17 @@
       "unknownModel": "Unknown Model",
       "noData": "No data available",
       "dateRange": "Date Range",
-      "allTime": "All Time"
+      "allTime": "All Time",
+      "providerBreakdown": "Provider Breakdown",
+      "unknownProvider": "Unknown Provider",
+      "apiKey": "API Key",
+      "provider": "Provider",
+      "model": "Model",
+      "allKeys": "All Keys",
+      "allProviders": "All Providers",
+      "allModels": "All Models",
+      "dimensions": "Dimensions",
+      "filters": "Filters"
     }
   },
   "sessions": {

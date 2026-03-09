@@ -5,7 +5,9 @@ import { getOverviewWithCache } from "@/lib/redis/overview-cache";
 import { getStatisticsWithCache } from "@/lib/redis/statistics-cache";
 import {
   type AdminUserModelBreakdownItem,
+  type AdminUserProviderBreakdownItem,
   getUserModelBreakdown,
+  getUserProviderBreakdown,
 } from "@/repository/admin-user-insights";
 import type { OverviewMetricsWithComparison } from "@/repository/overview";
 import { getSystemSettings } from "@/repository/system-config";
@@ -90,10 +92,30 @@ export async function getUserInsightsKeyTrend(
 /**
  * Get model-level usage breakdown for a specific user (admin only).
  */
+function validateDateRange(
+  startDate?: string,
+  endDate?: string
+): { ok: false; error: string } | null {
+  if (startDate && !DATE_REGEX.test(startDate)) {
+    return { ok: false, error: "Invalid startDate format: use YYYY-MM-DD" };
+  }
+  if (endDate && !DATE_REGEX.test(endDate)) {
+    return { ok: false, error: "Invalid endDate format: use YYYY-MM-DD" };
+  }
+  if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+    return { ok: false, error: "startDate must not be after endDate" };
+  }
+  return null;
+}
+
+/**
+ * Get model-level usage breakdown for a specific user (admin only).
+ */
 export async function getUserInsightsModelBreakdown(
   targetUserId: number,
   startDate?: string,
-  endDate?: string
+  endDate?: string,
+  filters?: { keyId?: number; providerId?: number }
 ): Promise<
   ActionResult<{
     breakdown: AdminUserModelBreakdownItem[];
@@ -105,18 +127,47 @@ export async function getUserInsightsModelBreakdown(
     return { ok: false, error: "Unauthorized" };
   }
 
-  if (startDate && !DATE_REGEX.test(startDate)) {
-    return { ok: false, error: "Invalid startDate format: use YYYY-MM-DD" };
-  }
-  if (endDate && !DATE_REGEX.test(endDate)) {
-    return { ok: false, error: "Invalid endDate format: use YYYY-MM-DD" };
-  }
-  if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-    return { ok: false, error: "startDate must not be after endDate" };
-  }
+  const dateError = validateDateRange(startDate, endDate);
+  if (dateError) return dateError;
 
   const [breakdown, settings] = await Promise.all([
-    getUserModelBreakdown(targetUserId, startDate, endDate),
+    getUserModelBreakdown(targetUserId, startDate, endDate, filters),
+    getSystemSettings(),
+  ]);
+
+  return {
+    ok: true,
+    data: {
+      breakdown,
+      currencyCode: settings.currencyDisplay,
+    },
+  };
+}
+
+/**
+ * Get provider-level usage breakdown for a specific user (admin only).
+ */
+export async function getUserInsightsProviderBreakdown(
+  targetUserId: number,
+  startDate?: string,
+  endDate?: string,
+  filters?: { keyId?: number; model?: string }
+): Promise<
+  ActionResult<{
+    breakdown: AdminUserProviderBreakdownItem[];
+    currencyCode: string;
+  }>
+> {
+  const session = await getSession();
+  if (!session || session.user.role !== "admin") {
+    return { ok: false, error: "Unauthorized" };
+  }
+
+  const dateError = validateDateRange(startDate, endDate);
+  if (dateError) return dateError;
+
+  const [breakdown, settings] = await Promise.all([
+    getUserProviderBreakdown(targetUserId, startDate, endDate, filters),
     getSystemSettings(),
   ]);
 

@@ -319,7 +319,7 @@ describe("UserKeyTrendChart", () => {
     queryClient.clear();
   });
 
-  it("renders time range buttons", async () => {
+  it("renders chart with timeRange prop", async () => {
     mockGetUserInsightsKeyTrend.mockResolvedValue({
       ok: true,
       data: [],
@@ -329,26 +329,15 @@ describe("UserKeyTrendChart", () => {
       "@/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-key-trend-chart"
     );
 
-    const { container, unmount } = renderWithProviders(<UserKeyTrendChart userId={10} />);
+    const { container, unmount } = renderWithProviders(
+      <UserKeyTrendChart userId={10} timeRange="7days" />
+    );
 
     await flushMicrotasks();
 
-    const todayBtn = container.querySelector("[data-testid='user-insights-time-range-today']");
-    const sevenDaysBtn = container.querySelector("[data-testid='user-insights-time-range-7days']");
-    const thirtyDaysBtn = container.querySelector(
-      "[data-testid='user-insights-time-range-30days']"
-    );
-    const thisMonthBtn = container.querySelector(
-      "[data-testid='user-insights-time-range-thisMonth']"
-    );
-
-    expect(todayBtn).not.toBeNull();
-    expect(sevenDaysBtn).not.toBeNull();
-    expect(thirtyDaysBtn).not.toBeNull();
-    expect(thisMonthBtn).not.toBeNull();
-
-    expect(todayBtn!.textContent).toBe("Today");
-    expect(sevenDaysBtn!.textContent).toBe("Last 7 Days");
+    // Time range buttons are now in the parent filter bar, not in this component
+    // Chart should render without internal time range controls
+    expect(container.querySelector("[data-testid='user-insights-time-range-today']")).toBeNull();
 
     unmount();
   });

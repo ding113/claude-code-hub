@@ -500,7 +500,17 @@
       "unknownModel": "未知模型",
       "noData": "暫無資料",
       "dateRange": "日期範圍",
-      "allTime": "全部時間"
+      "allTime": "全部時間",
+      "providerBreakdown": "供應商明細",
+      "unknownProvider": "未知供應商",
+      "apiKey": "API 金鑰",
+      "provider": "供應商",
+      "model": "模型",
+      "allKeys": "全部金鑰",
+      "allProviders": "全部供應商",
+      "allModels": "全部模型",
+      "dimensions": "維度",
+      "filters": "篩選"
     }
   },
   "sessions": {

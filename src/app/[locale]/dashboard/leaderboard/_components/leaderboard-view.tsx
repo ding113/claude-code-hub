@@ -214,7 +214,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
           return isAdmin ? (
             <Link
               href={`/dashboard/leaderboard/user/${row.userId}`}
-              className="text-primary underline-offset-4 hover:underline"
+              className="hover:text-muted-foreground transition-colors"
               data-testid={`leaderboard-user-link-${row.userId}`}
             >
               {row.userName}

@@ -5,6 +5,7 @@ const mockFindUserById = vi.hoisted(() => vi.fn());
 const mockGetOverviewWithCache = vi.hoisted(() => vi.fn());
 const mockGetStatisticsWithCache = vi.hoisted(() => vi.fn());
 const mockGetUserModelBreakdown = vi.hoisted(() => vi.fn());
+const mockGetUserProviderBreakdown = vi.hoisted(() => vi.fn());
 const mockGetSystemSettings = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth", () => ({
@@ -25,6 +26,7 @@ vi.mock("@/lib/redis/statistics-cache", () => ({
 
 vi.mock("@/repository/admin-user-insights", () => ({
   getUserModelBreakdown: mockGetUserModelBreakdown,
+  getUserProviderBreakdown: mockGetUserProviderBreakdown,
 }));
 
 vi.mock("@/repository/system-config", () => ({
@@ -330,7 +332,7 @@ describe("getUserInsightsModelBreakdown", () => {
       expect(result.data.breakdown).toEqual(breakdown);
       expect(result.data.currencyCode).toBe("USD");
     }
-    expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(10, undefined, undefined);
+    expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(10, undefined, undefined, undefined);
   });
 
   it("passes date range to getUserModelBreakdown", async () => {
@@ -345,7 +347,28 @@ describe("getUserInsightsModelBreakdown", () => {
     const result = await getUserInsightsModelBreakdown(10, "2026-03-01", "2026-03-09");
 
     expect(result.ok).toBe(true);
-    expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(10, "2026-03-01", "2026-03-09");
+    expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(
+      10,
+      "2026-03-01",
+      "2026-03-09",
+      undefined
+    );
+  });
+
+  it("passes filter params to getUserModelBreakdown", async () => {
+    const breakdown = createMockBreakdown();
+    const settings = createMockSettings();
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetUserModelBreakdown.mockResolvedValueOnce(breakdown);
+    mockGetSystemSettings.mockResolvedValueOnce(settings);
+
+    const { getUserInsightsModelBreakdown } = await import("@/actions/admin-user-insights");
+    const filters = { keyId: 5, providerId: 3 };
+    const result = await getUserInsightsModelBreakdown(10, "2026-03-01", "2026-03-09", filters);
+
+    expect(result.ok).toBe(true);
+    expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(10, "2026-03-01", "2026-03-09", filters);
   });
 
   it("rejects invalid startDate format", async () => {
@@ -385,5 +408,161 @@ describe("getUserInsightsModelBreakdown", () => {
       expect(result.error).toContain("startDate must not be after endDate");
     }
     expect(mockGetUserModelBreakdown).not.toHaveBeenCalled();
+  });
+});
+
+function createMockProviderBreakdown() {
+  return [
+    {
+      providerId: 1,
+      providerName: "Provider A",
+      requests: 40,
+      cost: 4.0,
+      inputTokens: 12000,
+      outputTokens: 6000,
+      cacheCreationTokens: 2500,
+      cacheReadTokens: 9000,
+    },
+    {
+      providerId: 2,
+      providerName: "Provider B",
+      requests: 10,
+      cost: 1.5,
+      inputTokens: 6000,
+      outputTokens: 2000,
+      cacheCreationTokens: 500,
+      cacheReadTokens: 4000,
+    },
+  ];
+}
+
+describe("getUserInsightsProviderBreakdown", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns unauthorized for non-admin", async () => {
+    mockGetSession.mockResolvedValueOnce(createUserSession());
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsProviderBreakdown(10);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unauthorized");
+    }
+    expect(mockGetUserProviderBreakdown).not.toHaveBeenCalled();
+  });
+
+  it("returns unauthorized when not logged in", async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsProviderBreakdown(10);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toBe("Unauthorized");
+    }
+  });
+
+  it("returns breakdown data for valid request", async () => {
+    const breakdown = createMockProviderBreakdown();
+    const settings = createMockSettings();
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetUserProviderBreakdown.mockResolvedValueOnce(breakdown);
+    mockGetSystemSettings.mockResolvedValueOnce(settings);
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsProviderBreakdown(10);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.breakdown).toEqual(breakdown);
+      expect(result.data.breakdown[0].providerName).toBe("Provider A");
+      expect(result.data.currencyCode).toBe("USD");
+    }
+    expect(mockGetUserProviderBreakdown).toHaveBeenCalledWith(10, undefined, undefined, undefined);
+  });
+
+  it("passes date range to getUserProviderBreakdown", async () => {
+    const breakdown = createMockProviderBreakdown();
+    const settings = createMockSettings();
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetUserProviderBreakdown.mockResolvedValueOnce(breakdown);
+    mockGetSystemSettings.mockResolvedValueOnce(settings);
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsProviderBreakdown(10, "2026-03-01", "2026-03-09");
+
+    expect(result.ok).toBe(true);
+    expect(mockGetUserProviderBreakdown).toHaveBeenCalledWith(
+      10,
+      "2026-03-01",
+      "2026-03-09",
+      undefined
+    );
+  });
+
+  it("passes filter params to getUserProviderBreakdown", async () => {
+    const breakdown = createMockProviderBreakdown();
+    const settings = createMockSettings();
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetUserProviderBreakdown.mockResolvedValueOnce(breakdown);
+    mockGetSystemSettings.mockResolvedValueOnce(settings);
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const filters = { keyId: 5, model: "claude-sonnet-4-20250514" };
+    const result = await getUserInsightsProviderBreakdown(10, "2026-03-01", "2026-03-09", filters);
+
+    expect(result.ok).toBe(true);
+    expect(mockGetUserProviderBreakdown).toHaveBeenCalledWith(
+      10,
+      "2026-03-01",
+      "2026-03-09",
+      filters
+    );
+  });
+
+  it("rejects invalid startDate format", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsProviderBreakdown(10, "not-a-date");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("startDate");
+    }
+    expect(mockGetUserProviderBreakdown).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid endDate format", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsProviderBreakdown(10, "2026-03-01", "03/09/2026");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("endDate");
+    }
+    expect(mockGetUserProviderBreakdown).not.toHaveBeenCalled();
+  });
+
+  it("rejects startDate after endDate", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsProviderBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsProviderBreakdown(10, "2026-03-09", "2026-03-01");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("startDate must not be after endDate");
+    }
+    expect(mockGetUserProviderBreakdown).not.toHaveBeenCalled();
   });
 });

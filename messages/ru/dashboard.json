@@ -500,7 +500,17 @@
       "unknownModel": "Неизвестная модель",
       "noData": "Нет данных",
       "dateRange": "Диапазон дат",
-      "allTime": "Всё время"
+      "allTime": "Всё время",
+      "providerBreakdown": "Разбивка по провайдерам",
+      "unknownProvider": "Неизвестный провайдер",
+      "apiKey": "API ключ",
+      "provider": "Провайдер",
+      "model": "Модель",
+      "allKeys": "Все ключи",
+      "allProviders": "Все провайдеры",
+      "allModels": "Все модели",
+      "dimensions": "Измерения",
+      "filters": "Фильтры"
     }
   },
   "sessions": {
