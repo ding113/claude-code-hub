@@ -456,7 +456,8 @@
       "avgTtfbMs": "Avg TTFB",
       "avgTokensPerSecond": "Avg tok/s",
       "avgCostPerRequest": "Avg Cost/Req",
-      "avgCostPerMillionTokens": "Avg Cost/1M Tokens"
+      "avgCostPerMillionTokens": "Avg Cost/1M Tokens",
+      "unknownModel": "Unknown"
     },
     "expandModelStats": "Expand model details",
     "collapseModelStats": "Collapse model details",
@@ -479,6 +480,27 @@
     "filters": {
       "userTagsPlaceholder": "Filter by user tags...",
       "userGroupsPlaceholder": "Filter by user groups..."
+    },
+    "userInsights": {
+      "title": "User Insights",
+      "backToLeaderboard": "Back to Leaderboard",
+      "overview": "Overview",
+      "keyTrend": "Key Usage Trend",
+      "modelBreakdown": "Model Breakdown",
+      "todayRequests": "Today Requests",
+      "todayCost": "Today Cost",
+      "avgResponseTime": "Avg Response Time",
+      "errorRate": "Error Rate",
+      "timeRange": {
+        "today": "Today",
+        "7days": "Last 7 Days",
+        "30days": "Last 30 Days",
+        "thisMonth": "This Month"
+      },
+      "unknownModel": "Unknown Model",
+      "noData": "No data available",
+      "dateRange": "Date Range",
+      "allTime": "All Time"
     }
   },
   "sessions": {

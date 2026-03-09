@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TagInput } from "@/components/ui/tag-input";
+import { Link } from "@/i18n/routing";
 import { formatTokenAmount } from "@/lib/utils";
 import type {
   DateRangeParams,
@@ -19,6 +20,7 @@ import type {
   ModelProviderStat,
   ProviderCacheHitRateLeaderboardEntry,
   ProviderLeaderboardEntry,
+  UserModelStat,
 } from "@/repository/leaderboard";
 import type { ProviderType } from "@/types/provider";
 import { DateRangePicker } from "./date-range-picker";
@@ -36,7 +38,12 @@ type ProviderCostFormattedFields = {
   avgCostPerRequestFormatted?: string | null;
   avgCostPerMillionTokensFormatted?: string | null;
 };
-type UserEntry = LeaderboardEntry & TotalCostFormattedFields;
+type UserEntry = LeaderboardEntry &
+  TotalCostFormattedFields & {
+    modelStats?: UserModelStatClient[];
+  };
+type UserModelStatClient = UserModelStat & TotalCostFormattedFields;
+type UserTableRow = UserEntry | UserModelStatClient;
 type ModelEntry = ModelLeaderboardEntry & TotalCostFormattedFields;
 type ModelProviderStatClient = ModelProviderStat & ProviderCostFormattedFields;
 type ProviderEntry = Omit<ProviderLeaderboardEntry, "modelStats"> &
@@ -135,6 +142,9 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
         if (scope === "provider") {
           url += "&includeModelStats=1";
         }
+        if (scope === "user" && isAdmin) {
+          url += "&includeUserModelStats=1";
+        }
         if (scope === "user") {
           if (userTagFilters.length > 0) {
             url += `&userTags=${encodeURIComponent(userTagFilters.join(","))}`;
@@ -167,7 +177,7 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [scope, period, dateRange, providerTypeFilter, userTagFilters, userGroupFilters, t]);
+  }, [scope, period, dateRange, providerTypeFilter, userTagFilters, userGroupFilters, isAdmin, t]);
 
   const handlePeriodChange = useCallback(
     (newPeriod: LeaderboardPeriod, newDateRange?: DateRangeParams) => {
@@ -196,12 +206,27 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
     </div>
   );
 
-  const userColumns: ColumnDef<UserEntry>[] = [
+  const userColumns: ColumnDef<UserTableRow>[] = [
     {
       header: t("columns.user"),
-      cell: (row) => row.userName,
+      cell: (row) => {
+        if ("userName" in row) {
+          return isAdmin ? (
+            <Link
+              href={`/dashboard/leaderboard/user/${row.userId}`}
+              className="text-primary underline-offset-4 hover:underline"
+              data-testid={`leaderboard-user-link-${row.userId}`}
+            >
+              {row.userName}
+            </Link>
+          ) : (
+            row.userName
+          );
+        }
+        return renderSubModelLabel(row.model ?? t("columns.unknownModel"));
+      },
       sortKey: "userName",
-      getValue: (row) => row.userName,
+      getValue: (row) => ("userName" in row ? row.userName : (row.model ?? "")),
     },
     {
       header: t("columns.requests"),
@@ -396,11 +421,17 @@ export function LeaderboardView({ isAdmin }: LeaderboardViewProps) {
   ];
 
   const renderUserTable = () => (
-    <LeaderboardTable<UserEntry>
+    <LeaderboardTable<UserEntry, UserModelStatClient>
       data={data as UserEntry[]}
       period={period}
       columns={userColumns}
       getRowKey={(row) => row.userId}
+      {...(isAdmin
+        ? {
+            getSubRows: (row) => row.modelStats,
+            getSubRowKey: (subRow) => subRow.model ?? "__null__",
+          }
+        : {})}
     />
   );
 

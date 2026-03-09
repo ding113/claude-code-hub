@@ -456,7 +456,8 @@
       "avgTtfbMs": "Средний TTFB",
       "avgTokensPerSecond": "Средн. ток/с",
       "avgCostPerRequest": "Ср. стоимость/запрос",
-      "avgCostPerMillionTokens": "Ср. стоимость/1М токенов"
+      "avgCostPerMillionTokens": "Ср. стоимость/1М токенов",
+      "unknownModel": "Неизвестно"
     },
     "expandModelStats": "Развернуть модели",
     "collapseModelStats": "Свернуть модели",
@@ -479,6 +480,27 @@
     "filters": {
       "userTagsPlaceholder": "Фильтр по тегам пользователей...",
       "userGroupsPlaceholder": "Фильтр по группам пользователей..."
+    },
+    "userInsights": {
+      "title": "Аналитика пользователя",
+      "backToLeaderboard": "Вернуться к рейтингу",
+      "overview": "Обзор",
+      "keyTrend": "Тренд использования ключей",
+      "modelBreakdown": "Разбивка по моделям",
+      "todayRequests": "Запросы за сегодня",
+      "todayCost": "Стоимость за сегодня",
+      "avgResponseTime": "Среднее время ответа",
+      "errorRate": "Частота ошибок",
+      "timeRange": {
+        "today": "Сегодня",
+        "7days": "Последние 7 дней",
+        "30days": "Последние 30 дней",
+        "thisMonth": "Этот месяц"
+      },
+      "unknownModel": "Неизвестная модель",
+      "noData": "Нет данных",
+      "dateRange": "Диапазон дат",
+      "allTime": "Всё время"
     }
   },
   "sessions": {

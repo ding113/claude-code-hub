@@ -456,7 +456,8 @@
       "avgTtfbMs": "平均TTFB",
       "avgTokensPerSecond": "平均トークン/秒",
       "avgCostPerRequest": "平均リクエスト単価",
-      "avgCostPerMillionTokens": "100万トークンあたりコスト"
+      "avgCostPerMillionTokens": "100万トークンあたりコスト",
+      "unknownModel": "不明"
     },
     "expandModelStats": "モデル詳細を展開",
     "collapseModelStats": "モデル詳細を折りたたむ",
@@ -479,6 +480,27 @@
     "filters": {
       "userTagsPlaceholder": "ユーザータグでフィルタ...",
       "userGroupsPlaceholder": "ユーザーグループでフィルタ..."
+    },
+    "userInsights": {
+      "title": "ユーザーインサイト",
+      "backToLeaderboard": "ランキングに戻る",
+      "overview": "概要",
+      "keyTrend": "Key 使用トレンド",
+      "modelBreakdown": "モデル内訳",
+      "todayRequests": "本日リクエスト",
+      "todayCost": "本日コスト",
+      "avgResponseTime": "平均応答時間",
+      "errorRate": "エラー率",
+      "timeRange": {
+        "today": "今日",
+        "7days": "過去7日間",
+        "30days": "過去30日間",
+        "thisMonth": "今月"
+      },
+      "unknownModel": "不明なモデル",
+      "noData": "データがありません",
+      "dateRange": "期間",
+      "allTime": "全期間"
     }
   },
   "sessions": {

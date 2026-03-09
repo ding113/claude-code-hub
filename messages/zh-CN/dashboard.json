@@ -456,7 +456,8 @@
       "avgTtfbMs": "平均 TTFB",
       "avgTokensPerSecond": "平均输出速率",
       "avgCostPerRequest": "平均单次请求成本",
-      "avgCostPerMillionTokens": "平均百万 Token 成本"
+      "avgCostPerMillionTokens": "平均百万 Token 成本",
+      "unknownModel": "未知"
     },
     "expandModelStats": "展开模型详情",
     "collapseModelStats": "收起模型详情",
@@ -479,6 +480,27 @@
     "filters": {
       "userTagsPlaceholder": "按用户标签筛选...",
       "userGroupsPlaceholder": "按用户分组筛选..."
+    },
+    "userInsights": {
+      "title": "用户洞察",
+      "backToLeaderboard": "返回排行榜",
+      "overview": "概览",
+      "keyTrend": "Key 使用趋势",
+      "modelBreakdown": "模型明细",
+      "todayRequests": "今日请求",
+      "todayCost": "今日费用",
+      "avgResponseTime": "平均响应时间",
+      "errorRate": "错误率",
+      "timeRange": {
+        "today": "今日",
+        "7days": "近 7 天",
+        "30days": "近 30 天",
+        "thisMonth": "本月"
+      },
+      "unknownModel": "未知模型",
+      "noData": "暂无数据",
+      "dateRange": "日期范围",
+      "allTime": "全部时间"
     }
   },
   "sessions": {
