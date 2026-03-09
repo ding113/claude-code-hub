@@ -42,7 +42,6 @@ function TimeoutInput({
   isCore,
 }: TimeoutInputProps) {
   const t = useTranslations("settings.providers.form");
-  const _displayValue = value ?? defaultValue;
   const isCustom = value !== undefined;
 
   return (
@@ -77,7 +76,7 @@ function TimeoutInput({
             <Input
               id={id}
               type="number"
-              value={value ?? ""}
+              value={value ?? defaultValue}
               onChange={(e) => {
                 const val = e.target.value;
                 onChange(val === "" ? undefined : parseInt(val, 10));
@@ -259,7 +258,7 @@ export function NetworkSection({ subSectionRefs }: NetworkSectionProps) {
                   }
                   disabled={state.ui.isPending}
                   min="0"
-                  max="1200"
+                  max="1800"
                   icon={Clock}
                   isCore={true}
                 />

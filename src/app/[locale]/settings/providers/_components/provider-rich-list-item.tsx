@@ -57,7 +57,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PROVIDER_GROUP, PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import {
+  PROVIDER_GROUP,
+  PROVIDER_LIMITS,
+  PROVIDER_TIMEOUT_DEFAULTS,
+} from "@/lib/constants/provider.constants";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
@@ -808,18 +812,18 @@ export function ProviderRichListItem({
             )}
             <span className="text-xs text-muted-foreground flex-shrink-0">
               {tTimeout("summary", {
-                streaming:
-                  provider.firstByteTimeoutStreamingMs === 0
-                    ? "∞"
-                    : ((provider.firstByteTimeoutStreamingMs || 30000) / 1000).toString(),
-                idle:
-                  provider.streamingIdleTimeoutMs === 0
-                    ? "∞"
-                    : ((provider.streamingIdleTimeoutMs || 10000) / 1000).toString(),
-                nonStreaming:
-                  provider.requestTimeoutNonStreamingMs === 0
-                    ? "∞"
-                    : ((provider.requestTimeoutNonStreamingMs || 600000) / 1000).toString(),
+                streaming: (
+                  (provider.firstByteTimeoutStreamingMs ??
+                    PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS) / 1000
+                ).toString(),
+                idle: (
+                  (provider.streamingIdleTimeoutMs ??
+                    PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS) / 1000
+                ).toString(),
+                nonStreaming: (
+                  (provider.requestTimeoutNonStreamingMs ??
+                    PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS) / 1000
+                ).toString(),
               })}
             </span>
           </div>

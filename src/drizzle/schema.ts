@@ -259,7 +259,7 @@ export const providers = pgTable('providers', {
   // 超时配置（毫秒）
   // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
   // 参考：https://github.com/nodejs/undici/discussions/1313
-  // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 30 秒，0 = 禁用）⭐ 核心
+  // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 0 = 不限制，非 0 时最小 1 秒）⭐ 核心
   //   覆盖从请求开始到收到首字节的全过程：DNS + TCP + TLS + 请求发送 + 首字节接收
   //   解决流式请求重试缓慢问题
   // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 0 = 不限制）⭐ 核心

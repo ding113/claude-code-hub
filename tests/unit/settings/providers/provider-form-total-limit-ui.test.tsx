@@ -146,13 +146,18 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
       isEnabled: true,
       weight: 1,
       priority: 0,
+      groupPriorities: null,
       costMultiplier: 1,
       groupTag: null,
       providerType: "claude",
       providerVendorId: null,
       preserveClientIp: false,
       modelRedirects: null,
+      activeTimeStart: null,
+      activeTimeEnd: null,
       allowedModels: null,
+      allowedClients: [],
+      blockedClients: [],
       mcpPassthroughType: "none",
       mcpPassthroughUrl: null,
       limit5hUsd: null,
@@ -175,13 +180,17 @@ describe("ProviderForm: 编辑时应支持提交总消费上限(limit_total_usd)
       websiteUrl: null,
       faviconUrl: null,
       cacheTtlPreference: null,
+      swapCacheTtlBilling: false,
       context1mPreference: null,
       codexReasoningEffortPreference: null,
       codexReasoningSummaryPreference: null,
       codexTextVerbosityPreference: null,
       codexParallelToolCallsPreference: null,
+      codexServiceTierPreference: null,
       anthropicMaxTokensPreference: null,
       anthropicThinkingBudgetPreference: null,
+      anthropicAdaptiveThinking: null,
+      geminiGoogleSearchPreference: null,
       tpm: null,
       rpm: null,
       rpd: null,
@@ -353,6 +362,71 @@ describe("ProviderForm: 新增成功后应重置总消费上限输入", () => {
     expect((document.getElementById("limit-total") as HTMLInputElement | null)?.value ?? null).toBe(
       ""
     );
+
+    unmount();
+  });
+});
+
+describe("ProviderForm: timeout defaults", () => {
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    vi.clearAllMocks();
+
+    const storage = (() => {
+      let store: Record<string, string> = {};
+      return {
+        getItem: (key: string) => (hasOwn(store, key) ? store[key] : null),
+        setItem: (key: string, value: string) => {
+          store[key] = String(value);
+        },
+        removeItem: (key: string) => {
+          delete store[key];
+        },
+        clear: () => {
+          store = {};
+        },
+        key: (index: number) => Object.keys(store)[index] ?? null,
+        get length() {
+          return Object.keys(store).length;
+        },
+      };
+    })();
+
+    Object.defineProperty(globalThis, "localStorage", {
+      value: storage,
+      configurable: true,
+    });
+
+    storage.setItem("provider-form-sections", JSON.stringify({ network: true }));
+  });
+
+  test("create mode shows timeout defaults as 0 seconds instead of blank inputs", async () => {
+    const messages = loadMessages();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <Dialog open onOpenChange={() => {}}>
+          <ProviderForm mode="create" enableMultiProviderTypes />
+        </Dialog>
+      </NextIntlClientProvider>
+    );
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect((document.getElementById("first-byte-timeout") as HTMLInputElement | null)?.value).toBe(
+      "0"
+    );
+    expect((document.getElementById("streaming-idle") as HTMLInputElement | null)?.value).toBe("0");
+    expect(
+      (document.getElementById("non-streaming-timeout") as HTMLInputElement | null)?.value
+    ).toBe("0");
 
     unmount();
   });

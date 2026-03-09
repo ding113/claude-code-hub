@@ -5,6 +5,7 @@ import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { resolveEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { SessionManager } from "@/lib/session-manager";
 import type { Provider } from "@/types/provider";
 
 const asyncTasks: Promise<void>[] = [];
@@ -75,6 +76,12 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     storeSessionResponse: vi.fn(),
     updateSessionUsage: vi.fn(),
+    clearSessionProvider: vi.fn(),
+    storeSessionUpstreamRequestMeta: vi.fn(async () => undefined),
+    storeSessionSpecialSettings: vi.fn(async () => undefined),
+    storeSessionRequestHeaders: vi.fn(async () => undefined),
+    storeSessionResponseHeaders: vi.fn(async () => undefined),
+    storeSessionUpstreamResponseMeta: vi.fn(async () => undefined),
   },
 }));
 
@@ -451,6 +458,76 @@ describe("ProxyResponseHandler - Gemini stream passthrough timeouts", () => {
         clientAbortController.abort(new Error("test_timeout"));
         throw new Error("流式静默超时未生效：读后续数据在 1.5s 内仍未返回（可能仍会卡死）");
       }
+    } finally {
+      clientAbortController.abort(new Error("test_cleanup"));
+      await close();
+      await Promise.allSettled(asyncTasks);
+    }
+  });
+
+  test("客户端中断流式透传后应清理 session provider 绑定，避免下次继续复用旧供应商", async () => {
+    asyncTasks.length = 0;
+    const { baseUrl, close } = await startSseServer((_req, res) => {
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive",
+      });
+      res.flushHeaders();
+      res.write('data: {"x":1}\n\n');
+      setTimeout(() => {
+        try {
+          res.write('data: {"x":2}\n\n');
+        } catch {
+          // ignore
+        }
+      }, 1000);
+    });
+
+    const clientAbortController = new AbortController();
+    vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
+
+    try {
+      const provider = createProvider({
+        url: baseUrl,
+        firstByteTimeoutStreamingMs: 1000,
+        streamingIdleTimeoutMs: 0,
+      });
+      const session = createSession({
+        clientAbortSignal: clientAbortController.signal,
+        messageId: 4,
+        userId: 1,
+      });
+      session.setProvider(provider);
+      session.setSessionId("gemini-abort-session");
+
+      const doForward = (
+        ProxyForwarder as unknown as {
+          doForward: (this: typeof ProxyForwarder, ...args: unknown[]) => unknown;
+        }
+      ).doForward;
+
+      const upstreamResponse = (await doForward.call(
+        ProxyForwarder,
+        session,
+        provider,
+        baseUrl
+      )) as Response;
+
+      const clientResponse = await ProxyResponseHandler.dispatch(session, upstreamResponse);
+      const reader = clientResponse.body?.getReader();
+      expect(reader).toBeTruthy();
+      if (!reader) throw new Error("Missing body reader");
+
+      const first = await reader.read();
+      expect(first.done).toBe(false);
+
+      clientAbortController.abort(new Error("client_cancelled"));
+      await Promise.allSettled(asyncTasks);
+
+      expect(vi.mocked(SessionManager.clearSessionProvider)).toHaveBeenCalledWith(
+        "gemini-abort-session"
+      );
     } finally {
       clientAbortController.abort(new Error("test_cleanup"));
       await close();

@@ -245,4 +245,28 @@ describe("ProviderRichListItem Endpoint Display", () => {
 
     unmount();
   });
+
+  test("renders timeout summary as 0s when provider timeouts are disabled", async () => {
+    const provider = makeProviderDisplay({
+      firstByteTimeoutStreamingMs: 0,
+      streamingIdleTimeoutMs: 0,
+      requestTimeoutNonStreamingMs: 0,
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderRichListItem
+        provider={provider}
+        currentUser={ADMIN_USER}
+        enableMultiProviderTypes={true}
+      />
+    );
+
+    await flushTicks(5);
+
+    expect(document.body.textContent).toContain("First byte: 0s");
+    expect(document.body.textContent).toContain("Stream interval: 0s");
+    expect(document.body.textContent).toContain("Non-streaming: 0s");
+
+    unmount();
+  });
 });
