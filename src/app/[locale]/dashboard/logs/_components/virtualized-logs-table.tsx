@@ -15,6 +15,7 @@ import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { isProviderFinalized } from "@/lib/utils/provider-display";
+import { isActualRequest } from "@/lib/utils/provider-chain-formatter";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
@@ -437,7 +438,8 @@ export function VirtualizedLogsTable({
                                         .find(
                                           (item) =>
                                             item.reason === "request_success" ||
-                                            item.reason === "retry_success"
+                                            item.reason === "retry_success" ||
+                                            item.reason === "hedge_winner"
                                         )
                                     : null;
                                 const actualCostMultiplier =
@@ -449,23 +451,6 @@ export function VirtualizedLogsTable({
                                   Number.isFinite(multiplier) &&
                                   multiplier !== 1;
 
-                                // Calculate actual request count (same logic as ProviderChainPopover)
-                                const isActualRequest = (item: ProviderChainItem) => {
-                                  if (item.reason === "concurrent_limit_failed") return true;
-                                  if (
-                                    item.reason === "retry_failed" ||
-                                    item.reason === "system_error"
-                                  )
-                                    return true;
-                                  if (
-                                    (item.reason === "request_success" ||
-                                      item.reason === "retry_success") &&
-                                    item.statusCode
-                                  ) {
-                                    return true;
-                                  }
-                                  return false;
-                                };
                                 const actualRequestCount =
                                   log.providerChain?.filter(isActualRequest).length ?? 0;
                                 // Only show badge in table when no retry (Popover shows badge when retry)

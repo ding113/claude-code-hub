@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatProbabilityCompact } from "@/lib/utils/provider-chain-formatter";
+import { formatProbabilityCompact, isActualRequest } from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { getFake200ReasonKey } from "./fake200-reason";
 
@@ -29,29 +29,6 @@ interface ProviderChainPopoverProps {
   hasCostBadge?: boolean;
   /** Callback when a chain item is clicked in the popover */
   onChainItemClick?: (chainIndex: number) => void;
-}
-
-/**
- * Determine if this is an actual request record (excluding intermediate states)
- */
-function isActualRequest(item: ProviderChainItem): boolean {
-  if (item.reason === "client_restriction_filtered") return false;
-  if (item.reason === "hedge_triggered") return false;
-
-  if (item.reason === "concurrent_limit_failed") return true;
-
-  if (item.reason === "retry_failed" || item.reason === "system_error") return true;
-  if (item.reason === "resource_not_found") return true;
-  if (item.reason === "endpoint_pool_exhausted") return true;
-  if (item.reason === "vendor_type_all_timeout") return true;
-  if (item.reason === "client_error_non_retryable") return true;
-  if (item.reason === "hedge_winner") return true;
-  if (item.reason === "hedge_loser_cancelled") return true;
-  if (item.reason === "client_abort") return true;
-  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
-    return true;
-  }
-  return false;
 }
 
 function parseGroupTags(groupTag?: string | null): string[] {
