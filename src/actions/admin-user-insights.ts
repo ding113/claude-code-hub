@@ -10,11 +10,14 @@ import {
 import type { OverviewMetricsWithComparison } from "@/repository/overview";
 import { getSystemSettings } from "@/repository/system-config";
 import { findUserById } from "@/repository/user";
+import type { DatabaseKeyStatRow } from "@/types/statistics";
 import type { User } from "@/types/user";
 import type { ActionResult } from "./types";
 
 const VALID_TIME_RANGES = ["today", "7days", "30days", "thisMonth"] as const;
 type ValidTimeRange = (typeof VALID_TIME_RANGES)[number];
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 function isValidTimeRange(value: string): value is ValidTimeRange {
   return (VALID_TIME_RANGES as readonly string[]).includes(value);
@@ -61,7 +64,7 @@ export async function getUserInsightsOverview(targetUserId: number): Promise<
 export async function getUserInsightsKeyTrend(
   targetUserId: number,
   timeRange: string
-): Promise<ActionResult<unknown>> {
+): Promise<ActionResult<DatabaseKeyStatRow[]>> {
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
     return { ok: false, error: "Unauthorized" };
@@ -76,7 +79,12 @@ export async function getUserInsightsKeyTrend(
 
   const statistics = await getStatisticsWithCache(timeRange, "keys", targetUserId);
 
-  return { ok: true, data: statistics };
+  const normalized = (statistics as DatabaseKeyStatRow[]).map((row) => ({
+    ...row,
+    date: typeof row.date === "string" ? row.date : new Date(row.date).toISOString(),
+  }));
+
+  return { ok: true, data: normalized };
 }
 
 /**
@@ -95,6 +103,16 @@ export async function getUserInsightsModelBreakdown(
   const session = await getSession();
   if (!session || session.user.role !== "admin") {
     return { ok: false, error: "Unauthorized" };
+  }
+
+  if (startDate && !DATE_REGEX.test(startDate)) {
+    return { ok: false, error: "Invalid startDate format: use YYYY-MM-DD" };
+  }
+  if (endDate && !DATE_REGEX.test(endDate)) {
+    return { ok: false, error: "Invalid endDate format: use YYYY-MM-DD" };
+  }
+  if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
+    return { ok: false, error: "startDate must not be after endDate" };
   }
 
   const [breakdown, settings] = await Promise.all([

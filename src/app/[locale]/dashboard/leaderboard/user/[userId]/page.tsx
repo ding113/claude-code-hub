@@ -18,7 +18,7 @@ export default async function UserInsightsPage({
   }
 
   const userId = Number(userIdStr);
-  if (Number.isNaN(userId)) {
+  if (!Number.isInteger(userId) || userId <= 0) {
     return redirect({ href: "/dashboard/leaderboard", locale });
   }
 

@@ -246,9 +246,28 @@ describe("getUserInsightsKeyTrend", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data).toEqual(mockStats);
+      expect(result.data).toHaveLength(2);
+      // Date strings should be preserved as-is
+      expect(result.data[0].date).toBe("2026-03-09");
+      expect(result.data[1].date).toBe("2026-03-08");
     }
     expect(mockGetStatisticsWithCache).toHaveBeenCalledWith("7days", "keys", 10);
+  });
+
+  it("normalizes Date objects to ISO strings", async () => {
+    const mockStats = [{ date: new Date("2026-03-09T12:00:00Z"), cost: 1.5, requests: 10 }];
+
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+    mockGetStatisticsWithCache.mockResolvedValueOnce(mockStats);
+
+    const { getUserInsightsKeyTrend } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsKeyTrend(10, "today");
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(typeof result.data[0].date).toBe("string");
+      expect(result.data[0].date).toContain("2026-03-09");
+    }
   });
 
   it("accepts all valid timeRange values", async () => {
@@ -317,5 +336,44 @@ describe("getUserInsightsModelBreakdown", () => {
 
     expect(result.ok).toBe(true);
     expect(mockGetUserModelBreakdown).toHaveBeenCalledWith(10, "2026-03-01", "2026-03-09");
+  });
+
+  it("rejects invalid startDate format", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsModelBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsModelBreakdown(10, "not-a-date");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("startDate");
+    }
+    expect(mockGetUserModelBreakdown).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid endDate format", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsModelBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsModelBreakdown(10, "2026-03-01", "03/09/2026");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("endDate");
+    }
+    expect(mockGetUserModelBreakdown).not.toHaveBeenCalled();
+  });
+
+  it("rejects startDate after endDate", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsModelBreakdown } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsModelBreakdown(10, "2026-03-09", "2026-03-01");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("startDate must not be after endDate");
+    }
+    expect(mockGetUserModelBreakdown).not.toHaveBeenCalled();
   });
 });

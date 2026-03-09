@@ -28,10 +28,11 @@ export async function getUserModelBreakdown(
   const systemSettings = await getSystemSettings();
   const billingModelSource = systemSettings.billingModelSource;
 
-  const modelField =
+  const rawModelField =
     billingModelSource === "original"
       ? sql<string>`COALESCE(${usageLedger.originalModel}, ${usageLedger.model})`
       : sql<string>`COALESCE(${usageLedger.model}, ${usageLedger.originalModel})`;
+  const modelField = sql<string>`NULLIF(TRIM(${rawModelField}), '')`;
 
   const conditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.userId, userId)];
 

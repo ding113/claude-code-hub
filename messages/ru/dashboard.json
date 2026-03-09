@@ -490,7 +490,7 @@
       "todayRequests": "Запросы за сегодня",
       "todayCost": "Стоимость за сегодня",
       "avgResponseTime": "Среднее время ответа",
-      "cacheHitRate": "Процент попаданий в кэш",
+      "errorRate": "Частота ошибок",
       "timeRange": {
         "today": "Сегодня",
         "7days": "Последние 7 дней",

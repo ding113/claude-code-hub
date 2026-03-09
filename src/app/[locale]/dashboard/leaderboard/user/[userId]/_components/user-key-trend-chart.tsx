@@ -36,6 +36,7 @@ interface ChartKey {
 
 export function UserKeyTrendChart({ userId }: UserKeyTrendChartProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
+  const tStats = useTranslations("dashboard.stats");
   const [timeRange, setTimeRange] = useState<TimeRangeKey>("7days");
 
   const { data: rawData, isLoading } = useQuery({
@@ -85,7 +86,7 @@ export function UserKeyTrendChart({ userId }: UserKeyTrendChartProps) {
 
     // Build chart config
     const config: ChartConfig = {
-      calls: { label: "Calls" },
+      calls: { label: tStats("requests") },
     };
     for (let i = 0; i < uniqueKeys.length; i++) {
       const key = uniqueKeys[i];
@@ -102,7 +103,7 @@ export function UserKeyTrendChart({ userId }: UserKeyTrendChartProps) {
       keys: uniqueKeys,
       chartConfig: config,
     };
-  }, [rawData, timeRange]);
+  }, [rawData, timeRange, tStats]);
 
   const timeRangeOptions: { key: TimeRangeKey; labelKey: string }[] = [
     { key: "today", labelKey: "timeRange.today" },

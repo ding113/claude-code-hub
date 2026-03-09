@@ -69,8 +69,8 @@ export function UserOverviewCards({ userId }: UserOverviewCardsProps) {
       icon: Clock,
     },
     {
-      key: "cacheHitRate",
-      label: t("cacheHitRate"),
+      key: "errorRate",
+      label: t("errorRate"),
       value: `${overview.todayErrorRate.toFixed(1)}%`,
       icon: Activity,
     },

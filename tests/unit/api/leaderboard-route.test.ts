@@ -331,6 +331,8 @@ describe("GET /api/leaderboard", () => {
       const response = await GET({ nextUrl: new URL(url) } as any);
 
       expect(response.status).toBe(403);
+      const body = await response.json();
+      expect(body.error).toBe("INCLUDE_USER_MODEL_STATS_ADMIN_REQUIRED");
     });
 
     it("non-admin with allowGlobalUsageView + includeUserModelStats=1 returns 403", async () => {
@@ -346,6 +348,8 @@ describe("GET /api/leaderboard", () => {
       const response = await GET({ nextUrl: new URL(url) } as any);
 
       expect(response.status).toBe(403);
+      const body = await response.json();
+      expect(body.error).toBe("INCLUDE_USER_MODEL_STATS_ADMIN_REQUIRED");
     });
   });
 });

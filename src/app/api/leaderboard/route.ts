@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
 
     if (includeUserModelStats && !isAdmin) {
       return NextResponse.json(
-        { error: "includeUserModelStats requires admin privileges" },
+        { error: "INCLUDE_USER_MODEL_STATS_ADMIN_REQUIRED" },
         { status: 403 }
       );
     }
@@ -285,9 +285,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(data, {
       headers: {
-        "Cache-Control": includeUserModelStats
-          ? "private, no-store"
-          : "public, s-maxage=60, stale-while-revalidate=120",
+        "Cache-Control":
+          includeUserModelStats || !systemSettings.allowGlobalUsageView
+            ? "private, no-store"
+            : "public, s-maxage=60, stale-while-revalidate=120",
       },
     });
   } catch (error) {

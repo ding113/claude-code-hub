@@ -22,6 +22,7 @@ interface UserModelBreakdownProps {
 
 export function UserModelBreakdown({ userId }: UserModelBreakdownProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
+  const tCommon = useTranslations("common");
   const tStats = useTranslations("myUsage.stats");
 
   const [startDate, setStartDate] = useState("");
@@ -111,7 +112,7 @@ export function UserModelBreakdown({ userId }: UserModelBreakdownProps) {
             className="h-7 w-[130px] text-xs"
           />
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleApplyRange}>
-            OK
+            {tCommon("ok")}
           </Button>
           {(appliedRange.start || appliedRange.end) && (
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={handleClearRange}>

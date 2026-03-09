@@ -490,7 +490,7 @@
       "todayRequests": "今日請求",
       "todayCost": "今日費用",
       "avgResponseTime": "平均回應時間",
-      "cacheHitRate": "快取命中率",
+      "errorRate": "錯誤率",
       "timeRange": {
         "today": "今日",
         "7days": "近 7 天",

@@ -10,6 +10,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import dashboardMessages from "@messages/en/dashboard.json";
 import myUsageMessages from "@messages/en/myUsage.json";
+import commonMessages from "@messages/en/common.json";
 
 // --- Hoisted mocks ---
 
@@ -68,6 +69,7 @@ vi.mock("@/components/ui/chart", () => ({
 const messages = {
   dashboard: dashboardMessages,
   myUsage: myUsageMessages,
+  common: commonMessages,
 } as const;
 
 let queryClient: QueryClient;
@@ -276,6 +278,10 @@ describe("UserOverviewCards", () => {
     );
     expect(avgResponseTime).not.toBeNull();
     expect(avgResponseTime!.textContent).toContain("850ms");
+
+    const errorRate = container.querySelector("[data-testid='user-insights-metric-errorRate']");
+    expect(errorRate).not.toBeNull();
+    expect(errorRate!.textContent).toContain("2.5%");
 
     unmount();
   });

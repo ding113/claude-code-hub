@@ -490,7 +490,7 @@
       "todayRequests": "Today Requests",
       "todayCost": "Today Cost",
       "avgResponseTime": "Avg Response Time",
-      "cacheHitRate": "Cache Hit Rate",
+      "errorRate": "Error Rate",
       "timeRange": {
         "today": "Today",
         "7days": "Last 7 Days",

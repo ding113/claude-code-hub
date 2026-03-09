@@ -490,7 +490,7 @@
       "todayRequests": "本日リクエスト",
       "todayCost": "本日コスト",
       "avgResponseTime": "平均応答時間",
-      "cacheHitRate": "キャッシュヒット率",
+      "errorRate": "エラー率",
       "timeRange": {
         "today": "今日",
         "7days": "過去7日間",
