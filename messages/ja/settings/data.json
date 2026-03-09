@@ -28,8 +28,10 @@
       "default": "{days}日前"
     },
     "rangeLabel": "クリーンアップ範囲",
+    "softDeletePurged": "{count}件の論理削除レコードも物理削除しました",
     "statisticsRetained": "✓ 統計データは保持されます（トレンド分析用）",
     "successMessage": "{count}件のログレコードをクリーンアップしました（{batches}バッチ、所要時間{duration}秒）",
+    "vacuumComplete": "データベース領域を回収しました",
     "willClean": "{range}のすべてのログレコードをクリーンアップします"
   },
   "description": "データベースのバックアップと復元を管理し、完全なインポート/エクスポートとログクリーンアップをサポートします。",

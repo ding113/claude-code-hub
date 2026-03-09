@@ -4,63 +4,56 @@ import { messageRequest } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
 
 /**
- * 日志清理条件
+ * Log cleanup conditions
  */
 export interface CleanupConditions {
-  // 时间范围
+  // Time range
   beforeDate?: Date;
   afterDate?: Date;
 
-  // 用户维度
+  // User dimension
   userIds?: number[];
 
-  // 供应商维度
+  // Provider dimension
   providerIds?: number[];
 
-  // 状态维度
-  statusCodes?: number[]; // 精确匹配状态码
+  // Status dimension
+  statusCodes?: number[];
   statusCodeRange?: {
-    // 状态码范围 (如 400-499)
     min: number;
     max: number;
   };
-  onlyBlocked?: boolean; // 仅被拦截的请求
+  onlyBlocked?: boolean;
 }
 
 /**
- * 清理选项
+ * Cleanup options
  */
 export interface CleanupOptions {
-  batchSize?: number; // 批量删除大小（默认 10000）
-  dryRun?: boolean; // 仅预览，不实际删除
+  batchSize?: number;
+  dryRun?: boolean;
 }
 
 /**
- * 清理结果
+ * Cleanup result
  */
 export interface CleanupResult {
   totalDeleted: number;
   batchCount: number;
   durationMs: number;
+  softDeletedPurged: number;
+  vacuumPerformed: boolean;
   error?: string;
 }
 
 /**
- * 触发信息
+ * Trigger info
  */
 export interface TriggerInfo {
   type: "manual" | "scheduled";
   user?: string;
 }
 
-/**
- * 执行日志清理
- *
- * @param conditions 清理条件
- * @param options 清理选项
- * @param triggerInfo 触发信息
- * @returns 清理结果
- */
 // NOTE: usage_ledger is intentionally immune to log cleanup.
 // Only message_request rows are deleted here.
 export async function cleanupLogs(
@@ -72,9 +65,10 @@ export async function cleanupLogs(
   const batchSize = options.batchSize || 10000;
   let totalDeleted = 0;
   let batchCount = 0;
+  let softDeletedPurged = 0;
+  let vacuumPerformed = false;
 
   try {
-    // 1. 构建 WHERE 条件
     const whereConditions = buildWhereConditions(conditions);
 
     if (whereConditions.length === 0) {
@@ -86,12 +80,13 @@ export async function cleanupLogs(
         totalDeleted: 0,
         batchCount: 0,
         durationMs: Date.now() - startTime,
-        error: "未指定任何清理条件",
+        softDeletedPurged: 0,
+        vacuumPerformed: false,
+        error: "No cleanup conditions specified",
       };
     }
 
     if (options.dryRun) {
-      // 仅统计数量
       const result = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(messageRequest)
@@ -107,10 +102,12 @@ export async function cleanupLogs(
         totalDeleted: result[0]?.count || 0,
         batchCount: 0,
         durationMs: Date.now() - startTime,
+        softDeletedPurged: 0,
+        vacuumPerformed: false,
       };
     }
 
-    // 2. 分批删除
+    // Main delete loop
     while (true) {
       const deleted = await deleteBatch(whereConditions, batchSize);
 
@@ -126,10 +123,17 @@ export async function cleanupLogs(
         totalDeleted,
       });
 
-      // 避免长时间锁表，短暂休息
       if (deleted === batchSize) {
         await sleep(100);
       }
+    }
+
+    // Purge soft-deleted records as fallback
+    softDeletedPurged = await purgeSoftDeleted(batchSize);
+
+    // VACUUM ANALYZE to reclaim disk space
+    if (totalDeleted > 0 || softDeletedPurged > 0) {
+      vacuumPerformed = await runVacuum();
     }
 
     const durationMs = Date.now() - startTime;
@@ -138,12 +142,14 @@ export async function cleanupLogs(
       action: "log_cleanup_complete",
       totalDeleted,
       batchCount,
+      softDeletedPurged,
+      vacuumPerformed,
       durationMs,
       triggerType: triggerInfo.type,
       user: triggerInfo.user,
     });
 
-    return { totalDeleted, batchCount, durationMs };
+    return { totalDeleted, batchCount, durationMs, softDeletedPurged, vacuumPerformed };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -159,21 +165,21 @@ export async function cleanupLogs(
       totalDeleted,
       batchCount,
       durationMs: Date.now() - startTime,
+      softDeletedPurged,
+      vacuumPerformed,
       error: errorMessage,
     };
   }
 }
 
 /**
- * 构建 WHERE 条件
+ * Build WHERE conditions for cleanup query.
+ * No deletedAt filter: cleanup should delete ALL matching records
+ * regardless of soft-delete status to actually reclaim space.
  */
-function buildWhereConditions(conditions: CleanupConditions): SQL[] {
+export function buildWhereConditions(conditions: CleanupConditions): SQL[] {
   const where: SQL[] = [];
 
-  // 排除软删除的记录（已经被软删除的不再处理）
-  where.push(sql`${messageRequest.deletedAt} IS NULL`);
-
-  // 时间范围
   if (conditions.beforeDate) {
     where.push(lte(messageRequest.createdAt, conditions.beforeDate));
   }
@@ -181,17 +187,14 @@ function buildWhereConditions(conditions: CleanupConditions): SQL[] {
     where.push(gte(messageRequest.createdAt, conditions.afterDate));
   }
 
-  // 用户维度
   if (conditions.userIds && conditions.userIds.length > 0) {
     where.push(inArray(messageRequest.userId, conditions.userIds));
   }
 
-  // 供应商维度
   if (conditions.providerIds && conditions.providerIds.length > 0) {
     where.push(inArray(messageRequest.providerId, conditions.providerIds));
   }
 
-  // 状态维度
   if (conditions.statusCodes && conditions.statusCodes.length > 0) {
     where.push(inArray(messageRequest.statusCode, conditions.statusCodes));
   }
@@ -212,40 +215,112 @@ function buildWhereConditions(conditions: CleanupConditions): SQL[] {
 }
 
 /**
- * 批量删除
- *
- * 使用 CTE (Common Table Expression) + DELETE 实现原子删除
- * 避免两步操作的竞态条件，性能更好
+ * Batch delete with CTE + RETURNING 1 for driver-agnostic row counting.
+ * Uses FOR UPDATE SKIP LOCKED to prevent deadlocks with concurrent jobs.
  */
 async function deleteBatch(whereConditions: SQL[], batchSize: number): Promise<number> {
-  // 使用 CTE 实现原子批量删除
   const result = await db.execute(sql`
     WITH ids_to_delete AS (
       SELECT id FROM message_request
       WHERE ${and(...whereConditions)}
       ORDER BY created_at ASC
       LIMIT ${batchSize}
-      FOR UPDATE
+      FOR UPDATE SKIP LOCKED
     )
     DELETE FROM message_request
     WHERE id IN (SELECT id FROM ids_to_delete)
+    RETURNING 1
   `);
 
   return getAffectedRows(result);
 }
 
-function getAffectedRows(result: unknown): number {
+/**
+ * Purge all soft-deleted records (deleted_at IS NOT NULL) in batches.
+ * Runs as fallback after main cleanup to ensure soft-deleted rows
+ * are also physically removed.
+ */
+async function purgeSoftDeleted(batchSize: number): Promise<number> {
+  let totalPurged = 0;
+
+  while (true) {
+    const result = await db.execute(sql`
+      WITH ids_to_delete AS (
+        SELECT id FROM message_request
+        WHERE deleted_at IS NOT NULL
+        ORDER BY created_at ASC
+        LIMIT ${batchSize}
+        FOR UPDATE SKIP LOCKED
+      )
+      DELETE FROM message_request
+      WHERE id IN (SELECT id FROM ids_to_delete)
+      RETURNING 1
+    `);
+
+    const deleted = getAffectedRows(result);
+    if (deleted === 0) break;
+
+    totalPurged += deleted;
+
+    logger.info({
+      action: "log_cleanup_soft_delete_purge",
+      deletedInBatch: deleted,
+      totalPurged,
+    });
+
+    if (deleted === batchSize) {
+      await sleep(100);
+    }
+  }
+
+  return totalPurged;
+}
+
+/**
+ * Run VACUUM ANALYZE to reclaim disk space after deletions.
+ * Failure is non-fatal: logged but does not fail the cleanup result.
+ */
+async function runVacuum(): Promise<boolean> {
+  try {
+    await db.execute(sql`VACUUM ANALYZE message_request`);
+    logger.info({ action: "log_cleanup_vacuum_complete" });
+    return true;
+  } catch (error) {
+    logger.warn({
+      action: "log_cleanup_vacuum_failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/**
+ * Extract affected row count from db.execute() result.
+ *
+ * Priority:
+ * 1. Array with length > 0 (RETURNING rows) -> result.length
+ * 2. result.count (postgres.js, may be BigInt)
+ * 3. result.rowCount (node-postgres)
+ * 4. 0
+ */
+export function getAffectedRows(result: unknown): number {
   if (!result || typeof result !== "object") {
     return 0;
   }
 
-  const r = result as { count?: unknown; rowCount?: unknown };
+  // RETURNING rows: postgres.js returns array of rows
+  if (Array.isArray(result) && result.length > 0) {
+    return result.length;
+  }
 
-  // postgres.js returns count as BigInt; node-postgres uses rowCount as number
+  const r = result as { count?: unknown; rowCount?: unknown; length?: unknown };
+
+  // postgres.js count (may be BigInt)
   if (r.count !== undefined) {
     return Number(r.count);
   }
 
+  // node-postgres rowCount
   if (typeof r.rowCount === "number") {
     return r.rowCount;
   }
@@ -253,9 +328,6 @@ function getAffectedRows(result: unknown): number {
   return 0;
 }
 
-/**
- * 休眠函数
- */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

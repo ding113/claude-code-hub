@@ -40,7 +40,9 @@
     "cancel": "取消",
     "confirm": "确认清理",
     "cleaning": "正在清理...",
+    "softDeletePurged": "另外清除了 {count} 条软删除记录",
     "successMessage": "成功清理 {count} 条日志记录（{batches} 批次，耗时 {duration}s）",
+    "vacuumComplete": "数据库空间已回收",
     "failed": "清理失败",
     "error": "清理日志失败",
     "descriptionWarning": "清理历史日志数据以释放数据库存储空间。注意：统计数据将被保留，但日志详情将被永久删除。"
