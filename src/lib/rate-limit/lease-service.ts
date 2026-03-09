@@ -43,6 +43,7 @@ export interface GetCostLeaseParams {
   limitAmount: number;
   resetTime?: string;
   resetMode?: DailyResetMode;
+  costResetAt?: Date | null;
 }
 
 /**
@@ -165,11 +166,17 @@ export class LeaseService {
       // Calculate time range for DB query
       const { startTime, endTime } = await getLeaseTimeRange(window, resetTime, resetMode);
 
+      // Clip startTime forward if costResetAt is more recent (limits-only reset)
+      const effectiveStartTime =
+        params.costResetAt instanceof Date && params.costResetAt > startTime
+          ? params.costResetAt
+          : startTime;
+
       // Query DB for current usage
       const currentUsage = await LeaseService.queryDbUsage(
         entityType,
         entityId,
-        startTime,
+        effectiveStartTime,
         endTime
       );
 

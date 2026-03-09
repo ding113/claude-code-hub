@@ -57,8 +57,10 @@ vi.mock("@/drizzle/db", () => ({
 
 vi.mock("@/lib/logger", () => ({
   logger: {
+    info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
+    debug: vi.fn(),
   },
 }));
 

@@ -51,6 +51,7 @@ export const users = pgTable('users', {
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
+  costResetAt: timestamp('cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
 
   // Daily quota reset mode (fixed: reset at specific time, rolling: 24h window)

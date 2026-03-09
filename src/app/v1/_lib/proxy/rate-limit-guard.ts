@@ -64,7 +64,7 @@ export class ProxyRateLimitGuard {
       key.id,
       "key",
       key.limitTotalUsd ?? null,
-      { keyHash: key.key }
+      { keyHash: key.key, resetAt: user.costResetAt }
     );
 
     if (!keyTotalCheck.allowed) {
@@ -94,7 +94,8 @@ export class ProxyRateLimitGuard {
     const userTotalCheck = await RateLimitService.checkTotalCostLimit(
       user.id,
       "user",
-      user.limitTotalUsd ?? null
+      user.limitTotalUsd ?? null,
+      { resetAt: user.costResetAt }
     );
 
     if (!userTotalCheck.allowed) {
@@ -229,6 +230,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null, // 仅检查 5h
       limit_weekly_usd: null,
       limit_monthly_usd: null,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!key5hCheck.allowed) {
@@ -265,6 +267,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null,
       limit_weekly_usd: null,
       limit_monthly_usd: null,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!user5hCheck.allowed) {
@@ -303,6 +306,7 @@ export class ProxyRateLimitGuard {
       daily_reset_time: key.dailyResetTime,
       limit_weekly_usd: null,
       limit_monthly_usd: null,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!keyDailyCheck.allowed) {
@@ -376,6 +380,7 @@ export class ProxyRateLimitGuard {
       daily_reset_mode: user.dailyResetMode,
       limit_weekly_usd: null,
       limit_monthly_usd: null,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!userDailyCheck.allowed) {
@@ -450,6 +455,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null,
       limit_weekly_usd: key.limitWeeklyUsd,
       limit_monthly_usd: null,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!keyWeeklyCheck.allowed) {
@@ -484,6 +490,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null,
       limit_weekly_usd: user.limitWeeklyUsd ?? null,
       limit_monthly_usd: null,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!userWeeklyCheck.allowed) {
@@ -520,6 +527,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null,
       limit_weekly_usd: null,
       limit_monthly_usd: key.limitMonthlyUsd,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!keyMonthlyCheck.allowed) {
@@ -556,6 +564,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null,
       limit_weekly_usd: null,
       limit_monthly_usd: user.limitMonthlyUsd ?? null,
+      cost_reset_at: user.costResetAt ?? null,
     });
 
     if (!userMonthlyCheck.allowed) {
