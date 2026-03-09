@@ -69,7 +69,7 @@ export function rectifyResponseInput(
   return {
     applied: false,
     action: "passthrough",
-    originalType: input === undefined || input === null ? "other" : "other",
+    originalType: "other",
   };
 }
 

@@ -427,6 +427,7 @@ export async function updateSystemSettings(
         interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
         enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+        enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
         enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
         enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
