@@ -193,21 +193,26 @@ export async function findAllLatestPricesPaginated(
   const total = Number(countResult.total);
 
   // 获取分页数据
+  // 子查询: DISTINCT ON 要求 ORDER BY 首列与其一致，用于去重选出每个模型的最优记录
+  // 外层: 按 updatedAt 降序排列，最近更新的模型排在前面
   const dataQuery = sql`
-    SELECT DISTINCT ON (model_name)
-      id,
-      model_name as "modelName",
-      price_data as "priceData",
-      source,
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    FROM model_prices
-    ${whereCondition}
-    ORDER BY
-      model_name,
-      (source = 'manual') DESC,
-      created_at DESC NULLS LAST,
-      id DESC
+    SELECT * FROM (
+      SELECT DISTINCT ON (model_name)
+        id,
+        model_name as "modelName",
+        price_data as "priceData",
+        source,
+        created_at as "createdAt",
+        updated_at as "updatedAt"
+      FROM model_prices
+      ${whereCondition}
+      ORDER BY
+        model_name,
+        (source = 'manual') DESC,
+        created_at DESC NULLS LAST,
+        id DESC
+    ) sub
+    ORDER BY sub."updatedAt" DESC NULLS LAST
     LIMIT ${pageSize} OFFSET ${offset}
   `;
 
