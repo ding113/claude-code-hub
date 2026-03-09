@@ -37,8 +37,8 @@ export interface ClientRestrictionsEditorProps {
     customBlockedPlaceholder: string;
     customHelp: string;
     presetClients: Record<string, string>;
-    subClients?: Record<string, string>;
-    nSelected?: string;
+    subClients: Record<string, string>;
+    nSelected: string;
   };
 }
 
@@ -95,21 +95,21 @@ export function ClientRestrictionsEditor({
       : isPresetSelected(blocked, preset.value)
         ? blocked
         : null;
-    if (!activeList) return translations.subClients?.all ?? "All";
+    if (!activeList) return translations.subClients.all;
     const selected = getSelectedChildren(activeList, preset);
     if (selected.length === 0 || selected.length === preset.children.length) {
-      return translations.subClients?.all ?? "All";
+      return translations.subClients.all;
     }
     if (selected.length <= 2) {
       return selected
         .map((v) => {
           const child = preset.children!.find((c) => c.value === v);
-          return child ? (translations.subClients?.[child.labelKey] ?? child.labelKey) : v;
+          return child ? (translations.subClients[child.labelKey]) : v;
         })
         .join(", ");
     }
     return (
-      translations.nSelected?.replace("{count}", String(selected.length)) ?? String(selected.length)
+      translations.nSelected.replace("{count}", String(selected.length))
     );
   };
 
@@ -163,7 +163,7 @@ export function ClientRestrictionsEditor({
                     htmlFor={`sub-all-${value}`}
                     className="text-sm font-normal cursor-pointer"
                   >
-                    {translations.subClients?.all ?? "All"}
+                    {translations.subClients.all}
                   </Label>
                 </div>
                 <div className="border-t my-1" />
@@ -189,7 +189,7 @@ export function ClientRestrictionsEditor({
                         htmlFor={`sub-${child.value}`}
                         className="text-sm font-normal cursor-pointer"
                       >
-                        {translations.subClients?.[child.labelKey] ?? child.labelKey}
+                        {translations.subClients[child.labelKey]}
                       </Label>
                     </div>
                   );

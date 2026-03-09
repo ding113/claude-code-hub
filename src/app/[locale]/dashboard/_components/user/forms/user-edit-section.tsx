@@ -120,8 +120,8 @@ export interface UserEditSectionProps {
       block: string;
     };
     presetClients: Record<string, string>;
-    subClients?: Record<string, string>;
-    nSelected?: string;
+    subClients: Record<string, string>;
+    nSelected: string;
     limitRules: {
       addRule: string;
       ruleTypes: Record<string, string>;

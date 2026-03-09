@@ -331,7 +331,7 @@
       "customAllowedPlaceholder": "例: my-ide、internal-tool",
       "customBlockedLabel": "カスタムブロックパターン",
       "customBlockedPlaceholder": "例: legacy-client",
-      "customHelp": "'*' なし：大文字小文字を区別しない部分一致（'-' と '_' は無視）。'*' あり：glob パターンマッチ（大文字小文字を区別しない、文字はそのまま一致）。",
+      "customHelp": "'*' なし：大文字小文字を区別しない部分一致（'-' と '_' は無視）。'*' あり：UA の先頭からの glob パターンマッチ（*foo* で任意の位置に一致; 大文字小文字を区別しない、文字はそのまま一致）。",
       "presetClients": {
         "claude-code": "Claude Code（すべて）",
         "gemini-cli": "Gemini CLI",

@@ -44,8 +44,8 @@ export interface AccessRestrictionsSectionProps {
       block: string;
     };
     presetClients: Record<string, string>;
-    subClients?: Record<string, string>;
-    nSelected?: string;
+    subClients: Record<string, string>;
+    nSelected: string;
   };
 }
 
