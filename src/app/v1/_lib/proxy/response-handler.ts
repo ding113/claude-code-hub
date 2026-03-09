@@ -275,6 +275,10 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 ): Promise<FinalizeDeferredStreamingResult> {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
+  const clearSessionBinding = async () => {
+    if (!session.sessionId) return;
+    await SessionManager.clearSessionProvider(session.sessionId);
+  };
 
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
 
@@ -320,6 +324,15 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       // 2xx 成功状态码
       errorMessage = null;
     }
+  }
+
+  const shouldClearSessionBindingOnFailure =
+    !streamEndedNormally ||
+    detected.isError ||
+    (upstreamStatusCode >= 400 && errorMessage !== null);
+
+  if ((!meta || !provider) && shouldClearSessionBindingOnFailure) {
+    await clearSessionBinding();
   }
 
   // 未启用延迟结算 / provider 缺失：
@@ -372,6 +385,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
   if (!streamEndedNormally) {
+    await clearSessionBinding();
+
     if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
@@ -404,6 +419,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   }
 
   if (detected.isError) {
+    await clearSessionBinding();
+
     logger.warn("[ResponseHandler] SSE completed but body indicates error (fake 200)", {
       providerId: meta.providerId,
       providerName: meta.providerName,
@@ -457,6 +474,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
   // ========== 非200状态码处理（流自然结束但HTTP状态码表示错误）==========
   if (upstreamStatusCode >= 400 && errorMessage !== null) {
+    await clearSessionBinding();
+
     logger.warn("[ResponseHandler] SSE completed but HTTP status indicates error", {
       providerId: meta.providerId,
       providerName: meta.providerName,
@@ -784,11 +803,12 @@ export class ProxyResponseHandler {
 
     const processingPromise = (async () => {
       const finalizeNonStreamAbort = async (): Promise<void> => {
+        const finalizedStatusCode = session.clientAbortSignal?.aborted ? 499 : statusCode;
         if (messageContext) {
           const duration = Date.now() - session.startTime;
           await updateMessageRequestDuration(messageContext.id, duration);
           await updateMessageRequestDetails(messageContext.id, {
-            statusCode: statusCode,
+            statusCode: finalizedStatusCode,
             ttfbMs: session.ttfbMs ?? duration,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
@@ -801,9 +821,11 @@ export class ProxyResponseHandler {
         }
 
         if (session.sessionId) {
+          await SessionManager.clearSessionProvider(session.sessionId);
+
           const sessionUsagePayload: SessionUsageUpdate = {
-            status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-            statusCode: statusCode,
+            status: finalizedStatusCode >= 200 && finalizedStatusCode < 300 ? "completed" : "error",
+            statusCode: finalizedStatusCode,
           };
 
           void SessionManager.updateSessionUsage(session.sessionId, sessionUsagePayload).catch(
@@ -1274,10 +1296,12 @@ export class ProxyResponseHandler {
           const pushChunk = (text: string, bytes: number) => {
             if (!text) return;
 
-            const pushToTail = () => {
-              tailChunks.push(text);
-              tailChunkBytes.push(bytes);
-              tailBufferedBytes += bytes;
+            const pushToTail = (tailText: string, tailBytes: number) => {
+              if (!tailText) return;
+
+              tailChunks.push(tailText);
+              tailChunkBytes.push(tailBytes);
+              tailBufferedBytes += tailBytes;
 
               // 仅保留尾部窗口，避免内存无界增长
               while (tailBufferedBytes > MAX_STATS_TAIL_BYTES && tailHead < tailChunkBytes.length) {
@@ -1317,13 +1341,13 @@ export class ProxyResponseHandler {
                 pushChunk(headPart, remainingHeadBytes);
 
                 inTailMode = true;
-                pushChunk(tailPart, bytes - remainingHeadBytes);
+                pushToTail(tailPart, bytes - remainingHeadBytes);
               } else {
                 headChunks.push(text);
                 headBufferedBytes += bytes;
               }
             } else {
-              pushChunk(text, bytes);
+              pushToTail(text, bytes);
             }
           };
           const decoder = new TextDecoder();

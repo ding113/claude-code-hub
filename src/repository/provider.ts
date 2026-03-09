@@ -4,6 +4,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm"
 import { db } from "@/drizzle/db";
 import { providerEndpoints, providers } from "@/drizzle/schema";
 import { getCachedProviders } from "@/lib/cache/provider-cache";
+import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { resetEndpointCircuit } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
@@ -210,9 +211,14 @@ export async function createProvider(providerData: CreateProviderData): Promise<
       providerData.circuit_breaker_half_open_success_threshold ?? 2,
     proxyUrl: providerData.proxy_url ?? null,
     proxyFallbackToDirect: providerData.proxy_fallback_to_direct ?? false,
-    firstByteTimeoutStreamingMs: providerData.first_byte_timeout_streaming_ms ?? 30000,
-    streamingIdleTimeoutMs: providerData.streaming_idle_timeout_ms ?? 10000,
-    requestTimeoutNonStreamingMs: providerData.request_timeout_non_streaming_ms ?? 600000,
+    firstByteTimeoutStreamingMs:
+      providerData.first_byte_timeout_streaming_ms ??
+      PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
+    streamingIdleTimeoutMs:
+      providerData.streaming_idle_timeout_ms ?? PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
+    requestTimeoutNonStreamingMs:
+      providerData.request_timeout_non_streaming_ms ??
+      PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
     websiteUrl: providerData.website_url ?? null,
     faviconUrl: providerData.favicon_url ?? null,
     cacheTtlPreference: providerData.cache_ttl_preference ?? null,

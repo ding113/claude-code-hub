@@ -58,6 +58,7 @@ vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     updateSessionUsage: vi.fn(),
     storeSessionResponse: vi.fn(),
+    clearSessionProvider: vi.fn(),
     extractCodexPromptCacheKey: vi.fn(),
     updateSessionWithCodexCacheKey: vi.fn(),
   },
@@ -162,7 +163,7 @@ function createSession(opts?: { sessionId?: string | null }): ProxySession {
       key,
       apiKey: "sk-test",
     },
-    sessionId: opts?.sessionId ?? null,
+    sessionId: opts?.sessionId ?? "fake-session",
     requestSequence: 1,
     originalFormat: "claude",
     providerType: null,
@@ -325,6 +326,7 @@ function setupCommonMocks() {
   vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
   vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
   vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+  vi.mocked(SessionManager.clearSessionProvider).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.trackCost).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
   vi.mocked(RateLimitService.decrementLeaseBudget).mockResolvedValue({
@@ -360,6 +362,7 @@ describe("Endpoint circuit breaker isolation", () => {
       expect.objectContaining({ message: expect.stringContaining("FAKE_200") })
     );
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
 
     const chain = session.getProviderChain();
     expect(
@@ -383,6 +386,7 @@ describe("Endpoint circuit breaker isolation", () => {
 
     expect(mockRecordFailure).not.toHaveBeenCalled();
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+    expect(SessionManager.clearSessionProvider).toHaveBeenCalledWith("fake-session");
 
     const chain = session.getProviderChain();
     expect(

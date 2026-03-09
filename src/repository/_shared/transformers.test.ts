@@ -202,9 +202,9 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.maxRetryAttempts).toBe(3);
       expect(result.circuitBreakerFailureThreshold).toBe(5);
       expect(result.circuitBreakerOpenDuration).toBe(1800000);
-      expect(result.firstByteTimeoutStreamingMs).toBe(30000);
-      expect(result.streamingIdleTimeoutMs).toBe(10000);
-      expect(result.requestTimeoutNonStreamingMs).toBe(600000);
+      expect(result.firstByteTimeoutStreamingMs).toBe(0);
+      expect(result.streamingIdleTimeoutMs).toBe(0);
+      expect(result.requestTimeoutNonStreamingMs).toBe(0);
       expect(result.createdAt).toEqual(now);
       expect(result.updatedAt).toEqual(now);
     });

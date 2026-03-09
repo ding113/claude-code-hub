@@ -31,7 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PROVIDER_LIMITS } from "@/lib/constants/provider.constants";
+import { PROVIDER_LIMITS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -375,18 +375,18 @@ export function ProviderListItem({
           <span className="font-medium text-foreground/80">超时配置:</span>
           <span className="tabular-nums">
             {tTimeout("summary", {
-              streaming:
-                item.firstByteTimeoutStreamingMs === 0
-                  ? "∞"
-                  : ((item.firstByteTimeoutStreamingMs || 30000) / 1000).toString(),
-              idle:
-                item.streamingIdleTimeoutMs === 0
-                  ? "∞"
-                  : ((item.streamingIdleTimeoutMs || 10000) / 1000).toString(),
-              nonStreaming:
-                item.requestTimeoutNonStreamingMs === 0
-                  ? "∞"
-                  : ((item.requestTimeoutNonStreamingMs || 600000) / 1000).toString(),
+              streaming: (
+                (item.firstByteTimeoutStreamingMs ??
+                  PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS) / 1000
+              ).toString(),
+              idle: (
+                (item.streamingIdleTimeoutMs ??
+                  PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS) / 1000
+              ).toString(),
+              nonStreaming: (
+                (item.requestTimeoutNonStreamingMs ??
+                  PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS) / 1000
+              ).toString(),
             })}
           </span>
         </div>

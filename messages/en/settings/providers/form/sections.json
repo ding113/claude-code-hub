@@ -405,7 +405,7 @@
     "disableHint": "Set to 0 to disable the timeout (for canary rollback scenarios only, not recommended)",
     "nonStreamingTotal": {
       "core": "true",
-      "desc": "Non-streaming request total timeout, range 60-1200 seconds, enter 0 to disable (default: no limit)",
+      "desc": "Non-streaming request total timeout, range 60-1800 seconds, enter 0 to disable (default: no limit)",
       "label": "Non-streaming Total Timeout (seconds)",
       "placeholder": "0"
     },
