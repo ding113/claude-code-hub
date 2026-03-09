@@ -1,4 +1,4 @@
-import { and, between, gte, inArray, isNotNull, lte, type SQL, sql } from "drizzle-orm";
+import { and, between, gte, inArray, isNotNull, isNull, lte, type SQL, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { messageRequest } from "@/drizzle/schema";
 import { logger } from "@/lib/logger";
@@ -54,6 +54,8 @@ export interface TriggerInfo {
   user?: string;
 }
 
+const BATCH_SLEEP_MS = 100;
+
 // NOTE: usage_ledger is intentionally immune to log cleanup.
 // Only message_request rows are deleted here.
 export async function cleanupLogs(
@@ -107,9 +109,12 @@ export async function cleanupLogs(
       };
     }
 
-    // Main delete loop
+    // Main delete loop: only active rows (deleted_at IS NULL) to leverage partial indexes.
+    // Soft-deleted rows are handled separately by purgeSoftDeleted with the same scope.
+    const activeConditions = [...whereConditions, isNull(messageRequest.deletedAt)];
+
     while (true) {
-      const deleted = await deleteBatch(whereConditions, batchSize);
+      const deleted = await deleteBatch(activeConditions, batchSize);
 
       if (deleted === 0) break;
 
@@ -124,12 +129,12 @@ export async function cleanupLogs(
       });
 
       if (deleted === batchSize) {
-        await sleep(100);
+        await sleep(BATCH_SLEEP_MS);
       }
     }
 
-    // Purge soft-deleted records as fallback
-    softDeletedPurged = await purgeSoftDeleted(batchSize);
+    // Purge soft-deleted records scoped to the same cleanup conditions
+    softDeletedPurged = await purgeSoftDeleted(whereConditions, batchSize);
 
     // VACUUM ANALYZE to reclaim disk space
     if (totalDeleted > 0 || softDeletedPurged > 0) {
@@ -174,8 +179,8 @@ export async function cleanupLogs(
 
 /**
  * Build WHERE conditions for cleanup query.
- * No deletedAt filter: cleanup should delete ALL matching records
- * regardless of soft-delete status to actually reclaim space.
+ * Does NOT include deleted_at filter: the caller decides whether to target
+ * active rows (deleteBatch) or soft-deleted rows (purgeSoftDeleted).
  */
 export function buildWhereConditions(conditions: CleanupConditions): SQL[] {
   const where: SQL[] = [];
@@ -236,18 +241,18 @@ async function deleteBatch(whereConditions: SQL[], batchSize: number): Promise<n
 }
 
 /**
- * Purge all soft-deleted records (deleted_at IS NOT NULL) in batches.
- * Runs as fallback after main cleanup to ensure soft-deleted rows
- * are also physically removed.
+ * Purge soft-deleted records (deleted_at IS NOT NULL) in batches,
+ * scoped to the same cleanup conditions to avoid deleting beyond the user's intent.
  */
-async function purgeSoftDeleted(batchSize: number): Promise<number> {
+async function purgeSoftDeleted(whereConditions: SQL[], batchSize: number): Promise<number> {
   let totalPurged = 0;
+  const purgeConditions = [...whereConditions, isNotNull(messageRequest.deletedAt)];
 
   while (true) {
     const result = await db.execute(sql`
       WITH ids_to_delete AS (
         SELECT id FROM message_request
-        WHERE deleted_at IS NOT NULL
+        WHERE ${and(...purgeConditions)}
         ORDER BY created_at ASC
         LIMIT ${batchSize}
         FOR UPDATE SKIP LOCKED
@@ -269,7 +274,7 @@ async function purgeSoftDeleted(batchSize: number): Promise<number> {
     });
 
     if (deleted === batchSize) {
-      await sleep(100);
+      await sleep(BATCH_SLEEP_MS);
     }
   }
 
@@ -278,6 +283,9 @@ async function purgeSoftDeleted(batchSize: number): Promise<number> {
 
 /**
  * Run VACUUM ANALYZE to reclaim disk space after deletions.
+ * NOTE: VACUUM cannot run inside a PostgreSQL transaction block.
+ * Drizzle's db.execute() typically runs outside transactions, but if the
+ * connection pool or middleware wraps calls, VACUUM will fail silently here.
  * Failure is non-fatal: logged but does not fail the cleanup result.
  */
 async function runVacuum(): Promise<boolean> {
@@ -313,7 +321,7 @@ export function getAffectedRows(result: unknown): number {
     return result.length;
   }
 
-  const r = result as { count?: unknown; rowCount?: unknown; length?: unknown };
+  const r = result as { count?: unknown; rowCount?: unknown };
 
   // postgres.js count (may be BigInt)
   if (r.count !== undefined) {
