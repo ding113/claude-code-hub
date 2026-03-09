@@ -1848,8 +1848,8 @@
         "all": "全部",
         "cli": "CLI",
         "vscode": "VS Code",
-        "sdk-ts": "SDK (TypeScript)",
-        "sdk-py": "SDK (Python)",
+        "sdk-ts": "SDK（TypeScript）",
+        "sdk-py": "SDK（Python）",
         "cli-sdk": "CLI SDK",
         "gh-action": "GitHub Action"
       },

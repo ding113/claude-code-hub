@@ -1039,7 +1039,7 @@
       "label": "許可されたクライアント",
       "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空の場合は制限なし。",
       "customLabel": "カスタムクライアントパターン",
-      "customPlaceholder": "パターンを入力（例: 'my-ide'、'codex-*'）"
+      "customPlaceholder": "パターンを入力(例: 'my-ide'、'codex-*')"
     },
     "allowedModels": {
       "label": "許可モデル",
@@ -1790,15 +1790,15 @@
           "label": "クライアント制限",
           "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空欄は制限なし。",
           "customLabel": "カスタムクライアントパターン",
-          "customPlaceholder": "パターンを入力（例: 'my-ide'、'codex-*'）",
-          "customHelp": "'*' なし：大文字小文字を区別しない部分一致（'-' と '_' は無視）。'*' あり：glob パターンマッチ（大文字小文字を区別しない、文字はそのまま一致）。"
+          "customPlaceholder": "パターンを入力(例: 'my-ide'、'codex-*')",
+          "customHelp": "'*' なし：大文字小文字を区別しない部分一致('-' と '_' は無視)。'*' あり：glob パターンマッチ(大文字小文字を区別しない、文字はそのまま一致)。"
         },
         "blockedClients": {
           "label": "ブロックするクライアント",
           "description": "これらのパターンに一致するクライアントは、許可リストに一致しても拒否されます。",
           "customLabel": "カスタムブロックパターン",
-          "customPlaceholder": "パターンを入力（例: 'my-ide'、'codex-*'）",
-          "customHelp": "'*' なし：大文字小文字を区別しない部分一致（'-' と '_' は無視）。'*' あり：glob パターンマッチ（大文字小文字を区別しない、文字はそのまま一致）。"
+          "customPlaceholder": "パターンを入力(例: 'my-ide'、'codex-*')",
+          "customHelp": "'*' なし：大文字小文字を区別しない部分一致('-' と '_' は無視)。'*' あり：glob パターンマッチ(大文字小文字を区別しない、文字はそのまま一致)。"
         },
         "allowedModels": {
           "label": "モデル制限",
