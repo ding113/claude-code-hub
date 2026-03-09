@@ -342,6 +342,35 @@ describe("client-detector", () => {
       const session = createMockSession({ userAgent: "codex_cli/2.0" });
       expect(matchClientPattern(session, "codex_*")).toBe(true);
     });
+
+    test("consecutive wildcards ** should behave like single *", () => {
+      const session = createMockSession({ userAgent: "codex-cli/2.0" });
+      expect(matchClientPattern(session, "codex-**")).toBe(true);
+      expect(matchClientPattern(session, "**codex**")).toBe(true);
+    });
+
+    test("glob should handle regex metacharacters literally", () => {
+      const session = createMockSession({ userAgent: "foo.bar/1.0" });
+      expect(matchClientPattern(session, "foo.bar*")).toBe(true);
+      expect(matchClientPattern(session, "foo*bar*")).toBe(true);
+      const session2 = createMockSession({ userAgent: "fooXbar/1.0" });
+      expect(matchClientPattern(session2, "foo.bar*")).toBe(false);
+    });
+
+    test("glob should handle brackets and parens literally", () => {
+      const session = createMockSession({ userAgent: "tool[v2]/1.0" });
+      expect(matchClientPattern(session, "tool[v2]*")).toBe(true);
+    });
+
+    test("pathological glob pattern completes quickly without ReDoS", () => {
+      const session = createMockSession({ userAgent: `${"a".repeat(32)}b` });
+      const pattern = "*a*a*a*a*a*a*a*a*c";
+      const start = performance.now();
+      const result = matchClientPattern(session, pattern);
+      const elapsed = performance.now() - start;
+      expect(result).toBe(false);
+      expect(elapsed).toBeLessThan(50);
+    });
   });
 
   describe("isClientAllowed", () => {

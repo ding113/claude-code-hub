@@ -33,13 +33,31 @@ export interface ClientRestrictionResult {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
 
-function globToRegex(pattern: string): RegExp {
-  const escaped = pattern
-    .toLowerCase()
-    .split("*")
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join(".*");
-  return new RegExp(`^${escaped}$`, "i");
+function globMatch(pattern: string, text: string): boolean {
+  const lp = pattern.toLowerCase();
+  const lt = text.toLowerCase();
+  let pi = 0;
+  let ti = 0;
+  let starPi = -1;
+  let starTi = -1;
+  while (ti < lt.length) {
+    if (pi < lp.length && lp[pi] === lt[ti]) {
+      pi++;
+      ti++;
+    } else if (pi < lp.length && lp[pi] === "*") {
+      starPi = pi;
+      starTi = ti;
+      pi++;
+    } else if (starPi >= 0) {
+      pi = starPi + 1;
+      starTi++;
+      ti = starTi;
+    } else {
+      return false;
+    }
+  }
+  while (pi < lp.length && lp[pi] === "*") pi++;
+  return pi === lp.length;
 }
 
 const ENTRYPOINT_MAP: Record<string, string> = {
@@ -114,7 +132,7 @@ export function matchClientPattern(session: ProxySession, pattern: string): bool
     }
 
     if (pattern.includes("*")) {
-      return globToRegex(pattern).test(ua);
+      return globMatch(pattern, ua);
     }
 
     const normalizedPattern = normalize(pattern);
@@ -152,7 +170,7 @@ export function detectClientFull(session: ProxySession, pattern: string): Client
     const ua = session.userAgent?.trim();
     if (ua) {
       if (pattern.includes("*")) {
-        matched = globToRegex(pattern).test(ua);
+        matched = globMatch(pattern, ua);
       } else {
         const normalizedPattern = normalize(pattern);
         if (normalizedPattern !== "") {
@@ -205,21 +223,12 @@ export function isClientAllowedDetailed(
   const detectedClient = subClient || ua || undefined;
   const hasBuiltinKeyword =
     checkedAllowlist.some(isBuiltinKeyword) || checkedBlocklist.some(isBuiltinKeyword);
-  const globCache = new Map<string, RegExp>();
-  const getGlobRegex = (p: string) => {
-    let re = globCache.get(p);
-    if (!re) {
-      re = globToRegex(p);
-      globCache.set(p, re);
-    }
-    return re;
-  };
 
   const matches = (pattern: string): boolean => {
     if (!isBuiltinKeyword(pattern)) {
       if (!ua) return false;
       if (pattern.includes("*")) {
-        return getGlobRegex(pattern).test(ua);
+        return globMatch(pattern, ua);
       }
       const normalizedPattern = normalize(pattern);
       return normalizedPattern !== "" && normalizedUa.includes(normalizedPattern);
