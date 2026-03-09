@@ -56,7 +56,11 @@
     "initial_selection": "Initial Selection",
     "endpoint_pool_exhausted": "Endpoint Pool Exhausted",
     "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout",
-    "client_restriction_filtered": "Client Restricted"
+    "client_restriction_filtered": "Client Restricted",
+    "client_abort": "Client Aborted",
+    "hedge_triggered": "Hedge Triggered",
+    "hedge_winner": "Hedge Winner",
+    "hedge_loser_cancelled": "Hedge Loser Cancelled"
   },
   "filterReasons": {
     "rate_limited": "Rate Limited",

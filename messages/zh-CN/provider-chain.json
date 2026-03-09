@@ -56,7 +56,11 @@
     "initial_selection": "首次选择",
     "endpoint_pool_exhausted": "端点池耗尽",
     "vendor_type_all_timeout": "供应商类型全端点超时",
-    "client_restriction_filtered": "客户端受限"
+    "client_restriction_filtered": "客户端受限",
+    "client_abort": "客户端断开",
+    "hedge_triggered": "首字节超时触发 Hedge",
+    "hedge_winner": "Hedge 竞速胜出",
+    "hedge_loser_cancelled": "Hedge 竞速落败"
   },
   "filterReasons": {
     "rate_limited": "速率限制",

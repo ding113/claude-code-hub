@@ -1022,10 +1022,23 @@ export class ProxyForwarder {
               totalProvidersAttempted,
             });
 
+            // 清理 session provider 绑定（仅在首次尝试时清理，避免清理已成功的绑定）
+            if (session.sessionId && attemptCount === 1) {
+              const { SessionManager } = await import("@/lib/session-manager");
+              await SessionManager.clearSessionProvider(session.sessionId);
+              logger.debug(
+                "ProxyForwarder: Cleared session binding due to client abort on first attempt",
+                {
+                  sessionId: session.sessionId,
+                  providerId: currentProvider.id,
+                }
+              );
+            }
+
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
               ...endpointAudit,
-              reason: "system_error", // 使用 system_error 作为客户端中断的原因
+              reason: "client_abort", // 使用 client_abort 作为客户端中断的原因
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
               errorMessage: "Client aborted request",
