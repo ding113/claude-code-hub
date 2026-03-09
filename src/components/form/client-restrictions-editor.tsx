@@ -104,13 +104,11 @@ export function ClientRestrictionsEditor({
       return selected
         .map((v) => {
           const child = preset.children!.find((c) => c.value === v);
-          return child ? (translations.subClients[child.labelKey]) : v;
+          return child ? translations.subClients[child.labelKey] : v;
         })
         .join(", ");
     }
-    return (
-      translations.nSelected.replace("{count}", String(selected.length))
-    );
+    return translations.nSelected.replace("{count}", String(selected.length));
   };
 
   const handleCustomAllowedChange = (newCustom: string[]) => {
