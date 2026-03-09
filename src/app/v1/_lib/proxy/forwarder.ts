@@ -2957,17 +2957,11 @@ export class ProxyForwarder {
         );
         if (!alternativeProvider) {
           noMoreProviders = true;
-          if (attempts.size > 0) {
-            lastError =
-              lastError ??
-              new ProxyError("Streaming first byte timeout", 524, {
-                body: "",
-                providerId: initialProvider.id,
-                providerName: initialProvider.name,
-              });
-            abortAllAttempts(undefined, "streaming_first_byte_timeout");
+          // No alternative providers available — let in-flight attempt(s) continue.
+          // If all attempts already completed, settle with last error.
+          if (attempts.size === 0) {
+            await finishIfExhausted();
           }
-          await finishIfExhausted();
           return;
         }
 
