@@ -18,7 +18,8 @@ export type SpecialSetting =
   | AnthropicContext1mHeaderOverrideSpecialSetting
   | GeminiGoogleSearchOverrideSpecialSetting
   | PricingResolutionSpecialSetting
-  | CodexServiceTierResultSpecialSetting;
+  | CodexServiceTierResultSpecialSetting
+  | ResponseInputRectifierSpecialSetting;
 
 export type SpecialSettingChangeValue = string | number | boolean | null;
 
@@ -224,4 +225,18 @@ export type CodexServiceTierResultSpecialSetting = {
   requestedServiceTier: string | null;
   actualServiceTier: string | null;
   effectivePriority: boolean;
+};
+
+/**
+ * Response Input 整流器审计
+ *
+ * 用于记录：当 /v1/responses 端点收到非数组格式的 input 时，
+ * 系统自动将其规范化为数组格式的行为，便于在请求日志中审计。
+ */
+export type ResponseInputRectifierSpecialSetting = {
+  type: "response_input_rectifier";
+  scope: "request";
+  hit: boolean;
+  action: "string_to_array" | "object_to_array" | "empty_string_to_empty_array" | "passthrough";
+  originalType: "string" | "object" | "array" | "other";
 };

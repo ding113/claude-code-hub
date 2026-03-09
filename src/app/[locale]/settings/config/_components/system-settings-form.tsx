@@ -56,6 +56,7 @@ interface SystemSettingsFormProps {
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
     | "enableBillingHeaderRectifier"
+    | "enableResponseInputRectifier"
     | "enableThinkingBudgetRectifier"
     | "enableCodexSessionIdCompletion"
     | "enableClaudeMetadataUserIdInjection"
@@ -104,6 +105,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   );
   const [enableBillingHeaderRectifier, setEnableBillingHeaderRectifier] = useState(
     initialSettings.enableBillingHeaderRectifier
+  );
+  const [enableResponseInputRectifier, setEnableResponseInputRectifier] = useState(
+    initialSettings.enableResponseInputRectifier
   );
   const [enableThinkingBudgetRectifier, setEnableThinkingBudgetRectifier] = useState(
     initialSettings.enableThinkingBudgetRectifier
@@ -172,6 +176,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
         enableBillingHeaderRectifier,
+        enableResponseInputRectifier,
         enableThinkingBudgetRectifier,
         enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection,
@@ -201,6 +206,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableBillingHeaderRectifier(result.data.enableBillingHeaderRectifier);
+        setEnableResponseInputRectifier(result.data.enableResponseInputRectifier);
         setEnableThinkingBudgetRectifier(result.data.enableThinkingBudgetRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableClaudeMetadataUserIdInjection(result.data.enableClaudeMetadataUserIdInjection);
@@ -472,6 +478,29 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             id="enable-billing-header-rectifier"
             checked={enableBillingHeaderRectifier}
             onCheckedChange={(checked) => setEnableBillingHeaderRectifier(checked)}
+            disabled={isPending}
+          />
+        </div>
+
+        {/* Enable Response Input Rectifier */}
+        <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between hover:bg-white/[0.04] transition-colors">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-sky-500/10 text-sky-400 shrink-0">
+              <FileCode className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                {t("enableResponseInputRectifier")}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {t("enableResponseInputRectifierDesc")}
+              </p>
+            </div>
+          </div>
+          <Switch
+            id="enable-response-input-rectifier"
+            checked={enableResponseInputRectifier}
+            onCheckedChange={(checked) => setEnableResponseInputRectifier(checked)}
             disabled={isPending}
           />
         </div>

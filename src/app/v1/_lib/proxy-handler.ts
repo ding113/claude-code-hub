@@ -9,6 +9,7 @@ import { detectClientFormat, detectFormatByEndpoint } from "./proxy/format-mappe
 import { ProxyForwarder } from "./proxy/forwarder";
 import { GuardPipelineBuilder } from "./proxy/guard-pipeline";
 import { ProxyResponseHandler } from "./proxy/response-handler";
+import { normalizeResponseInput } from "./proxy/response-input-rectifier";
 import { ProxyResponses } from "./proxy/responses";
 import { ProxySession } from "./proxy/session";
 
@@ -47,6 +48,11 @@ export async function handleProxyRequest(c: Context): Promise<Response> {
           });
         }
       }
+    }
+
+    // Response API input rectifier: normalize non-array input before guard pipeline
+    if (session.originalFormat === "response") {
+      await normalizeResponseInput(session);
     }
 
     // Build guard pipeline from session endpoint policy

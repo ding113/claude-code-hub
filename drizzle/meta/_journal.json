@@ -554,6 +554,13 @@
       "when": 1772782546382,
       "tag": "0078_remarkable_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1772994859188,
+      "tag": "0079_easy_zeigeist",
+      "breakpoints": true
     }
   ]
 }
