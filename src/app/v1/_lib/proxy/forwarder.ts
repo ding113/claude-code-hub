@@ -2965,9 +2965,29 @@ export class ProxyForwarder {
         }
 
         await startAttempt(alternativeProvider, false);
-      })().finally(() => {
-        launchingAlternative = null;
-      });
+      })()
+        .catch(async (error) => {
+          const normalizedError = error instanceof Error ? error : new Error(String(error));
+
+          logger.error("ProxyForwarder: Hedge failed to launch alternative provider", {
+            error: normalizedError,
+            sessionId: session.sessionId ?? null,
+            providerId: initialProvider.id,
+            providerName: initialProvider.name,
+          });
+
+          lastError = new ProxyError("No available providers", 503, {
+            body: "",
+            providerId: initialProvider.id,
+            providerName: initialProvider.name,
+          });
+          noMoreProviders = true;
+          abortAllAttempts(undefined, "hedge_launch_failed");
+          await finishIfExhausted();
+        })
+        .finally(() => {
+          launchingAlternative = null;
+        });
 
       await launchingAlternative;
     };
@@ -3179,6 +3199,10 @@ export class ProxyForwarder {
             } catch {
               // ignore
             }
+            const cancelPromise = response.body?.cancel("hedge_loser");
+            cancelPromise?.catch(() => {
+              // ignore
+            });
             return;
           }
 
@@ -3305,10 +3329,21 @@ export class ProxyForwarder {
           strictBlockCause: endpointSelectionError ? "selector_error" : "no_endpoint_candidates",
           errorMessage: endpointSelectionError?.message,
         });
-        throw (
-          endpointSelectionError ??
-          new ProxyError("No available provider endpoints", 503, { body: "" })
-        );
+
+        if (endpointSelectionError) {
+          logger.warn("[ProxyForwarder] Failed to load provider endpoints (strict pool)", {
+            providerId: provider.id,
+            vendorId: providerVendorId,
+            providerType: provider.providerType,
+            error: endpointSelectionError.message,
+          });
+        }
+
+        throw new ProxyError("No available provider endpoints", 503, {
+          body: "",
+          providerId: provider.id,
+          providerName: provider.name,
+        });
       }
 
       const sanitizedUrl = sanitizeUrl(provider.url);

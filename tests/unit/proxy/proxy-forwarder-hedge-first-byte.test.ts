@@ -514,4 +514,82 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       vi.useRealTimers();
     }
   });
+
+  test("hedge launcher rejection should settle request instead of hanging", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({ id: 1, name: "p1", firstByteTimeoutStreamingMs: 100 });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion.mockRejectedValueOnce(new Error("selector down"));
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p1",
+          firstChunkDelayMs: 500,
+          controller: controller1,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+      const rejection = expect(responsePromise).rejects.toMatchObject({
+        statusCode: 503,
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      await vi.runAllTimersAsync();
+
+      await rejection;
+      expect(controller1.signal.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("strict endpoint pool errors should reject with sanitized ProxyError instead of raw selector error", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: 123,
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      session.requestUrl = new URL("https://example.com/v1/messages");
+      session.setProvider(provider1);
+
+      mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(new Error("Redis connection lost"));
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(null);
+
+      const responsePromise = ProxyForwarder.send(session);
+      const rejection = expect(responsePromise).rejects.toMatchObject({
+        statusCode: 503,
+        message: "No available provider endpoints",
+      });
+
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
