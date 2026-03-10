@@ -30,6 +30,7 @@ export async function UsageLogsDataSection({
 }: UsageLogsDataSectionProps) {
   const resolvedSearchParams = await searchParams;
   const serverTimeZone = await resolveSystemTimezone();
+  const systemSettings = await getCachedSystemSettings();
 
   return (
     <UsageLogsViewVirtualized
@@ -37,6 +38,8 @@ export async function UsageLogsDataSection({
       userId={userId}
       searchParams={resolvedSearchParams}
       serverTimeZone={serverTimeZone}
+      billingModelSource={systemSettings.billingModelSource}
+      currencyCode={systemSettings.currencyDisplay}
     />
   );
 }
