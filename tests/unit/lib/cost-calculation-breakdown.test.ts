@@ -101,6 +101,66 @@ describe("calculateRequestCostBreakdown", () => {
     expect(result.input).toBeCloseTo(1.8, 4);
   });
 
+  test("uses priority long-context pricing fields in breakdown when available", () => {
+    const result = calculateRequestCostBreakdown(
+      {
+        input_tokens: 272001,
+        output_tokens: 2,
+        cache_read_input_tokens: 10,
+      },
+      makePriceData({
+        mode: "responses",
+        model_family: "gpt",
+        input_cost_per_token_priority: 2,
+        output_cost_per_token_priority: 20,
+        cache_read_input_token_cost_priority: 0.2,
+        input_cost_per_token_above_272k_tokens: 5,
+        output_cost_per_token_above_272k_tokens: 50,
+        cache_read_input_token_cost_above_272k_tokens: 0.5,
+        input_cost_per_token_above_272k_tokens_priority: 7,
+        output_cost_per_token_above_272k_tokens_priority: 70,
+        cache_read_input_token_cost_above_272k_tokens_priority: 0.7,
+      }),
+      false,
+      true
+    );
+
+    expect(result.input).toBe(1904007);
+    expect(result.output).toBe(140);
+    expect(result.cache_read).toBe(7);
+    expect(result.total).toBe(1904154);
+  });
+
+  test("falls back to regular long-context pricing in breakdown when priority long-context fields are absent", () => {
+    const result = calculateRequestCostBreakdown(
+      {
+        input_tokens: 272001,
+        output_tokens: 2,
+        cache_read_input_tokens: 10,
+      },
+      makePriceData({
+        mode: "responses",
+        model_family: "gpt",
+        input_cost_per_token_priority: 2,
+        output_cost_per_token_priority: 20,
+        cache_read_input_token_cost_priority: 0.2,
+        input_cost_per_token_above_272k_tokens: 5,
+        output_cost_per_token_above_272k_tokens: 50,
+        cache_read_input_token_cost_above_272k_tokens: 0.5,
+        input_cost_per_token_above_272k_tokens_priority: undefined,
+        output_cost_per_token_above_272k_tokens_priority: undefined,
+        cache_read_input_token_cost_above_272k_tokens_priority: undefined,
+      }),
+      false,
+      true
+    );
+
+    expect(result.input).toBe(1360005);
+    expect(result.output).toBe(100);
+    expect(result.cache_read).toBe(5);
+    expect(result.total).toBe(1360110);
+  });
+
   test("categories sum to total", () => {
     const result = calculateRequestCostBreakdown(
       {

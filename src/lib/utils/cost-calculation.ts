@@ -91,9 +91,12 @@ function __calculateTieredCostWithSeparatePrices(
 function resolveLongContextThreshold(priceData: ModelPriceData): number {
   const has272kFields =
     typeof priceData.input_cost_per_token_above_272k_tokens === "number" ||
+    typeof priceData.input_cost_per_token_above_272k_tokens_priority === "number" ||
     typeof priceData.output_cost_per_token_above_272k_tokens === "number" ||
+    typeof priceData.output_cost_per_token_above_272k_tokens_priority === "number" ||
     typeof priceData.cache_creation_input_token_cost_above_272k_tokens === "number" ||
     typeof priceData.cache_read_input_token_cost_above_272k_tokens === "number" ||
+    typeof priceData.cache_read_input_token_cost_above_272k_tokens_priority === "number" ||
     typeof priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens === "number";
 
   const modelFamily = typeof priceData.model_family === "string" ? priceData.model_family : "";
@@ -102,6 +105,24 @@ function resolveLongContextThreshold(priceData: ModelPriceData): number {
   }
 
   return CONTEXT_1M_TOKEN_THRESHOLD;
+}
+
+function resolvePriorityAwareLongContextRate(
+  priorityServiceTierApplied: boolean,
+  fields: {
+    above272k?: number;
+    above272kPriority?: number;
+    above200k?: number;
+    above200kPriority?: number;
+  }
+): number | undefined {
+  if (priorityServiceTierApplied) {
+    return (
+      fields.above272kPriority ?? fields.above200kPriority ?? fields.above272k ?? fields.above200k
+    );
+  }
+
+  return fields.above272k ?? fields.above200k;
 }
 
 function getRequestInputContextTokens(
@@ -207,12 +228,18 @@ export function calculateRequestCostBreakdown(
     }
   }
 
-  const inputAboveThreshold =
-    priceData.input_cost_per_token_above_272k_tokens ??
-    priceData.input_cost_per_token_above_200k_tokens;
-  const outputAboveThreshold =
-    priceData.output_cost_per_token_above_272k_tokens ??
-    priceData.output_cost_per_token_above_200k_tokens;
+  const inputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
+    above272k: priceData.input_cost_per_token_above_272k_tokens,
+    above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
+    above200k: priceData.input_cost_per_token_above_200k_tokens,
+    above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
+  });
+  const outputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
+    above272k: priceData.output_cost_per_token_above_272k_tokens,
+    above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
+    above200k: priceData.output_cost_per_token_above_200k_tokens,
+    above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
+  });
   const cacheCreationAboveThreshold =
     priceData.cache_creation_input_token_cost_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_200k_tokens;
@@ -220,9 +247,12 @@ export function calculateRequestCostBreakdown(
     priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     cacheCreationAboveThreshold;
-  const cacheReadAboveThreshold =
-    priceData.cache_read_input_token_cost_above_272k_tokens ??
-    priceData.cache_read_input_token_cost_above_200k_tokens;
+  const cacheReadAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
+    above272k: priceData.cache_read_input_token_cost_above_272k_tokens,
+    above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
+    above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
+    above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
+  });
   const longContextThreshold = resolveLongContextThreshold(priceData);
   const longContextThresholdExceeded =
     getRequestInputContextTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
@@ -434,12 +464,18 @@ export function calculateRequestCost(
     }
   }
 
-  const inputAboveThreshold =
-    priceData.input_cost_per_token_above_272k_tokens ??
-    priceData.input_cost_per_token_above_200k_tokens;
-  const outputAboveThreshold =
-    priceData.output_cost_per_token_above_272k_tokens ??
-    priceData.output_cost_per_token_above_200k_tokens;
+  const inputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
+    above272k: priceData.input_cost_per_token_above_272k_tokens,
+    above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
+    above200k: priceData.input_cost_per_token_above_200k_tokens,
+    above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
+  });
+  const outputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
+    above272k: priceData.output_cost_per_token_above_272k_tokens,
+    above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
+    above200k: priceData.output_cost_per_token_above_200k_tokens,
+    above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
+  });
   const cacheCreationAboveThreshold =
     priceData.cache_creation_input_token_cost_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_200k_tokens;
@@ -447,9 +483,12 @@ export function calculateRequestCost(
     priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     cacheCreationAboveThreshold;
-  const cacheReadAboveThreshold =
-    priceData.cache_read_input_token_cost_above_272k_tokens ??
-    priceData.cache_read_input_token_cost_above_200k_tokens;
+  const cacheReadAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
+    above272k: priceData.cache_read_input_token_cost_above_272k_tokens,
+    above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
+    above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
+    above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
+  });
   const longContextThreshold = resolveLongContextThreshold(priceData);
   const longContextThresholdExceeded =
     getRequestInputContextTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
