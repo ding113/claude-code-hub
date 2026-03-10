@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { ActiveSessionsList } from "@/components/customs/active-sessions-list";
+import { getEnvConfig } from "@/lib/config/env.schema";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { getSystemSettings } from "@/repository/system-config";
 import { UsageLogsViewVirtualized } from "./usage-logs-view-virtualized";
@@ -40,6 +41,7 @@ export async function UsageLogsDataSection({
       serverTimeZone={serverTimeZone}
       billingModelSource={systemSettings.billingModelSource}
       currencyCode={systemSettings.currencyDisplay}
+      logsRefreshIntervalMs={getEnvConfig().DASHBOARD_LOGS_POLL_INTERVAL_MS}
     />
   );
 }

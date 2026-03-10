@@ -184,6 +184,7 @@
       "title": "请求详情",
       "statusTitle": "状态: {status}",
       "inProgress": "请求中",
+      "retrying": "Retrying",
       "unknown": "未知",
       "success": "请求成功完成",
       "error": "请求失败，以下是详细的错误信息和供应商决策链",

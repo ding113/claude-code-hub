@@ -184,6 +184,7 @@
       "title": "リクエスト詳細",
       "statusTitle": "ステータス: {status}",
       "inProgress": "処理中",
+      "retrying": "Retrying",
       "unknown": "不明",
       "success": "リクエストが正常に完了しました",
       "error": "リクエスト失敗、詳細なエラー情報とプロバイダー決定チェーンは以下の通りです",

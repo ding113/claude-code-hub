@@ -53,6 +53,9 @@ vi.mock("@/hooks/use-virtualizer", () => ({
 
 vi.mock("@/lib/utils/provider-chain-formatter", () => ({
   formatProviderSummary: () => "provider summary",
+  getRetryCount: () => 0,
+  isHedgeRace: () => false,
+  isActualRequest: () => true,
 }));
 
 vi.mock("@/actions/usage-logs", () => ({
@@ -92,6 +95,11 @@ vi.mock("./model-display-with-redirect", () => ({
 
 vi.mock("./error-details-dialog", () => ({
   ErrorDetailsDialog: () => <div data-slot="error-details-dialog" />,
+}));
+
+let mockIsProviderFinalized = true;
+vi.mock("@/lib/utils/provider-display", () => ({
+  isProviderFinalized: () => mockIsProviderFinalized,
 }));
 
 import { VirtualizedLogsTable } from "./virtualized-logs-table";
@@ -373,5 +381,118 @@ describe("virtualized-logs-table multiplier badge", () => {
     expect(html).toContain("5m");
     expect(html).not.toContain("5m ~");
     expect(html).not.toContain("bg-amber-50");
+  });
+});
+
+describe("virtualized-logs-table live chain display", () => {
+  function setupLiveChainDefaults() {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+    mockIsProviderFinalized = false;
+  }
+
+  test("renders provider name from live chain when unfinalised", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [{ id: 1, name: "openai-east", reason: "initial_selection" }],
+          phase: "provider_selected",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+    expect(html).toContain("openai-east");
+    expect(html).toContain("animate-spin");
+  });
+
+  test("renders retrying badge when phase is retrying", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [
+            { id: 1, name: "p1", reason: "initial_selection" },
+            { id: 2, name: "p2", reason: "retry_failed" },
+          ],
+          phase: "retrying",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+    expect(html).toContain("logs.details.retrying");
+    expect(html).toContain("text-amber-500");
+  });
+
+  test("renders GitBranch icon when phase is hedge_racing", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [{ id: 1, name: "p1", reason: "hedge_triggered" }],
+          phase: "hedge_racing",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+    expect(html).toContain("text-indigo-500");
+  });
+
+  test("renders generic in-progress when live chain is empty", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: {
+          chain: [],
+          phase: "queued",
+          updatedAt: Date.now(),
+        },
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+    expect(html).toContain("logs.details.inProgress");
+  });
+
+  test("renders generic spinner when no live chain data", () => {
+    setupLiveChainDefaults();
+    mockLogs = [
+      makeLog({
+        id: 1,
+        statusCode: null,
+        providerChain: null,
+        _liveChain: undefined,
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
+    );
+    expect(html).toContain("logs.details.inProgress");
+    expect(html).toContain("animate-spin");
   });
 });

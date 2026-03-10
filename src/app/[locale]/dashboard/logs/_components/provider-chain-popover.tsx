@@ -419,15 +419,10 @@ export function ProviderChainPopover({
         >
           <span className="flex w-full items-center gap-1 min-w-0">
             {/* Request count badge */}
+            {isHedge && <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />}
             <Badge variant="secondary" className="shrink-0">
-              {isHedge ? (
-                <GitBranch className="w-3 h-3" />
-              ) : (
-                <>
-                  {requestCount}
-                  {t("logs.table.times")}
-                </>
-              )}
+              {requestCount}
+              {t("logs.table.times")}
             </Badge>
             {/* Provider name */}
             <span className="truncate min-w-0" dir="auto">

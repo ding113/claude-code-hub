@@ -184,6 +184,7 @@
       "title": "請求詳情",
       "statusTitle": "狀態: {status}",
       "inProgress": "請求中",
+      "retrying": "Retrying",
       "unknown": "未知狀態",
       "success": "請求成功完成",
       "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",

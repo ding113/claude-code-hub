@@ -61,4 +61,24 @@ describe("UsageLogsDataSection", () => {
       userId: 42,
     });
   });
+
+  it("passes logsRefreshIntervalMs from env config", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue({
+      billingModelSource: "redirected",
+      currencyDisplay: "USD",
+    } as Awaited<ReturnType<typeof getSystemSettings>>);
+
+    const searchParams = Promise.resolve({});
+    const element = (await UsageLogsDataSection({
+      isAdmin: true,
+      userId: 1,
+      searchParams,
+    })) as ReactElement;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const props = (element as any).props;
+    expect(props).toHaveProperty("logsRefreshIntervalMs");
+    expect(typeof props.logsRefreshIntervalMs).toBe("number");
+    expect(props.logsRefreshIntervalMs).toBeGreaterThanOrEqual(250);
+  });
 });

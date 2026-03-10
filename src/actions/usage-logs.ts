@@ -7,6 +7,8 @@ import {
   SESSION_ID_SUGGESTION_MIN_LEN,
 } from "@/lib/constants/usage-logs.constants";
 import { logger } from "@/lib/logger";
+import { readLiveChainBatch } from "@/lib/redis/live-chain-store";
+import { isProviderFinalized } from "@/lib/utils/provider-display";
 import {
   findUsageLogSessionIdSuggestions,
   findUsageLogsBatch,
@@ -384,6 +386,28 @@ export async function getUsageLogsBatch(
       session.user.role === "admin" ? filters : { ...filters, userId: session.user.id };
 
     const result = await findUsageLogsBatch(finalFilters);
+
+    // Merge Redis live chain data for unfinalised rows
+    const unfinalisedRows = result.logs.filter(
+      (row) => !isProviderFinalized(row) && row.sessionId && row.requestSequence != null
+    );
+
+    if (unfinalisedRows.length > 0) {
+      const liveData = await readLiveChainBatch(
+        unfinalisedRows.map((r) => ({
+          sessionId: r.sessionId!,
+          requestSequence: r.requestSequence!,
+        }))
+      );
+
+      for (const row of unfinalisedRows) {
+        const key = `${row.sessionId}:${row.requestSequence}`;
+        const snapshot = liveData.get(key);
+        if (snapshot) {
+          row._liveChain = snapshot;
+        }
+      }
+    }
 
     return { ok: true, data: result };
   } catch (error) {

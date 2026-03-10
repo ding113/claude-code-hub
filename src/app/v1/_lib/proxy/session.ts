@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
+import { writeLiveChain } from "@/lib/redis/live-chain-store";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import {
   type ResolvedPricing,
@@ -324,6 +325,7 @@ export class ProxySession {
 
     const value = Math.max(0, Date.now() - this.startTime);
     this.ttfbMs = value;
+    this.persistLiveChain();
     return value;
   }
 
@@ -520,7 +522,13 @@ export class ProxySession {
 
     if (shouldAdd) {
       this.providerChain.push(item);
+      this.persistLiveChain();
     }
+  }
+
+  private persistLiveChain(): void {
+    if (!this.sessionId || this.requestSequence == null) return;
+    void writeLiveChain(this.sessionId, this.requestSequence, this.providerChain);
   }
 
   /**

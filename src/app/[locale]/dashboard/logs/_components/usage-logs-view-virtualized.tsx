@@ -38,6 +38,7 @@ interface UsageLogsViewVirtualizedProps {
   currencyCode?: CurrencyCode;
   billingModelSource?: BillingModelSource;
   serverTimeZone?: string;
+  logsRefreshIntervalMs?: number;
 }
 
 async function fetchSystemSettings(): Promise<SystemSettings> {
@@ -65,6 +66,7 @@ function UsageLogsViewContent({
   currencyCode = "USD",
   billingModelSource = "original",
   serverTimeZone,
+  logsRefreshIntervalMs,
 }: UsageLogsViewVirtualizedProps) {
   const t = useTranslations("dashboard");
   const tc = useTranslations("customs");
@@ -384,7 +386,7 @@ function UsageLogsViewContent({
               currencyCode={resolvedCurrencyCode}
               billingModelSource={resolvedBillingModelSource}
               autoRefreshEnabled={!isFullscreenOpen && isAutoRefresh}
-              autoRefreshIntervalMs={5000}
+              autoRefreshIntervalMs={logsRefreshIntervalMs ?? 5000}
               hiddenColumns={hiddenColumns}
             />
           </CardContent>

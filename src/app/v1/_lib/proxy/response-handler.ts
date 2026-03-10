@@ -6,6 +6,7 @@ import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
 import type { LeaseWindowType } from "@/lib/rate-limit/lease";
+import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
@@ -3137,6 +3138,10 @@ export async function finalizeRequestStats(
     specialSettings: session.getSpecialSettings() ?? undefined,
   });
 
+  if (session.sessionId && session.requestSequence != null) {
+    void deleteLiveChain(session.sessionId, session.requestSequence);
+  }
+
   return normalizedUsage;
 }
 
@@ -3302,6 +3307,10 @@ async function persistRequestFailure(options: {
       swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
       specialSettings: session.getSpecialSettings() ?? undefined,
     });
+
+    if (session.sessionId && session.requestSequence != null) {
+      void deleteLiveChain(session.sessionId, session.requestSequence);
+    }
 
     const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";
     logger.info(

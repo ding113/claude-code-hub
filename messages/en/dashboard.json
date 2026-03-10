@@ -184,6 +184,7 @@
       "title": "Request Details",
       "statusTitle": "Status: {status}",
       "inProgress": "In Progress",
+      "retrying": "Retrying",
       "unknown": "Unknown",
       "success": "Request completed successfully",
       "error": "Request failed, here are the detailed error messages and provider decision chain",
