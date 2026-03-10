@@ -592,4 +592,75 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       vi.useRealTimers();
     }
   });
+
+  test("endpoint resolution failure should not inflate launchedProviderCount, winner gets request_success not hedge_winner", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        providerVendorId: 123,
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        providerVendorId: null,
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      session.requestUrl = new URL("https://example.com/v1/messages");
+      session.setProvider(provider1);
+
+      // Provider 1's strict endpoint resolution will fail
+      mocks.getPreferredProviderEndpoints.mockRejectedValueOnce(
+        new Error("Endpoint resolution failed")
+      );
+
+      // After provider 1 fails, pick provider 2 as alternative
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller2 = new AbortController();
+
+      // Only provider 2 reaches doForward (provider 1 fails at endpoint resolution)
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p2",
+          firstChunkDelayMs: 10,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(200);
+      const response = await responsePromise;
+
+      expect(await response.text()).toContain('"provider":"p2"');
+      expect(session.provider?.id).toBe(2);
+
+      // Key assertion: since only provider 2 actually launched (provider 1 failed at
+      // endpoint resolution before incrementing launchedProviderCount), the winner
+      // should be classified as "request_success" not "hedge_winner".
+      const chain = session.getProviderChain();
+      const winnerEntry = chain.find(
+        (entry) => entry.reason === "request_success" || entry.reason === "hedge_winner"
+      );
+      expect(winnerEntry).toBeDefined();
+      expect(winnerEntry!.reason).toBe("request_success");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

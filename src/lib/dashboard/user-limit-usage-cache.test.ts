@@ -57,4 +57,19 @@ describe("user-limit-usage-cache", () => {
 
     expect(getUserAllLimitUsageMock).toHaveBeenCalledTimes(1);
   });
+
+  test("logs error and returns null when getUserAllLimitUsage rejects", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const testError = new Error("network failure");
+    getUserAllLimitUsageMock.mockRejectedValueOnce(testError);
+
+    const result = await getSharedUserLimitUsage(42);
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "[user-limit-usage-cache] getUserAllLimitUsage failed",
+      expect.objectContaining({ userId: 42, error: testError })
+    );
+    consoleSpy.mockRestore();
+  });
 });

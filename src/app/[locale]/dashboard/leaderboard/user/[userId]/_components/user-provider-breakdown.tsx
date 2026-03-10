@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Server } from "lucide-react";
+import { AlertCircle, Server } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { getUserInsightsProviderBreakdown } from "@/actions/admin-user-insights";
 import {
@@ -33,7 +33,7 @@ export function UserProviderBreakdown({
 
   const filters = keyId || model ? { keyId, model } : undefined;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["user-insights-provider-breakdown", userId, startDate, endDate, keyId, model],
     queryFn: async () => {
       const result = await getUserInsightsProviderBreakdown(userId, startDate, endDate, filters);
@@ -88,6 +88,11 @@ export function UserProviderBreakdown({
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-16 w-full" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="flex items-center justify-center h-[120px] text-destructive">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            {t("loadError")}
           </div>
         ) : items.length === 0 ? (
           <div className="flex items-center justify-center h-[120px] text-muted-foreground">

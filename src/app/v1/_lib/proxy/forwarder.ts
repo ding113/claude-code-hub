@@ -3143,7 +3143,6 @@ export class ProxyForwarder {
       if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return;
 
       launchedProviderIds.add(provider.id);
-      launchedProviderCount += 1;
 
       let endpointSelection: {
         endpointId: number | null;
@@ -3158,6 +3157,8 @@ export class ProxyForwarder {
         await finishIfExhausted();
         return;
       }
+
+      launchedProviderCount += 1;
 
       const attemptSession = useOriginalSession
         ? session
@@ -3509,6 +3510,9 @@ export class ProxyForwarder {
       if (result.done) {
         return result;
       }
+      // Skip zero-length chunks: some upstream providers (e.g. behind proxies/load-balancers)
+      // may emit empty chunks as keep-alive or framing artifacts. These carry no payload and
+      // must be silently skipped to avoid treating them as a valid "first byte" event.
       if (result.value && result.value.byteLength > 0) {
         return result;
       }

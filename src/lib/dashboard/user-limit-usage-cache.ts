@@ -56,7 +56,10 @@ export async function getSharedUserLimitUsage(userId: number): Promise<LimitUsag
       usageCache.set(userId, { data: result.data, timestamp: Date.now() });
       return result.data;
     })
-    .catch(() => null)
+    .catch((error) => {
+      console.error("[user-limit-usage-cache] getUserAllLimitUsage failed", { userId, error });
+      return null;
+    })
     .finally(() => {
       inFlightUsageRequests.delete(userId);
     });

@@ -511,7 +511,8 @@
       "allProviders": "すべてのプロバイダー",
       "allModels": "すべてのモデル",
       "dimensions": "ディメンション",
-      "filters": "フィルター"
+      "filters": "フィルター",
+      "loadError": "データの読み込みに失敗しました"
     }
   },
   "sessions": {

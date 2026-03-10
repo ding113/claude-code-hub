@@ -511,7 +511,8 @@
       "allProviders": "Все провайдеры",
       "allModels": "Все модели",
       "dimensions": "Измерения",
-      "filters": "Фильтры"
+      "filters": "Фильтры",
+      "loadError": "Не удалось загрузить данные"
     }
   },
   "sessions": {

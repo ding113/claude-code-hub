@@ -511,7 +511,8 @@
       "allProviders": "全部供應商",
       "allModels": "全部模型",
       "dimensions": "維度",
-      "filters": "篩選"
+      "filters": "篩選",
+      "loadError": "資料載入失敗"
     }
   },
   "sessions": {

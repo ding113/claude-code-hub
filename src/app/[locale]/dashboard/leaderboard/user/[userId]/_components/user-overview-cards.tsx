@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Clock, DollarSign, TrendingUp } from "lucide-react";
+import { Activity, AlertCircle, Clock, DollarSign, TrendingUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { getUserInsightsOverview } from "@/actions/admin-user-insights";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,7 +20,7 @@ function formatResponseTime(ms: number): string {
 export function UserOverviewCards({ userId }: UserOverviewCardsProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["user-insights-overview", userId],
     queryFn: async () => {
       const result = await getUserInsightsOverview(userId);
@@ -41,6 +41,19 @@ export function UserOverviewCards({ userId }: UserOverviewCardsProps) {
           </Card>
         ))}
       </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-center text-destructive">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            {t("loadError")}
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 

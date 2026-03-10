@@ -511,7 +511,8 @@
       "allProviders": "全部供应商",
       "allModels": "全部模型",
       "dimensions": "维度",
-      "filters": "筛选"
+      "filters": "筛选",
+      "loadError": "数据加载失败"
     }
   },
   "sessions": {

@@ -511,7 +511,8 @@
       "allProviders": "All Providers",
       "allModels": "All Models",
       "dimensions": "Dimensions",
-      "filters": "Filters"
+      "filters": "Filters",
+      "loadError": "Failed to load data"
     }
   },
   "sessions": {

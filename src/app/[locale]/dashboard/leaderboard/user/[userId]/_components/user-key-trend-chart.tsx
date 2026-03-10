@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { AlertCircle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
@@ -38,7 +39,11 @@ export function UserKeyTrendChart({ userId, timeRange, keyId }: UserKeyTrendChar
   const t = useTranslations("dashboard.leaderboard.userInsights");
   const tStats = useTranslations("dashboard.stats");
 
-  const { data: rawData, isLoading } = useQuery({
+  const {
+    data: rawData,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ["user-insights-key-trend", userId, timeRange],
     queryFn: async () => {
       const result = await getUserInsightsKeyTrend(userId, timeRange);
@@ -115,6 +120,11 @@ export function UserKeyTrendChart({ userId, timeRange, keyId }: UserKeyTrendChar
       <CardContent>
         {isLoading ? (
           <Skeleton className="h-[300px] w-full" />
+        ) : isError ? (
+          <div className="flex items-center justify-center h-[300px] text-destructive">
+            <AlertCircle className="h-4 w-4 mr-2" />
+            {t("loadError")}
+          </div>
         ) : chartData.length === 0 ? (
           <div className="flex items-center justify-center h-[300px] text-muted-foreground">
             {t("noData")}
