@@ -3124,6 +3124,7 @@ export class ProxyForwarder {
         endpointId: attempt.endpointAudit.endpointId,
         endpointUrl: attempt.endpointAudit.endpointUrl,
         upstreamStatusCode: attempt.response.status,
+        isHedgeWinner: isActualHedgeWin,
       });
 
       const response = new Response(

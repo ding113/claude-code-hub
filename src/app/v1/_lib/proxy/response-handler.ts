@@ -543,56 +543,63 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     });
   }
 
-  // 成功后绑定 session 到供应商（智能绑定策略）
-  if (session.sessionId) {
-    const result = await SessionManager.updateSessionBindingSmart(
-      session.sessionId,
-      meta.providerId,
-      meta.providerPriority,
-      meta.isFirstAttempt,
-      meta.isFailoverSuccess
-    );
+  // Hedge winner: commitWinner() already performed session binding and chain logging.
+  // Skip duplicate operations to avoid double entries in the provider chain.
+  if (!meta.isHedgeWinner) {
+    // 成功后绑定 session 到供应商（智能绑定策略）
+    if (session.sessionId) {
+      const result = await SessionManager.updateSessionBindingSmart(
+        session.sessionId,
+        meta.providerId,
+        meta.providerPriority,
+        meta.isFirstAttempt,
+        meta.isFailoverSuccess
+      );
 
-    if (result.updated) {
-      logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
-        sessionId: session.sessionId,
+      if (result.updated) {
+        logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
+          sessionId: session.sessionId,
+          providerId: meta.providerId,
+          providerName: meta.providerName,
+          priority: meta.providerPriority,
+          reason: result.reason,
+          details: result.details,
+          attemptNumber: meta.attemptNumber,
+          totalProvidersAttempted: meta.totalProvidersAttempted,
+        });
+      } else {
+        logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
+          sessionId: session.sessionId,
+          providerId: meta.providerId,
+          providerName: meta.providerName,
+          priority: meta.providerPriority,
+          reason: result.reason,
+          details: result.details,
+        });
+      }
+
+      // 统一更新两个数据源（确保监控数据一致）
+      void SessionManager.updateSessionProvider(session.sessionId, {
         providerId: meta.providerId,
         providerName: meta.providerName,
-        priority: meta.providerPriority,
-        reason: result.reason,
-        details: result.details,
-        attemptNumber: meta.attemptNumber,
-        totalProvidersAttempted: meta.totalProvidersAttempted,
-      });
-    } else {
-      logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
-        sessionId: session.sessionId,
-        providerId: meta.providerId,
-        providerName: meta.providerName,
-        priority: meta.providerPriority,
-        reason: result.reason,
-        details: result.details,
+      }).catch((err) => {
+        logger.error(
+          "[ResponseHandler] Failed to update session provider info (stream finalized)",
+          {
+            error: err,
+          }
+        );
       });
     }
 
-    // 统一更新两个数据源（确保监控数据一致）
-    void SessionManager.updateSessionProvider(session.sessionId, {
-      providerId: meta.providerId,
-      providerName: meta.providerName,
-    }).catch((err) => {
-      logger.error("[ResponseHandler] Failed to update session provider info (stream finalized)", {
-        error: err,
-      });
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: meta.isFirstAttempt ? "request_success" : "retry_success",
+      attemptNumber: meta.attemptNumber,
+      statusCode: meta.upstreamStatusCode,
     });
   }
-
-  session.addProviderToChain(providerForChain, {
-    endpointId: meta.endpointId,
-    endpointUrl: meta.endpointUrl,
-    reason: meta.isFirstAttempt ? "request_success" : "retry_success",
-    attemptNumber: meta.attemptNumber,
-    statusCode: meta.upstreamStatusCode,
-  });
 
   logger.info("[ResponseHandler] Streaming request finalized as success", {
     providerId: meta.providerId,

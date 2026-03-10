@@ -27,6 +27,8 @@ export type DeferredStreamingFinalization = {
   endpointId: number | null;
   endpointUrl: string;
   upstreamStatusCode: number;
+  /** When true, commitWinner() already performed session binding and chain logging; finalization should skip them. */
+  isHedgeWinner?: boolean;
 };
 
 const deferredMeta = new WeakMap<ProxySession, DeferredStreamingFinalization>();
