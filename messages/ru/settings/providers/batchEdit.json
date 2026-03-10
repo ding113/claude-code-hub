@@ -1,4 +1,81 @@
 {
+  "selectedCount": "Выбрано: {count}",
+  "actions": {
+    "edit": "Редактировать",
+    "resetCircuit": "Сбросить предохранитель",
+    "delete": "Удалить"
+  },
+  "enterMode": "Массовое редактирование",
+  "selectionHint": "Выберите провайдеров для массового редактирования",
+  "selectAll": "Выбрать все",
+  "invertSelection": "Инвертировать",
+  "selectByType": "По типу",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "По группе",
+  "selectByGroupItem": "{group} ({count})",
+  "editSelected": "Редактировать выбранные",
+  "exitMode": "Выход",
+  "dialog": {
+    "editTitle": "Массовое редактирование провайдеров",
+    "editDesc": "Редактирование настроек для {count} провайдеров",
+    "deleteTitle": "Удаление провайдеров",
+    "deleteDesc": "Вы уверены, что хотите удалить {count} провайдеров? Это действие нельзя отменить.",
+    "resetCircuitTitle": "Сброс предохранителей",
+    "resetCircuitDesc": "Сбросить предохранители для {count} провайдеров?",
+    "next": "Далее"
+  },
+  "preview": {
+    "title": "Предпросмотр изменений",
+    "description": "Проверка изменений для {count} провайдеров",
+    "loading": "Загрузка предпросмотра...",
+    "noChanges": "Нет изменений для применения",
+    "summary": "Затронуто {providerCount} провайдеров, изменено {fieldCount} полей, пропущено {skipCount}",
+    "excludeProvider": "Переключить включение провайдера",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: пропущено ({reason})",
+    "nullValue": "(пусто)",
+    "back": "Назад",
+    "apply": "Применить изменения"
+  },
+  "fields": {
+    "isEnabled": {
+      "label": "Включен"
+    },
+    "priority": "Приоритет",
+    "weight": "Вес",
+    "costMultiplier": "Множитель стоимости",
+    "groupTag": {
+      "label": "Тег группы"
+    },
+    "modelRedirects": "Перенаправление моделей",
+    "allowedModels": "Разрешенные модели",
+    "thinkingBudget": "Бюджет размышлений",
+    "adaptiveThinking": "Адаптивное мышление"
+  },
+  "toast": {
+    "previewFailed": "Ошибка предпросмотра: {error}",
+    "unknownError": "Неизвестная ошибка",
+    "updated": "Обновлено провайдеров: {count}",
+    "undo": "Отменить",
+    "undoSuccess": "Восстановлено провайдеров: {count}",
+    "undoFailed": "Ошибка отмены: {error}",
+    "failed": "Ошибка операции: {error}",
+    "circuitReset": "Сброшено предохранителей: {count}"
+  },
+  "undo": {
+    "batchDeleteSuccess": "Удалено провайдеров: {count}",
+    "button": "Отменить",
+    "batchDeleteUndone": "Восстановлено провайдеров: {count}",
+    "expired": "Отмена истекла",
+    "failed": "Ошибка отмены"
+  },
+  "confirm": {
+    "cancel": "Отмена",
+    "goBack": "Назад",
+    "confirm": "Подтвердить",
+    "processing": "Обработка..."
+  },
   "mixedValues": {
     "label": "(смешанные значения)",
     "tooltip": "Выбранные провайдеры имеют разные значения:",

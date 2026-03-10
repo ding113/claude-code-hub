@@ -1,4 +1,81 @@
 {
+  "selectedCount": "{count} 件選択中",
+  "actions": {
+    "edit": "編集",
+    "resetCircuit": "サーキットブレーカーをリセット",
+    "delete": "削除"
+  },
+  "enterMode": "一括編集",
+  "selectionHint": "プロバイダーを選択して一括編集",
+  "selectAll": "すべて選択",
+  "invertSelection": "選択を反転",
+  "selectByType": "タイプ別",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "グループ別",
+  "selectByGroupItem": "{group} ({count})",
+  "editSelected": "選択項目を編集",
+  "exitMode": "終了",
+  "dialog": {
+    "editTitle": "プロバイダーの一括編集",
+    "editDesc": "{count} 件のプロバイダーの設定を編集",
+    "deleteTitle": "プロバイダーの削除",
+    "deleteDesc": "{count} 件のプロバイダーを削除してよろしいですか？この操作は元に戻せません。",
+    "resetCircuitTitle": "サーキットブレーカーのリセット",
+    "resetCircuitDesc": "{count} 件のプロバイダーのサーキットブレーカーをリセットしますか？",
+    "next": "次へ"
+  },
+  "preview": {
+    "title": "変更のプレビュー",
+    "description": "{count} 件のプロバイダーの変更を確認",
+    "loading": "プレビューを読み込み中...",
+    "noChanges": "適用する変更はありません",
+    "summary": "{providerCount} 件のプロバイダーに影響、{fieldCount} 件のフィールドを変更、{skipCount} 件スキップ",
+    "excludeProvider": "プロバイダーの包含を切り替え",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: スキップ ({reason})",
+    "nullValue": "(空)",
+    "back": "戻る",
+    "apply": "変更を適用"
+  },
+  "fields": {
+    "isEnabled": {
+      "label": "有効状態"
+    },
+    "priority": "優先度",
+    "weight": "重み",
+    "costMultiplier": "コスト倍率",
+    "groupTag": {
+      "label": "グループタグ"
+    },
+    "modelRedirects": "モデルリダイレクト",
+    "allowedModels": "許可モデル",
+    "thinkingBudget": "思考バジェット",
+    "adaptiveThinking": "アダプティブ思考"
+  },
+  "toast": {
+    "previewFailed": "プレビュー失敗: {error}",
+    "unknownError": "不明なエラー",
+    "updated": "{count} 件のプロバイダーを更新しました",
+    "undo": "元に戻す",
+    "undoSuccess": "{count} 件のプロバイダーを元に戻しました",
+    "undoFailed": "元に戻す操作に失敗: {error}",
+    "failed": "操作に失敗: {error}",
+    "circuitReset": "{count} 件のサーキットブレーカーをリセットしました"
+  },
+  "undo": {
+    "batchDeleteSuccess": "{count} 件のプロバイダーを削除しました",
+    "button": "元に戻す",
+    "batchDeleteUndone": "{count} 件のプロバイダーを復元しました",
+    "expired": "元に戻す期限切れ",
+    "failed": "元に戻す操作に失敗"
+  },
+  "confirm": {
+    "cancel": "キャンセル",
+    "goBack": "戻る",
+    "confirm": "確認",
+    "processing": "処理中..."
+  },
   "mixedValues": {
     "label": "(混合値)",
     "tooltip": "選択されたプロバイダーには異なる値があります：",

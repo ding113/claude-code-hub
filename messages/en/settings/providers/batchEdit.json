@@ -1,4 +1,81 @@
 {
+  "selectedCount": "{count} selected",
+  "actions": {
+    "edit": "Edit",
+    "resetCircuit": "Reset Circuit",
+    "delete": "Delete"
+  },
+  "enterMode": "Batch Edit",
+  "selectionHint": "Select providers to batch edit",
+  "selectAll": "Select all",
+  "invertSelection": "Invert",
+  "selectByType": "By Type",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "By Group",
+  "selectByGroupItem": "{group} ({count})",
+  "editSelected": "Edit Selected",
+  "exitMode": "Exit",
+  "dialog": {
+    "editTitle": "Batch Edit Providers",
+    "editDesc": "Edit settings for {count} providers",
+    "deleteTitle": "Delete Providers",
+    "deleteDesc": "Are you sure you want to delete {count} providers? This action cannot be undone.",
+    "resetCircuitTitle": "Reset Circuit Breakers",
+    "resetCircuitDesc": "Reset circuit breakers for {count} providers?",
+    "next": "Next"
+  },
+  "preview": {
+    "title": "Preview Changes",
+    "description": "Review changes for {count} providers",
+    "loading": "Loading preview...",
+    "noChanges": "No changes to apply",
+    "summary": "{providerCount} providers affected, {fieldCount} fields changed, {skipCount} skipped",
+    "excludeProvider": "Toggle provider inclusion",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: skipped ({reason})",
+    "nullValue": "(empty)",
+    "back": "Back",
+    "apply": "Apply Changes"
+  },
+  "fields": {
+    "isEnabled": {
+      "label": "Enabled"
+    },
+    "priority": "Priority",
+    "weight": "Weight",
+    "costMultiplier": "Cost Multiplier",
+    "groupTag": {
+      "label": "Group Tag"
+    },
+    "modelRedirects": "Model Redirects",
+    "allowedModels": "Allowed Models",
+    "thinkingBudget": "Thinking Budget",
+    "adaptiveThinking": "Adaptive Thinking"
+  },
+  "toast": {
+    "previewFailed": "Preview failed: {error}",
+    "unknownError": "Unknown error",
+    "updated": "{count} providers updated",
+    "undo": "Undo",
+    "undoSuccess": "{count} providers reverted",
+    "undoFailed": "Undo failed: {error}",
+    "failed": "Operation failed: {error}",
+    "circuitReset": "{count} circuit breakers reset"
+  },
+  "undo": {
+    "batchDeleteSuccess": "{count} providers deleted",
+    "button": "Undo",
+    "batchDeleteUndone": "{count} providers restored",
+    "expired": "Undo expired",
+    "failed": "Undo failed"
+  },
+  "confirm": {
+    "cancel": "Cancel",
+    "goBack": "Go Back",
+    "confirm": "Confirm",
+    "processing": "Processing..."
+  },
   "mixedValues": {
     "label": "(mixed values)",
     "tooltip": "Selected providers have different values:",
