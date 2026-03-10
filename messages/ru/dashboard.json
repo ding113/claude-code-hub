@@ -1545,7 +1545,7 @@
       "userDeleted": "Пользователь удален",
       "saving": "Сохранение...",
       "resetSection": {
-        "title": "Сброс данных"
+        "title": "Параметры сброса"
       },
       "resetLimits": {
         "title": "Сброс лимитов",

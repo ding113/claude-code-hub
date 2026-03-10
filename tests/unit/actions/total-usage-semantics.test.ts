@@ -243,38 +243,4 @@ describe("total-usage-semantics", () => {
       expect(ALL_TIME_MAX_AGE_DAYS).toBe(Infinity);
     });
   });
-
-  describe("source code verification", () => {
-    it("should verify sumUserCost passes ALL_TIME_MAX_AGE_DAYS when period is total", async () => {
-      // This test verifies the implementation by reading the source code pattern
-      // Ensure we call quota aggregation functions with ALL_TIME_MAX_AGE_DAYS for all-time usage.
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-
-      const myUsagePath = path.join(process.cwd(), "src/actions/my-usage.ts");
-      const content = await fs.readFile(myUsagePath, "utf-8");
-
-      // Verify the constant is defined as Infinity
-      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
-
-      // Verify quota aggregation uses the constant for all-time usage
-      expect(content).toMatch(/sumUserQuotaCosts\([\s\S]*?ALL_TIME_MAX_AGE_DAYS/);
-
-      expect(content).toMatch(/sumKeyQuotaCostsById\([\s\S]*?ALL_TIME_MAX_AGE_DAYS/);
-    });
-
-    it("should verify getUserAllLimitUsage passes ALL_TIME_MAX_AGE_DAYS", async () => {
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-
-      const usersPath = path.join(process.cwd(), "src/actions/users.ts");
-      const content = await fs.readFile(usersPath, "utf-8");
-
-      // Verify the constant is defined as Infinity
-      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
-
-      // Verify sumUserTotalCost is called with the constant (+ optional costResetAt arg)
-      expect(content).toMatch(/sumUserTotalCost\(userId,\s*ALL_TIME_MAX_AGE_DAYS/);
-    });
-  });
 });

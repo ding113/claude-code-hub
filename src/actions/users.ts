@@ -10,6 +10,7 @@ import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions";
+import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup } from "@/lib/utils/provider-group";
@@ -1901,13 +1902,17 @@ export async function resetUserAllStatistics(userId: number): Promise<ActionResu
     const keyHashes = keys.map((k) => k.key);
 
     // 1. Delete all messageRequest logs for this user
-    await db.delete(messageRequest).where(eq(messageRequest.userId, userId));
-
-    // Also clear ledger rows -- the ONLY legitimate DELETE path for usage_ledger
-    await db.delete(usageLedger).where(eq(usageLedger.userId, userId));
-
-    // Clear costResetAt since all data is wiped (also invalidates auth cache)
-    await resetUserCostResetAt(userId, null);
+    // Atomic: delete logs + ledger + clear costResetAt in a single transaction
+    await db.transaction(async (tx) => {
+      await tx.delete(messageRequest).where(eq(messageRequest.userId, userId));
+      await tx.delete(usageLedger).where(eq(usageLedger.userId, userId));
+      await tx
+        .update(usersTable)
+        .set({ costResetAt: null, updatedAt: new Date() })
+        .where(and(eq(usersTable.id, userId), isNull(usersTable.deletedAt)));
+    });
+    // Invalidate auth cache outside transaction (Redis, not DB)
+    await invalidateCachedUser(userId).catch(() => {});
 
     // 2. Clear Redis cache (cost keys + active sessions)
     try {

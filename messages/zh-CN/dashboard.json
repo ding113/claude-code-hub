@@ -1563,7 +1563,7 @@
       "userDeleted": "用户已删除",
       "saving": "保存中...",
       "resetSection": {
-        "title": "数据重置"
+        "title": "重置选项"
       },
       "resetLimits": {
         "title": "重置限额",

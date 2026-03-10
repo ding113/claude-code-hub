@@ -38,8 +38,12 @@ vi.mock("@/lib/redis/active-session-keys", () => ({
 
 describe("clearUserCostCache", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    // Re-establish default implementations after resetAllMocks
+    getRedisClientMock.mockReturnValue(redisMock);
     redisMock.status = "ready";
+    redisMock.pipeline.mockReturnValue(redisPipelineMock);
+    redisPipelineMock.del.mockReturnThis();
     redisPipelineMock.exec.mockResolvedValue([]);
     scanPatternMock.mockResolvedValue([]);
   });

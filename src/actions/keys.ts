@@ -762,7 +762,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         ),
         sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
         sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
-        sumKeyTotalCost(key.key, 365, costResetAt),
+        sumKeyTotalCost(key.key, Infinity, costResetAt),
         SessionTracker.getKeySessionCount(keyId),
       ]);
 

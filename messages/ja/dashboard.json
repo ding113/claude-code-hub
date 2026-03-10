@@ -1540,7 +1540,7 @@
       "userDeleted": "ユーザーが削除されました",
       "saving": "保存しています...",
       "resetSection": {
-        "title": "データリセット"
+        "title": "リセットオプション"
       },
       "resetLimits": {
         "title": "制限のリセット",

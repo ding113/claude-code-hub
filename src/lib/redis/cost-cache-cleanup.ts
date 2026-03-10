@@ -49,15 +49,57 @@ export async function clearUserCostCache(
       return [];
     }),
     // Total cost cache keys (with optional resetAt suffix)
-    scanPattern(redis, `total_cost:user:${userId}`).catch(() => []),
-    scanPattern(redis, `total_cost:user:${userId}:*`).catch(() => []),
-    ...keyHashes.map((keyHash) => scanPattern(redis, `total_cost:key:${keyHash}`).catch(() => [])),
+    scanPattern(redis, `total_cost:user:${userId}`).catch((err) => {
+      logger.warn("Failed to scan total cost pattern", {
+        userId,
+        pattern: `total_cost:user:${userId}`,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
+    scanPattern(redis, `total_cost:user:${userId}:*`).catch((err) => {
+      logger.warn("Failed to scan total cost pattern", {
+        userId,
+        pattern: `total_cost:user:${userId}:*`,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
     ...keyHashes.map((keyHash) =>
-      scanPattern(redis, `total_cost:key:${keyHash}:*`).catch(() => [])
+      scanPattern(redis, `total_cost:key:${keyHash}`).catch((err) => {
+        logger.warn("Failed to scan total cost key pattern", {
+          keyHash,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return [];
+      })
+    ),
+    ...keyHashes.map((keyHash) =>
+      scanPattern(redis, `total_cost:key:${keyHash}:*`).catch((err) => {
+        logger.warn("Failed to scan total cost key pattern", {
+          keyHash,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return [];
+      })
     ),
     // Lease cache keys (budget slices cached by LeaseService)
-    ...keyIds.map((keyId) => scanPattern(redis, `lease:key:${keyId}:*`).catch(() => [])),
-    scanPattern(redis, `lease:user:${userId}:*`).catch(() => []),
+    ...keyIds.map((keyId) =>
+      scanPattern(redis, `lease:key:${keyId}:*`).catch((err) => {
+        logger.warn("Failed to scan lease key pattern", {
+          keyId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return [];
+      })
+    ),
+    scanPattern(redis, `lease:user:${userId}:*`).catch((err) => {
+      logger.warn("Failed to scan lease user pattern", {
+        userId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return [];
+    }),
   ]);
 
   const allCostKeys = scanResults.flat();

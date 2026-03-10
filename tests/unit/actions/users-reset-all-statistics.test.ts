@@ -43,11 +43,20 @@ vi.mock("@/repository/key", async (importOriginal) => {
 });
 
 // Mock drizzle db
-const dbDeleteWhereMock = vi.fn();
-const dbDeleteMock = vi.fn(() => ({ where: dbDeleteWhereMock }));
+const txDeleteWhereMock = vi.fn();
+const txDeleteMock = vi.fn(() => ({ where: txDeleteWhereMock }));
+const txUpdateSetMock = vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) }));
+const txUpdateMock = vi.fn(() => ({ set: txUpdateSetMock }));
+const txMock = {
+  delete: txDeleteMock,
+  update: txUpdateMock,
+};
+const dbTransactionMock = vi.fn(async (fn: (tx: typeof txMock) => Promise<void>) => {
+  await fn(txMock);
+});
 vi.mock("@/drizzle/db", () => ({
   db: {
-    delete: dbDeleteMock,
+    transaction: dbTransactionMock,
   },
 }));
 
@@ -59,6 +68,12 @@ const loggerMock = {
 };
 vi.mock("@/lib/logger", () => ({
   logger: loggerMock,
+}));
+
+// Mock invalidateCachedUser (called directly after transaction)
+const invalidateCachedUserMock = vi.fn();
+vi.mock("@/lib/security/api-key-auth-cache", () => ({
+  invalidateCachedUser: invalidateCachedUserMock,
 }));
 
 // Mock Redis
@@ -88,8 +103,9 @@ describe("resetUserAllStatistics", () => {
     redisMock.status = "ready";
     redisPipelineMock.exec.mockResolvedValue([]);
     // DB delete returns resolved promise
-    dbDeleteWhereMock.mockResolvedValue(undefined);
+    txDeleteWhereMock.mockResolvedValue(undefined);
     resetUserCostResetAtMock.mockResolvedValue(true);
+    invalidateCachedUserMock.mockResolvedValue(undefined);
   });
 
   test("should return PERMISSION_DENIED for non-admin user", async () => {
@@ -122,7 +138,7 @@ describe("resetUserAllStatistics", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errorCode).toBe(ERROR_CODES.NOT_FOUND);
-    expect(dbDeleteMock).not.toHaveBeenCalled();
+    expect(dbTransactionMock).not.toHaveBeenCalled();
   });
 
   test("should successfully reset all user statistics", async () => {
@@ -136,9 +152,10 @@ describe("resetUserAllStatistics", () => {
     const result = await resetUserAllStatistics(123);
 
     expect(result.ok).toBe(true);
-    // DB delete called
-    expect(dbDeleteMock).toHaveBeenCalled();
-    expect(dbDeleteWhereMock).toHaveBeenCalled();
+    // DB transaction called (delete + update wrapped in transaction)
+    expect(dbTransactionMock).toHaveBeenCalled();
+    expect(txDeleteMock).toHaveBeenCalled();
+    expect(txDeleteWhereMock).toHaveBeenCalled();
     // Redis operations
     expect(redisMock.pipeline).toHaveBeenCalled();
     expect(redisPipelineMock.del).toHaveBeenCalled();
@@ -159,8 +176,8 @@ describe("resetUserAllStatistics", () => {
     const result = await resetUserAllStatistics(123);
 
     expect(result.ok).toBe(true);
-    // DB delete still called
-    expect(dbDeleteMock).toHaveBeenCalled();
+    // DB transaction still called
+    expect(dbTransactionMock).toHaveBeenCalled();
     // Redis pipeline NOT called (status not ready)
     expect(redisMock.pipeline).not.toHaveBeenCalled();
   });
@@ -245,6 +262,6 @@ describe("resetUserAllStatistics", () => {
     const result = await resetUserAllStatistics(123);
 
     expect(result.ok).toBe(true);
-    expect(dbDeleteMock).toHaveBeenCalled();
+    expect(dbTransactionMock).toHaveBeenCalled();
   });
 });

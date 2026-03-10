@@ -106,6 +106,7 @@ describe("resetUserLimitsOnly", () => {
   });
 
   test("should return PERMISSION_DENIED when no session", async () => {
+    // TODO(#890): Consider returning UNAUTHORIZED for null session (current: PERMISSION_DENIED for both null + non-admin)
     getSessionMock.mockResolvedValue(null);
 
     const { resetUserLimitsOnly } = await import("@/actions/users");

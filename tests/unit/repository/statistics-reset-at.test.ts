@@ -51,6 +51,7 @@ describe("statistics resetAt parameter", () => {
       const result = await sumUserTotalCost(10, 365, resetAt);
 
       expect(result).toBe(42.5);
+      expect(dbResultMock).toHaveBeenCalled();
     });
 
     test("without resetAt -- uses maxAgeDays cutoff instead", async () => {
@@ -60,6 +61,7 @@ describe("statistics resetAt parameter", () => {
       const result = await sumUserTotalCost(10, 365);
 
       expect(result).toBe(100.0);
+      expect(dbResultMock).toHaveBeenCalled();
     });
 
     test("with null resetAt -- treated same as undefined", async () => {
@@ -69,6 +71,7 @@ describe("statistics resetAt parameter", () => {
       const result = await sumUserTotalCost(10, 365, null);
 
       expect(result).toBe(50.0);
+      expect(dbResultMock).toHaveBeenCalled();
     });
 
     test("with invalid Date (NaN) -- skips resetAt, falls through to maxAgeDays", async () => {
@@ -79,6 +82,7 @@ describe("statistics resetAt parameter", () => {
       const result = await sumUserTotalCost(10, 365, invalidDate);
 
       expect(result).toBe(75.0);
+      expect(dbResultMock).toHaveBeenCalled();
     });
   });
 
@@ -91,6 +95,7 @@ describe("statistics resetAt parameter", () => {
       const result = await sumKeyTotalCost("sk-hash", 365, resetAt);
 
       expect(result).toBe(15.0);
+      expect(dbResultMock).toHaveBeenCalled();
     });
 
     test("without resetAt -- falls back to maxAgeDays", async () => {
@@ -100,6 +105,7 @@ describe("statistics resetAt parameter", () => {
       const result = await sumKeyTotalCost("sk-hash", 365);
 
       expect(result).toBe(30.0);
+      expect(dbResultMock).toHaveBeenCalled();
     });
   });
 

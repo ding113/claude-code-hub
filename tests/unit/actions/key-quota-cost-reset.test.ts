@@ -147,7 +147,7 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
     expect(sumKeyCostInTimeRangeMock).toHaveBeenNthCalledWith(4, 42, costResetAt, NOW);
 
     // sumKeyTotalCost receives costResetAt as 3rd argument
-    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", 365, costResetAt);
+    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", Infinity, costResetAt);
   });
 
   test("user without costResetAt (null) -- original time ranges unchanged", async () => {
@@ -167,7 +167,7 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
     // monthly
     expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, MONTHLY_START, NOW);
     // total cost: null costResetAt
-    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", 365, null);
+    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", Infinity, null);
   });
 
   test("costResetAt older than all period starts -- no clipping effect", async () => {
@@ -186,7 +186,7 @@ describe("getKeyQuotaUsage costResetAt clipping", () => {
     expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, WEEKLY_START, NOW);
     expect(sumKeyCostInTimeRangeMock).toHaveBeenCalledWith(42, MONTHLY_START, NOW);
     // total still receives costResetAt (sumKeyTotalCost handles it internally)
-    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", 365, costResetAt);
+    expect(sumKeyTotalCostMock).toHaveBeenCalledWith("sk-test-key-hash", Infinity, costResetAt);
   });
 
   test("costResetAt in the middle of daily range -- clips daily correctly", async () => {

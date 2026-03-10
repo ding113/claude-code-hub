@@ -172,6 +172,7 @@ function hydrateUserFromCache(payload: CachedUserPayloadV1): User | null {
   const costResetAt = parseOptionalDate(user.costResetAt);
   if (user.expiresAt != null && !expiresAt) return null;
   if (user.deletedAt != null && !deletedAt) return null;
+  // costResetAt: intentional fail-open on invalid date -- affects quota counting window, not access control
 
   return {
     ...(payload.user as User),

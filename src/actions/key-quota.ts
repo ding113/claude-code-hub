@@ -127,7 +127,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
         ),
         sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
         sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
-        sumKeyTotalCost(keyRow.key, 365, costResetAt),
+        sumKeyTotalCost(keyRow.key, Infinity, costResetAt),
         SessionTracker.getKeySessionCount(keyId),
       ]);
 
