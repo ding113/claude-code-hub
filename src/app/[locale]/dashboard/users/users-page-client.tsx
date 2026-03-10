@@ -1,9 +1,9 @@
 "use client";
 
-import { useInfiniteQuery, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers, Loader2, Plus, Search, ShieldCheck } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { KeyUsageData } from "@/actions/users";
 import {
   getAllUserKeyGroups,
@@ -23,13 +23,14 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TagInput } from "@/components/ui/tag-input";
+import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
+import { loadUserUsagePagesSequentially } from "@/lib/dashboard/user-usage-loader";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
 import { CreateUserDialog } from "../_components/user/create-user-dialog";
-import { clearUsageCache } from "../_components/user/user-limit-badge";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
 /**
@@ -81,6 +82,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     | "createdAt"
   >("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [usageByKeyId, setUsageByKeyId] = useState<Record<number, KeyUsageData>>({});
 
   // Debounce search term to avoid frequent API requests
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -195,39 +197,53 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     staleTime: 30_000,
   });
 
-  // Per-page usage queries: fire independently for each loaded page
   const pageUserIds = useMemo(
     () => (data?.pages ?? []).map((page) => page.users.map((u) => u.id)),
     [data]
   );
+  const usageDatasetKey = useMemo(() => JSON.stringify(queryKey), [queryKey]);
+  const latestUsageDatasetKeyRef = useRef(usageDatasetKey);
 
-  const usageQueries = useQueries({
-    queries: isAdmin
-      ? pageUserIds.map((ids) => ({
-          queryKey: ["users-usage", ids],
-          queryFn: () => getUsersUsageBatch(ids),
-          enabled: ids.length > 0,
-          staleTime: 60_000,
-          refetchOnWindowFocus: false,
-        }))
-      : [],
-  });
+  useEffect(() => {
+    latestUsageDatasetKeyRef.current = usageDatasetKey;
+    setUsageByKeyId({});
+  }, [usageDatasetKey]);
 
-  // Stable fingerprint: only changes when a query actually receives new data,
-  // not on every render tick (useQueries returns a new array reference each time).
-  const usageDataVersion = usageQueries.map((q) => q.dataUpdatedAt).join(",");
-
-  // Build merged usageByKeyId lookup from all resolved usage queries.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: usageDataVersion tracks actual data changes; usageQueries ref is unstable
-  const usageByKeyId = useMemo(() => {
-    const merged: Record<number, KeyUsageData> = {};
-    for (const query of usageQueries) {
-      if (query.data?.ok) {
-        Object.assign(merged, query.data.data.usageByKeyId);
-      }
+  useEffect(() => {
+    if (!isAdmin || isLoading || isFetching || pageUserIds.length === 0) {
+      return;
     }
-    return merged;
-  }, [usageDataVersion]);
+
+    const abortController = new AbortController();
+    const requestedDatasetKey = usageDatasetKey;
+
+    void loadUserUsagePagesSequentially({
+      pageUserIds,
+      signal: abortController.signal,
+      fetchUsagePage: async (userIds) => {
+        const result = await queryClient.fetchQuery({
+          queryKey: ["users-usage", userIds],
+          queryFn: () => getUsersUsageBatch(userIds),
+          staleTime: 60_000,
+        });
+        return result.ok ? result.data.usageByKeyId : {};
+      },
+      onPageLoaded: (pageUsageByKeyId) => {
+        if (latestUsageDatasetKeyRef.current !== requestedDatasetKey) {
+          return;
+        }
+
+        setUsageByKeyId((previous) => ({
+          ...previous,
+          ...pageUsageByKeyId,
+        }));
+      },
+    });
+
+    return () => {
+      abortController.abort();
+    };
+  }, [isAdmin, isFetching, isLoading, pageUserIds, queryClient, usageDatasetKey]);
 
   const coreUsers = useMemo(() => data?.pages.flatMap((page) => page.users) ?? [], [data]);
 
@@ -771,6 +787,7 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
             onOpenBatchEdit={handleOpenBatchEdit}
             translations={tableTranslations}
             onRefresh={() => {
+              setUsageByKeyId({});
               clearUsageCache();
               queryClient.invalidateQueries({ queryKey: ["users-usage"] });
               refetch();
