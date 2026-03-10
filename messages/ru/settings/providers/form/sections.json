@@ -331,13 +331,23 @@
       "customAllowedPlaceholder": "напр. my-ide, internal-tool",
       "customBlockedLabel": "Пользовательские шаблоны блокировки",
       "customBlockedPlaceholder": "напр. legacy-client",
-      "customHelp": "Пользовательские шаблоны проверяются по вхождению в User-Agent без учёта регистра. '-' и '_' считаются эквивалентными.",
+      "customHelp": "Без '*': поиск подстроки без учёта регистра ('-' и '_' игнорируются). С '*': glob-шаблон от начала UA (используйте *foo* для поиска в любом месте; без учёта регистра, символы буквальные).",
       "presetClients": {
         "claude-code": "Claude Code (все)",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "Все",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "Выбрано: {count}"
     },
     "preserveClientIp": {
       "desc": "Передавать x-forwarded-for / x-real-ip в апстрим (может раскрыть реальный IP клиента)",

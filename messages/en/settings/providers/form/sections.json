@@ -330,13 +330,23 @@
       "customAllowedPlaceholder": "e.g. my-ide, internal-tool",
       "customBlockedLabel": "Custom Blocked Patterns",
       "customBlockedPlaceholder": "e.g. legacy-client",
-      "customHelp": "Custom patterns use case-insensitive User-Agent contains matching. '-' and '_' are treated as equivalent.",
+      "customHelp": "Without '*': case-insensitive substring match ('-'/'_' ignored). With '*': glob pattern match from start of UA (use *foo* to match anywhere; case-insensitive, characters are literal).",
       "presetClients": {
         "claude-code": "Claude Code (all)",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "All",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "{count} selected"
     },
     "preserveClientIp": {
       "desc": "Pass x-forwarded-for / x-real-ip to upstream providers (may expose real client IP)",

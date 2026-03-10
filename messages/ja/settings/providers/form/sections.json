@@ -331,13 +331,23 @@
       "customAllowedPlaceholder": "例: my-ide、internal-tool",
       "customBlockedLabel": "カスタムブロックパターン",
       "customBlockedPlaceholder": "例: legacy-client",
-      "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます（大文字小文字を区別しません）。'-' と '_' は同等として扱います。",
+      "customHelp": "'*' なし：大文字小文字を区別しない部分一致（'-' と '_' は無視）。'*' あり：UA の先頭からの glob パターンマッチ（*foo* で任意の位置に一致; 大文字小文字を区別しない、文字はそのまま一致）。",
       "presetClients": {
         "claude-code": "Claude Code（すべて）",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "すべて",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "{count} 件選択"
     },
     "preserveClientIp": {
       "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",

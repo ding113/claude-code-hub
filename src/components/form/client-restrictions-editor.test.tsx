@@ -23,6 +23,16 @@ const TEST_TRANSLATIONS = {
     "factory-cli": "Droid CLI",
     "codex-cli": "Codex CLI",
   },
+  subClients: {
+    all: "All",
+    cli: "CLI",
+    vscode: "VS Code",
+    "sdk-ts": "SDK (TypeScript)",
+    "sdk-py": "SDK (Python)",
+    "cli-sdk": "CLI SDK",
+    "gh-action": "GitHub Action",
+  },
+  nSelected: "{count} selected",
 };
 
 function render(node: ReactNode) {

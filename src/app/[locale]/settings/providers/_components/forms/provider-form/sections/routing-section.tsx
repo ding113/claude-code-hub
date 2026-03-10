@@ -298,6 +298,18 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                     ),
                     "codex-cli": t("sections.routing.clientRestrictions.presetClients.codex-cli"),
                   },
+                  subClients: {
+                    all: t("sections.routing.clientRestrictions.subClients.all"),
+                    cli: t("sections.routing.clientRestrictions.subClients.cli"),
+                    vscode: t("sections.routing.clientRestrictions.subClients.vscode"),
+                    "sdk-ts": t("sections.routing.clientRestrictions.subClients.sdk-ts"),
+                    "sdk-py": t("sections.routing.clientRestrictions.subClients.sdk-py"),
+                    "cli-sdk": t("sections.routing.clientRestrictions.subClients.cli-sdk"),
+                    "gh-action": t("sections.routing.clientRestrictions.subClients.gh-action"),
+                  },
+                  nSelected: t("sections.routing.clientRestrictions.nSelected", {
+                    count: "{count}",
+                  }),
                 }}
                 onInvalidTag={(_tag, reason) => {
                   const messages: Record<string, string> = {

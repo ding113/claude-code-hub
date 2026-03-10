@@ -1084,7 +1084,7 @@
       "label": "Allowed Clients",
       "description": "Restrict which CLI/IDE clients can use this account. Leave empty for no restrictions.",
       "customLabel": "Custom Client Patterns",
-      "customPlaceholder": "Enter custom pattern (e.g., 'xcode', 'my-ide')"
+      "customPlaceholder": "Enter pattern (e.g., 'my-ide', 'codex-*')"
     },
     "allowedModels": {
       "label": "Allowed Models",
@@ -1901,15 +1901,15 @@
           "label": "Client Restrictions",
           "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",
           "customLabel": "Custom Client Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
-          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
+          "customPlaceholder": "Enter pattern (e.g., 'my-ide', 'codex-*')",
+          "customHelp": "Without '*': case-insensitive substring match ('-'/'_' ignored). With '*': glob pattern match from start of UA (use *foo* to match anywhere; case-insensitive, characters are literal)."
         },
         "blockedClients": {
           "label": "Blocked Clients",
           "description": "Clients matching these patterns will be rejected, even if they match allowed clients.",
           "customLabel": "Custom Block Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
-          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
+          "customPlaceholder": "Enter pattern (e.g., 'my-ide', 'codex-*')",
+          "customHelp": "Without '*': case-insensitive substring match ('-'/'_' ignored). With '*': glob pattern match from start of UA (use *foo* to match anywhere; case-insensitive, characters are literal)."
         },
         "allowedModels": {
           "label": "Model Restrictions",
@@ -1946,7 +1946,17 @@
         "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
         "claude-code-sdk-py": "Claude Code SDK (Python)",
         "claude-code-gh-action": "Claude Code GitHub Action"
-      }
+      },
+      "subClients": {
+        "all": "All",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "{count} selected"
     },
     "keyEditSection": {
       "sections": {

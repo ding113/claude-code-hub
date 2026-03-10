@@ -33,6 +33,33 @@ export interface ClientRestrictionResult {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
 
+function globMatch(pattern: string, text: string): boolean {
+  const lp = pattern.toLowerCase();
+  const lt = text.toLowerCase();
+  let pi = 0;
+  let ti = 0;
+  let starPi = -1;
+  let starTi = -1;
+  while (ti < lt.length) {
+    if (pi < lp.length && lp[pi] === lt[ti]) {
+      pi++;
+      ti++;
+    } else if (pi < lp.length && lp[pi] === "*") {
+      starPi = pi;
+      starTi = ti;
+      pi++;
+    } else if (starPi >= 0) {
+      pi = starPi + 1;
+      starTi++;
+      ti = starTi;
+    } else {
+      return false;
+    }
+  }
+  while (pi < lp.length && lp[pi] === "*") pi++;
+  return pi === lp.length;
+}
+
 const ENTRYPOINT_MAP: Record<string, string> = {
   cli: "claude-code-cli",
   "sdk-cli": "claude-code-cli-sdk",
@@ -104,6 +131,10 @@ export function matchClientPattern(session: ProxySession, pattern: string): bool
       return false;
     }
 
+    if (pattern.includes("*")) {
+      return globMatch(pattern, ua);
+    }
+
     const normalizedPattern = normalize(pattern);
     if (normalizedPattern === "") {
       return false;
@@ -138,9 +169,13 @@ export function detectClientFull(session: ProxySession, pattern: string): Client
   } else {
     const ua = session.userAgent?.trim();
     if (ua) {
-      const normalizedPattern = normalize(pattern);
-      if (normalizedPattern !== "") {
-        matched = normalize(ua).includes(normalizedPattern);
+      if (pattern.includes("*")) {
+        matched = globMatch(pattern, ua);
+      } else {
+        const normalizedPattern = normalize(pattern);
+        if (normalizedPattern !== "") {
+          matched = normalize(ua).includes(normalizedPattern);
+        }
       }
     }
   }
@@ -192,6 +227,9 @@ export function isClientAllowedDetailed(
   const matches = (pattern: string): boolean => {
     if (!isBuiltinKeyword(pattern)) {
       if (!ua) return false;
+      if (pattern.includes("*")) {
+        return globMatch(pattern, ua);
+      }
       const normalizedPattern = normalize(pattern);
       return normalizedPattern !== "" && normalizedUa.includes(normalizedPattern);
     }

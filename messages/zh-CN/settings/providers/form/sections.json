@@ -67,13 +67,23 @@
       "customAllowedPlaceholder": "例如 my-ide、internal-tool",
       "customBlockedLabel": "自定义黑名单模式",
       "customBlockedPlaceholder": "例如 legacy-client",
-      "customHelp": "自定义模式使用 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。",
+      "customHelp": "不含 '*'：不区分大小写的子串匹配（忽略 '-' 和 '_'）。含 '*'：从 UA 开头的 glob 通配符匹配（用 *foo* 匹配任意位置；不区分大小写，字符按原样匹配）。",
       "presetClients": {
         "claude-code": "Claude Code（全部）",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "全部",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "已选 {count} 项"
     },
     "scheduleParams": {
       "title": "调度参数",
