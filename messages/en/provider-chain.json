@@ -43,6 +43,7 @@
     "endpointPoolExhausted": "Endpoint Pool Exhausted",
     "vendorTypeAllTimeout": "Vendor-Type All Endpoints Timeout",
     "hedgeTriggered": "Hedge Triggered",
+    "hedgeLaunched": "Hedge Alternative Launched",
     "hedgeWinner": "Hedge Winner",
     "hedgeLoserCancelled": "Hedge Loser (Cancelled)",
     "clientAbort": "Client Aborted"
@@ -62,6 +63,7 @@
     "vendor_type_all_timeout": "Vendor-Type All Endpoints Timeout",
     "client_restriction_filtered": "Client Restricted",
     "hedge_triggered": "Hedge Triggered",
+    "hedge_launched": "Hedge Alternative Launched",
     "hedge_winner": "Hedge Winner",
     "hedge_loser_cancelled": "Hedge Loser (Cancelled)",
     "client_abort": "Client Aborted"
@@ -232,6 +234,7 @@
     "vendorTypeAllTimeout": "Vendor-Type All Endpoints Timeout (524)",
     "vendorTypeAllTimeoutNote": "All endpoints for this vendor-type timed out. Vendor-type circuit breaker triggered.",
     "hedgeTriggered": "Hedge Threshold Exceeded (launching alternative)",
+    "hedgeLaunched": "Hedge Alternative Provider Launched",
     "hedgeWinner": "Hedge Race Winner (first byte received first)",
     "hedgeLoserCancelled": "Hedge Race Loser (request cancelled)",
     "clientAbort": "Client Disconnected (request aborted)",

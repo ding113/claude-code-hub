@@ -3068,9 +3068,14 @@ export class ProxyForwarder {
       }
       session.setProvider(attempt.provider);
 
+      // Determine if this is truly a hedge winner or just a regular success
+      // Only mark as hedge_winner when an actual hedge race occurred
+      // Note: launchedProviderCount is the most reliable indicator - if > 1, multiple providers were launched
+      const isActualHedgeWin = launchedProviderCount > 1;
+
       session.addProviderToChain(attempt.provider, {
         ...attempt.endpointAudit,
-        reason: "hedge_winner",
+        reason: isActualHedgeWin ? "hedge_winner" : "request_success",
         attemptNumber: attempt.sequence,
         statusCode: attempt.response.status,
       });
@@ -3178,6 +3183,17 @@ export class ProxyForwarder {
       };
 
       attempts.add(attempt);
+
+      // Record hedge participant launch in decision chain
+      // (first provider is already recorded via initial_selection or session_reuse)
+      if (launchedProviderCount > 1) {
+        session.addProviderToChain(provider, {
+          ...attempt.endpointAudit,
+          reason: "hedge_launched",
+          attemptNumber: attempt.sequence,
+          circuitState: getCircuitState(provider.id),
+        });
+      }
 
       if (attempt.firstByteTimeoutMs > 0) {
         attempt.thresholdTimer = setTimeout(() => {

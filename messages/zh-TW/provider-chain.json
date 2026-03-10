@@ -43,6 +43,7 @@
     "endpointPoolExhausted": "端點池耗盡",
     "vendorTypeAllTimeout": "供應商類型全端點逾時",
     "hedgeTriggered": "Hedge 已觸發",
+    "hedgeLaunched": "Hedge 備選已啟動",
     "hedgeWinner": "Hedge 競速贏家",
     "hedgeLoserCancelled": "Hedge 競速輸家（已取消）",
     "clientAbort": "客戶端中斷"
@@ -62,6 +63,7 @@
     "vendor_type_all_timeout": "供應商類型全端點逾時",
     "client_restriction_filtered": "客戶端受限",
     "hedge_triggered": "Hedge 已觸發",
+    "hedge_launched": "Hedge 備選已啟動",
     "hedge_winner": "Hedge 競速贏家",
     "hedge_loser_cancelled": "Hedge 競速輸家（已取消）",
     "client_abort": "客戶端中斷"
@@ -232,6 +234,7 @@
     "vendorTypeAllTimeout": "供應商類型全端點逾時（524）",
     "vendorTypeAllTimeoutNote": "該供應商類型的所有端點均逾時，已觸發供應商類型臨時熔斷。",
     "hedgeTriggered": "Hedge 閾值超出（正在啟動備選供應商）",
+    "hedgeLaunched": "Hedge 備選供應商已啟動",
     "hedgeWinner": "Hedge 競速贏家（最先收到首位元組）",
     "hedgeLoserCancelled": "Hedge 競速輸家（請求已取消）",
     "clientAbort": "客戶端已斷開連接（請求中斷）",

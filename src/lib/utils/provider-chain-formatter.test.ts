@@ -6,6 +6,9 @@ import {
   formatProviderDescription,
   formatProviderSummary,
   formatProviderTimeline,
+  getRetryCount,
+  isActualRequest,
+  isHedgeRace,
 } from "./provider-chain-formatter";
 
 /**
@@ -588,3 +591,187 @@ describe("hedge and client_abort reason handling", () => {
     expect(summary).toBeDefined();
   });
 });
+
+// =============================================================================
+// isHedgeRace and getRetryCount tests
+// =============================================================================
+
+describe("isHedgeRace", () => {
+  test("returns true when chain contains hedge_triggered", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000 },
+    ];
+    expect(isHedgeRace(chain)).toBe(true);
+  });
+
+  test("returns true when chain contains hedge_launched", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "hedge_launched", timestamp: 1000 },
+    ];
+    expect(isHedgeRace(chain)).toBe(true);
+  });
+
+  test("returns true when chain contains hedge_winner", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "hedge_winner", statusCode: 200, timestamp: 1000 },
+    ];
+    expect(isHedgeRace(chain)).toBe(true);
+  });
+
+  test("returns true when chain contains hedge_loser_cancelled", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 1000 },
+    ];
+    expect(isHedgeRace(chain)).toBe(true);
+  });
+
+  test("returns false for regular retry chain", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "retry_failed", timestamp: 1000 },
+      { id: 2, name: "p2", reason: "retry_success", statusCode: 200, timestamp: 2000 },
+    ];
+    expect(isHedgeRace(chain)).toBe(false);
+  });
+
+  test("returns false for single success", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "request_success", statusCode: 200, timestamp: 1000 },
+    ];
+    expect(isHedgeRace(chain)).toBe(false);
+  });
+});
+
+describe("getRetryCount", () => {
+  test("returns 0 for hedge race (not a retry)", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "initial_selection", timestamp: 0 },
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000 },
+      { id: 2, name: "p2", reason: "hedge_launched", timestamp: 1001 },
+      { id: 2, name: "p2", reason: "hedge_winner", statusCode: 200, timestamp: 2000 },
+      { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 2000 },
+    ];
+    expect(getRetryCount(chain)).toBe(0);
+  });
+
+  test("returns 0 for single successful request", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "initial_selection", timestamp: 0 },
+      { id: 1, name: "p1", reason: "request_success", statusCode: 200, timestamp: 1000 },
+    ];
+    expect(getRetryCount(chain)).toBe(0);
+  });
+
+  test("returns 1 for one retry (2 actual requests)", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "retry_failed", timestamp: 1000 },
+      { id: 2, name: "p2", reason: "retry_success", statusCode: 200, timestamp: 2000 },
+    ];
+    expect(getRetryCount(chain)).toBe(1);
+  });
+
+  test("returns 2 for two retries (3 actual requests)", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "retry_failed", timestamp: 1000 },
+      { id: 2, name: "p2", reason: "retry_failed", timestamp: 2000 },
+      { id: 3, name: "p3", reason: "retry_success", statusCode: 200, timestamp: 3000 },
+    ];
+    expect(getRetryCount(chain)).toBe(2);
+  });
+});
+
+describe("hedge_launched reason handling", () => {
+  test("hedge_launched is not an actual request", () => {
+    const item: ProviderChainItem = {
+      id: 2,
+      name: "p2",
+      reason: "hedge_launched",
+      timestamp: 1001,
+    };
+    expect(isActualRequest(item)).toBe(false);
+  });
+
+  test("hedge_launched appears in timeline", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "initial_selection", timestamp: 0 },
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000, attemptNumber: 1 },
+      {
+        id: 2,
+        name: "p2",
+        reason: "hedge_launched",
+        timestamp: 1001,
+        attemptNumber: 2,
+        circuitState: "closed",
+      },
+      { id: 2, name: "p2", reason: "hedge_winner", statusCode: 200, timestamp: 2000, attemptNumber: 2 },
+      { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 1 },
+    ];
+    const { timeline } = formatProviderTimeline(chain, mockT);
+    expect(timeline).toContain("timeline.hedgeLaunched");
+    expect(timeline).toContain("p2");
+  });
+});
+
+describe("Edge cases for hedge race detection", () => {
+  test("isHedgeRace returns false for empty chain", () => {
+    const chain: ProviderChainItem[] = [];
+    expect(isHedgeRace(chain)).toBe(false);
+  });
+
+  test("getRetryCount returns 0 for empty chain", () => {
+    const chain: ProviderChainItem[] = [];
+    expect(getRetryCount(chain)).toBe(0);
+  });
+
+  test("isHedgeRace returns true for incomplete hedge chain (only hedge_launched, no winner)", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "initial_selection", timestamp: 0 },
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000 },
+      { id: 2, name: "p2", reason: "hedge_launched", timestamp: 1001, attemptNumber: 2 },
+      // System crashed or request cancelled before winner determined
+    ];
+    expect(isHedgeRace(chain)).toBe(true);
+  });
+
+  test("getRetryCount returns 0 for incomplete hedge chain", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "initial_selection", timestamp: 0 },
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000 },
+      { id: 2, name: "p2", reason: "hedge_launched", timestamp: 1001, attemptNumber: 2 },
+    ];
+    expect(getRetryCount(chain)).toBe(0);
+  });
+
+  test("mixed scenario: retry + hedge race (hedge takes precedence)", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "retry_failed", timestamp: 0 },
+      { id: 2, name: "p2", reason: "hedge_triggered", timestamp: 1000, attemptNumber: 2 },
+      { id: 3, name: "p3", reason: "hedge_launched", timestamp: 1001, attemptNumber: 3 },
+      { id: 3, name: "p3", reason: "hedge_winner", statusCode: 200, timestamp: 2000, attemptNumber: 3 },
+      { id: 2, name: "p2", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 2 },
+    ];
+    expect(isHedgeRace(chain)).toBe(true);
+    expect(getRetryCount(chain)).toBe(0); // Hedge race takes precedence over retry count
+  });
+
+  test("multiple hedge_launched entries (3+ concurrent providers)", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "p1", reason: "initial_selection", timestamp: 0 },
+      { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000, attemptNumber: 1 },
+      { id: 2, name: "p2", reason: "hedge_launched", timestamp: 1001, attemptNumber: 2 },
+      { id: 3, name: "p3", reason: "hedge_launched", timestamp: 1002, attemptNumber: 3 },
+      { id: 2, name: "p2", reason: "hedge_winner", statusCode: 200, timestamp: 2000, attemptNumber: 2 },
+      { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 1 },
+      { id: 3, name: "p3", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 3 },
+    ];
+    expect(isHedgeRace(chain)).toBe(true);
+    expect(getRetryCount(chain)).toBe(0);
+
+    // Verify all hedge_launched entries are not counted as actual requests
+    const actualRequests = chain.filter(isActualRequest);
+    expect(actualRequests).toHaveLength(3); // winner + 2 losers
+    expect(actualRequests.every(item =>
+      item.reason === "hedge_winner" || item.reason === "hedge_loser_cancelled"
+    )).toBe(true);
+  });
+});
+

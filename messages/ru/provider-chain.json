@@ -43,6 +43,7 @@
     "endpointPoolExhausted": "Пул конечных точек исчерпан",
     "vendorTypeAllTimeout": "Тайм-аут всех конечных точек",
     "hedgeTriggered": "Hedge запущен",
+    "hedgeLaunched": "Hedge альтернатива запущена",
     "hedgeWinner": "Победитель Hedge-гонки",
     "hedgeLoserCancelled": "Проигравший Hedge-гонки (отменён)",
     "clientAbort": "Клиент прервал запрос"
@@ -62,6 +63,7 @@
     "vendor_type_all_timeout": "Тайм-аут всех конечных точек типа поставщика",
     "client_restriction_filtered": "Клиент ограничен",
     "hedge_triggered": "Hedge запущен",
+    "hedge_launched": "Hedge альтернатива запущена",
     "hedge_winner": "Победитель Hedge-гонки",
     "hedge_loser_cancelled": "Проигравший Hedge-гонки (отменён)",
     "client_abort": "Клиент прервал запрос"
@@ -232,6 +234,7 @@
     "vendorTypeAllTimeout": "Тайм-аут всех конечных точек типа поставщика (524)",
     "vendorTypeAllTimeoutNote": "Все конечные точки этого типа поставщика превысили тайм-аут. Активирован размыкатель типа поставщика.",
     "hedgeTriggered": "Порог Hedge превышен (запускается альтернативный провайдер)",
+    "hedgeLaunched": "Hedge альтернативный провайдер запущен",
     "hedgeWinner": "Победитель Hedge-гонки (первый получил начальный байт)",
     "hedgeLoserCancelled": "Проигравший Hedge-гонки (запрос отменён)",
     "clientAbort": "Клиент отключился (запрос прерван)",

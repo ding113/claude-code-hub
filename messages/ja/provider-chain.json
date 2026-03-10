@@ -43,6 +43,7 @@
     "endpointPoolExhausted": "エンドポイントプール枯渇",
     "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト",
     "hedgeTriggered": "Hedge 発動",
+    "hedgeLaunched": "Hedge 代替起動済み",
     "hedgeWinner": "Hedge 競争勝者",
     "hedgeLoserCancelled": "Hedge 競争敗者（キャンセル）",
     "clientAbort": "クライアント中断"
@@ -62,6 +63,7 @@
     "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト",
     "client_restriction_filtered": "クライアント制限",
     "hedge_triggered": "Hedge 発動",
+    "hedge_launched": "Hedge 代替起動済み",
     "hedge_winner": "Hedge 競争勝者",
     "hedge_loser_cancelled": "Hedge 競争敗者（キャンセル）",
     "client_abort": "クライアント中断"
@@ -232,6 +234,7 @@
     "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト（524）",
     "vendorTypeAllTimeoutNote": "このベンダータイプの全エンドポイントがタイムアウトしました。ベンダータイプサーキットブレーカーが発動しました。",
     "hedgeTriggered": "Hedge 閾値超過（代替プロバイダーを起動中）",
+    "hedgeLaunched": "Hedge 代替プロバイダー起動済み",
     "hedgeWinner": "Hedge 競争勝者（最初にファーストバイトを受信）",
     "hedgeLoserCancelled": "Hedge 競争敗者（リクエストキャンセル）",
     "clientAbort": "クライアント切断（リクエスト中断）",

@@ -455,6 +455,7 @@ export class ProxySession {
         | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
         | "client_restriction_filtered" // 供应商因客户端限制被跳过（会话复用路径）
         | "hedge_triggered" // Hedge 计时器触发，启动备选供应商
+        | "hedge_launched" // Hedge 备选供应商已启动（信息性记录）
         | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
         | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消
         | "client_abort"; // 客户端在响应完成前断开连接
@@ -508,11 +509,14 @@ export class ProxySession {
       endpointFilterStats: metadata?.endpointFilterStats,
     };
 
-    // 避免重复添加同一个供应商（除非是重试，即有 attemptNumber）
+    // 避免重复添加同一个供应商
+    // 检查最后一条记录是否与当前记录完全相同（id + reason + attemptNumber）
+    const lastItem = this.providerChain[this.providerChain.length - 1];
     const shouldAdd =
       this.providerChain.length === 0 ||
-      this.providerChain[this.providerChain.length - 1].id !== provider.id ||
-      metadata?.attemptNumber !== undefined;
+      lastItem.id !== provider.id ||
+      lastItem.reason !== metadata?.reason ||
+      (metadata?.attemptNumber !== undefined && lastItem.attemptNumber !== metadata.attemptNumber);
 
     if (shouldAdd) {
       this.providerChain.push(item);

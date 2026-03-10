@@ -15,7 +15,7 @@ import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import { isProviderFinalized } from "@/lib/utils/provider-display";
-import { isActualRequest } from "@/lib/utils/provider-chain-formatter";
+import { getRetryCount } from "@/lib/utils/provider-chain-formatter";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
@@ -451,10 +451,11 @@ export function VirtualizedLogsTable({
                                   Number.isFinite(multiplier) &&
                                   multiplier !== 1;
 
-                                const actualRequestCount =
-                                  log.providerChain?.filter(isActualRequest).length ?? 0;
+                                const retryCount = log.providerChain
+                                  ? getRetryCount(log.providerChain)
+                                  : 0;
                                 // Only show badge in table when no retry (Popover shows badge when retry)
-                                const showBadgeInTable = hasCostBadge && actualRequestCount <= 1;
+                                const showBadgeInTable = hasCostBadge && retryCount === 0;
 
                                 return (
                                   <>
