@@ -18,7 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatProbabilityCompact, getRetryCount, isActualRequest, isHedgeRace } from "@/lib/utils/provider-chain-formatter";
+import {
+  formatProbabilityCompact,
+  getRetryCount,
+  isActualRequest,
+  isHedgeRace,
+} from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { getFake200ReasonKey } from "./fake200-reason";
 
@@ -472,10 +477,7 @@ export function ProviderChainPopover({
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
             <Badge variant="outline" className="text-[10px]">
-              {isHedge
-                ? tChain("timeline.hedgeRace")
-                : `${requestCount} ${t("logs.table.times")}`
-              }
+              {isHedge ? tChain("timeline.hedgeRace") : `${requestCount} ${t("logs.table.times")}`}
             </Badge>
           </div>
         </div>

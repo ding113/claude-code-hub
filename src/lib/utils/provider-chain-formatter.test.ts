@@ -702,7 +702,14 @@ describe("hedge_launched reason handling", () => {
         attemptNumber: 2,
         circuitState: "closed",
       },
-      { id: 2, name: "p2", reason: "hedge_winner", statusCode: 200, timestamp: 2000, attemptNumber: 2 },
+      {
+        id: 2,
+        name: "p2",
+        reason: "hedge_winner",
+        statusCode: 200,
+        timestamp: 2000,
+        attemptNumber: 2,
+      },
       { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 1 },
     ];
     const { timeline } = formatProviderTimeline(chain, mockT);
@@ -746,7 +753,14 @@ describe("Edge cases for hedge race detection", () => {
       { id: 1, name: "p1", reason: "retry_failed", timestamp: 0 },
       { id: 2, name: "p2", reason: "hedge_triggered", timestamp: 1000, attemptNumber: 2 },
       { id: 3, name: "p3", reason: "hedge_launched", timestamp: 1001, attemptNumber: 3 },
-      { id: 3, name: "p3", reason: "hedge_winner", statusCode: 200, timestamp: 2000, attemptNumber: 3 },
+      {
+        id: 3,
+        name: "p3",
+        reason: "hedge_winner",
+        statusCode: 200,
+        timestamp: 2000,
+        attemptNumber: 3,
+      },
       { id: 2, name: "p2", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 2 },
     ];
     expect(isHedgeRace(chain)).toBe(true);
@@ -759,7 +773,14 @@ describe("Edge cases for hedge race detection", () => {
       { id: 1, name: "p1", reason: "hedge_triggered", timestamp: 1000, attemptNumber: 1 },
       { id: 2, name: "p2", reason: "hedge_launched", timestamp: 1001, attemptNumber: 2 },
       { id: 3, name: "p3", reason: "hedge_launched", timestamp: 1002, attemptNumber: 3 },
-      { id: 2, name: "p2", reason: "hedge_winner", statusCode: 200, timestamp: 2000, attemptNumber: 2 },
+      {
+        id: 2,
+        name: "p2",
+        reason: "hedge_winner",
+        statusCode: 200,
+        timestamp: 2000,
+        attemptNumber: 2,
+      },
       { id: 1, name: "p1", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 1 },
       { id: 3, name: "p3", reason: "hedge_loser_cancelled", timestamp: 2000, attemptNumber: 3 },
     ];
@@ -769,9 +790,10 @@ describe("Edge cases for hedge race detection", () => {
     // Verify all hedge_launched entries are not counted as actual requests
     const actualRequests = chain.filter(isActualRequest);
     expect(actualRequests).toHaveLength(3); // winner + 2 losers
-    expect(actualRequests.every(item =>
-      item.reason === "hedge_winner" || item.reason === "hedge_loser_cancelled"
-    )).toBe(true);
+    expect(
+      actualRequests.every(
+        (item) => item.reason === "hedge_winner" || item.reason === "hedge_loser_cancelled"
+      )
+    ).toBe(true);
   });
 });
-
