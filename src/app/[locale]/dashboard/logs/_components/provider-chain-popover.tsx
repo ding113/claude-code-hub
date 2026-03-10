@@ -421,10 +421,7 @@ export function ProviderChainPopover({
             {/* Request count badge */}
             <Badge variant="secondary" className="shrink-0">
               {isHedge ? (
-                <>
-                  <GitBranch className="w-3 h-3 mr-1" />
-                  {tChain("timeline.hedgeRace")}
-                </>
+                <GitBranch className="w-3 h-3" />
               ) : (
                 <>
                   {requestCount}
