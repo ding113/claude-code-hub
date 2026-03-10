@@ -1,11 +1,6 @@
 import { Info } from "lucide-react";
 import { useTranslations } from "next-intl";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface MixedValueIndicatorProps {
   values?: unknown[]; // 可选：显示所有不同的值

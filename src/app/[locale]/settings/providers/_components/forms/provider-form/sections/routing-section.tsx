@@ -36,8 +36,15 @@ interface RoutingSectionProps {
 export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
   const t = useTranslations("settings.providers.form");
   const tUI = useTranslations("ui.tagInput");
-  const { state, dispatch, mode, provider, enableMultiProviderTypes, groupSuggestions, batchAnalysis } =
-    useProviderForm();
+  const {
+    state,
+    dispatch,
+    mode,
+    provider,
+    enableMultiProviderTypes,
+    groupSuggestions,
+    batchAnalysis,
+  } = useProviderForm();
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
 

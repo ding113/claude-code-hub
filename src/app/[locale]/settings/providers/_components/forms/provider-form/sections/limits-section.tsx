@@ -113,9 +113,7 @@ function LimitCard({
               {unit}
             </span>
           </div>
-          {mixedValues && mixedValues.length > 0 && (
-            <MixedValueIndicator values={mixedValues} />
-          )}
+          {mixedValues && mixedValues.length > 0 && <MixedValueIndicator values={mixedValues} />}
         </div>
       </div>
       {value !== null && (
@@ -371,7 +369,9 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
                     </p>
                   )}
                   {isBatch && batchAnalysis?.circuitBreaker.failureThreshold.status === "mixed" && (
-                    <MixedValueIndicator values={batchAnalysis.circuitBreaker.failureThreshold.values} />
+                    <MixedValueIndicator
+                      values={batchAnalysis.circuitBreaker.failureThreshold.values}
+                    />
                   )}
                 </div>
               </SmartInputWrapper>
@@ -393,21 +393,24 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
                           payload: val === "" ? undefined : parseInt(val, 10),
                         });
                       }}
-                    placeholder={t("sections.circuitBreaker.openDuration.placeholder")}
-                    disabled={state.ui.isPending}
-                    min="1"
-                    max="1440"
-                    step="1"
-                    className="pr-12"
-                  />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                    min
-                  </span>
+                      placeholder={t("sections.circuitBreaker.openDuration.placeholder")}
+                      disabled={state.ui.isPending}
+                      min="1"
+                      max="1440"
+                      step="1"
+                      className="pr-12"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      min
+                    </span>
+                  </div>
+                  {isBatch &&
+                    batchAnalysis?.circuitBreaker.openDurationMinutes.status === "mixed" && (
+                      <MixedValueIndicator
+                        values={batchAnalysis.circuitBreaker.openDurationMinutes.values}
+                      />
+                    )}
                 </div>
-                {isBatch && batchAnalysis?.circuitBreaker.openDurationMinutes.status === "mixed" && (
-                  <MixedValueIndicator values={batchAnalysis.circuitBreaker.openDurationMinutes.values} />
-                )}
-              </div>
               </SmartInputWrapper>
 
               <SmartInputWrapper
@@ -432,9 +435,12 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
                     max="10"
                     step="1"
                   />
-                  {isBatch && batchAnalysis?.circuitBreaker.halfOpenSuccessThreshold.status === "mixed" && (
-                    <MixedValueIndicator values={batchAnalysis.circuitBreaker.halfOpenSuccessThreshold.values} />
-                  )}
+                  {isBatch &&
+                    batchAnalysis?.circuitBreaker.halfOpenSuccessThreshold.status === "mixed" && (
+                      <MixedValueIndicator
+                        values={batchAnalysis.circuitBreaker.halfOpenSuccessThreshold.values}
+                      />
+                    )}
                 </div>
               </SmartInputWrapper>
 
@@ -464,7 +470,9 @@ export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
                     <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
                   </div>
                   {isBatch && batchAnalysis?.circuitBreaker.maxRetryAttempts.status === "mixed" && (
-                    <MixedValueIndicator values={batchAnalysis.circuitBreaker.maxRetryAttempts.values} />
+                    <MixedValueIndicator
+                      values={batchAnalysis.circuitBreaker.maxRetryAttempts.values}
+                    />
                   )}
                 </div>
               </SmartInputWrapper>
