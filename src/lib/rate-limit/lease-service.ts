@@ -43,6 +43,7 @@ export interface GetCostLeaseParams {
   limitAmount: number;
   resetTime?: string;
   resetMode?: DailyResetMode;
+  costResetAt?: Date | null;
 }
 
 /**
@@ -106,6 +107,18 @@ export class LeaseService {
               return await LeaseService.refreshCostLeaseFromDb(params);
             }
 
+            // Check if costResetAt changed - force refresh if so
+            const paramResetAtMs =
+              params.costResetAt instanceof Date ? params.costResetAt.getTime() : null;
+            if ((lease.costResetAtMs ?? null) !== paramResetAtMs) {
+              logger.debug("[LeaseService] costResetAt changed, force refresh", {
+                key: leaseKey,
+                cachedResetAtMs: lease.costResetAtMs ?? null,
+                newResetAtMs: paramResetAtMs,
+              });
+              return await LeaseService.refreshCostLeaseFromDb(params);
+            }
+
             logger.debug("[LeaseService] Cache hit", {
               key: leaseKey,
               remaining: lease.remainingBudget,
@@ -165,11 +178,17 @@ export class LeaseService {
       // Calculate time range for DB query
       const { startTime, endTime } = await getLeaseTimeRange(window, resetTime, resetMode);
 
+      // Clip startTime forward if costResetAt is more recent (limits-only reset)
+      const effectiveStartTime =
+        params.costResetAt instanceof Date && params.costResetAt > startTime
+          ? params.costResetAt
+          : startTime;
+
       // Query DB for current usage
       const currentUsage = await LeaseService.queryDbUsage(
         entityType,
         entityId,
-        startTime,
+        effectiveStartTime,
         endTime
       );
 
@@ -194,6 +213,7 @@ export class LeaseService {
         limitAmount,
         remainingBudget,
         ttlSeconds,
+        costResetAtMs: params.costResetAt instanceof Date ? params.costResetAt.getTime() : null,
       });
 
       // Store in Redis

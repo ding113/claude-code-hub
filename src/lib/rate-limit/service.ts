@@ -165,6 +165,7 @@ export class RateLimitService {
       daily_reset_mode?: DailyResetMode;
       limit_weekly_usd: number | null;
       limit_monthly_usd: number | null;
+      cost_reset_at?: Date | null;
     }
   ): Promise<{ allowed: boolean; reason?: string }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
@@ -214,7 +215,12 @@ export class RateLimitService {
                   logger.info(
                     `[RateLimit] Cache miss for ${type}:${id}:cost_5h, querying database`
                   );
-                  return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+                  return await RateLimitService.checkCostLimitsFromDatabase(
+                    id,
+                    type,
+                    costLimits,
+                    limits.cost_reset_at
+                  );
                 }
               }
             } catch (error) {
@@ -222,7 +228,12 @@ export class RateLimitService {
                 "[RateLimit] 5h rolling window query failed, fallback to database:",
                 error
               );
-              return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+              return await RateLimitService.checkCostLimitsFromDatabase(
+                id,
+                type,
+                costLimits,
+                limits.cost_reset_at
+              );
             }
           } else if (limit.period === "daily" && limit.resetMode === "rolling") {
             // daily 滚动窗口：使用 ZSET + Lua 脚本
@@ -246,7 +257,12 @@ export class RateLimitService {
                   logger.info(
                     `[RateLimit] Cache miss for ${type}:${id}:cost_daily_rolling, querying database`
                   );
-                  return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+                  return await RateLimitService.checkCostLimitsFromDatabase(
+                    id,
+                    type,
+                    costLimits,
+                    limits.cost_reset_at
+                  );
                 }
               }
             } catch (error) {
@@ -254,7 +270,12 @@ export class RateLimitService {
                 "[RateLimit] Daily rolling window query failed, fallback to database:",
                 error
               );
-              return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+              return await RateLimitService.checkCostLimitsFromDatabase(
+                id,
+                type,
+                costLimits,
+                limits.cost_reset_at
+              );
             }
           } else {
             // daily fixed/周/月使用普通 GET
@@ -267,7 +288,12 @@ export class RateLimitService {
               logger.info(
                 `[RateLimit] Cache miss for ${type}:${id}:cost_${periodKey}, querying database`
               );
-              return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+              return await RateLimitService.checkCostLimitsFromDatabase(
+                id,
+                type,
+                costLimits,
+                limits.cost_reset_at
+              );
             }
 
             current = parseFloat((value as string) || "0");
@@ -287,10 +313,20 @@ export class RateLimitService {
 
       // Slow Path: Redis 不可用，降级到数据库
       logger.warn(`[RateLimit] Redis unavailable, checking ${type} cost limits from database`);
-      return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+      return await RateLimitService.checkCostLimitsFromDatabase(
+        id,
+        type,
+        costLimits,
+        limits.cost_reset_at
+      );
     } catch (error) {
       logger.error("[RateLimit] Check failed, fallback to database:", error);
-      return await RateLimitService.checkCostLimitsFromDatabase(id, type, costLimits);
+      return await RateLimitService.checkCostLimitsFromDatabase(
+        id,
+        type,
+        costLimits,
+        limits.cost_reset_at
+      );
     }
   }
 
@@ -311,17 +347,18 @@ export class RateLimitService {
     try {
       let current = 0;
       const cacheKey = (() => {
+        const resetAtSuffix =
+          options?.resetAt instanceof Date && !Number.isNaN(options.resetAt.getTime())
+            ? `:${options.resetAt.getTime()}`
+            : "";
         if (entityType === "key") {
-          return `total_cost:key:${options?.keyHash}`;
+          return `total_cost:key:${options?.keyHash}${resetAtSuffix}`;
         }
         if (entityType === "user") {
-          return `total_cost:user:${entityId}`;
+          return `total_cost:user:${entityId}${resetAtSuffix}`;
         }
-        const resetAtMs =
-          options?.resetAt instanceof Date && !Number.isNaN(options.resetAt.getTime())
-            ? options.resetAt.getTime()
-            : "none";
-        return `total_cost:provider:${entityId}:${resetAtMs}`;
+        const resetAtMs = resetAtSuffix || ":none";
+        return `total_cost:provider:${entityId}${resetAtMs}`;
       })();
       const cacheTtl = 300; // 5 minutes
 
@@ -339,9 +376,9 @@ export class RateLimitService {
                 logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
                 return { allowed: true };
               }
-              current = await sumKeyTotalCost(options.keyHash);
+              current = await sumKeyTotalCost(options.keyHash, 365, options?.resetAt);
             } else if (entityType === "user") {
-              current = await sumUserTotalCost(entityId);
+              current = await sumUserTotalCost(entityId, 365, options?.resetAt);
             } else {
               current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
             }
@@ -357,9 +394,9 @@ export class RateLimitService {
             if (!options?.keyHash) {
               return { allowed: true };
             }
-            current = await sumKeyTotalCost(options.keyHash);
+            current = await sumKeyTotalCost(options.keyHash, 365, options?.resetAt);
           } else if (entityType === "user") {
-            current = await sumUserTotalCost(entityId);
+            current = await sumUserTotalCost(entityId, 365, options?.resetAt);
           } else {
             current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
           }
@@ -371,9 +408,9 @@ export class RateLimitService {
             logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
             return { allowed: true };
           }
-          current = await sumKeyTotalCost(options.keyHash);
+          current = await sumKeyTotalCost(options.keyHash, 365, options?.resetAt);
         } else if (entityType === "user") {
-          current = await sumUserTotalCost(entityId);
+          current = await sumUserTotalCost(entityId, 365, options?.resetAt);
         } else {
           current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
         }
@@ -401,7 +438,8 @@ export class RateLimitService {
   private static async checkCostLimitsFromDatabase(
     id: number,
     type: "key" | "provider" | "user",
-    costLimits: CostLimit[]
+    costLimits: CostLimit[],
+    costResetAt?: Date | null
   ): Promise<{ allowed: boolean; reason?: string }> {
     const {
       findKeyCostEntriesInTimeRange,
@@ -422,6 +460,10 @@ export class RateLimitService {
         limit.resetMode
       );
 
+      // Clip startTime forward if costResetAt is more recent
+      const effectiveStartTime =
+        costResetAt instanceof Date && costResetAt > startTime ? costResetAt : startTime;
+
       // 查询数据库
       let current = 0;
       let costEntries: Array<{
@@ -436,13 +478,13 @@ export class RateLimitService {
       if (isRollingWindow) {
         switch (type) {
           case "key":
-            costEntries = await findKeyCostEntriesInTimeRange(id, startTime, endTime);
+            costEntries = await findKeyCostEntriesInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "provider":
-            costEntries = await findProviderCostEntriesInTimeRange(id, startTime, endTime);
+            costEntries = await findProviderCostEntriesInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "user":
-            costEntries = await findUserCostEntriesInTimeRange(id, startTime, endTime);
+            costEntries = await findUserCostEntriesInTimeRange(id, effectiveStartTime, endTime);
             break;
           default:
             costEntries = [];
@@ -452,13 +494,13 @@ export class RateLimitService {
       } else {
         switch (type) {
           case "key":
-            current = await sumKeyCostInTimeRange(id, startTime, endTime);
+            current = await sumKeyCostInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "provider":
-            current = await sumProviderCostInTimeRange(id, startTime, endTime);
+            current = await sumProviderCostInTimeRange(id, effectiveStartTime, endTime);
             break;
           case "user":
-            current = await sumUserCostInTimeRange(id, startTime, endTime);
+            current = await sumUserCostInTimeRange(id, effectiveStartTime, endTime);
             break;
           default:
             current = 0;
@@ -1424,6 +1466,7 @@ export class RateLimitService {
       daily_reset_mode?: DailyResetMode;
       limit_weekly_usd: number | null;
       limit_monthly_usd: number | null;
+      cost_reset_at?: Date | null;
     }
   ): Promise<{ allowed: boolean; reason?: string; failOpen?: boolean }> {
     const normalizedDailyReset = normalizeResetTime(limits.daily_reset_time);
@@ -1479,6 +1522,7 @@ export class RateLimitService {
           limitAmount: check.limit,
           resetTime: check.resetTime,
           resetMode: check.resetMode,
+          costResetAt: limits.cost_reset_at,
         });
 
         // Fail-open if lease retrieval failed

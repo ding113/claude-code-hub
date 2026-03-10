@@ -702,6 +702,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       .select({
         key: keysTable,
         userLimitConcurrentSessions: usersTable.limitConcurrentSessions,
+        userCostResetAt: usersTable.costResetAt,
       })
       .from(keysTable)
       .leftJoin(usersTable, and(eq(keysTable.userId, usersTable.id), isNull(usersTable.deletedAt)))
@@ -733,6 +734,11 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       result.userLimitConcurrentSessions ?? null
     );
 
+    // Clip time range start by costResetAt (for limits-only reset)
+    const costResetAt = result.userCostResetAt ?? null;
+    const clipStart = (start: Date): Date =>
+      costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
+
     // Calculate time ranges using Key's dailyResetTime/dailyResetMode configuration
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
       "daily",
@@ -748,11 +754,15 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
     const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
       await Promise.all([
-        sumKeyCostInTimeRange(keyId, range5h.startTime, range5h.endTime),
-        sumKeyCostInTimeRange(keyId, keyDailyTimeRange.startTime, keyDailyTimeRange.endTime),
-        sumKeyCostInTimeRange(keyId, rangeWeekly.startTime, rangeWeekly.endTime),
-        sumKeyCostInTimeRange(keyId, rangeMonthly.startTime, rangeMonthly.endTime),
-        sumKeyTotalCost(key.key),
+        sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
+        sumKeyCostInTimeRange(
+          keyId,
+          clipStart(keyDailyTimeRange.startTime),
+          keyDailyTimeRange.endTime
+        ),
+        sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
+        sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
+        sumKeyTotalCost(key.key, Infinity, costResetAt),
         SessionTracker.getKeySessionCount(keyId),
       ]);
 

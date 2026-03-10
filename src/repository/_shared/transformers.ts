@@ -48,6 +48,7 @@ export function toUser(dbUser: any): User {
     dailyResetTime: dbUser?.dailyResetTime ?? "00:00",
     isEnabled: dbUser?.isEnabled ?? true,
     expiresAt: dbUser?.expiresAt ? new Date(dbUser.expiresAt) : null,
+    costResetAt: dbUser?.costResetAt ? new Date(dbUser.costResetAt) : null,
     allowedClients: dbUser?.allowedClients ?? [],
     blockedClients: dbUser?.blockedClients ?? [],
     allowedModels: dbUser?.allowedModels ?? [],

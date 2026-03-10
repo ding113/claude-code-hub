@@ -145,7 +145,8 @@ describe("total-usage-semantics", () => {
       expect(sumKeyQuotaCostsByIdMock).toHaveBeenCalledWith(
         1,
         expect.any(Object),
-        ALL_TIME_MAX_AGE_DAYS
+        ALL_TIME_MAX_AGE_DAYS,
+        null
       );
     });
 
@@ -195,7 +196,8 @@ describe("total-usage-semantics", () => {
       expect(sumUserQuotaCostsMock).toHaveBeenCalledWith(
         1,
         expect.any(Object),
-        ALL_TIME_MAX_AGE_DAYS
+        ALL_TIME_MAX_AGE_DAYS,
+        null
       );
     });
   });
@@ -228,47 +230,17 @@ describe("total-usage-semantics", () => {
       await getUserAllLimitUsage(1);
 
       // Verify sumUserTotalCost was called with Infinity (all-time)
-      expect(sumUserTotalCostMock).toHaveBeenCalledWith(1, Infinity);
+      // 3rd arg is user.costResetAt (undefined when not set on mock user)
+      const calls = sumUserTotalCostMock.mock.calls;
+      expect(calls.length).toBe(1);
+      expect(calls[0][0]).toBe(1);
+      expect(calls[0][1]).toBe(Infinity);
     });
   });
 
   describe("ALL_TIME_MAX_AGE_DAYS constant value", () => {
     it("should be Infinity for all-time semantics", () => {
       expect(ALL_TIME_MAX_AGE_DAYS).toBe(Infinity);
-    });
-  });
-
-  describe("source code verification", () => {
-    it("should verify sumUserCost passes ALL_TIME_MAX_AGE_DAYS when period is total", async () => {
-      // This test verifies the implementation by reading the source code pattern
-      // Ensure we call quota aggregation functions with ALL_TIME_MAX_AGE_DAYS for all-time usage.
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-
-      const myUsagePath = path.join(process.cwd(), "src/actions/my-usage.ts");
-      const content = await fs.readFile(myUsagePath, "utf-8");
-
-      // Verify the constant is defined as Infinity
-      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
-
-      // Verify quota aggregation uses the constant for all-time usage
-      expect(content).toMatch(/sumUserQuotaCosts\([^)]*ALL_TIME_MAX_AGE_DAYS\s*\)/);
-
-      expect(content).toMatch(/sumKeyQuotaCostsById\([^)]*ALL_TIME_MAX_AGE_DAYS\s*\)/);
-    });
-
-    it("should verify getUserAllLimitUsage passes ALL_TIME_MAX_AGE_DAYS", async () => {
-      const fs = await import("node:fs/promises");
-      const path = await import("node:path");
-
-      const usersPath = path.join(process.cwd(), "src/actions/users.ts");
-      const content = await fs.readFile(usersPath, "utf-8");
-
-      // Verify the constant is defined as Infinity
-      expect(content).toContain("const ALL_TIME_MAX_AGE_DAYS = Infinity");
-
-      // Verify sumUserTotalCost is called with the constant
-      expect(content).toContain("sumUserTotalCost(userId, ALL_TIME_MAX_AGE_DAYS)");
     });
   });
 });
