@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { TagInput } from "@/components/ui/tag-input";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
 import type { ProviderType } from "@/types/provider";
+import { MixedValueIndicator } from "../../../batch-edit/mixed-value-indicator";
 import { ModelMultiSelect } from "../../../model-multi-select";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
@@ -35,7 +36,7 @@ interface RoutingSectionProps {
 export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
   const t = useTranslations("settings.providers.form");
   const tUI = useTranslations("ui.tagInput");
-  const { state, dispatch, mode, provider, enableMultiProviderTypes, groupSuggestions } =
+  const { state, dispatch, mode, provider, enableMultiProviderTypes, groupSuggestions, batchAnalysis } =
     useProviderForm();
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
@@ -177,13 +178,18 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
         <div className="space-y-4">
           {/* Model Redirects */}
           <FieldGroup label={t("sections.routing.modelRedirects.label")}>
-            <ModelRedirectEditor
-              value={state.routing.modelRedirects}
-              onChange={(value: Record<string, string>) =>
-                dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })
-              }
-              disabled={state.ui.isPending}
-            />
+            <div className="space-y-2">
+              <ModelRedirectEditor
+                value={state.routing.modelRedirects}
+                onChange={(value: Record<string, string>) =>
+                  dispatch({ type: "SET_MODEL_REDIRECTS", payload: value })
+                }
+                disabled={state.ui.isPending}
+              />
+              {isBatch && batchAnalysis?.routing.modelRedirects.status === "mixed" && (
+                <MixedValueIndicator values={batchAnalysis.routing.modelRedirects.values} />
+              )}
+            </div>
           </FieldGroup>
 
           {/* Allowed Models */}
@@ -314,64 +320,79 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
               label={t("sections.routing.scheduleParams.priority.label")}
               description={t("sections.routing.scheduleParams.priority.desc")}
             >
-              <Input
-                id={isEdit ? "edit-priority" : "priority"}
-                type="number"
-                value={state.routing.priority}
-                onChange={(e) =>
-                  dispatch({ type: "SET_PRIORITY", payload: parseInt(e.target.value, 10) || 0 })
-                }
-                placeholder={t("sections.routing.scheduleParams.priority.placeholder")}
-                disabled={state.ui.isPending}
-                min="0"
-                step="1"
-              />
+              <div className="space-y-2">
+                <Input
+                  id={isEdit ? "edit-priority" : "priority"}
+                  type="number"
+                  value={state.routing.priority}
+                  onChange={(e) =>
+                    dispatch({ type: "SET_PRIORITY", payload: parseInt(e.target.value, 10) || 0 })
+                  }
+                  placeholder={t("sections.routing.scheduleParams.priority.placeholder")}
+                  disabled={state.ui.isPending}
+                  min="0"
+                  step="1"
+                />
+                {isBatch && batchAnalysis?.routing.priority.status === "mixed" && (
+                  <MixedValueIndicator values={batchAnalysis.routing.priority.values} />
+                )}
+              </div>
             </SmartInputWrapper>
 
             <SmartInputWrapper
               label={t("sections.routing.scheduleParams.weight.label")}
               description={t("sections.routing.scheduleParams.weight.desc")}
             >
-              <Input
-                id={isEdit ? "edit-weight" : "weight"}
-                type="number"
-                value={state.routing.weight}
-                onChange={(e) =>
-                  dispatch({ type: "SET_WEIGHT", payload: parseInt(e.target.value, 10) || 1 })
-                }
-                placeholder={t("sections.routing.scheduleParams.weight.placeholder")}
-                disabled={state.ui.isPending}
-                min="1"
-                step="1"
-              />
+              <div className="space-y-2">
+                <Input
+                  id={isEdit ? "edit-weight" : "weight"}
+                  type="number"
+                  value={state.routing.weight}
+                  onChange={(e) =>
+                    dispatch({ type: "SET_WEIGHT", payload: parseInt(e.target.value, 10) || 1 })
+                  }
+                  placeholder={t("sections.routing.scheduleParams.weight.placeholder")}
+                  disabled={state.ui.isPending}
+                  min="1"
+                  step="1"
+                />
+                {isBatch && batchAnalysis?.routing.weight.status === "mixed" && (
+                  <MixedValueIndicator values={batchAnalysis.routing.weight.values} />
+                )}
+              </div>
             </SmartInputWrapper>
 
             <SmartInputWrapper
               label={t("sections.routing.scheduleParams.costMultiplier.label")}
               description={t("sections.routing.scheduleParams.costMultiplier.desc")}
             >
-              <Input
-                id={isEdit ? "edit-cost" : "cost"}
-                type="number"
-                value={state.routing.costMultiplier}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === "") {
-                    dispatch({ type: "SET_COST_MULTIPLIER", payload: 1.0 });
-                    return;
-                  }
-                  const num = parseFloat(value);
-                  dispatch({
-                    type: "SET_COST_MULTIPLIER",
-                    payload: Number.isNaN(num) ? 1.0 : num,
-                  });
-                }}
-                onFocus={(e) => e.target.select()}
-                placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
-                disabled={state.ui.isPending}
-                min="0"
-                step="0.0001"
-              />
+              <div className="space-y-2">
+                <Input
+                  id={isEdit ? "edit-cost" : "cost"}
+                  type="number"
+                  value={state.routing.costMultiplier}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      dispatch({ type: "SET_COST_MULTIPLIER", payload: 1.0 });
+                      return;
+                    }
+                    const num = parseFloat(value);
+                    dispatch({
+                      type: "SET_COST_MULTIPLIER",
+                      payload: Number.isNaN(num) ? 1.0 : num,
+                    });
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
+                  disabled={state.ui.isPending}
+                  min="0"
+                  step="0.0001"
+                />
+                {isBatch && batchAnalysis?.routing.costMultiplier.status === "mixed" && (
+                  <MixedValueIndicator values={batchAnalysis.routing.costMultiplier.values} />
+                )}
+              </div>
             </SmartInputWrapper>
           </div>
 

@@ -739,6 +739,14 @@ export function ProviderFormProvider({
   const dirtyFieldsRef = useRef(new Set<string>());
   const isBatch = mode === "batch";
 
+  // Compute batch analysis once if in batch mode
+  const batchAnalysis = useMemo(() => {
+    if (isBatch && batchProviders && batchProviders.length > 0) {
+      return analyzeBatchProviderSettings(batchProviders);
+    }
+    return undefined;
+  }, [isBatch, batchProviders]);
+
   // Wrap dispatch for batch mode to auto-track dirty fields
   const dispatch: Dispatch<ProviderFormAction> = useCallback(
     (action: ProviderFormAction) => {
@@ -765,6 +773,7 @@ export function ProviderFormProvider({
       groupSuggestions,
       batchProviders,
       dirtyFields: dirtyFieldsRef.current,
+      batchAnalysis,
     }),
     [
       state,
@@ -776,6 +785,7 @@ export function ProviderFormProvider({
       hideWebsiteUrl,
       groupSuggestions,
       batchProviders,
+      batchAnalysis,
     ]
   );
 

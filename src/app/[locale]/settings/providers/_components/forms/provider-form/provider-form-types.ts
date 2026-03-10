@@ -15,6 +15,7 @@ import type {
   ProviderDisplay,
   ProviderType,
 } from "@/types/provider";
+import type { BatchSettingsAnalysis } from "../../batch-edit/analyze-batch-settings";
 
 // Form mode
 export type FormMode = "create" | "edit" | "batch";
@@ -233,4 +234,5 @@ export interface ProviderFormContextValue {
   groupSuggestions: string[];
   batchProviders?: ProviderDisplay[];
   dirtyFields: Set<string>;
+  batchAnalysis?: BatchSettingsAnalysis;
 }
