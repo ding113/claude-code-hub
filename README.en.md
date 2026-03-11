@@ -78,6 +78,20 @@ SSSAiCode offers a special bonus for users of this software. Register via this l
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="200">
+<a href="https://aigocode.com/invite/QDNEJJAH">
+<img src="public/readme/aigocode.jpg" alt="AIGoCode Logo" width="180"/>
+</a>
+</td>
+<td>
+<b>💎 Special Offer</b>: <a href="https://aigocode.com/invite/QDNEJJAH">AIGoCode</a> is an all-in-one platform integrating the latest models from Claude Code, Codex, and Gemini, delivering stable, efficient, and cost-effective AI coding services. Flexible subscription plans (monthly or bundled), zero ban risk, direct access from China, massive credit pools, and lightning-fast responses.<br/>
+AIGoCode offers a special bonus for CCH users — register via this link and receive an extra <b>10% bonus credit</b> on your first top-up → <a href="https://aigocode.com/invite/QDNEJJAH">Visit Now</a>
+</td>
+</tr>
+</table>
+
 ## ✨ Core Highlights
 
 - 🤖 **Intelligent load balancing**: Weight + priority + grouping scheduler with built-in circuit breaker and up to three failover retries to keep requests stable.
