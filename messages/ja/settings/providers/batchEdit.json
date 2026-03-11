@@ -40,7 +40,10 @@
   },
   "fields": {
     "isEnabled": {
-      "label": "有効状態"
+      "label": "有効状態",
+      "noChange": "変更なし",
+      "enable": "有効にする",
+      "disable": "無効にする"
     },
     "priority": "優先度",
     "weight": "重み",
@@ -67,6 +70,10 @@
     "batchDeleteSuccess": "{count} 件のプロバイダーを削除しました",
     "button": "元に戻す",
     "batchDeleteUndone": "{count} 件のプロバイダーを復元しました",
+    "singleEditSuccess": "プロバイダーを更新しました",
+    "singleEditUndone": "プロバイダーの更新を元に戻しました",
+    "singleDeleteSuccess": "プロバイダーを削除しました",
+    "singleDeleteUndone": "プロバイダーを復元しました",
     "expired": "元に戻す期限切れ",
     "failed": "元に戻す操作に失敗"
   },
@@ -75,6 +82,15 @@
     "goBack": "戻る",
     "confirm": "確認",
     "processing": "処理中..."
+  },
+  "affectedProviders": {
+    "title": "対象プロバイダー",
+    "more": "他 {count} 件"
+  },
+  "batchNotes": {
+    "codexOnly": "Codex のみ",
+    "claudeOnly": "Claude のみ",
+    "geminiOnly": "Gemini のみ"
   },
   "mixedValues": {
     "label": "(混合値)",

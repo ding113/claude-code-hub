@@ -40,7 +40,10 @@
   },
   "fields": {
     "isEnabled": {
-      "label": "Включен"
+      "label": "Включен",
+      "noChange": "Без изменений",
+      "enable": "Включить",
+      "disable": "Отключить"
     },
     "priority": "Приоритет",
     "weight": "Вес",
@@ -67,6 +70,10 @@
     "batchDeleteSuccess": "Удалено провайдеров: {count}",
     "button": "Отменить",
     "batchDeleteUndone": "Восстановлено провайдеров: {count}",
+    "singleEditSuccess": "Провайдер обновлен",
+    "singleEditUndone": "Обновление провайдера отменено",
+    "singleDeleteSuccess": "Провайдер удален",
+    "singleDeleteUndone": "Провайдер восстановлен",
     "expired": "Отмена истекла",
     "failed": "Ошибка отмены"
   },
@@ -75,6 +82,15 @@
     "goBack": "Назад",
     "confirm": "Подтвердить",
     "processing": "Обработка..."
+  },
+  "affectedProviders": {
+    "title": "Затронутые провайдеры",
+    "more": "и еще {count}"
+  },
+  "batchNotes": {
+    "codexOnly": "Только Codex",
+    "claudeOnly": "Только Claude",
+    "geminiOnly": "Только Gemini"
   },
   "mixedValues": {
     "label": "(смешанные значения)",

@@ -40,7 +40,10 @@
   },
   "fields": {
     "isEnabled": {
-      "label": "Enabled"
+      "label": "Enabled",
+      "noChange": "No Change",
+      "enable": "Enable",
+      "disable": "Disable"
     },
     "priority": "Priority",
     "weight": "Weight",
@@ -67,6 +70,10 @@
     "batchDeleteSuccess": "{count} providers deleted",
     "button": "Undo",
     "batchDeleteUndone": "{count} providers restored",
+    "singleEditSuccess": "Provider updated",
+    "singleEditUndone": "Provider update reverted",
+    "singleDeleteSuccess": "Provider deleted",
+    "singleDeleteUndone": "Provider restored",
     "expired": "Undo expired",
     "failed": "Undo failed"
   },
@@ -75,6 +82,15 @@
     "goBack": "Go Back",
     "confirm": "Confirm",
     "processing": "Processing..."
+  },
+  "affectedProviders": {
+    "title": "Affected Providers",
+    "more": "+{count} more"
+  },
+  "batchNotes": {
+    "codexOnly": "Codex only",
+    "claudeOnly": "Claude only",
+    "geminiOnly": "Gemini only"
   },
   "mixedValues": {
     "label": "(mixed values)",

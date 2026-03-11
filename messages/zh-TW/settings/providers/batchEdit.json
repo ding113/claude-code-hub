@@ -40,7 +40,10 @@
   },
   "fields": {
     "isEnabled": {
-      "label": "啟用狀態"
+      "label": "啟用狀態",
+      "noChange": "不修改",
+      "enable": "啟用",
+      "disable": "停用"
     },
     "priority": "優先順序",
     "weight": "權重",
@@ -67,6 +70,10 @@
     "batchDeleteSuccess": "已刪除 {count} 個供應商",
     "button": "復原",
     "batchDeleteUndone": "已還原 {count} 個供應商",
+    "singleEditSuccess": "供應商已更新",
+    "singleEditUndone": "已復原供應商更新",
+    "singleDeleteSuccess": "供應商已刪除",
+    "singleDeleteUndone": "供應商已還原",
     "expired": "復原已過期",
     "failed": "復原失敗"
   },
@@ -75,6 +82,15 @@
     "goBack": "返回",
     "confirm": "確認",
     "processing": "處理中..."
+  },
+  "affectedProviders": {
+    "title": "受影響的供應商",
+    "more": "還有 {count} 個"
+  },
+  "batchNotes": {
+    "codexOnly": "僅限 Codex",
+    "claudeOnly": "僅限 Claude",
+    "geminiOnly": "僅限 Gemini"
   },
   "mixedValues": {
     "label": "(混合值)",

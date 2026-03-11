@@ -40,7 +40,10 @@
   },
   "fields": {
     "isEnabled": {
-      "label": "启用状态"
+      "label": "启用状态",
+      "noChange": "不修改",
+      "enable": "启用",
+      "disable": "禁用"
     },
     "priority": "优先级",
     "weight": "权重",
@@ -67,6 +70,10 @@
     "batchDeleteSuccess": "已删除 {count} 个供应商",
     "button": "撤销",
     "batchDeleteUndone": "已恢复 {count} 个供应商",
+    "singleEditSuccess": "供应商已更新",
+    "singleEditUndone": "已撤销供应商更新",
+    "singleDeleteSuccess": "供应商已删除",
+    "singleDeleteUndone": "供应商已恢复",
     "expired": "撤销已过期",
     "failed": "撤销失败"
   },
@@ -75,6 +82,15 @@
     "goBack": "返回",
     "confirm": "确认",
     "processing": "处理中..."
+  },
+  "affectedProviders": {
+    "title": "受影响的供应商",
+    "more": "还有 {count} 个"
+  },
+  "batchNotes": {
+    "codexOnly": "仅限 Codex",
+    "claudeOnly": "仅限 Claude",
+    "geminiOnly": "仅限 Gemini"
   },
   "mixedValues": {
     "label": "(混合值)",
