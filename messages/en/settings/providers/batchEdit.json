@@ -1,37 +1,46 @@
 {
-  "enterMode": "Batch Edit",
-  "exitMode": "Exit",
-  "selectAll": "Select All",
-  "invertSelection": "Invert",
   "selectedCount": "{count} selected",
-  "editSelected": "Edit Selected",
-  "selectByType": "Select by Type",
-  "selectByTypeItem": "{type} ({count})",
-  "selectByGroup": "Select by Group",
-  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "Edit",
-    "delete": "Delete",
-    "resetCircuit": "Reset Circuit"
+    "resetCircuit": "Reset Circuit",
+    "delete": "Delete"
   },
+  "enterMode": "Batch Edit",
+  "selectionHint": "Select providers to batch edit",
+  "selectAll": "Select all",
+  "invertSelection": "Invert",
+  "selectByType": "By Type",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "By Group",
+  "selectByGroupItem": "{group} ({count})",
+  "editSelected": "Edit Selected",
+  "exitMode": "Exit",
   "dialog": {
     "editTitle": "Batch Edit Providers",
-    "editDesc": "Changes will apply to {count} providers",
+    "editDesc": "Edit settings for {count} providers",
     "deleteTitle": "Delete Providers",
-    "deleteDesc": "Permanently delete {count} providers?",
+    "deleteDesc": "Are you sure you want to delete {count} providers? This action cannot be undone.",
     "resetCircuitTitle": "Reset Circuit Breakers",
-    "resetCircuitDesc": "Reset circuit breaker for {count} providers?",
-    "next": "Next",
-    "noFieldEnabled": "Please enable at least one field to update"
+    "resetCircuitDesc": "Reset circuit breakers for {count} providers?",
+    "next": "Next"
   },
-  "sections": {
-    "basic": "Basic Settings",
-    "routing": "Group & Routing",
-    "anthropic": "Anthropic Settings"
+  "preview": {
+    "title": "Preview Changes",
+    "description": "Review changes for {count} providers",
+    "loading": "Loading preview...",
+    "noChanges": "No changes to apply",
+    "summary": "{providerCount} providers affected, {fieldCount} fields changed, {skipCount} skipped",
+    "excludeProvider": "Toggle provider inclusion",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: skipped ({reason})",
+    "nullValue": "(empty)",
+    "back": "Back",
+    "apply": "Apply Changes"
   },
   "fields": {
     "isEnabled": {
-      "label": "Status",
+      "label": "Enabled",
       "noChange": "No Change",
       "enable": "Enable",
       "disable": "Disable"
@@ -40,69 +49,52 @@
     "weight": "Weight",
     "costMultiplier": "Cost Multiplier",
     "groupTag": {
-      "label": "Group Tag",
-      "clear": "Clear"
+      "label": "Group Tag"
     },
     "modelRedirects": "Model Redirects",
     "allowedModels": "Allowed Models",
     "thinkingBudget": "Thinking Budget",
-    "adaptiveThinking": "Adaptive Thinking",
-    "activeTimeStart": "Active Start Time",
-    "activeTimeEnd": "Active End Time"
+    "adaptiveThinking": "Adaptive Thinking"
+  },
+  "toast": {
+    "previewFailed": "Preview failed: {error}",
+    "unknownError": "Unknown error",
+    "updated": "{count} providers updated",
+    "undo": "Undo",
+    "undoSuccess": "{count} providers reverted",
+    "undoFailed": "Undo failed: {error}",
+    "failed": "Operation failed: {error}",
+    "circuitReset": "{count} circuit breakers reset"
+  },
+  "undo": {
+    "batchDeleteSuccess": "{count} providers deleted",
+    "button": "Undo",
+    "batchDeleteUndone": "{count} providers restored",
+    "singleEditSuccess": "Provider updated",
+    "singleEditUndone": "Provider update reverted",
+    "singleDeleteSuccess": "Provider deleted",
+    "singleDeleteUndone": "Provider restored",
+    "expired": "Undo expired",
+    "failed": "Undo failed"
+  },
+  "confirm": {
+    "cancel": "Cancel",
+    "goBack": "Go Back",
+    "confirm": "Confirm",
+    "processing": "Processing..."
   },
   "affectedProviders": {
     "title": "Affected Providers",
     "more": "+{count} more"
-  },
-  "confirm": {
-    "title": "Confirm Operation",
-    "cancel": "Cancel",
-    "confirm": "Confirm",
-    "goBack": "Go Back",
-    "processing": "Processing..."
-  },
-  "preview": {
-    "title": "Preview Changes",
-    "description": "Review changes before applying to {count} providers",
-    "providerHeader": "{name}",
-    "fieldChanged": "{field}: {before} -> {after}",
-    "nullValue": "null",
-    "fieldSkipped": "{field}: Skipped ({reason})",
-    "excludeProvider": "Exclude",
-    "summary": "{providerCount} providers, {fieldCount} changes, {skipCount} skipped",
-    "noChanges": "No changes to apply",
-    "apply": "Apply Changes",
-    "back": "Back to Edit",
-    "loading": "Generating preview..."
   },
   "batchNotes": {
     "codexOnly": "Codex only",
     "claudeOnly": "Claude only",
     "geminiOnly": "Gemini only"
   },
-  "selectionHint": "Select multiple providers for batch operations",
-  "undo": {
-    "button": "Undo",
-    "success": "Operation undone successfully",
-    "expired": "Undo expired",
-    "batchDeleteSuccess": "Deleted {count} providers",
-    "batchDeleteUndone": "Restored {count} providers",
-    "singleDeleteSuccess": "Provider deleted",
-    "singleDeleteUndone": "Provider restored",
-    "singleEditSuccess": "Provider updated",
-    "singleEditUndone": "Changes reverted",
-    "failed": "Undo failed"
-  },
-  "toast": {
-    "updated": "Updated {count} providers",
-    "deleted": "Deleted {count} providers",
-    "circuitReset": "Reset {count} circuit breakers",
-    "failed": "Operation failed: {error}",
-    "undo": "Undo",
-    "undoSuccess": "Reverted {count} providers",
-    "undoFailed": "Undo failed: {error}",
-    "undoExpired": "Undo window expired",
-    "previewFailed": "Preview failed: {error}",
-    "unknownError": "Unknown error"
+  "mixedValues": {
+    "label": "(mixed values)",
+    "tooltip": "Selected providers have different values:",
+    "andMore": "...and {count} more"
   }
 }

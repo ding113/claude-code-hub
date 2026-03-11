@@ -1,3 +1,4 @@
+import { PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { formatCostForStorage } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
@@ -47,6 +48,7 @@ export function toUser(dbUser: any): User {
     dailyResetTime: dbUser?.dailyResetTime ?? "00:00",
     isEnabled: dbUser?.isEnabled ?? true,
     expiresAt: dbUser?.expiresAt ? new Date(dbUser.expiresAt) : null,
+    costResetAt: dbUser?.costResetAt ? new Date(dbUser.costResetAt) : null,
     allowedClients: dbUser?.allowedClients ?? [],
     blockedClients: dbUser?.blockedClients ?? [],
     allowedModels: dbUser?.allowedModels ?? [],
@@ -116,9 +118,14 @@ export function toProvider(dbProvider: any): Provider {
     circuitBreakerHalfOpenSuccessThreshold: dbProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2,
     proxyUrl: dbProvider?.proxyUrl ?? null,
     proxyFallbackToDirect: dbProvider?.proxyFallbackToDirect ?? false,
-    firstByteTimeoutStreamingMs: dbProvider?.firstByteTimeoutStreamingMs ?? 30000,
-    streamingIdleTimeoutMs: dbProvider?.streamingIdleTimeoutMs ?? 10000,
-    requestTimeoutNonStreamingMs: dbProvider?.requestTimeoutNonStreamingMs ?? 600000,
+    firstByteTimeoutStreamingMs:
+      dbProvider?.firstByteTimeoutStreamingMs ??
+      PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
+    streamingIdleTimeoutMs:
+      dbProvider?.streamingIdleTimeoutMs ?? PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
+    requestTimeoutNonStreamingMs:
+      dbProvider?.requestTimeoutNonStreamingMs ??
+      PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
     websiteUrl: dbProvider?.websiteUrl ?? null,
     faviconUrl: dbProvider?.faviconUrl ?? null,
     cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,
@@ -201,6 +208,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
     enableBillingHeaderRectifier: dbSettings?.enableBillingHeaderRectifier ?? true,
+    enableResponseInputRectifier: dbSettings?.enableResponseInputRectifier ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
     enableClaudeMetadataUserIdInjection: dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,

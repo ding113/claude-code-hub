@@ -184,6 +184,7 @@
       "title": "Request Details",
       "statusTitle": "Status: {status}",
       "inProgress": "In Progress",
+      "retrying": "Retrying",
       "unknown": "Unknown",
       "success": "Request completed successfully",
       "error": "Request failed, here are the detailed error messages and provider decision chain",
@@ -456,7 +457,8 @@
       "avgTtfbMs": "Avg TTFB",
       "avgTokensPerSecond": "Avg tok/s",
       "avgCostPerRequest": "Avg Cost/Req",
-      "avgCostPerMillionTokens": "Avg Cost/1M Tokens"
+      "avgCostPerMillionTokens": "Avg Cost/1M Tokens",
+      "unknownModel": "Unknown"
     },
     "expandModelStats": "Expand model details",
     "collapseModelStats": "Collapse model details",
@@ -479,6 +481,38 @@
     "filters": {
       "userTagsPlaceholder": "Filter by user tags...",
       "userGroupsPlaceholder": "Filter by user groups..."
+    },
+    "userInsights": {
+      "title": "User Insights",
+      "backToLeaderboard": "Back to Leaderboard",
+      "overview": "Overview",
+      "keyTrend": "Key Usage Trend",
+      "modelBreakdown": "Model Breakdown",
+      "todayRequests": "Today Requests",
+      "todayCost": "Today Cost",
+      "avgResponseTime": "Avg Response Time",
+      "errorRate": "Error Rate",
+      "timeRange": {
+        "today": "Today",
+        "7days": "Last 7 Days",
+        "30days": "Last 30 Days",
+        "thisMonth": "This Month"
+      },
+      "unknownModel": "Unknown Model",
+      "noData": "No data available",
+      "dateRange": "Date Range",
+      "allTime": "All Time",
+      "providerBreakdown": "Provider Breakdown",
+      "unknownProvider": "Unknown Provider",
+      "apiKey": "API Key",
+      "provider": "Provider",
+      "model": "Model",
+      "allKeys": "All Keys",
+      "allProviders": "All Providers",
+      "allModels": "All Models",
+      "dimensions": "Dimensions",
+      "filters": "Filters",
+      "loadError": "Failed to load data"
     }
   },
   "sessions": {
@@ -1052,7 +1086,7 @@
       "label": "Allowed Clients",
       "description": "Restrict which CLI/IDE clients can use this account. Leave empty for no restrictions.",
       "customLabel": "Custom Client Patterns",
-      "customPlaceholder": "Enter custom pattern (e.g., 'xcode', 'my-ide')"
+      "customPlaceholder": "Enter pattern (e.g., 'my-ide', 'codex-*')"
     },
     "allowedModels": {
       "label": "Allowed Models",
@@ -1539,6 +1573,21 @@
       "deleteFailed": "Failed to delete user",
       "userDeleted": "User has been deleted",
       "saving": "Saving...",
+      "resetSection": {
+        "title": "Reset Options"
+      },
+      "resetLimits": {
+        "title": "Reset Limits",
+        "description": "Reset accumulated cost counters for all limits. Request logs and statistics are preserved.",
+        "button": "Reset Limits",
+        "confirmTitle": "Reset Limits Only?",
+        "confirmDescription": "This will reset all accumulated cost counters (5h, daily, weekly, monthly, total) to zero. Request logs and usage statistics will be preserved.",
+        "confirm": "Yes, Reset Limits",
+        "loading": "Resetting...",
+        "error": "Failed to reset limits",
+        "success": "All limits have been reset",
+        "lastResetAt": "Last reset: {date}"
+      },
       "resetData": {
         "title": "Reset Statistics",
         "description": "Delete all request logs and usage data for this user. This action is irreversible.",
@@ -1854,15 +1903,15 @@
           "label": "Client Restrictions",
           "description": "Restrict which CLI/IDE clients can use this account. Empty = no restriction.",
           "customLabel": "Custom Client Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
-          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
+          "customPlaceholder": "Enter pattern (e.g., 'my-ide', 'codex-*')",
+          "customHelp": "Without '*': case-insensitive substring match ('-'/'_' ignored). With '*': glob pattern match from start of UA (use *foo* to match anywhere; case-insensitive, characters are literal)."
         },
         "blockedClients": {
           "label": "Blocked Clients",
           "description": "Clients matching these patterns will be rejected, even if they match allowed clients.",
           "customLabel": "Custom Block Pattern",
-          "customPlaceholder": "Enter pattern (e.g., 'xcode', 'my-ide')",
-          "customHelp": "Custom patterns match User-Agent by case-insensitive substring. '-' and '_' are treated as equivalent."
+          "customPlaceholder": "Enter pattern (e.g., 'my-ide', 'codex-*')",
+          "customHelp": "Without '*': case-insensitive substring match ('-'/'_' ignored). With '*': glob pattern match from start of UA (use *foo* to match anywhere; case-insensitive, characters are literal)."
         },
         "allowedModels": {
           "label": "Model Restrictions",
@@ -1899,7 +1948,17 @@
         "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
         "claude-code-sdk-py": "Claude Code SDK (Python)",
         "claude-code-gh-action": "Claude Code GitHub Action"
-      }
+      },
+      "subClients": {
+        "all": "All",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "{count} selected"
     },
     "keyEditSection": {
       "sections": {

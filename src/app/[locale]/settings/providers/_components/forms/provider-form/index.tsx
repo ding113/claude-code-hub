@@ -33,16 +33,15 @@ import type {
   ProviderType,
   ProviderVendor,
 } from "@/types/provider";
-import { FormTabNav } from "./components/form-tab-nav";
+import { FormTabNav, NAV_ORDER, PARENT_MAP, TAB_ORDER } from "./components/form-tab-nav";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
-import type { TabId } from "./provider-form-types";
+import type { NavTargetId, SubTabId, TabId } from "./provider-form-types";
 import { BasicInfoSection } from "./sections/basic-info-section";
 import { LimitsSection } from "./sections/limits-section";
 import { NetworkSection } from "./sections/network-section";
+import { OptionsSection } from "./sections/options-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
-
-const TAB_ORDER: TabId[] = ["basic", "routing", "limits", "network", "testing"];
 
 function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
@@ -188,17 +187,29 @@ function ProviderFormContent({
 
   // Scroll navigation state - all sections stacked vertically
   const contentRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Record<TabId, HTMLDivElement | null>>({
-    basic: null,
-    routing: null,
-    limits: null,
-    network: null,
-    testing: null,
-  });
+  const sectionRefs = useRef<Record<NavTargetId, HTMLDivElement | null>>(
+    Object.fromEntries(NAV_ORDER.map((id) => [id, null])) as Record<
+      NavTargetId,
+      HTMLDivElement | null
+    >
+  );
   const isScrollingToSection = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const scrollLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollEndListenerRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+      if (scrollEndListenerRef.current) {
+        contentRef.current?.removeEventListener("scrollend", scrollEndListenerRef.current);
+      }
+    };
+  }, []);
 
   // Scroll to section when tab is clicked
-  const scrollToSection = useCallback((tab: TabId) => {
+  const scrollToSection = useCallback((tab: NavTargetId) => {
     const section = sectionRefs.current[tab];
     if (section && contentRef.current) {
       isScrollingToSection.current = true;
@@ -206,45 +217,68 @@ function ProviderFormContent({
       const sectionTop = section.getBoundingClientRect().top;
       const offset = sectionTop - containerTop + contentRef.current.scrollTop;
       contentRef.current.scrollTo({ top: offset, behavior: "smooth" });
-      setTimeout(() => {
+      if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+      if (scrollEndListenerRef.current) {
+        contentRef.current.removeEventListener("scrollend", scrollEndListenerRef.current);
+      }
+      const unlock = () => {
         isScrollingToSection.current = false;
-      }, 500);
+      };
+      const onScrollEnd = () => {
+        if (scrollLockTimerRef.current) clearTimeout(scrollLockTimerRef.current);
+        scrollEndListenerRef.current = null;
+        unlock();
+      };
+      scrollEndListenerRef.current = onScrollEnd;
+      contentRef.current.addEventListener("scrollend", onScrollEnd, { once: true });
+      scrollLockTimerRef.current = setTimeout(() => {
+        contentRef.current?.removeEventListener("scrollend", onScrollEnd);
+        scrollEndListenerRef.current = null;
+        unlock();
+      }, 1000);
     }
   }, []);
 
-  // Detect active section based on scroll position
+  // Detect active section based on scroll position (throttled via rAF)
   const handleScroll = useCallback(() => {
-    if (isScrollingToSection.current || !contentRef.current) return;
-
-    const container = contentRef.current;
-    const containerRect = container.getBoundingClientRect();
-    const _scrollTop = container.scrollTop;
-
-    // Find which section is at the top of the viewport
-    let activeSection: TabId = "basic";
-    let minDistance = Infinity;
-
-    for (const tab of TAB_ORDER) {
-      const section = sectionRefs.current[tab];
-      if (!section) continue;
-
-      const sectionRect = section.getBoundingClientRect();
-      const distanceFromTop = Math.abs(sectionRect.top - containerRect.top);
-
-      if (distanceFromTop < minDistance) {
-        minDistance = distanceFromTop;
-        activeSection = tab;
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (isScrollingToSection.current || !contentRef.current) return;
+      const container = contentRef.current;
+      const containerRect = container.getBoundingClientRect();
+      let activeSection: NavTargetId = TAB_ORDER[0] ?? "basic";
+      let minDistance = Infinity;
+      for (const id of NAV_ORDER) {
+        const section = sectionRefs.current[id];
+        if (!section) continue;
+        const sectionRect = section.getBoundingClientRect();
+        const distanceFromTop = Math.abs(sectionRect.top - containerRect.top);
+        if (distanceFromTop < minDistance) {
+          minDistance = distanceFromTop;
+          activeSection = id;
+        }
       }
-    }
-
-    if (state.ui.activeTab !== activeSection) {
-      dispatch({ type: "SET_ACTIVE_TAB", payload: activeSection });
-    }
-  }, [dispatch, state.ui.activeTab]);
+      const parentTab =
+        activeSection in PARENT_MAP
+          ? PARENT_MAP[activeSection as SubTabId]
+          : (activeSection as TabId);
+      const subTab = activeSection in PARENT_MAP ? (activeSection as SubTabId) : null;
+      if (state.ui.activeTab !== parentTab || state.ui.activeSubTab !== subTab) {
+        dispatch({ type: "SET_ACTIVE_NAV", payload: { tab: parentTab, subTab } });
+      }
+    });
+  }, [dispatch, state.ui.activeSubTab, state.ui.activeTab]);
 
   const handleTabChange = (tab: TabId) => {
     dispatch({ type: "SET_ACTIVE_TAB", payload: tab });
     scrollToSection(tab);
+  };
+
+  const handleSubTabChange = (subTab: SubTabId) => {
+    const parentTab = PARENT_MAP[subTab];
+    dispatch({ type: "SET_ACTIVE_NAV", payload: { tab: parentTab, subTab } });
+    scrollToSection(subTab);
   };
 
   // Sync isPending to context
@@ -527,7 +561,32 @@ function ProviderFormContent({
       status.routing = "configured";
     }
 
-    // Limits - configured if any limit set
+    if (
+      // Advanced options
+      state.routing.preserveClientIp ||
+      state.routing.cacheTtlPreference !== "inherit" ||
+      state.routing.swapCacheTtlBilling ||
+      state.routing.context1mPreference !== "inherit" ||
+      // Codex overrides
+      state.routing.codexReasoningEffortPreference !== "inherit" ||
+      state.routing.codexReasoningSummaryPreference !== "inherit" ||
+      state.routing.codexTextVerbosityPreference !== "inherit" ||
+      state.routing.codexParallelToolCallsPreference !== "inherit" ||
+      state.routing.codexServiceTierPreference !== "inherit" ||
+      // Anthropic overrides
+      state.routing.anthropicMaxTokensPreference !== "inherit" ||
+      state.routing.anthropicThinkingBudgetPreference !== "inherit" ||
+      state.routing.anthropicAdaptiveThinking !== null ||
+      // Gemini overrides
+      state.routing.geminiGoogleSearchPreference !== "inherit" ||
+      // Active time
+      state.routing.activeTimeStart !== null ||
+      state.routing.activeTimeEnd !== null
+    ) {
+      status.options = "configured";
+    }
+
+    // Limits - configured if any rate limit set
     if (
       state.rateLimit.limit5hUsd ||
       state.rateLimit.limitDailyUsd ||
@@ -563,7 +622,9 @@ function ProviderFormContent({
           {/* Tab Navigation */}
           <FormTabNav
             activeTab={state.ui.activeTab}
+            activeSubTab={state.ui.activeSubTab}
             onTabChange={handleTabChange}
+            onSubTabChange={handleSubTabChange}
             disabled={isPending}
             tabStatus={getTabStatus()}
           />
@@ -602,7 +663,28 @@ function ProviderFormContent({
                 sectionRefs.current.routing = el;
               }}
             >
-              <RoutingSection />
+              <RoutingSection
+                subSectionRefs={{
+                  scheduling: (el) => {
+                    sectionRefs.current.scheduling = el;
+                  },
+                }}
+              />
+            </div>
+
+            {/* Options Section */}
+            <div
+              ref={(el) => {
+                sectionRefs.current.options = el;
+              }}
+            >
+              <OptionsSection
+                subSectionRefs={{
+                  activeTime: (el) => {
+                    sectionRefs.current.activeTime = el;
+                  },
+                }}
+              />
             </div>
 
             {/* Limits Section */}
@@ -611,7 +693,13 @@ function ProviderFormContent({
                 sectionRefs.current.limits = el;
               }}
             >
-              <LimitsSection />
+              <LimitsSection
+                subSectionRefs={{
+                  circuitBreaker: (el) => {
+                    sectionRefs.current.circuitBreaker = el;
+                  },
+                }}
+              />
             </div>
 
             {/* Network Section */}
@@ -620,7 +708,13 @@ function ProviderFormContent({
                 sectionRefs.current.network = el;
               }}
             >
-              <NetworkSection />
+              <NetworkSection
+                subSectionRefs={{
+                  timeout: (el) => {
+                    sectionRefs.current.timeout = el;
+                  },
+                }}
+              />
             </div>
 
             {/* Testing Section */}

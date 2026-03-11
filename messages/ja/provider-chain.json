@@ -41,7 +41,12 @@
     "http2Fallback": "HTTP/2 フォールバック",
     "clientError": "クライアントエラー",
     "endpointPoolExhausted": "エンドポイントプール枯渇",
-    "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト"
+    "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト",
+    "hedgeTriggered": "Hedge 発動",
+    "hedgeLaunched": "Hedge 代替起動済み",
+    "hedgeWinner": "Hedge 競争勝者",
+    "hedgeLoserCancelled": "Hedge 競争敗者（キャンセル）",
+    "clientAbort": "クライアント中断"
   },
   "reasons": {
     "request_success": "成功",
@@ -56,7 +61,12 @@
     "initial_selection": "初期選択",
     "endpoint_pool_exhausted": "エンドポイントプール枯渇",
     "vendor_type_all_timeout": "ベンダータイプ全エンドポイントタイムアウト",
-    "client_restriction_filtered": "クライアント制限"
+    "client_restriction_filtered": "クライアント制限",
+    "hedge_triggered": "Hedge 発動",
+    "hedge_launched": "Hedge 代替起動済み",
+    "hedge_winner": "Hedge 競争勝者",
+    "hedge_loser_cancelled": "Hedge 競争敗者（キャンセル）",
+    "client_abort": "クライアント中断"
   },
   "filterReasons": {
     "rate_limited": "レート制限",
@@ -222,7 +232,14 @@
     "strictBlockNoEndpoints": "厳格モード：利用可能なエンドポイント候補がないため、フォールバックなしでプロバイダーをスキップ",
     "strictBlockSelectorError": "厳格モード：エンドポイントセレクターでエラーが発生したため、フォールバックなしでプロバイダーをスキップ",
     "vendorTypeAllTimeout": "ベンダータイプ全エンドポイントタイムアウト（524）",
-    "vendorTypeAllTimeoutNote": "このベンダータイプの全エンドポイントがタイムアウトしました。ベンダータイプサーキットブレーカーが発動しました。"
+    "vendorTypeAllTimeoutNote": "このベンダータイプの全エンドポイントがタイムアウトしました。ベンダータイプサーキットブレーカーが発動しました。",
+    "hedgeTriggered": "Hedge 閾値超過（代替プロバイダーを起動中）",
+    "hedgeLaunched": "Hedge 代替プロバイダー起動済み",
+    "hedgeWinner": "Hedge 競争勝者（最初にファーストバイトを受信）",
+    "hedgeLoserCancelled": "Hedge 競争敗者（リクエストキャンセル）",
+    "clientAbort": "クライアント切断（リクエスト中断）",
+    "hedgeRace": "Hedge 競争",
+    "hedgeThresholdExceeded": "ファーストバイトタイムアウト超過、代替プロバイダーを起動"
   },
   "selectionMethods": {
     "session_reuse": "セッション再利用",

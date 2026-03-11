@@ -42,5 +42,6 @@
   "actionResetUsage": "Reset Usage",
   "actionDelete": "Delete",
   "selectProvider": "Select {name}",
-  "schedule": "Schedule"
+  "schedule": "Schedule",
+  "proxyEnabled": "Proxy enabled"
 }

@@ -40,6 +40,10 @@
       "desc": "向上游转发 x-forwarded-for / x-real-ip，可能暴露真实来源 IP",
       "help": "默认关闭以保护隐私；仅在需要上游感知终端 IP 时开启。"
     },
+    "options": {
+      "title": "选项",
+      "desc": "附加供应商选项和覆写设置"
+    },
     "modelWhitelist": {
       "title": "模型白名单",
       "desc": "限制此供应商可以处理的模型。默认情况下，供应商可以处理该类型下的所有模型。",
@@ -63,13 +67,23 @@
       "customAllowedPlaceholder": "例如 my-ide、internal-tool",
       "customBlockedLabel": "自定义黑名单模式",
       "customBlockedPlaceholder": "例如 legacy-client",
-      "customHelp": "自定义模式使用 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。",
+      "customHelp": "不含 '*'：不区分大小写的子串匹配（忽略 '-' 和 '_'）。含 '*'：从 UA 开头的 glob 通配符匹配（用 *foo* 匹配任意位置；不区分大小写，字符按原样匹配）。",
       "presetClients": {
         "claude-code": "Claude Code（全部）",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "全部",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "已选 {count} 项"
     },
     "scheduleParams": {
       "title": "调度参数",
@@ -374,7 +388,7 @@
     "nonStreamingTotal": {
       "label": "非流式总超时（秒）",
       "placeholder": "0",
-      "desc": "非流式请求总超时，范围 60-1200 秒，填 0 禁用（默认不限制）",
+      "desc": "非流式请求总超时，范围 60-1800 秒，填 0 禁用（默认不限制）",
       "core": "true"
     },
     "disableHint": "设为 0 表示禁用该超时（仅用于灰度回退场景，不推荐）"

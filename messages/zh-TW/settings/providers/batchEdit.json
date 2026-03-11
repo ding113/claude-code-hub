@@ -1,108 +1,100 @@
 {
-  "enterMode": "批次編輯",
-  "exitMode": "退出",
-  "selectAll": "全選",
-  "invertSelection": "反選",
-  "selectedCount": "已選 {count} 項",
-  "editSelected": "編輯選中項",
-  "selectByType": "按類型選擇",
-  "selectByTypeItem": "{type} ({count})",
-  "selectByGroup": "按分組選擇",
-  "selectByGroupItem": "{group} ({count})",
+  "selectedCount": "已選擇 {count} 個",
   "actions": {
     "edit": "編輯",
-    "delete": "刪除",
-    "resetCircuit": "重置熔斷"
+    "resetCircuit": "重設熔斷器",
+    "delete": "刪除"
   },
+  "enterMode": "批次編輯",
+  "selectionHint": "選擇供應商進行批次編輯",
+  "selectAll": "全選",
+  "invertSelection": "反選",
+  "selectByType": "依類型",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "依群組",
+  "selectByGroupItem": "{group} ({count})",
+  "editSelected": "編輯所選",
+  "exitMode": "退出",
   "dialog": {
     "editTitle": "批次編輯供應商",
-    "editDesc": "修改將應用於 {count} 個供應商",
+    "editDesc": "編輯 {count} 個供應商的設定",
     "deleteTitle": "刪除供應商",
-    "deleteDesc": "確定永久刪除 {count} 個供應商?",
-    "resetCircuitTitle": "重置熔斷器",
-    "resetCircuitDesc": "確定重置 {count} 個供應商的熔斷器?",
-    "next": "下一步",
-    "noFieldEnabled": "請至少啟用一個要更新的欄位"
+    "deleteDesc": "確定要刪除 {count} 個供應商嗎？此操作無法復原。",
+    "resetCircuitTitle": "重設熔斷器",
+    "resetCircuitDesc": "確定要重設 {count} 個供應商的熔斷器嗎？",
+    "next": "下一步"
   },
-  "sections": {
-    "basic": "基本設定",
-    "routing": "分組與路由",
-    "anthropic": "Anthropic 設定"
+  "preview": {
+    "title": "預覽變更",
+    "description": "檢查 {count} 個供應商的變更",
+    "loading": "正在載入預覽...",
+    "noChanges": "沒有需要套用的變更",
+    "summary": "影響 {providerCount} 個供應商，變更 {fieldCount} 個欄位，跳過 {skipCount} 個",
+    "excludeProvider": "切換供應商包含狀態",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: 已跳過 ({reason})",
+    "nullValue": "(空)",
+    "back": "返回",
+    "apply": "套用變更"
   },
   "fields": {
     "isEnabled": {
-      "label": "狀態",
+      "label": "啟用狀態",
       "noChange": "不修改",
       "enable": "啟用",
       "disable": "停用"
     },
-    "priority": "優先級",
+    "priority": "優先順序",
     "weight": "權重",
-    "costMultiplier": "價格倍率",
+    "costMultiplier": "成本倍數",
     "groupTag": {
-      "label": "分組標籤",
-      "clear": "清除"
+      "label": "群組標籤"
     },
     "modelRedirects": "模型重新導向",
     "allowedModels": "允許的模型",
-    "thinkingBudget": "思維預算",
-    "adaptiveThinking": "自適應思維",
-    "activeTimeStart": "排程開始時間",
-    "activeTimeEnd": "排程結束時間"
-  },
-  "affectedProviders": {
-    "title": "受影響的供應商",
-    "more": "+{count} 更多"
-  },
-  "confirm": {
-    "title": "確認操作",
-    "cancel": "取消",
-    "confirm": "確認",
-    "goBack": "返回",
-    "processing": "處理中..."
-  },
-  "preview": {
-    "title": "預覽變更",
-    "description": "將變更應用到 {count} 個供應商前請先確認",
-    "providerHeader": "{name}",
-    "fieldChanged": "{field}: {before} -> {after}",
-    "nullValue": "空",
-    "fieldSkipped": "{field}: 已跳過 ({reason})",
-    "excludeProvider": "排除",
-    "summary": "{providerCount} 個供應商, {fieldCount} 項變更, {skipCount} 項跳過",
-    "noChanges": "沒有可應用的變更",
-    "apply": "應用變更",
-    "back": "返回編輯",
-    "loading": "正在產生預覽..."
-  },
-  "batchNotes": {
-    "codexOnly": "僅 Codex",
-    "claudeOnly": "僅 Claude",
-    "geminiOnly": "僅 Gemini"
-  },
-  "selectionHint": "選擇多個供應商以進行批次操作",
-  "undo": {
-    "button": "復原",
-    "success": "操作已成功復原",
-    "expired": "復原時限已過期",
-    "batchDeleteSuccess": "已刪除 {count} 個供應商",
-    "batchDeleteUndone": "已還原 {count} 個供應商",
-    "singleDeleteSuccess": "供應商已刪除",
-    "singleDeleteUndone": "供應商已恢復",
-    "singleEditSuccess": "供應商已更新",
-    "singleEditUndone": "變更已還原",
-    "failed": "復原失敗"
+    "thinkingBudget": "思考預算",
+    "adaptiveThinking": "自適應思考"
   },
   "toast": {
+    "previewFailed": "預覽失敗: {error}",
+    "unknownError": "未知錯誤",
     "updated": "已更新 {count} 個供應商",
-    "deleted": "已刪除 {count} 個供應商",
-    "circuitReset": "已重置 {count} 個熔斷器",
-    "failed": "操作失敗: {error}",
     "undo": "復原",
     "undoSuccess": "已還原 {count} 個供應商",
     "undoFailed": "復原失敗: {error}",
-    "undoExpired": "復原時限已過期",
-    "previewFailed": "預覽失敗: {error}",
-    "unknownError": "未知錯誤"
+    "failed": "操作失敗: {error}",
+    "circuitReset": "已重設 {count} 個熔斷器"
+  },
+  "undo": {
+    "batchDeleteSuccess": "已刪除 {count} 個供應商",
+    "button": "復原",
+    "batchDeleteUndone": "已還原 {count} 個供應商",
+    "singleEditSuccess": "供應商已更新",
+    "singleEditUndone": "已復原供應商更新",
+    "singleDeleteSuccess": "供應商已刪除",
+    "singleDeleteUndone": "供應商已還原",
+    "expired": "復原已過期",
+    "failed": "復原失敗"
+  },
+  "confirm": {
+    "cancel": "取消",
+    "goBack": "返回",
+    "confirm": "確認",
+    "processing": "處理中..."
+  },
+  "affectedProviders": {
+    "title": "受影響的供應商",
+    "more": "還有 {count} 個"
+  },
+  "batchNotes": {
+    "codexOnly": "僅限 Codex",
+    "claudeOnly": "僅限 Claude",
+    "geminiOnly": "僅限 Gemini"
+  },
+  "mixedValues": {
+    "label": "(混合值)",
+    "tooltip": "選中的供應商有不同的值：",
+    "andMore": "...還有 {count} 個"
   }
 }

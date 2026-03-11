@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { logger } from "@/lib/logger";
+import { writeLiveChain } from "@/lib/redis/live-chain-store";
 import { clientRequestsContext1m as clientRequestsContext1mHelper } from "@/lib/special-attributes";
 import {
   type ResolvedPricing,
@@ -324,6 +325,7 @@ export class ProxySession {
 
     const value = Math.max(0, Date.now() - this.startTime);
     this.ttfbMs = value;
+    this.persistLiveChain();
     return value;
   }
 
@@ -453,7 +455,12 @@ export class ProxySession {
         | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
         | "endpoint_pool_exhausted" // 端点池耗尽（strict endpoint policy 阻止了 fallback）
         | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
-        | "client_restriction_filtered"; // 供应商因客户端限制被跳过（会话复用路径）
+        | "client_restriction_filtered" // 供应商因客户端限制被跳过（会话复用路径）
+        | "hedge_triggered" // Hedge 计时器触发，启动备选供应商
+        | "hedge_launched" // Hedge 备选供应商已启动（信息性记录）
+        | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
+        | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消
+        | "client_abort"; // 客户端在响应完成前断开连接
       selectionMethod?:
         | "session_reuse"
         | "weighted_random"
@@ -504,15 +511,24 @@ export class ProxySession {
       endpointFilterStats: metadata?.endpointFilterStats,
     };
 
-    // 避免重复添加同一个供应商（除非是重试，即有 attemptNumber）
+    // 避免重复添加同一个供应商
+    // 检查最后一条记录是否与当前记录完全相同（id + reason + attemptNumber）
+    const lastItem = this.providerChain[this.providerChain.length - 1];
     const shouldAdd =
       this.providerChain.length === 0 ||
-      this.providerChain[this.providerChain.length - 1].id !== provider.id ||
-      metadata?.attemptNumber !== undefined;
+      lastItem.id !== provider.id ||
+      lastItem.reason !== metadata?.reason ||
+      (metadata?.attemptNumber !== undefined && lastItem.attemptNumber !== metadata.attemptNumber);
 
     if (shouldAdd) {
       this.providerChain.push(item);
+      this.persistLiveChain();
     }
+  }
+
+  private persistLiveChain(): void {
+    if (!this.sessionId || this.requestSequence == null) return;
+    void writeLiveChain(this.sessionId, this.requestSequence, this.providerChain);
   }
 
   /**

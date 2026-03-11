@@ -158,13 +158,19 @@ function createSession(opts: {
     specialSettings: [],
     cachedPriceData: undefined,
     cachedBillingModelSource: undefined,
+    resolvedPricingCache: new Map(),
     endpointPolicy: resolveEndpointPolicy("/v1/messages"),
     isHeaderModified: () => false,
     getContext1mApplied: () => false,
     getOriginalModel: () => originalModel,
     getCurrentModel: () => redirectedModel,
     getProviderChain: () => [],
-    getCachedPriceDataByBillingSource: async () => testPriceData,
+    getResolvedPricingByBillingSource: async () => ({
+      resolvedModelName: redirectedModel,
+      resolvedPricingProviderKey: "test-provider",
+      source: "cloud_exact" as const,
+      priceData: testPriceData,
+    }),
     recordTtfb: () => 100,
     ttfbMs: null,
     getRequestSequence: () => 1,
@@ -374,10 +380,22 @@ describe("Lease Budget Decrement after trackCostToRedis", () => {
       messageId: 5003,
     });
 
-    // Override getCachedPriceDataByBillingSource to return zero prices
+    // Override getResolvedPricingByBillingSource to return zero prices
     (
-      session as { getCachedPriceDataByBillingSource: () => Promise<ModelPriceData> }
-    ).getCachedPriceDataByBillingSource = async () => zeroPriceData;
+      session as {
+        getResolvedPricingByBillingSource: () => Promise<{
+          resolvedModelName: string;
+          resolvedPricingProviderKey: string;
+          source: string;
+          priceData: ModelPriceData;
+        }>;
+      }
+    ).getResolvedPricingByBillingSource = async () => ({
+      resolvedModelName: originalModel,
+      resolvedPricingProviderKey: "test-provider",
+      source: "cloud_exact" as const,
+      priceData: zeroPriceData,
+    });
 
     const response = createNonStreamResponse(usage);
     await ProxyResponseHandler.dispatch(session, response);

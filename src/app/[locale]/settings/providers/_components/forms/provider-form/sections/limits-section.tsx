@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { PROVIDER_DEFAULTS } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
+import { MixedValueIndicator } from "../../../batch-edit/mixed-value-indicator";
 import { FieldGroup, SectionCard, SmartInputWrapper } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
 
@@ -54,6 +55,7 @@ interface LimitCardProps {
   step?: string;
   min?: string;
   isDecimal?: boolean;
+  mixedValues?: (number | null)[];
 }
 
 function LimitCard({
@@ -69,6 +71,7 @@ function LimitCard({
   step = "0.01",
   min = "0",
   isDecimal = true,
+  mixedValues,
 }: LimitCardProps) {
   return (
     <div
@@ -110,6 +113,7 @@ function LimitCard({
               {unit}
             </span>
           </div>
+          {mixedValues && mixedValues.length > 0 && <MixedValueIndicator values={mixedValues} />}
         </div>
       </div>
       {value !== null && (
@@ -123,10 +127,17 @@ function LimitCard({
   );
 }
 
-export function LimitsSection() {
+interface LimitsSectionProps {
+  subSectionRefs?: {
+    circuitBreaker?: (el: HTMLDivElement | null) => void;
+  };
+}
+
+export function LimitsSection({ subSectionRefs }: LimitsSectionProps) {
   const t = useTranslations("settings.providers.form");
-  const { state, dispatch, mode } = useProviderForm();
+  const { state, dispatch, mode, batchAnalysis } = useProviderForm();
   const isEdit = mode === "edit";
+  const isBatch = mode === "batch";
 
   return (
     <motion.div
@@ -157,6 +168,11 @@ export function LimitsSection() {
                 placeholder={t("sections.rateLimit.limit5h.placeholder")}
                 onChange={(value) => dispatch({ type: "SET_LIMIT_5H_USD", payload: value })}
                 disabled={state.ui.isPending}
+                mixedValues={
+                  isBatch && batchAnalysis?.rateLimit.limit5hUsd.status === "mixed"
+                    ? batchAnalysis.rateLimit.limit5hUsd.values
+                    : undefined
+                }
               />
               <LimitCard
                 label={t("sections.rateLimit.limitDaily.label")}
@@ -168,6 +184,11 @@ export function LimitsSection() {
                 placeholder={t("sections.rateLimit.limitDaily.placeholder")}
                 onChange={(value) => dispatch({ type: "SET_LIMIT_DAILY_USD", payload: value })}
                 disabled={state.ui.isPending}
+                mixedValues={
+                  isBatch && batchAnalysis?.rateLimit.limitDailyUsd.status === "mixed"
+                    ? batchAnalysis.rateLimit.limitDailyUsd.values
+                    : undefined
+                }
               />
               <LimitCard
                 label={t("sections.rateLimit.limitWeekly.label")}
@@ -179,6 +200,11 @@ export function LimitsSection() {
                 placeholder={t("sections.rateLimit.limitWeekly.placeholder")}
                 onChange={(value) => dispatch({ type: "SET_LIMIT_WEEKLY_USD", payload: value })}
                 disabled={state.ui.isPending}
+                mixedValues={
+                  isBatch && batchAnalysis?.rateLimit.limitWeeklyUsd.status === "mixed"
+                    ? batchAnalysis.rateLimit.limitWeeklyUsd.values
+                    : undefined
+                }
               />
               <LimitCard
                 label={t("sections.rateLimit.limitMonthly.label")}
@@ -190,6 +216,11 @@ export function LimitsSection() {
                 placeholder={t("sections.rateLimit.limitMonthly.placeholder")}
                 onChange={(value) => dispatch({ type: "SET_LIMIT_MONTHLY_USD", payload: value })}
                 disabled={state.ui.isPending}
+                mixedValues={
+                  isBatch && batchAnalysis?.rateLimit.limitMonthlyUsd.status === "mixed"
+                    ? batchAnalysis.rateLimit.limitMonthlyUsd.values
+                    : undefined
+                }
               />
             </div>
           </FieldGroup>
@@ -257,6 +288,11 @@ export function LimitsSection() {
                 placeholder={t("sections.rateLimit.limitTotal.placeholder")}
                 onChange={(value) => dispatch({ type: "SET_LIMIT_TOTAL_USD", payload: value })}
                 disabled={state.ui.isPending}
+                mixedValues={
+                  isBatch && batchAnalysis?.rateLimit.limitTotalUsd.status === "mixed"
+                    ? batchAnalysis.rateLimit.limitTotalUsd.values
+                    : undefined
+                }
               />
               <LimitCard
                 label={t("sections.rateLimit.limitConcurrent.label")}
@@ -272,6 +308,11 @@ export function LimitsSection() {
                 disabled={state.ui.isPending}
                 step="1"
                 isDecimal={false}
+                mixedValues={
+                  isBatch && batchAnalysis?.rateLimit.limitConcurrentSessions.status === "mixed"
+                    ? batchAnalysis.rateLimit.limitConcurrentSessions.values
+                    : undefined
+                }
               />
             </div>
           </FieldGroup>
@@ -279,146 +320,180 @@ export function LimitsSection() {
       </SectionCard>
 
       {/* Circuit Breaker Settings */}
-      <SectionCard
-        title={t("sections.circuitBreaker.title")}
-        description={t("sections.circuitBreaker.desc")}
-        icon={Shield}
-      >
-        <div className="space-y-4">
-          {/* Circuit Breaker Parameters */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <SmartInputWrapper
-              label={t("sections.circuitBreaker.failureThreshold.label")}
-              description={t("sections.circuitBreaker.failureThreshold.desc")}
-            >
-              <div className="relative">
-                <Input
-                  id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
-                  type="number"
-                  value={state.circuitBreaker.failureThreshold ?? ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    dispatch({
-                      type: "SET_FAILURE_THRESHOLD",
-                      payload: val === "" ? undefined : parseInt(val, 10),
-                    });
-                  }}
-                  placeholder={t("sections.circuitBreaker.failureThreshold.placeholder")}
-                  disabled={state.ui.isPending}
-                  min="0"
-                  step="1"
-                  className={cn(state.circuitBreaker.failureThreshold === 0 && "border-yellow-500")}
-                />
-                <AlertTriangle
-                  className={cn(
-                    "absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4",
-                    state.circuitBreaker.failureThreshold === 0
-                      ? "text-yellow-500"
-                      : "text-muted-foreground/30"
+      <div ref={subSectionRefs?.circuitBreaker}>
+        <SectionCard
+          title={t("sections.circuitBreaker.title")}
+          description={t("sections.circuitBreaker.desc")}
+          icon={Shield}
+        >
+          <div className="space-y-4">
+            {/* Circuit Breaker Parameters */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <SmartInputWrapper
+                label={t("sections.circuitBreaker.failureThreshold.label")}
+                description={t("sections.circuitBreaker.failureThreshold.desc")}
+              >
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Input
+                      id={isEdit ? "edit-failure-threshold" : "failure-threshold"}
+                      type="number"
+                      value={state.circuitBreaker.failureThreshold ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        dispatch({
+                          type: "SET_FAILURE_THRESHOLD",
+                          payload: val === "" ? undefined : parseInt(val, 10),
+                        });
+                      }}
+                      placeholder={t("sections.circuitBreaker.failureThreshold.placeholder")}
+                      disabled={state.ui.isPending}
+                      min="0"
+                      step="1"
+                      className={cn(
+                        state.circuitBreaker.failureThreshold === 0 && "border-yellow-500"
+                      )}
+                    />
+                    <AlertTriangle
+                      className={cn(
+                        "absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4",
+                        state.circuitBreaker.failureThreshold === 0
+                          ? "text-yellow-500"
+                          : "text-muted-foreground/30"
+                      )}
+                    />
+                  </div>
+                  {state.circuitBreaker.failureThreshold === 0 && (
+                    <p className="text-xs text-yellow-600">
+                      {t("sections.circuitBreaker.failureThreshold.warning")}
+                    </p>
                   )}
-                />
+                  {isBatch && batchAnalysis?.circuitBreaker.failureThreshold.status === "mixed" && (
+                    <MixedValueIndicator
+                      values={batchAnalysis.circuitBreaker.failureThreshold.values}
+                    />
+                  )}
+                </div>
+              </SmartInputWrapper>
+
+              <SmartInputWrapper
+                label={t("sections.circuitBreaker.openDuration.label")}
+                description={t("sections.circuitBreaker.openDuration.desc")}
+              >
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Input
+                      id={isEdit ? "edit-open-duration" : "open-duration"}
+                      type="number"
+                      value={state.circuitBreaker.openDurationMinutes ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        dispatch({
+                          type: "SET_OPEN_DURATION_MINUTES",
+                          payload: val === "" ? undefined : parseInt(val, 10),
+                        });
+                      }}
+                      placeholder={t("sections.circuitBreaker.openDuration.placeholder")}
+                      disabled={state.ui.isPending}
+                      min="1"
+                      max="1440"
+                      step="1"
+                      className="pr-12"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                      min
+                    </span>
+                  </div>
+                  {isBatch &&
+                    batchAnalysis?.circuitBreaker.openDurationMinutes.status === "mixed" && (
+                      <MixedValueIndicator
+                        values={batchAnalysis.circuitBreaker.openDurationMinutes.values}
+                      />
+                    )}
+                </div>
+              </SmartInputWrapper>
+
+              <SmartInputWrapper
+                label={t("sections.circuitBreaker.successThreshold.label")}
+                description={t("sections.circuitBreaker.successThreshold.desc")}
+              >
+                <div className="space-y-2">
+                  <Input
+                    id={isEdit ? "edit-success-threshold" : "success-threshold"}
+                    type="number"
+                    value={state.circuitBreaker.halfOpenSuccessThreshold ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      dispatch({
+                        type: "SET_HALF_OPEN_SUCCESS_THRESHOLD",
+                        payload: val === "" ? undefined : parseInt(val, 10),
+                      });
+                    }}
+                    placeholder={t("sections.circuitBreaker.successThreshold.placeholder")}
+                    disabled={state.ui.isPending}
+                    min="1"
+                    max="10"
+                    step="1"
+                  />
+                  {isBatch &&
+                    batchAnalysis?.circuitBreaker.halfOpenSuccessThreshold.status === "mixed" && (
+                      <MixedValueIndicator
+                        values={batchAnalysis.circuitBreaker.halfOpenSuccessThreshold.values}
+                      />
+                    )}
+                </div>
+              </SmartInputWrapper>
+
+              <SmartInputWrapper
+                label={t("sections.circuitBreaker.maxRetryAttempts.label")}
+                description={t("sections.circuitBreaker.maxRetryAttempts.desc")}
+              >
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Input
+                      id={isEdit ? "edit-max-retry-attempts" : "max-retry-attempts"}
+                      type="number"
+                      value={state.circuitBreaker.maxRetryAttempts ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        dispatch({
+                          type: "SET_MAX_RETRY_ATTEMPTS",
+                          payload: val === "" ? null : parseInt(val, 10),
+                        });
+                      }}
+                      placeholder={t("sections.circuitBreaker.maxRetryAttempts.placeholder")}
+                      disabled={state.ui.isPending}
+                      min="1"
+                      max="10"
+                      step="1"
+                    />
+                    <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
+                  </div>
+                  {isBatch && batchAnalysis?.circuitBreaker.maxRetryAttempts.status === "mixed" && (
+                    <MixedValueIndicator
+                      values={batchAnalysis.circuitBreaker.maxRetryAttempts.values}
+                    />
+                  )}
+                </div>
+              </SmartInputWrapper>
+            </div>
+
+            {/* Circuit Breaker Status Indicator */}
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
+              <Zap className="h-4 w-4 text-primary" />
+              <div className="flex-1 text-xs text-muted-foreground">
+                {t("sections.circuitBreaker.summary", {
+                  failureThreshold: state.circuitBreaker.failureThreshold ?? 5,
+                  openDuration: state.circuitBreaker.openDurationMinutes ?? 30,
+                  successThreshold: state.circuitBreaker.halfOpenSuccessThreshold ?? 2,
+                  maxRetryAttempts:
+                    state.circuitBreaker.maxRetryAttempts ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS,
+                })}
               </div>
-              {state.circuitBreaker.failureThreshold === 0 && (
-                <p className="text-xs text-yellow-600">
-                  {t("sections.circuitBreaker.failureThreshold.warning")}
-                </p>
-              )}
-            </SmartInputWrapper>
-
-            <SmartInputWrapper
-              label={t("sections.circuitBreaker.openDuration.label")}
-              description={t("sections.circuitBreaker.openDuration.desc")}
-            >
-              <div className="relative">
-                <Input
-                  id={isEdit ? "edit-open-duration" : "open-duration"}
-                  type="number"
-                  value={state.circuitBreaker.openDurationMinutes ?? ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    dispatch({
-                      type: "SET_OPEN_DURATION_MINUTES",
-                      payload: val === "" ? undefined : parseInt(val, 10),
-                    });
-                  }}
-                  placeholder={t("sections.circuitBreaker.openDuration.placeholder")}
-                  disabled={state.ui.isPending}
-                  min="1"
-                  max="1440"
-                  step="1"
-                  className="pr-12"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  min
-                </span>
-              </div>
-            </SmartInputWrapper>
-
-            <SmartInputWrapper
-              label={t("sections.circuitBreaker.successThreshold.label")}
-              description={t("sections.circuitBreaker.successThreshold.desc")}
-            >
-              <Input
-                id={isEdit ? "edit-success-threshold" : "success-threshold"}
-                type="number"
-                value={state.circuitBreaker.halfOpenSuccessThreshold ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  dispatch({
-                    type: "SET_HALF_OPEN_SUCCESS_THRESHOLD",
-                    payload: val === "" ? undefined : parseInt(val, 10),
-                  });
-                }}
-                placeholder={t("sections.circuitBreaker.successThreshold.placeholder")}
-                disabled={state.ui.isPending}
-                min="1"
-                max="10"
-                step="1"
-              />
-            </SmartInputWrapper>
-
-            <SmartInputWrapper
-              label={t("sections.circuitBreaker.maxRetryAttempts.label")}
-              description={t("sections.circuitBreaker.maxRetryAttempts.desc")}
-            >
-              <div className="relative">
-                <Input
-                  id={isEdit ? "edit-max-retry-attempts" : "max-retry-attempts"}
-                  type="number"
-                  value={state.circuitBreaker.maxRetryAttempts ?? ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    dispatch({
-                      type: "SET_MAX_RETRY_ATTEMPTS",
-                      payload: val === "" ? null : parseInt(val, 10),
-                    });
-                  }}
-                  placeholder={t("sections.circuitBreaker.maxRetryAttempts.placeholder")}
-                  disabled={state.ui.isPending}
-                  min="1"
-                  max="10"
-                  step="1"
-                />
-                <RefreshCw className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/30" />
-              </div>
-            </SmartInputWrapper>
-          </div>
-
-          {/* Circuit Breaker Status Indicator */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
-            <Zap className="h-4 w-4 text-primary" />
-            <div className="flex-1 text-xs text-muted-foreground">
-              {t("sections.circuitBreaker.summary", {
-                failureThreshold: state.circuitBreaker.failureThreshold ?? 5,
-                openDuration: state.circuitBreaker.openDurationMinutes ?? 30,
-                successThreshold: state.circuitBreaker.halfOpenSuccessThreshold ?? 2,
-                maxRetryAttempts:
-                  state.circuitBreaker.maxRetryAttempts ?? PROVIDER_DEFAULTS.MAX_RETRY_ATTEMPTS,
-              })}
             </div>
           </div>
-        </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
     </motion.div>
   );
 }

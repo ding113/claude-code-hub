@@ -35,7 +35,12 @@ export interface ProviderChainItem {
     | "http2_fallback" // HTTP/2 协议错误，回退到 HTTP/1.1（不切换供应商、不计入熔断器）
     | "endpoint_pool_exhausted" // 端点池耗尽（所有端点熔断或不可用，严格模式阻止降级）
     | "vendor_type_all_timeout" // 供应商类型全端点超时（524），触发 vendor-type 临时熔断
-    | "client_restriction_filtered"; // Provider skipped due to client restriction (neutral, no circuit breaker)
+    | "client_restriction_filtered" // Provider skipped due to client restriction (neutral, no circuit breaker)
+    | "hedge_triggered" // Hedge 计时器触发，启动备选供应商
+    | "hedge_launched" // Hedge 备选供应商已启动（信息性记录，不算实际请求）
+    | "hedge_winner" // 该供应商赢得 Hedge 竞速（最先收到首字节）
+    | "hedge_loser_cancelled" // 该供应商输掉 Hedge 竞速，请求被取消
+    | "client_abort"; // 客户端在响应完成前断开连接
 
   // === 选择方法（细化） ===
   selectionMethod?:

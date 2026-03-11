@@ -540,6 +540,38 @@ describe("extractUsageMetrics", () => {
       // 顶层优先
       expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
     });
+
+    it("应从 Chat Completions 的 prompt_tokens_details.cached_tokens 提取缓存读取", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 500,
+          prompt_tokens_details: {
+            cached_tokens: 200,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(200);
+    });
+
+    it("顶层 cache_read_input_tokens 应优先于 Chat Completions 嵌套格式", () => {
+      const response = JSON.stringify({
+        usage: {
+          prompt_tokens: 1000,
+          cache_read_input_tokens: 300,
+          prompt_tokens_details: {
+            cached_tokens: 200,
+          },
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+    });
   });
 
   describe("SSE 流式响应解析", () => {

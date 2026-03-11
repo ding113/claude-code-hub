@@ -184,6 +184,7 @@
       "title": "请求详情",
       "statusTitle": "状态: {status}",
       "inProgress": "请求中",
+      "retrying": "Retrying",
       "unknown": "未知",
       "success": "请求成功完成",
       "error": "请求失败，以下是详细的错误信息和供应商决策链",
@@ -456,7 +457,8 @@
       "avgTtfbMs": "平均 TTFB",
       "avgTokensPerSecond": "平均输出速率",
       "avgCostPerRequest": "平均单次请求成本",
-      "avgCostPerMillionTokens": "平均百万 Token 成本"
+      "avgCostPerMillionTokens": "平均百万 Token 成本",
+      "unknownModel": "未知"
     },
     "expandModelStats": "展开模型详情",
     "collapseModelStats": "收起模型详情",
@@ -479,6 +481,38 @@
     "filters": {
       "userTagsPlaceholder": "按用户标签筛选...",
       "userGroupsPlaceholder": "按用户分组筛选..."
+    },
+    "userInsights": {
+      "title": "用户洞察",
+      "backToLeaderboard": "返回排行榜",
+      "overview": "概览",
+      "keyTrend": "Key 使用趋势",
+      "modelBreakdown": "模型明细",
+      "todayRequests": "今日请求",
+      "todayCost": "今日费用",
+      "avgResponseTime": "平均响应时间",
+      "errorRate": "错误率",
+      "timeRange": {
+        "today": "今日",
+        "7days": "近 7 天",
+        "30days": "近 30 天",
+        "thisMonth": "本月"
+      },
+      "unknownModel": "未知模型",
+      "noData": "暂无数据",
+      "dateRange": "日期范围",
+      "allTime": "全部时间",
+      "providerBreakdown": "供应商明细",
+      "unknownProvider": "未知供应商",
+      "apiKey": "API 密钥",
+      "provider": "供应商",
+      "model": "模型",
+      "allKeys": "全部密钥",
+      "allProviders": "全部供应商",
+      "allModels": "全部模型",
+      "dimensions": "维度",
+      "filters": "筛选",
+      "loadError": "数据加载失败"
     }
   },
   "sessions": {
@@ -1053,7 +1087,7 @@
       "label": "允许的客户端",
       "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
       "customLabel": "自定义客户端模式",
-      "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）"
+      "customPlaceholder": "输入模式（如 'my-ide'、'codex-*'）"
     },
     "allowedModels": {
       "label": "允许的模型",
@@ -1540,6 +1574,21 @@
       "deleteFailed": "删除用户失败",
       "userDeleted": "用户已删除",
       "saving": "保存中...",
+      "resetSection": {
+        "title": "重置选项"
+      },
+      "resetLimits": {
+        "title": "重置限额",
+        "description": "重置所有限额的累计消费计数器。请求日志和统计数据将被保留。",
+        "button": "重置限额",
+        "confirmTitle": "仅重置限额？",
+        "confirmDescription": "这将把所有累计消费计数器（5小时、每日、每周、每月、总计）归零。请求日志和使用统计将被保留。",
+        "confirm": "是的，重置限额",
+        "loading": "正在重置...",
+        "error": "重置限额失败",
+        "success": "所有限额已重置",
+        "lastResetAt": "上次重置: {date}"
+      },
       "resetData": {
         "title": "重置统计",
         "description": "删除该用户的所有请求日志和使用数据。此操作不可逆。",
@@ -1813,15 +1862,15 @@
           "label": "客户端限制",
           "description": "限制哪些 CLI/IDE 客户端可以使用此账户。留空表示无限制。",
           "customLabel": "自定义客户端模式",
-          "customPlaceholder": "输入自定义模式（如：'xcode', 'my-ide'）",
-          "customHelp": "自定义模式按 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。"
+          "customPlaceholder": "输入模式（如 'my-ide'、'codex-*'）",
+          "customHelp": "不含 '*'：不区分大小写的子串匹配（忽略 '-' 和 '_'）。含 '*'：从 UA 开头的 glob 通配符匹配（用 *foo* 匹配任意位置；不区分大小写，字符按原样匹配）。"
         },
         "blockedClients": {
           "label": "黑名单客户端",
           "description": "匹配这些模式的客户端将被拒绝，即使它们也匹配白名单。",
           "customLabel": "自定义黑名单模式",
-          "customPlaceholder": "输入模式（如 'xcode'、'my-ide'）",
-          "customHelp": "自定义模式按 User-Agent 包含匹配（不区分大小写），并将 '-' 与 '_' 视为等价。"
+          "customPlaceholder": "输入模式（如 'my-ide'、'codex-*'）",
+          "customHelp": "不含 '*'：不区分大小写的子串匹配（忽略 '-' 和 '_'）。含 '*'：从 UA 开头的 glob 通配符匹配（用 *foo* 匹配任意位置；不区分大小写，字符按原样匹配）。"
         },
         "allowedModels": {
           "label": "模型限制",
@@ -1858,7 +1907,17 @@
         "claude-code-sdk-ts": "Claude Code SDK（TypeScript）",
         "claude-code-sdk-py": "Claude Code SDK（Python）",
         "claude-code-gh-action": "Claude Code GitHub Action"
-      }
+      },
+      "subClients": {
+        "all": "全部",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "已选 {count} 项"
     },
     "keyEditSection": {
       "sections": {

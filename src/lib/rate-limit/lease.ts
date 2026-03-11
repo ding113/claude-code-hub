@@ -38,6 +38,7 @@ export interface BudgetLease {
   limitAmount: number;
   remainingBudget: number;
   ttlSeconds: number;
+  costResetAtMs?: number | null;
 }
 
 /**

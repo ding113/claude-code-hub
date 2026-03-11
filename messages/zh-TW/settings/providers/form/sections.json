@@ -331,18 +331,32 @@
       "customAllowedPlaceholder": "例如 my-ide、internal-tool",
       "customBlockedLabel": "自訂黑名單模式",
       "customBlockedPlaceholder": "例如 legacy-client",
-      "customHelp": "自訂模式使用 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。",
+      "customHelp": "不含 '*'：不區分大小寫的子串比對（忽略 '-' 和 '_'）。含 '*'：從 UA 開頭的 glob 萬用字元比對（用 *foo* 比對任意位置；不區分大小寫，字元按原樣比對）。",
       "presetClients": {
         "claude-code": "Claude Code（全部）",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "全部",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "已選 {count} 項"
     },
     "preserveClientIp": {
       "desc": "向上游轉發 x-forwarded-for / x-real-ip，可能暴露真實來源 IP",
       "help": "預設關閉以保護隱私；僅在需要上游感知終端 IP 時開啟。",
       "label": "透傳客戶端 IP"
+    },
+    "options": {
+      "title": "選項",
+      "desc": "附加供應商選項和覆寫設定"
     },
     "providerType": {
       "desc": "（決定調度策略）",
@@ -402,7 +416,7 @@
     "disableHint": "設為 0 表示禁用該超時（僅用於灰度回退場景，不推薦）",
     "nonStreamingTotal": {
       "core": "true",
-      "desc": "非串流請求總超時，範圍 60-1200 秒，填 0 禁用（預設不限制）",
+      "desc": "非串流請求總超時，範圍 60-1800 秒，填 0 禁用（預設不限制）",
       "label": "非串流總超時（秒）",
       "placeholder": "0"
     },

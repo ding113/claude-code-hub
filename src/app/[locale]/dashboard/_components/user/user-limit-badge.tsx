@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getUserAllLimitUsage } from "@/actions/users";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getSharedUserLimitUsage,
+  type LimitUsageData,
+  peekCachedUserLimitUsage,
+} from "@/lib/dashboard/user-limit-usage-cache";
 import { cn } from "@/lib/utils";
 
 export type LimitType = "5h" | "daily" | "weekly" | "monthly" | "total";
@@ -14,26 +18,6 @@ export interface UserLimitBadgeProps {
   limit: number | null;
   label: string;
   unit?: string;
-}
-
-interface LimitUsageData {
-  limit5h: { usage: number; limit: number | null };
-  limitDaily: { usage: number; limit: number | null };
-  limitWeekly: { usage: number; limit: number | null };
-  limitMonthly: { usage: number; limit: number | null };
-  limitTotal: { usage: number; limit: number | null };
-}
-
-// Global cache for user limit usage data
-const usageCache = new Map<number, { data: LimitUsageData; timestamp: number }>();
-const CACHE_TTL = 60 * 1000; // 1 minute
-
-export function clearUsageCache(userId?: number): void {
-  if (userId !== undefined) {
-    usageCache.delete(userId);
-  } else {
-    usageCache.clear();
-  }
 }
 
 function formatPercentage(usage: number, limit: number): string {
@@ -77,39 +61,52 @@ export function UserLimitBadge({
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    let isCancelled = false;
+
     // If no limit is set, don't fetch usage data
     if (limit === null || limit === undefined) {
       return;
     }
 
     // Check cache first
-    const cached = usageCache.get(userId);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    const cached = peekCachedUserLimitUsage(userId);
+    if (cached) {
       // Reset error/loading state when using cached data
       setError(false);
       setIsLoading(false);
-      setUsageData((prev) => (prev === cached.data ? prev : cached.data));
+      setUsageData((prev) => (prev === cached ? prev : cached));
       return;
     }
 
     setIsLoading(true);
     setError(false);
 
-    getUserAllLimitUsage(userId)
-      .then((res) => {
-        if (res.ok && res.data) {
-          usageCache.set(userId, { data: res.data, timestamp: Date.now() });
-          setUsageData(res.data);
+    getSharedUserLimitUsage(userId)
+      .then((data) => {
+        if (isCancelled) {
+          return;
+        }
+
+        if (data) {
+          setUsageData(data);
         } else {
           setError(true);
         }
       })
       .catch(() => {
-        setError(true);
+        if (!isCancelled) {
+          setError(true);
+        }
       })
       .finally(() => {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [userId, limit]);
 
   // No limit set - show "-"

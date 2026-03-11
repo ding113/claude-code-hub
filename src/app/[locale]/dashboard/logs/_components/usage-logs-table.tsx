@@ -25,7 +25,8 @@ import {
   NON_BILLING_ENDPOINT,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
-import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
+import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
+import { formatProviderSummary, getFinalProviderName } from "@/lib/utils/provider-chain-formatter";
 import {
   getPricingResolutionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
@@ -125,7 +126,9 @@ export function UsageLogsTable({
                         .reverse()
                         .find(
                           (item) =>
-                            item.reason === "request_success" || item.reason === "retry_success"
+                            item.reason === "request_success" ||
+                            item.reason === "retry_success" ||
+                            item.reason === "hedge_winner"
                         )
                     : null;
 
@@ -199,9 +202,7 @@ export function UsageLogsTable({
                               <ProviderChainPopover
                                 chain={log.providerChain ?? []}
                                 finalProvider={
-                                  (log.providerChain && log.providerChain.length > 0
-                                    ? log.providerChain[log.providerChain.length - 1].name
-                                    : null) ||
+                                  getFinalProviderName(log.providerChain ?? []) ||
                                   log.providerName ||
                                   tChain("circuit.unknown")
                                 }
@@ -243,16 +244,16 @@ export function UsageLogsTable({
                               )}
                           </div>
                           {/* 显示供应商倍率 Badge（不为 1.0 时） */}
-                          {hasCostBadge && multiplier != null ? (
+                          {shouldShowCostBadgeInCell(log.providerChain, multiplier) ? (
                             <Badge
                               variant="outline"
                               className={
-                                multiplier > 1
+                                multiplier! > 1
                                   ? "text-xs bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
                                   : "text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
                               }
                             >
-                              ×{multiplier.toFixed(2)}
+                              ×{multiplier!.toFixed(2)}
                             </Badge>
                           ) : null}
                         </div>
@@ -467,11 +468,11 @@ export function UsageLogsTable({
                                   {formatTokenAmount(log.cacheReadInputTokens)} tokens (0.1x)
                                 </div>
                               )}
-                              {hasCostBadge && multiplier != null ? (
+                              {hasCostBadge && multiplier != null && (
                                 <div>
                                   {t("logs.billingDetails.multiplier")}: {multiplier.toFixed(2)}x
                                 </div>
-                              ) : null}
+                              )}
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>

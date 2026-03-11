@@ -331,18 +331,32 @@
       "customAllowedPlaceholder": "例: my-ide、internal-tool",
       "customBlockedLabel": "カスタムブロックパターン",
       "customBlockedPlaceholder": "例: legacy-client",
-      "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます（大文字小文字を区別しません）。'-' と '_' は同等として扱います。",
+      "customHelp": "'*' なし：大文字小文字を区別しない部分一致（'-' と '_' は無視）。'*' あり：UA の先頭からの glob パターンマッチ（*foo* で任意の位置に一致; 大文字小文字を区別しない、文字はそのまま一致）。",
       "presetClients": {
         "claude-code": "Claude Code（すべて）",
         "gemini-cli": "Gemini CLI",
         "factory-cli": "Droid CLI",
         "codex-cli": "Codex CLI"
-      }
+      },
+      "subClients": {
+        "all": "すべて",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "{count} 件選択"
     },
     "preserveClientIp": {
       "desc": "x-forwarded-for / x-real-ip を上流に渡します（実際の IP が露出する可能性）",
       "help": "プライバシー保護のためデフォルトはオフ。上流側で端末 IP が必要な場合のみ有効化してください。",
       "label": "クライアント IP を転送"
+    },
+    "options": {
+      "title": "オプション",
+      "desc": "追加のプロバイダーオプションとオーバーライド"
     },
     "providerType": {
       "desc": "（スケジューリングに影響）",
@@ -402,7 +416,7 @@
     "disableHint": "0に設定するとタイムアウトを無効にします（カナリアロールバックシナリオのみ、非推奨）",
     "nonStreamingTotal": {
       "core": "true",
-      "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1200秒、0で無効化（デフォルト: 無制限）",
+      "desc": "非ストリーミングリクエストの総タイムアウト、範囲60～1800秒、0で無効化（デフォルト: 無制限）",
       "label": "非ストリーミング総タイムアウト（秒）",
       "placeholder": "0"
     },

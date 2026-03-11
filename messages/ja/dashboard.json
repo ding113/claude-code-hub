@@ -184,6 +184,7 @@
       "title": "リクエスト詳細",
       "statusTitle": "ステータス: {status}",
       "inProgress": "処理中",
+      "retrying": "Retrying",
       "unknown": "不明",
       "success": "リクエストが正常に完了しました",
       "error": "リクエスト失敗、詳細なエラー情報とプロバイダー決定チェーンは以下の通りです",
@@ -456,7 +457,8 @@
       "avgTtfbMs": "平均TTFB",
       "avgTokensPerSecond": "平均トークン/秒",
       "avgCostPerRequest": "平均リクエスト単価",
-      "avgCostPerMillionTokens": "100万トークンあたりコスト"
+      "avgCostPerMillionTokens": "100万トークンあたりコスト",
+      "unknownModel": "不明"
     },
     "expandModelStats": "モデル詳細を展開",
     "collapseModelStats": "モデル詳細を折りたたむ",
@@ -479,6 +481,38 @@
     "filters": {
       "userTagsPlaceholder": "ユーザータグでフィルタ...",
       "userGroupsPlaceholder": "ユーザーグループでフィルタ..."
+    },
+    "userInsights": {
+      "title": "ユーザーインサイト",
+      "backToLeaderboard": "ランキングに戻る",
+      "overview": "概要",
+      "keyTrend": "Key 使用トレンド",
+      "modelBreakdown": "モデル内訳",
+      "todayRequests": "本日リクエスト",
+      "todayCost": "本日コスト",
+      "avgResponseTime": "平均応答時間",
+      "errorRate": "エラー率",
+      "timeRange": {
+        "today": "今日",
+        "7days": "過去7日間",
+        "30days": "過去30日間",
+        "thisMonth": "今月"
+      },
+      "unknownModel": "不明なモデル",
+      "noData": "データがありません",
+      "dateRange": "期間",
+      "allTime": "全期間",
+      "providerBreakdown": "プロバイダー内訳",
+      "unknownProvider": "不明なプロバイダー",
+      "apiKey": "APIキー",
+      "provider": "プロバイダー",
+      "model": "モデル",
+      "allKeys": "すべてのキー",
+      "allProviders": "すべてのプロバイダー",
+      "allModels": "すべてのモデル",
+      "dimensions": "ディメンション",
+      "filters": "フィルター",
+      "loadError": "データの読み込みに失敗しました"
     }
   },
   "sessions": {
@@ -1039,7 +1073,7 @@
       "label": "許可されたクライアント",
       "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空の場合は制限なし。",
       "customLabel": "カスタムクライアントパターン",
-      "customPlaceholder": "カスタムパターンを入力(例：'xcode', 'my-ide')"
+      "customPlaceholder": "パターンを入力(例: 'my-ide'、'codex-*')"
     },
     "allowedModels": {
       "label": "許可モデル",
@@ -1517,6 +1551,21 @@
       "deleteFailed": "ユーザーの削除に失敗しました",
       "userDeleted": "ユーザーが削除されました",
       "saving": "保存しています...",
+      "resetSection": {
+        "title": "リセットオプション"
+      },
+      "resetLimits": {
+        "title": "制限のリセット",
+        "description": "全ての制限の累積コストカウンターをリセットします。リクエストログと統計データは保持されます。",
+        "button": "制限をリセット",
+        "confirmTitle": "制限のみリセットしますか？",
+        "confirmDescription": "全ての累積コストカウンター(5時間、日次、週次、月次、合計)がゼロにリセットされます。リクエストログと利用統計は保持されます。",
+        "confirm": "はい、リセットする",
+        "loading": "リセット中...",
+        "error": "制限のリセットに失敗しました",
+        "success": "全ての制限がリセットされました",
+        "lastResetAt": "前回のリセット: {date}"
+      },
       "resetData": {
         "title": "統計リセット",
         "description": "このユーザーのすべてのリクエストログと使用データを削除します。この操作は元に戻せません。",
@@ -1790,15 +1839,15 @@
           "label": "クライアント制限",
           "description": "このアカウントを使用できるCLI/IDEクライアントを制限します。空欄は制限なし。",
           "customLabel": "カスタムクライアントパターン",
-          "customPlaceholder": "パターンを入力(例：'xcode', 'my-ide')",
-          "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます(大文字小文字を区別しません)。'-' と '_' は同等として扱います。"
+          "customPlaceholder": "パターンを入力(例: 'my-ide'、'codex-*')",
+          "customHelp": "'*' なし：大文字小文字を区別しない部分一致('-' と '_' は無視)。'*' あり：UA の先頭からの glob パターンマッチ(*foo* で任意の位置に一致; 大文字小文字を区別しない、文字はそのまま一致)。"
         },
         "blockedClients": {
           "label": "ブロックするクライアント",
           "description": "これらのパターンに一致するクライアントは、許可リストに一致しても拒否されます。",
           "customLabel": "カスタムブロックパターン",
-          "customPlaceholder": "パターンを入力(例: 'xcode'、'my-ide')",
-          "customHelp": "カスタムパターンは User-Agent の部分一致で判定されます(大文字小文字を区別しません)。'-' と '_' は同等として扱います。"
+          "customPlaceholder": "パターンを入力(例: 'my-ide'、'codex-*')",
+          "customHelp": "'*' なし：大文字小文字を区別しない部分一致('-' と '_' は無視)。'*' あり：UA の先頭からの glob パターンマッチ(*foo* で任意の位置に一致; 大文字小文字を区別しない、文字はそのまま一致)。"
         },
         "allowedModels": {
           "label": "モデル制限",
@@ -1835,7 +1884,17 @@
         "claude-code-sdk-ts": "Claude Code SDK (TypeScript)",
         "claude-code-sdk-py": "Claude Code SDK (Python)",
         "claude-code-gh-action": "Claude Code GitHub Action"
-      }
+      },
+      "subClients": {
+        "all": "すべて",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK (TypeScript)",
+        "sdk-py": "SDK (Python)",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "{count} 件選択"
     },
     "keyEditSection": {
       "sections": {

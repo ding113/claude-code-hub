@@ -67,6 +67,7 @@ export interface UsageLogRow {
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
   swapCacheTtlApplied: boolean | null; // 是否启用了swap cache TTL billing
   specialSettings: SpecialSetting[] | null; // 特殊设置（审计/展示）
+  _liveChain?: { chain: ProviderChainItem[]; phase: string; updatedAt: number } | null;
 }
 
 export interface UsageLogSummary {

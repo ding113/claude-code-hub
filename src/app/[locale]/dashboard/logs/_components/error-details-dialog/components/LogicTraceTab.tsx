@@ -34,7 +34,11 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
   if (item.reason === "session_reuse" || item.selectionMethod === "session_reuse") {
     return "session_reuse";
   }
-  if (item.reason === "request_success" || item.reason === "retry_success") {
+  if (
+    item.reason === "request_success" ||
+    item.reason === "retry_success" ||
+    item.reason === "hedge_winner"
+  ) {
     return "success";
   }
   if (
@@ -43,11 +47,13 @@ function getRequestStatus(item: ProviderChainItem): StepStatus {
     item.reason === "resource_not_found" ||
     item.reason === "client_error_non_retryable" ||
     item.reason === "endpoint_pool_exhausted" ||
-    item.reason === "concurrent_limit_failed"
+    item.reason === "concurrent_limit_failed" ||
+    item.reason === "hedge_loser_cancelled" ||
+    item.reason === "client_abort"
   ) {
     return "failure";
   }
-  // http2_fallback and other retry-related reasons are treated as pending/in-progress
+  // hedge_triggered, http2_fallback and other retry-related reasons are treated as pending/in-progress
   return "pending";
 }
 
@@ -710,23 +716,38 @@ export function LogicTraceTab({
               item.reason === "session_reuse" || item.selectionMethod === "session_reuse";
 
             // Determine icon based on type
+            const isHedgeTriggered = item.reason === "hedge_triggered";
+            const isHedgeLoser = item.reason === "hedge_loser_cancelled";
+            const isClientAbort = item.reason === "client_abort";
             const stepIcon = isSessionReuse
               ? Link2
-              : isRetry
-                ? RefreshCw
-                : status === "success"
-                  ? CheckCircle
-                  : status === "failure"
-                    ? XCircle
-                    : Server;
+              : isHedgeTriggered
+                ? GitBranch
+                : isHedgeLoser || isClientAbort
+                  ? XCircle
+                  : isRetry
+                    ? RefreshCw
+                    : status === "success"
+                      ? CheckCircle
+                      : status === "failure"
+                        ? XCircle
+                        : Server;
 
             // Determine title based on type
             // For session reuse flow, show simplified "Execute Request" title for the first item
             const stepTitle = isSessionReuse
               ? t("logicTrace.executeRequest")
-              : isRetry
-                ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
-                : t("logicTrace.attemptProvider", { provider: item.name });
+              : isHedgeTriggered
+                ? tChain("timeline.hedgeTriggered")
+                : isHedgeLoser
+                  ? tChain("timeline.hedgeLoserCancelled")
+                  : isClientAbort
+                    ? tChain("timeline.clientAbort")
+                    : isRetry
+                      ? t("logicTrace.retryAttempt", { number: item.attemptNumber ?? 1 })
+                      : item.reason === "hedge_winner"
+                        ? tChain("timeline.hedgeWinner")
+                        : t("logicTrace.attemptProvider", { provider: item.name });
 
             return (
               <StepCard

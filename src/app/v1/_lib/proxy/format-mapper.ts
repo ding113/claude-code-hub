@@ -121,6 +121,7 @@ export function detectClientFormat(requestBody: Record<string, unknown>): Client
   }
 
   // 3. 检测 Response API (Codex) 格式
+  // 仅通过 input 数组识别；字符串/单对象简写由 response-input-rectifier 在端点确认后规范化
   if (Array.isArray(requestBody.input)) {
     return "response";
   }

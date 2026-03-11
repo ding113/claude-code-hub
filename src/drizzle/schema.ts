@@ -51,6 +51,7 @@ export const users = pgTable('users', {
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
+  costResetAt: timestamp('cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions'),
 
   // Daily quota reset mode (fixed: reset at specific time, rolling: 24h window)
@@ -259,13 +260,13 @@ export const providers = pgTable('providers', {
   // 超时配置（毫秒）
   // 注意：由于 undici fetch API 的限制，无法精确分离 DNS/TCP/TLS 连接阶段和响应头接收阶段
   // 参考：https://github.com/nodejs/undici/discussions/1313
-  // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 30 秒，0 = 禁用）⭐ 核心
+  // - firstByteTimeoutStreamingMs: 流式请求首字节超时（默认 0 = 不限制，非 0 时最小 1 秒）[核心]
   //   覆盖从请求开始到收到首字节的全过程：DNS + TCP + TLS + 请求发送 + 首字节接收
   //   解决流式请求重试缓慢问题
-  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 0 = 不限制）⭐ 核心
+  // - streamingIdleTimeoutMs: 流式请求静默期超时（默认 0 = 不限制）[核心]
   //   解决流式中途卡住问题
   //   注意：配置非 0 值时，最小必须为 60 秒
-  // - requestTimeoutNonStreamingMs: 非流式请求总超时（默认 0 = 不限制）⭐ 核心
+  // - requestTimeoutNonStreamingMs: 非流式请求总超时（默认 0 = 不限制）[核心]
   //   防止长请求无限挂起
   firstByteTimeoutStreamingMs: integer('first_byte_timeout_streaming_ms').notNull().default(0),
   streamingIdleTimeoutMs: integer('streaming_idle_timeout_ms').notNull().default(0),
@@ -712,6 +713,12 @@ export const systemSettings = pgTable('system_settings', {
   // billing header 整流器（默认开启）
   // 开启后：主动移除 Claude Code 客户端注入到 system 提示中的 x-anthropic-billing-header 文本块
   enableBillingHeaderRectifier: boolean('enable_billing_header_rectifier')
+    .notNull()
+    .default(true),
+
+  // Response API input 整流器（默认开启）
+  // 开启后：当 /v1/responses 端点收到非数组 input 时，自动规范化为数组格式
+  enableResponseInputRectifier: boolean('enable_response_input_rectifier')
     .notNull()
     .default(true),
 

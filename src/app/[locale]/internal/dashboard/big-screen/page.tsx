@@ -311,7 +311,7 @@ const ActivityStream = ({
               >
                 <div className={`col-span-2 truncate font-bold text-orange-400`}>{item.user}</div>
                 <div className={`col-span-3 truncate text-gray-300`}>{item.model}</div>
-                <div className={`col-span-3 truncate text-gray-500`}>{item.provider}</div>
+                <div className={`col-span-3 truncate text-gray-500`}>{item.provider || "..."}</div>
                 <div
                   className={`col-span-2 text-right ${item.latency > 1000 ? "text-red-400" : "text-green-400"}`}
                 >
@@ -320,12 +320,14 @@ const ActivityStream = ({
                 <div className="col-span-2 text-right flex justify-end">
                   <span
                     className={`px-1.5 rounded-sm ${
-                      item.status === 200
-                        ? "bg-green-500/10 text-green-500"
-                        : "bg-red-500/10 text-red-500"
+                      item.status === 0
+                        ? "bg-yellow-500/10 text-yellow-500"
+                        : item.status === 200
+                          ? "bg-green-500/10 text-green-500"
+                          : "bg-red-500/10 text-red-500"
                     }`}
                   >
-                    {item.status}
+                    {item.status === 0 ? "..." : item.status}
                   </span>
                 </div>
               </motion.div>

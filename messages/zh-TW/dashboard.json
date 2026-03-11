@@ -184,6 +184,7 @@
       "title": "請求詳情",
       "statusTitle": "狀態: {status}",
       "inProgress": "請求中",
+      "retrying": "Retrying",
       "unknown": "未知狀態",
       "success": "請求成功完成",
       "error": "請求失敗，以下是詳細的錯誤訊息和供應商決策鏈",
@@ -456,7 +457,8 @@
       "avgTtfbMs": "平均 TTFB（ms）",
       "avgTokensPerSecond": "平均輸出速率",
       "avgCostPerRequest": "平均每次請求成本",
-      "avgCostPerMillionTokens": "平均每百萬 Token 成本"
+      "avgCostPerMillionTokens": "平均每百萬 Token 成本",
+      "unknownModel": "未知"
     },
     "expandModelStats": "展開模型詳情",
     "collapseModelStats": "收起模型詳情",
@@ -479,6 +481,38 @@
     "filters": {
       "userTagsPlaceholder": "按使用者標籤篩選...",
       "userGroupsPlaceholder": "按使用者群組篩選..."
+    },
+    "userInsights": {
+      "title": "使用者洞察",
+      "backToLeaderboard": "返回排行榜",
+      "overview": "概覽",
+      "keyTrend": "Key 使用趨勢",
+      "modelBreakdown": "模型明細",
+      "todayRequests": "今日請求",
+      "todayCost": "今日費用",
+      "avgResponseTime": "平均回應時間",
+      "errorRate": "錯誤率",
+      "timeRange": {
+        "today": "今日",
+        "7days": "近 7 天",
+        "30days": "近 30 天",
+        "thisMonth": "本月"
+      },
+      "unknownModel": "未知模型",
+      "noData": "暫無資料",
+      "dateRange": "日期範圍",
+      "allTime": "全部時間",
+      "providerBreakdown": "供應商明細",
+      "unknownProvider": "未知供應商",
+      "apiKey": "API 金鑰",
+      "provider": "供應商",
+      "model": "模型",
+      "allKeys": "全部金鑰",
+      "allProviders": "全部供應商",
+      "allModels": "全部模型",
+      "dimensions": "維度",
+      "filters": "篩選",
+      "loadError": "資料載入失敗"
     }
   },
   "sessions": {
@@ -1038,7 +1072,7 @@
       "label": "允許的用戶端",
       "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
       "customLabel": "自訂用戶端模式",
-      "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）"
+      "customPlaceholder": "輸入模式（如 'my-ide'、'codex-*'）"
     },
     "allowedModels": {
       "label": "允許的模型",
@@ -1525,6 +1559,21 @@
       "deleteFailed": "刪除使用者失敗",
       "userDeleted": "使用者已刪除",
       "saving": "儲存中...",
+      "resetSection": {
+        "title": "重置選項"
+      },
+      "resetLimits": {
+        "title": "重設限額",
+        "description": "重設所有限額的累計消費計數器。請求日誌和統計資料將被保留。",
+        "button": "重設限額",
+        "confirmTitle": "僅重設限額？",
+        "confirmDescription": "這將把所有累計消費計數器（5小時、每日、每週、每月、總計）歸零。請求日誌和使用統計將被保留。",
+        "confirm": "是的，重設限額",
+        "loading": "正在重設...",
+        "error": "重設限額失敗",
+        "success": "所有限額已重設",
+        "lastResetAt": "上次重設: {date}"
+      },
       "resetData": {
         "title": "重置統計",
         "description": "刪除該使用者的所有請求日誌和使用資料。此操作不可逆。",
@@ -1798,15 +1847,15 @@
           "label": "用戶端限制",
           "description": "限制哪些 CLI/IDE 用戶端可以使用此帳戶。留空表示無限制。",
           "customLabel": "自訂用戶端模式",
-          "customPlaceholder": "輸入自訂模式（如：'xcode', 'my-ide'）",
-          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
+          "customPlaceholder": "輸入模式（如 'my-ide'、'codex-*'）",
+          "customHelp": "不含 '*'：不區分大小寫的子串比對（忽略 '-' 和 '_'）。含 '*'：從 UA 開頭的 glob 萬用字元比對（用 *foo* 比對任意位置；不區分大小寫，字元按原樣比對）。"
         },
         "blockedClients": {
           "label": "黑名單客戶端",
           "description": "符合這些模式的客戶端將被拒絕，即使它們也符合白名單。",
           "customLabel": "自訂黑名單模式",
-          "customPlaceholder": "輸入模式（如 'xcode'、'my-ide'）",
-          "customHelp": "自訂模式會以 User-Agent 包含比對（不區分大小寫），並將 '-' 與 '_' 視為等價。"
+          "customPlaceholder": "輸入模式（如 'my-ide'、'codex-*'）",
+          "customHelp": "不含 '*'：不區分大小寫的子串比對（忽略 '-' 和 '_'）。含 '*'：從 UA 開頭的 glob 萬用字元比對（用 *foo* 比對任意位置；不區分大小寫，字元按原樣比對）。"
         },
         "allowedModels": {
           "label": "Model 限制",
@@ -1843,7 +1892,17 @@
         "claude-code-sdk-ts": "Claude Code SDK（TypeScript）",
         "claude-code-sdk-py": "Claude Code SDK（Python）",
         "claude-code-gh-action": "Claude Code GitHub Action"
-      }
+      },
+      "subClients": {
+        "all": "全部",
+        "cli": "CLI",
+        "vscode": "VS Code",
+        "sdk-ts": "SDK（TypeScript）",
+        "sdk-py": "SDK（Python）",
+        "cli-sdk": "CLI SDK",
+        "gh-action": "GitHub Action"
+      },
+      "nSelected": "已選 {count} 項"
     },
     "keyEditSection": {
       "sections": {

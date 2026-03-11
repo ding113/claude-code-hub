@@ -93,20 +93,28 @@ export function LogCleanupPanel() {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || t("failed"));
+        console.error("Cleanup API error:", result.error);
+        throw new Error(t("failed"));
       }
 
       if (result.success) {
-        toast.success(
+        const parts: string[] = [
           t("successMessage", {
             count: result.totalDeleted.toLocaleString(),
             batches: result.batchCount,
             duration: (result.durationMs / 1000).toFixed(2),
-          })
-        );
+          }),
+        ];
+        if (result.softDeletedPurged > 0) {
+          parts.push(t("softDeletePurged", { count: result.softDeletedPurged.toLocaleString() }));
+        }
+        if (result.vacuumPerformed) {
+          parts.push(t("vacuumComplete"));
+        }
+        toast.success(parts.join(" | "));
         setIsOpen(false);
       } else {
-        toast.error(result.error || t("failed"));
+        toast.error(t("failed"));
       }
     } catch (error) {
       console.error("Cleanup error:", error);

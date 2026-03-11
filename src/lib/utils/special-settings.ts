@@ -124,6 +124,8 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.actualServiceTier,
         setting.effectivePriority,
       ]);
+    case "response_input_rectifier":
+      return JSON.stringify([setting.type, setting.hit, setting.action, setting.originalType]);
     default: {
       // 兜底：保证即使未来扩展类型也不会导致运行时崩溃
       const _exhaustive: never = setting;

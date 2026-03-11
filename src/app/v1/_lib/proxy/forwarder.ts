@@ -36,6 +36,7 @@ import {
 import { updateMessageRequestDetails } from "@/repository/message";
 import type { CacheTtlPreference, CacheTtlResolved } from "@/types/cache";
 import type { ProviderChainItem } from "@/types/message";
+import type { Provider } from "@/types/provider";
 import type { ClaudeMetadataUserIdInjectionSpecialSetting } from "@/types/special-settings";
 
 import { GeminiAuth } from "../gemini/auth";
@@ -84,10 +85,32 @@ const STANDARD_ENDPOINTS = [
 
 const STRICT_STANDARD_ENDPOINTS = ["/v1/messages", "/v1/responses", "/v1/chat/completions"];
 
+const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
+
 const RETRY_LIMITS = PROVIDER_LIMITS.MAX_RETRY_ATTEMPTS;
 const MAX_PROVIDER_SWITCHES = 20; // 保险栓：最多切换 20 次供应商（防止无限循环）
 
 type CacheTtlOption = CacheTtlPreference | null | undefined;
+
+type ProxySessionWithAttemptRuntime = ProxySession & {
+  clearResponseTimeout?: () => void;
+  responseController?: AbortController;
+};
+
+type StreamingHedgeAttempt = {
+  provider: Provider;
+  session: ProxySession;
+  endpointAudit: { endpointId: number | null; endpointUrl: string };
+  responseController: AbortController | null;
+  clearResponseTimeout: (() => void) | null;
+  firstByteTimeoutMs: number;
+  sequence: number;
+  settled: boolean;
+  thresholdTriggered: boolean;
+  thresholdTimer: NodeJS.Timeout | null;
+  reader: ReadableStreamDefaultReader<Uint8Array> | null;
+  response: Response | null;
+};
 
 // 非流式响应体检查的上限（字节）：避免上游在 2xx 场景返回超大内容导致内存占用失控。
 // 说明：
@@ -502,6 +525,12 @@ export class ProxyForwarder {
   static async send(session: ProxySession): Promise<Response> {
     if (!session.provider || !session.authState?.success) {
       throw new Error("代理上下文缺少供应商或鉴权信息");
+    }
+
+    if (ProxyForwarder.shouldUseStreamingHedge(session)) {
+      const hedgePromise = ProxyForwarder.sendStreamingWithHedge(session);
+      void hedgePromise.catch(() => undefined);
+      return await hedgePromise;
     }
 
     const env = getEnvConfig();
@@ -1020,10 +1049,12 @@ export class ProxyForwarder {
               totalProvidersAttempted,
             });
 
+            await ProxyForwarder.clearSessionProviderBinding(session);
+
             // 记录到决策链（标记为客户端中断）
             session.addProviderToChain(currentProvider, {
               ...endpointAudit,
-              reason: "system_error", // 使用 system_error 作为客户端中断的原因
+              reason: "client_abort",
               circuitState: getCircuitState(currentProvider.id),
               attemptNumber: attemptCount,
               errorMessage: "Client aborted request",
@@ -1741,6 +1772,7 @@ export class ProxyForwarder {
     }
 
     // ⭐ 不暴露供应商详情，仅返回简单错误
+    await ProxyForwarder.clearSessionProviderBinding(session);
     throw new ProxyError("所有供应商暂时不可用，请稍后重试", 503); // Service Unavailable
   }
 
@@ -2131,51 +2163,63 @@ export class ProxyForwarder {
       const hasBody = session.method !== "GET" && session.method !== "HEAD";
 
       if (hasBody) {
-        const filteredMessage = filterPrivateParameters(session.request.message) as Record<
-          string,
-          unknown
-        >;
+        if (session.getEndpointPolicy().bypassForwarderPreprocessing && session.request.buffer) {
+          // Raw passthrough: preserve original request body bytes as-is
+          requestBody = session.request.buffer;
+          session.forwardedRequestBody = session.request.log;
 
-        // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
-        let messageToSend: Record<string, unknown> = filteredMessage;
-        if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
-          const settings = await getCachedSystemSettings();
-          const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
-          const injection = applyClaudeMetadataUserIdInjectionWithAudit(
-            filteredMessage,
-            session,
-            enabled
-          );
-
-          if (injection) {
-            messageToSend = injection.message;
-            session.addSpecialSetting(injection.audit);
-            await persistSpecialSettings(session);
+          try {
+            isStreaming = (session.request.message as Record<string, unknown>).stream === true;
+          } catch {
+            isStreaming = false;
           }
-        }
+        } else {
+          const filteredMessage = filterPrivateParameters(session.request.message) as Record<
+            string,
+            unknown
+          >;
 
-        const bodyString = JSON.stringify(messageToSend);
-        requestBody = bodyString;
-        session.forwardedRequestBody = bodyString;
+          // 将 metadata.user_id 注入放在私有参数过滤之后，避免受过滤逻辑影响。
+          let messageToSend: Record<string, unknown> = filteredMessage;
+          if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+            const settings = await getCachedSystemSettings();
+            const enabled = settings.enableClaudeMetadataUserIdInjection ?? true;
+            const injection = applyClaudeMetadataUserIdInjectionWithAudit(
+              filteredMessage,
+              session,
+              enabled
+            );
 
-        try {
-          const parsed = JSON.parse(bodyString);
-          isStreaming = parsed.stream === true;
-        } catch {
-          isStreaming = false;
-        }
+            if (injection) {
+              messageToSend = injection.message;
+              session.addSpecialSetting(injection.audit);
+              await persistSpecialSettings(session);
+            }
+          }
 
-        if (process.env.NODE_ENV === "development") {
-          logger.trace("ProxyForwarder: Forwarding request", {
-            provider: provider.name,
-            providerId: provider.id,
-            proxyUrl: proxyUrl,
-            format: session.originalFormat,
-            method: session.method,
-            bodyLength: bodyString.length,
-            bodyPreview: bodyString.slice(0, 1000),
-            isStreaming,
-          });
+          const bodyString = JSON.stringify(messageToSend);
+          requestBody = bodyString;
+          session.forwardedRequestBody = bodyString;
+
+          try {
+            const parsed = JSON.parse(bodyString);
+            isStreaming = parsed.stream === true;
+          } catch {
+            isStreaming = false;
+          }
+
+          if (process.env.NODE_ENV === "development") {
+            logger.trace("ProxyForwarder: Forwarding request", {
+              provider: provider.name,
+              providerId: provider.id,
+              proxyUrl: proxyUrl,
+              format: session.originalFormat,
+              method: session.method,
+              bodyLength: bodyString.length,
+              bodyPreview: bodyString.slice(0, 1000),
+              isStreaming,
+            });
+          }
         }
       }
     }
@@ -2811,6 +2855,703 @@ export class ProxyForwarder {
     return alternativeProvider;
   }
 
+  private static shouldUseStreamingHedge(session: ProxySession): boolean {
+    const endpointPolicy = session.getEndpointPolicy?.();
+    return (
+      (endpointPolicy?.allowRetry ?? true) &&
+      (endpointPolicy?.allowProviderSwitch ?? true) &&
+      (session.request.message as Record<string, unknown>).stream === true &&
+      (session.provider?.firstByteTimeoutStreamingMs ?? 0) > 0
+    );
+  }
+
+  private static async sendStreamingWithHedge(session: ProxySession): Promise<Response> {
+    const initialProvider = session.provider;
+    if (!initialProvider) {
+      throw new Error("代理上下文缺少供应商");
+    }
+
+    const launchedProviderIds = new Set<number>();
+    let launchedProviderCount = 0;
+    let settled = false;
+    let winnerCommitted = false;
+    let noMoreProviders = false;
+    let launchingAlternative: Promise<void> | null = null;
+    let lastError: Error | null = null;
+    const attempts = new Set<StreamingHedgeAttempt>();
+
+    let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
+    const resultPromise = new Promise<{ response?: Response; error?: Error }>((resolve) => {
+      resolveResult = resolve;
+    });
+
+    const settleSuccess = (response: Response) => {
+      if (settled) return;
+      settled = true;
+      resolveResult?.({ response });
+    };
+
+    const settleFailure = async (error: Error) => {
+      if (settled) return;
+      settled = true;
+      await ProxyForwarder.clearSessionProviderBinding(session);
+      resolveResult?.({ error });
+    };
+
+    const abortAttempt = (attempt: StreamingHedgeAttempt, reason: string) => {
+      if (attempt.settled) return;
+      attempt.settled = true;
+      if (attempt.thresholdTimer) {
+        clearTimeout(attempt.thresholdTimer);
+        attempt.thresholdTimer = null;
+      }
+      attempts.delete(attempt);
+      if (reason === "hedge_loser") {
+        attempt.session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "hedge_loser_cancelled",
+          attemptNumber: attempt.sequence,
+        });
+      }
+      try {
+        attempt.responseController?.abort(new Error(reason));
+      } catch {
+        // ignore
+      }
+      const readerCancel = attempt.reader?.cancel();
+      readerCancel?.catch(() => {
+        // ignore
+      });
+    };
+
+    const abortAllAttempts = (winner?: StreamingHedgeAttempt, reason: string = "hedge_loser") => {
+      for (const attempt of Array.from(attempts)) {
+        if (winner && attempt === winner) continue;
+        abortAttempt(attempt, reason);
+      }
+    };
+
+    const finishIfExhausted = async () => {
+      if (!settled && noMoreProviders && attempts.size === 0) {
+        await settleFailure(
+          lastError ??
+            new ProxyError("No available providers", 503, {
+              body: "",
+              providerId: initialProvider.id,
+            })
+        );
+      }
+    };
+
+    const launchAlternative = async () => {
+      if (settled || winnerCommitted || noMoreProviders) return;
+      if (launchingAlternative) {
+        await launchingAlternative;
+        return;
+      }
+
+      launchingAlternative = (async () => {
+        const alternativeProvider = await ProxyForwarder.selectAlternative(
+          session,
+          Array.from(launchedProviderIds)
+        );
+        if (!alternativeProvider) {
+          noMoreProviders = true;
+          // No alternative providers available — let in-flight attempt(s) continue.
+          // If all attempts already completed, settle with last error.
+          if (attempts.size === 0) {
+            await finishIfExhausted();
+          }
+          return;
+        }
+
+        await startAttempt(alternativeProvider, false);
+      })()
+        .catch(async (error) => {
+          const normalizedError = error instanceof Error ? error : new Error(String(error));
+
+          logger.error("ProxyForwarder: Hedge failed to launch alternative provider", {
+            error: normalizedError,
+            sessionId: session.sessionId ?? null,
+            providerId: initialProvider.id,
+            providerName: initialProvider.name,
+          });
+
+          lastError = new ProxyError("No available providers", 503, {
+            body: "",
+            providerId: initialProvider.id,
+            providerName: initialProvider.name,
+          });
+          noMoreProviders = true;
+          abortAllAttempts(undefined, "hedge_launch_failed");
+          await finishIfExhausted();
+        })
+        .finally(() => {
+          launchingAlternative = null;
+        });
+
+      await launchingAlternative;
+    };
+
+    const handleAttemptFailure = async (attempt: StreamingHedgeAttempt, error: Error) => {
+      if (settled || winnerCommitted || attempt.settled) return;
+
+      attempt.settled = true;
+      if (attempt.thresholdTimer) {
+        clearTimeout(attempt.thresholdTimer);
+        attempt.thresholdTimer = null;
+      }
+      attempts.delete(attempt);
+      lastError = error;
+
+      const errorCategory = await categorizeErrorAsync(error);
+      const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
+
+      if (attempt.endpointAudit.endpointId != null) {
+        const isTimeoutError = error instanceof ProxyError && error.statusCode === 524;
+        if (isTimeoutError || errorCategory === ErrorCategory.SYSTEM_ERROR) {
+          await recordEndpointFailure(attempt.endpointAudit.endpointId, error);
+        }
+      }
+
+      if (errorCategory === ErrorCategory.CLIENT_ABORT) {
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "client_abort",
+          attemptNumber: attempt.sequence,
+          errorMessage: "Client aborted request",
+          circuitState: getCircuitState(attempt.provider.id),
+        });
+        abortAllAttempts(undefined, "client_abort");
+        await settleFailure(
+          error instanceof ProxyError ? error : new ProxyError("Request aborted by client", 499)
+        );
+        return;
+      }
+
+      if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
+        await recordFailure(attempt.provider.id, error);
+      }
+
+      session.addProviderToChain(attempt.provider, {
+        ...attempt.endpointAudit,
+        reason:
+          errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
+            ? "resource_not_found"
+            : "retry_failed",
+        attemptNumber: attempt.sequence,
+        statusCode,
+        errorMessage: error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message,
+        circuitState: getCircuitState(attempt.provider.id),
+      });
+
+      await launchAlternative();
+      await finishIfExhausted();
+    };
+
+    const commitWinner = async (attempt: StreamingHedgeAttempt, firstChunk: Uint8Array) => {
+      if (settled || winnerCommitted || attempt.settled || !attempt.response || !attempt.reader)
+        return;
+
+      winnerCommitted = true;
+
+      if (attempt.thresholdTimer) {
+        clearTimeout(attempt.thresholdTimer);
+        attempt.thresholdTimer = null;
+      }
+
+      attempt.settled = true;
+      attempts.delete(attempt);
+
+      if (attempt.session !== session) {
+        ProxyForwarder.syncWinningAttemptSession(session, attempt.session);
+      }
+      session.setProvider(attempt.provider);
+
+      // Determine if this is truly a hedge winner or just a regular success
+      // Only mark as hedge_winner when an actual hedge race occurred
+      // Note: launchedProviderCount is the most reliable indicator - if > 1, multiple providers were launched
+      const isActualHedgeWin = launchedProviderCount > 1;
+
+      session.addProviderToChain(attempt.provider, {
+        ...attempt.endpointAudit,
+        reason: isActualHedgeWin ? "hedge_winner" : "request_success",
+        attemptNumber: attempt.sequence,
+        statusCode: attempt.response.status,
+      });
+
+      abortAllAttempts(attempt, "hedge_loser");
+
+      if (session.sessionId) {
+        void (async () => {
+          const bindingResult = await SessionManager.updateSessionBindingSmart(
+            session.sessionId!,
+            attempt.provider.id,
+            attempt.provider.priority || 0,
+            launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
+            attempt.provider.id !== initialProvider.id
+          );
+
+          if (bindingResult.updated) {
+            logger.info("ProxyForwarder: Hedge winner binding updated", {
+              sessionId: session.sessionId,
+              providerId: attempt.provider.id,
+              providerName: attempt.provider.name,
+              reason: bindingResult.reason,
+              details: bindingResult.details,
+            });
+          }
+
+          await SessionManager.updateSessionProvider(session.sessionId!, {
+            providerId: attempt.provider.id,
+            providerName: attempt.provider.name,
+          });
+        })().catch((bindingError) => {
+          logger.error("ProxyForwarder: Failed to update session provider info for hedge winner", {
+            error: bindingError,
+          });
+        });
+      }
+
+      setDeferredStreamingFinalization(session, {
+        providerId: attempt.provider.id,
+        providerName: attempt.provider.name,
+        providerPriority: attempt.provider.priority || 0,
+        attemptNumber: attempt.sequence,
+        totalProvidersAttempted: launchedProviderCount,
+        isFirstAttempt: launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
+        isFailoverSuccess: attempt.provider.id !== initialProvider.id,
+        endpointId: attempt.endpointAudit.endpointId,
+        endpointUrl: attempt.endpointAudit.endpointUrl,
+        upstreamStatusCode: attempt.response.status,
+        isHedgeWinner: isActualHedgeWin,
+      });
+
+      const response = new Response(
+        ProxyForwarder.buildBufferedFirstChunkStream(firstChunk, attempt.reader),
+        {
+          status: attempt.response.status,
+          statusText: attempt.response.statusText,
+          headers: attempt.response.headers,
+        }
+      );
+
+      settleSuccess(response);
+    };
+
+    const startAttempt = async (provider: Provider, useOriginalSession: boolean) => {
+      if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return;
+
+      launchedProviderIds.add(provider.id);
+
+      let endpointSelection: {
+        endpointId: number | null;
+        baseUrl: string;
+        endpointUrl: string;
+      };
+      try {
+        endpointSelection = await ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider);
+      } catch (endpointError) {
+        lastError = endpointError as Error;
+        await launchAlternative();
+        await finishIfExhausted();
+        return;
+      }
+
+      launchedProviderCount += 1;
+
+      const attemptSession = useOriginalSession
+        ? session
+        : ProxyForwarder.createStreamingShadowSession(session, provider);
+      attemptSession.setProvider(provider);
+
+      const attempt: StreamingHedgeAttempt = {
+        provider,
+        session: attemptSession,
+        endpointAudit: {
+          endpointId: endpointSelection.endpointId,
+          endpointUrl: endpointSelection.endpointUrl,
+        },
+        responseController: null,
+        clearResponseTimeout: null,
+        firstByteTimeoutMs:
+          provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        sequence: launchedProviderCount,
+        settled: false,
+        thresholdTriggered: false,
+        thresholdTimer: null,
+        reader: null,
+        response: null,
+      };
+
+      attempts.add(attempt);
+
+      // Record hedge participant launch in decision chain
+      // (first provider is already recorded via initial_selection or session_reuse)
+      if (launchedProviderCount > 1) {
+        session.addProviderToChain(provider, {
+          ...attempt.endpointAudit,
+          reason: "hedge_launched",
+          attemptNumber: attempt.sequence,
+          circuitState: getCircuitState(provider.id),
+        });
+      }
+
+      if (attempt.firstByteTimeoutMs > 0) {
+        attempt.thresholdTimer = setTimeout(() => {
+          if (settled || attempt.settled || attempt.thresholdTriggered) return;
+          attempt.thresholdTriggered = true;
+          attempt.session.addProviderToChain(attempt.provider, {
+            ...attempt.endpointAudit,
+            reason: "hedge_triggered",
+            attemptNumber: attempt.sequence,
+            circuitState: getCircuitState(attempt.provider.id),
+          });
+          void launchAlternative();
+        }, attempt.firstByteTimeoutMs);
+      }
+
+      const providerForRequest =
+        provider.firstByteTimeoutStreamingMs > 0
+          ? { ...provider, firstByteTimeoutStreamingMs: 0 }
+          : provider;
+
+      void ProxyForwarder.doForward(
+        attemptSession,
+        providerForRequest,
+        endpointSelection.baseUrl,
+        attempt.endpointAudit,
+        1
+      )
+        .then(async (response) => {
+          if (settled || winnerCommitted) {
+            const attemptRuntime = attemptSession as ProxySessionWithAttemptRuntime;
+            try {
+              attemptRuntime.responseController?.abort(new Error("hedge_loser"));
+            } catch {
+              // ignore
+            }
+            const cancelPromise = response.body?.cancel("hedge_loser");
+            cancelPromise?.catch(() => {
+              // ignore
+            });
+            return;
+          }
+
+          const attemptRuntime = attemptSession as ProxySessionWithAttemptRuntime;
+          attempt.responseController = attemptRuntime.responseController ?? null;
+          attempt.clearResponseTimeout = attemptRuntime.clearResponseTimeout ?? null;
+          attempt.clearResponseTimeout?.();
+          attempt.response = response;
+
+          if (!response.body) {
+            await handleAttemptFailure(
+              attempt,
+              new EmptyResponseError(provider.id, provider.name, "empty_body")
+            );
+            return;
+          }
+
+          attempt.reader = response.body.getReader();
+
+          try {
+            const firstChunk = await ProxyForwarder.readFirstReadableChunk(attempt.reader);
+            if (firstChunk.done) {
+              await handleAttemptFailure(
+                attempt,
+                new EmptyResponseError(provider.id, provider.name, "empty_body")
+              );
+              return;
+            }
+
+            await commitWinner(attempt, firstChunk.value);
+          } catch (firstChunkError) {
+            const normalizedError =
+              firstChunkError instanceof Error
+                ? firstChunkError
+                : new Error(String(firstChunkError));
+            if (settled || winnerCommitted) return;
+            await handleAttemptFailure(attempt, normalizedError);
+          }
+        })
+        .catch(async (attemptError) => {
+          const normalizedError =
+            attemptError instanceof Error ? attemptError : new Error(String(attemptError));
+          if (settled || winnerCommitted) return;
+          await handleAttemptFailure(attempt, normalizedError);
+        });
+    };
+
+    if (session.clientAbortSignal) {
+      session.clientAbortSignal.addEventListener(
+        "abort",
+        () => {
+          if (settled || winnerCommitted) return;
+          noMoreProviders = true;
+          lastError = new ProxyError("Request aborted by client", 499);
+          for (const attempt of Array.from(attempts)) {
+            if (!attempt.settled) {
+              session.addProviderToChain(attempt.provider, {
+                ...attempt.endpointAudit,
+                reason: "client_abort",
+                attemptNumber: attempt.sequence,
+                errorMessage: "Client aborted request",
+              });
+            }
+          }
+          abortAllAttempts(undefined, "client_abort");
+          void finishIfExhausted();
+        },
+        { once: true }
+      );
+    }
+
+    await startAttempt(initialProvider, true);
+    await finishIfExhausted();
+    const result = await resultPromise;
+    if (result.error) {
+      throw result.error;
+    }
+    return result.response as Response;
+  }
+
+  private static async resolveStreamingHedgeEndpoint(
+    session: ProxySession,
+    provider: Provider
+  ): Promise<{ endpointId: number | null; baseUrl: string; endpointUrl: string }> {
+    const requestPath = session.requestUrl.pathname;
+    const providerVendorId = provider.providerVendorId ?? 0;
+    const isMcpRequest =
+      provider.providerType !== "gemini" &&
+      provider.providerType !== "gemini-cli" &&
+      !STANDARD_ENDPOINTS.includes(requestPath);
+    const shouldEnforceStrictEndpointPool =
+      !isMcpRequest && STRICT_STANDARD_ENDPOINTS.includes(requestPath) && providerVendorId > 0;
+
+    if (
+      !isMcpRequest &&
+      provider.providerVendorId &&
+      (await isVendorTypeCircuitOpen(provider.providerVendorId, provider.providerType))
+    ) {
+      throw new ProxyError("Vendor-type circuit is open", 503, {
+        body: "",
+        providerId: provider.id,
+        providerName: provider.name,
+      });
+    }
+
+    const endpointCandidates: Array<{ endpointId: number | null; endpointUrl: string }> = [];
+    let endpointSelectionError: Error | null = null;
+
+    if (isMcpRequest) {
+      const sanitizedUrl = sanitizeUrl(provider.url);
+      endpointCandidates.push({ endpointId: null, endpointUrl: sanitizedUrl });
+      return { endpointId: null, baseUrl: provider.url, endpointUrl: sanitizedUrl };
+    }
+
+    if (providerVendorId > 0) {
+      try {
+        const preferred = await getPreferredProviderEndpoints({
+          vendorId: providerVendorId,
+          providerType: provider.providerType,
+        });
+        endpointCandidates.push(
+          ...preferred.map((endpoint) => ({ endpointId: endpoint.id, endpointUrl: endpoint.url }))
+        );
+      } catch (error) {
+        endpointSelectionError = error instanceof Error ? error : new Error(String(error));
+      }
+    }
+
+    if (endpointCandidates.length === 0) {
+      if (shouldEnforceStrictEndpointPool) {
+        session.addProviderToChain(provider, {
+          reason: "endpoint_pool_exhausted",
+          attemptNumber: 1,
+          strictBlockCause: endpointSelectionError ? "selector_error" : "no_endpoint_candidates",
+          errorMessage: endpointSelectionError?.message,
+        });
+
+        if (endpointSelectionError) {
+          logger.warn("[ProxyForwarder] Failed to load provider endpoints (strict pool)", {
+            providerId: provider.id,
+            vendorId: providerVendorId,
+            providerType: provider.providerType,
+            error: endpointSelectionError.message,
+          });
+        }
+
+        throw new ProxyError("No available provider endpoints", 503, {
+          body: "",
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+      }
+
+      const sanitizedUrl = sanitizeUrl(provider.url);
+      return { endpointId: null, baseUrl: provider.url, endpointUrl: sanitizedUrl };
+    }
+
+    return {
+      endpointId: endpointCandidates[0].endpointId,
+      baseUrl: endpointCandidates[0].endpointUrl,
+      endpointUrl: sanitizeUrl(endpointCandidates[0].endpointUrl),
+    };
+  }
+
+  private static createStreamingShadowSession(
+    session: ProxySession,
+    provider: Provider
+  ): ProxySession {
+    const shadow = Object.assign(
+      Object.create(Object.getPrototypeOf(session)) as ProxySession,
+      session
+    );
+    const sourceState = session as unknown as {
+      originalHeaders: Headers;
+      providerChain: ProviderChainItem[];
+      specialSettings: unknown[];
+      originalModelName: string | null;
+      originalUrlPathname: string | null;
+      providersSnapshot: Provider[] | null;
+    };
+    const shadowState = shadow as unknown as {
+      request: ProxySession["request"];
+      headers: Headers;
+      originalHeaders: Headers;
+      providerChain: ProviderChainItem[];
+      specialSettings: unknown[];
+      originalModelName: string | null;
+      originalUrlPathname: string | null;
+      providersSnapshot: Provider[] | null;
+    };
+
+    shadowState.request = {
+      ...session.request,
+      message: structuredClone(session.request.message),
+      buffer: session.request.buffer ? session.request.buffer.slice(0) : undefined,
+    };
+    shadow.requestUrl = new URL(session.requestUrl.toString());
+    shadowState.headers = new Headers(session.headers);
+    shadowState.originalHeaders = new Headers(sourceState.originalHeaders);
+    shadowState.providerChain = [...sourceState.providerChain];
+    shadowState.specialSettings = [...sourceState.specialSettings];
+    shadowState.originalModelName = sourceState.originalModelName;
+    shadowState.originalUrlPathname = sourceState.originalUrlPathname;
+    shadowState.providersSnapshot = sourceState.providersSnapshot;
+    shadow.setCacheTtlResolved(session.getCacheTtlResolved());
+    shadow.setContext1mApplied(session.getContext1mApplied());
+    shadow.forwardedRequestBody = null;
+    shadow.sessionId = null;
+    shadow.messageContext = null;
+    shadow.setProvider(provider);
+
+    return shadow;
+  }
+
+  private static syncWinningAttemptSession(target: ProxySession, source: ProxySession): void {
+    target.request.message = source.request.message;
+    target.request.buffer = source.request.buffer;
+    target.request.log = source.request.log;
+    target.request.note = source.request.note;
+    target.request.model = source.request.model;
+    target.requestUrl = new URL(source.requestUrl.toString());
+    target.forwardedRequestBody = source.forwardedRequestBody;
+    target.setCacheTtlResolved(source.getCacheTtlResolved());
+    target.setContext1mApplied(source.getContext1mApplied());
+
+    const sourceState = source as unknown as {
+      providerChain: ProviderChainItem[];
+      specialSettings: unknown[];
+      originalModelName: string | null;
+      originalUrlPathname: string | null;
+    };
+    const targetState = target as unknown as {
+      providerChain: ProviderChainItem[];
+      specialSettings: unknown[];
+      originalModelName: string | null;
+      originalUrlPathname: string | null;
+      clearResponseTimeout?: () => void;
+      responseController?: AbortController;
+    };
+    const sourceRuntime = source as ProxySessionWithAttemptRuntime;
+
+    const mergedProviderChain = [...targetState.providerChain];
+    for (const item of sourceState.providerChain) {
+      const exists = mergedProviderChain.some(
+        (existing) =>
+          existing.id === item.id &&
+          existing.timestamp === item.timestamp &&
+          existing.reason === item.reason &&
+          existing.attemptNumber === item.attemptNumber
+      );
+      if (!exists) {
+        mergedProviderChain.push(item);
+      }
+    }
+    targetState.providerChain = mergedProviderChain;
+    targetState.specialSettings = [...sourceState.specialSettings];
+    targetState.originalModelName = sourceState.originalModelName;
+    targetState.originalUrlPathname = sourceState.originalUrlPathname;
+    targetState.clearResponseTimeout = sourceRuntime.clearResponseTimeout;
+    targetState.responseController = sourceRuntime.responseController;
+  }
+
+  private static async clearSessionProviderBinding(session: ProxySession): Promise<void> {
+    if (!session.sessionId) return;
+    await SessionManager.clearSessionProvider(session.sessionId);
+  }
+
+  private static async readFirstReadableChunk(
+    reader: ReadableStreamDefaultReader<Uint8Array>
+  ): Promise<ReadableStreamReadResult<Uint8Array>> {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) {
+        return result;
+      }
+      // Skip zero-length chunks: some upstream providers (e.g. behind proxies/load-balancers)
+      // may emit empty chunks as keep-alive or framing artifacts. These carry no payload and
+      // must be silently skipped to avoid treating them as a valid "first byte" event.
+      if (result.value && result.value.byteLength > 0) {
+        return result;
+      }
+    }
+  }
+
+  private static buildBufferedFirstChunkStream(
+    firstChunk: Uint8Array,
+    reader: ReadableStreamDefaultReader<Uint8Array>
+  ): ReadableStream<Uint8Array> {
+    let firstChunkSent = false;
+
+    return new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (!firstChunkSent) {
+          firstChunkSent = true;
+          controller.enqueue(firstChunk);
+          return;
+        }
+
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          return;
+        }
+        if (value && value.byteLength > 0) {
+          controller.enqueue(value);
+        }
+      },
+      async cancel(reason) {
+        try {
+          await reader.cancel(reason);
+        } catch {
+          // ignore
+        }
+      },
+    });
+  }
+
   private static buildHeaders(
     session: ProxySession,
     provider: NonNullable<typeof session.provider>
@@ -2915,7 +3656,7 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length", "connection"], // 删除 content-length（动态计算）和 connection（undici 自动管理）
+      blacklist: OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
@@ -2960,7 +3701,11 @@ export class ProxyForwarder {
     }
 
     const headerProcessor = HeaderProcessor.createForProxy({
-      blacklist: ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY],
+      blacklist: [
+        ...OUTBOUND_TRANSPORT_HEADER_BLACKLIST,
+        "x-api-key",
+        GEMINI_PROTOCOL.HEADERS.API_KEY,
+      ],
       preserveClientIpHeaders: preserveClientIp,
       overrides,
     });

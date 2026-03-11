@@ -18,6 +18,9 @@ export interface ModelPriceData {
   cache_creation_input_token_cost_above_200k_tokens?: number;
   cache_read_input_token_cost_above_200k_tokens?: number;
   cache_creation_input_token_cost_above_1hr_above_200k_tokens?: number;
+  input_cost_per_token_above_200k_tokens_priority?: number;
+  output_cost_per_token_above_200k_tokens_priority?: number;
+  cache_read_input_token_cost_above_200k_tokens_priority?: number;
 
   // 272K 分层价格（GPT-5.4 等模型保留扩展）
   input_cost_per_token_above_272k_tokens?: number;
@@ -25,6 +28,9 @@ export interface ModelPriceData {
   cache_creation_input_token_cost_above_272k_tokens?: number;
   cache_read_input_token_cost_above_272k_tokens?: number;
   cache_creation_input_token_cost_above_1hr_above_272k_tokens?: number;
+  input_cost_per_token_above_272k_tokens_priority?: number;
+  output_cost_per_token_above_272k_tokens_priority?: number;
+  cache_read_input_token_cost_above_272k_tokens_priority?: number;
 
   // 优先服务等级价格（例如 OpenAI priority tier）
   input_cost_per_token_priority?: number;

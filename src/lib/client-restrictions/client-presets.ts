@@ -1,6 +1,12 @@
+export interface ClientRestrictionChild {
+  value: string;
+  labelKey: string;
+}
+
 export interface ClientRestrictionPresetOption {
   value: string;
   aliases: readonly string[];
+  children?: readonly ClientRestrictionChild[];
 }
 
 const CLAUDE_CODE_ALIAS_VALUES = [
@@ -14,7 +20,18 @@ const CLAUDE_CODE_ALIAS_VALUES = [
 ] as const;
 
 export const CLIENT_RESTRICTION_PRESET_OPTIONS: readonly ClientRestrictionPresetOption[] = [
-  { value: "claude-code", aliases: CLAUDE_CODE_ALIAS_VALUES },
+  {
+    value: "claude-code",
+    aliases: CLAUDE_CODE_ALIAS_VALUES,
+    children: [
+      { value: "claude-code-cli", labelKey: "cli" },
+      { value: "claude-code-vscode", labelKey: "vscode" },
+      { value: "claude-code-sdk-ts", labelKey: "sdk-ts" },
+      { value: "claude-code-sdk-py", labelKey: "sdk-py" },
+      { value: "claude-code-cli-sdk", labelKey: "cli-sdk" },
+      { value: "claude-code-gh-action", labelKey: "gh-action" },
+    ],
+  },
   { value: "gemini-cli", aliases: ["gemini-cli"] },
   { value: "factory-cli", aliases: ["factory-cli"] },
   { value: "codex-cli", aliases: ["codex-cli"] },
@@ -86,4 +103,38 @@ export function mergePresetAndCustomClients(values: string[], customValues: stri
   const { presetValues } = splitPresetAndCustomClients(values);
   const filteredCustomValues = customValues.filter((value) => !PRESET_ALIAS_SET.has(value));
   return uniqueOrdered([...presetValues, ...filteredCustomValues]);
+}
+
+export function getSelectedChildren(
+  values: string[],
+  preset: ClientRestrictionPresetOption
+): string[] {
+  if (!preset.children) return [];
+  const childValues = preset.children.map((c) => c.value);
+  if (values.includes(preset.value)) return childValues;
+  return childValues.filter((v) => values.includes(v));
+}
+
+export function isAllChildrenSelected(
+  values: string[],
+  preset: ClientRestrictionPresetOption
+): boolean {
+  if (!preset.children) return false;
+  if (values.includes(preset.value)) return true;
+  return preset.children.every((c) => values.includes(c.value));
+}
+
+export function setChildSelection(
+  values: string[],
+  preset: ClientRestrictionPresetOption,
+  selectedChildren: string[]
+): string[] {
+  if (!preset.children) return values;
+  const allChildValues = new Set(preset.children.map((c) => c.value));
+  const filtered = values.filter((v) => v !== preset.value && !allChildValues.has(v));
+  if (selectedChildren.length === 0) return filtered;
+  if (selectedChildren.length === preset.children.length) {
+    return [...filtered, preset.value];
+  }
+  return [...filtered, ...selectedChildren];
 }

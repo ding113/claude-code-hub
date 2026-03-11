@@ -6,6 +6,7 @@ import { requestCloudPriceTableSync } from "@/lib/price-sync/cloud-price-updater
 import { ProxyStatusTracker } from "@/lib/proxy-status-tracker";
 import { RateLimitService } from "@/lib/rate-limit";
 import type { LeaseWindowType } from "@/lib/rate-limit/lease";
+import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CostBreakdown } from "@/lib/utils/cost-calculation";
@@ -275,6 +276,10 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 ): Promise<FinalizeDeferredStreamingResult> {
   const meta = consumeDeferredStreamingFinalization(session);
   const provider = session.provider;
+  const clearSessionBinding = async () => {
+    if (!session.sessionId) return;
+    await SessionManager.clearSessionProvider(session.sessionId);
+  };
 
   const providerIdForPersistence = meta?.providerId ?? provider?.id ?? null;
 
@@ -320,6 +325,15 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
       // 2xx 成功状态码
       errorMessage = null;
     }
+  }
+
+  const shouldClearSessionBindingOnFailure =
+    !streamEndedNormally ||
+    detected.isError ||
+    (upstreamStatusCode >= 400 && errorMessage !== null);
+
+  if ((!meta || !provider) && shouldClearSessionBindingOnFailure) {
+    await clearSessionBinding();
   }
 
   // 未启用延迟结算 / provider 缺失：
@@ -372,6 +386,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   // - 客户端主动中断：不计入熔断器（这通常不是供应商问题）
   // - 非客户端中断：计入 provider/endpoint 熔断失败（与 timeout 路径保持一致）
   if (!streamEndedNormally) {
+    await clearSessionBinding();
+
     if (!clientAborted && session.getEndpointPolicy().allowCircuitBreakerAccounting) {
       try {
         // 动态导入：避免 proxy 模块与熔断器模块之间潜在的循环依赖。
@@ -404,6 +420,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
   }
 
   if (detected.isError) {
+    await clearSessionBinding();
+
     logger.warn("[ResponseHandler] SSE completed but body indicates error (fake 200)", {
       providerId: meta.providerId,
       providerName: meta.providerName,
@@ -457,6 +475,8 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
 
   // ========== 非200状态码处理（流自然结束但HTTP状态码表示错误）==========
   if (upstreamStatusCode >= 400 && errorMessage !== null) {
+    await clearSessionBinding();
+
     logger.warn("[ResponseHandler] SSE completed but HTTP status indicates error", {
       providerId: meta.providerId,
       providerName: meta.providerName,
@@ -523,56 +543,63 @@ async function finalizeDeferredStreamingFinalizationIfNeeded(
     });
   }
 
-  // 成功后绑定 session 到供应商（智能绑定策略）
-  if (session.sessionId) {
-    const result = await SessionManager.updateSessionBindingSmart(
-      session.sessionId,
-      meta.providerId,
-      meta.providerPriority,
-      meta.isFirstAttempt,
-      meta.isFailoverSuccess
-    );
+  // Hedge winner: commitWinner() already performed session binding and chain logging.
+  // Skip duplicate operations to avoid double entries in the provider chain.
+  if (!meta.isHedgeWinner) {
+    // 成功后绑定 session 到供应商（智能绑定策略）
+    if (session.sessionId) {
+      const result = await SessionManager.updateSessionBindingSmart(
+        session.sessionId,
+        meta.providerId,
+        meta.providerPriority,
+        meta.isFirstAttempt,
+        meta.isFailoverSuccess
+      );
 
-    if (result.updated) {
-      logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
-        sessionId: session.sessionId,
+      if (result.updated) {
+        logger.info("[ResponseHandler] Session binding updated (stream finalized)", {
+          sessionId: session.sessionId,
+          providerId: meta.providerId,
+          providerName: meta.providerName,
+          priority: meta.providerPriority,
+          reason: result.reason,
+          details: result.details,
+          attemptNumber: meta.attemptNumber,
+          totalProvidersAttempted: meta.totalProvidersAttempted,
+        });
+      } else {
+        logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
+          sessionId: session.sessionId,
+          providerId: meta.providerId,
+          providerName: meta.providerName,
+          priority: meta.providerPriority,
+          reason: result.reason,
+          details: result.details,
+        });
+      }
+
+      // 统一更新两个数据源（确保监控数据一致）
+      void SessionManager.updateSessionProvider(session.sessionId, {
         providerId: meta.providerId,
         providerName: meta.providerName,
-        priority: meta.providerPriority,
-        reason: result.reason,
-        details: result.details,
-        attemptNumber: meta.attemptNumber,
-        totalProvidersAttempted: meta.totalProvidersAttempted,
-      });
-    } else {
-      logger.debug("[ResponseHandler] Session binding not updated (stream finalized)", {
-        sessionId: session.sessionId,
-        providerId: meta.providerId,
-        providerName: meta.providerName,
-        priority: meta.providerPriority,
-        reason: result.reason,
-        details: result.details,
+      }).catch((err) => {
+        logger.error(
+          "[ResponseHandler] Failed to update session provider info (stream finalized)",
+          {
+            error: err,
+          }
+        );
       });
     }
 
-    // 统一更新两个数据源（确保监控数据一致）
-    void SessionManager.updateSessionProvider(session.sessionId, {
-      providerId: meta.providerId,
-      providerName: meta.providerName,
-    }).catch((err) => {
-      logger.error("[ResponseHandler] Failed to update session provider info (stream finalized)", {
-        error: err,
-      });
+    session.addProviderToChain(providerForChain, {
+      endpointId: meta.endpointId,
+      endpointUrl: meta.endpointUrl,
+      reason: meta.isFirstAttempt ? "request_success" : "retry_success",
+      attemptNumber: meta.attemptNumber,
+      statusCode: meta.upstreamStatusCode,
     });
   }
-
-  session.addProviderToChain(providerForChain, {
-    endpointId: meta.endpointId,
-    endpointUrl: meta.endpointUrl,
-    reason: meta.isFirstAttempt ? "request_success" : "retry_success",
-    attemptNumber: meta.attemptNumber,
-    statusCode: meta.upstreamStatusCode,
-  });
 
   logger.info("[ResponseHandler] Streaming request finalized as success", {
     providerId: meta.providerId,
@@ -784,11 +811,12 @@ export class ProxyResponseHandler {
 
     const processingPromise = (async () => {
       const finalizeNonStreamAbort = async (): Promise<void> => {
+        const finalizedStatusCode = session.clientAbortSignal?.aborted ? 499 : statusCode;
         if (messageContext) {
           const duration = Date.now() - session.startTime;
           await updateMessageRequestDuration(messageContext.id, duration);
           await updateMessageRequestDetails(messageContext.id, {
-            statusCode: statusCode,
+            statusCode: finalizedStatusCode,
             ttfbMs: session.ttfbMs ?? duration,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // 更新重定向后的模型
@@ -801,9 +829,11 @@ export class ProxyResponseHandler {
         }
 
         if (session.sessionId) {
+          await SessionManager.clearSessionProvider(session.sessionId);
+
           const sessionUsagePayload: SessionUsageUpdate = {
-            status: statusCode >= 200 && statusCode < 300 ? "completed" : "error",
-            statusCode: statusCode,
+            status: finalizedStatusCode >= 200 && finalizedStatusCode < 300 ? "completed" : "error",
+            statusCode: finalizedStatusCode,
           };
 
           void SessionManager.updateSessionUsage(session.sessionId, sessionUsagePayload).catch(
@@ -1274,10 +1304,12 @@ export class ProxyResponseHandler {
           const pushChunk = (text: string, bytes: number) => {
             if (!text) return;
 
-            const pushToTail = () => {
-              tailChunks.push(text);
-              tailChunkBytes.push(bytes);
-              tailBufferedBytes += bytes;
+            const pushToTail = (tailText: string, tailBytes: number) => {
+              if (!tailText) return;
+
+              tailChunks.push(tailText);
+              tailChunkBytes.push(tailBytes);
+              tailBufferedBytes += tailBytes;
 
               // 仅保留尾部窗口，避免内存无界增长
               while (tailBufferedBytes > MAX_STATS_TAIL_BYTES && tailHead < tailChunkBytes.length) {
@@ -1317,13 +1349,13 @@ export class ProxyResponseHandler {
                 pushChunk(headPart, remainingHeadBytes);
 
                 inTailMode = true;
-                pushChunk(tailPart, bytes - remainingHeadBytes);
+                pushToTail(tailPart, bytes - remainingHeadBytes);
               } else {
                 headChunks.push(text);
                 headBufferedBytes += bytes;
               }
             } else {
-              pushChunk(text, bytes);
+              pushToTail(text, bytes);
             }
           };
           const decoder = new TextDecoder();
@@ -2528,15 +2560,24 @@ export function extractUsageMetrics(value: unknown): UsageMetrics | null {
     hasAny = true;
   }
 
-  // OpenAI Response API 格式：input_tokens_details.cached_tokens（嵌套结构）
-  // 仅在顶层字段不存在时使用（避免重复计算）
-  if (!result.cache_read_input_tokens) {
+  if (result.cache_read_input_tokens === undefined) {
     const inputTokensDetails = usage.input_tokens_details as Record<string, unknown> | undefined;
     if (inputTokensDetails && typeof inputTokensDetails.cached_tokens === "number") {
       result.cache_read_input_tokens = inputTokensDetails.cached_tokens;
       hasAny = true;
       logger.debug("[ResponseHandler] Parsed cached tokens from OpenAI Response API format", {
         cachedTokens: inputTokensDetails.cached_tokens,
+      });
+    }
+  }
+
+  if (result.cache_read_input_tokens === undefined) {
+    const promptTokensDetails = usage.prompt_tokens_details as Record<string, unknown> | undefined;
+    if (promptTokensDetails && typeof promptTokensDetails.cached_tokens === "number") {
+      result.cache_read_input_tokens = promptTokensDetails.cached_tokens;
+      hasAny = true;
+      logger.debug("[ResponseHandler] Parsed cached tokens from OpenAI Chat Completions format", {
+        cachedTokens: promptTokensDetails.cached_tokens,
       });
     }
   }
@@ -3104,6 +3145,10 @@ export async function finalizeRequestStats(
     specialSettings: session.getSpecialSettings() ?? undefined,
   });
 
+  if (session.sessionId && session.requestSequence != null) {
+    void deleteLiveChain(session.sessionId, session.requestSequence);
+  }
+
   return normalizedUsage;
 }
 
@@ -3269,6 +3314,10 @@ async function persistRequestFailure(options: {
       swapCacheTtlApplied: session.provider?.swapCacheTtlBilling ?? false,
       specialSettings: session.getSpecialSettings() ?? undefined,
     });
+
+    if (session.sessionId && session.requestSequence != null) {
+      void deleteLiveChain(session.sessionId, session.requestSequence);
+    }
 
     const isAsyncWrite = getEnvConfig().MESSAGE_REQUEST_WRITE_MODE !== "sync";
     logger.info(

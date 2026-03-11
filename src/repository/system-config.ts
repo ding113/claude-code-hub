@@ -152,6 +152,7 @@ function createFallbackSettings(): SystemSettings {
     enableThinkingSignatureRectifier: true,
     enableThinkingBudgetRectifier: true,
     enableBillingHeaderRectifier: true,
+    enableResponseInputRectifier: true,
     enableCodexSessionIdCompletion: true,
     enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
@@ -196,6 +197,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
       enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
       enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
+      enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
       enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
       enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
       enableResponseFixer: systemSettings.enableResponseFixer,
@@ -356,6 +358,11 @@ export async function updateSystemSettings(
       updates.enableBillingHeaderRectifier = payload.enableBillingHeaderRectifier;
     }
 
+    // Response API input 整流器开关（如果提供）
+    if (payload.enableResponseInputRectifier !== undefined) {
+      updates.enableResponseInputRectifier = payload.enableResponseInputRectifier;
+    }
+
     // Codex Session ID 补全开关（如果提供）
     if (payload.enableCodexSessionIdCompletion !== undefined) {
       updates.enableCodexSessionIdCompletion = payload.enableCodexSessionIdCompletion;
@@ -420,6 +427,8 @@ export async function updateSystemSettings(
         interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
         enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+        enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
+        enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
         enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
         enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
         enableResponseFixer: systemSettings.enableResponseFixer,

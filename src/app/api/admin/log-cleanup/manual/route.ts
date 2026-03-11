@@ -93,6 +93,8 @@ export async function POST(request: NextRequest) {
       totalDeleted: result.totalDeleted,
       batchCount: result.batchCount,
       durationMs: result.durationMs,
+      softDeletedPurged: result.softDeletedPurged,
+      vacuumPerformed: result.vacuumPerformed,
       error: result.error,
     });
   } catch (error) {

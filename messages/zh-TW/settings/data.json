@@ -28,8 +28,10 @@
       "default": "約 {days} 天前"
     },
     "rangeLabel": "清理範圍",
+    "softDeletePurged": "另外清除了 {count} 筆軟刪除記錄",
     "statisticsRetained": "✓ 統計資料將被保留（用於趨勢分析）",
     "successMessage": "成功清理 {count} 筆日誌記錄（{batches} 批次，耗時 {duration}秒）",
+    "vacuumComplete": "資料庫空間已回收",
     "willClean": "將清理 {range} 的所有日誌記錄"
   },
   "description": "管理資料庫的備份與恢復，支援完整資料匯入匯出和日誌清理。",

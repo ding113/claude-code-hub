@@ -1,37 +1,46 @@
 {
-  "enterMode": "Массовое редактирование",
-  "exitMode": "Выход",
-  "selectAll": "Выбрать все",
-  "invertSelection": "Инвертировать",
   "selectedCount": "Выбрано: {count}",
-  "editSelected": "Редактировать выбранные",
-  "selectByType": "Выбрать по типу",
-  "selectByTypeItem": "{type} ({count})",
-  "selectByGroup": "Выбрать по группе",
-  "selectByGroupItem": "{group} ({count})",
   "actions": {
     "edit": "Редактировать",
-    "delete": "Удалить",
-    "resetCircuit": "Сбросить прерыватель"
+    "resetCircuit": "Сбросить предохранитель",
+    "delete": "Удалить"
   },
+  "enterMode": "Массовое редактирование",
+  "selectionHint": "Выберите провайдеров для массового редактирования",
+  "selectAll": "Выбрать все",
+  "invertSelection": "Инвертировать",
+  "selectByType": "По типу",
+  "selectByTypeItem": "{type} ({count})",
+  "selectByGroup": "По группе",
+  "selectByGroupItem": "{group} ({count})",
+  "editSelected": "Редактировать выбранные",
+  "exitMode": "Выход",
   "dialog": {
-    "editTitle": "Массовое редактирование поставщиков",
-    "editDesc": "Изменения будут применены к {count} поставщикам",
-    "deleteTitle": "Удалить поставщиков",
-    "deleteDesc": "Удалить {count} поставщиков навсегда?",
-    "resetCircuitTitle": "Сбросить прерыватели",
-    "resetCircuitDesc": "Сбросить прерыватель для {count} поставщиков?",
-    "next": "Далее",
-    "noFieldEnabled": "Пожалуйста, включите хотя бы одно поле для обновления"
+    "editTitle": "Массовое редактирование провайдеров",
+    "editDesc": "Редактирование настроек для {count} провайдеров",
+    "deleteTitle": "Удаление провайдеров",
+    "deleteDesc": "Вы уверены, что хотите удалить {count} провайдеров? Это действие нельзя отменить.",
+    "resetCircuitTitle": "Сброс предохранителей",
+    "resetCircuitDesc": "Сбросить предохранители для {count} провайдеров?",
+    "next": "Далее"
   },
-  "sections": {
-    "basic": "Основные настройки",
-    "routing": "Группы и маршрутизация",
-    "anthropic": "Настройки Anthropic"
+  "preview": {
+    "title": "Предпросмотр изменений",
+    "description": "Проверка изменений для {count} провайдеров",
+    "loading": "Загрузка предпросмотра...",
+    "noChanges": "Нет изменений для применения",
+    "summary": "Затронуто {providerCount} провайдеров, изменено {fieldCount} полей, пропущено {skipCount}",
+    "excludeProvider": "Переключить включение провайдера",
+    "providerHeader": "{name}",
+    "fieldChanged": "{field}: {before} -> {after}",
+    "fieldSkipped": "{field}: пропущено ({reason})",
+    "nullValue": "(пусто)",
+    "back": "Назад",
+    "apply": "Применить изменения"
   },
   "fields": {
     "isEnabled": {
-      "label": "Статус",
+      "label": "Включен",
       "noChange": "Без изменений",
       "enable": "Включить",
       "disable": "Отключить"
@@ -40,69 +49,52 @@
     "weight": "Вес",
     "costMultiplier": "Множитель стоимости",
     "groupTag": {
-      "label": "Тег группы",
-      "clear": "Очистить"
+      "label": "Тег группы"
     },
     "modelRedirects": "Перенаправление моделей",
-    "allowedModels": "Разрешённые модели",
-    "thinkingBudget": "Бюджет мышления",
-    "adaptiveThinking": "Адаптивное мышление",
-    "activeTimeStart": "Время начала расписания",
-    "activeTimeEnd": "Время окончания расписания"
+    "allowedModels": "Разрешенные модели",
+    "thinkingBudget": "Бюджет размышлений",
+    "adaptiveThinking": "Адаптивное мышление"
   },
-  "affectedProviders": {
-    "title": "Затронутые поставщики",
-    "more": "+{count} ещё"
+  "toast": {
+    "previewFailed": "Ошибка предпросмотра: {error}",
+    "unknownError": "Неизвестная ошибка",
+    "updated": "Обновлено провайдеров: {count}",
+    "undo": "Отменить",
+    "undoSuccess": "Восстановлено провайдеров: {count}",
+    "undoFailed": "Ошибка отмены: {error}",
+    "failed": "Ошибка операции: {error}",
+    "circuitReset": "Сброшено предохранителей: {count}"
+  },
+  "undo": {
+    "batchDeleteSuccess": "Удалено провайдеров: {count}",
+    "button": "Отменить",
+    "batchDeleteUndone": "Восстановлено провайдеров: {count}",
+    "singleEditSuccess": "Провайдер обновлен",
+    "singleEditUndone": "Обновление провайдера отменено",
+    "singleDeleteSuccess": "Провайдер удален",
+    "singleDeleteUndone": "Провайдер восстановлен",
+    "expired": "Отмена истекла",
+    "failed": "Ошибка отмены"
   },
   "confirm": {
-    "title": "Подтвердите операцию",
     "cancel": "Отмена",
-    "confirm": "Подтвердить",
     "goBack": "Назад",
+    "confirm": "Подтвердить",
     "processing": "Обработка..."
   },
-  "preview": {
-    "title": "Предпросмотр изменений",
-    "description": "Проверьте изменения перед применением к {count} поставщикам",
-    "providerHeader": "{name}",
-    "fieldChanged": "{field}: {before} -> {after}",
-    "nullValue": "null",
-    "fieldSkipped": "{field}: Пропущено ({reason})",
-    "excludeProvider": "Исключить",
-    "summary": "{providerCount} поставщиков, {fieldCount} изменений, {skipCount} пропущено",
-    "noChanges": "Нет изменений для применения",
-    "apply": "Применить изменения",
-    "back": "Вернуться к редактированию",
-    "loading": "Генерация предпросмотра..."
+  "affectedProviders": {
+    "title": "Затронутые провайдеры",
+    "more": "и еще {count}"
   },
   "batchNotes": {
     "codexOnly": "Только Codex",
     "claudeOnly": "Только Claude",
     "geminiOnly": "Только Gemini"
   },
-  "selectionHint": "Выберите нескольких поставщиков для массовых операций",
-  "undo": {
-    "button": "Отменить",
-    "success": "Операция успешно отменена",
-    "expired": "Время отмены истекло",
-    "batchDeleteSuccess": "Удалено поставщиков: {count}",
-    "batchDeleteUndone": "Восстановлено поставщиков: {count}",
-    "singleDeleteSuccess": "Поставщик удалён",
-    "singleDeleteUndone": "Поставщик восстановлен",
-    "singleEditSuccess": "Поставщик обновлён",
-    "singleEditUndone": "Изменения отменены",
-    "failed": "Ошибка отмены"
-  },
-  "toast": {
-    "updated": "Обновлено поставщиков: {count}",
-    "deleted": "Удалено поставщиков: {count}",
-    "circuitReset": "Сброшено прерывателей: {count}",
-    "failed": "Операция не удалась: {error}",
-    "undo": "Отменить",
-    "undoSuccess": "Восстановлено поставщиков: {count}",
-    "undoFailed": "Отмена не удалась: {error}",
-    "undoExpired": "Время отмены истекло",
-    "previewFailed": "Предпросмотр не удался: {error}",
-    "unknownError": "Неизвестная ошибка"
+  "mixedValues": {
+    "label": "(смешанные значения)",
+    "tooltip": "Выбранные провайдеры имеют разные значения:",
+    "andMore": "...и еще {count}"
   }
 }

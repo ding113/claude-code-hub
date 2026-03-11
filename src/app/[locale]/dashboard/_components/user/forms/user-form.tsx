@@ -400,6 +400,16 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
                 "factory-cli": tUserEdit("presetClients.factory-cli"),
                 "codex-cli": tUserEdit("presetClients.codex-cli"),
               },
+              subClients: {
+                all: tUserEdit("subClients.all"),
+                cli: tUserEdit("subClients.cli"),
+                vscode: tUserEdit("subClients.vscode"),
+                "sdk-ts": tUserEdit("subClients.sdk-ts"),
+                "sdk-py": tUserEdit("subClients.sdk-py"),
+                "cli-sdk": tUserEdit("subClients.cli-sdk"),
+                "gh-action": tUserEdit("subClients.gh-action"),
+              },
+              nSelected: tUserEdit("nSelected", { count: "{count}" }),
             }}
           />
         </>

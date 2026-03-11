@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle,
   ChevronRight,
+  GitBranch,
   InfoIcon,
   Link2,
   MinusCircle,
@@ -17,7 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { formatProbabilityCompact } from "@/lib/utils/provider-chain-formatter";
+import {
+  formatProbabilityCompact,
+  getRetryCount,
+  isActualRequest,
+  isHedgeRace,
+} from "@/lib/utils/provider-chain-formatter";
 import type { ProviderChainItem } from "@/types/message";
 import { getFake200ReasonKey } from "./fake200-reason";
 
@@ -28,25 +34,6 @@ interface ProviderChainPopoverProps {
   hasCostBadge?: boolean;
   /** Callback when a chain item is clicked in the popover */
   onChainItemClick?: (chainIndex: number) => void;
-}
-
-/**
- * Determine if this is an actual request record (excluding intermediate states)
- */
-function isActualRequest(item: ProviderChainItem): boolean {
-  if (item.reason === "client_restriction_filtered") return false;
-
-  if (item.reason === "concurrent_limit_failed") return true;
-
-  if (item.reason === "retry_failed" || item.reason === "system_error") return true;
-  if (item.reason === "resource_not_found") return true;
-  if (item.reason === "endpoint_pool_exhausted") return true;
-  if (item.reason === "vendor_type_all_timeout") return true;
-  if (item.reason === "client_error_non_retryable") return true;
-  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
-    return true;
-  }
-  return false;
 }
 
 function parseGroupTags(groupTag?: string | null): string[] {
@@ -70,7 +57,12 @@ function getItemStatus(item: ProviderChainItem): {
   color: string;
   bgColor: string;
 } {
-  if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
+  if (
+    (item.reason === "request_success" ||
+      item.reason === "retry_success" ||
+      item.reason === "hedge_winner") &&
+    item.statusCode
+  ) {
     return {
       icon: CheckCircle,
       color: "text-emerald-600",
@@ -111,6 +103,27 @@ function getItemStatus(item: ProviderChainItem): {
       bgColor: "bg-muted/30",
     };
   }
+  if (item.reason === "hedge_triggered") {
+    return {
+      icon: GitBranch,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50 dark:bg-indigo-950/30",
+    };
+  }
+  if (item.reason === "hedge_loser_cancelled") {
+    return {
+      icon: XCircle,
+      color: "text-slate-500",
+      bgColor: "bg-slate-50 dark:bg-slate-800/50",
+    };
+  }
+  if (item.reason === "client_abort") {
+    return {
+      icon: MinusCircle,
+      color: "text-amber-600",
+      bgColor: "bg-amber-50 dark:bg-amber-950/30",
+    };
+  }
   return {
     icon: RefreshCw,
     color: "text-slate-500",
@@ -139,6 +152,8 @@ export function ProviderChainPopover({
 
   // Calculate actual request count (excluding intermediate states)
   const requestCount = chain.filter(isActualRequest).length;
+  const retryCount = getRetryCount(chain);
+  const isHedge = isHedgeRace(chain);
 
   // Fallback for empty string
   const displayName = finalProvider || "-";
@@ -154,8 +169,8 @@ export function ProviderChainPopover({
   const initialSelection = chain.find((item) => item.reason === "initial_selection");
   const selectionContext = initialSelection?.decisionContext;
 
-  // Single request: show name with icon and compact tooltip
-  if (requestCount <= 1) {
+  // Single request (no retry and no hedge): show name with icon and compact tooltip
+  if (retryCount === 0 && !isHedge) {
     // Get session reuse context for detailed tooltip
     const sessionReuseItem = chain.find(
       (item) => item.reason === "session_reuse" || item.selectionMethod === "session_reuse"
@@ -378,7 +393,12 @@ export function ProviderChainPopover({
   // Get the successful provider's costMultiplier and groupTag
   const successfulProvider = [...chain]
     .reverse()
-    .find((item) => item.reason === "request_success" || item.reason === "retry_success");
+    .find(
+      (item) =>
+        item.reason === "request_success" ||
+        item.reason === "retry_success" ||
+        item.reason === "hedge_winner"
+    );
   const finalCostMultiplier = successfulProvider?.costMultiplier;
   const finalGroupTag = successfulProvider?.groupTag;
   const finalGroupTags = parseGroupTags(finalGroupTag);
@@ -395,14 +415,18 @@ export function ProviderChainPopover({
           type="button"
           variant="ghost"
           className="h-auto p-0 font-normal hover:bg-transparent w-full min-w-0"
-          aria-label={`${displayName} - ${requestCount}${t("logs.table.times")}`}
+          aria-label={`${displayName} - ${isHedge ? tChain("timeline.hedgeRace") : `${requestCount}${t("logs.table.times")}`}`}
         >
           <span className="flex w-full items-center gap-1 min-w-0">
             {/* Request count badge */}
-            <Badge variant="secondary" className="shrink-0">
-              {requestCount}
-              {t("logs.table.times")}
-            </Badge>
+            {isHedge ? (
+              <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
+            ) : (
+              <Badge variant="secondary" className="shrink-0">
+                {requestCount}
+                {t("logs.table.times")}
+              </Badge>
+            )}
             {/* Provider name */}
             <span className="truncate min-w-0" dir="auto">
               {displayName}
@@ -448,7 +472,7 @@ export function ProviderChainPopover({
           <div className="flex items-center justify-between">
             <h4 className="font-semibold text-sm">{t("logs.providerChain.decisionChain")}</h4>
             <Badge variant="outline" className="text-[10px]">
-              {requestCount} {t("logs.table.times")}
+              {isHedge ? tChain("timeline.hedgeRace") : `${requestCount} ${t("logs.table.times")}`}
             </Badge>
           </div>
         </div>

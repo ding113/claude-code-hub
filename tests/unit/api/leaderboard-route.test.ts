@@ -287,4 +287,69 @@ describe("GET /api/leaderboard", () => {
       expect(body[0].modelStats).toHaveLength(0);
     });
   });
+
+  describe("user scope includeUserModelStats", () => {
+    it("admin + includeUserModelStats=1 returns 200 with correct cache call and private headers", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 1, name: "admin", role: "admin" } });
+      mocks.getLeaderboardWithCache.mockResolvedValue([
+        {
+          userId: 1,
+          userName: "user-a",
+          totalRequests: 100,
+          totalCost: 5.0,
+          totalTokens: 1000,
+          modelStats: [
+            { model: "claude-3-opus", totalRequests: 60, totalCost: 3.0, totalTokens: 600 },
+            { model: null, totalRequests: 40, totalCost: 2.0, totalTokens: 400 },
+          ],
+        },
+      ]);
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url =
+        "http://localhost/api/leaderboard?scope=user&period=daily&includeUserModelStats=1";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+      const body = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+
+      const options = mocks.getLeaderboardWithCache.mock.calls[0][4];
+      expect(options.includeModelStats).toBe(true);
+
+      expect(body[0].modelStats).toHaveLength(2);
+      expect(body[0].modelStats[0]).toHaveProperty("totalCostFormatted");
+      expect(body[0].modelStats[1].model).toBeNull();
+    });
+
+    it("non-admin + includeUserModelStats=1 returns 403", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 2, name: "user", role: "user" } });
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url =
+        "http://localhost/api/leaderboard?scope=user&period=daily&includeUserModelStats=1";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+
+      expect(response.status).toBe(403);
+      const body = await response.json();
+      expect(body.error).toBe("INCLUDE_USER_MODEL_STATS_ADMIN_REQUIRED");
+    });
+
+    it("non-admin with allowGlobalUsageView + includeUserModelStats=1 returns 403", async () => {
+      mocks.getSession.mockResolvedValue({ user: { id: 2, name: "user", role: "user" } });
+      mocks.getSystemSettings.mockResolvedValue({
+        currencyDisplay: "USD",
+        allowGlobalUsageView: true,
+      });
+
+      const { GET } = await import("@/app/api/leaderboard/route");
+      const url =
+        "http://localhost/api/leaderboard?scope=user&period=daily&includeUserModelStats=1";
+      const response = await GET({ nextUrl: new URL(url) } as any);
+
+      expect(response.status).toBe(403);
+      const body = await response.json();
+      expect(body.error).toBe("INCLUDE_USER_MODEL_STATS_ADMIN_REQUIRED");
+    });
+  });
 });

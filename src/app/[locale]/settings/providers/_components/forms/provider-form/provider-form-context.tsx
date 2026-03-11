@@ -11,6 +11,7 @@ import {
   useRef,
 } from "react";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
+import { analyzeBatchProviderSettings } from "../../batch-edit/analyze-batch-settings";
 import type {
   FormMode,
   ProviderFormAction,
@@ -79,14 +80,205 @@ export function createInitialState(
     url?: string;
     websiteUrl?: string;
     providerType?: ProviderType;
-  }
+  },
+  batchProviders?: ProviderDisplay[]
 ): ProviderFormState {
   const isEdit = mode === "edit";
   const isBatch = mode === "batch";
   const raw = isEdit ? provider : cloneProvider;
   const sourceProvider = raw ? structuredClone(raw) : undefined;
 
-  // Batch mode: all fields start at neutral defaults (no provider source)
+  // Batch mode: 使用分析结果预填充
+  if (isBatch && batchProviders && batchProviders.length > 0) {
+    const analysis = analyzeBatchProviderSettings(batchProviders);
+
+    return {
+      basic: { name: "", url: "", key: "", websiteUrl: "" },
+      routing: {
+        providerType: "claude", // 批量编辑不支持修改 providerType
+        groupTag:
+          analysis.routing.groupTag.status === "uniform" ? analysis.routing.groupTag.value : [],
+        preserveClientIp:
+          analysis.routing.preserveClientIp.status === "uniform"
+            ? analysis.routing.preserveClientIp.value
+            : false,
+        modelRedirects:
+          analysis.routing.modelRedirects.status === "uniform"
+            ? analysis.routing.modelRedirects.value
+            : {},
+        allowedModels:
+          analysis.routing.allowedModels.status === "uniform"
+            ? analysis.routing.allowedModels.value
+            : [],
+        allowedClients:
+          analysis.routing.allowedClients.status === "uniform"
+            ? analysis.routing.allowedClients.value
+            : [],
+        blockedClients:
+          analysis.routing.blockedClients.status === "uniform"
+            ? analysis.routing.blockedClients.value
+            : [],
+        priority:
+          analysis.routing.priority.status === "uniform" ? analysis.routing.priority.value : 0,
+        groupPriorities:
+          analysis.routing.groupPriorities.status === "uniform"
+            ? analysis.routing.groupPriorities.value
+            : {},
+        weight: analysis.routing.weight.status === "uniform" ? analysis.routing.weight.value : 1,
+        costMultiplier:
+          analysis.routing.costMultiplier.status === "uniform"
+            ? analysis.routing.costMultiplier.value
+            : 1.0,
+        cacheTtlPreference:
+          analysis.routing.cacheTtlPreference.status === "uniform"
+            ? analysis.routing.cacheTtlPreference.value
+            : "inherit",
+        swapCacheTtlBilling:
+          analysis.routing.swapCacheTtlBilling.status === "uniform"
+            ? analysis.routing.swapCacheTtlBilling.value
+            : false,
+        context1mPreference:
+          analysis.routing.context1mPreference.status === "uniform"
+            ? analysis.routing.context1mPreference.value
+            : "inherit",
+        codexReasoningEffortPreference:
+          analysis.routing.codexReasoningEffortPreference.status === "uniform"
+            ? analysis.routing.codexReasoningEffortPreference.value
+            : "inherit",
+        codexReasoningSummaryPreference:
+          analysis.routing.codexReasoningSummaryPreference.status === "uniform"
+            ? analysis.routing.codexReasoningSummaryPreference.value
+            : "inherit",
+        codexTextVerbosityPreference:
+          analysis.routing.codexTextVerbosityPreference.status === "uniform"
+            ? analysis.routing.codexTextVerbosityPreference.value
+            : "inherit",
+        codexParallelToolCallsPreference:
+          analysis.routing.codexParallelToolCallsPreference.status === "uniform"
+            ? analysis.routing.codexParallelToolCallsPreference.value
+            : "inherit",
+        codexServiceTierPreference:
+          analysis.routing.codexServiceTierPreference.status === "uniform"
+            ? analysis.routing.codexServiceTierPreference.value
+            : "inherit",
+        anthropicMaxTokensPreference:
+          analysis.routing.anthropicMaxTokensPreference.status === "uniform"
+            ? analysis.routing.anthropicMaxTokensPreference.value
+            : "inherit",
+        anthropicThinkingBudgetPreference:
+          analysis.routing.anthropicThinkingBudgetPreference.status === "uniform"
+            ? analysis.routing.anthropicThinkingBudgetPreference.value
+            : "inherit",
+        anthropicAdaptiveThinking:
+          analysis.routing.anthropicAdaptiveThinking.status === "uniform"
+            ? analysis.routing.anthropicAdaptiveThinking.value
+            : null,
+        geminiGoogleSearchPreference:
+          analysis.routing.geminiGoogleSearchPreference.status === "uniform"
+            ? analysis.routing.geminiGoogleSearchPreference.value
+            : "inherit",
+        activeTimeStart:
+          analysis.routing.activeTimeStart.status === "uniform"
+            ? analysis.routing.activeTimeStart.value
+            : null,
+        activeTimeEnd:
+          analysis.routing.activeTimeEnd.status === "uniform"
+            ? analysis.routing.activeTimeEnd.value
+            : null,
+      },
+      rateLimit: {
+        limit5hUsd:
+          analysis.rateLimit.limit5hUsd.status === "uniform"
+            ? analysis.rateLimit.limit5hUsd.value
+            : null,
+        limitDailyUsd:
+          analysis.rateLimit.limitDailyUsd.status === "uniform"
+            ? analysis.rateLimit.limitDailyUsd.value
+            : null,
+        dailyResetMode:
+          analysis.rateLimit.dailyResetMode.status === "uniform"
+            ? analysis.rateLimit.dailyResetMode.value
+            : "fixed",
+        dailyResetTime:
+          analysis.rateLimit.dailyResetTime.status === "uniform"
+            ? analysis.rateLimit.dailyResetTime.value
+            : "00:00",
+        limitWeeklyUsd:
+          analysis.rateLimit.limitWeeklyUsd.status === "uniform"
+            ? analysis.rateLimit.limitWeeklyUsd.value
+            : null,
+        limitMonthlyUsd:
+          analysis.rateLimit.limitMonthlyUsd.status === "uniform"
+            ? analysis.rateLimit.limitMonthlyUsd.value
+            : null,
+        limitTotalUsd:
+          analysis.rateLimit.limitTotalUsd.status === "uniform"
+            ? analysis.rateLimit.limitTotalUsd.value
+            : null,
+        limitConcurrentSessions:
+          analysis.rateLimit.limitConcurrentSessions.status === "uniform"
+            ? analysis.rateLimit.limitConcurrentSessions.value
+            : null,
+      },
+      circuitBreaker: {
+        failureThreshold:
+          analysis.circuitBreaker.failureThreshold.status === "uniform"
+            ? analysis.circuitBreaker.failureThreshold.value
+            : undefined,
+        openDurationMinutes:
+          analysis.circuitBreaker.openDurationMinutes.status === "uniform"
+            ? analysis.circuitBreaker.openDurationMinutes.value
+            : undefined,
+        halfOpenSuccessThreshold:
+          analysis.circuitBreaker.halfOpenSuccessThreshold.status === "uniform"
+            ? analysis.circuitBreaker.halfOpenSuccessThreshold.value
+            : undefined,
+        maxRetryAttempts:
+          analysis.circuitBreaker.maxRetryAttempts.status === "uniform"
+            ? analysis.circuitBreaker.maxRetryAttempts.value
+            : null,
+      },
+      network: {
+        proxyUrl:
+          analysis.network.proxyUrl.status === "uniform" ? analysis.network.proxyUrl.value : "",
+        proxyFallbackToDirect:
+          analysis.network.proxyFallbackToDirect.status === "uniform"
+            ? analysis.network.proxyFallbackToDirect.value
+            : false,
+        firstByteTimeoutStreamingSeconds:
+          analysis.network.firstByteTimeoutStreamingSeconds.status === "uniform"
+            ? analysis.network.firstByteTimeoutStreamingSeconds.value
+            : undefined,
+        streamingIdleTimeoutSeconds:
+          analysis.network.streamingIdleTimeoutSeconds.status === "uniform"
+            ? analysis.network.streamingIdleTimeoutSeconds.value
+            : undefined,
+        requestTimeoutNonStreamingSeconds:
+          analysis.network.requestTimeoutNonStreamingSeconds.status === "uniform"
+            ? analysis.network.requestTimeoutNonStreamingSeconds.value
+            : undefined,
+      },
+      mcp: {
+        mcpPassthroughType:
+          analysis.mcp.mcpPassthroughType.status === "uniform"
+            ? analysis.mcp.mcpPassthroughType.value
+            : "none",
+        mcpPassthroughUrl:
+          analysis.mcp.mcpPassthroughUrl.status === "uniform"
+            ? analysis.mcp.mcpPassthroughUrl.value
+            : "",
+      },
+      batch: { isEnabled: "no_change" },
+      ui: {
+        activeTab: "basic",
+        activeSubTab: null,
+        isPending: false,
+        showFailureThresholdConfirm: false,
+      },
+    };
+  }
+
+  // Batch mode fallback: all fields start at neutral defaults (no provider source)
   if (isBatch) {
     return {
       basic: { name: "", url: "", key: "", websiteUrl: "" },
@@ -147,6 +339,7 @@ export function createInitialState(
       batch: { isEnabled: "no_change" },
       ui: {
         activeTab: "basic",
+        activeSubTab: null,
         isPending: false,
         showFailureThresholdConfirm: false,
       },
@@ -241,6 +434,7 @@ export function createInitialState(
     batch: { isEnabled: "no_change" },
     ui: {
       activeTab: "basic",
+      activeSubTab: null,
       isPending: false,
       showFailureThresholdConfirm: false,
     },
@@ -476,7 +670,12 @@ export function providerFormReducer(
 
     // UI
     case "SET_ACTIVE_TAB":
-      return { ...state, ui: { ...state.ui, activeTab: action.payload } };
+      return { ...state, ui: { ...state.ui, activeTab: action.payload, activeSubTab: null } };
+    case "SET_ACTIVE_NAV":
+      return {
+        ...state,
+        ui: { ...state.ui, activeTab: action.payload.tab, activeSubTab: action.payload.subTab },
+      };
     case "SET_IS_PENDING":
       return { ...state, ui: { ...state.ui, isPending: action.payload } };
     case "SET_SHOW_FAILURE_THRESHOLD_CONFIRM":
@@ -534,11 +733,19 @@ export function ProviderFormProvider({
 }) {
   const [state, rawDispatch] = useReducer(
     providerFormReducer,
-    createInitialState(mode, provider, cloneProvider, preset)
+    createInitialState(mode, provider, cloneProvider, preset, batchProviders)
   );
 
   const dirtyFieldsRef = useRef(new Set<string>());
   const isBatch = mode === "batch";
+
+  // Compute batch analysis once if in batch mode
+  const batchAnalysis = useMemo(() => {
+    if (isBatch && batchProviders && batchProviders.length > 0) {
+      return analyzeBatchProviderSettings(batchProviders);
+    }
+    return undefined;
+  }, [isBatch, batchProviders]);
 
   // Wrap dispatch for batch mode to auto-track dirty fields
   const dispatch: Dispatch<ProviderFormAction> = useCallback(
@@ -566,6 +773,7 @@ export function ProviderFormProvider({
       groupSuggestions,
       batchProviders,
       dirtyFields: dirtyFieldsRef.current,
+      batchAnalysis,
     }),
     [
       state,
@@ -577,6 +785,7 @@ export function ProviderFormProvider({
       hideWebsiteUrl,
       groupSuggestions,
       batchProviders,
+      batchAnalysis,
     ]
   );
 

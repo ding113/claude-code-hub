@@ -48,6 +48,7 @@ const SUCCESS_REASONS = new Set([
   "retry_success",
   "initial_selection",
   "session_reuse",
+  "hedge_winner",
 ]);
 
 function isSuccessReason(reason: string | undefined): boolean {
@@ -58,6 +59,7 @@ const ERROR_REASONS = new Set([
   "system_error",
   "vendor_type_all_timeout",
   "endpoint_pool_exhausted",
+  "client_abort",
 ]);
 
 function isErrorReason(reason: string | undefined): boolean {
@@ -275,8 +277,34 @@ export async function traceProxyRequest(ctx: TraceContext): Promise<void> {
           guardSpan.end(forwardStartDate);
         }
 
-        // 2. Provider attempt events (one per failed chain item)
+        // 2. Provider attempt events (one per failed/hedge chain item)
         for (const item of session.getProviderChain()) {
+          // Hedge trigger: informational event (not a success or failure)
+          if (item.reason === "hedge_triggered") {
+            const hedgeObs = rootSpan.startObservation(
+              "hedge-trigger",
+              {
+                level: "WARNING" as ObservationLevel,
+                input: {
+                  providerId: item.id,
+                  providerName: item.name,
+                  attempt: item.attemptNumber,
+                },
+                output: {
+                  reason: item.reason,
+                  circuitState: item.circuitState,
+                },
+                metadata: { ...item },
+              },
+              {
+                asType: "event",
+                startTime: new Date(item.timestamp ?? session.startTime),
+              } as { asType: "event" }
+            );
+            hedgeObs.end();
+            continue;
+          }
+
           if (!isSuccessReason(item.reason)) {
             const eventObs = rootSpan.startObservation(
               "provider-attempt",

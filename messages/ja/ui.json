@@ -52,7 +52,8 @@
     "maxTags": "最大タグ数に達しました",
     "tooLong": "タグの長さは{max}文字を超えることはできません",
     "invalidFormat": "タグには英数字、アンダースコア、ハイフンのみ使用できます",
-    "removeTag": "タグ {tag} を削除"
+    "removeTag": "タグ {tag} を削除",
+    "unknownError": "無効な入力"
   },
   "providerGroupSelect": {
     "placeholder": "プロバイダーグループを選択",

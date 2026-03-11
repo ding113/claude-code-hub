@@ -31,7 +31,8 @@
     "openrouter": "OpenRouter"
   },
   "badges": {
-    "local": "本機"
+    "local": "本機",
+    "multi": "多供應商"
   },
   "capabilities": {
     "assistantPrefill": "助手預填充",

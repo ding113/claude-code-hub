@@ -15,12 +15,19 @@ import type {
   ProviderDisplay,
   ProviderType,
 } from "@/types/provider";
+import type { BatchSettingsAnalysis } from "../../batch-edit/analyze-batch-settings";
 
 // Form mode
 export type FormMode = "create" | "edit" | "batch";
 
 // Tab identifiers
-export type TabId = "basic" | "routing" | "limits" | "network" | "testing";
+export type TabId = "basic" | "routing" | "options" | "limits" | "network" | "testing";
+
+// Sub-tab identifiers for sub-navigation within parent sections
+export type SubTabId = "scheduling" | "activeTime" | "circuitBreaker" | "timeout";
+
+// Combined navigation target (parent tab or sub-tab)
+export type NavTargetId = TabId | SubTabId;
 
 // Tab configuration
 export interface TabConfig {
@@ -106,6 +113,7 @@ export interface BatchState {
 
 export interface UIState {
   activeTab: TabId;
+  activeSubTab: SubTabId | null;
   isPending: boolean;
   showFailureThresholdConfirm: boolean;
 }
@@ -186,6 +194,7 @@ export type ProviderFormAction =
   | { type: "SET_MCP_PASSTHROUGH_URL"; payload: string }
   // UI actions
   | { type: "SET_ACTIVE_TAB"; payload: TabId }
+  | { type: "SET_ACTIVE_NAV"; payload: { tab: TabId; subTab: SubTabId | null } }
   | { type: "SET_IS_PENDING"; payload: boolean }
   | { type: "SET_SHOW_FAILURE_THRESHOLD_CONFIRM"; payload: boolean }
   // Bulk actions
@@ -225,4 +234,5 @@ export interface ProviderFormContextValue {
   groupSuggestions: string[];
   batchProviders?: ProviderDisplay[];
   dirtyFields: Set<string>;
+  batchAnalysis?: BatchSettingsAnalysis;
 }

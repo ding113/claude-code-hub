@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { ArrowUp, Loader2 } from "lucide-react";
+import { ArrowUp, GitBranch, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -22,11 +22,13 @@ import {
   NON_BILLING_ENDPOINT,
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
+import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
+import { getFinalProviderName } from "@/lib/utils/provider-chain-formatter";
+import { isProviderFinalized } from "@/lib/utils/provider-display";
 import {
   getPricingResolutionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
 } from "@/lib/utils/special-settings";
-import type { ProviderChainItem } from "@/types/message";
 import type { BillingModelSource } from "@/types/system-config";
 import { ErrorDetailsDialog } from "./error-details-dialog";
 import { ModelDisplayWithRedirect } from "./model-display-with-redirect";
@@ -75,7 +77,8 @@ export function VirtualizedLogsTable({
   serverTimeZone: _serverTimeZone,
 }: VirtualizedLogsTableProps) {
   const t = useTranslations("dashboard");
-  const getPricingSourceLabel = (source: string) => t(`logs.billingDetails.pricingSource.`);
+  const getPricingSourceLabel = (source: string) =>
+    t(`logs.billingDetails.pricingSource.${source}`);
   const tChain = useTranslations("provider-chain");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
@@ -129,7 +132,11 @@ export function VirtualizedLogsTable({
       initialPageParam: undefined as { createdAt: string; id: number } | undefined,
       staleTime: 30000, // 30 seconds
       refetchOnWindowFocus: false,
-      refetchInterval: shouldPoll ? autoRefreshIntervalMs : false,
+      refetchInterval: (query) => {
+        if (!shouldPoll) return false;
+        if (query.state.fetchStatus !== "idle") return false;
+        return autoRefreshIntervalMs;
+      },
       maxPages: 5,
     });
 
@@ -419,6 +426,33 @@ export function VirtualizedLogsTable({
                             <span className="h-1.5 w-1.5 rounded-full bg-orange-600 dark:bg-orange-400" />
                             {t("logs.table.blocked")}
                           </span>
+                        ) : !isProviderFinalized(log) ? (
+                          log._liveChain ? (
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Loader2 className="h-3 w-3 animate-spin text-blue-500 shrink-0" />
+                              <span className="text-xs text-muted-foreground truncate">
+                                {log._liveChain.chain.length > 0
+                                  ? log._liveChain.chain[log._liveChain.chain.length - 1].name
+                                  : t("logs.details.inProgress")}
+                              </span>
+                              {log._liveChain.phase === "retrying" && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] px-1 py-0 shrink-0 text-amber-500 border-amber-300"
+                                >
+                                  {t("logs.details.retrying")}
+                                </Badge>
+                              )}
+                              {log._liveChain.phase === "hedge_racing" && (
+                                <GitBranch className="h-3 w-3 shrink-0 text-indigo-500" />
+                              )}
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              {t("logs.details.inProgress")}
+                            </span>
+                          )
                         ) : (
                           <div className="flex flex-col items-start gap-0.5 min-w-0">
                             <div className="flex items-center gap-1 min-w-0 w-full overflow-hidden">
@@ -431,39 +465,25 @@ export function VirtualizedLogsTable({
                                         .find(
                                           (item) =>
                                             item.reason === "request_success" ||
-                                            item.reason === "retry_success"
+                                            item.reason === "retry_success" ||
+                                            item.reason === "hedge_winner"
                                         )
                                     : null;
                                 const actualCostMultiplier =
                                   successfulProvider?.costMultiplier ?? log.costMultiplier;
-                                const multiplier = Number(actualCostMultiplier);
+                                const multiplier =
+                                  actualCostMultiplier === "" || actualCostMultiplier == null
+                                    ? null
+                                    : Number(actualCostMultiplier);
                                 const hasCostBadge =
                                   actualCostMultiplier !== "" &&
                                   actualCostMultiplier != null &&
                                   Number.isFinite(multiplier) &&
                                   multiplier !== 1;
-
-                                // Calculate actual request count (same logic as ProviderChainPopover)
-                                const isActualRequest = (item: ProviderChainItem) => {
-                                  if (item.reason === "concurrent_limit_failed") return true;
-                                  if (
-                                    item.reason === "retry_failed" ||
-                                    item.reason === "system_error"
-                                  )
-                                    return true;
-                                  if (
-                                    (item.reason === "request_success" ||
-                                      item.reason === "retry_success") &&
-                                    item.statusCode
-                                  ) {
-                                    return true;
-                                  }
-                                  return false;
-                                };
-                                const actualRequestCount =
-                                  log.providerChain?.filter(isActualRequest).length ?? 0;
-                                // Only show badge in table when no retry (Popover shows badge when retry)
-                                const showBadgeInTable = hasCostBadge && actualRequestCount <= 1;
+                                const showBadgeInTable = shouldShowCostBadgeInCell(
+                                  log.providerChain,
+                                  multiplier
+                                );
 
                                 return (
                                   <>
@@ -471,9 +491,7 @@ export function VirtualizedLogsTable({
                                       <ProviderChainPopover
                                         chain={log.providerChain ?? []}
                                         finalProvider={
-                                          (log.providerChain && log.providerChain.length > 0
-                                            ? log.providerChain[log.providerChain.length - 1].name
-                                            : null) ||
+                                          getFinalProviderName(log.providerChain ?? []) ||
                                           log.providerName ||
                                           tChain("circuit.unknown")
                                         }
@@ -493,12 +511,12 @@ export function VirtualizedLogsTable({
                                       <Badge
                                         variant="outline"
                                         className={
-                                          multiplier > 1
+                                          multiplier! > 1
                                             ? "text-[10px] px-1 py-0 bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800 shrink-0"
                                             : "text-[10px] px-1 py-0 bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800 shrink-0"
                                         }
                                       >
-                                        x{multiplier.toFixed(2)}
+                                        x{multiplier!.toFixed(2)}
                                       </Badge>
                                     )}
                                   </>

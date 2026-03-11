@@ -41,7 +41,12 @@
     "http2Fallback": "HTTP/2 回退",
     "clientError": "客户端错误",
     "endpointPoolExhausted": "端点池耗尽",
-    "vendorTypeAllTimeout": "供应商类型全端点超时"
+    "vendorTypeAllTimeout": "供应商类型全端点超时",
+    "hedgeTriggered": "Hedge 已触发",
+    "hedgeLaunched": "Hedge 备选已启动",
+    "hedgeWinner": "Hedge 竞速赢家",
+    "hedgeLoserCancelled": "Hedge 竞速输家（已取消）",
+    "clientAbort": "客户端中断"
   },
   "reasons": {
     "request_success": "成功",
@@ -56,7 +61,12 @@
     "initial_selection": "首次选择",
     "endpoint_pool_exhausted": "端点池耗尽",
     "vendor_type_all_timeout": "供应商类型全端点超时",
-    "client_restriction_filtered": "客户端受限"
+    "client_restriction_filtered": "客户端受限",
+    "hedge_triggered": "Hedge 已触发",
+    "hedge_launched": "Hedge 备选已启动",
+    "hedge_winner": "Hedge 竞速赢家",
+    "hedge_loser_cancelled": "Hedge 竞速输家（已取消）",
+    "client_abort": "客户端中断"
   },
   "filterReasons": {
     "rate_limited": "速率限制",
@@ -222,7 +232,14 @@
     "strictBlockNoEndpoints": "严格模式：无可用端点候选，跳过该供应商且不降级",
     "strictBlockSelectorError": "严格模式：端点选择器发生错误，跳过该供应商且不降级",
     "vendorTypeAllTimeout": "供应商类型全端点超时（524）",
-    "vendorTypeAllTimeoutNote": "该供应商类型的所有端点均超时，已触发供应商类型临时熔断。"
+    "vendorTypeAllTimeoutNote": "该供应商类型的所有端点均超时，已触发供应商类型临时熔断。",
+    "hedgeTriggered": "Hedge 阈值超出（正在启动备选供应商）",
+    "hedgeLaunched": "Hedge 备选供应商已启动",
+    "hedgeWinner": "Hedge 竞速赢家（最先收到首字节）",
+    "hedgeLoserCancelled": "Hedge 竞速输家（请求已取消）",
+    "clientAbort": "客户端已断开连接（请求中断）",
+    "hedgeRace": "Hedge 竞速",
+    "hedgeThresholdExceeded": "首字节超时，已启动备选供应商"
   },
   "selectionMethods": {
     "session_reuse": "会话复用",

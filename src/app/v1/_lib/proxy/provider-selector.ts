@@ -98,72 +98,26 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
 /**
  * 检查供应商是否支持指定模型（用于调度器匹配）
  *
- * 核心逻辑：
- * 1. Claude 模型请求 (claude-*)：
- *    - Anthropic 提供商：根据 allowedModels 白名单判断
- *    - 非 Anthropic 提供商：不支持 claude-* 模型调度
+ * 核心逻辑（统一所有供应商类型）：
+ * 1. 未设置 allowedModels（null 或空数组）：接受任意模型（格式兼容性由 checkFormatProviderTypeCompatibility 保证）
+ * 2. 设置了 allowedModels：仅当原始请求模型命中 allowedModels 时才支持
+ * 3. modelRedirects 仅在供应商已被选中后用于改写上游模型，不参与调度放行
  *
- * 2. 非 Claude 模型请求 (gpt-*, gemini-*, 或其他任意模型)：
- *    - Anthropic 提供商：不支持（仅支持 Claude 模型）
- *    - 非 Anthropic 提供商（codex, gemini-cli, openai-compatible）：
- *      a. 如果未设置 allowedModels（null 或空数组）：接受任意模型
- *      b. 如果设置了 allowedModels：检查模型是否在声明列表中，或有模型重定向配置
- *      注意：allowedModels 是声明性列表（用户可填写任意字符串），用于调度器匹配，不是真实模型校验
+ * 注意：allowedModels 是声明性列表（用户可填写任意字符串），用于调度器匹配，不是真实模型校验。
+ * 格式兼容性（如 claude 格式请求只路由到 claude 类型供应商）由 checkFormatProviderTypeCompatibility 独立保证。
  *
  * @param provider - 供应商信息
  * @param requestedModel - 用户请求的模型名称
  * @returns 是否支持该模型（用于调度器筛选）
  */
 function providerSupportsModel(provider: Provider, requestedModel: string): boolean {
-  const isClaudeModel = requestedModel.startsWith("claude-");
-  const isClaudeProvider =
-    provider.providerType === "claude" || provider.providerType === "claude-auth";
-
-  // Case 1: Claude 模型请求
-  if (isClaudeModel) {
-    // 1a. Anthropic 提供商
-    if (isClaudeProvider) {
-      // 未设置 allowedModels 或为空数组：允许所有 claude 模型
-      if (!provider.allowedModels || provider.allowedModels.length === 0) {
-        return true;
-      }
-      // 检查白名单
-      return provider.allowedModels.includes(requestedModel);
-    }
-
-    // 1b. 非 Anthropic 提供商不支持 Claude 模型调度
-    return false;
-  }
-
-  // Case 2: 非 Claude 模型请求（gpt-*, gemini-*, 或其他任意模型）
-  // 2a. 优先检查显式声明（支持跨类型代理）
-  // 原因：允许 Claude 类型供应商通过 allowedModels/modelRedirects 声明支持非 Claude 模型
-  // 场景：Claude 供应商配置模型重定向，将 gemini-* 请求转发到真实的 Gemini 上游
-  const explicitlyDeclared = !!(
-    provider.allowedModels?.includes(requestedModel) || provider.modelRedirects?.[requestedModel]
-  );
-
-  if (explicitlyDeclared) {
-    return true; // 显式声明优先级最高，允许跨类型代理
-  }
-
-  // 2b. Anthropic 提供商不支持非声明的非 Claude 模型
-  // 保护机制：防止将非 Claude 模型误路由到 Anthropic API
-  if (isClaudeProvider) {
-    return false;
-  }
-
-  // 2c. 非 Anthropic 提供商（codex, gemini, gemini-cli, openai-compatible）
-  // allowedModels 是声明列表，用于调度器匹配提供商
-  // 用户可以手动填写任意模型名称（不限于真实模型），用于声明该提供商"支持"哪些模型
-
-  // 未设置 allowedModels 或为空数组：接受任意模型（由上游提供商判断）
+  // 1. 未设置 allowedModels（null 或空数组）：接受任意模型
   if (!provider.allowedModels || provider.allowedModels.length === 0) {
     return true;
   }
 
-  // 不在声明列表中且无重定向配置（前面已检查过 explicitlyDeclared）
-  return false;
+  // 2. 设置了 allowedModels：只按原始请求模型做白名单匹配
+  return provider.allowedModels.includes(requestedModel);
 }
 
 /**
@@ -578,7 +532,9 @@ export class ProxyProviderResolver {
       return null;
     }
 
-    // 检查模型支持（使用新的模型匹配逻辑）
+    // 检查模型支持
+    // 注意：此处不检查格式兼容性（checkFormatProviderTypeCompatibility），
+    // 因为 session binding 仅由 pickRandomProvider 创建，该路径已保证格式兼容。
     const requestedModel = session.getOriginalModel();
     if (requestedModel && !providerSupportsModel(provider, requestedModel)) {
       logger.debug("ProviderSelector: Session provider does not support requested model", {
@@ -1392,4 +1348,4 @@ export class ProxyProviderResolver {
 }
 
 // Export for testing
-export { checkProviderGroupMatch };
+export { checkProviderGroupMatch, providerSupportsModel };
