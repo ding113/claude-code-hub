@@ -14,6 +14,7 @@ export type SpecialSetting =
   | BillingHeaderRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
+  | AnthropicEffortSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting
   | GeminiGoogleSearchOverrideSpecialSetting
@@ -69,6 +70,19 @@ export type GuardInterceptSpecialSetting = {
    * 原始原因（通常为 JSON 字符串），保持原样以便前端与日志一致展示。
    */
   reason: string | null;
+};
+
+/**
+ * Anthropic effort 请求参数审计
+ *
+ * 用于记录原始 Anthropic 请求体中的 output_config.effort，
+ * 便于在使用记录中以标签形式展示。
+ */
+export type AnthropicEffortSpecialSetting = {
+  type: "anthropic_effort";
+  scope: "request";
+  hit: boolean;
+  effort: string;
 };
 
 /**

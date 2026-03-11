@@ -5,6 +5,7 @@ import { db } from "@/drizzle/db";
 import { keys as keysTable, messageRequest, providers, usageLedger, users } from "@/drizzle/schema";
 import { TTLMap } from "@/lib/cache/ttl-map";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
+import { extractAnthropicEffortFromSpecialSettings } from "@/lib/utils/anthropic-effort";
 import { buildUnifiedSpecialSettings } from "@/lib/utils/special-settings";
 import type { ProviderChainItem } from "@/types/message";
 import type { SpecialSetting } from "@/types/special-settings";
@@ -68,6 +69,7 @@ export interface UsageLogRow {
   swapCacheTtlApplied: boolean | null; // 是否启用了swap cache TTL billing
   specialSettings: SpecialSetting[] | null; // 特殊设置（审计/展示）
   _liveChain?: { chain: ProviderChainItem[]; phase: string; updatedAt: number } | null;
+  anthropicEffort?: string | null;
 }
 
 export interface UsageLogSummary {
@@ -221,6 +223,7 @@ export async function findUsageLogsBatch(
       cacheTtlApplied: row.cacheTtlApplied,
       context1mApplied: row.context1mApplied,
     });
+    const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
 
     return {
       ...row,
@@ -233,6 +236,7 @@ export async function findUsageLogsBatch(
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
+      anthropicEffort,
     };
   });
 
@@ -423,6 +427,43 @@ interface UsageLogSlimRow {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
+  anthropicEffort?: string | null;
+}
+
+function mapUsageLogSlimRow(row: {
+  id: number;
+  createdAt: Date | null;
+  model: string | null;
+  originalModel: string | null;
+  endpoint: string | null;
+  statusCode: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  costUsd: string | null | { toString(): string };
+  durationMs: number | null;
+  cacheCreationInputTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreation5mInputTokens: number | null;
+  cacheCreation1hInputTokens: number | null;
+  cacheTtlApplied: string | null;
+  specialSettings?: SpecialSetting[] | null;
+}): UsageLogSlimRow {
+  const { specialSettings, ...rest } = row;
+  const unifiedSpecialSettings = buildUnifiedSpecialSettings({
+    existing: Array.isArray(specialSettings) ? specialSettings : null,
+    blockedBy: null,
+    blockedReason: null,
+    statusCode: rest.statusCode,
+    cacheTtlApplied: rest.cacheTtlApplied,
+    context1mApplied: null,
+  });
+  const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
+
+  return {
+    ...rest,
+    costUsd: rest.costUsd?.toString() ?? null,
+    anthropicEffort,
+  };
 }
 
 // my-usage logs: short TTL cache for total count to avoid repeated COUNT(*) on pagination/polling.
@@ -474,6 +515,7 @@ export async function findUsageLogsForKeySlim(
       cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
       cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
       cacheTtlApplied: messageRequest.cacheTtlApplied,
+      specialSettings: messageRequest.specialSettings,
     })
     .from(messageRequest)
     .where(and(...conditions))
@@ -553,7 +595,11 @@ export async function findUsageLogsForKeySlim(
     if (cachedTotal !== undefined) {
       ledgerTotal = Math.max(cachedTotal, ledgerTotal);
       return {
-        logs: ledgerPageRows.map((row) => ({ ...row, costUsd: row.costUsd?.toString() ?? null })),
+        logs: ledgerPageRows.map((row) => ({
+          ...row,
+          costUsd: row.costUsd?.toString() ?? null,
+          anthropicEffort: null,
+        })),
         total: ledgerTotal,
       };
     }
@@ -575,6 +621,7 @@ export async function findUsageLogsForKeySlim(
     const ledgerLogs: UsageLogSlimRow[] = ledgerPageRows.map((row) => ({
       ...row,
       costUsd: row.costUsd?.toString() ?? null,
+      anthropicEffort: null,
     }));
 
     usageLogSlimTotalCache.set(totalCacheKey, ledgerTotal);
@@ -587,7 +634,7 @@ export async function findUsageLogsForKeySlim(
   if (cachedTotal !== undefined) {
     total = Math.max(cachedTotal, total);
     return {
-      logs: pageRows.map((row) => ({ ...row, costUsd: row.costUsd?.toString() ?? null })),
+      logs: pageRows.map((row) => mapUsageLogSlimRow(row)),
       total,
     };
   }
@@ -606,10 +653,7 @@ export async function findUsageLogsForKeySlim(
     total = countResults[0]?.totalRows ?? 0;
   }
 
-  const logs: UsageLogSlimRow[] = pageRows.map((row) => ({
-    ...row,
-    costUsd: row.costUsd?.toString() ?? null,
-  }));
+  const logs: UsageLogSlimRow[] = pageRows.map((row) => mapUsageLogSlimRow(row));
 
   usageLogSlimTotalCache.set(totalCacheKey, total);
   return { logs, total };
@@ -823,6 +867,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       cacheTtlApplied: row.cacheTtlApplied,
       context1mApplied: row.context1mApplied,
     });
+    const anthropicEffort = extractAnthropicEffortFromSpecialSettings(unifiedSpecialSettings);
 
     return {
       ...row,
@@ -835,6 +880,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       providerChain: row.providerChain as ProviderChainItem[] | null,
       endpoint: row.endpoint,
       specialSettings: unifiedSpecialSettings,
+      anthropicEffort,
     };
   });
 

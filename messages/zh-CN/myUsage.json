@@ -58,7 +58,8 @@
     "next": "下一页",
     "noLogs": "暂无日志",
     "unknownModel": "未知模型",
-    "billingModel": "计费：{model}"
+    "billingModel": "计费：{model}",
+    "anthropicEffort": "Effort: {effort}"
   },
   "expiration": {
     "title": "过期时间",

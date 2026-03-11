@@ -58,7 +58,8 @@
     "next": "次へ",
     "noLogs": "ログがありません",
     "unknownModel": "不明なモデル",
-    "billingModel": "課金: {model}"
+    "billingModel": "課金: {model}",
+    "anthropicEffort": "Effort: {effort}"
   },
   "expiration": {
     "title": "有効期限",
