@@ -152,6 +152,35 @@ export function isHedgeRace(chain: ProviderChainItem[]): boolean {
 }
 
 /**
+ * Determine the final (winning) provider from a decision chain.
+ *
+ * Priority order:
+ *  1. hedge_winner  -- the provider that won a hedge race
+ *  2. Last request_success / retry_success with a statusCode
+ *  3. Fallback to the last entry's name
+ *
+ * Returns null for empty / nullish chains.
+ */
+export function getFinalProviderName(chain: ProviderChainItem[] | null | undefined): string | null {
+  if (!chain || chain.length === 0) return null;
+
+  // Priority 1: hedge_winner
+  const hedgeWinner = chain.find((item) => item.reason === "hedge_winner");
+  if (hedgeWinner) return hedgeWinner.name;
+
+  // Priority 2: last successful request (must have statusCode)
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const item = chain[i];
+    if ((item.reason === "request_success" || item.reason === "retry_success") && item.statusCode) {
+      return item.name;
+    }
+  }
+
+  // Priority 3: fallback to last entry
+  return chain[chain.length - 1].name;
+}
+
+/**
  * Count real retries (excluding hedge race concurrent attempts).
  *
  * Design Decision:

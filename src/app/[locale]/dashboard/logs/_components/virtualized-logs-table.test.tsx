@@ -53,6 +53,7 @@ vi.mock("@/hooks/use-virtualizer", () => ({
 
 vi.mock("@/lib/utils/provider-chain-formatter", () => ({
   formatProviderSummary: () => "provider summary",
+  getFinalProviderName: () => "mock-provider",
   getRetryCount: () => 0,
   isHedgeRace: () => false,
   isActualRequest: () => true,
@@ -303,9 +304,9 @@ describe("virtualized-logs-table multiplier badge", () => {
     const html = renderToStaticMarkup(
       <VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />
     );
-    // VirtualizedLogsTable uses ProviderChainPopover which renders the provider name directly,
-    // not via formatProviderSummary (which is only used in other contexts)
-    expect(html).toContain("p1");
+    // VirtualizedLogsTable uses ProviderChainPopover which renders the provider name
+    // via getFinalProviderName (mocked to return "mock-provider")
+    expect(html).toContain("mock-provider");
     expect(html).toContain("logs.table.loadingMore");
   });
 

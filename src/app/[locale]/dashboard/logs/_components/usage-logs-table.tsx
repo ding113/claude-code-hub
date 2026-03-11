@@ -26,7 +26,7 @@ import {
   shouldHideOutputRate,
 } from "@/lib/utils/performance-formatter";
 import { shouldShowCostBadgeInCell } from "@/lib/utils/provider-chain-display";
-import { formatProviderSummary } from "@/lib/utils/provider-chain-formatter";
+import { formatProviderSummary, getFinalProviderName } from "@/lib/utils/provider-chain-formatter";
 import {
   getPricingResolutionSpecialSetting,
   hasPriorityServiceTierSpecialSetting,
@@ -202,9 +202,7 @@ export function UsageLogsTable({
                               <ProviderChainPopover
                                 chain={log.providerChain ?? []}
                                 finalProvider={
-                                  (log.providerChain && log.providerChain.length > 0
-                                    ? log.providerChain[log.providerChain.length - 1].name
-                                    : null) ||
+                                  getFinalProviderName(log.providerChain ?? []) ||
                                   log.providerName ||
                                   tChain("circuit.unknown")
                                 }

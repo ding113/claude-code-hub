@@ -6,6 +6,7 @@ import {
   formatProviderDescription,
   formatProviderSummary,
   formatProviderTimeline,
+  getFinalProviderName,
   getRetryCount,
   isActualRequest,
   isHedgeRace,
@@ -795,5 +796,102 @@ describe("Edge cases for hedge race detection", () => {
         (item) => item.reason === "hedge_winner" || item.reason === "hedge_loser_cancelled"
       )
     ).toBe(true);
+  });
+});
+
+// =============================================================================
+// getFinalProviderName tests
+// =============================================================================
+
+describe("getFinalProviderName", () => {
+  test("returns null for empty chain", () => {
+    expect(getFinalProviderName([])).toBeNull();
+  });
+
+  test("returns null for null/undefined chain", () => {
+    expect(getFinalProviderName(null as unknown as ProviderChainItem[])).toBeNull();
+    expect(getFinalProviderName(undefined as unknown as ProviderChainItem[])).toBeNull();
+  });
+
+  test("returns provider name for single request_success", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "provider-a", reason: "request_success", statusCode: 200, timestamp: 1000 },
+    ];
+    expect(getFinalProviderName(chain)).toBe("provider-a");
+  });
+
+  test("returns hedge_winner provider when hedge_loser_cancelled is last", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "provider-a", reason: "initial_selection", timestamp: 0 },
+      { id: 1, name: "provider-a", reason: "hedge_triggered", timestamp: 1000 },
+      { id: 2, name: "provider-b", reason: "hedge_launched", timestamp: 1001 },
+      {
+        id: 2,
+        name: "provider-b",
+        reason: "hedge_winner",
+        statusCode: 200,
+        timestamp: 2000,
+      },
+      { id: 1, name: "provider-a", reason: "hedge_loser_cancelled", timestamp: 2001 },
+    ];
+    expect(getFinalProviderName(chain)).toBe("provider-b");
+  });
+
+  test("returns retry_success provider for retry chain", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "provider-a", reason: "retry_failed", timestamp: 1000 },
+      {
+        id: 2,
+        name: "provider-b",
+        reason: "retry_success",
+        statusCode: 200,
+        timestamp: 2000,
+      },
+    ];
+    expect(getFinalProviderName(chain)).toBe("provider-b");
+  });
+
+  test("returns last entry name when all entries are failures", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "provider-a", reason: "retry_failed", timestamp: 1000 },
+      { id: 2, name: "provider-b", reason: "retry_failed", timestamp: 2000 },
+    ];
+    expect(getFinalProviderName(chain)).toBe("provider-b");
+  });
+
+  test("returns last entry name for intermediate-only chain", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "provider-a", reason: "initial_selection", timestamp: 0 },
+    ];
+    expect(getFinalProviderName(chain)).toBe("provider-a");
+  });
+
+  test("returns fallback for retry_success without statusCode", () => {
+    const chain: ProviderChainItem[] = [
+      { id: 1, name: "provider-a", reason: "retry_success", timestamp: 1000 },
+    ];
+    // No statusCode means it's an intermediate state, falls through to last-entry fallback
+    expect(getFinalProviderName(chain)).toBe("provider-a");
+  });
+
+  test("hedge_winner takes priority over request_success earlier in chain", () => {
+    // Edge case: both hedge_winner and request_success present
+    const chain: ProviderChainItem[] = [
+      {
+        id: 1,
+        name: "provider-a",
+        reason: "request_success",
+        statusCode: 200,
+        timestamp: 500,
+      },
+      {
+        id: 2,
+        name: "provider-b",
+        reason: "hedge_winner",
+        statusCode: 200,
+        timestamp: 2000,
+      },
+    ];
+    expect(getFinalProviderName(chain)).toBe("provider-b");
   });
 });
