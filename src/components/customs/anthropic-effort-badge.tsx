@@ -23,11 +23,7 @@ interface AnthropicEffortBadgeProps {
   className?: string;
 }
 
-export function AnthropicEffortBadge({
-  effort,
-  label,
-  className,
-}: AnthropicEffortBadgeProps) {
+export function AnthropicEffortBadge({ effort, label, className }: AnthropicEffortBadgeProps) {
   return (
     <Badge
       variant="outline"
