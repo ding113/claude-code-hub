@@ -29,7 +29,7 @@ export function ProviderTypeFilter({ value, onChange, disabled = false }: Provid
     <div className="flex items-center gap-2">
       <Filter className="h-4 w-4 text-muted-foreground" />
       <Select value={value} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger className="w-[200px]" disabled={disabled}>
+        <SelectTrigger className="w-[160px]" disabled={disabled}>
           <SelectValue placeholder={tForm("filterByType")} />
         </SelectTrigger>
         <SelectContent>
@@ -40,13 +40,13 @@ export function ProviderTypeFilter({ value, onChange, disabled = false }: Provid
               const config = PROVIDER_TYPE_CONFIG[type];
               const Icon = config.icon;
               const typeKey = getProviderTypeTranslationKey(type);
-              const label = type === "openai-compatible" ? "OpenAI" : tTypes(`${typeKey}.label`);
+              const label = tTypes(`${typeKey}.label`);
 
               return (
                 <SelectItem key={type} value={type}>
                   <div className="flex items-center gap-2">
                     <Icon className={`h-3.5 w-3.5 ${config.iconColor}`} />
-                    <span>{label}</span>
+                    <span className="truncate max-w-[100px]">{label}</span>
                   </div>
                 </SelectItem>
               );
