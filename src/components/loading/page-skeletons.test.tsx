@@ -8,8 +8,8 @@ import {
 
 describe("page-skeletons", () => {
   test("LoadingState renders label and aria-busy", () => {
-    const html = renderToStaticMarkup(<LoadingState label="加载中" />);
-    expect(html).toContain("加载中");
+    const html = renderToStaticMarkup(<LoadingState label="Loading" />);
+    expect(html).toContain("Loading");
     expect(html).toContain('aria-busy="true"');
   });
 

@@ -271,7 +271,7 @@ export const TableColumnTypes = {
    * 操作列
    */
   actions: <T extends TableData>(
-    title: string = "操作",
+    title: string = "Actions",
     render: (value: any, record: T, index: number) => ReactNode,
     options?: Partial<TableColumn<T>>
   ): TableColumn<T> => ({

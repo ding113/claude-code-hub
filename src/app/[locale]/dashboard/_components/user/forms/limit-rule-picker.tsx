@@ -55,13 +55,13 @@ export interface LimitRulePickerProps {
 }
 
 const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
-  { type: "limitRpm", fallbackLabel: "RPM 限额" },
-  { type: "limit5h", fallbackLabel: "5小时限额" },
-  { type: "limitDaily", fallbackLabel: "每日限额" },
-  { type: "limitWeekly", fallbackLabel: "周限额" },
-  { type: "limitMonthly", fallbackLabel: "月限额" },
-  { type: "limitTotal", fallbackLabel: "总限额" },
-  { type: "limitSessions", fallbackLabel: "并发 Session" },
+  { type: "limitRpm", fallbackLabel: "RPM limit" },
+  { type: "limit5h", fallbackLabel: "5h limit" },
+  { type: "limitDaily", fallbackLabel: "Daily limit" },
+  { type: "limitWeekly", fallbackLabel: "Weekly limit" },
+  { type: "limitMonthly", fallbackLabel: "Monthly limit" },
+  { type: "limitTotal", fallbackLabel: "Total limit" },
+  { type: "limitSessions", fallbackLabel: "Concurrent sessions" },
 ];
 
 const QUICK_VALUES = [10, 50, 100, 500] as const;
@@ -132,17 +132,17 @@ export function LimitRulePicker({
     setError(null);
 
     if (!type) {
-      setError(getTranslation(translations, "errors.missingType", "请选择限额类型"));
+      setError(getTranslation(translations, "errors.missingType", "Please select a limit type"));
       return;
     }
 
     if (!Number.isFinite(numericValue) || numericValue < 0) {
-      setError(getTranslation(translations, "errors.invalidValue", "请输入有效数值"));
+      setError(getTranslation(translations, "errors.invalidValue", "Please enter a valid value"));
       return;
     }
 
     if (needsTime && !isValidTime(dailyTime)) {
-      setError(getTranslation(translations, "errors.invalidTime", "请输入有效时间 (HH:mm)"));
+      setError(getTranslation(translations, "errors.invalidTime", "Please enter a valid time (HH:mm)"));
       return;
     }
 
@@ -158,9 +158,9 @@ export function LimitRulePicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
-          <DialogTitle>{getTranslation(translations, "title", "添加限额规则")}</DialogTitle>
+          <DialogTitle>{getTranslation(translations, "title", "Add limit rule")}</DialogTitle>
           <DialogDescription>
-            {getTranslation(translations, "description", "选择限额类型并设置数值")}
+            {getTranslation(translations, "description", "Select limit type and set value")}
           </DialogDescription>
         </DialogHeader>
 
@@ -174,11 +174,11 @@ export function LimitRulePicker({
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>{getTranslation(translations, "fields.type.label", "限额类型")}</Label>
+              <Label>{getTranslation(translations, "fields.type.label", "Limit type")}</Label>
               <Select value={type} onValueChange={(val) => setType(val as LimitType)}>
                 <SelectTrigger>
                   <SelectValue
-                    placeholder={getTranslation(translations, "fields.type.placeholder", "请选择")}
+                    placeholder={getTranslation(translations, "fields.type.placeholder", "Select")}
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -196,7 +196,7 @@ export function LimitRulePicker({
                     {getTranslation(
                       translations,
                       "overwriteHint",
-                      "此类型已存在，保存将覆盖原有值"
+                      "This type already exists, saving will overwrite"
                     )}
                   </span>
                 </div>
@@ -204,7 +204,7 @@ export function LimitRulePicker({
             </div>
 
             <div className="space-y-2">
-              <Label>{getTranslation(translations, "fields.value.label", "数值")}</Label>
+              <Label>{getTranslation(translations, "fields.value.label", "Value")}</Label>
               <Input
                 type="number"
                 min={0}
@@ -213,7 +213,7 @@ export function LimitRulePicker({
                 autoFocus
                 value={rawValue}
                 onChange={(e) => setRawValue(e.target.value)}
-                placeholder={getTranslation(translations, "fields.value.placeholder", "请输入")}
+                placeholder={getTranslation(translations, "fields.value.placeholder", "Enter value")}
                 aria-invalid={Boolean(error)}
               />
 
@@ -232,7 +232,7 @@ export function LimitRulePicker({
                     onClick={() => setRawValue(String(v))}
                   >
                     {v === 0
-                      ? getTranslation(translations, "quickValues.unlimited", "无限")
+                      ? getTranslation(translations, "quickValues.unlimited", "Unlimited")
                       : type === "limitSessions" || type === "limitRpm"
                         ? v
                         : `$${v}`}
@@ -245,7 +245,7 @@ export function LimitRulePicker({
           {isDaily && (
             <div className={cn("grid gap-4", dailyMode === "fixed" ? "sm:grid-cols-2" : "")}>
               <div className="space-y-2">
-                <Label>{getTranslation(translations, "daily.mode.label", "每日模式")}</Label>
+                <Label>{getTranslation(translations, "daily.mode.label", "Daily mode")}</Label>
                 <Select
                   value={dailyMode}
                   onValueChange={(val) => setDailyMode(val as DailyResetMode)}
@@ -266,7 +266,7 @@ export function LimitRulePicker({
 
               {dailyMode === "fixed" && (
                 <div className="space-y-2">
-                  <Label>{getTranslation(translations, "daily.time.label", "重置时间")}</Label>
+                  <Label>{getTranslation(translations, "daily.time.label", "Reset time")}</Label>
                   <Input
                     type="time"
                     step={60}
@@ -290,10 +290,10 @@ export function LimitRulePicker({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleCancel}>
-              {getTranslation(translations, "cancel", "取消")}
+              {getTranslation(translations, "cancel", "Cancel")}
             </Button>
             <Button type="submit" disabled={!canConfirm}>
-              {getTranslation(translations, "confirm", "保存")}
+              {getTranslation(translations, "confirm", "Save")}
             </Button>
           </DialogFooter>
         </form>
