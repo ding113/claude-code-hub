@@ -151,7 +151,7 @@ export function LogCleanupPanel() {
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger
             id="time-range"
-            className="w-full sm:w-[300px] border-white/10 bg-white/[0.02]"
+            className="w-full sm:w-[300px]"
           >
             <SelectValue />
           </SelectTrigger>

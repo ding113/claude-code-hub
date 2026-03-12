@@ -17,7 +17,7 @@ export default function SettingsDataPage() {
   const [isUsageGuideOpen, setIsUsageGuideOpen] = useState(false);
 
   return (
-    <>
+    <div className="space-y-4">
       <SettingsPageHeader
         title={t("data.title")}
         description={t("data.description")}
@@ -37,7 +37,6 @@ export default function SettingsDataPage() {
         title={t("data.section.cleanup.title")}
         description={t("data.section.cleanup.description")}
         icon="trash"
-        variant="warning"
       >
         <LogCleanupPanel />
       </Section>
@@ -108,6 +107,6 @@ export default function SettingsDataPage() {
           </CollapsibleContent>
         </Collapsible>
       </div>
-    </>
+    </div>
   );
 }

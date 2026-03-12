@@ -77,7 +77,7 @@ export function DatabaseStatusDisplay() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {status.isAvailable ? (
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border bg-green-500/10 text-green-400 border-green-500/20">
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border bg-green-500/15 text-green-500 border-green-500/30">
               {t("connected")}
             </span>
           ) : (
