@@ -635,6 +635,9 @@ export const requestFilters = pgTable('request_filters', {
     .$type<'global' | 'providers' | 'groups'>(),
   providerIds: jsonb('provider_ids').$type<number[] | null>(),
   groupTags: jsonb('group_tags').$type<string[] | null>(),
+  ruleMode: varchar('rule_mode', { length: 20 }).notNull().default('simple').$type<'simple' | 'advanced'>(),
+  executionPhase: varchar('execution_phase', { length: 20 }).notNull().default('guard').$type<'guard' | 'final'>(),
+  operations: jsonb('operations'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -642,6 +645,7 @@ export const requestFilters = pgTable('request_filters', {
   requestFiltersScopeIdx: index('idx_request_filters_scope').on(table.scope),
   requestFiltersActionIdx: index('idx_request_filters_action').on(table.action),
   requestFiltersBindingIdx: index('idx_request_filters_binding').on(table.isEnabled, table.bindingType),
+  requestFiltersPhaseIdx: index('idx_request_filters_phase').on(table.isEnabled, table.executionPhase),
 }));
 
 // Sensitive Words table

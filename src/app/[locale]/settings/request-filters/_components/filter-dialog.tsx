@@ -25,11 +25,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import type { FilterOperation } from "@/lib/request-filter-types";
 import { cn } from "@/lib/utils";
 import type {
   RequestFilter,
   RequestFilterBindingType,
+  RequestFilterExecutionPhase,
   RequestFilterMatchType,
+  RequestFilterRuleMode,
 } from "@/repository/request-filters";
 import { GroupMultiSelect } from "./group-multi-select";
 import { ProviderMultiSelect } from "./provider-multi-select";
@@ -141,6 +144,16 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   );
   const [providerIds, setProviderIds] = useState<number[]>(filter?.providerIds ?? []);
   const [groupTags, setGroupTags] = useState<string[]>(filter?.groupTags ?? []);
+  const [ruleMode, setRuleMode] = useState<RequestFilterRuleMode>(filter?.ruleMode ?? "simple");
+  const [executionPhase, setExecutionPhase] = useState<RequestFilterExecutionPhase>(
+    filter?.executionPhase ?? "final"
+  );
+  const [operationsJson, setOperationsJson] = useState(() => {
+    if (filter?.operations) {
+      return JSON.stringify(filter.operations, null, 2);
+    }
+    return "";
+  });
 
   useEffect(() => {
     // Sync controlled open prop to internal state
@@ -169,6 +182,9 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       setBindingType(filter.bindingType ?? "global");
       setProviderIds(filter.providerIds ?? []);
       setGroupTags(filter.groupTags ?? []);
+      setRuleMode(filter.ruleMode ?? "simple");
+      setExecutionPhase(filter.executionPhase ?? "final");
+      setOperationsJson(filter.operations ? JSON.stringify(filter.operations, null, 2) : "");
     }
   }, [filter]);
 
@@ -203,7 +219,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim() || !target.trim()) {
+    if (!name.trim() || (ruleMode === "simple" && !target.trim())) {
       toast.error(t("dialog.validation.fieldRequired"));
       return;
     }
@@ -222,21 +238,46 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       }
     }
 
+    let parsedOperations: FilterOperation[] | null = null;
+    if (ruleMode === "advanced") {
+      const raw = operationsJson.trim();
+      if (!raw) {
+        toast.error(t("dialog.validation.operationsRequired"));
+        setIsSubmitting(false);
+        return;
+      }
+      try {
+        parsedOperations = JSON.parse(raw);
+        if (!Array.isArray(parsedOperations)) {
+          toast.error(t("dialog.validation.invalidOperations"));
+          setIsSubmitting(false);
+          return;
+        }
+      } catch {
+        toast.error(t("dialog.validation.invalidOperations"));
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
     try {
       const payload = {
         name: name.trim(),
         description: description.trim() || undefined,
         scope,
         action,
-        target: target.trim(),
-        matchType: showMatchType ? (matchType ?? "contains") : null,
-        replacement: showReplacement ? parsedReplacement : null,
+        target: ruleMode === "simple" ? target.trim() : "",
+        matchType: showMatchType && ruleMode === "simple" ? (matchType ?? "contains") : null,
+        replacement: showReplacement && ruleMode === "simple" ? parsedReplacement : null,
         priority,
         isEnabled,
         bindingType,
         providerIds: bindingType === "providers" ? providerIds : null,
         groupTags: bindingType === "groups" ? groupTags : null,
-      } as const;
+        ruleMode,
+        executionPhase,
+        operations: ruleMode === "advanced" ? parsedOperations : null,
+      };
 
       const result =
         mode === "create"
@@ -330,99 +371,162 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="filter-scope" className="text-sm font-medium text-foreground">
-              {t("dialog.scope")}
-            </Label>
-            <Select value={scope} onValueChange={(val) => setScope(val as RequestFilter["scope"])}>
-              <SelectTrigger
-                id="filter-scope"
-                className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
-              >
+            <Label className="text-sm font-medium text-foreground">{t("dialog.ruleMode")}</Label>
+            <Select
+              value={ruleMode}
+              onValueChange={(val) => setRuleMode(val as RequestFilterRuleMode)}
+            >
+              <SelectTrigger className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
-                <SelectItem value="header">{t("scopeLabel.header")}</SelectItem>
-                <SelectItem value="body">{t("scopeLabel.body")}</SelectItem>
+                <SelectItem value="simple">{t("ruleMode.simple")}</SelectItem>
+                <SelectItem value="advanced">{t("ruleMode.advanced")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="filter-action" className="text-sm font-medium text-foreground">
-              {t("dialog.action")}
+            <Label className="text-sm font-medium text-foreground">
+              {t("dialog.executionPhase")}
             </Label>
             <Select
-              value={action}
-              onValueChange={(val) => setAction(val as RequestFilter["action"])}
+              value={executionPhase}
+              onValueChange={(val) => setExecutionPhase(val as RequestFilterExecutionPhase)}
             >
-              <SelectTrigger
-                id="filter-action"
-                className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
-              >
+              <SelectTrigger className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
-                {actionOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
+                <SelectItem value="guard">{t("dialog.executionPhaseGuard")}</SelectItem>
+                <SelectItem value="final">{t("dialog.executionPhaseFinal")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {showMatchType && (
-            <div className="grid gap-2">
-              <Label htmlFor="filter-match-type" className="text-sm font-medium text-foreground">
-                {t("dialog.matchType")}
-              </Label>
-              <Select
-                value={matchType ?? "contains"}
-                onValueChange={(val) => setMatchType(val as RequestFilterMatchType)}
-              >
-                <SelectTrigger
-                  id="filter-match-type"
-                  className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+          {ruleMode === "simple" && (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="filter-scope" className="text-sm font-medium text-foreground">
+                  {t("dialog.scope")}
+                </Label>
+                <Select
+                  value={scope}
+                  onValueChange={(val) => setScope(val as RequestFilter["scope"])}
                 >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-card border-border">
-                  <SelectItem value="contains">{t("dialog.matchTypeContains")}</SelectItem>
-                  <SelectItem value="exact">{t("dialog.matchTypeExact")}</SelectItem>
-                  <SelectItem value="regex">{t("dialog.matchTypeRegex")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                  <SelectTrigger
+                    id="filter-scope"
+                    className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="header">{t("scopeLabel.header")}</SelectItem>
+                    <SelectItem value="body">{t("scopeLabel.body")}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="filter-action" className="text-sm font-medium text-foreground">
+                  {t("dialog.action")}
+                </Label>
+                <Select
+                  value={action}
+                  onValueChange={(val) => setAction(val as RequestFilter["action"])}
+                >
+                  <SelectTrigger
+                    id="filter-action"
+                    className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    {actionOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {showMatchType && (
+                <div className="grid gap-2">
+                  <Label
+                    htmlFor="filter-match-type"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    {t("dialog.matchType")}
+                  </Label>
+                  <Select
+                    value={matchType ?? "contains"}
+                    onValueChange={(val) => setMatchType(val as RequestFilterMatchType)}
+                  >
+                    <SelectTrigger
+                      id="filter-match-type"
+                      className="bg-muted/50 border-border focus:border-[#E25706] focus:ring-[#E25706]"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="contains">{t("dialog.matchTypeContains")}</SelectItem>
+                      <SelectItem value="exact">{t("dialog.matchTypeExact")}</SelectItem>
+                      <SelectItem value="regex">{t("dialog.matchTypeRegex")}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="grid gap-2">
+                <Label htmlFor="filter-target" className="text-sm font-medium text-foreground">
+                  {t("dialog.target")}
+                </Label>
+                <DarkInput
+                  id="filter-target"
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  placeholder={
+                    action === "json_path"
+                      ? t("dialog.jsonPathPlaceholder")
+                      : t("dialog.targetPlaceholder")
+                  }
+                  required
+                />
+              </div>
+
+              {showReplacement && (
+                <div className="grid gap-2">
+                  <Label
+                    htmlFor="filter-replacement"
+                    className="text-sm font-medium text-foreground"
+                  >
+                    {t("dialog.replacement")}
+                  </Label>
+                  <DarkTextarea
+                    id="filter-replacement"
+                    value={replacement}
+                    onChange={(e) => setReplacement(e.target.value)}
+                    placeholder={t("dialog.replacementPlaceholder")}
+                    rows={3}
+                  />
+                </div>
+              )}
+            </>
           )}
 
-          <div className="grid gap-2">
-            <Label htmlFor="filter-target" className="text-sm font-medium text-foreground">
-              {t("dialog.target")}
-            </Label>
-            <DarkInput
-              id="filter-target"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              placeholder={
-                action === "json_path"
-                  ? t("dialog.jsonPathPlaceholder")
-                  : t("dialog.targetPlaceholder")
-              }
-              required
-            />
-          </div>
-
-          {showReplacement && (
+          {ruleMode === "advanced" && (
             <div className="grid gap-2">
-              <Label htmlFor="filter-replacement" className="text-sm font-medium text-foreground">
-                {t("dialog.replacement")}
+              <Label className="text-sm font-medium text-foreground">
+                {t("dialog.operationsLabel")}
               </Label>
               <DarkTextarea
-                id="filter-replacement"
-                value={replacement}
-                onChange={(e) => setReplacement(e.target.value)}
-                placeholder={t("dialog.replacementPlaceholder")}
-                rows={3}
+                id="filter-operations"
+                value={operationsJson}
+                onChange={(e) => setOperationsJson(e.target.value)}
+                placeholder={t("dialog.operations")}
+                rows={10}
+                className="font-mono text-xs"
               />
             </div>
           )}

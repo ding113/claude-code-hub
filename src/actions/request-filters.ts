@@ -5,6 +5,7 @@ import safeRegex from "safe-regex";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { requestFilterEngine } from "@/lib/request-filter-engine";
+import type { FilterMatcher, FilterOperation, InsertOp } from "@/lib/request-filter-types";
 import {
   createRequestFilter,
   deleteRequestFilter,
@@ -13,7 +14,9 @@ import {
   type RequestFilter,
   type RequestFilterAction,
   type RequestFilterBindingType,
+  type RequestFilterExecutionPhase,
   type RequestFilterMatchType,
+  type RequestFilterRuleMode,
   type RequestFilterScope,
   updateRequestFilter,
 } from "@/repository/request-filters";
@@ -23,6 +26,75 @@ const SETTINGS_PATH = "/settings/request-filters";
 
 function isAdmin(session: Awaited<ReturnType<typeof getSession>>): boolean {
   return !!session && session.user.role === "admin";
+}
+
+// ---------------------------------------------------------------------------
+// Validation: advanced mode operations
+// ---------------------------------------------------------------------------
+
+function validateMatcher(matcher: FilterMatcher, context: string): string | null {
+  if (matcher.matchType === "regex" && typeof matcher.value === "string") {
+    if (!safeRegex(matcher.value)) {
+      return `${context}: regex matcher has ReDoS risk`;
+    }
+  }
+  return null;
+}
+
+function validateOperations(operations: unknown): string | null {
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return "Advanced mode requires at least one operation";
+  }
+
+  for (let i = 0; i < operations.length; i++) {
+    const raw = operations[i] as Record<string, unknown> | null | undefined;
+    const prefix = `operations[${i}]`;
+
+    if (!raw || typeof raw !== "object") {
+      return `${prefix}: must be an object`;
+    }
+
+    if (!raw.op || !["set", "remove", "merge", "insert"].includes(raw.op as string)) {
+      return `${prefix}: invalid op type "${String(raw.op)}"`;
+    }
+
+    if (!raw.scope || !["header", "body"].includes(raw.scope as string)) {
+      return `${prefix}: invalid scope "${String(raw.scope)}"`;
+    }
+
+    const op = raw as unknown as FilterOperation;
+
+    // merge and insert are body-only
+    if ((op.op === "merge" || op.op === "insert") && op.scope !== "body") {
+      return `${prefix}: ${op.op} operation only supports body scope`;
+    }
+
+    if (!("path" in op) || typeof op.path !== "string" || !op.path.trim()) {
+      return `${prefix}: path is required`;
+    }
+
+    // Op-specific validation
+    if (op.op === "insert") {
+      const insertOp = op as InsertOp;
+      if ((insertOp.position === "before" || insertOp.position === "after") && !insertOp.anchor) {
+        return `${prefix}: anchor is required when position is "${insertOp.position}"`;
+      }
+      if (insertOp.anchor) {
+        const matcherErr = validateMatcher(insertOp.anchor, `${prefix}.anchor`);
+        if (matcherErr) return matcherErr;
+      }
+      if (insertOp.dedupe?.byFields && !Array.isArray(insertOp.dedupe.byFields)) {
+        return `${prefix}: dedupe.byFields must be an array`;
+      }
+    }
+
+    if (op.op === "remove" && "matcher" in op && op.matcher) {
+      const matcherErr = validateMatcher(op.matcher, `${prefix}.matcher`);
+      if (matcherErr) return matcherErr;
+    }
+  }
+
+  return null;
 }
 
 function validatePayload(data: {
@@ -35,13 +107,25 @@ function validatePayload(data: {
   bindingType?: RequestFilterBindingType;
   providerIds?: number[] | null;
   groupTags?: string[] | null;
+  ruleMode?: RequestFilterRuleMode;
+  operations?: FilterOperation[] | null;
 }): string | null {
   if (!data.name?.trim()) return "名称不能为空";
-  if (!data.target?.trim()) return "目标字段不能为空";
 
-  if (data.action === "text_replace" && data.matchType === "regex" && data.target) {
-    if (!safeRegex(data.target)) {
-      return "正则表达式存在 ReDoS 风险";
+  const ruleMode = data.ruleMode ?? "simple";
+
+  if (ruleMode === "advanced") {
+    // Advanced mode: validate operations, skip simple fields
+    const opsError = validateOperations(data.operations);
+    if (opsError) return opsError;
+  } else {
+    // Simple mode: existing validation
+    if (!data.target?.trim()) return "目标字段不能为空";
+
+    if (data.action === "text_replace" && data.matchType === "regex" && data.target) {
+      if (!safeRegex(data.target)) {
+        return "正则表达式存在 ReDoS 风险";
+      }
     }
   }
 
@@ -100,6 +184,9 @@ export async function createRequestFilterAction(data: {
   bindingType?: RequestFilterBindingType;
   providerIds?: number[] | null;
   groupTags?: string[] | null;
+  ruleMode?: RequestFilterRuleMode;
+  executionPhase?: RequestFilterExecutionPhase;
+  operations?: FilterOperation[] | null;
 }): Promise<ActionResult<RequestFilter>> {
   const session = await getSession();
   if (!isAdmin(session)) return { ok: false, error: "权限不足" };
@@ -113,13 +200,16 @@ export async function createRequestFilterAction(data: {
       description: data.description?.trim(),
       scope: data.scope,
       action: data.action,
-      target: data.target.trim(),
+      target: data.target?.trim() ?? "",
       matchType: data.matchType ?? null,
       replacement: data.replacement ?? null,
       priority: data.priority ?? 0,
       bindingType: data.bindingType ?? "global",
       providerIds: data.providerIds ?? null,
       groupTags: data.groupTags ?? null,
+      ruleMode: data.ruleMode ?? "simple",
+      executionPhase: data.executionPhase ?? "guard",
+      operations: data.operations ?? null,
     });
 
     revalidatePath(SETTINGS_PATH);
@@ -145,10 +235,30 @@ export async function updateRequestFilterAction(
     bindingType: RequestFilterBindingType;
     providerIds: number[] | null;
     groupTags: string[] | null;
+    ruleMode: RequestFilterRuleMode;
+    executionPhase: RequestFilterExecutionPhase;
+    operations: FilterOperation[] | null;
   }>
 ): Promise<ActionResult<RequestFilter>> {
   const session = await getSession();
   if (!isAdmin(session)) return { ok: false, error: "权限不足" };
+
+  // Validate operations when ruleMode or operations change
+  if (updates.ruleMode !== undefined || updates.operations !== undefined) {
+    const existing = await getRequestFilterById(id);
+    if (!existing) {
+      return { ok: false, error: "记录不存在" };
+    }
+
+    const effectiveRuleMode = updates.ruleMode ?? existing.ruleMode;
+    const effectiveOperations =
+      updates.operations !== undefined ? updates.operations : existing.operations;
+
+    if (effectiveRuleMode === "advanced") {
+      const opsError = validateOperations(effectiveOperations);
+      if (opsError) return { ok: false, error: opsError };
+    }
+  }
 
   // ReDoS validation: applies when action is text_replace with regex matchType
   // Must check BOTH explicit updates AND existing filter state to prevent bypass

@@ -12,21 +12,32 @@
   "deleteSuccess": "删除成功",
   "deleteFailed": "删除失败",
   "enable": "已启用",
+  "executionPhase": {
+    "guard": "前置（Guard）",
+    "final": "后置（Final）"
+  },
   "disable": "已禁用",
   "confirmDelete": "确定删除过滤器\"{name}\"?",
   "empty": "暂无过滤器，点击右上角新增。",
   "refreshCache": "刷新缓存",
   "refreshSuccess": "缓存已刷新，加载 {count} 条过滤器",
+  "ruleMode": {
+    "simple": "简单",
+    "advanced": "高级"
+  },
   "refreshFailed": "刷新失败",
   "dialog": {
     "createTitle": "新增过滤器",
     "editTitle": "编辑过滤器",
+    "executionPhase": "执行阶段",
+    "executionPhaseFinal": "后置 - 在所有 Provider 覆写后执行",
+    "executionPhaseGuard": "前置 - 在 Provider 选择前执行",
     "name": "名称",
     "scope": "作用域",
     "action": "动作",
     "target": "目标字段/路径",
-    "replacement": "替换值 (可选)",
-    "description": "描述 (可选)",
+    "replacement": "替换值（可选）",
+    "description": "描述（可选）",
     "priority": "优先级",
     "matchType": "匹配类型",
     "matchTypeContains": "包含",
@@ -35,10 +46,17 @@
     "jsonPathPlaceholder": "例如: messages.0.content 或 data.items[0].token",
     "targetPlaceholder": "Header 名称或文本/路径",
     "replacementPlaceholder": "字符串或 JSON，留空表示删除",
+    "ruleMode": "规则模式",
     "save": "保存",
     "saving": "保存中...",
     "validation": {
-      "fieldRequired": "名称和目标为必填项"
+      "anchorRequired": "before/after 位置必须指定锚点",
+      "fieldRequired": "名称和目标为必填项",
+      "insertBodyOnly": "Insert 操作仅支持 Body 作用域",
+      "invalidOperations": "操作序列 JSON 格式无效",
+      "mergeBodyOnly": "Merge 操作仅支持 Body 作用域",
+      "operationsRequired": "高级模式必须定义操作序列",
+      "unsafeRegex": "正则表达式存在 ReDoS 风险"
     },
     "bindingType": "应用范围",
     "bindingGlobal": "所有Provider（全局）",
@@ -49,6 +67,8 @@
     "searchProviders": "搜索Provider...",
     "searchGroups": "搜索分组...",
     "noProvidersFound": "未找到Provider",
+    "operations": "操作序列（JSON）",
+    "operationsLabel": "以 JSON 数组定义高级操作序列",
     "noGroupsFound": "未找到分组",
     "providersSelected": "已选 {count} 个Provider",
     "groupsSelected": "已选 {count} 个分组",
@@ -66,7 +86,9 @@
     "apply": "范围",
     "status": "状态",
     "createdAt": "创建时间",
-    "actions": "操作"
+    "actions": "操作",
+    "mode": "模式",
+    "phase": "阶段"
   },
   "scopeLabel": {
     "header": "Header",

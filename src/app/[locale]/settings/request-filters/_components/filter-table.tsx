@@ -113,6 +113,8 @@ export function FilterTable({ filters, providers }: Props) {
             <tr className="bg-white/[0.02] text-left text-sm font-medium text-muted-foreground">
               <th className="px-4 py-3 border-b border-border/50">{t("table.name")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.scope")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.mode")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.phase")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.action")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.target")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.replacement")}</th>
@@ -151,6 +153,32 @@ export function FilterTable({ filters, providers }: Props) {
                 <td className="px-4 py-3 text-sm">
                   <Badge variant="outline" className="bg-white/5 border-border">
                     {t(`scopeLabel.${filter.scope}`)}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "border-border",
+                      filter.ruleMode === "advanced"
+                        ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                        : "bg-white/5"
+                    )}
+                  >
+                    {t(`ruleMode.${filter.ruleMode ?? "simple"}`)}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "border-border",
+                      filter.executionPhase === "final"
+                        ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                        : "bg-white/5"
+                    )}
+                  >
+                    {t(`executionPhase.${filter.executionPhase ?? "guard"}`)}
                   </Badge>
                 </td>
                 <td className="px-4 py-3 text-sm">

@@ -24,6 +24,9 @@
     "createTitle": "Добавить фильтр",
     "description": "Описание (опционально)",
     "editTitle": "Редактировать фильтр",
+    "executionPhase": "Фаза выполнения",
+    "executionPhaseFinal": "Final - Применяется после всех переопределений провайдера",
+    "executionPhaseGuard": "Guard - Применяется до выбора провайдера",
     "groupsSelected": "Выбрано групп: {count}",
     "jsonPathPlaceholder": "например: messages.0.content или data.items[0].token",
     "loading": "Загрузка...",
@@ -34,10 +37,13 @@
     "name": "Название",
     "noGroupsFound": "Группы не найдены",
     "noProvidersFound": "Провайдеры не найдены",
+    "operations": "Операции (JSON)",
+    "operationsLabel": "Определите расширенные операции как JSON-массив",
     "priority": "Приоритет",
     "providersSelected": "Выбрано провайдеров: {count}",
     "replacement": "Значение (опционально)",
     "replacementPlaceholder": "Строка или JSON, пусто — удалить",
+    "ruleMode": "Режим правила",
     "save": "Сохранить",
     "saving": "Сохранение...",
     "scope": "Область",
@@ -49,7 +55,13 @@
     "target": "Поле/путь",
     "targetPlaceholder": "Имя заголовка или текст/путь",
     "validation": {
-      "fieldRequired": "Название и цель обязательны"
+      "anchorRequired": "Для позиции before/after требуется якорь",
+      "fieldRequired": "Название и цель обязательны",
+      "insertBodyOnly": "Операция Insert поддерживает только Body",
+      "invalidOperations": "Неверный формат JSON операций",
+      "mergeBodyOnly": "Операция Merge поддерживает только Body",
+      "operationsRequired": "Для расширенного режима требуются операции",
+      "unsafeRegex": "Регулярное выражение имеет риск ReDoS"
     }
   },
   "disable": "Отключено",
@@ -58,12 +70,20 @@
   "editSuccess": "Обновлено",
   "empty": "Фильтров пока нет. Добавьте новый.",
   "enable": "Включено",
+  "executionPhase": {
+    "guard": "Guard (Ранний)",
+    "final": "Final (Поздний)"
+  },
   "groups": "Группы",
   "nav": "Фильтры запросов",
   "providers": "Провайдеры",
   "refreshCache": "Обновить кэш",
   "refreshFailed": "Обновление не удалось",
   "refreshSuccess": "Кэш обновлен, загружено {count} фильтров",
+  "ruleMode": {
+    "simple": "Простой",
+    "advanced": "Расширенный"
+  },
   "scopeLabel": {
     "body": "Body",
     "header": "Header"
@@ -73,7 +93,9 @@
     "actions": "Действия",
     "apply": "Область",
     "createdAt": "Создано",
+    "mode": "Режим",
     "name": "Название",
+    "phase": "Фаза",
     "priority": "Приоритет",
     "replacement": "Значение",
     "scope": "Область",

@@ -24,6 +24,9 @@
     "createTitle": "新增過濾器",
     "description": "描述（選填）",
     "editTitle": "編輯過濾器",
+    "executionPhase": "執行階段",
+    "executionPhaseFinal": "後置 - 在所有 Provider 覆寫後執行",
+    "executionPhaseGuard": "前置 - 在 Provider 選擇前執行",
     "groupsSelected": "已選 {count} 個分組",
     "jsonPathPlaceholder": "例如：messages.0.content 或 data.items[0].token",
     "loading": "載入中...",
@@ -34,10 +37,13 @@
     "name": "名稱",
     "noGroupsFound": "找不到分組",
     "noProvidersFound": "找不到Provider",
+    "operations": "操作序列（JSON）",
+    "operationsLabel": "以 JSON 陣列定義進階操作序列",
     "priority": "優先級",
     "providersSelected": "已選 {count} 個Provider",
     "replacement": "替換值（選填）",
     "replacementPlaceholder": "字串或 JSON，留空為清除",
+    "ruleMode": "規則模式",
     "save": "儲存",
     "saving": "儲存中...",
     "scope": "範圍",
@@ -49,7 +55,13 @@
     "target": "目標欄位/路徑",
     "targetPlaceholder": "Header 名稱或文字/路徑",
     "validation": {
-      "fieldRequired": "名稱和目標為必填項"
+      "anchorRequired": "before/after 位置必須指定錨點",
+      "fieldRequired": "名稱和目標為必填項",
+      "insertBodyOnly": "Insert 操作僅支援 Body 作用域",
+      "invalidOperations": "操作序列 JSON 格式無效",
+      "mergeBodyOnly": "Merge 操作僅支援 Body 作用域",
+      "operationsRequired": "進階模式必須定義操作序列",
+      "unsafeRegex": "正則表達式存在 ReDoS 風險"
     }
   },
   "disable": "已停用",
@@ -58,12 +70,20 @@
   "editSuccess": "更新完成",
   "empty": "尚無過濾器，點選右上角新增。",
   "enable": "已啟用",
+  "executionPhase": {
+    "guard": "前置（Guard）",
+    "final": "後置（Final）"
+  },
   "groups": "群組",
   "nav": "請求過濾",
   "providers": "供應商",
   "refreshCache": "刷新快取",
   "refreshFailed": "刷新失敗",
   "refreshSuccess": "快取已刷新，載入 {count} 條過濾器",
+  "ruleMode": {
+    "simple": "簡單",
+    "advanced": "進階"
+  },
   "scopeLabel": {
     "body": "Body",
     "header": "Header"
@@ -73,7 +93,9 @@
     "actions": "動作",
     "apply": "範圍",
     "createdAt": "建立時間",
+    "mode": "模式",
     "name": "名稱",
+    "phase": "階段",
     "priority": "優先級",
     "replacement": "替換值",
     "scope": "範圍",
