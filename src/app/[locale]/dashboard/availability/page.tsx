@@ -20,7 +20,11 @@ export default async function AvailabilityPage() {
   if (!isAdmin) {
     return (
       <div className="space-y-6">
-        <Section title={t("availability.title")} description={t("availability.description")}>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{t("availability.title")}</h1>
+          <p className="mt-2 text-muted-foreground">{t("availability.description")}</p>
+        </div>
+        <Section>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -43,7 +47,11 @@ export default async function AvailabilityPage() {
 
   return (
     <div className="space-y-6">
-      <Section title={t("availability.title")} description={t("availability.description")}>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">{t("availability.title")}</h1>
+        <p className="mt-2 text-muted-foreground">{t("availability.description")}</p>
+      </div>
+      <Section>
         <Suspense fallback={<AvailabilityDashboardSkeleton />}>
           <AvailabilityDashboard />
         </Suspense>
