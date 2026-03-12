@@ -100,7 +100,7 @@ export function OverrideSection({
   );
 
   return (
-    <div className="rounded-xl bg-white/[0.02] border border-border/50 p-4 space-y-4">
+    <div className="rounded-xl bg-card/80 border border-border/50 p-4 space-y-4">
       <div className="flex items-center space-x-2">
         <Checkbox
           id={`${idPrefix}-enableOverride`}
@@ -146,7 +146,7 @@ export function OverrideSection({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-6 text-xs hover:bg-white/10"
+                      className="h-6 text-xs hover:bg-muted"
                     >
                       {t("errorRules.dialog.useTemplate")}
                       <ChevronDown className="ml-1 h-3 w-3" />

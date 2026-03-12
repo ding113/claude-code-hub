@@ -263,7 +263,7 @@ export function EditRuleDialog({ rule, open, onOpenChange }: EditRuleDialogProps
               variant="ghost"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="hover:bg-white/10"
+              className="hover:bg-muted"
             >
               {t("common.cancel")}
             </Button>
