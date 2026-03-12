@@ -167,15 +167,19 @@ export function SectionStatic({
         className
       )}
     >
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-foreground tracking-tight">{title}</h2>
-          {description && (
-            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{description}</p>
-          )}
+      {(title || description || actions) && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            {title && (
+              <h2 className="text-base font-semibold text-foreground tracking-tight">{title}</h2>
+            )}
+            {description && (
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{description}</p>
+            )}
+          </div>
+          {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
-      </div>
+      )}
       {children}
     </section>
   );

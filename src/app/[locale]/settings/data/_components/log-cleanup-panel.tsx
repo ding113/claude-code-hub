@@ -146,7 +146,7 @@ export function LogCleanupPanel() {
         </strong>
       </p>
 
-      <div className="flex flex-col gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5">
+      <div className="flex flex-col gap-3 p-4 rounded-xl bg-card/80 border border-border/50">
         <Label htmlFor="time-range">{t("rangeLabel")}</Label>
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger id="time-range" className="w-full sm:w-[300px]">
@@ -180,7 +180,7 @@ export function LogCleanupPanel() {
               <p>{t("confirmWarning", { range: getTimeRangeDescription() })}</p>
 
               {/* Preview info */}
-              <div className="bg-white/[0.02] border border-white/5 p-3 rounded-xl">
+              <div className="bg-card/80 border border-border/50 p-3 rounded-xl">
                 {isPreviewLoading ? (
                   <div className="flex items-center gap-2 text-sm">
                     <Loader2 className="h-4 w-4 animate-spin" />

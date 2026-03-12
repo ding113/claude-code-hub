@@ -35,7 +35,7 @@ export function ProviderTypeFilter({ value, onChange, disabled = false }: Provid
         <SelectContent>
           <SelectItem value="all">{tForm("filterAllProviders")}</SelectItem>
           {getAllProviderTypes()
-            .filter((type) => !["claude-auth", "gemini-cli"].includes(type))
+            .filter((type) => !["claude-auth", "gemini-cli"].includes(type)) // internal/system types
             .map((type) => {
               const config = PROVIDER_TYPE_CONFIG[type];
               const Icon = config.icon;
