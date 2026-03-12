@@ -149,10 +149,7 @@ export function LogCleanupPanel() {
       <div className="flex flex-col gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/5">
         <Label htmlFor="time-range">{t("rangeLabel")}</Label>
         <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger
-            id="time-range"
-            className="w-full sm:w-[300px]"
-          >
+          <SelectTrigger id="time-range" className="w-full sm:w-[300px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

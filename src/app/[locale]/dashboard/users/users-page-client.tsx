@@ -578,7 +578,9 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
           <p className="mt-2 text-muted-foreground">
-            {isInitialLoading ? tCommon("loading") : t("description", { count: visibleUsers.length })}
+            {isInitialLoading
+              ? tCommon("loading")
+              : t("description", { count: visibleUsers.length })}
           </p>
         </div>
         {isAdmin && (

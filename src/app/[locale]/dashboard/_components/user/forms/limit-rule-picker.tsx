@@ -142,7 +142,9 @@ export function LimitRulePicker({
     }
 
     if (needsTime && !isValidTime(dailyTime)) {
-      setError(getTranslation(translations, "errors.invalidTime", "Please enter a valid time (HH:mm)"));
+      setError(
+        getTranslation(translations, "errors.invalidTime", "Please enter a valid time (HH:mm)")
+      );
       return;
     }
 
@@ -213,7 +215,11 @@ export function LimitRulePicker({
                 autoFocus
                 value={rawValue}
                 onChange={(e) => setRawValue(e.target.value)}
-                placeholder={getTranslation(translations, "fields.value.placeholder", "Enter value")}
+                placeholder={getTranslation(
+                  translations,
+                  "fields.value.placeholder",
+                  "Enter value"
+                )}
                 aria-invalid={Boolean(error)}
               />
 

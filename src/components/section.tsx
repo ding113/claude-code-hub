@@ -131,9 +131,15 @@ export function Section({
                 </div>
               )}
               <div className="min-w-0">
-                {title && <h2 className="text-base font-semibold text-foreground tracking-tight">{title}</h2>}
+                {title && (
+                  <h2 className="text-base font-semibold text-foreground tracking-tight">
+                    {title}
+                  </h2>
+                )}
                 {description && (
-                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{description}</p>
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                    {description}
+                  </p>
                 )}
               </div>
             </div>
