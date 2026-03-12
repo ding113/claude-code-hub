@@ -34,21 +34,23 @@ export function ProviderTypeFilter({ value, onChange, disabled = false }: Provid
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">{tForm("filterAllProviders")}</SelectItem>
-          {getAllProviderTypes().map((type) => {
-            const config = PROVIDER_TYPE_CONFIG[type];
-            const Icon = config.icon;
-            const typeKey = getProviderTypeTranslationKey(type);
-            const label = tTypes(`${typeKey}.label`);
+          {getAllProviderTypes()
+            .filter((type) => !["claude-auth", "gemini-cli"].includes(type))
+            .map((type) => {
+              const config = PROVIDER_TYPE_CONFIG[type];
+              const Icon = config.icon;
+              const typeKey = getProviderTypeTranslationKey(type);
+              const label = type === "openai-compatible" ? "OpenAI" : tTypes(`${typeKey}.label`);
 
-            return (
-              <SelectItem key={type} value={type}>
-                <div className="flex items-center gap-2">
-                  <Icon className={`h-3.5 w-3.5 ${config.iconColor}`} />
-                  <span>{label}</span>
-                </div>
-              </SelectItem>
-            );
-          })}
+              return (
+                <SelectItem key={type} value={type}>
+                  <div className="flex items-center gap-2">
+                    <Icon className={`h-3.5 w-3.5 ${config.iconColor}`} />
+                    <span>{label}</span>
+                  </div>
+                </SelectItem>
+              );
+            })}
         </SelectContent>
       </Select>
     </div>
