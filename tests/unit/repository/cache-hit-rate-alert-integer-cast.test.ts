@@ -100,9 +100,7 @@ vi.mock("@/drizzle/schema", () => ({
 }));
 
 vi.mock("@/repository/system-config", () => ({
-  getSystemSettings: vi.fn(() =>
-    Promise.resolve({ billingModelSource: "original" })
-  ),
+  getSystemSettings: vi.fn(() => Promise.resolve({ billingModelSource: "original" })),
 }));
 
 vi.mock("@/repository/_shared/message-request-conditions", () => ({
