@@ -892,7 +892,9 @@ async function _findKeysStatisticsBatchInternal(
     }
   }
 
-  // Step 3: Query last usage for all keys via LATERAL JOIN (1 index probe per key)
+  // Step 3: Query last usage for all keys via LATERAL JOIN (1 index probe per key).
+  // usage_ledger.created_at is NOT NULL, so adding NULLS LAST here only prevents
+  // PostgreSQL from reusing the existing (key, created_at) index for a backward scan.
   const keyParams = sql.join(
     keyStrings.map((k) => sql`${k}`),
     sql.raw(", ")
@@ -905,7 +907,7 @@ async function _findKeysStatisticsBatchInternal(
       FROM usage_ledger ul
       WHERE ul.key = k.key_val
         AND ul.blocked_by IS NULL
-      ORDER BY ul.created_at DESC NULLS LAST
+      ORDER BY ul.created_at DESC
       LIMIT 1
     ) lr ON true
     LEFT JOIN providers p ON lr.final_provider_id = p.id
