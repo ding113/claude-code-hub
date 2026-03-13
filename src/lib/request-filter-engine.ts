@@ -25,6 +25,9 @@ interface CachedRequestFilter extends RequestFilter {
 // Transport headers that must never be user-controlled
 const TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
 
+// Keys that must never be traversed to prevent prototype pollution
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
 // ---------------------------------------------------------------------------
 // Path helpers (shared by guard and final phases)
 // ---------------------------------------------------------------------------
@@ -35,6 +38,7 @@ function parsePath(path: string): Array<string | number> {
   let match: RegExpExecArray | null;
   while ((match = regex.exec(path)) !== null) {
     if (match[1]) {
+      if (UNSAFE_KEYS.has(match[1])) continue; // block prototype pollution
       parts.push(match[1]);
     } else if (match[3]) {
       parts.push(Number(match[3]));
@@ -151,6 +155,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
 /** Recursive merge with null-as-delete semantics */
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(source)) {
+    if (UNSAFE_KEYS.has(key)) continue; // block prototype pollution
     if (value === null) {
       delete target[key];
     } else if (
@@ -193,12 +198,18 @@ function matchElement(element: unknown, matcher: FilterMatcher): boolean {
       return fieldValue === matcher.value;
     case "contains":
       return String(fieldValue).includes(String(matcher.value));
-    case "regex":
+    case "regex": {
+      const pattern = String(matcher.value);
+      if (!safeRegex(pattern)) {
+        logger.warn("[RequestFilterEngine] Unsafe regex in matcher", { pattern });
+        return false;
+      }
       try {
-        return new RegExp(String(matcher.value)).test(String(fieldValue));
+        return new RegExp(pattern).test(String(fieldValue));
       } catch {
         return false;
       }
+    }
     default:
       return false;
   }

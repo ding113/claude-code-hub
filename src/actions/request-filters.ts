@@ -24,6 +24,9 @@ import type { ActionResult } from "./types";
 
 const SETTINGS_PATH = "/settings/request-filters";
 
+const VALIDATION_UNSAFE_KEYS = /(?:^|[.[])(?:__proto__|constructor|prototype)(?:[.[\]]|$)/;
+const MAX_OPERATIONS = 50;
+
 function isAdmin(session: Awaited<ReturnType<typeof getSession>>): boolean {
   return !!session && session.user.role === "admin";
 }
@@ -44,6 +47,10 @@ function validateMatcher(matcher: FilterMatcher, context: string): string | null
 function validateOperations(operations: unknown): string | null {
   if (!Array.isArray(operations) || operations.length === 0) {
     return "Advanced mode requires at least one operation";
+  }
+
+  if (operations.length > MAX_OPERATIONS) {
+    return `Operations array must not exceed ${MAX_OPERATIONS} entries`;
   }
 
   for (let i = 0; i < operations.length; i++) {
@@ -71,6 +78,29 @@ function validateOperations(operations: unknown): string | null {
 
     if (!("path" in op) || typeof op.path !== "string" || !op.path.trim()) {
       return `${prefix}: path is required`;
+    }
+
+    // Block prototype pollution via path
+    if (VALIDATION_UNSAFE_KEYS.test(op.path)) {
+      return `${prefix}: path contains a forbidden property name`;
+    }
+
+    // Value validation for ops that require it
+    if (op.op === "set" && !("value" in raw)) {
+      return `${prefix}: value is required for set`;
+    }
+    if (op.op === "merge") {
+      if (
+        !("value" in raw) ||
+        raw.value === null ||
+        typeof raw.value !== "object" ||
+        Array.isArray(raw.value)
+      ) {
+        return `${prefix}: merge value must be a plain object`;
+      }
+    }
+    if (op.op === "insert" && !("value" in raw)) {
+      return `${prefix}: value is required for insert`;
     }
 
     // Op-specific validation
@@ -262,15 +292,25 @@ export async function updateRequestFilterAction(
 
   // ReDoS validation: applies when action is text_replace with regex matchType
   // Must check BOTH explicit updates AND existing filter state to prevent bypass
-  if (updates.target) {
-    // Determine effective matchType and action (from updates or existing filter)
+  if (
+    updates.target !== undefined ||
+    updates.matchType !== undefined ||
+    updates.action !== undefined
+  ) {
+    // Determine effective target, matchType and action (from updates or existing filter)
+    let effectiveTarget = updates.target;
     let effectiveMatchType = updates.matchType;
     let effectiveAction = updates.action;
 
-    // If matchType or action not in updates, need to check existing filter
-    if (effectiveMatchType === undefined || effectiveAction === undefined) {
+    // If any field not in updates, need to check existing filter
+    if (
+      effectiveTarget === undefined ||
+      effectiveMatchType === undefined ||
+      effectiveAction === undefined
+    ) {
       const existing = await getRequestFilterById(id);
       if (existing) {
+        if (effectiveTarget === undefined) effectiveTarget = existing.target;
         if (effectiveMatchType === undefined) effectiveMatchType = existing.matchType;
         if (effectiveAction === undefined) effectiveAction = existing.action;
       }
@@ -279,7 +319,7 @@ export async function updateRequestFilterAction(
     const isTextReplace = effectiveAction === "text_replace";
     const isRegex = effectiveMatchType === "regex";
 
-    if (isTextReplace && isRegex && !safeRegex(updates.target)) {
+    if (isTextReplace && isRegex && effectiveTarget && !safeRegex(effectiveTarget)) {
       return { ok: false, error: "正则表达式存在 ReDoS 风险" };
     }
   }

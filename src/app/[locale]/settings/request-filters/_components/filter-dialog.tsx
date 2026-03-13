@@ -146,7 +146,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
   const [groupTags, setGroupTags] = useState<string[]>(filter?.groupTags ?? []);
   const [ruleMode, setRuleMode] = useState<RequestFilterRuleMode>(filter?.ruleMode ?? "simple");
   const [executionPhase, setExecutionPhase] = useState<RequestFilterExecutionPhase>(
-    filter?.executionPhase ?? "final"
+    filter?.executionPhase ?? "guard"
   );
   const [operationsJson, setOperationsJson] = useState(() => {
     if (filter?.operations) {
@@ -183,7 +183,7 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       setProviderIds(filter.providerIds ?? []);
       setGroupTags(filter.groupTags ?? []);
       setRuleMode(filter.ruleMode ?? "simple");
-      setExecutionPhase(filter.executionPhase ?? "final");
+      setExecutionPhase(filter.executionPhase ?? "guard");
       setOperationsJson(filter.operations ? JSON.stringify(filter.operations, null, 2) : "");
     }
   }, [filter]);
