@@ -1856,6 +1856,7 @@ export class ProxyForwarder {
     let requestBody: BodyInit | undefined;
     let isStreaming = false;
     let proxyUrl: string;
+    let isApiKey = false;
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -1898,45 +1899,91 @@ export class ProxyForwarder {
           }
         }
 
+        // 检测流式请求：Gemini 支持两种方式
+        // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
+        // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
+        const geminiPathname = session.requestUrl.pathname || "";
+        const geminiSearchParams = session.requestUrl.searchParams;
+        const originalBody = session.request.message as Record<string, unknown>;
+        isStreaming =
+          geminiPathname.includes("streamGenerateContent") ||
+          geminiSearchParams.get("alt") === "sse" ||
+          originalBody?.stream === true;
+
+        // 2. 准备认证和 Headers
+        const accessToken = await GeminiAuth.getAccessToken(provider.key);
+        isApiKey = GeminiAuth.isApiKey(provider.key);
+
+        // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
+        const effectiveBaseUrl =
+          baseUrl ||
+          provider.url ||
+          (provider.providerType === "gemini"
+            ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+            : GEMINI_PROTOCOL.CLI_ENDPOINT);
+
+        proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
+
+        // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
+        // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
+        processedHeaders = ProxyForwarder.buildGeminiHeaders(
+          session,
+          provider,
+          effectiveBaseUrl,
+          accessToken,
+          isApiKey
+        );
+
+        // Final-phase request filter for Gemini: after headers built, before body serialization
+        // Clone body to prevent in-place mutation of session.request.message on retries
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          const bodyForFinal = structuredClone(bodyToSerialize);
+          await requestFilterEngine.applyFinal(session, bodyForFinal, processedHeaders);
+          bodyToSerialize = bodyForFinal;
+        }
+
         const bodyString = JSON.stringify(bodyToSerialize);
         requestBody = bodyString;
         session.forwardedRequestBody = bodyString;
+      } else {
+        // No body: still need streaming detection, auth, URL, headers
+        const geminiPathname = session.requestUrl.pathname || "";
+        const geminiSearchParams = session.requestUrl.searchParams;
+        isStreaming =
+          geminiPathname.includes("streamGenerateContent") ||
+          geminiSearchParams.get("alt") === "sse";
+
+        const accessToken = await GeminiAuth.getAccessToken(provider.key);
+        isApiKey = GeminiAuth.isApiKey(provider.key);
+
+        const effectiveBaseUrl =
+          baseUrl ||
+          provider.url ||
+          (provider.providerType === "gemini"
+            ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+            : GEMINI_PROTOCOL.CLI_ENDPOINT);
+
+        proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
+
+        processedHeaders = ProxyForwarder.buildGeminiHeaders(
+          session,
+          provider,
+          effectiveBaseUrl,
+          accessToken,
+          isApiKey
+        );
+
+        // Final-phase request filter for no-body requests (header-only operations)
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          await requestFilterEngine.applyFinal(
+            session,
+            {} as Record<string, unknown>,
+            processedHeaders
+          );
+        }
       }
-
-      // 检测流式请求：Gemini 支持两种方式
-      // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
-      // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
-      const geminiPathname = session.requestUrl.pathname || "";
-      const geminiSearchParams = session.requestUrl.searchParams;
-      const originalBody = session.request.message as Record<string, unknown>;
-      isStreaming =
-        geminiPathname.includes("streamGenerateContent") ||
-        geminiSearchParams.get("alt") === "sse" ||
-        originalBody?.stream === true;
-
-      // 2. 准备认证和 Headers
-      const accessToken = await GeminiAuth.getAccessToken(provider.key);
-      const isApiKey = GeminiAuth.isApiKey(provider.key);
-
-      // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
-      const effectiveBaseUrl =
-        baseUrl ||
-        provider.url ||
-        (provider.providerType === "gemini"
-          ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
-          : GEMINI_PROTOCOL.CLI_ENDPOINT);
-
-      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
-
-      // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
-      // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
-      processedHeaders = ProxyForwarder.buildGeminiHeaders(
-        session,
-        provider,
-        effectiveBaseUrl,
-        accessToken,
-        isApiKey
-      );
 
       if (session.sessionId) {
         void SessionManager.storeSessionUpstreamRequestMeta(
@@ -2224,6 +2271,12 @@ export class ProxyForwarder {
             }
           }
 
+          // Final-phase request filter: after all provider overrides, before serialization
+          if (!session.getEndpointPolicy().bypassRequestFilters) {
+            const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+            await requestFilterEngine.applyFinal(session, messageToSend, processedHeaders);
+          }
+
           const bodyString = JSON.stringify(messageToSend);
           requestBody = bodyString;
           session.forwardedRequestBody = bodyString;
@@ -2247,6 +2300,16 @@ export class ProxyForwarder {
               isStreaming,
             });
           }
+        }
+      } else {
+        // No body (GET/HEAD): still run final-phase for header-only filter operations
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          await requestFilterEngine.applyFinal(
+            session,
+            {} as Record<string, unknown>,
+            processedHeaders
+          );
         }
       }
     }

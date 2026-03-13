@@ -24,6 +24,9 @@
     "createTitle": "Add Filter",
     "description": "Description (optional)",
     "editTitle": "Edit Filter",
+    "executionPhase": "Execution Phase",
+    "executionPhaseFinal": "Final - Applied after all provider overrides",
+    "executionPhaseGuard": "Guard - Applied before provider selection",
     "groupsSelected": "{count} group(s) selected",
     "jsonPathPlaceholder": "e.g. messages.0.content or data.items[0].token",
     "loading": "Loading...",
@@ -34,10 +37,13 @@
     "name": "Name",
     "noGroupsFound": "No groups found",
     "noProvidersFound": "No providers found",
+    "operations": "Operations (JSON)",
+    "operationsLabel": "Define advanced operations as a JSON array",
     "priority": "Priority",
     "providersSelected": "{count} provider(s) selected",
     "replacement": "Replacement (optional)",
     "replacementPlaceholder": "String or JSON, leave blank to clear",
+    "ruleMode": "Rule Mode",
     "save": "Save",
     "saving": "Saving...",
     "scope": "Scope",
@@ -49,7 +55,13 @@
     "target": "Target field/path",
     "targetPlaceholder": "Header name or text/path",
     "validation": {
-      "fieldRequired": "Name and target are required"
+      "anchorRequired": "Anchor is required when position is before/after",
+      "fieldRequired": "Name and target are required",
+      "insertBodyOnly": "Insert operations can only target body scope",
+      "invalidOperations": "Invalid operations JSON format",
+      "mergeBodyOnly": "Merge operations can only target body scope",
+      "operationsRequired": "Operations are required for advanced mode",
+      "unsafeRegex": "Regex pattern has ReDoS risk"
     }
   },
   "disable": "Disabled",
@@ -58,12 +70,20 @@
   "editSuccess": "Filter updated",
   "empty": "No filters yet. Click Add Filter to configure.",
   "enable": "Enabled",
+  "executionPhase": {
+    "final": "Final (Late)",
+    "guard": "Guard (Early)"
+  },
   "groups": "Groups",
   "nav": "Request Filters",
   "providers": "Providers",
   "refreshCache": "Refresh Cache",
   "refreshFailed": "Refresh failed",
   "refreshSuccess": "Cache refreshed, loaded {count} filters",
+  "ruleMode": {
+    "advanced": "Advanced",
+    "simple": "Simple"
+  },
   "scopeLabel": {
     "body": "Body",
     "header": "Header"
@@ -71,14 +91,18 @@
   "table": {
     "action": "Action",
     "actions": "Actions",
+    "advancedOps": "{count} operation(s)",
     "apply": "Apply",
     "createdAt": "Created At",
+    "mode": "Mode",
     "name": "Name",
+    "phase": "Phase",
     "priority": "Priority",
     "replacement": "Replacement",
     "scope": "Scope",
     "status": "Status",
-    "target": "Target"
+    "target": "Target",
+    "toggleStatus": "Toggle filter {name}"
   },
   "title": "Request Filters"
 }
