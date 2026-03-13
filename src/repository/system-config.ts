@@ -160,6 +160,7 @@ function createFallbackSettings(): SystemSettings {
     },
     blockedUrls: [],
     enableCfOptimization: false,
+    forwardedClientIp: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -190,6 +191,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       responseFixerConfig: systemSettings.responseFixerConfig,
       blockedUrls: systemSettings.blockedUrls,
       enableCfOptimization: systemSettings.enableCfOptimization,
+      forwardedClientIp: systemSettings.forwardedClientIp,
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
@@ -350,6 +352,11 @@ export async function updateSystemSettings(
     // CF 优选全局启用开关（如果提供）
     if (payload.enableCfOptimization !== undefined) {
       updates.enableCfOptimization = payload.enableCfOptimization;
+    }
+
+    // 全局转发客户端 IP（如果提供）
+    if (payload.forwardedClientIp !== undefined) {
+      updates.forwardedClientIp = payload.forwardedClientIp;
     }
 
     const [updated] = await db

@@ -533,6 +533,9 @@ export const systemSettings = pgTable('system_settings', {
   // Cloudflare 优选 IP 全局启用开关（默认关闭）
   enableCfOptimization: boolean('enable_cf_optimization').notNull().default(false),
 
+  // 全局转发客户端 IP（用于手动指定 x-forwarded-for / x-real-ip）
+  forwardedClientIp: varchar('forwarded_client_ip', { length: 128 }),
+
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 });

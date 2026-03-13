@@ -58,6 +58,9 @@ export interface SystemSettings {
   // Cloudflare 优选 IP 全局启用开关
   enableCfOptimization: boolean;
 
+  // 全局转发客户端 IP（用于手动指定 x-forwarded-for / x-real-ip）
+  forwardedClientIp: string | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -106,4 +109,7 @@ export interface UpdateSystemSettingsInput {
 
   // Cloudflare 优选 IP 全局启用开关（可选）
   enableCfOptimization?: boolean;
+
+  // 全局转发客户端 IP（可选）
+  forwardedClientIp?: string | null;
 }

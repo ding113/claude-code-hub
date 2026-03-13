@@ -45,6 +45,7 @@ async function SettingsConfigContent() {
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
             enableResponseFixer: settings.enableResponseFixer,
             responseFixerConfig: settings.responseFixerConfig,
+            forwardedClientIp: settings.forwardedClientIp,
           }}
         />
       </Section>

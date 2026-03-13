@@ -34,6 +34,7 @@ interface SystemSettingsFormProps {
     | "enableCodexSessionIdCompletion"
     | "enableResponseFixer"
     | "responseFixerConfig"
+    | "forwardedClientIp"
   >;
 }
 
@@ -70,6 +71,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [responseFixerConfig, setResponseFixerConfig] = useState(
     initialSettings.responseFixerConfig
   );
+  const [forwardedClientIp, setForwardedClientIp] = useState(
+    initialSettings.forwardedClientIp ?? ""
+  );
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -93,6 +97,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         enableCodexSessionIdCompletion,
         enableResponseFixer,
         responseFixerConfig,
+        forwardedClientIp: forwardedClientIp.trim() || null,
       });
 
       if (!result.ok) {
@@ -112,6 +117,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
+        setForwardedClientIp(result.data.forwardedClientIp ?? "");
       }
 
       toast.success(t("configUpdated"));
@@ -349,6 +355,19 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
             </div>
           </div>
         )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="forwarded-client-ip">{t("forwardedClientIp")}</Label>
+        <Input
+          id="forwarded-client-ip"
+          value={forwardedClientIp}
+          onChange={(event) => setForwardedClientIp(event.target.value)}
+          placeholder={t("forwardedClientIpPlaceholder")}
+          disabled={isPending}
+          maxLength={128}
+        />
+        <p className="text-xs text-muted-foreground">{t("forwardedClientIpDesc")}</p>
       </div>
 
       <div className="flex justify-end">

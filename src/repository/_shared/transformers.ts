@@ -185,6 +185,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     },
     blockedUrls: dbSettings?.blockedUrls ?? [],
     enableCfOptimization: dbSettings?.enableCfOptimization ?? false,
+    forwardedClientIp: dbSettings?.forwardedClientIp ?? null,
     createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
     updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };

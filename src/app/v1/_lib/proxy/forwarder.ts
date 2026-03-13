@@ -1333,7 +1333,7 @@ export class ProxyForwarder {
 
       // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
       // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
-      processedHeaders = ProxyForwarder.buildGeminiHeaders(
+      processedHeaders = await ProxyForwarder.buildGeminiHeaders(
         session,
         provider,
         baseUrl,
@@ -1638,7 +1638,7 @@ export class ProxyForwarder {
         }
       }
 
-      processedHeaders = ProxyForwarder.buildHeaders(session, provider);
+      processedHeaders = await ProxyForwarder.buildHeaders(session, provider);
 
       if (session.sessionId) {
         void SessionManager.storeSessionRequestHeaders(
@@ -2510,10 +2510,10 @@ export class ProxyForwarder {
     };
   }
 
-  private static buildHeaders(
+  private static async buildHeaders(
     session: ProxySession,
     provider: NonNullable<typeof session.provider>
-  ): Headers {
+  ): Promise<Headers> {
     // 从令牌池中选择 key（排除已失败的 key）
     const failedKeyIndices = session.getFailedKeyIndices(provider.id);
     const { key: outboundKey, keyIndex } = ProxyForwarder.selectKeyFromPool(
@@ -2583,6 +2583,13 @@ export class ProxyForwarder {
       if (clientIp) {
         overrides["x-real-ip"] = clientIp;
       }
+    }
+
+    // 全局转发客户端 IP：从系统设置注入（覆盖 provider 级别）
+    const globalSettings = await getCachedSystemSettings();
+    if (globalSettings.forwardedClientIp) {
+      overrides["x-forwarded-for"] = globalSettings.forwardedClientIp;
+      overrides["x-real-ip"] = globalSettings.forwardedClientIp;
     }
 
     // 针对 1h 缓存 TTL，补充 Anthropic beta header（避免客户端遗漏）
@@ -2689,20 +2696,19 @@ export class ProxyForwarder {
 
     const headerProcessor = HeaderProcessor.createForProxy({
       blacklist,
-      preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
 
     return headerProcessor.process(session.headers);
   }
 
-  private static buildGeminiHeaders(
+  private static async buildGeminiHeaders(
     session: ProxySession,
     provider: NonNullable<typeof session.provider>,
     baseUrl: string,
     accessToken: string,
     isApiKey: boolean
-  ): Headers {
+  ): Promise<Headers> {
     const preserveClientIp = provider.preserveClientIp ?? false;
     const { clientIp, xForwardedFor } = ProxyForwarder.resolveClientIp(session.headers);
 
@@ -2732,9 +2738,15 @@ export class ProxyForwarder {
       }
     }
 
+    // 全局转发客户端 IP：从系统设置注入（覆盖 provider 级别）
+    const globalSettings = await getCachedSystemSettings();
+    if (globalSettings.forwardedClientIp) {
+      overrides["x-forwarded-for"] = globalSettings.forwardedClientIp;
+      overrides["x-real-ip"] = globalSettings.forwardedClientIp;
+    }
+
     const headerProcessor = HeaderProcessor.createForProxy({
       blacklist: ["content-length", "connection", "x-api-key", GEMINI_PROTOCOL.HEADERS.API_KEY],
-      preserveClientIpHeaders: preserveClientIp,
       overrides,
     });
 

@@ -45,6 +45,7 @@ export async function saveSystemSettings(formData: {
   responseFixerConfig?: Partial<ResponseFixerConfig>;
   blockedUrls?: string[];
   enableCfOptimization?: boolean;
+  forwardedClientIp?: string | null;
 }): Promise<ActionResult<SystemSettings>> {
   try {
     const session = await getSession();
@@ -72,6 +73,7 @@ export async function saveSystemSettings(formData: {
       responseFixerConfig: validated.responseFixerConfig,
       blockedUrls: validated.blockedUrls,
       enableCfOptimization: validated.enableCfOptimization,
+      forwardedClientIp: validated.forwardedClientIp,
     });
 
     // Invalidate the system settings cache so proxy requests get fresh settings

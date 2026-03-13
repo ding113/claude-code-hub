@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS: Pick<
   | "enableResponseFixer"
   | "responseFixerConfig"
   | "enableCfOptimization"
+  | "forwardedClientIp"
 > = {
   enableHttp2: false,
   interceptAnthropicWarmupRequests: false,
@@ -47,6 +48,7 @@ const DEFAULT_SETTINGS: Pick<
     maxFixSize: 1024 * 1024,
   },
   enableCfOptimization: false,
+  forwardedClientIp: null,
 };
 
 /**
@@ -112,6 +114,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
       blockedUrls: [],
       enableCfOptimization: DEFAULT_SETTINGS.enableCfOptimization,
+      forwardedClientIp: DEFAULT_SETTINGS.forwardedClientIp,
       createdAt: new Date(),
       updatedAt: new Date(),
     } satisfies SystemSettings;

@@ -785,6 +785,12 @@ export const UpdateSystemSettingsSchema = z.object({
   blockedUrls: z.array(z.string()).optional(),
   // CF 优选全局启用开关（可选）
   enableCfOptimization: z.boolean().optional(),
+  // 全局转发客户端 IP（可选）
+  forwardedClientIp: z
+    .string()
+    .max(128, "转发客户端 IP 长度不能超过128个字符")
+    .nullable()
+    .optional(),
 });
 
 // 导出类型推断
