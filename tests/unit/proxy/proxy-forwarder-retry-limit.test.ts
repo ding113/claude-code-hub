@@ -1082,3 +1082,57 @@ describe("ProxyForwarder - endpoint stickiness on retry", () => {
     }
   });
 });
+
+describe("NON_RETRYABLE_CLIENT_ERROR regression tests", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getPreferredProviderEndpoints.mockResolvedValue([
+      makeEndpoint({ id: 1, vendorId: 1, providerType: "claude", url: "https://ep1.example.com" }),
+    ]);
+  });
+
+  test("NON_RETRYABLE_CLIENT_ERROR with plain SocketError does not throw TypeError", async () => {
+    // 1. Build a synthetic native transport error
+    const socketErr = Object.assign(new Error("other side closed"), {
+      name: "SocketError",
+      code: "UND_ERR_SOCKET",
+    });
+
+    // 2. doForward always throws it
+    const doForward = vi.spyOn(ProxyForwarder as unknown as { doForward: unknown }, "doForward");
+    doForward.mockRejectedValue(socketErr);
+
+    // 3. Force categorizeErrorAsync to return NON_RETRYABLE_CLIENT_ERROR (simulates regression)
+    vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+
+    const session = createSession(new URL("https://example.com/v1/messages"));
+    const provider = createProvider({ id: 1, providerType: "claude", providerVendorId: 1 });
+    session.setProvider(provider);
+
+    // 4. Expect the original SocketError to be rethrown, NOT a TypeError
+    await expect(ProxyForwarder.send(session)).rejects.toSatisfy((e: unknown) => {
+      expect(e).toBe(socketErr); // same object reference
+      return true;
+    });
+
+    // 5. Provider chain should have been recorded
+    expect(session.getProviderChain()).toHaveLength(1);
+    expect(session.getProviderChain()[0].reason).toBe("client_error_non_retryable");
+  });
+
+  test("categorizeErrorAsync returns SYSTEM_ERROR for SocketError even if rule would match", async () => {
+    // Import real categorizeErrorAsync (not the mock from the forwarder test)
+    const { categorizeErrorAsync: realCategorize, ErrorCategory: RealErrorCategory } =
+      await vi.importActual<typeof import("@/app/v1/_lib/proxy/errors")>(
+        "@/app/v1/_lib/proxy/errors"
+      );
+
+    const socketErr = Object.assign(new Error("other side closed"), {
+      name: "SocketError",
+      code: "UND_ERR_SOCKET",
+    });
+
+    const category = await realCategorize(socketErr);
+    expect(category).toBe(RealErrorCategory.SYSTEM_ERROR);
+  });
+});

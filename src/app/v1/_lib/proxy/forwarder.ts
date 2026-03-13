@@ -1350,8 +1350,6 @@ export class ProxyForwarder {
 
           // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）
           if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
-            const proxyError = lastError as ProxyError;
-            const statusCode = proxyError.statusCode;
             const detectionResult = await getErrorDetectionResultAsync(lastError);
             const matchedRule =
               detectionResult.matched &&
@@ -1370,42 +1368,71 @@ export class ProxyForwarder {
                   }
                 : undefined;
 
-            logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
-              providerId: currentProvider.id,
-              providerName: currentProvider.name,
-              statusCode: statusCode,
-              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
-              error: errorMessage,
-              attemptNumber: attemptCount,
-              totalProvidersAttempted,
-              reason:
-                "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
-            });
+            if (lastError instanceof ProxyError) {
+              // Original path: full ProxyError fields available
+              logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                statusCode: lastError.statusCode,
+                statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
+                error: errorMessage,
+                attemptNumber: attemptCount,
+                totalProvidersAttempted,
+                reason:
+                  "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
+              });
 
-            // 记录到决策链（标记为不可重试的客户端错误）
-            // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
-            session.addProviderToChain(currentProvider, {
-              ...endpointAudit,
-              reason: "client_error_non_retryable", // 新增的 reason 值
-              circuitState: getCircuitState(currentProvider.id),
-              attemptNumber: attemptCount,
-              errorMessage: errorMessage,
-              statusCode: statusCode,
-              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
-              errorDetails: {
-                provider: {
-                  id: currentProvider.id,
-                  name: currentProvider.name,
-                  statusCode: statusCode,
-                  statusText: proxyError.message,
-                  upstreamBody: proxyError.upstreamError?.body,
-                  upstreamParsed: proxyError.upstreamError?.parsed,
+              // 记录到决策链（标记为不可重试的客户端错误）
+              // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
+              session.addProviderToChain(currentProvider, {
+                ...endpointAudit,
+                reason: "client_error_non_retryable", // 新增的 reason 值
+                circuitState: getCircuitState(currentProvider.id),
+                attemptNumber: attemptCount,
+                errorMessage: errorMessage,
+                statusCode: lastError.statusCode,
+                statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
+                errorDetails: {
+                  provider: {
+                    id: currentProvider.id,
+                    name: currentProvider.name,
+                    statusCode: lastError.statusCode,
+                    statusText: lastError.message,
+                    upstreamBody: lastError.upstreamError?.body,
+                    upstreamParsed: lastError.upstreamError?.parsed,
+                  },
+                  clientError: lastError.getDetailedErrorMessage(),
+                  matchedRule,
+                  request: buildRequestDetails(session),
                 },
-                clientError: proxyError.getDetailedErrorMessage(),
-                matchedRule,
-                request: buildRequestDetails(session),
-              },
-            });
+              });
+            } else {
+              // Plain Error path: omit ProxyError-only fields
+              logger.warn(
+                "ProxyForwarder: Non-retryable client error (plain error), stopping immediately",
+                {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  error: lastError.message,
+                  attemptNumber: attemptCount,
+                  totalProvidersAttempted,
+                  reason: "White-listed client error matched by error rule",
+                }
+              );
+
+              session.addProviderToChain(currentProvider, {
+                ...endpointAudit,
+                reason: "client_error_non_retryable",
+                circuitState: getCircuitState(currentProvider.id),
+                attemptNumber: attemptCount,
+                errorMessage: lastError.message,
+                errorDetails: {
+                  clientError: lastError.message,
+                  matchedRule,
+                  request: buildRequestDetails(session),
+                },
+              });
+            }
 
             // 立即抛出错误，不重试，不切换供应商
             // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
