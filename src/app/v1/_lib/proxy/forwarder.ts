@@ -3116,7 +3116,9 @@ export class ProxyForwarder {
         });
         abortAllAttempts(undefined, "client_abort");
         await settleFailure(
-          error instanceof ProxyError ? error : new ProxyError("Request aborted by client", 499, undefined, true)
+          error instanceof ProxyError
+            ? error
+            : new ProxyError("Request aborted by client", 499, undefined, true)
         );
         return;
       }
