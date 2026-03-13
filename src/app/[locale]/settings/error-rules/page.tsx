@@ -36,7 +36,7 @@ export default async function ErrorRulesPage() {
           title={t("errorRules.section.title")}
           icon="alert-triangle"
           iconColor="text-orange-400"
-          variant="warning"
+          variant="default"
           actions={
             <div className="flex gap-2">
               <Suspense fallback={<Skeleton className="h-9 w-24" />}>

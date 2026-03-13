@@ -29,26 +29,28 @@ export function ProviderTypeFilter({ value, onChange, disabled = false }: Provid
     <div className="flex items-center gap-2">
       <Filter className="h-4 w-4 text-muted-foreground" />
       <Select value={value} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger className="w-[200px]" disabled={disabled}>
+        <SelectTrigger className="w-[160px]" disabled={disabled}>
           <SelectValue placeholder={tForm("filterByType")} />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">{tForm("filterAllProviders")}</SelectItem>
-          {getAllProviderTypes().map((type) => {
-            const config = PROVIDER_TYPE_CONFIG[type];
-            const Icon = config.icon;
-            const typeKey = getProviderTypeTranslationKey(type);
-            const label = tTypes(`${typeKey}.label`);
+          {getAllProviderTypes()
+            .filter((type) => !["claude-auth", "gemini-cli"].includes(type)) // internal/system types
+            .map((type) => {
+              const config = PROVIDER_TYPE_CONFIG[type];
+              const Icon = config.icon;
+              const typeKey = getProviderTypeTranslationKey(type);
+              const label = tTypes(`${typeKey}.label`);
 
-            return (
-              <SelectItem key={type} value={type}>
-                <div className="flex items-center gap-2">
-                  <Icon className={`h-3.5 w-3.5 ${config.iconColor}`} />
-                  <span>{label}</span>
-                </div>
-              </SelectItem>
-            );
-          })}
+              return (
+                <SelectItem key={type} value={type}>
+                  <div className="flex items-center gap-2">
+                    <Icon className={`h-3.5 w-3.5 ${config.iconColor}`} />
+                    <span className="truncate max-w-[100px]">{label}</span>
+                  </div>
+                </SelectItem>
+              );
+            })}
         </SelectContent>
       </Select>
     </div>

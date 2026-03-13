@@ -64,12 +64,10 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   useEffect(() => {
     // providerGroup 为 admin-only 字段：仅管理员允许编辑 Key.providerGroup
     if (!isAdmin) return;
-    if (user?.id) {
-      getAvailableProviderGroups(user.id).then(setProviderGroupSuggestions);
-    } else {
-      getAvailableProviderGroups().then(setProviderGroupSuggestions);
-    }
-  }, [isAdmin, user?.id]);
+    getAvailableProviderGroups()
+      .then(setProviderGroupSuggestions)
+      .catch(() => {});
+  }, [isAdmin]);
 
   const formatExpiresAt = (expiresAt: string) => {
     if (!expiresAt) return "";

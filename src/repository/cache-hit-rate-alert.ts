@@ -82,10 +82,10 @@ function normalizeTtlFallbackSeconds(config: CacheHitRateAlertQueryConfig): {
   const base: Record<ProviderType, number> = {
     claude: defaultSeconds,
     "claude-auth": defaultSeconds,
-    codex: 6 * 3600,
+    codex: 600,
     gemini: defaultSeconds,
     "gemini-cli": defaultSeconds,
-    "openai-compatible": 6 * 3600,
+    "openai-compatible": 600,
   };
   const overrides = config.ttlFallbackSecondsByProviderType ?? {};
   const byType: Record<ProviderType, number> = { ...base };

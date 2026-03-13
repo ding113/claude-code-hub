@@ -71,7 +71,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
   if (rules.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/5 mb-4">
+        <div className="p-3 rounded-xl bg-card/80 border border-border/50 mb-4">
           <AlertTriangle className="h-8 w-8 text-muted-foreground" />
         </div>
         <p className="text-sm text-muted-foreground">{t("errorRules.emptyState")}</p>
@@ -92,9 +92,9 @@ export function RuleListTable({ rules }: RuleListTableProps) {
             <div
               key={rule.id}
               className={cn(
-                "p-4 rounded-xl bg-white/[0.02] border border-white/5",
+                "p-4 rounded-xl bg-card/80 border border-border/50",
                 "flex flex-col sm:flex-row sm:items-center justify-between gap-4",
-                "hover:bg-white/[0.04] hover:border-white/10 transition-colors group"
+                "hover:bg-card hover:border-border transition-colors group"
               )}
             >
               <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -122,7 +122,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                     {rule.isDefault && (
                       <Badge
                         variant="secondary"
-                        className="text-[10px] bg-white/5 text-muted-foreground border-white/10"
+                        className="text-[10px] bg-muted/50 text-muted-foreground border-border"
                       >
                         {t("errorRules.table.default")}
                       </Badge>
@@ -130,7 +130,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                     {rule.category && (
                       <Badge
                         variant="outline"
-                        className={cn("text-[10px] border-white/10", colors.text)}
+                        className={cn("text-[10px] border-border", colors.text)}
                       >
                         {rule.category}
                       </Badge>
@@ -141,7 +141,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                       {rule.description}
                     </p>
                   )}
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                  <p className="text-[10px] text-muted-foreground mt-1">
                     {formatInTimeZone(new Date(rule.createdAt), timeZone, "yyyy-MM-dd HH:mm:ss")}
                   </p>
                 </div>
@@ -156,7 +156,7 @@ export function RuleListTable({ rules }: RuleListTableProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-8 w-8 hover:bg-white/10"
+                    className="h-8 w-8 hover:bg-muted"
                     onClick={() => handleEdit(rule)}
                   >
                     <Pencil className="h-4 w-4" />

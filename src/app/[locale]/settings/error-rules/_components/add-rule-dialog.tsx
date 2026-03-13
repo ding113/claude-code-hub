@@ -244,7 +244,7 @@ export function AddRuleDialog() {
               variant="ghost"
               onClick={() => setOpen(false)}
               disabled={isSubmitting}
-              className="hover:bg-white/10"
+              className="hover:bg-muted"
             >
               {t("common.cancel")}
             </Button>
