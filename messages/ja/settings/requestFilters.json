@@ -90,7 +90,8 @@
   },
   "table": {
     "action": "アクション",
-    "actions": "アクション",
+    "actions": "操作",
+    "advancedOps": "{count} 件の操作",
     "apply": "適用",
     "createdAt": "作成日時",
     "mode": "モード",

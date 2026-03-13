@@ -91,6 +91,7 @@
   "table": {
     "action": "Action",
     "actions": "Actions",
+    "advancedOps": "{count} operation(s)",
     "apply": "Apply",
     "createdAt": "Created At",
     "mode": "Mode",

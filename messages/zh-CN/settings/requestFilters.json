@@ -17,7 +17,7 @@
     "final": "后置（Final）"
   },
   "disable": "已禁用",
-  "confirmDelete": "确定删除过滤器\"{name}\"?",
+  "confirmDelete": "确定删除过滤器\"{name}\"？",
   "empty": "暂无过滤器，点击右上角新增。",
   "refreshCache": "刷新缓存",
   "refreshSuccess": "缓存已刷新，加载 {count} 条过滤器",
@@ -87,6 +87,7 @@
     "status": "状态",
     "createdAt": "创建时间",
     "actions": "操作",
+    "advancedOps": "{count} 个操作",
     "mode": "模式",
     "phase": "阶段"
   },

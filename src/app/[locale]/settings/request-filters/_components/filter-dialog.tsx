@@ -292,9 +292,8 @@ export function FilterDialog({ mode, trigger, filter, open, onOpenChange }: Prop
       } else {
         toast.error(result.error);
       }
-    } catch (error) {
+    } catch {
       toast.error(mode === "create" ? t("addFailed") : t("editFailed"));
-      console.error(error);
     } finally {
       setIsSubmitting(false);
     }

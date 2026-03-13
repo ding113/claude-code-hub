@@ -91,8 +91,9 @@
   "table": {
     "action": "Действие",
     "actions": "Действия",
+    "advancedOps": "Операций: {count}",
     "apply": "Область",
-    "createdAt": "Создано",
+    "createdAt": "Дата создания",
     "mode": "Режим",
     "name": "Название",
     "phase": "Фаза",

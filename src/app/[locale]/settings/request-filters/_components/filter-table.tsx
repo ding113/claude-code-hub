@@ -187,12 +187,18 @@ export function FilterTable({ filters, providers }: Props) {
                   </Badge>
                 </td>
                 <td className="px-4 py-3 text-sm max-w-[250px]">
-                  <code
-                    className="block rounded-lg bg-muted/50 border border-border px-2 py-1 text-xs truncate font-mono"
-                    title={filter.target}
-                  >
-                    {filter.target}
-                  </code>
+                  {filter.ruleMode === "advanced" ? (
+                    <span className="text-xs text-muted-foreground italic">
+                      {t("table.advancedOps", { count: filter.operations?.length ?? 0 })}
+                    </span>
+                  ) : (
+                    <code
+                      className="block rounded-lg bg-muted/50 border border-border px-2 py-1 text-xs truncate font-mono"
+                      title={filter.target}
+                    >
+                      {filter.target}
+                    </code>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm max-w-[200px]">
                   <span
@@ -275,6 +281,7 @@ export function FilterTable({ filters, providers }: Props) {
                   <Switch
                     checked={filter.isEnabled}
                     onCheckedChange={(checked) => handleToggle(filter, checked)}
+                    aria-label={filter.isEnabled ? t("enable") : t("disable")}
                   />
                 </td>
                 <td className="px-2 py-3 text-right">

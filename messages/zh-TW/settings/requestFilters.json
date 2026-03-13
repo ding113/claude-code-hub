@@ -91,6 +91,7 @@
   "table": {
     "action": "動作",
     "actions": "動作",
+    "advancedOps": "{count} 個操作",
     "apply": "範圍",
     "createdAt": "建立時間",
     "mode": "模式",
