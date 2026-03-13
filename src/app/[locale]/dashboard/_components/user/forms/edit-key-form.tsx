@@ -64,7 +64,9 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   useEffect(() => {
     // providerGroup 为 admin-only 字段：仅管理员允许编辑 Key.providerGroup
     if (!isAdmin) return;
-    getAvailableProviderGroups().then(setProviderGroupSuggestions);
+    getAvailableProviderGroups()
+      .then(setProviderGroupSuggestions)
+      .catch(() => {});
   }, [isAdmin]);
 
   const formatExpiresAt = (expiresAt: string) => {
