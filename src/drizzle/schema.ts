@@ -940,6 +940,11 @@ export const usageLedger = pgTable('usage_ledger', {
   usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
     .on(table.finalProviderId, table.createdAt, table.costUsd)
     .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for LATERAL last-usage per key (getUsers)
+  // finalProviderId as trailing key column for index-only scan (Drizzle lacks INCLUDE support)
+  usageLedgerKeyCreatedAtDescCoverIdx: index('idx_usage_ledger_key_created_at_desc_cover')
+    .on(table.key, sql`${table.createdAt} DESC NULLS LAST`, table.finalProviderId)
+    .where(sql`${table.blockedBy} IS NULL`),
 }));
 
 // Relations
