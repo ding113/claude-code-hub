@@ -89,7 +89,8 @@
     "actions": "操作",
     "advancedOps": "{count} 个操作",
     "mode": "模式",
-    "phase": "阶段"
+    "phase": "阶段",
+    "toggleStatus": "切换过滤器 {name}"
   },
   "scopeLabel": {
     "header": "Header",

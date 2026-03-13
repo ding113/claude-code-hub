@@ -101,7 +101,8 @@
     "replacement": "置換値",
     "scope": "スコープ",
     "status": "状態",
-    "target": "対象"
+    "target": "対象",
+    "toggleStatus": "フィルター {name} を切り替え"
   },
   "title": "リクエストフィルター"
 }

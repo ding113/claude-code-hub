@@ -71,8 +71,8 @@ function validateOperations(operations: unknown): string | null {
 
     const op = raw as unknown as FilterOperation;
 
-    // merge and insert are body-only
-    if ((op.op === "merge" || op.op === "insert") && op.scope !== "body") {
+    // merge and insert are body-only (enforced by type, validated at runtime as defense-in-depth)
+    if ((op.op === "merge" || op.op === "insert") && (raw.scope as string) !== "body") {
       return `${prefix}: ${op.op} operation only supports body scope`;
     }
 
@@ -224,6 +224,13 @@ export async function createRequestFilterAction(data: {
   const validationError = validatePayload(data);
   if (validationError) return { ok: false, error: validationError };
 
+  // Reject advanced + guard combo: advanced mode only supports final phase
+  const effectiveRuleMode = data.ruleMode ?? "simple";
+  const effectivePhase = data.executionPhase ?? "guard";
+  if (effectiveRuleMode === "advanced" && effectivePhase === "guard") {
+    return { ok: false, error: "Advanced mode filters only support final execution phase" };
+  }
+
   try {
     const created = await createRequestFilter({
       name: data.name.trim(),
@@ -273,16 +280,40 @@ export async function updateRequestFilterAction(
   const session = await getSession();
   if (!isAdmin(session)) return { ok: false, error: "权限不足" };
 
-  // Validate operations when ruleMode or operations change
-  if (updates.ruleMode !== undefined || updates.operations !== undefined) {
-    const existing = await getRequestFilterById(id);
+  // Fetch existing record once for all validations that need it
+  const needsExisting =
+    updates.ruleMode !== undefined ||
+    updates.operations !== undefined ||
+    updates.executionPhase !== undefined ||
+    updates.target !== undefined ||
+    updates.matchType !== undefined ||
+    updates.action !== undefined ||
+    updates.bindingType !== undefined ||
+    updates.providerIds !== undefined ||
+    updates.groupTags !== undefined;
+
+  let existing: RequestFilter | null = null;
+  if (needsExisting) {
+    existing = await getRequestFilterById(id);
     if (!existing) {
       return { ok: false, error: "记录不存在" };
     }
+  }
 
-    const effectiveRuleMode = updates.ruleMode ?? existing.ruleMode;
+  // Reject advanced + guard combo: advanced mode only supports final phase
+  if (updates.ruleMode !== undefined || updates.executionPhase !== undefined) {
+    const effectiveRuleMode = updates.ruleMode ?? existing!.ruleMode;
+    const effectivePhase = updates.executionPhase ?? existing!.executionPhase;
+    if (effectiveRuleMode === "advanced" && effectivePhase === "guard") {
+      return { ok: false, error: "Advanced mode filters only support final execution phase" };
+    }
+  }
+
+  // Validate operations when ruleMode or operations change
+  if (updates.ruleMode !== undefined || updates.operations !== undefined) {
+    const effectiveRuleMode = updates.ruleMode ?? existing!.ruleMode;
     const effectiveOperations =
-      updates.operations !== undefined ? updates.operations : existing.operations;
+      updates.operations !== undefined ? updates.operations : existing!.operations;
 
     if (effectiveRuleMode === "advanced") {
       const opsError = validateOperations(effectiveOperations);
@@ -298,23 +329,9 @@ export async function updateRequestFilterAction(
     updates.action !== undefined
   ) {
     // Determine effective target, matchType and action (from updates or existing filter)
-    let effectiveTarget = updates.target;
-    let effectiveMatchType = updates.matchType;
-    let effectiveAction = updates.action;
-
-    // If any field not in updates, need to check existing filter
-    if (
-      effectiveTarget === undefined ||
-      effectiveMatchType === undefined ||
-      effectiveAction === undefined
-    ) {
-      const existing = await getRequestFilterById(id);
-      if (existing) {
-        if (effectiveTarget === undefined) effectiveTarget = existing.target;
-        if (effectiveMatchType === undefined) effectiveMatchType = existing.matchType;
-        if (effectiveAction === undefined) effectiveAction = existing.action;
-      }
-    }
+    const effectiveTarget = updates.target ?? existing!.target;
+    const effectiveMatchType = updates.matchType ?? existing!.matchType;
+    const effectiveAction = updates.action ?? existing!.action;
 
     const isTextReplace = effectiveAction === "text_replace";
     const isRegex = effectiveMatchType === "regex";
@@ -330,23 +347,17 @@ export async function updateRequestFilterAction(
     updates.providerIds !== undefined ||
     updates.groupTags !== undefined
   ) {
-    // Need to merge updates with existing data
-    const existing = await getRequestFilterById(id);
-    if (!existing) {
-      return { ok: false, error: "记录不存在" };
-    }
-
-    const effectiveBindingType = updates.bindingType ?? existing.bindingType;
+    const effectiveBindingType = updates.bindingType ?? existing!.bindingType;
     const effectiveProviderIds =
-      updates.providerIds !== undefined ? updates.providerIds : existing.providerIds;
+      updates.providerIds !== undefined ? updates.providerIds : existing!.providerIds;
     const effectiveGroupTags =
-      updates.groupTags !== undefined ? updates.groupTags : existing.groupTags;
+      updates.groupTags !== undefined ? updates.groupTags : existing!.groupTags;
 
     const validationError = validatePayload({
-      name: existing.name,
-      scope: existing.scope,
-      action: existing.action,
-      target: existing.target,
+      name: existing!.name,
+      scope: existing!.scope,
+      action: existing!.action,
+      target: existing!.target,
       bindingType: effectiveBindingType,
       providerIds: effectiveProviderIds,
       groupTags: effectiveGroupTags,

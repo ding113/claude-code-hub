@@ -56,8 +56,10 @@ export interface RemoveOp extends BaseOp {
 // Merge (body only)
 // ---------------------------------------------------------------------------
 
-export interface MergeOp extends BaseOp {
+export interface MergeOp {
   op: "merge";
+  /** Merge only operates on request body */
+  scope: "body";
   /** Body JSON path to target object */
   path: string;
   /** Keys with null value -> delete; object value -> recursive merge; others -> overwrite */
@@ -68,8 +70,10 @@ export interface MergeOp extends BaseOp {
 // Insert (body only)
 // ---------------------------------------------------------------------------
 
-export interface InsertOp extends BaseOp {
+export interface InsertOp {
   op: "insert";
+  /** Insert only operates on request body */
+  scope: "body";
   /** Body JSON path to target array */
   path: string;
   /** Item to insert */

@@ -101,7 +101,8 @@
     "replacement": "替換值",
     "scope": "範圍",
     "status": "狀態",
-    "target": "目標"
+    "target": "目標",
+    "toggleStatus": "切換過濾器 {name}"
   },
   "title": "請求過濾器"
 }

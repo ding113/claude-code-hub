@@ -101,7 +101,8 @@
     "replacement": "Replacement",
     "scope": "Scope",
     "status": "Status",
-    "target": "Target"
+    "target": "Target",
+    "toggleStatus": "Toggle filter {name}"
   },
   "title": "Request Filters"
 }

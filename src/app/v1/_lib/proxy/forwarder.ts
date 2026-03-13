@@ -1908,9 +1908,12 @@ export class ProxyForwarder {
         );
 
         // Final-phase request filter for Gemini: after headers built, before body serialization
+        // Clone body to prevent in-place mutation of session.request.message on retries
         if (!session.getEndpointPolicy().bypassRequestFilters) {
           const { requestFilterEngine } = await import("@/lib/request-filter-engine");
-          await requestFilterEngine.applyFinal(session, bodyToSerialize, processedHeaders);
+          const bodyForFinal = structuredClone(bodyToSerialize);
+          await requestFilterEngine.applyFinal(session, bodyForFinal, processedHeaders);
+          bodyToSerialize = bodyForFinal;
         }
 
         const bodyString = JSON.stringify(bodyToSerialize);
@@ -1943,6 +1946,16 @@ export class ProxyForwarder {
           accessToken,
           isApiKey
         );
+
+        // Final-phase request filter for no-body requests (header-only operations)
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          await requestFilterEngine.applyFinal(
+            session,
+            {} as Record<string, unknown>,
+            processedHeaders
+          );
+        }
       }
 
       if (session.sessionId) {
@@ -2260,6 +2273,16 @@ export class ProxyForwarder {
               isStreaming,
             });
           }
+        }
+      } else {
+        // No body (GET/HEAD): still run final-phase for header-only filter operations
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          await requestFilterEngine.applyFinal(
+            session,
+            {} as Record<string, unknown>,
+            processedHeaders
+          );
         }
       }
     }

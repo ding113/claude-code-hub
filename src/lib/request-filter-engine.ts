@@ -38,7 +38,7 @@ function parsePath(path: string): Array<string | number> {
   let match: RegExpExecArray | null;
   while ((match = regex.exec(path)) !== null) {
     if (match[1]) {
-      if (UNSAFE_KEYS.has(match[1])) continue; // block prototype pollution
+      if (UNSAFE_KEYS.has(match[1])) return []; // reject entire path on unsafe key
       parts.push(match[1]);
     } else if (match[3]) {
       parts.push(Number(match[3]));
@@ -87,6 +87,7 @@ function setValueByPath(obj: Record<string, unknown>, path: string, value: unkno
 function getValueByPath(obj: Record<string, unknown>, path: string): unknown {
   if (!path) return undefined;
   const keys = parsePath(path);
+  if (keys.length === 0) return undefined;
   let current: unknown = obj;
   for (const key of keys) {
     if (current === null || current === undefined || typeof current !== "object") {

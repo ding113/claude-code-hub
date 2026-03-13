@@ -281,7 +281,7 @@ export function FilterTable({ filters, providers }: Props) {
                   <Switch
                     checked={filter.isEnabled}
                     onCheckedChange={(checked) => handleToggle(filter, checked)}
-                    aria-label={filter.isEnabled ? t("enable") : t("disable")}
+                    aria-label={t("table.toggleStatus", { name: filter.name })}
                   />
                 </td>
                 <td className="px-2 py-3 text-right">

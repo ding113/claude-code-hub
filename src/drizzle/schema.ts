@@ -17,6 +17,7 @@ import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
 import type { ResponseFixerConfig } from '@/types/system-config';
 import type { ProviderType } from "@/types/provider";
+import type { FilterOperation } from "@/lib/request-filter-types";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -637,7 +638,7 @@ export const requestFilters = pgTable('request_filters', {
   groupTags: jsonb('group_tags').$type<string[] | null>(),
   ruleMode: varchar('rule_mode', { length: 20 }).notNull().default('simple').$type<'simple' | 'advanced'>(),
   executionPhase: varchar('execution_phase', { length: 20 }).notNull().default('guard').$type<'guard' | 'final'>(),
-  operations: jsonb('operations'),
+  operations: jsonb('operations').$type<FilterOperation[] | null>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({

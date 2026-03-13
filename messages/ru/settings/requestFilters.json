@@ -101,7 +101,8 @@
     "replacement": "Значение",
     "scope": "Область",
     "status": "Статус",
-    "target": "Цель"
+    "target": "Цель",
+    "toggleStatus": "Переключить фильтр {name}"
   },
   "title": "Фильтры запросов"
 }
