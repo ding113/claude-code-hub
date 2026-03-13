@@ -2621,7 +2621,9 @@ export class ProxyForwarder {
           err.name === "ResponseAborted"
             ? "Response transmission aborted"
             : "Request aborted by client",
-          499 // Nginx 使用的 "Client Closed Request" 状态码
+          499, // Nginx 使用的 "Client Closed Request" 状态码
+          undefined,
+          true
         );
       }
 
@@ -3114,7 +3116,7 @@ export class ProxyForwarder {
         });
         abortAllAttempts(undefined, "client_abort");
         await settleFailure(
-          error instanceof ProxyError ? error : new ProxyError("Request aborted by client", 499)
+          error instanceof ProxyError ? error : new ProxyError("Request aborted by client", 499, undefined, true)
         );
         return;
       }
@@ -3378,7 +3380,7 @@ export class ProxyForwarder {
         () => {
           if (settled || winnerCommitted) return;
           noMoreProviders = true;
-          lastError = new ProxyError("Request aborted by client", 499);
+          lastError = new ProxyError("Request aborted by client", 499, undefined, true);
           for (const attempt of Array.from(attempts)) {
             if (!attempt.settled) {
               session.addProviderToChain(attempt.provider, {

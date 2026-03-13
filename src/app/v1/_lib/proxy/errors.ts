@@ -15,6 +15,8 @@ import type { ProviderChainItem } from "@/types/message";
 import type { ProxySession } from "./session";
 
 export class ProxyError extends Error {
+  public readonly isLocalAbort: boolean;
+
   constructor(
     message: string,
     public readonly statusCode: number,
@@ -54,10 +56,12 @@ export class ProxyError extends Error {
        * 命中的推断规则 id（仅用于内部调试/审计，不应用于用户展示文案）。
        */
       statusCodeInferenceMatcherId?: string;
-    }
+    },
+    isLocalAbort: boolean = false
   ) {
     super(message);
     this.name = "ProxyError";
+    this.isLocalAbort = isLocalAbort;
   }
 
   /**
@@ -702,16 +706,15 @@ export function isClientAbortError(error: Error): boolean {
     return true;
   }
 
-  // 2. 检查 HTTP 状态码（Nginx 使用的 "Client Closed Request"）
-  if (error instanceof ProxyError && error.statusCode === 499) {
+  // 2. 仅 CCH 本地合成的 499（非上游 HTTP 499）
+  if (error instanceof ProxyError && error.statusCode === 499 && error.isLocalAbort) {
     return true;
   }
 
-  // 3. 检查精确的错误消息（白名单模式，向后兼容）
+  // 3. 精确消息白名单（去掉 "aborted" 泛匹配，避免误伤上游错误文案）
   const abortMessages = [
     "This operation was aborted", // 标准 AbortError 消息
     "The user aborted a request", // 浏览器标准消息
-    "aborted", // 向后兼容（但需在前两个检查失败后才使用）
   ];
 
   return abortMessages.some((msg) => error.message.includes(msg));
