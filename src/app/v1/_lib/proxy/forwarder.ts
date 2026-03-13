@@ -1407,7 +1407,123 @@ export class ProxyForwarder {
                 },
               });
             } else {
-              // Plain Error path: omit ProxyError-only fields
+              // Non-ProxyError path: check if this is actually a network/transport
+              // error that was miscategorized. SocketError and similar network errors
+              // should trigger retry/failover, not be treated as client input errors.
+              // Detection logic aligned with isTransportError() in errors.ts.
+              // See: https://github.com/ding113/claude-code-hub/issues/909
+              const errCode =
+                (lastError as Error & { code?: string }).code ??
+                (lastError as Error & { cause?: { code?: string } }).cause?.code;
+
+              const TRANSPORT_CODES = new Set([
+                "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "ENOTFOUND",
+                "EAI_AGAIN",
+                "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT",
+                "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+              ]);
+
+              const isNetworkError =
+                lastError.name === "SocketError" ||
+                (errCode !== undefined && TRANSPORT_CODES.has(errCode)) ||
+                lastError.message?.toLowerCase().includes("fetch failed") ||
+                lastError.message?.toLowerCase().includes("other side closed");
+
+              if (isNetworkError) {
+                const err = lastError as Error & {
+                  code?: string;
+                  errno?: number;
+                  syscall?: string;
+                };
+
+                logger.warn(
+                  "ProxyForwarder: Network error miscategorized as NON_RETRYABLE_CLIENT_ERROR, handling as SYSTEM_ERROR for retry/failover",
+                  {
+                    providerId: currentProvider.id,
+                    providerName: currentProvider.name,
+                    errorType: err.constructor.name,
+                    errorMessage: err.message,
+                    errorCode: err.code,
+                    attemptNumber: attemptCount,
+                    totalProvidersAttempted,
+                    willRetry: attemptCount < maxAttemptsPerProvider,
+                    originalCategory: errorCategory,
+                  }
+                );
+
+                session.addProviderToChain(currentProvider, {
+                  ...endpointAudit,
+                  reason: "system_error",
+                  circuitState: getCircuitState(currentProvider.id),
+                  attemptNumber: attemptCount,
+                  errorMessage: errorMessage,
+                  errorDetails: {
+                    system: {
+                      errorType: err.constructor.name,
+                      errorName: err.name,
+                      errorMessage: err.message || err.name || "Unknown error",
+                      errorCode: err.code,
+                      errorSyscall: err.syscall,
+                    },
+                    request: buildRequestDetails(session),
+                  },
+                });
+
+                // Mirror endpoint-level circuit breaker recording (line ~1039)
+                // that SYSTEM_ERROR gets but our reclassified path skips
+                if (activeEndpoint.endpointId != null) {
+                  await recordEndpointFailure(activeEndpoint.endpointId, lastError);
+                }
+
+
+                if (attemptCount < maxAttemptsPerProvider) {
+                  currentEndpointIndex++;
+                  logger.debug("ProxyForwarder: Advancing endpoint index due to miscategorized network error", {
+                    providerId: currentProvider.id,
+                    previousEndpointIndex: currentEndpointIndex - 1,
+                    newEndpointIndex: currentEndpointIndex,
+                    maxEndpointIndex: endpointCandidates.length - 1,
+                  });
+
+                  await new Promise((resolve) => setTimeout(resolve, 100));
+                  continue;
+                }
+
+                logger.warn("ProxyForwarder: Misclassified network error persists, will switch provider", {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  totalProvidersAttempted,
+                });
+
+                const env = getEnvConfig();
+                failedProviderIds.push(currentProvider.id);
+
+                if (env.ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS) {
+                  logger.warn(
+                    "ProxyForwarder: Network error will be counted towards circuit breaker (enabled by config)",
+                    {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      errorType: err.constructor.name,
+                      errorCode: err.code,
+                    }
+                  );
+
+                  await recordFailure(currentProvider.id, lastError);
+                } else {
+                  logger.debug(
+                    "ProxyForwarder: Network error not counted towards circuit breaker (disabled by default)",
+                    {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                    }
+                  );
+                }
+
+                break;
+              }
+
+              // Genuine non-ProxyError client error: log and throw
               logger.warn(
                 "ProxyForwarder: Non-retryable client error (plain error), stopping immediately",
                 {
