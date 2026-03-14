@@ -125,12 +125,7 @@ describe("getSessionDetails - unified specialSettings", () => {
     if (!result.ok) return;
 
     const types = (result.data.specialSettings ?? []).map((s) => s.type).sort();
-    expect(types).toEqual(
-      [
-        "anthropic_cache_ttl_header_override",
-        "guard_intercept",
-      ].sort()
-    );
+    expect(types).toEqual(["anthropic_cache_ttl_header_override", "guard_intercept"].sort());
   });
 
   test("当 Redis 与 DB 同时存在 specialSettings 时，应合并并去重", async () => {
