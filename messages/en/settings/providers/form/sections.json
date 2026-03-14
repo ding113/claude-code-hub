@@ -294,15 +294,6 @@
         }
       }
     },
-    "context1m": {
-      "desc": "Configure 1M context window support. Only affects Sonnet models (claude-sonnet-4-5, claude-sonnet-4). Tiered pricing applies when enabled.",
-      "label": "1M Context Window",
-      "options": {
-        "disabled": "Disabled",
-        "forceEnable": "Force Enable (for supported models)",
-        "inherit": "Inherit (follow client request)"
-      }
-    },
     "modelRedirects": {
       "label": "Model Redirects",
       "optional": "(optional)"

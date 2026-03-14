@@ -1,3 +1,4 @@
+import { extractAnthropicEffortFromRequestBody } from "@/lib/utils/anthropic-effort";
 import { createMessageRequest } from "@/repository/message";
 import type { ProxySession } from "./session";
 
@@ -29,6 +30,24 @@ export class ProxyMessageService {
     const currentModel = session.request.model;
     if (currentModel && !session.getOriginalModel()) {
       session.setOriginalModel(currentModel);
+    }
+
+    const isAnthropicProvider =
+      provider.providerType === "claude" || provider.providerType === "claude-auth";
+    const hasAnthropicEffortAudit = session
+      .getSpecialSettings()
+      ?.some((setting) => setting.type === "anthropic_effort");
+
+    if (isAnthropicProvider && !hasAnthropicEffortAudit) {
+      const anthropicEffort = extractAnthropicEffortFromRequestBody(session.request.message);
+      if (anthropicEffort) {
+        session.addSpecialSetting({
+          type: "anthropic_effort",
+          scope: "request",
+          hit: true,
+          effort: anthropicEffort,
+        });
+      }
     }
 
     const messageRequest = await createMessageRequest({

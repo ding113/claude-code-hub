@@ -115,40 +115,6 @@ export function OptionsSection({ subSectionRefs }: OptionsSectionProps) {
                   </SelectContent>
                 </Select>
               </SmartInputWrapper>
-
-              {/* 1M Context Window - Claude type only (or batch mode) */}
-              {(providerType === "claude" || providerType === "claude-auth" || isBatch) && (
-                <SmartInputWrapper
-                  label={t("sections.routing.context1m.label")}
-                  description={t("sections.routing.context1m.desc")}
-                >
-                  <Select
-                    value={state.routing.context1mPreference}
-                    onValueChange={(val) =>
-                      dispatch({
-                        type: "SET_CONTEXT_1M_PREFERENCE",
-                        payload: val as "inherit" | "force_enable" | "disabled",
-                      })
-                    }
-                    disabled={state.ui.isPending}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="inherit" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">
-                        {t("sections.routing.context1m.options.inherit")}
-                      </SelectItem>
-                      <SelectItem value="force_enable">
-                        {t("sections.routing.context1m.options.forceEnable")}
-                      </SelectItem>
-                      <SelectItem value="disabled">
-                        {t("sections.routing.context1m.options.disabled")}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </SmartInputWrapper>
-              )}
             </div>
           </SectionCard>
 

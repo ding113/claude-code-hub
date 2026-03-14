@@ -57,6 +57,7 @@ import {
   getAllProviderTypes,
   getProviderTypeConfig,
   getProviderTypeTranslationKey,
+  getUserFacingProviderTypes,
 } from "@/lib/provider-type-utils";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { ProviderEndpoint, ProviderType } from "@/types/provider";
@@ -496,9 +497,7 @@ export function AddEndpointButton({
   const [isEnabled, setIsEnabled] = useState(true);
   const [providerType, setProviderType] = useState<ProviderType>(fixedProviderType ?? "claude");
 
-  const selectableTypes: ProviderType[] = getAllProviderTypes().filter(
-    (type) => !["claude-auth", "gemini-cli"].includes(type)
-  );
+  const selectableTypes: ProviderType[] = getUserFacingProviderTypes();
 
   useEffect(() => {
     if (!open) {

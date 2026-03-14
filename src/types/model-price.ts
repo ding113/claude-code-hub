@@ -1,6 +1,23 @@
 /**
  * 模型价格数据
  */
+export type LongContextPricingScope = "request" | "session";
+
+export interface LongContextPricing {
+  threshold_tokens: number;
+  scope?: LongContextPricingScope;
+  input_multiplier?: number;
+  output_multiplier?: number;
+  cache_creation_input_multiplier?: number;
+  cache_creation_input_multiplier_above_1hr?: number;
+  cache_read_input_multiplier?: number;
+  input_cost_per_token?: number;
+  output_cost_per_token?: number;
+  cache_creation_input_token_cost?: number;
+  cache_creation_input_token_cost_above_1hr?: number;
+  cache_read_input_token_cost?: number;
+}
+
 export interface ModelPriceData {
   // 基础价格信息
   input_cost_per_token?: number;
@@ -52,6 +69,9 @@ export interface ModelPriceData {
     search_context_size_low?: number;
     search_context_size_medium?: number;
   };
+
+  // 长上下文价格（例如 GPT-5.4 超过 272K 后的 premium 费率）
+  long_context_pricing?: LongContextPricing;
 
   // 模型能力信息
   display_name?: string;

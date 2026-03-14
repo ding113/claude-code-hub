@@ -243,7 +243,7 @@ export function MetadataTab({
                       1M Context
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      ({t("billingDetails.context1mPricing")})
+                      ({t("billingDetails.context1mEnabled")})
                     </span>
                   </div>
                 </div>

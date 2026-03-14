@@ -17,6 +17,7 @@ import { relations, sql } from 'drizzle-orm';
 import type { SpecialSetting } from '@/types/special-settings';
 import type { ResponseFixerConfig } from '@/types/system-config';
 import type { ProviderType } from "@/types/provider";
+import type { FilterOperation } from "@/lib/request-filter-types";
 
 // Enums
 export const dailyResetModeEnum = pgEnum('daily_reset_mode', ['fixed', 'rolling']);
@@ -635,6 +636,9 @@ export const requestFilters = pgTable('request_filters', {
     .$type<'global' | 'providers' | 'groups'>(),
   providerIds: jsonb('provider_ids').$type<number[] | null>(),
   groupTags: jsonb('group_tags').$type<string[] | null>(),
+  ruleMode: varchar('rule_mode', { length: 20 }).notNull().default('simple').$type<'simple' | 'advanced'>(),
+  executionPhase: varchar('execution_phase', { length: 20 }).notNull().default('guard').$type<'guard' | 'final'>(),
+  operations: jsonb('operations').$type<FilterOperation[] | null>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -642,6 +646,7 @@ export const requestFilters = pgTable('request_filters', {
   requestFiltersScopeIdx: index('idx_request_filters_scope').on(table.scope),
   requestFiltersActionIdx: index('idx_request_filters_action').on(table.action),
   requestFiltersBindingIdx: index('idx_request_filters_binding').on(table.isEnabled, table.bindingType),
+  requestFiltersPhaseIdx: index('idx_request_filters_phase').on(table.isEnabled, table.executionPhase),
 }));
 
 // Sensitive Words table
@@ -934,6 +939,11 @@ export const usageLedger = pgTable('usage_ledger', {
   // #slow-query: covering index for SUM(cost_usd) per provider (rate-limit total)
   usageLedgerProviderCostCoverIdx: index('idx_usage_ledger_provider_cost_cover')
     .on(table.finalProviderId, table.createdAt, table.costUsd)
+    .where(sql`${table.blockedBy} IS NULL`),
+  // #slow-query: covering index for LATERAL last-usage per key (getUsers)
+  // finalProviderId as trailing key column for index-only scan (Drizzle lacks INCLUDE support)
+  usageLedgerKeyCreatedAtDescCoverIdx: index('idx_usage_ledger_key_created_at_desc_cover')
+    .on(table.key, sql`${table.createdAt} DESC NULLS LAST`, table.finalProviderId)
     .where(sql`${table.blockedBy} IS NULL`),
 }));
 

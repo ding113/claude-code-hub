@@ -24,7 +24,6 @@ import {
 } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
-import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import {
   detectUpstreamErrorFromSseOrJsonText,
   inferUpstreamErrorStatusCodeFromText,
@@ -1350,8 +1349,6 @@ export class ProxyForwarder {
 
           // ⭐ 3. 不可重试的客户端输入错误处理（不计入熔断器，不重试，立即返回）
           if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
-            const proxyError = lastError as ProxyError;
-            const statusCode = proxyError.statusCode;
             const detectionResult = await getErrorDetectionResultAsync(lastError);
             const matchedRule =
               detectionResult.matched &&
@@ -1370,42 +1367,71 @@ export class ProxyForwarder {
                   }
                 : undefined;
 
-            logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
-              providerId: currentProvider.id,
-              providerName: currentProvider.name,
-              statusCode: statusCode,
-              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
-              error: errorMessage,
-              attemptNumber: attemptCount,
-              totalProvidersAttempted,
-              reason:
-                "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
-            });
+            if (lastError instanceof ProxyError) {
+              // Original path: full ProxyError fields available
+              logger.warn("ProxyForwarder: Non-retryable client error, stopping immediately", {
+                providerId: currentProvider.id,
+                providerName: currentProvider.name,
+                statusCode: lastError.statusCode,
+                statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
+                error: errorMessage,
+                attemptNumber: attemptCount,
+                totalProvidersAttempted,
+                reason:
+                  "White-listed client error (prompt length, content filter, PDF limit, or thinking format)",
+              });
 
-            // 记录到决策链（标记为不可重试的客户端错误）
-            // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
-            session.addProviderToChain(currentProvider, {
-              ...endpointAudit,
-              reason: "client_error_non_retryable", // 新增的 reason 值
-              circuitState: getCircuitState(currentProvider.id),
-              attemptNumber: attemptCount,
-              errorMessage: errorMessage,
-              statusCode: statusCode,
-              statusCodeInferred: proxyError.upstreamError?.statusCodeInferred ?? false,
-              errorDetails: {
-                provider: {
-                  id: currentProvider.id,
-                  name: currentProvider.name,
-                  statusCode: statusCode,
-                  statusText: proxyError.message,
-                  upstreamBody: proxyError.upstreamError?.body,
-                  upstreamParsed: proxyError.upstreamError?.parsed,
+              // 记录到决策链（标记为不可重试的客户端错误）
+              // 注意：不调用 recordFailure()，因为这不是供应商的问题，是客户端输入问题
+              session.addProviderToChain(currentProvider, {
+                ...endpointAudit,
+                reason: "client_error_non_retryable", // 新增的 reason 值
+                circuitState: getCircuitState(currentProvider.id),
+                attemptNumber: attemptCount,
+                errorMessage: errorMessage,
+                statusCode: lastError.statusCode,
+                statusCodeInferred: lastError.upstreamError?.statusCodeInferred ?? false,
+                errorDetails: {
+                  provider: {
+                    id: currentProvider.id,
+                    name: currentProvider.name,
+                    statusCode: lastError.statusCode,
+                    statusText: lastError.message,
+                    upstreamBody: lastError.upstreamError?.body,
+                    upstreamParsed: lastError.upstreamError?.parsed,
+                  },
+                  clientError: lastError.getDetailedErrorMessage(),
+                  matchedRule,
+                  request: buildRequestDetails(session),
                 },
-                clientError: proxyError.getDetailedErrorMessage(),
-                matchedRule,
-                request: buildRequestDetails(session),
-              },
-            });
+              });
+            } else {
+              // Plain Error path: omit ProxyError-only fields
+              logger.warn(
+                "ProxyForwarder: Non-retryable client error (plain error), stopping immediately",
+                {
+                  providerId: currentProvider.id,
+                  providerName: currentProvider.name,
+                  error: lastError.message,
+                  attemptNumber: attemptCount,
+                  totalProvidersAttempted,
+                  reason: "White-listed client error matched by error rule",
+                }
+              );
+
+              session.addProviderToChain(currentProvider, {
+                ...endpointAudit,
+                reason: "client_error_non_retryable",
+                circuitState: getCircuitState(currentProvider.id),
+                attemptNumber: attemptCount,
+                errorMessage: lastError.message,
+                errorDetails: {
+                  clientError: lastError.message,
+                  matchedRule,
+                  request: buildRequestDetails(session),
+                },
+              });
+            }
 
             // 立即抛出错误，不重试，不切换供应商
             // 白名单错误不计入熔断器，因为是客户端输入问题，不是供应商故障
@@ -1796,23 +1822,11 @@ export class ProxyForwarder {
     );
     session.setCacheTtlResolved(resolvedCacheTtl);
 
-    // 解析 1M 上下文是否应用
-    // 注意：此时模型重定向尚未发生，getCurrentModel() 返回原始模型
-    // 1M 功能仅对 Anthropic 类型供应商有效
+    // 1M context: GA, no longer needs beta header. Just record if client sent the header.
     const isAnthropicProvider =
       provider.providerType === "claude" || provider.providerType === "claude-auth";
-    if (isAnthropicProvider) {
-      const currentModel = session.getCurrentModel() || "";
-      const clientRequests1m = session.clientRequestsContext1m();
-      // W-007: 添加类型验证，避免类型断言
-      const validPreferences = ["inherit", "force_enable", "disabled", null] as const;
-      type Context1mPref = (typeof validPreferences)[number];
-      const rawPref = provider.context1mPreference;
-      const context1mPref: Context1mPref = validPreferences.includes(rawPref as Context1mPref)
-        ? (rawPref as Context1mPref)
-        : null;
-      const context1mApplied = shouldApplyContext1m(context1mPref, currentModel, clientRequests1m);
-      session.setContext1mApplied(context1mApplied);
+    if (isAnthropicProvider && session.clientRequestsContext1m()) {
+      session.setContext1mApplied(true);
     }
 
     // Apply model redirect (if configured) - skip for raw passthrough endpoints
@@ -1829,6 +1843,7 @@ export class ProxyForwarder {
     let requestBody: BodyInit | undefined;
     let isStreaming = false;
     let proxyUrl: string;
+    let isApiKey = false;
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
@@ -1871,45 +1886,91 @@ export class ProxyForwarder {
           }
         }
 
+        // 检测流式请求：Gemini 支持两种方式
+        // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
+        // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
+        const geminiPathname = session.requestUrl.pathname || "";
+        const geminiSearchParams = session.requestUrl.searchParams;
+        const originalBody = session.request.message as Record<string, unknown>;
+        isStreaming =
+          geminiPathname.includes("streamGenerateContent") ||
+          geminiSearchParams.get("alt") === "sse" ||
+          originalBody?.stream === true;
+
+        // 2. 准备认证和 Headers
+        const accessToken = await GeminiAuth.getAccessToken(provider.key);
+        isApiKey = GeminiAuth.isApiKey(provider.key);
+
+        // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
+        const effectiveBaseUrl =
+          baseUrl ||
+          provider.url ||
+          (provider.providerType === "gemini"
+            ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+            : GEMINI_PROTOCOL.CLI_ENDPOINT);
+
+        proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
+
+        // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
+        // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
+        processedHeaders = ProxyForwarder.buildGeminiHeaders(
+          session,
+          provider,
+          effectiveBaseUrl,
+          accessToken,
+          isApiKey
+        );
+
+        // Final-phase request filter for Gemini: after headers built, before body serialization
+        // Clone body to prevent in-place mutation of session.request.message on retries
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          const bodyForFinal = structuredClone(bodyToSerialize);
+          await requestFilterEngine.applyFinal(session, bodyForFinal, processedHeaders);
+          bodyToSerialize = bodyForFinal;
+        }
+
         const bodyString = JSON.stringify(bodyToSerialize);
         requestBody = bodyString;
         session.forwardedRequestBody = bodyString;
+      } else {
+        // No body: still need streaming detection, auth, URL, headers
+        const geminiPathname = session.requestUrl.pathname || "";
+        const geminiSearchParams = session.requestUrl.searchParams;
+        isStreaming =
+          geminiPathname.includes("streamGenerateContent") ||
+          geminiSearchParams.get("alt") === "sse";
+
+        const accessToken = await GeminiAuth.getAccessToken(provider.key);
+        isApiKey = GeminiAuth.isApiKey(provider.key);
+
+        const effectiveBaseUrl =
+          baseUrl ||
+          provider.url ||
+          (provider.providerType === "gemini"
+            ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
+            : GEMINI_PROTOCOL.CLI_ENDPOINT);
+
+        proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
+
+        processedHeaders = ProxyForwarder.buildGeminiHeaders(
+          session,
+          provider,
+          effectiveBaseUrl,
+          accessToken,
+          isApiKey
+        );
+
+        // Final-phase request filter for no-body requests (header-only operations)
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          await requestFilterEngine.applyFinal(
+            session,
+            {} as Record<string, unknown>,
+            processedHeaders
+          );
+        }
       }
-
-      // 检测流式请求：Gemini 支持两种方式
-      // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
-      // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
-      const geminiPathname = session.requestUrl.pathname || "";
-      const geminiSearchParams = session.requestUrl.searchParams;
-      const originalBody = session.request.message as Record<string, unknown>;
-      isStreaming =
-        geminiPathname.includes("streamGenerateContent") ||
-        geminiSearchParams.get("alt") === "sse" ||
-        originalBody?.stream === true;
-
-      // 2. 准备认证和 Headers
-      const accessToken = await GeminiAuth.getAccessToken(provider.key);
-      const isApiKey = GeminiAuth.isApiKey(provider.key);
-
-      // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
-      const effectiveBaseUrl =
-        baseUrl ||
-        provider.url ||
-        (provider.providerType === "gemini"
-          ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
-          : GEMINI_PROTOCOL.CLI_ENDPOINT);
-
-      proxyUrl = buildProxyUrl(effectiveBaseUrl, session.requestUrl);
-
-      // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
-      // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
-      processedHeaders = ProxyForwarder.buildGeminiHeaders(
-        session,
-        provider,
-        effectiveBaseUrl,
-        accessToken,
-        isApiKey
-      );
 
       if (session.sessionId) {
         void SessionManager.storeSessionUpstreamRequestMeta(
@@ -2197,6 +2258,12 @@ export class ProxyForwarder {
             }
           }
 
+          // Final-phase request filter: after all provider overrides, before serialization
+          if (!session.getEndpointPolicy().bypassRequestFilters) {
+            const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+            await requestFilterEngine.applyFinal(session, messageToSend, processedHeaders);
+          }
+
           const bodyString = JSON.stringify(messageToSend);
           requestBody = bodyString;
           session.forwardedRequestBody = bodyString;
@@ -2220,6 +2287,16 @@ export class ProxyForwarder {
               isStreaming,
             });
           }
+        }
+      } else {
+        // No body (GET/HEAD): still run final-phase for header-only filter operations
+        if (!session.getEndpointPolicy().bypassRequestFilters) {
+          const { requestFilterEngine } = await import("@/lib/request-filter-engine");
+          await requestFilterEngine.applyFinal(
+            session,
+            {} as Record<string, unknown>,
+            processedHeaders
+          );
         }
       }
     }
@@ -2531,7 +2608,9 @@ export class ProxyForwarder {
           err.name === "ResponseAborted"
             ? "Response transmission aborted"
             : "Request aborted by client",
-          499 // Nginx 使用的 "Client Closed Request" 状态码
+          499, // Nginx 使用的 "Client Closed Request" 状态码
+          undefined,
+          true
         );
       }
 
@@ -3024,7 +3103,9 @@ export class ProxyForwarder {
         });
         abortAllAttempts(undefined, "client_abort");
         await settleFailure(
-          error instanceof ProxyError ? error : new ProxyError("Request aborted by client", 499)
+          error instanceof ProxyError
+            ? error
+            : new ProxyError("Request aborted by client", 499, undefined, true)
         );
         return;
       }
@@ -3288,7 +3369,7 @@ export class ProxyForwarder {
         () => {
           if (settled || winnerCommitted) return;
           noMoreProviders = true;
-          lastError = new ProxyError("Request aborted by client", 499);
+          lastError = new ProxyError("Request aborted by client", 499, undefined, true);
           for (const attempt of Array.from(attempts)) {
             if (!attempt.settled) {
               session.addProviderToChain(attempt.provider, {
@@ -3624,34 +3705,6 @@ export class ProxyForwarder {
       if (betaFlags.size === 1) {
         betaFlags.add("prompt-caching-2024-07-31");
       }
-      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
-    }
-
-    // 针对 1M 上下文，补充 Anthropic beta header
-    // 逻辑：根据供应商 context1mPreference 决定是否应用 1M 上下文
-    // - 'disabled': 不应用（已在调度阶段被过滤）
-    // - 'force_enable': 强制应用（仅对支持的模型）
-    // - 'inherit' 或 null: 遵循客户端请求
-    if (
-      session.getContext1mApplied?.() &&
-      (provider.providerType === "claude" || provider.providerType === "claude-auth")
-    ) {
-      session.addSpecialSetting({
-        type: "anthropic_context_1m_header_override",
-        scope: "request_header",
-        hit: true,
-        header: "anthropic-beta",
-        flag: CONTEXT_1M_BETA_HEADER,
-      });
-      const existingBeta =
-        overrides["anthropic-beta"] || session.headers.get("anthropic-beta") || "";
-      const betaFlags = new Set(
-        existingBeta
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      );
-      betaFlags.add(CONTEXT_1M_BETA_HEADER);
       overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 

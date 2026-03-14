@@ -263,7 +263,7 @@ export function UsageLogsTable({
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="flex items-center gap-1 min-w-0 cursor-help">
+                            <div className="min-w-0 cursor-help">
                               <ModelDisplayWithRedirect
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
@@ -433,22 +433,10 @@ export function UsageLogsTable({
                               <div>
                                 {t("logs.billingDetails.input")}:{" "}
                                 {formatTokenAmount(log.inputTokens)} tokens
-                                {log.context1mApplied && (log.inputTokens ?? 0) > 200000 && (
-                                  <span className="text-purple-600 dark:text-purple-400">
-                                    {" "}
-                                    (2x &gt;200k)
-                                  </span>
-                                )}
                               </div>
                               <div>
                                 {t("logs.billingDetails.output")}:{" "}
                                 {formatTokenAmount(log.outputTokens)} tokens
-                                {log.context1mApplied && (log.outputTokens ?? 0) > 200000 && (
-                                  <span className="text-purple-600 dark:text-purple-400">
-                                    {" "}
-                                    (1.5x &gt;200k)
-                                  </span>
-                                )}
                               </div>
                               {(log.cacheCreation5mInputTokens ?? 0) > 0 && (
                                 <div>

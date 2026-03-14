@@ -58,7 +58,8 @@
     "next": "Next",
     "noLogs": "No logs",
     "unknownModel": "Unknown model",
-    "billingModel": "Billing: {model}"
+    "billingModel": "Billing: {model}",
+    "anthropicEffort": "Effort: {effort}"
   },
   "expiration": {
     "title": "Expiration",

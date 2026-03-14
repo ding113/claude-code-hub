@@ -34,7 +34,7 @@ export const CLIENT_RESTRICTION_PRESET_OPTIONS: readonly ClientRestrictionPreset
   },
   { value: "gemini-cli", aliases: ["gemini-cli"] },
   { value: "factory-cli", aliases: ["factory-cli"] },
-  { value: "codex-cli", aliases: ["codex-cli"] },
+  { value: "codex-cli", aliases: ["codex-cli", "codex_vscode", "Codex Desktop"] },
 ];
 
 const PRESET_OPTION_MAP = new Map(

@@ -41,7 +41,7 @@ export function QuickExpirePicker({ onSelect, translations }: QuickExpirePickerP
   return (
     <div className="flex flex-wrap gap-2">
       <Button type="button" variant="outline" size="sm" onClick={() => onSelect(addDays(base, 7))}>
-        {getTranslation(translations, "week", "一周后")}
+        {getTranslation(translations, "week", "1 week")}
       </Button>
       <Button
         type="button"
@@ -49,7 +49,7 @@ export function QuickExpirePicker({ onSelect, translations }: QuickExpirePickerP
         size="sm"
         onClick={() => onSelect(addMonths(base, 1))}
       >
-        {getTranslation(translations, "month", "一月后")}
+        {getTranslation(translations, "month", "1 month")}
       </Button>
       <Button
         type="button"
@@ -57,10 +57,10 @@ export function QuickExpirePicker({ onSelect, translations }: QuickExpirePickerP
         size="sm"
         onClick={() => onSelect(addMonths(base, 3))}
       >
-        {getTranslation(translations, "threeMonths", "三月后")}
+        {getTranslation(translations, "threeMonths", "3 months")}
       </Button>
       <Button type="button" variant="outline" size="sm" onClick={() => onSelect(addYears(base, 1))}>
-        {getTranslation(translations, "year", "一年后")}
+        {getTranslation(translations, "year", "1 year")}
       </Button>
     </div>
   );

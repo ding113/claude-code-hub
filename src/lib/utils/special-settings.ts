@@ -50,10 +50,19 @@ function buildSettingKey(setting: SpecialSetting): string {
       ]);
     case "guard_intercept":
       return JSON.stringify([setting.type, setting.guard, setting.action, setting.statusCode]);
+    case "anthropic_effort":
+      return JSON.stringify([setting.type, setting.hit, setting.effort]);
     case "anthropic_cache_ttl_header_override":
       return JSON.stringify([setting.type, setting.ttl]);
     case "anthropic_context_1m_header_override":
       return JSON.stringify([setting.type, setting.header, setting.flag]);
+    case "long_context_pricing":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.pricingScope ?? null,
+        setting.thresholdTokens ?? null,
+      ]);
     case "thinking_signature_rectifier":
       return JSON.stringify([
         setting.type,
@@ -167,24 +176,6 @@ export function buildUnifiedSpecialSettings(
       scope: "request_header",
       hit: true,
       ttl: params.cacheTtlApplied,
-    });
-  }
-
-  const hasExplicitAnthropicContext1m = base.some(
-    (item) => item.type === "anthropic_context_1m_header_override"
-  );
-  const hasCodexServiceTierResult = base.some((item) => item.type === "codex_service_tier_result");
-  if (
-    params.context1mApplied === true &&
-    !hasExplicitAnthropicContext1m &&
-    !hasCodexServiceTierResult
-  ) {
-    derived.push({
-      type: "anthropic_context_1m_header_override",
-      scope: "request_header",
-      hit: true,
-      header: "anthropic-beta",
-      flag: "context-1m-2025-08-07",
     });
   }
 

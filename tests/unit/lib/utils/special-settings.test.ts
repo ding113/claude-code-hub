@@ -75,43 +75,13 @@ describe("buildUnifiedSpecialSettings", () => {
     );
   });
 
-  test("context1mApplied=true 时应在无显式记录时回退派生 anthropic_context_1m_header_override", () => {
+  test("context1mApplied=true no longer derives header override (1M context GA)", () => {
     const settings = buildUnifiedSpecialSettings({
       existing: null,
       context1mApplied: true,
     });
 
-    expect(settings).not.toBeNull();
-    expect(settings).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "anthropic_context_1m_header_override",
-          scope: "request_header",
-          hit: true,
-          header: "anthropic-beta",
-        }),
-      ])
-    );
-  });
-
-  test("context1mApplied=true 但已有 codex service tier result 时不应回退派生 anthropic_context_1m_header_override", () => {
-    const settings = buildUnifiedSpecialSettings({
-      existing: [
-        {
-          type: "codex_service_tier_result",
-          scope: "response",
-          hit: true,
-          requestedServiceTier: "priority",
-          actualServiceTier: null,
-          effectivePriority: true,
-        },
-      ],
-      context1mApplied: true,
-    });
-
-    expect(settings?.some((item) => item.type === "anthropic_context_1m_header_override")).toBe(
-      false
-    );
+    expect(settings).toBe(null);
   });
 
   test("应合并 existing specialSettings 与派生 specialSettings", () => {

@@ -104,14 +104,6 @@ export function buildPatchDraftFromFormState(
   if (dirtyFields.has("routing.swapCacheTtlBilling")) {
     draft.swap_cache_ttl_billing = { set: state.routing.swapCacheTtlBilling };
   }
-  if (dirtyFields.has("routing.context1mPreference")) {
-    if (state.routing.context1mPreference === "inherit") {
-      draft.context_1m_preference = { clear: true };
-    } else {
-      draft.context_1m_preference = { set: state.routing.context1mPreference };
-    }
-  }
-
   // Codex preferences
   if (dirtyFields.has("routing.codexReasoningEffortPreference")) {
     if (state.routing.codexReasoningEffortPreference === "inherit") {

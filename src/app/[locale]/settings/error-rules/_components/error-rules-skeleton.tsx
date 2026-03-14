@@ -4,7 +4,7 @@ export function ErrorRulesSkeleton() {
   return (
     <div className="space-y-6">
       {/* Tester Section Skeleton */}
-      <div className="rounded-xl border border-white/5 bg-card/30 backdrop-blur-sm p-5 md:p-6 space-y-4">
+      <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm p-5 md:p-6 space-y-4">
         <div className="flex items-start gap-3">
           <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
           <div className="space-y-2 flex-1">
@@ -40,7 +40,7 @@ export function ErrorRulesTableSkeleton() {
       {Array.from({ length: 5 }).map((_, i) => (
         <div
           key={i}
-          className="p-4 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between gap-4"
+          className="p-4 rounded-xl bg-card/80 border border-border/50 flex items-center justify-between gap-4"
         >
           <div className="flex items-start gap-3 flex-1">
             <Skeleton className="h-8 w-8 rounded-lg shrink-0" />

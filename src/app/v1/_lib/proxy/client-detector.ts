@@ -33,6 +33,19 @@ export interface ClientRestrictionResult {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
 
+function matchesCodexDesktopAlias(pattern: string, userAgent: string): boolean {
+  if (!/^codex desktop\b/i.test(userAgent)) {
+    return false;
+  }
+
+  const normalizedPattern = pattern.trim().toLowerCase();
+  return (
+    normalizedPattern === "codex-cli" ||
+    normalizedPattern === "codex_vscode" ||
+    normalizedPattern === "codex desktop"
+  );
+}
+
 function globMatch(pattern: string, text: string): boolean {
   const lp = pattern.toLowerCase();
   const lt = text.toLowerCase();
@@ -131,16 +144,21 @@ export function matchClientPattern(session: ProxySession, pattern: string): bool
       return false;
     }
 
+    if (matchesCodexDesktopAlias(pattern, ua)) {
+      return true;
+    }
+
     if (pattern.includes("*")) {
       return globMatch(pattern, ua);
     }
 
+    const normalizedUa = normalize(ua);
     const normalizedPattern = normalize(pattern);
     if (normalizedPattern === "") {
       return false;
     }
 
-    return normalize(ua).includes(normalizedPattern);
+    return normalizedUa.includes(normalizedPattern);
   }
 
   const claudeCode = confirmClaudeCodeSignals(session);
@@ -169,7 +187,9 @@ export function detectClientFull(session: ProxySession, pattern: string): Client
   } else {
     const ua = session.userAgent?.trim();
     if (ua) {
-      if (pattern.includes("*")) {
+      if (matchesCodexDesktopAlias(pattern, ua)) {
+        matched = true;
+      } else if (pattern.includes("*")) {
         matched = globMatch(pattern, ua);
       } else {
         const normalizedPattern = normalize(pattern);
@@ -227,6 +247,9 @@ export function isClientAllowedDetailed(
   const matches = (pattern: string): boolean => {
     if (!isBuiltinKeyword(pattern)) {
       if (!ua) return false;
+      if (matchesCodexDesktopAlias(pattern, ua)) {
+        return true;
+      }
       if (pattern.includes("*")) {
         return globMatch(pattern, ua);
       }

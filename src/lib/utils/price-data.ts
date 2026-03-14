@@ -5,6 +5,7 @@ function hasValidNumericPrice(values: unknown[]): boolean {
 }
 
 function collectNumericCosts(priceData: ModelPriceData): unknown[] {
+  const longContextPricing = priceData.long_context_pricing;
   return [
     priceData.input_cost_per_token,
     priceData.output_cost_per_token,
@@ -32,6 +33,16 @@ function collectNumericCosts(priceData: ModelPriceData): unknown[] {
     priceData.output_cost_per_token_priority,
     priceData.cache_read_input_token_cost_priority,
     priceData.output_cost_per_image,
+    longContextPricing?.input_multiplier,
+    longContextPricing?.output_multiplier,
+    longContextPricing?.cache_creation_input_multiplier,
+    longContextPricing?.cache_creation_input_multiplier_above_1hr,
+    longContextPricing?.cache_read_input_multiplier,
+    longContextPricing?.input_cost_per_token,
+    longContextPricing?.output_cost_per_token,
+    longContextPricing?.cache_creation_input_token_cost,
+    longContextPricing?.cache_creation_input_token_cost_above_1hr,
+    longContextPricing?.cache_read_input_token_cost,
   ];
 }
 

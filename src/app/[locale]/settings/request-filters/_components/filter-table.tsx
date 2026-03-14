@@ -113,6 +113,8 @@ export function FilterTable({ filters, providers }: Props) {
             <tr className="bg-white/[0.02] text-left text-sm font-medium text-muted-foreground">
               <th className="px-4 py-3 border-b border-border/50">{t("table.name")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.scope")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.mode")}</th>
+              <th className="px-4 py-3 border-b border-border/50">{t("table.phase")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.action")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.target")}</th>
               <th className="px-4 py-3 border-b border-border/50">{t("table.replacement")}</th>
@@ -154,17 +156,49 @@ export function FilterTable({ filters, providers }: Props) {
                   </Badge>
                 </td>
                 <td className="px-4 py-3 text-sm">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "border-border",
+                      filter.ruleMode === "advanced"
+                        ? "bg-purple-500/20 text-purple-400 border-purple-500/30"
+                        : "bg-white/5"
+                    )}
+                  >
+                    {t(`ruleMode.${filter.ruleMode ?? "simple"}`)}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "border-border",
+                      filter.executionPhase === "final"
+                        ? "bg-blue-500/20 text-blue-400 border-blue-500/30"
+                        : "bg-white/5"
+                    )}
+                  >
+                    {t(`executionPhase.${filter.executionPhase ?? "guard"}`)}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3 text-sm">
                   <Badge className="bg-[#E25706]/20 text-[#E25706] border-[#E25706]/30">
                     {t(`actionLabel.${filter.action}`)}
                   </Badge>
                 </td>
                 <td className="px-4 py-3 text-sm max-w-[250px]">
-                  <code
-                    className="block rounded-lg bg-muted/50 border border-border px-2 py-1 text-xs truncate font-mono"
-                    title={filter.target}
-                  >
-                    {filter.target}
-                  </code>
+                  {filter.ruleMode === "advanced" ? (
+                    <span className="text-xs text-muted-foreground italic">
+                      {t("table.advancedOps", { count: filter.operations?.length ?? 0 })}
+                    </span>
+                  ) : (
+                    <code
+                      className="block rounded-lg bg-muted/50 border border-border px-2 py-1 text-xs truncate font-mono"
+                      title={filter.target}
+                    >
+                      {filter.target}
+                    </code>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm max-w-[200px]">
                   <span
@@ -247,6 +281,7 @@ export function FilterTable({ filters, providers }: Props) {
                   <Switch
                     checked={filter.isEnabled}
                     onCheckedChange={(checked) => handleToggle(filter, checked)}
+                    aria-label={t("table.toggleStatus", { name: filter.name })}
                   />
                 </td>
                 <td className="px-2 py-3 text-right">

@@ -1,4 +1,3 @@
-import type { Context1mPreference } from "@/lib/special-attributes";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   AnthropicAdaptiveThinkingConfig,
@@ -36,7 +35,6 @@ export interface BatchSettingsAnalysis {
     groupPriorities: FieldAnalysisResult<Record<string, number>>;
     cacheTtlPreference: FieldAnalysisResult<CacheTtlPreference>;
     swapCacheTtlBilling: FieldAnalysisResult<boolean>;
-    context1mPreference: FieldAnalysisResult<Context1mPreference>;
     codexReasoningEffortPreference: FieldAnalysisResult<CodexReasoningEffortPreference>;
     codexReasoningSummaryPreference: FieldAnalysisResult<CodexReasoningSummaryPreference>;
     codexTextVerbosityPreference: FieldAnalysisResult<CodexTextVerbosityPreference>;
@@ -134,10 +132,6 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
       groupPriorities: analyzeField(providers, (p) => p.groupPriorities ?? {}),
       cacheTtlPreference: analyzeField(providers, (p) => p.cacheTtlPreference ?? "inherit"),
       swapCacheTtlBilling: analyzeField(providers, (p) => p.swapCacheTtlBilling ?? false),
-      context1mPreference: analyzeField(
-        providers,
-        (p) => (p.context1mPreference as Context1mPreference) ?? "inherit"
-      ),
       codexReasoningEffortPreference: analyzeField(
         providers,
         (p) => p.codexReasoningEffortPreference ?? "inherit"

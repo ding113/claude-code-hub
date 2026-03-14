@@ -21,6 +21,85 @@ type UsageMetrics = {
   output_image_tokens?: number;
 };
 
+export interface ResolvedLongContextPricing {
+  thresholdTokens: number;
+  scope: "request" | "session";
+  inputCostPerToken?: number;
+  outputCostPerToken?: number;
+  cacheCreationInputTokenCost?: number;
+  cacheCreationInputTokenCostAbove1hr?: number;
+  cacheReadInputTokenCost?: number;
+}
+
+export interface RequestCostCalculationOptions {
+  multiplier?: number;
+  context1mApplied?: boolean;
+  priorityServiceTierApplied?: boolean;
+  longContextPricing?: ResolvedLongContextPricing | null;
+}
+
+type RequestCostBreakdownOptions = Omit<RequestCostCalculationOptions, "multiplier">;
+
+export interface LongContextPricingMatch {
+  thresholdTokens: number;
+  scope: "request" | "session";
+  observedInputTokens: number;
+  pricing: ResolvedLongContextPricing;
+}
+
+function isFiniteNonNegativeNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function normalizeThresholdTokens(value: unknown): number | null {
+  if (!isFiniteNonNegativeNumber(value) || value <= 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+}
+
+function getLongContextScope(value: unknown): "request" | "session" {
+  return value === "session" ? "session" : "request";
+}
+
+function deriveMultiplier(explicitCost: unknown, baseCost: unknown): number | undefined {
+  if (
+    !isFiniteNonNegativeNumber(explicitCost) ||
+    !isFiniteNonNegativeNumber(baseCost) ||
+    baseCost <= 0
+  ) {
+    return undefined;
+  }
+
+  return explicitCost / baseCost;
+}
+
+function resolvePremiumUnitCost(input: {
+  explicitCost: unknown;
+  baseCost: number | undefined;
+  explicitMultiplier: unknown;
+  fallbackMultiplier?: number;
+}): number | undefined {
+  if (isFiniteNonNegativeNumber(input.explicitCost)) {
+    return input.explicitCost;
+  }
+
+  if (!isFiniteNonNegativeNumber(input.baseCost)) {
+    return undefined;
+  }
+
+  const multiplier = isFiniteNonNegativeNumber(input.explicitMultiplier)
+    ? input.explicitMultiplier
+    : input.fallbackMultiplier;
+
+  if (!isFiniteNonNegativeNumber(multiplier)) {
+    return undefined;
+  }
+
+  return input.baseCost * multiplier;
+}
+
 function multiplyCost(quantity: number | undefined, unitCost: number | undefined): Decimal {
   const qtyDecimal = quantity != null ? new Decimal(quantity) : null;
   const costDecimal = unitCost != null ? toDecimal(unitCost) : null;
@@ -107,6 +186,151 @@ function resolveLongContextThreshold(priceData: ModelPriceData): number {
   return CONTEXT_1M_TOKEN_THRESHOLD;
 }
 
+export function resolveLongContextPricing(
+  priceData: ModelPriceData
+): ResolvedLongContextPricing | null {
+  const pricing = priceData.long_context_pricing;
+  if (!pricing) {
+    return null;
+  }
+
+  const thresholdTokens = normalizeThresholdTokens(pricing.threshold_tokens);
+  if (!thresholdTokens) {
+    return null;
+  }
+
+  const baseInputCost = priceData.input_cost_per_token;
+  const baseOutputCost = priceData.output_cost_per_token;
+  const baseCacheCreation5mCost =
+    priceData.cache_creation_input_token_cost ??
+    (baseInputCost != null ? baseInputCost * 1.25 : undefined);
+  const baseCacheCreation1hCost =
+    priceData.cache_creation_input_token_cost_above_1hr ??
+    (baseInputCost != null ? baseInputCost * 2 : undefined) ??
+    baseCacheCreation5mCost;
+  const baseCacheReadCost =
+    priceData.cache_read_input_token_cost ??
+    (baseInputCost != null
+      ? baseInputCost * 0.1
+      : baseOutputCost != null
+        ? baseOutputCost * 0.1
+        : undefined);
+
+  const inputMultiplier =
+    (isFiniteNonNegativeNumber(pricing.input_multiplier) ? pricing.input_multiplier : undefined) ??
+    deriveMultiplier(pricing.input_cost_per_token, baseInputCost);
+  const outputMultiplier =
+    (isFiniteNonNegativeNumber(pricing.output_multiplier)
+      ? pricing.output_multiplier
+      : undefined) ?? deriveMultiplier(pricing.output_cost_per_token, baseOutputCost);
+  const cacheCreationMultiplier =
+    (isFiniteNonNegativeNumber(pricing.cache_creation_input_multiplier)
+      ? pricing.cache_creation_input_multiplier
+      : undefined) ?? inputMultiplier;
+  const cacheCreation1hMultiplier =
+    (isFiniteNonNegativeNumber(pricing.cache_creation_input_multiplier_above_1hr)
+      ? pricing.cache_creation_input_multiplier_above_1hr
+      : undefined) ?? cacheCreationMultiplier;
+  const cacheReadMultiplier =
+    (isFiniteNonNegativeNumber(pricing.cache_read_input_multiplier)
+      ? pricing.cache_read_input_multiplier
+      : undefined) ?? inputMultiplier;
+
+  const inputCostPerToken = resolvePremiumUnitCost({
+    explicitCost: pricing.input_cost_per_token,
+    baseCost: baseInputCost,
+    explicitMultiplier: pricing.input_multiplier,
+    fallbackMultiplier: inputMultiplier,
+  });
+  const outputCostPerToken = resolvePremiumUnitCost({
+    explicitCost: pricing.output_cost_per_token,
+    baseCost: baseOutputCost,
+    explicitMultiplier: pricing.output_multiplier,
+    fallbackMultiplier: outputMultiplier,
+  });
+  const cacheCreationInputTokenCost = resolvePremiumUnitCost({
+    explicitCost: pricing.cache_creation_input_token_cost,
+    baseCost: baseCacheCreation5mCost,
+    explicitMultiplier: pricing.cache_creation_input_multiplier,
+    fallbackMultiplier: cacheCreationMultiplier,
+  });
+  const cacheCreationInputTokenCostAbove1hr = resolvePremiumUnitCost({
+    explicitCost: pricing.cache_creation_input_token_cost_above_1hr,
+    baseCost: baseCacheCreation1hCost,
+    explicitMultiplier: pricing.cache_creation_input_multiplier_above_1hr,
+    fallbackMultiplier: cacheCreation1hMultiplier,
+  });
+  const cacheReadInputTokenCost = resolvePremiumUnitCost({
+    explicitCost: pricing.cache_read_input_token_cost,
+    baseCost: baseCacheReadCost,
+    explicitMultiplier: pricing.cache_read_input_multiplier,
+    fallbackMultiplier: cacheReadMultiplier,
+  });
+
+  const hasResolvedPremiumCost = [
+    inputCostPerToken,
+    outputCostPerToken,
+    cacheCreationInputTokenCost,
+    cacheCreationInputTokenCostAbove1hr,
+    cacheReadInputTokenCost,
+  ].some(isFiniteNonNegativeNumber);
+
+  if (!hasResolvedPremiumCost) {
+    return null;
+  }
+
+  return {
+    thresholdTokens,
+    scope: getLongContextScope(pricing.scope),
+    inputCostPerToken,
+    outputCostPerToken,
+    cacheCreationInputTokenCost,
+    cacheCreationInputTokenCostAbove1hr,
+    cacheReadInputTokenCost,
+  };
+}
+
+function normalizeRequestCostOptions(
+  multiplierOrOptions: number | RequestCostCalculationOptions = 1.0,
+  context1mApplied: boolean = false,
+  priorityServiceTierApplied: boolean = false
+): Required<RequestCostCalculationOptions> {
+  if (typeof multiplierOrOptions === "object" && multiplierOrOptions !== null) {
+    return {
+      multiplier: multiplierOrOptions.multiplier ?? 1.0,
+      context1mApplied: multiplierOrOptions.context1mApplied ?? false,
+      priorityServiceTierApplied: multiplierOrOptions.priorityServiceTierApplied ?? false,
+      longContextPricing: multiplierOrOptions.longContextPricing ?? null,
+    };
+  }
+
+  return {
+    multiplier: multiplierOrOptions,
+    context1mApplied,
+    priorityServiceTierApplied,
+    longContextPricing: null,
+  };
+}
+
+function normalizeRequestCostBreakdownOptions(
+  context1mAppliedOrOptions: boolean | RequestCostBreakdownOptions = false,
+  priorityServiceTierApplied: boolean = false
+): Required<RequestCostBreakdownOptions> {
+  if (typeof context1mAppliedOrOptions === "object" && context1mAppliedOrOptions !== null) {
+    return {
+      context1mApplied: context1mAppliedOrOptions.context1mApplied ?? false,
+      priorityServiceTierApplied: context1mAppliedOrOptions.priorityServiceTierApplied ?? false,
+      longContextPricing: context1mAppliedOrOptions.longContextPricing ?? null,
+    };
+  }
+
+  return {
+    context1mApplied: context1mAppliedOrOptions,
+    priorityServiceTierApplied,
+    longContextPricing: null,
+  };
+}
+
 function resolvePriorityAwareLongContextRate(
   priorityServiceTierApplied: boolean,
   fields: {
@@ -125,7 +349,7 @@ function resolvePriorityAwareLongContextRate(
   return fields.above272k ?? fields.above200k;
 }
 
-function getRequestInputContextTokens(
+export function getLongContextTriggerInputTokens(
   usage: UsageMetrics,
   cache5mTokens?: number,
   cache1hTokens?: number
@@ -143,6 +367,28 @@ function getRequestInputContextTokens(
   );
 }
 
+export function matchLongContextPricing(
+  usage: UsageMetrics,
+  priceData: ModelPriceData
+): LongContextPricingMatch | null {
+  const pricing = resolveLongContextPricing(priceData);
+  if (!pricing) {
+    return null;
+  }
+
+  const observedInputTokens = getLongContextTriggerInputTokens(usage);
+  if (observedInputTokens <= pricing.thresholdTokens) {
+    return null;
+  }
+
+  return {
+    thresholdTokens: pricing.thresholdTokens,
+    scope: pricing.scope,
+    observedInputTokens,
+    pricing,
+  };
+}
+
 export interface CostBreakdown {
   input: number;
   output: number;
@@ -158,9 +404,13 @@ export interface CostBreakdown {
 export function calculateRequestCostBreakdown(
   usage: UsageMetrics,
   priceData: ModelPriceData,
-  context1mApplied: boolean = false,
+  context1mAppliedOrOptions: boolean | RequestCostBreakdownOptions = false,
   priorityServiceTierApplied: boolean = false
 ): CostBreakdown {
+  const options = normalizeRequestCostBreakdownOptions(
+    context1mAppliedOrOptions,
+    priorityServiceTierApplied
+  );
   let inputBucket = new Decimal(0);
   let outputBucket = new Decimal(0);
   let cacheCreationBucket = new Decimal(0);
@@ -169,14 +419,17 @@ export function calculateRequestCostBreakdown(
   const baseInputCostPerToken = priceData.input_cost_per_token;
   const baseOutputCostPerToken = priceData.output_cost_per_token;
   const inputCostPerToken =
-    priorityServiceTierApplied && typeof priceData.input_cost_per_token_priority === "number"
+    options.priorityServiceTierApplied &&
+    typeof priceData.input_cost_per_token_priority === "number"
       ? priceData.input_cost_per_token_priority
       : baseInputCostPerToken;
   const outputCostPerToken =
-    priorityServiceTierApplied && typeof priceData.output_cost_per_token_priority === "number"
+    options.priorityServiceTierApplied &&
+    typeof priceData.output_cost_per_token_priority === "number"
       ? priceData.output_cost_per_token_priority
       : baseOutputCostPerToken;
   const inputCostPerRequest = priceData.input_cost_per_request;
+  const longContextPricing = options.longContextPricing;
 
   // Per-request cost -> input bucket
   if (
@@ -200,7 +453,7 @@ export function calculateRequestCostBreakdown(
     cacheCreation5mCost;
 
   const cacheReadCost =
-    (priorityServiceTierApplied &&
+    (options.priorityServiceTierApplied &&
     typeof priceData.cache_read_input_token_cost_priority === "number"
       ? priceData.cache_read_input_token_cost_priority
       : priceData.cache_read_input_token_cost) ??
@@ -228,18 +481,24 @@ export function calculateRequestCostBreakdown(
     }
   }
 
-  const inputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
-    above272k: priceData.input_cost_per_token_above_272k_tokens,
-    above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
-    above200k: priceData.input_cost_per_token_above_200k_tokens,
-    above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
-  });
-  const outputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
-    above272k: priceData.output_cost_per_token_above_272k_tokens,
-    above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
-    above200k: priceData.output_cost_per_token_above_200k_tokens,
-    above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
-  });
+  const inputAboveThreshold = resolvePriorityAwareLongContextRate(
+    options.priorityServiceTierApplied,
+    {
+      above272k: priceData.input_cost_per_token_above_272k_tokens,
+      above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
+      above200k: priceData.input_cost_per_token_above_200k_tokens,
+      above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
+    }
+  );
+  const outputAboveThreshold = resolvePriorityAwareLongContextRate(
+    options.priorityServiceTierApplied,
+    {
+      above272k: priceData.output_cost_per_token_above_272k_tokens,
+      above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
+      above200k: priceData.output_cost_per_token_above_200k_tokens,
+      above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
+    }
+  );
   const cacheCreationAboveThreshold =
     priceData.cache_creation_input_token_cost_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_200k_tokens;
@@ -247,27 +506,42 @@ export function calculateRequestCostBreakdown(
     priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     cacheCreationAboveThreshold;
-  const cacheReadAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
-    above272k: priceData.cache_read_input_token_cost_above_272k_tokens,
-    above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
-    above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
-    above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
-  });
+  const cacheReadAboveThreshold = resolvePriorityAwareLongContextRate(
+    options.priorityServiceTierApplied,
+    {
+      above272k: priceData.cache_read_input_token_cost_above_272k_tokens,
+      above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
+      above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
+      above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
+    }
+  );
   const longContextThreshold = resolveLongContextThreshold(priceData);
   const longContextThresholdExceeded =
-    getRequestInputContextTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
+    getLongContextTriggerInputTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
   const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
   const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
   // Input tokens -> input bucket
   // 注意：一旦请求的“输入上下文总量”超过阈值，供应商官方定价按整次请求的全量 token
   // 应用 long-context 价格，而不是仅对超过阈值的部分加价。
-  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
+  if (
+    longContextPricing &&
+    longContextPricing.inputCostPerToken != null &&
+    usage.input_tokens != null
+  ) {
+    inputBucket = inputBucket.add(
+      multiplyCost(usage.input_tokens, longContextPricing.inputCostPerToken)
+    );
+  } else if (
+    longContextThresholdExceeded &&
+    inputAboveThreshold != null &&
+    usage.input_tokens != null
+  ) {
     inputBucket = inputBucket.add(multiplyCost(usage.input_tokens, inputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     inputCostPerToken != null &&
     usage.input_tokens != null
   ) {
@@ -280,12 +554,24 @@ export function calculateRequestCostBreakdown(
 
   // Output tokens -> output bucket
   // 与 input 相同：阈值判断基于整次请求的输入上下文，而不是 output bucket 自己的 token 数。
-  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
+  if (
+    longContextPricing &&
+    longContextPricing.outputCostPerToken != null &&
+    usage.output_tokens != null
+  ) {
+    outputBucket = outputBucket.add(
+      multiplyCost(usage.output_tokens, longContextPricing.outputCostPerToken)
+    );
+  } else if (
+    longContextThresholdExceeded &&
+    outputAboveThreshold != null &&
+    usage.output_tokens != null
+  ) {
     outputBucket = outputBucket.add(multiplyCost(usage.output_tokens, outputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     outputCostPerToken != null &&
     usage.output_tokens != null
   ) {
@@ -300,6 +586,14 @@ export function calculateRequestCostBreakdown(
 
   // Cache creation 5m -> cache_creation bucket
   if (
+    longContextPricing &&
+    longContextPricing.cacheCreationInputTokenCost != null &&
+    cache5mTokens != null
+  ) {
+    cacheCreationBucket = cacheCreationBucket.add(
+      multiplyCost(cache5mTokens, longContextPricing.cacheCreationInputTokenCost)
+    );
+  } else if (
     longContextThresholdExceeded &&
     hasRealCacheCreationBase &&
     cacheCreationAboveThreshold != null &&
@@ -310,8 +604,8 @@ export function calculateRequestCostBreakdown(
     );
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
@@ -324,6 +618,14 @@ export function calculateRequestCostBreakdown(
 
   // Cache creation 1h -> cache_creation bucket
   if (
+    longContextPricing &&
+    longContextPricing.cacheCreationInputTokenCostAbove1hr != null &&
+    cache1hTokens != null
+  ) {
+    cacheCreationBucket = cacheCreationBucket.add(
+      multiplyCost(cache1hTokens, longContextPricing.cacheCreationInputTokenCostAbove1hr)
+    );
+  } else if (
     longContextThresholdExceeded &&
     hasRealCacheCreationBase &&
     cacheCreation1hAboveThreshold != null &&
@@ -334,8 +636,8 @@ export function calculateRequestCostBreakdown(
     );
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {
@@ -348,6 +650,14 @@ export function calculateRequestCostBreakdown(
 
   // Cache read -> cache_read bucket
   if (
+    longContextPricing &&
+    longContextPricing.cacheReadInputTokenCost != null &&
+    usage.cache_read_input_tokens != null
+  ) {
+    cacheReadBucket = cacheReadBucket.add(
+      multiplyCost(usage.cache_read_input_tokens, longContextPricing.cacheReadInputTokenCost)
+    );
+  } else if (
     longContextThresholdExceeded &&
     hasRealCacheReadBase &&
     cacheReadAboveThreshold != null &&
@@ -397,23 +707,31 @@ export function calculateRequestCostBreakdown(
 export function calculateRequestCost(
   usage: UsageMetrics,
   priceData: ModelPriceData,
-  multiplier: number = 1.0,
+  multiplierOrOptions: number | RequestCostCalculationOptions = 1.0,
   context1mApplied: boolean = false,
   priorityServiceTierApplied: boolean = false
 ): Decimal {
+  const options = normalizeRequestCostOptions(
+    multiplierOrOptions,
+    context1mApplied,
+    priorityServiceTierApplied
+  );
   const segments: Decimal[] = [];
 
   const baseInputCostPerToken = priceData.input_cost_per_token;
   const baseOutputCostPerToken = priceData.output_cost_per_token;
   const inputCostPerToken =
-    priorityServiceTierApplied && typeof priceData.input_cost_per_token_priority === "number"
+    options.priorityServiceTierApplied &&
+    typeof priceData.input_cost_per_token_priority === "number"
       ? priceData.input_cost_per_token_priority
       : baseInputCostPerToken;
   const outputCostPerToken =
-    priorityServiceTierApplied && typeof priceData.output_cost_per_token_priority === "number"
+    options.priorityServiceTierApplied &&
+    typeof priceData.output_cost_per_token_priority === "number"
       ? priceData.output_cost_per_token_priority
       : baseOutputCostPerToken;
   const inputCostPerRequest = priceData.input_cost_per_request;
+  const longContextPricing = options.longContextPricing;
 
   if (
     typeof inputCostPerRequest === "number" &&
@@ -436,7 +754,7 @@ export function calculateRequestCost(
     cacheCreation5mCost;
 
   const cacheReadCost =
-    (priorityServiceTierApplied &&
+    (options.priorityServiceTierApplied &&
     typeof priceData.cache_read_input_token_cost_priority === "number"
       ? priceData.cache_read_input_token_cost_priority
       : priceData.cache_read_input_token_cost) ??
@@ -464,18 +782,24 @@ export function calculateRequestCost(
     }
   }
 
-  const inputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
-    above272k: priceData.input_cost_per_token_above_272k_tokens,
-    above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
-    above200k: priceData.input_cost_per_token_above_200k_tokens,
-    above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
-  });
-  const outputAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
-    above272k: priceData.output_cost_per_token_above_272k_tokens,
-    above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
-    above200k: priceData.output_cost_per_token_above_200k_tokens,
-    above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
-  });
+  const inputAboveThreshold = resolvePriorityAwareLongContextRate(
+    options.priorityServiceTierApplied,
+    {
+      above272k: priceData.input_cost_per_token_above_272k_tokens,
+      above272kPriority: priceData.input_cost_per_token_above_272k_tokens_priority,
+      above200k: priceData.input_cost_per_token_above_200k_tokens,
+      above200kPriority: priceData.input_cost_per_token_above_200k_tokens_priority,
+    }
+  );
+  const outputAboveThreshold = resolvePriorityAwareLongContextRate(
+    options.priorityServiceTierApplied,
+    {
+      above272k: priceData.output_cost_per_token_above_272k_tokens,
+      above272kPriority: priceData.output_cost_per_token_above_272k_tokens_priority,
+      above200k: priceData.output_cost_per_token_above_200k_tokens,
+      above200kPriority: priceData.output_cost_per_token_above_200k_tokens_priority,
+    }
+  );
   const cacheCreationAboveThreshold =
     priceData.cache_creation_input_token_cost_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_200k_tokens;
@@ -483,26 +807,39 @@ export function calculateRequestCost(
     priceData.cache_creation_input_token_cost_above_1hr_above_272k_tokens ??
     priceData.cache_creation_input_token_cost_above_1hr_above_200k_tokens ??
     cacheCreationAboveThreshold;
-  const cacheReadAboveThreshold = resolvePriorityAwareLongContextRate(priorityServiceTierApplied, {
-    above272k: priceData.cache_read_input_token_cost_above_272k_tokens,
-    above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
-    above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
-    above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
-  });
+  const cacheReadAboveThreshold = resolvePriorityAwareLongContextRate(
+    options.priorityServiceTierApplied,
+    {
+      above272k: priceData.cache_read_input_token_cost_above_272k_tokens,
+      above272kPriority: priceData.cache_read_input_token_cost_above_272k_tokens_priority,
+      above200k: priceData.cache_read_input_token_cost_above_200k_tokens,
+      above200kPriority: priceData.cache_read_input_token_cost_above_200k_tokens_priority,
+    }
+  );
   const longContextThreshold = resolveLongContextThreshold(priceData);
   const longContextThresholdExceeded =
-    getRequestInputContextTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
+    getLongContextTriggerInputTokens(usage, cache5mTokens, cache1hTokens) > longContextThreshold;
   const hasRealCacheCreationBase = priceData.cache_creation_input_token_cost != null;
   const hasRealCacheReadBase = priceData.cache_read_input_token_cost != null;
 
   // Input tokens
   // 注意：阈值命中后按整次请求的全量 token 应用 long-context 价格。
-  if (longContextThresholdExceeded && inputAboveThreshold != null && usage.input_tokens != null) {
+  if (
+    longContextPricing &&
+    longContextPricing.inputCostPerToken != null &&
+    usage.input_tokens != null
+  ) {
+    segments.push(multiplyCost(usage.input_tokens, longContextPricing.inputCostPerToken));
+  } else if (
+    longContextThresholdExceeded &&
+    inputAboveThreshold != null &&
+    usage.input_tokens != null
+  ) {
     segments.push(multiplyCost(usage.input_tokens, inputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     inputCostPerToken != null &&
     usage.input_tokens != null
   ) {
@@ -514,12 +851,22 @@ export function calculateRequestCost(
   }
 
   // Output tokens
-  if (longContextThresholdExceeded && outputAboveThreshold != null && usage.output_tokens != null) {
+  if (
+    longContextPricing &&
+    longContextPricing.outputCostPerToken != null &&
+    usage.output_tokens != null
+  ) {
+    segments.push(multiplyCost(usage.output_tokens, longContextPricing.outputCostPerToken));
+  } else if (
+    longContextThresholdExceeded &&
+    outputAboveThreshold != null &&
+    usage.output_tokens != null
+  ) {
     segments.push(multiplyCost(usage.output_tokens, outputAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     outputCostPerToken != null &&
     usage.output_tokens != null
   ) {
@@ -536,6 +883,12 @@ export function calculateRequestCost(
 
   // 缓存创建费用（5分钟 TTL）：优先级 explicit long-context > context1m fallback > 普通
   if (
+    longContextPricing &&
+    longContextPricing.cacheCreationInputTokenCost != null &&
+    cache5mTokens != null
+  ) {
+    segments.push(multiplyCost(cache5mTokens, longContextPricing.cacheCreationInputTokenCost));
+  } else if (
     longContextThresholdExceeded &&
     hasRealCacheCreationBase &&
     cacheCreationAboveThreshold != null &&
@@ -544,8 +897,8 @@ export function calculateRequestCost(
     segments.push(multiplyCost(cache5mTokens, cacheCreationAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     cacheCreation5mCost != null &&
     cache5mTokens != null
   ) {
@@ -558,6 +911,14 @@ export function calculateRequestCost(
 
   // 缓存创建费用（1小时 TTL）：优先级 explicit long-context > context1m fallback > 普通
   if (
+    longContextPricing &&
+    longContextPricing.cacheCreationInputTokenCostAbove1hr != null &&
+    cache1hTokens != null
+  ) {
+    segments.push(
+      multiplyCost(cache1hTokens, longContextPricing.cacheCreationInputTokenCostAbove1hr)
+    );
+  } else if (
     longContextThresholdExceeded &&
     hasRealCacheCreationBase &&
     cacheCreation1hAboveThreshold != null &&
@@ -566,8 +927,8 @@ export function calculateRequestCost(
     segments.push(multiplyCost(cache1hTokens, cacheCreation1hAboveThreshold));
   } else if (
     longContextThresholdExceeded &&
-    context1mApplied &&
-    !priorityServiceTierApplied &&
+    options.context1mApplied &&
+    !options.priorityServiceTierApplied &&
     cacheCreation1hCost != null &&
     cache1hTokens != null
   ) {
@@ -580,6 +941,14 @@ export function calculateRequestCost(
 
   // 缓存读取费用
   if (
+    longContextPricing &&
+    longContextPricing.cacheReadInputTokenCost != null &&
+    usage.cache_read_input_tokens != null
+  ) {
+    segments.push(
+      multiplyCost(usage.cache_read_input_tokens, longContextPricing.cacheReadInputTokenCost)
+    );
+  } else if (
     longContextThresholdExceeded &&
     hasRealCacheReadBase &&
     cacheReadAboveThreshold != null &&
@@ -608,6 +977,6 @@ export function calculateRequestCost(
   const total = segments.reduce((acc, segment) => acc.plus(segment), new Decimal(0));
 
   // 应用倍率
-  const multiplierDecimal = new Decimal(multiplier);
+  const multiplierDecimal = new Decimal(options.multiplier);
   return total.mul(multiplierDecimal).toDecimalPlaces(COST_SCALE);
 }

@@ -45,7 +45,7 @@ export function ProviderGroupSelect({
   const [groups, setGroups] = useState<Array<{ group: string; providerCount: number }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const loadFailedText = useMemo(
-    () => getTranslation(translations, "errors.loadFailed", "加载失败"),
+    () => getTranslation(translations, "errors.loadFailed", "Load failed"),
     [translations]
   );
 
@@ -99,7 +99,7 @@ export function ProviderGroupSelect({
   const description = useMemo(() => {
     const base = getTranslation(translations, "description", "");
     if (isLoading && !base) {
-      return getTranslation(translations, "loadingText", "加载中...");
+      return getTranslation(translations, "loadingText", "Loading...");
     }
     return base;
   }, [translations, isLoading]);
@@ -124,8 +124,8 @@ export function ProviderGroupSelect({
 
   return (
     <TagInputField
-      label={getTranslation(translations, "label", "供应商分组")}
-      placeholder={getTranslation(translations, "placeholder", "输入分组并回车")}
+      label={getTranslation(translations, "label", "Provider group")}
+      placeholder={getTranslation(translations, "placeholder", "Enter group and press Enter")}
       description={description}
       maxTagLength={200}
       maxTags={20}

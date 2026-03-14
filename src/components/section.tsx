@@ -69,7 +69,7 @@ const SECTION_ICON_MAP: Record<SectionIconName, LucideIcon> = {
 };
 
 export type SectionProps = {
-  title: string;
+  title?: string;
   description?: string;
   icon?: SectionIconName;
   iconColor?: string;
@@ -117,27 +117,35 @@ export function Section({
       )}
 
       <div className="relative z-10">
-        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3 min-w-0">
-            {Icon && (
-              <div
-                className={cn(
-                  "flex items-center justify-center w-9 h-9 rounded-lg shrink-0 mt-0.5",
-                  variant === "highlight" ? "bg-primary/20" : "bg-muted/50"
-                )}
-              >
-                <Icon className={cn("h-4 w-4", iconColor)} />
-              </div>
-            )}
-            <div className="min-w-0">
-              <h2 className="text-base font-semibold text-foreground tracking-tight">{title}</h2>
-              {description && (
-                <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{description}</p>
+        {(title || description || Icon || actions) && (
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-start gap-3 min-w-0">
+              {Icon && (
+                <div
+                  className={cn(
+                    "flex items-center justify-center w-9 h-9 rounded-lg shrink-0 mt-0.5",
+                    variant === "highlight" ? "bg-primary/20" : "bg-muted/50"
+                  )}
+                >
+                  <Icon className={cn("h-4 w-4", iconColor)} />
+                </div>
               )}
+              <div className="min-w-0">
+                {title && (
+                  <h2 className="text-base font-semibold text-foreground tracking-tight">
+                    {title}
+                  </h2>
+                )}
+                {description && (
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                    {description}
+                  </p>
+                )}
+              </div>
             </div>
+            {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
           </div>
-          {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
-        </div>
+        )}
         {children}
       </div>
     </motion.section>
@@ -159,15 +167,19 @@ export function SectionStatic({
         className
       )}
     >
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-base font-semibold text-foreground tracking-tight">{title}</h2>
-          {description && (
-            <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{description}</p>
-          )}
+      {(title || description || actions) && (
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            {title && (
+              <h2 className="text-base font-semibold text-foreground tracking-tight">{title}</h2>
+            )}
+            {description && (
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{description}</p>
+            )}
+          </div>
+          {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
-      </div>
+      )}
       {children}
     </section>
   );

@@ -15,6 +15,8 @@ import type { ProviderChainItem } from "@/types/message";
 import type { ProxySession } from "./session";
 
 export class ProxyError extends Error {
+  public readonly isLocalAbort: boolean;
+
   constructor(
     message: string,
     public readonly statusCode: number,
@@ -54,10 +56,12 @@ export class ProxyError extends Error {
        * 命中的推断规则 id（仅用于内部调试/审计，不应用于用户展示文案）。
        */
       statusCodeInferenceMatcherId?: string;
-    }
+    },
+    isLocalAbort: boolean = false
   ) {
     super(message);
     this.name = "ProxyError";
+    this.isLocalAbort = isLocalAbort;
   }
 
   /**
@@ -702,19 +706,62 @@ export function isClientAbortError(error: Error): boolean {
     return true;
   }
 
-  // 2. 检查 HTTP 状态码（Nginx 使用的 "Client Closed Request"）
-  if (error instanceof ProxyError && error.statusCode === 499) {
+  // 2. 仅 CCH 本地合成的 499（非上游 HTTP 499）
+  if (error instanceof ProxyError && error.statusCode === 499 && error.isLocalAbort) {
     return true;
   }
 
-  // 3. 检查精确的错误消息（白名单模式，向后兼容）
+  // 3. 精确消息白名单（去掉 "aborted" 泛匹配，避免误伤上游错误文案）
   const abortMessages = [
     "This operation was aborted", // 标准 AbortError 消息
     "The user aborted a request", // 浏览器标准消息
-    "aborted", // 向后兼容（但需在前两个检查失败后才使用）
   ];
 
   return abortMessages.some((msg) => error.message.includes(msg));
+}
+
+/**
+ * Transport error detection
+ *
+ * Detects native undici/fetch transport errors that should always be classified
+ * as SYSTEM_ERROR regardless of error rule matching.
+ *
+ * These errors indicate network-level failures (DNS, connection, timeout) rather
+ * than application-level issues, and must not be misclassified by error rules
+ * that might match their message content.
+ *
+ * @param error - Error to check
+ * @returns true if error is a transport error
+ */
+function isTransportError(error: Error): boolean {
+  const TRANSPORT_ERROR_CODES = new Set([
+    "UND_ERR_SOCKET",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "UND_ERR_HEADERS_TIMEOUT",
+    "UND_ERR_BODY_TIMEOUT",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "ENOTFOUND",
+    "EAI_AGAIN",
+  ]);
+
+  const TRANSPORT_MESSAGE_SIGNATURES = ["other side closed", "fetch failed"];
+
+  // Check error name
+  if (error.name === "SocketError") return true;
+
+  // Check error code on error itself or cause
+  const code =
+    (error as Error & { code?: string }).code ??
+    (error as Error & { cause?: { code?: string } }).cause?.code;
+  if (code && TRANSPORT_ERROR_CODES.has(code)) return true;
+
+  // Check message for known transport signatures
+  const msg = error.message.toLowerCase();
+  if (TRANSPORT_MESSAGE_SIGNATURES.some((sig) => msg.includes(sig))) return true;
+
+  return false;
 }
 
 /**
@@ -861,6 +908,12 @@ export async function categorizeErrorAsync(error: Error): Promise<ErrorCategory>
   // 优先级 1: 客户端中断检测（优先级最高）- 使用统一的精确检测函数
   if (isClientAbortError(error)) {
     return ErrorCategory.CLIENT_ABORT; // 客户端主动中断
+  }
+
+  // 优先级 1.5: Native transport errors — must not be matched by error rules
+  // These are always SYSTEM_ERROR regardless of message content
+  if (isTransportError(error)) {
+    return ErrorCategory.SYSTEM_ERROR;
   }
 
   // 优先级 2: 不可重试的客户端输入错误检测（白名单模式）

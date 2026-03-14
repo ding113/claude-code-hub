@@ -295,15 +295,6 @@
         }
       }
     },
-    "context1m": {
-      "desc": "1M コンテキストウィンドウのサポートを設定します。Sonnet モデル（claude-sonnet-4-5、claude-sonnet-4）にのみ適用されます。有効時は段階的料金が適用されます。",
-      "label": "1M コンテキストウィンドウ",
-      "options": {
-        "disabled": "無効",
-        "forceEnable": "強制有効化",
-        "inherit": "継承（クライアントに従う）"
-      }
-    },
     "modelRedirects": {
       "label": "モデルリダイレクト設定",
       "optional": "（任意）"

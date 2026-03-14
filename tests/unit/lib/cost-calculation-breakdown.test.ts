@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { calculateRequestCostBreakdown, type CostBreakdown } from "@/lib/utils/cost-calculation";
+import {
+  calculateRequestCost,
+  calculateRequestCostBreakdown,
+  matchLongContextPricing,
+  type CostBreakdown,
+} from "@/lib/utils/cost-calculation";
 import type { ModelPriceData } from "@/types/model-price";
 
 function makePriceData(overrides: Partial<ModelPriceData> = {}): ModelPriceData {
@@ -215,5 +220,54 @@ describe("calculateRequestCostBreakdown", () => {
 
     // 1000 tokens should go to 1h tier at 0.000006
     expect(result.cache_creation).toBeCloseTo(0.006, 6);
+  });
+
+  test("long_context_pricing uses full-request premium prices after threshold", () => {
+    const priceData = makePriceData({
+      long_context_pricing: {
+        threshold_tokens: 272000,
+        scope: "request",
+        input_multiplier: 2,
+        output_multiplier: 1.5,
+        cache_read_input_multiplier: 2,
+      },
+    });
+
+    const usage = {
+      input_tokens: 272001,
+      output_tokens: 100,
+      cache_read_input_tokens: 50,
+    };
+    const match = matchLongContextPricing(usage, priceData);
+
+    expect(match).not.toBeNull();
+
+    const cost = calculateRequestCost(usage, priceData, {
+      multiplier: 1,
+      context1mApplied: false,
+      longContextPricing: match?.pricing ?? null,
+    });
+
+    expect(cost.toNumber()).toBeCloseTo(1.634286, 6);
+  });
+
+  test("long_context_pricing threshold is exclusive at exactly 272000 tokens", () => {
+    const priceData = makePriceData({
+      long_context_pricing: {
+        threshold_tokens: 272000,
+        scope: "request",
+        input_multiplier: 2,
+      },
+    });
+
+    const match = matchLongContextPricing(
+      {
+        input_tokens: 272000,
+        output_tokens: 10,
+      },
+      priceData
+    );
+
+    expect(match).toBeNull();
   });
 });

@@ -55,13 +55,13 @@ export interface LimitRulePickerProps {
 }
 
 const LIMIT_TYPE_OPTIONS: Array<{ type: LimitType; fallbackLabel: string }> = [
-  { type: "limitRpm", fallbackLabel: "RPM 限额" },
-  { type: "limit5h", fallbackLabel: "5小时限额" },
-  { type: "limitDaily", fallbackLabel: "每日限额" },
-  { type: "limitWeekly", fallbackLabel: "周限额" },
-  { type: "limitMonthly", fallbackLabel: "月限额" },
-  { type: "limitTotal", fallbackLabel: "总限额" },
-  { type: "limitSessions", fallbackLabel: "并发 Session" },
+  { type: "limitRpm", fallbackLabel: "RPM limit" },
+  { type: "limit5h", fallbackLabel: "5h limit" },
+  { type: "limitDaily", fallbackLabel: "Daily limit" },
+  { type: "limitWeekly", fallbackLabel: "Weekly limit" },
+  { type: "limitMonthly", fallbackLabel: "Monthly limit" },
+  { type: "limitTotal", fallbackLabel: "Total limit" },
+  { type: "limitSessions", fallbackLabel: "Concurrent sessions" },
 ];
 
 const QUICK_VALUES = [10, 50, 100, 500] as const;
@@ -89,6 +89,9 @@ export function LimitRulePicker({
   existingTypes,
   translations,
 }: LimitRulePickerProps) {
+  const t = (path: string, fallback: string): string =>
+    getTranslation(translations, path, fallback);
+
   // Keep existingTypeSet for showing overwrite hint, but no longer filter availableTypes
   const existingTypeSet = useMemo(() => new Set(existingTypes), [existingTypes]);
   // All types are always available - selecting an existing type will overwrite it
@@ -132,17 +135,17 @@ export function LimitRulePicker({
     setError(null);
 
     if (!type) {
-      setError(getTranslation(translations, "errors.missingType", "请选择限额类型"));
+      setError(t("errors.missingType", "Please select a limit type"));
       return;
     }
 
     if (!Number.isFinite(numericValue) || numericValue < 0) {
-      setError(getTranslation(translations, "errors.invalidValue", "请输入有效数值"));
+      setError(t("errors.invalidValue", "Please enter a valid value"));
       return;
     }
 
     if (needsTime && !isValidTime(dailyTime)) {
-      setError(getTranslation(translations, "errors.invalidTime", "请输入有效时间 (HH:mm)"));
+      setError(t("errors.invalidTime", "Please enter a valid time (HH:mm)"));
       return;
     }
 
@@ -158,9 +161,9 @@ export function LimitRulePicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
-          <DialogTitle>{getTranslation(translations, "title", "添加限额规则")}</DialogTitle>
+          <DialogTitle>{t("title", "Add limit rule")}</DialogTitle>
           <DialogDescription>
-            {getTranslation(translations, "description", "选择限额类型并设置数值")}
+            {t("description", "Select limit type and set value")}
           </DialogDescription>
         </DialogHeader>
 
@@ -174,17 +177,15 @@ export function LimitRulePicker({
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>{getTranslation(translations, "fields.type.label", "限额类型")}</Label>
+              <Label>{t("fields.type.label", "Limit type")}</Label>
               <Select value={type} onValueChange={(val) => setType(val as LimitType)}>
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={getTranslation(translations, "fields.type.placeholder", "请选择")}
-                  />
+                  <SelectValue placeholder={t("fields.type.placeholder", "Select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableTypes.map((opt) => (
                     <SelectItem key={opt.type} value={opt.type}>
-                      {getTranslation(translations, `limitTypes.${opt.type}`, opt.fallbackLabel)}
+                      {t(`limitTypes.${opt.type}`, opt.fallbackLabel)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -196,7 +197,7 @@ export function LimitRulePicker({
                     {getTranslation(
                       translations,
                       "overwriteHint",
-                      "此类型已存在，保存将覆盖原有值"
+                      "This type already exists, saving will overwrite"
                     )}
                   </span>
                 </div>
@@ -204,7 +205,7 @@ export function LimitRulePicker({
             </div>
 
             <div className="space-y-2">
-              <Label>{getTranslation(translations, "fields.value.label", "数值")}</Label>
+              <Label>{t("fields.value.label", "Value")}</Label>
               <Input
                 type="number"
                 min={0}
@@ -213,7 +214,11 @@ export function LimitRulePicker({
                 autoFocus
                 value={rawValue}
                 onChange={(e) => setRawValue(e.target.value)}
-                placeholder={getTranslation(translations, "fields.value.placeholder", "请输入")}
+                placeholder={getTranslation(
+                  translations,
+                  "fields.value.placeholder",
+                  "Enter value"
+                )}
                 aria-invalid={Boolean(error)}
               />
 
@@ -232,7 +237,7 @@ export function LimitRulePicker({
                     onClick={() => setRawValue(String(v))}
                   >
                     {v === 0
-                      ? getTranslation(translations, "quickValues.unlimited", "无限")
+                      ? t("quickValues.unlimited", "Unlimited")
                       : type === "limitSessions" || type === "limitRpm"
                         ? v
                         : `$${v}`}
@@ -245,7 +250,7 @@ export function LimitRulePicker({
           {isDaily && (
             <div className={cn("grid gap-4", dailyMode === "fixed" ? "sm:grid-cols-2" : "")}>
               <div className="space-y-2">
-                <Label>{getTranslation(translations, "daily.mode.label", "每日模式")}</Label>
+                <Label>{t("daily.mode.label", "Daily mode")}</Label>
                 <Select
                   value={dailyMode}
                   onValueChange={(val) => setDailyMode(val as DailyResetMode)}
@@ -254,25 +259,21 @@ export function LimitRulePicker({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fixed">
-                      {getTranslation(translations, "daily.mode.fixed", "fixed")}
-                    </SelectItem>
-                    <SelectItem value="rolling">
-                      {getTranslation(translations, "daily.mode.rolling", "rolling")}
-                    </SelectItem>
+                    <SelectItem value="fixed">{t("daily.mode.fixed", "fixed")}</SelectItem>
+                    <SelectItem value="rolling">{t("daily.mode.rolling", "rolling")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {dailyMode === "fixed" && (
                 <div className="space-y-2">
-                  <Label>{getTranslation(translations, "daily.time.label", "重置时间")}</Label>
+                  <Label>{t("daily.time.label", "Reset time")}</Label>
                   <Input
                     type="time"
                     step={60}
                     value={dailyTime}
                     onChange={(e) => setDailyTime(e.target.value)}
-                    placeholder={getTranslation(translations, "daily.time.placeholder", "HH:mm")}
+                    placeholder={t("daily.time.placeholder", "HH:mm")}
                     aria-invalid={Boolean(error)}
                   />
                 </div>
@@ -280,7 +281,7 @@ export function LimitRulePicker({
 
               {dailyMode === "rolling" && (
                 <p className="text-xs text-muted-foreground">
-                  {getTranslation(translations, "daily.mode.helperRolling", "rolling 24h")}
+                  {t("daily.mode.helperRolling", "rolling 24h")}
                 </p>
               )}
             </div>
@@ -290,10 +291,10 @@ export function LimitRulePicker({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleCancel}>
-              {getTranslation(translations, "cancel", "取消")}
+              {t("cancel", "Cancel")}
             </Button>
             <Button type="submit" disabled={!canConfirm}>
-              {getTranslation(translations, "confirm", "保存")}
+              {t("confirm", "Save")}
             </Button>
           </DialogFooter>
         </form>

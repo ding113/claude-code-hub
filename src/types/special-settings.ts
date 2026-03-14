@@ -14,8 +14,10 @@ export type SpecialSetting =
   | BillingHeaderRectifierSpecialSetting
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
+  | AnthropicEffortSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
   | AnthropicContext1mHeaderOverrideSpecialSetting
+  | LongContextPricingSpecialSetting
   | GeminiGoogleSearchOverrideSpecialSetting
   | PricingResolutionSpecialSetting
   | CodexServiceTierResultSpecialSetting
@@ -72,6 +74,19 @@ export type GuardInterceptSpecialSetting = {
 };
 
 /**
+ * Anthropic effort 请求参数审计
+ *
+ * 用于记录原始 Anthropic 请求体中的 output_config.effort，
+ * 便于在使用记录中以标签形式展示。
+ */
+export type AnthropicEffortSpecialSetting = {
+  type: "anthropic_effort";
+  scope: "request";
+  hit: boolean;
+  effort: string;
+};
+
+/**
  * Anthropic 缓存 TTL 相关标头覆写审计
  *
  * 说明：当系统根据配置/偏好对请求应用缓存 TTL 能力时，需要在“特殊设置”中可见，
@@ -93,6 +108,19 @@ export type AnthropicContext1mHeaderOverrideSpecialSetting = {
   hit: boolean;
   header: "anthropic-beta";
   flag: string;
+};
+
+/**
+ * 长上下文 premium 计费审计
+ *
+ * 用于记录：请求因命中模型的长上下文定价规则而按 premium 费率计费。
+ */
+export type LongContextPricingSpecialSetting = {
+  type: "long_context_pricing";
+  scope: "billing";
+  hit: boolean;
+  pricingScope: "request" | "session" | null;
+  thresholdTokens: number | null;
 };
 
 /**

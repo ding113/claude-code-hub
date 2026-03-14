@@ -24,7 +24,11 @@ export default async function LeaderboardPage() {
   if (!hasPermission) {
     return (
       <div className="space-y-6">
-        <Section title={t("title.costRanking")} description={t("title.costRankingDescription")}>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{t("title.costRanking")}</h1>
+          <p className="mt-2 text-muted-foreground">{t("title.costRankingDescription")}</p>
+        </div>
+        <Section>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -60,7 +64,11 @@ export default async function LeaderboardPage() {
   // 有权限时渲染排行榜
   return (
     <div className="space-y-6">
-      <Section title={t("title.costRanking")} description={t("title.costRankingDescription")}>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">{t("title.costRanking")}</h1>
+        <p className="mt-2 text-muted-foreground">{t("title.costRankingDescription")}</p>
+      </div>
+      <Section>
         <LeaderboardView isAdmin={isAdmin} />
       </Section>
     </div>

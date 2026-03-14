@@ -45,7 +45,7 @@ export function RegexTester({ pattern }: RegexTesterProps) {
   }, [pattern, testMessage]);
 
   return (
-    <div className="space-y-3 rounded-xl bg-white/[0.02] border border-border/50 p-4">
+    <div className="space-y-3 rounded-xl bg-card/80 border border-border/50 p-4">
       <div className="space-y-2">
         <label
           htmlFor="test-message"
@@ -82,12 +82,12 @@ export function RegexTester({ pattern }: RegexTesterProps) {
                 </>
               ) : (
                 <>
-                  <div className="p-1 rounded-md bg-white/5">
+                  <div className="p-1 rounded-md bg-muted/50">
                     <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
                   </div>
                   <Badge
                     variant="secondary"
-                    className="bg-white/5 text-muted-foreground border-border text-[10px]"
+                    className="bg-muted/50 text-muted-foreground border-border text-[10px]"
                   >
                     {t("errorRules.dialog.matchFailed")}
                   </Badge>

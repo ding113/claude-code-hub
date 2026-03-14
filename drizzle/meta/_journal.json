@@ -568,6 +568,20 @@
       "when": 1773036289279,
       "tag": "0080_fresh_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1773335594607,
+      "tag": "0081_strange_zarek",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1773423984994,
+      "tag": "0082_hot_vision",
+      "breakpoints": true
     }
   ]
 }

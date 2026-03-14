@@ -82,10 +82,10 @@ function normalizeTtlFallbackSeconds(config: CacheHitRateAlertQueryConfig): {
   const base: Record<ProviderType, number> = {
     claude: defaultSeconds,
     "claude-auth": defaultSeconds,
-    codex: 6 * 3600,
+    codex: 600,
     gemini: defaultSeconds,
     "gemini-cli": defaultSeconds,
-    "openai-compatible": 6 * 3600,
+    "openai-compatible": 600,
   };
   const overrides = config.ttlFallbackSecondsByProviderType ?? {};
   const byType: Record<ProviderType, number> = { ...base };
@@ -157,13 +157,13 @@ export async function findProviderModelCacheHitRateMetricsForAlert(
     Object.entries(ttlFallback.byType) as Array<[ProviderType, number]>
   ).map(
     ([providerType, seconds]) =>
-      sql`WHEN ${providers.providerType} = ${providerType} THEN ${seconds}`
+      sql`WHEN ${providers.providerType} = ${providerType} THEN ${seconds}::integer`
   );
 
-  const ttlFallbackSecondsExpr = sql<number>`CASE
+  const ttlFallbackSecondsExpr = sql<number>`(CASE
     ${sql.join(ttlFallbackWhenClauses, sql` `)}
-    ELSE ${ttlFallback.defaultSeconds}
-  END`;
+    ELSE ${ttlFallback.defaultSeconds}::integer
+  END)`;
 
   // 重要：swap_cache_ttl_applied 仅用于“计费口径”的 5m/1h 翻转（见 Provider.swapCacheTtlBilling）。
   // eligible/TTL/gap 属于“缓存语义口径”，这里需要把 5m/1h 还原回真实 TTL，再用于 gap<=TTL 的判断。

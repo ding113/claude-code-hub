@@ -295,15 +295,6 @@
         }
       }
     },
-    "context1m": {
-      "desc": "設定 1M 上下文視窗支援。僅對 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。啟用後將套用階梯定價。",
-      "label": "1M 上下文視窗",
-      "options": {
-        "disabled": "停用",
-        "forceEnable": "強制啟用",
-        "inherit": "跟隨客戶端"
-      }
-    },
     "modelRedirects": {
       "label": "模型重定向設定",
       "optional": "（選填）"

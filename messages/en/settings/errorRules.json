@@ -68,6 +68,9 @@
     "saving": "Saving...",
     "testMessageLabel": "Test Message",
     "testMessagePlaceholder": "Enter error message to test...",
+    "templateClaudeApi": "Claude API",
+    "templateGeminiApi": "Gemini API",
+    "templateOpenaiApi": "OpenAI API",
     "useTemplate": "Claude Error Template",
     "useTemplateConfirm": "Existing content will be replaced by the template. Continue?",
     "validJson": "JSON format is valid"

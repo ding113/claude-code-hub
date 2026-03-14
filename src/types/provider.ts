@@ -1,6 +1,5 @@
 // 供应商类型枚举
 
-import type { Context1mPreference } from "@/lib/special-attributes";
 import type { CacheTtlPreference } from "./cache";
 
 export type ProviderType =
@@ -130,7 +129,7 @@ export interface ProviderBatchPatchDraft {
   group_priorities?: ProviderPatchDraftInput<Record<string, number>>;
   cache_ttl_preference?: ProviderPatchDraftInput<CacheTtlPreference>;
   swap_cache_ttl_billing?: ProviderPatchDraftInput<boolean>;
-  context_1m_preference?: ProviderPatchDraftInput<Context1mPreference>;
+  context_1m_preference?: ProviderPatchDraftInput<string>;
   codex_reasoning_effort_preference?: ProviderPatchDraftInput<CodexReasoningEffortPreference>;
   codex_reasoning_summary_preference?: ProviderPatchDraftInput<CodexReasoningSummaryPreference>;
   codex_text_verbosity_preference?: ProviderPatchDraftInput<CodexTextVerbosityPreference>;
@@ -183,7 +182,7 @@ export interface ProviderBatchPatch {
   group_priorities: ProviderPatchOperation<Record<string, number>>;
   cache_ttl_preference: ProviderPatchOperation<CacheTtlPreference>;
   swap_cache_ttl_billing: ProviderPatchOperation<boolean>;
-  context_1m_preference: ProviderPatchOperation<Context1mPreference>;
+  context_1m_preference: ProviderPatchOperation<string>;
   codex_reasoning_effort_preference: ProviderPatchOperation<CodexReasoningEffortPreference>;
   codex_reasoning_summary_preference: ProviderPatchOperation<CodexReasoningSummaryPreference>;
   codex_text_verbosity_preference: ProviderPatchOperation<CodexTextVerbosityPreference>;
@@ -236,7 +235,7 @@ export interface ProviderBatchApplyUpdates {
   group_priorities?: Record<string, number> | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   swap_cache_ttl_billing?: boolean;
-  context_1m_preference?: Context1mPreference | null;
+  context_1m_preference?: string | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
@@ -365,7 +364,7 @@ export interface Provider {
   swapCacheTtlBilling: boolean;
 
   // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
-  context1mPreference: Context1mPreference | null;
+  context1mPreference: string | null;
 
   // Codex（Responses API）参数覆写（仅对 Codex 类型供应商有效）
   codexReasoningEffortPreference: CodexReasoningEffortPreference | null;
@@ -454,7 +453,7 @@ export interface ProviderDisplay {
   faviconUrl: string | null;
   cacheTtlPreference: CacheTtlPreference | null;
   swapCacheTtlBilling: boolean;
-  context1mPreference: Context1mPreference | null;
+  context1mPreference: string | null;
   codexReasoningEffortPreference: CodexReasoningEffortPreference | null;
   codexReasoningSummaryPreference: CodexReasoningSummaryPreference | null;
   codexTextVerbosityPreference: CodexTextVerbosityPreference | null;
@@ -551,7 +550,7 @@ export interface CreateProviderData {
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   swap_cache_ttl_billing?: boolean;
-  context_1m_preference?: Context1mPreference | null;
+  context_1m_preference?: string | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
@@ -630,7 +629,7 @@ export interface UpdateProviderData {
   favicon_url?: string | null;
   cache_ttl_preference?: CacheTtlPreference | null;
   swap_cache_ttl_billing?: boolean;
-  context_1m_preference?: Context1mPreference | null;
+  context_1m_preference?: string | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;

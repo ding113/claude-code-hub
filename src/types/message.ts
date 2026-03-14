@@ -176,7 +176,6 @@ export interface ProviderChainItem {
         | "format_type_mismatch" // 请求格式与供应商类型不兼容
         | "type_mismatch"
         | "model_not_allowed"
-        | "context_1m_disabled" // 供应商禁用了 1M 上下文功能
         | "schedule_inactive" // 供应商不在调度时间窗口内
         | "disabled"
         | "client_restriction"; // Provider filtered due to client restriction

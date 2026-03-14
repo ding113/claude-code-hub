@@ -34,7 +34,6 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_GROUP_PRIORITIES: "routing.groupPriorities",
   SET_CACHE_TTL_PREFERENCE: "routing.cacheTtlPreference",
   SET_SWAP_CACHE_TTL_BILLING: "routing.swapCacheTtlBilling",
-  SET_CONTEXT_1M_PREFERENCE: "routing.context1mPreference",
   SET_CODEX_REASONING_EFFORT: "routing.codexReasoningEffortPreference",
   SET_CODEX_REASONING_SUMMARY: "routing.codexReasoningSummaryPreference",
   SET_CODEX_TEXT_VERBOSITY: "routing.codexTextVerbosityPreference",
@@ -137,10 +136,6 @@ export function createInitialState(
           analysis.routing.swapCacheTtlBilling.status === "uniform"
             ? analysis.routing.swapCacheTtlBilling.value
             : false,
-        context1mPreference:
-          analysis.routing.context1mPreference.status === "uniform"
-            ? analysis.routing.context1mPreference.value
-            : "inherit",
         codexReasoningEffortPreference:
           analysis.routing.codexReasoningEffortPreference.status === "uniform"
             ? analysis.routing.codexReasoningEffortPreference.value
@@ -296,7 +291,6 @@ export function createInitialState(
         costMultiplier: 1.0,
         cacheTtlPreference: "inherit",
         swapCacheTtlBilling: false,
-        context1mPreference: "inherit",
         codexReasoningEffortPreference: "inherit",
         codexReasoningSummaryPreference: "inherit",
         codexTextVerbosityPreference: "inherit",
@@ -376,9 +370,6 @@ export function createInitialState(
       costMultiplier: sourceProvider?.costMultiplier ?? 1.0,
       cacheTtlPreference: sourceProvider?.cacheTtlPreference ?? "inherit",
       swapCacheTtlBilling: sourceProvider?.swapCacheTtlBilling ?? false,
-      context1mPreference:
-        (sourceProvider?.context1mPreference as "inherit" | "force_enable" | "disabled") ??
-        "inherit",
       codexReasoningEffortPreference: sourceProvider?.codexReasoningEffortPreference ?? "inherit",
       codexReasoningSummaryPreference: sourceProvider?.codexReasoningSummaryPreference ?? "inherit",
       codexTextVerbosityPreference: sourceProvider?.codexTextVerbosityPreference ?? "inherit",
@@ -487,8 +478,6 @@ export function providerFormReducer(
       return { ...state, routing: { ...state.routing, cacheTtlPreference: action.payload } };
     case "SET_SWAP_CACHE_TTL_BILLING":
       return { ...state, routing: { ...state.routing, swapCacheTtlBilling: action.payload } };
-    case "SET_CONTEXT_1M_PREFERENCE":
-      return { ...state, routing: { ...state.routing, context1mPreference: action.payload } };
     case "SET_CODEX_REASONING_EFFORT":
       return {
         ...state,

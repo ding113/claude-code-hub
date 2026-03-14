@@ -68,6 +68,9 @@
     "saving": "Сохранение...",
     "testMessageLabel": "Тестовое сообщение",
     "testMessagePlaceholder": "Введите сообщение об ошибке для тестирования...",
+    "templateClaudeApi": "Claude API",
+    "templateGeminiApi": "Gemini API",
+    "templateOpenaiApi": "OpenAI API",
     "useTemplate": "Шаблон Claude Error",
     "useTemplateConfirm": "Существующее содержимое будет заменено шаблоном. Продолжить?",
     "validJson": "Формат JSON корректен"

@@ -158,6 +158,7 @@
       "nonBilling": "非计费",
       "skipped": "已跳过",
       "specialSettings": "特殊设置",
+      "anthropicEffort": "Effort: {effort}",
       "times": "次",
       "loadedCount": "已加载 {count} 条记录",
       "loadingMore": "加载更多中...",
@@ -287,7 +288,7 @@
         "fast": "fast",
         "fastPriority": "优先服务等级（fast 模式）",
         "context1m": "1M 上下文",
-        "context1mPricing": "输入 2x >200k, 输出 1.5x >200k",
+        "context1mEnabled": "1M 上下文窗口已启用",
         "pricingProvider": "计费价格提供商",
         "pricingSourceLabel": "计费价格来源",
         "pricingSource": {
@@ -330,6 +331,10 @@
         "billingInfo": "计费信息",
         "technicalTimeline": "技术时间线",
         "copyTimeline": "复制时间线"
+      },
+      "effort": {
+        "label": "Effort",
+        "overridden": "已被供应商覆写"
       },
       "logicTrace": {
         "title": "决策链",
@@ -390,7 +395,7 @@
       "fast": "fast",
       "fastPriority": "优先服务等级（fast 模式）",
       "context1m": "1M 上下文",
-      "context1mPricing": "输入 >200k 2倍, 输出 >200k 1.5倍",
+      "context1mEnabled": "1M 上下文窗口已启用",
       "pricingProvider": "计费价格提供商",
       "pricingSourceLabel": "计费价格来源",
       "pricingSource": {

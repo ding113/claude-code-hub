@@ -61,6 +61,12 @@ export function getAllProviderTypes(): ProviderType[] {
   return Object.keys(PROVIDER_TYPE_CONFIG) as ProviderType[];
 }
 
+const INTERNAL_PROVIDER_TYPES: ReadonlySet<ProviderType> = new Set(["claude-auth", "gemini-cli"]);
+
+export function getUserFacingProviderTypes(): ProviderType[] {
+  return getAllProviderTypes().filter((type) => !INTERNAL_PROVIDER_TYPES.has(type));
+}
+
 // 将供应商类型转换为翻译键（claude-auth -> claudeAuth, gemini-cli -> geminiCli）
 export function getProviderTypeTranslationKey(type: ProviderType): string {
   return type.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());

@@ -68,6 +68,9 @@
     "saving": "保存しています...",
     "testMessageLabel": "テストメッセージ",
     "testMessagePlaceholder": "テストするエラーメッセージを入力...",
+    "templateClaudeApi": "Claude API",
+    "templateGeminiApi": "Gemini API",
+    "templateOpenaiApi": "OpenAI API",
     "useTemplate": "Claude Error テンプレート",
     "useTemplateConfirm": "入力済みの内容をテンプレートで上書きしますか？",
     "validJson": "JSON 形式は有効です"

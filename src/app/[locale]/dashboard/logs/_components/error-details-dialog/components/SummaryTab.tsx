@@ -15,10 +15,12 @@ import {
   Zap,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/routing";
 import { cn, formatTokenAmount } from "@/lib/utils";
+import { extractAnthropicEffortInfo } from "@/lib/utils/anthropic-effort";
 import { formatCurrency } from "@/lib/utils/currency";
 import {
   getPricingResolutionSpecialSetting,
@@ -76,6 +78,7 @@ export function SummaryTab({
     ? t(`billingDetails.pricingSource.${pricingResolution.source}`)
     : null;
   const hasPriorityServiceTier = hasPriorityServiceTierSpecialSetting(specialSettings);
+  const effortInfo = extractAnthropicEffortInfo(specialSettings);
   const isFake200PostStreamFailure =
     typeof errorMessage === "string" && errorMessage.startsWith("FAKE_200_");
   const fake200Code =
@@ -201,36 +204,63 @@ export function SummaryTab({
       )}
 
       {/* Session Info */}
-      {sessionId && (
+      {(sessionId || effortInfo) && (
         <div className="space-y-2">
           <h4 className="text-sm font-semibold">{t("metadata.sessionInfo")}</h4>
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <code className="text-xs font-mono break-all">{sessionId}</code>
-                  {requestSequence && (
-                    <Badge variant="outline" className="text-xs shrink-0">
-                      #{requestSequence}
-                    </Badge>
+          <div className="rounded-lg border bg-card divide-y">
+            {sessionId && (
+              <div className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs font-mono break-all">{sessionId}</code>
+                      {requestSequence && (
+                        <Badge variant="outline" className="text-xs shrink-0">
+                          #{requestSequence}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  {hasMessages && !checkingMessages && (
+                    <Link
+                      href={
+                        requestSequence
+                          ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
+                          : `/dashboard/sessions/${sessionId}/messages`
+                      }
+                    >
+                      <Button variant="outline" size="sm">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        {t("viewDetails")}
+                      </Button>
+                    </Link>
                   )}
                 </div>
               </div>
-              {hasMessages && !checkingMessages && (
-                <Link
-                  href={
-                    requestSequence
-                      ? `/dashboard/sessions/${sessionId}/messages?seq=${requestSequence}`
-                      : `/dashboard/sessions/${sessionId}/messages`
-                  }
-                >
-                  <Button variant="outline" size="sm">
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    {t("viewDetails")}
-                  </Button>
-                </Link>
-              )}
-            </div>
+            )}
+            {effortInfo && (
+              <div className="p-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground">{t("effort.label")}:</span>
+                  <AnthropicEffortBadge
+                    effort={effortInfo.originalEffort}
+                    label={effortInfo.originalEffort}
+                  />
+                  {effortInfo.isOverridden && effortInfo.overriddenEffort && (
+                    <>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <AnthropicEffortBadge
+                        effort={effortInfo.overriddenEffort}
+                        label={effortInfo.overriddenEffort}
+                      />
+                    </>
+                  )}
+                </div>
+                {effortInfo.isOverridden && (
+                  <p className="text-[11px] text-muted-foreground mt-1">{t("effort.overridden")}</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -356,7 +386,7 @@ export function SummaryTab({
                       1M Context
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      ({t("billingDetails.context1mPricing")})
+                      ({t("billingDetails.context1mEnabled")})
                     </span>
                   </div>
                 </div>

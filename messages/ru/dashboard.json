@@ -158,6 +158,7 @@
       "nonBilling": "Не тарифицируется",
       "skipped": "Пропущено",
       "specialSettings": "Особые",
+      "anthropicEffort": "Effort: {effort}",
       "times": "раз",
       "loadedCount": "Загружено {count} записей",
       "loadingMore": "Загрузка...",
@@ -287,7 +288,7 @@
         "fast": "fast",
         "fastPriority": "Приоритетный уровень обслуживания (режим fast)",
         "context1m": "1M контекст",
-        "context1mPricing": "Вход 2x >200k, Выход 1.5x >200k",
+        "context1mEnabled": "Окно контекста 1M включено",
         "pricingProvider": "Провайдер тарифа",
         "pricingSourceLabel": "Источник тарифа",
         "pricingSource": {
@@ -330,6 +331,10 @@
         "billingInfo": "Информация о биллинге",
         "technicalTimeline": "Техническая хронология",
         "copyTimeline": "Копировать хронологию"
+      },
+      "effort": {
+        "label": "Effort",
+        "overridden": "Переопределено провайдером"
       },
       "logicTrace": {
         "title": "Цепочка решений",
@@ -390,7 +395,7 @@
       "fast": "fast",
       "fastPriority": "Приоритетный уровень обслуживания (режим fast)",
       "context1m": "1M Контекст",
-      "context1mPricing": "Вход >200k 2x, Выход >200k 1.5x",
+      "context1mEnabled": "Окно контекста 1M включено",
       "pricingProvider": "Провайдер тарифа",
       "pricingSourceLabel": "Источник тарифа",
       "pricingSource": {

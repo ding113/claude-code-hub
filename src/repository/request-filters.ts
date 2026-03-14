@@ -4,11 +4,14 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { requestFilters } from "@/drizzle/schema";
 import { emitRequestFiltersUpdated } from "@/lib/emit-event";
+import type { FilterOperation } from "@/lib/request-filter-types";
 
 export type RequestFilterScope = "header" | "body";
 export type RequestFilterAction = "remove" | "set" | "json_path" | "text_replace";
 export type RequestFilterMatchType = "regex" | "contains" | "exact" | null;
 export type RequestFilterBindingType = "global" | "providers" | "groups";
+export type RequestFilterRuleMode = "simple" | "advanced";
+export type RequestFilterExecutionPhase = "guard" | "final";
 
 export interface RequestFilter {
   id: number;
@@ -24,6 +27,9 @@ export interface RequestFilter {
   bindingType: RequestFilterBindingType;
   providerIds: number[] | null;
   groupTags: string[] | null;
+  ruleMode: RequestFilterRuleMode;
+  executionPhase: RequestFilterExecutionPhase;
+  operations: FilterOperation[] | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +51,9 @@ function mapRow(row: Row): RequestFilter {
     bindingType: (row.bindingType as RequestFilterBindingType) ?? "global",
     providerIds: (row.providerIds as number[] | null) ?? null,
     groupTags: (row.groupTags as string[] | null) ?? null,
+    ruleMode: (row.ruleMode as RequestFilterRuleMode) ?? "simple",
+    executionPhase: (row.executionPhase as RequestFilterExecutionPhase) ?? "guard",
+    operations: (row.operations as FilterOperation[] | null) ?? null,
     createdAt: row.createdAt ?? new Date(),
     updatedAt: row.updatedAt ?? new Date(),
   };
@@ -97,6 +106,9 @@ interface CreateRequestFilterInput {
   bindingType?: RequestFilterBindingType;
   providerIds?: number[] | null;
   groupTags?: string[] | null;
+  ruleMode?: RequestFilterRuleMode;
+  executionPhase?: RequestFilterExecutionPhase;
+  operations?: FilterOperation[] | null;
 }
 
 export async function createRequestFilter(data: CreateRequestFilterInput): Promise<RequestFilter> {
@@ -115,6 +127,9 @@ export async function createRequestFilter(data: CreateRequestFilterInput): Promi
       bindingType: data.bindingType ?? "global",
       providerIds: data.providerIds ?? null,
       groupTags: data.groupTags ?? null,
+      ruleMode: data.ruleMode ?? "simple",
+      executionPhase: data.executionPhase ?? "guard",
+      operations: data.operations ?? null,
     })
     .returning();
 
@@ -135,6 +150,9 @@ interface UpdateRequestFilterInput {
   bindingType?: RequestFilterBindingType;
   providerIds?: number[] | null;
   groupTags?: string[] | null;
+  ruleMode?: RequestFilterRuleMode;
+  executionPhase?: RequestFilterExecutionPhase;
+  operations?: FilterOperation[] | null;
 }
 
 export async function updateRequestFilter(

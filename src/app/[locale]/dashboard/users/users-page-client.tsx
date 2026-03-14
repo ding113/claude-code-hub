@@ -574,17 +574,17 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-lg font-medium">{t("title")}</h3>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight">{t("title")}</h1>
+          <p className="mt-2 text-muted-foreground">
             {isInitialLoading
               ? tCommon("loading")
               : t("description", { count: visibleUsers.length })}
           </p>
         </div>
         {isAdmin && (
-          <Button onClick={handleCreateUser}>
+          <Button onClick={handleCreateUser} className="shrink-0">
             <Plus className="mr-2 h-4 w-4" />
             {t("toolbar.createUser")}
           </Button>

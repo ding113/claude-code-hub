@@ -38,6 +38,8 @@ OS_TYPE=""
 IMAGE_TAG="latest"
 BRANCH_NAME="main"
 APP_PORT="23000"
+UPDATE_MODE=false
+FORCE_NEW=false
 
 # CLI argument variables
 BRANCH_ARG=""
@@ -61,6 +63,7 @@ Options:
   -d, --deploy-dir <path>    Custom deployment directory
       --domain <domain>      Domain for Caddy HTTPS (enables Caddy automatically)
       --enable-caddy         Enable Caddy reverse proxy without HTTPS (HTTP only)
+      --force-new            Force fresh installation (ignore existing deployment)
   -y, --yes                  Non-interactive mode (skip prompts, use defaults)
   -h, --help                 Show this help message
 
@@ -71,6 +74,8 @@ Examples:
   $0 -t "my-secure-token" -y            # Use custom admin token
   $0 --domain hub.example.com -y        # Deploy with Caddy HTTPS
   $0 --enable-caddy -y                  # Deploy with Caddy HTTP-only
+  $0 -y                                 # Update existing deployment (auto-detected)
+  $0 --force-new -y                     # Force fresh install even if deployment exists
 
 For more information, visit: https://github.com/ding113/claude-code-hub
 EOF
@@ -122,6 +127,10 @@ parse_args() {
                 ;;
             --enable-caddy)
                 ENABLE_CADDY=true
+                shift
+                ;;
+            --force-new)
+                FORCE_NEW=true
                 shift
                 ;;
             -y|--yes)
@@ -347,6 +356,67 @@ generate_db_password() {
     log_info "Generated secure database password"
 }
 
+detect_existing_deployment() {
+    if [[ "$FORCE_NEW" == true ]]; then
+        log_info "Force-new flag set, skipping existing deployment detection"
+        return 1
+    fi
+    if [[ -f "$DEPLOY_DIR/.env" ]] && [[ -f "$DEPLOY_DIR/docker-compose.yaml" ]]; then
+        log_info "Detected existing deployment in $DEPLOY_DIR"
+        UPDATE_MODE=true
+        return 0
+    fi
+    return 1
+}
+
+extract_suffix_from_compose() {
+    local compose_file="$DEPLOY_DIR/docker-compose.yaml"
+    SUFFIX=$(sed -n 's/.*container_name: claude-code-hub-db-\([a-z0-9]*\)/\1/p' "$compose_file" | head -1)
+    if [[ -z "$SUFFIX" ]]; then
+        log_warning "Could not extract suffix from docker-compose.yaml, generating new one"
+        generate_random_suffix
+        return
+    fi
+    log_info "Using existing suffix: $SUFFIX"
+}
+
+load_existing_env() {
+    local env_file="$DEPLOY_DIR/.env"
+
+    # Load DB_PASSWORD
+    local existing_db_pw
+    existing_db_pw=$(grep '^DB_PASSWORD=' "$env_file" | head -1 | cut -d'=' -f2-)
+    if [[ -n "$existing_db_pw" ]]; then
+        DB_PASSWORD="$existing_db_pw"
+        log_info "Preserved existing database password"
+    else
+        log_warning "DB_PASSWORD not found in existing .env, generating new one"
+        generate_db_password
+    fi
+
+    # Load ADMIN_TOKEN (CLI argument takes priority)
+    if [[ -z "$ADMIN_TOKEN" ]]; then
+        local existing_token
+        existing_token=$(grep '^ADMIN_TOKEN=' "$env_file" | head -1 | cut -d'=' -f2-)
+        if [[ -n "$existing_token" ]]; then
+            ADMIN_TOKEN="$existing_token"
+            log_info "Preserved existing admin token"
+        else
+            log_warning "ADMIN_TOKEN not found in existing .env, generating new one"
+            generate_admin_token
+        fi
+    fi
+
+    # Load APP_PORT (CLI argument takes priority)
+    if [[ -z "$PORT_ARG" ]]; then
+        local existing_port
+        existing_port=$(grep '^APP_PORT=' "$env_file" | head -1 | cut -d'=' -f2-)
+        if [[ -n "$existing_port" ]]; then
+            APP_PORT="$existing_port"
+        fi
+    fi
+}
+
 create_deployment_dir() {
     log_info "Creating deployment directory: $DEPLOY_DIR"
     
@@ -542,6 +612,14 @@ EOF
 
 write_env_file() {
     log_info "Writing .env file..."
+
+    # Update mode: backup existing .env, then restore custom variables after writing
+    local backup_file=""
+    if [[ "$UPDATE_MODE" == true ]] && [[ -f "$DEPLOY_DIR/.env" ]]; then
+        backup_file="$DEPLOY_DIR/.env.bak"
+        cp "$DEPLOY_DIR/.env" "$backup_file"
+        log_info "Backed up existing .env to .env.bak"
+    fi
     
     # Determine secure cookies setting based on Caddy and domain
     local secure_cookies="true"
@@ -593,7 +671,20 @@ TZ=Asia/Shanghai
 LOG_LEVEL=info
 EOF
 
-    # W-015: 设置 .env 文件权限，防止敏感信息泄露
+    # Restore user custom variables from backup (variables not managed by this script)
+    if [[ -n "$backup_file" ]] && [[ -f "$backup_file" ]]; then
+        local managed_keys="ADMIN_TOKEN|DB_USER|DB_PASSWORD|DB_NAME|APP_PORT|APP_URL|AUTO_MIGRATE|ENABLE_RATE_LIMIT|SESSION_TTL|STORE_SESSION_MESSAGES|STORE_SESSION_RESPONSE_BODY|ENABLE_SECURE_COOKIES|ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS|ENABLE_ENDPOINT_CIRCUIT_BREAKER|NODE_ENV|TZ|LOG_LEVEL"
+        local custom_vars
+        custom_vars=$(grep -v '^\s*#' "$backup_file" | grep -v '^\s*$' | grep -vE "^($managed_keys)=" || true)
+        if [[ -n "$custom_vars" ]]; then
+            echo "" >> "$DEPLOY_DIR/.env"
+            echo "# User Custom Configuration (preserved from previous deployment)" >> "$DEPLOY_DIR/.env"
+            echo "$custom_vars" >> "$DEPLOY_DIR/.env"
+            log_info "Preserved $(echo "$custom_vars" | wc -l | tr -d ' ') custom environment variables"
+        fi
+    fi
+
+    # W-015: restrict .env file permissions to prevent sensitive data leaks
     chmod 600 "$DEPLOY_DIR/.env"
 
     log_success ".env file created"
@@ -677,7 +768,11 @@ print_success_message() {
     echo ""
     echo -e "${GREEN}+================================================================+${NC}"
     echo -e "${GREEN}|                                                                |${NC}"
-    echo -e "${GREEN}|          Claude Code Hub Deployed Successfully!               |${NC}"
+    if [[ "$UPDATE_MODE" == true ]]; then
+        echo -e "${GREEN}|          Claude Code Hub Updated Successfully!                |${NC}"
+    else
+        echo -e "${GREEN}|          Claude Code Hub Deployed Successfully!               |${NC}"
+    fi
     echo -e "${GREEN}|                                                                |${NC}"
     echo -e "${GREEN}+================================================================+${NC}"
     echo ""
@@ -704,9 +799,14 @@ print_success_message() {
     fi
 
     echo ""
-    echo -e "${BLUE}Admin Token (KEEP THIS SECRET!):${NC}"
-    echo -e "   ${YELLOW}${ADMIN_TOKEN}${NC}"
-    echo ""
+
+    # In update mode, skip printing the admin token (user already knows it)
+    if [[ "$UPDATE_MODE" != true ]]; then
+        echo -e "${BLUE}Admin Token (KEEP THIS SECRET!):${NC}"
+        echo -e "   ${YELLOW}${ADMIN_TOKEN}${NC}"
+        echo ""
+    fi
+
     echo -e "${BLUE}Usage Documentation:${NC}"
     if [[ "$ENABLE_CADDY" == true ]] && [[ -n "$DOMAIN_ARG" ]]; then
         echo -e "   Chinese: ${GREEN}https://${DOMAIN_ARG}/zh-CN/usage-doc${NC}"
@@ -739,7 +839,11 @@ print_success_message() {
     fi
 
     echo ""
-    echo -e "${RED}IMPORTANT: Please save the admin token in a secure location!${NC}"
+    if [[ "$UPDATE_MODE" != true ]]; then
+        echo -e "${RED}IMPORTANT: Please save the admin token in a secure location!${NC}"
+    else
+        echo -e "${BLUE}NOTE: Your existing secrets and custom configuration have been preserved.${NC}"
+    fi
     echo ""
 }
 
@@ -765,10 +869,19 @@ main() {
     fi
     
     select_branch
-    
-    generate_random_suffix
-    generate_admin_token
-    generate_db_password
+
+    # Key branch: detect existing deployment
+    if detect_existing_deployment; then
+        log_info "=== UPDATE MODE ==="
+        log_info "Updating existing deployment (secrets and custom config will be preserved)"
+        extract_suffix_from_compose
+        load_existing_env
+    else
+        log_info "=== FRESH INSTALL MODE ==="
+        generate_random_suffix
+        generate_admin_token
+        generate_db_password
+    fi
     
     create_deployment_dir
     write_compose_file
@@ -780,7 +893,11 @@ main() {
     if wait_for_health; then
         print_success_message
     else
-        log_warning "Deployment completed but some services may not be fully healthy yet"
+        if [[ "$UPDATE_MODE" == true ]]; then
+            log_warning "Update completed but some services may not be fully healthy yet"
+        else
+            log_warning "Deployment completed but some services may not be fully healthy yet"
+        fi
         log_info "Please check the logs: cd $DEPLOY_DIR && docker compose logs -f"
         print_success_message
     fi

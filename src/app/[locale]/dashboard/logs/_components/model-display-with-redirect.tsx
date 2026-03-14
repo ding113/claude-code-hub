@@ -2,7 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback } from "react";
+import { type MouseEvent, useCallback } from "react";
 import { toast } from "sonner";
 import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +22,7 @@ export function ModelDisplayWithRedirect({
   billingModelSource,
   onRedirectClick,
 }: ModelDisplayWithRedirectProps) {
-  const t = useTranslations("common");
-
+  const tCommon = useTranslations("common");
   // 判断是否发生重定向
   const isRedirected = originalModel && currentModel && originalModel !== currentModel;
 
@@ -31,21 +30,24 @@ export function ModelDisplayWithRedirect({
   const billingModel = billingModelSource === "original" ? originalModel : currentModel;
 
   const handleCopyModel = useCallback(
-    (e: React.MouseEvent) => {
+    (e: MouseEvent) => {
       e.stopPropagation();
       if (!billingModel) return;
       void copyTextToClipboard(billingModel).then((ok) => {
-        if (ok) toast.success(t("copySuccess"));
+        if (ok) toast.success(tCommon("copySuccess"));
       });
     },
-    [billingModel, t]
+    [billingModel, tCommon]
   );
 
   if (!isRedirected) {
     return (
       <div className="flex items-center gap-1.5 min-w-0">
         {billingModel ? <ModelVendorIcon modelId={billingModel} /> : null}
-        <span className="truncate cursor-pointer hover:underline" onClick={handleCopyModel}>
+        <span
+          className="truncate max-w-full cursor-pointer hover:underline"
+          onClick={handleCopyModel}
+        >
           {billingModel || "-"}
         </span>
       </div>

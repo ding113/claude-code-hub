@@ -91,7 +91,7 @@ export function ErrorRuleTester() {
       </Button>
 
       {result && (
-        <div className="space-y-4 rounded-xl bg-white/[0.02] border border-border/50 p-4">
+        <div className="space-y-4 rounded-xl bg-card/80 border border-border/50 p-4">
           {/* Match Status */}
           <div className="flex flex-wrap items-center gap-2">
             {result.matched ? (
@@ -105,7 +105,7 @@ export function ErrorRuleTester() {
               </>
             ) : (
               <>
-                <div className="p-1.5 rounded-lg bg-white/5">
+                <div className="p-1.5 rounded-lg bg-muted/50">
                   <XCircle className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <span className="text-sm font-medium text-muted-foreground">
@@ -129,7 +129,7 @@ export function ErrorRuleTester() {
                     </span>
                     <Badge
                       variant="secondary"
-                      className="bg-white/5 text-foreground border-border text-[10px]"
+                      className="bg-muted/50 text-foreground border-border text-[10px]"
                     >
                       {result.rule.category}
                     </Badge>

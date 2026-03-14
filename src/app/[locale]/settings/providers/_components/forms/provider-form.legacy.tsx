@@ -34,7 +34,6 @@ import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
-import type { Context1mPreference } from "@/lib/special-attributes";
 import {
   extractBaseUrl,
   isValidUrl,
@@ -211,11 +210,6 @@ export function ProviderForm({
   const [cacheTtlPreference, setCacheTtlPreference] = useState<"inherit" | "5m" | "1h">(
     sourceProvider?.cacheTtlPreference ?? "inherit"
   );
-
-  // 1M Context Window 偏好配置（仅对 Anthropic 类型供应商有效）
-  const [context1mPreference, setContext1mPreference] = useState<
-    "inherit" | "force_enable" | "disabled"
-  >((sourceProvider?.context1mPreference as "inherit" | "force_enable" | "disabled") ?? "inherit");
 
   // Codex（Responses API）供应商级参数覆写（仅对 Codex 类型供应商有效）
   const [codexReasoningEffortPreference, setCodexReasoningEffortPreference] =
@@ -492,7 +486,6 @@ export function ProviderForm({
             limit_total_usd?: number | null;
             limit_concurrent_sessions?: number | null;
             cache_ttl_preference?: "inherit" | "5m" | "1h";
-            context_1m_preference?: Context1mPreference | null;
             codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
             codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
             codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
@@ -534,7 +527,6 @@ export function ProviderForm({
             limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
-            context_1m_preference: context1mPreference,
             codex_reasoning_effort_preference: codexReasoningEffortPreference,
             codex_reasoning_summary_preference: codexReasoningSummaryPreference,
             codex_text_verbosity_preference: codexTextVerbosityPreference,
@@ -597,7 +589,6 @@ export function ProviderForm({
             limit_total_usd: limitTotalUsd,
             limit_concurrent_sessions: limitConcurrentSessions ?? 0,
             cache_ttl_preference: cacheTtlPreference,
-            context_1m_preference: context1mPreference,
             codex_reasoning_effort_preference: codexReasoningEffortPreference,
             codex_reasoning_summary_preference: codexReasoningSummaryPreference,
             codex_text_verbosity_preference: codexTextVerbosityPreference,
@@ -674,7 +665,6 @@ export function ProviderForm({
             PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS / 1000
           );
           setWebsiteUrl("");
-          setContext1mPreference("inherit");
         }
         onSuccess?.();
       } catch (error) {
@@ -1116,38 +1106,6 @@ export function ProviderForm({
                     {t("sections.routing.cacheTtl.desc")}
                   </p>
                 </div>
-
-                {/* 1M Context Window 配置 - 仅 Anthropic 类型供应商显示 */}
-                {(providerType === "claude" || providerType === "claude-auth") && (
-                  <div className="space-y-2">
-                    <Label>{t("sections.routing.context1m.label")}</Label>
-                    <Select
-                      value={context1mPreference}
-                      onValueChange={(val) =>
-                        setContext1mPreference(val as "inherit" | "force_enable" | "disabled")
-                      }
-                      disabled={isPending}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="inherit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inherit">
-                          {t("sections.routing.context1m.options.inherit")}
-                        </SelectItem>
-                        <SelectItem value="force_enable">
-                          {t("sections.routing.context1m.options.forceEnable")}
-                        </SelectItem>
-                        <SelectItem value="disabled">
-                          {t("sections.routing.context1m.options.disabled")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {t("sections.routing.context1m.desc")}
-                    </p>
-                  </div>
-                )}
 
                 {/* Codex 参数覆写 - 仅 Codex 类型供应商显示 */}
                 {providerType === "codex" && (

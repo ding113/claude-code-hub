@@ -106,7 +106,6 @@ function createMockState(
       costMultiplier: 1,
       cacheTtlPreference: "inherit",
       swapCacheTtlBilling: false,
-      context1mPreference: "inherit",
       codexReasoningEffortPreference: "inherit",
       codexReasoningSummaryPreference: "inherit",
       codexTextVerbosityPreference: "inherit",
@@ -242,16 +241,6 @@ describe("OptionsSection", () => {
   });
 
   describe("conditional rendering - claude provider", () => {
-    it("shows context1m for claude type", () => {
-      const { unmount } = renderSection({
-        state: createMockState({ routing: { providerType: "claude" } }),
-      });
-
-      expect(getBodyText()).toContain("sections.routing.context1m.label");
-
-      unmount();
-    });
-
     it("shows Anthropic overrides for claude type", () => {
       const { unmount } = renderSection({
         state: createMockState({ routing: { providerType: "claude" } }),
@@ -290,16 +279,6 @@ describe("OptionsSection", () => {
       });
 
       expect(getBodyText()).toContain("sections.routing.codexOverrides.title");
-
-      unmount();
-    });
-
-    it("hides context1m for codex type", () => {
-      const { unmount } = renderSection({
-        state: createMockState({ routing: { providerType: "codex" } }),
-      });
-
-      expect(getBodyText()).not.toContain("sections.routing.context1m.label");
 
       unmount();
     });
