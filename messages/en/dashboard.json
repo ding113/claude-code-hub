@@ -332,6 +332,10 @@
         "technicalTimeline": "Technical Timeline",
         "copyTimeline": "Copy Timeline"
       },
+      "effort": {
+        "label": "Effort",
+        "overridden": "Overridden by provider"
+      },
       "logicTrace": {
         "title": "Decision Chain",
         "noDecisionData": "No decision data available",

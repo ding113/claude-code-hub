@@ -332,6 +332,10 @@
         "technicalTimeline": "技術タイムライン",
         "copyTimeline": "タイムラインをコピー"
       },
+      "effort": {
+        "label": "Effort",
+        "overridden": "プロバイダーにより上書き"
+      },
       "logicTrace": {
         "title": "決定チェーン",
         "noDecisionData": "決定データがありません",

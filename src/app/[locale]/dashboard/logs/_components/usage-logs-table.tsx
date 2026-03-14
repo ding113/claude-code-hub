@@ -268,7 +268,6 @@ export function UsageLogsTable({
                                 originalModel={log.originalModel}
                                 currentModel={log.model}
                                 billingModelSource={billingModelSource}
-                                anthropicEffort={log.anthropicEffort}
                                 onRedirectClick={() =>
                                   setDialogState({ logId: log.id, scrollToRedirect: true })
                                 }

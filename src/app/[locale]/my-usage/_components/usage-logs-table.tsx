@@ -5,7 +5,6 @@ import { useTimeZone, useTranslations } from "next-intl";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import type { MyUsageLogEntry } from "@/actions/my-usage";
-import { AnthropicEffortBadge } from "@/components/customs/anthropic-effort-badge";
 import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -122,12 +121,6 @@ export function UsageLogsTable({
                       <div className="text-[11px] text-muted-foreground">
                         {t("billingModel", { model: log.billingModel })}
                       </div>
-                    ) : null}
-                    {log.anthropicEffort ? (
-                      <AnthropicEffortBadge
-                        effort={log.anthropicEffort}
-                        label={t("anthropicEffort", { effort: log.anthropicEffort })}
-                      />
                     ) : null}
                   </TableCell>
                   <TableCell className="text-right text-xs font-mono tabular-nums">

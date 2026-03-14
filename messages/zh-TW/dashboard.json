@@ -332,6 +332,10 @@
         "technicalTimeline": "技術時間軸",
         "copyTimeline": "複製時間軸"
       },
+      "effort": {
+        "label": "Effort",
+        "overridden": "已被供應商覆寫"
+      },
       "logicTrace": {
         "title": "決策鏈",
         "noDecisionData": "暫無決策資料",

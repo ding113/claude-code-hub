@@ -332,6 +332,10 @@
         "technicalTimeline": "Техническая хронология",
         "copyTimeline": "Копировать хронологию"
       },
+      "effort": {
+        "label": "Effort",
+        "overridden": "Переопределено провайдером"
+      },
       "logicTrace": {
         "title": "Цепочка решений",
         "noDecisionData": "Нет данных о решениях",

@@ -332,6 +332,10 @@
         "technicalTimeline": "技术时间线",
         "copyTimeline": "复制时间线"
       },
+      "effort": {
+        "label": "Effort",
+        "overridden": "已被供应商覆写"
+      },
       "logicTrace": {
         "title": "决策链",
         "noDecisionData": "暂无决策数据",
