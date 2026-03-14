@@ -882,7 +882,9 @@ export function ProviderForm({
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{t("sections.routing.providerTypeDesc")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("sections.routing.providerTypeDesc")}
+                  </p>
                 </div>
 
                 <div className="space-y-2">

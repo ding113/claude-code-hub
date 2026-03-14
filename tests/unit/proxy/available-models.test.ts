@@ -100,11 +100,7 @@ describe("getProviderTypesForFormat - 客户端格式到 Provider 类型映射",
   });
 
   test("openai 格式应返回 codex、openai 和 openai-compatible 类型", () => {
-    expect(getProviderTypesForFormat("openai")).toEqual([
-      "codex",
-      "openai",
-      "openai-compatible",
-    ]);
+    expect(getProviderTypesForFormat("openai")).toEqual(["codex", "openai", "openai-compatible"]);
   });
 
   test("gemini 格式应返回 gemini 和 gemini-cli 类型", () => {

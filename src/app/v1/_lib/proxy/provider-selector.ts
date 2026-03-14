@@ -685,7 +685,13 @@ export class ProxyProviderResolver {
     let visibleProviders = allProviders;
 
     // 原始请求格式映射到目标供应商类型；缺省为 claude 以兼容历史请求
-    const targetType: "claude" | "codex" | "openai" | "openai-compatible" | "gemini" | "gemini-cli" = (() => {
+    const targetType:
+      | "claude"
+      | "codex"
+      | "openai"
+      | "openai-compatible"
+      | "gemini"
+      | "gemini-cli" = (() => {
       switch (session?.originalFormat) {
         case "claude":
           return "claude";
@@ -1137,8 +1143,13 @@ export class ProxyProviderResolver {
     );
 
     // 将 providerType 映射为 decisionContext 允许的 targetType
-    const targetType: "claude" | "codex" | "openai" | "openai-compatible" | "gemini" | "gemini-cli" =
-      providerType === "claude-auth" ? "claude" : providerType;
+    const targetType:
+      | "claude"
+      | "codex"
+      | "openai"
+      | "openai-compatible"
+      | "gemini"
+      | "gemini-cli" = providerType === "claude-auth" ? "claude" : providerType;
 
     if (typeFiltered.length === 0) {
       return {
