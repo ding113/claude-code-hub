@@ -257,12 +257,14 @@ function ensureLongContextPricingAudit(
     return;
   }
 
-  const existing = session.getSpecialSettings()?.find(
-    (setting) =>
-      setting.type === "long_context_pricing" &&
-      setting.pricingScope === pricing.scope &&
-      setting.thresholdTokens === pricing.thresholdTokens
-  );
+  const existing = session
+    .getSpecialSettings()
+    ?.find(
+      (setting) =>
+        setting.type === "long_context_pricing" &&
+        setting.pricingScope === pricing.scope &&
+        setting.thresholdTokens === pricing.thresholdTokens
+    );
 
   if (!existing) {
     session.addSpecialSetting(createLongContextPricingAudit(pricing));
@@ -3222,7 +3224,6 @@ export async function finalizeRequestStats(
     provider.swapCacheTtlBilling
   );
 
-<<<<<<< HEAD
   // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
   if (
     provider.providerType === "codex" &&
@@ -3232,10 +3233,7 @@ export async function finalizeRequestStats(
     session.setContext1mApplied(true);
   }
 
-  await updateRequestCostFromUsage(
-=======
   const costUpdateResult = await updateRequestCostFromUsage(
->>>>>>> b9df1888 (feat: support long-context pricing metadata)
     messageContext.id,
     session.getOriginalModel(),
     session.getCurrentModel(),
