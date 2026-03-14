@@ -49,6 +49,12 @@ export function clientRequestsContext1m(
   });
 }
 
+/**
+ * Codex context-1m badge threshold (272k tokens)
+ * When input tokens exceed this, the 1M context badge is displayed.
+ */
+export const CODEX_1M_CONTEXT_TOKEN_THRESHOLD = 272000;
+
 // =============================================================================
 // Extended Cache TTL Support (Reference)
 // =============================================================================

@@ -609,5 +609,22 @@ describe("client-detector", () => {
       expect(result.signals).toEqual([]);
       expect(result.supplementary).toEqual([]);
     });
+
+    test("should match codex desktop alias in detectClientFull", () => {
+      const session = createMockSession({ userAgent: "Codex Desktop/1.0" });
+      const result = detectClientFull(session, "codex-cli");
+
+      expect(result.matched).toBe(true);
+      expect(result.hubConfirmed).toBe(false);
+      expect(result.subClient).toBeNull();
+    });
+
+    test("should match codex_vscode via codex desktop alias in detectClientFull", () => {
+      const session = createMockSession({ userAgent: "Codex Desktop/1.0" });
+      const result = detectClientFull(session, "codex_vscode");
+
+      expect(result.matched).toBe(true);
+      expect(result.hubConfirmed).toBe(false);
+    });
   });
 });

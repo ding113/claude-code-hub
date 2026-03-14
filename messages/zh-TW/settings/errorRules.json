@@ -68,6 +68,9 @@
     "saving": "儲存中...",
     "testMessageLabel": "測試訊息",
     "testMessagePlaceholder": "輸入要測試的錯誤訊息...",
+    "templateClaudeApi": "Claude API",
+    "templateGeminiApi": "Gemini API",
+    "templateOpenaiApi": "OpenAI API",
     "useTemplate": "Claude Error 範本",
     "useTemplateConfirm": "輸入框已有內容，確定以範本覆蓋？",
     "validJson": "JSON 格式正確"

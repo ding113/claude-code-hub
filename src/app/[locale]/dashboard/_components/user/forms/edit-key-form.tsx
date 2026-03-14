@@ -66,7 +66,9 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
     if (!isAdmin) return;
     getAvailableProviderGroups()
       .then(setProviderGroupSuggestions)
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[EditKeyForm] Failed to load provider group suggestions:", err);
+      });
   }, [isAdmin]);
 
   const formatExpiresAt = (expiresAt: string) => {

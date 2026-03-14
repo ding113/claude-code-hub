@@ -9,6 +9,7 @@ import type { LeaseWindowType } from "@/lib/rate-limit/lease";
 import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
+import { CODEX_1M_CONTEXT_TOKEN_THRESHOLD } from "@/lib/special-attributes";
 import type {
   CostBreakdown,
   RequestCostCalculationOptions,
@@ -54,6 +55,20 @@ export type UsageMetrics = {
   input_image_tokens?: number;
   output_image_tokens?: number;
 };
+
+function maybeSetCodexContext1m(
+  session: ProxySession,
+  provider: Provider,
+  inputTokens: number | null | undefined
+): void {
+  if (
+    provider.providerType === "codex" &&
+    inputTokens != null &&
+    inputTokens > CODEX_1M_CONTEXT_TOKEN_THRESHOLD
+  ) {
+    session.setContext1mApplied(true);
+  }
+}
 
 /**
  * Fire Langfuse trace asynchronously. Non-blocking, error-tolerant.
@@ -948,14 +963,7 @@ export class ProxyResponseHandler {
           );
         }
 
-        // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
-        if (
-          provider.providerType === "codex" &&
-          usageMetrics?.input_tokens != null &&
-          usageMetrics.input_tokens > 272000
-        ) {
-          session.setContext1mApplied(true);
-        }
+        maybeSetCodexContext1m(session, provider, usageMetrics?.input_tokens);
 
         // Codex: Extract prompt_cache_key and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -1968,14 +1976,7 @@ export class ProxyResponseHandler {
           );
         }
 
-        // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
-        if (
-          provider.providerType === "codex" &&
-          usageForCost?.input_tokens != null &&
-          usageForCost.input_tokens > 272000
-        ) {
-          session.setContext1mApplied(true);
-        }
+        maybeSetCodexContext1m(session, provider, usageForCost?.input_tokens);
 
         // Codex: Extract prompt_cache_key from SSE events and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
@@ -3229,14 +3230,7 @@ export async function finalizeRequestStats(
     provider.swapCacheTtlBilling
   );
 
-  // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
-  if (
-    provider.providerType === "codex" &&
-    normalizedUsage.input_tokens != null &&
-    normalizedUsage.input_tokens > 272000
-  ) {
-    session.setContext1mApplied(true);
-  }
+  maybeSetCodexContext1m(session, provider, normalizedUsage.input_tokens);
 
   const costUpdateResult = await updateRequestCostFromUsage(
     messageContext.id,

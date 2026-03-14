@@ -154,13 +154,13 @@ export function OverrideSection({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onSelect={() => handleUseTemplate(CLAUDE_OVERRIDE_TEMPLATE)}>
-                      Claude API
+                      {t("errorRules.dialog.templateClaudeApi")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => handleUseTemplate(GEMINI_OVERRIDE_TEMPLATE)}>
-                      Gemini API
+                      {t("errorRules.dialog.templateGeminiApi")}
                     </DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => handleUseTemplate(OPENAI_OVERRIDE_TEMPLATE)}>
-                      OpenAI API
+                      {t("errorRules.dialog.templateOpenaiApi")}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

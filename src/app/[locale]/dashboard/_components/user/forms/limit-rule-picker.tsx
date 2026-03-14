@@ -89,6 +89,9 @@ export function LimitRulePicker({
   existingTypes,
   translations,
 }: LimitRulePickerProps) {
+  const t = (path: string, fallback: string): string =>
+    getTranslation(translations, path, fallback);
+
   // Keep existingTypeSet for showing overwrite hint, but no longer filter availableTypes
   const existingTypeSet = useMemo(() => new Set(existingTypes), [existingTypes]);
   // All types are always available - selecting an existing type will overwrite it
@@ -132,19 +135,17 @@ export function LimitRulePicker({
     setError(null);
 
     if (!type) {
-      setError(getTranslation(translations, "errors.missingType", "Please select a limit type"));
+      setError(t("errors.missingType", "Please select a limit type"));
       return;
     }
 
     if (!Number.isFinite(numericValue) || numericValue < 0) {
-      setError(getTranslation(translations, "errors.invalidValue", "Please enter a valid value"));
+      setError(t("errors.invalidValue", "Please enter a valid value"));
       return;
     }
 
     if (needsTime && !isValidTime(dailyTime)) {
-      setError(
-        getTranslation(translations, "errors.invalidTime", "Please enter a valid time (HH:mm)")
-      );
+      setError(t("errors.invalidTime", "Please enter a valid time (HH:mm)"));
       return;
     }
 
@@ -160,9 +161,9 @@ export function LimitRulePicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[680px]">
         <DialogHeader>
-          <DialogTitle>{getTranslation(translations, "title", "Add limit rule")}</DialogTitle>
+          <DialogTitle>{t("title", "Add limit rule")}</DialogTitle>
           <DialogDescription>
-            {getTranslation(translations, "description", "Select limit type and set value")}
+            {t("description", "Select limit type and set value")}
           </DialogDescription>
         </DialogHeader>
 
@@ -176,17 +177,15 @@ export function LimitRulePicker({
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label>{getTranslation(translations, "fields.type.label", "Limit type")}</Label>
+              <Label>{t("fields.type.label", "Limit type")}</Label>
               <Select value={type} onValueChange={(val) => setType(val as LimitType)}>
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={getTranslation(translations, "fields.type.placeholder", "Select")}
-                  />
+                  <SelectValue placeholder={t("fields.type.placeholder", "Select")} />
                 </SelectTrigger>
                 <SelectContent>
                   {availableTypes.map((opt) => (
                     <SelectItem key={opt.type} value={opt.type}>
-                      {getTranslation(translations, `limitTypes.${opt.type}`, opt.fallbackLabel)}
+                      {t(`limitTypes.${opt.type}`, opt.fallbackLabel)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -206,7 +205,7 @@ export function LimitRulePicker({
             </div>
 
             <div className="space-y-2">
-              <Label>{getTranslation(translations, "fields.value.label", "Value")}</Label>
+              <Label>{t("fields.value.label", "Value")}</Label>
               <Input
                 type="number"
                 min={0}
@@ -238,7 +237,7 @@ export function LimitRulePicker({
                     onClick={() => setRawValue(String(v))}
                   >
                     {v === 0
-                      ? getTranslation(translations, "quickValues.unlimited", "Unlimited")
+                      ? t("quickValues.unlimited", "Unlimited")
                       : type === "limitSessions" || type === "limitRpm"
                         ? v
                         : `$${v}`}
@@ -251,7 +250,7 @@ export function LimitRulePicker({
           {isDaily && (
             <div className={cn("grid gap-4", dailyMode === "fixed" ? "sm:grid-cols-2" : "")}>
               <div className="space-y-2">
-                <Label>{getTranslation(translations, "daily.mode.label", "Daily mode")}</Label>
+                <Label>{t("daily.mode.label", "Daily mode")}</Label>
                 <Select
                   value={dailyMode}
                   onValueChange={(val) => setDailyMode(val as DailyResetMode)}
@@ -260,25 +259,21 @@ export function LimitRulePicker({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fixed">
-                      {getTranslation(translations, "daily.mode.fixed", "fixed")}
-                    </SelectItem>
-                    <SelectItem value="rolling">
-                      {getTranslation(translations, "daily.mode.rolling", "rolling")}
-                    </SelectItem>
+                    <SelectItem value="fixed">{t("daily.mode.fixed", "fixed")}</SelectItem>
+                    <SelectItem value="rolling">{t("daily.mode.rolling", "rolling")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {dailyMode === "fixed" && (
                 <div className="space-y-2">
-                  <Label>{getTranslation(translations, "daily.time.label", "Reset time")}</Label>
+                  <Label>{t("daily.time.label", "Reset time")}</Label>
                   <Input
                     type="time"
                     step={60}
                     value={dailyTime}
                     onChange={(e) => setDailyTime(e.target.value)}
-                    placeholder={getTranslation(translations, "daily.time.placeholder", "HH:mm")}
+                    placeholder={t("daily.time.placeholder", "HH:mm")}
                     aria-invalid={Boolean(error)}
                   />
                 </div>
@@ -286,7 +281,7 @@ export function LimitRulePicker({
 
               {dailyMode === "rolling" && (
                 <p className="text-xs text-muted-foreground">
-                  {getTranslation(translations, "daily.mode.helperRolling", "rolling 24h")}
+                  {t("daily.mode.helperRolling", "rolling 24h")}
                 </p>
               )}
             </div>
@@ -296,10 +291,10 @@ export function LimitRulePicker({
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleCancel}>
-              {getTranslation(translations, "cancel", "Cancel")}
+              {t("cancel", "Cancel")}
             </Button>
             <Button type="submit" disabled={!canConfirm}>
-              {getTranslation(translations, "confirm", "Save")}
+              {t("confirm", "Save")}
             </Button>
           </DialogFooter>
         </form>

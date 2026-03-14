@@ -187,7 +187,9 @@ export function detectClientFull(session: ProxySession, pattern: string): Client
   } else {
     const ua = session.userAgent?.trim();
     if (ua) {
-      if (pattern.includes("*")) {
+      if (matchesCodexDesktopAlias(pattern, ua)) {
+        matched = true;
+      } else if (pattern.includes("*")) {
         matched = globMatch(pattern, ua);
       } else {
         const normalizedPattern = normalize(pattern);
