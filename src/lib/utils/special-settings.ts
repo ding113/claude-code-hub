@@ -54,6 +54,15 @@ function buildSettingKey(setting: SpecialSetting): string {
       return JSON.stringify([setting.type, setting.hit, setting.effort]);
     case "anthropic_cache_ttl_header_override":
       return JSON.stringify([setting.type, setting.ttl]);
+    case "anthropic_context_1m_header_override":
+      return JSON.stringify([setting.type, setting.header, setting.flag]);
+    case "long_context_pricing":
+      return JSON.stringify([
+        setting.type,
+        setting.hit,
+        setting.pricingScope ?? null,
+        setting.thresholdTokens ?? null,
+      ]);
     case "thinking_signature_rectifier":
       return JSON.stringify([
         setting.type,

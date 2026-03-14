@@ -16,6 +16,8 @@ export type SpecialSetting =
   | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicEffortSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
+  | AnthropicContext1mHeaderOverrideSpecialSetting
+  | LongContextPricingSpecialSetting
   | GeminiGoogleSearchOverrideSpecialSetting
   | PricingResolutionSpecialSetting
   | CodexServiceTierResultSpecialSetting
@@ -95,6 +97,30 @@ export type AnthropicCacheTtlHeaderOverrideSpecialSetting = {
   scope: "request_header";
   hit: boolean;
   ttl: string;
+};
+
+/**
+ * Anthropic 1M 上下文相关标头覆写审计
+ */
+export type AnthropicContext1mHeaderOverrideSpecialSetting = {
+  type: "anthropic_context_1m_header_override";
+  scope: "request_header";
+  hit: boolean;
+  header: "anthropic-beta";
+  flag: string;
+};
+
+/**
+ * 长上下文 premium 计费审计
+ *
+ * 用于记录：请求因命中模型的长上下文定价规则而按 premium 费率计费。
+ */
+export type LongContextPricingSpecialSetting = {
+  type: "long_context_pricing";
+  scope: "billing";
+  hit: boolean;
+  pricingScope: "request" | "session" | null;
+  thresholdTokens: number | null;
 };
 
 /**

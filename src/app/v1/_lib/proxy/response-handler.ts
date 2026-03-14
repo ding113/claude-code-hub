@@ -9,8 +9,16 @@ import type { LeaseWindowType } from "@/lib/rate-limit/lease";
 import { deleteLiveChain } from "@/lib/redis/live-chain-store";
 import { SessionManager } from "@/lib/session-manager";
 import { SessionTracker } from "@/lib/session-tracker";
-import type { CostBreakdown } from "@/lib/utils/cost-calculation";
-import { calculateRequestCost, calculateRequestCostBreakdown } from "@/lib/utils/cost-calculation";
+import type {
+  CostBreakdown,
+  RequestCostCalculationOptions,
+  ResolvedLongContextPricing,
+} from "@/lib/utils/cost-calculation";
+import {
+  calculateRequestCost,
+  calculateRequestCostBreakdown,
+  matchLongContextPricing,
+} from "@/lib/utils/cost-calculation";
 import { hasValidPriceData } from "@/lib/utils/price-data";
 import { resolvePricingForModelRecords } from "@/lib/utils/pricing-resolution";
 import { isSSEText, parseSSEData } from "@/lib/utils/sse";
@@ -27,6 +35,7 @@ import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
 import type { Provider } from "@/types/provider";
 import type { SessionUsageUpdate } from "@/types/session";
+import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
 import { isClientAbortError } from "./errors";
@@ -226,6 +235,52 @@ function ensureCodexServiceTierResultSpecialSetting(
     actualServiceTier,
     effectivePriority,
   });
+}
+
+function createLongContextPricingAudit(
+  pricing: ResolvedLongContextPricing
+): LongContextPricingSpecialSetting {
+  return {
+    type: "long_context_pricing",
+    scope: "billing",
+    hit: true,
+    pricingScope: pricing.scope,
+    thresholdTokens: pricing.thresholdTokens,
+  };
+}
+
+function ensureLongContextPricingAudit(
+  session: ProxySession,
+  pricing: ResolvedLongContextPricing | null
+): void {
+  if (!pricing) {
+    return;
+  }
+
+  const existing = session.getSpecialSettings()?.find(
+    (setting) =>
+      setting.type === "long_context_pricing" &&
+      setting.pricingScope === pricing.scope &&
+      setting.thresholdTokens === pricing.thresholdTokens
+  );
+
+  if (!existing) {
+    session.addSpecialSetting(createLongContextPricingAudit(pricing));
+  }
+}
+
+function buildCostCalculationOptions(
+  costMultiplier: number,
+  context1mApplied: boolean,
+  priorityServiceTierApplied: boolean,
+  longContextPricing: ResolvedLongContextPricing | null
+): RequestCostCalculationOptions {
+  return {
+    multiplier: costMultiplier,
+    context1mApplied,
+    priorityServiceTierApplied,
+    longContextPricing,
+  };
 }
 
 type FinalizeDeferredStreamingResult = {
@@ -931,7 +986,7 @@ export class ProxyResponseHandler {
         }
 
         if (usageRecord && usageMetrics && messageContext) {
-          await updateRequestCostFromUsage(
+          const costUpdateResult = await updateRequestCostFromUsage(
             messageContext.id,
             session.getOriginalModel(),
             session.getCurrentModel(),
@@ -941,9 +996,18 @@ export class ProxyResponseHandler {
             session.getContext1mApplied(),
             priorityServiceTierApplied
           );
+          if (costUpdateResult.longContextPricingApplied) {
+            ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
+          }
 
           // 追踪消费到 Redis（用于限流）
-          await trackCostToRedis(session, usageMetrics, priorityServiceTierApplied);
+          await trackCostToRedis(
+            session,
+            usageMetrics,
+            priorityServiceTierApplied,
+            costUpdateResult.resolvedPricing,
+            costUpdateResult.longContextPricing
+          );
         }
 
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
@@ -956,12 +1020,17 @@ export class ProxyResponseHandler {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+                const longContextPricing =
+                  matchLongContextPricing(usageMetrics, resolvedPricing.priceData)?.pricing ?? null;
                 const cost = calculateRequestCost(
                   usageMetrics,
                   resolvedPricing.priceData,
-                  provider.costMultiplier,
-                  session.getContext1mApplied(),
-                  priorityServiceTierApplied
+                  buildCostCalculationOptions(
+                    provider.costMultiplier,
+                    session.getContext1mApplied(),
+                    priorityServiceTierApplied,
+                    longContextPricing
+                  )
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
@@ -971,9 +1040,12 @@ export class ProxyResponseHandler {
                   const rawCost = calculateRequestCost(
                     usageMetrics,
                     resolvedPricing.priceData,
-                    1.0,
-                    session.getContext1mApplied(),
-                    priorityServiceTierApplied
+                    buildCostCalculationOptions(
+                      1.0,
+                      session.getContext1mApplied(),
+                      priorityServiceTierApplied,
+                      longContextPricing
+                    )
                   );
                   if (rawCost.gt(0)) {
                     rawCostUsdStr = rawCost.toString();
@@ -986,8 +1058,11 @@ export class ProxyResponseHandler {
                   costBreakdown = calculateRequestCostBreakdown(
                     usageMetrics,
                     resolvedPricing.priceData,
-                    session.getContext1mApplied(),
-                    priorityServiceTierApplied
+                    {
+                      context1mApplied: session.getContext1mApplied(),
+                      priorityServiceTierApplied,
+                      longContextPricing,
+                    }
                   );
                 } catch {
                   /* non-critical */
@@ -1926,7 +2001,7 @@ export class ProxyResponseHandler {
           }
         }
 
-        await updateRequestCostFromUsage(
+        const costUpdateResult = await updateRequestCostFromUsage(
           messageContext.id,
           session.getOriginalModel(),
           session.getCurrentModel(),
@@ -1936,9 +2011,18 @@ export class ProxyResponseHandler {
           session.getContext1mApplied(),
           priorityServiceTierApplied
         );
+        if (costUpdateResult.longContextPricingApplied) {
+          ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
+        }
 
         // 追踪消费到 Redis（用于限流）
-        await trackCostToRedis(session, usageForCost, priorityServiceTierApplied);
+        await trackCostToRedis(
+          session,
+          usageForCost,
+          priorityServiceTierApplied,
+          costUpdateResult.resolvedPricing,
+          costUpdateResult.longContextPricing
+        );
 
         // Calculate cost for session tracking (with multiplier) and Langfuse (raw)
         let costUsdStr: string | undefined;
@@ -1950,12 +2034,17 @@ export class ProxyResponseHandler {
               const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
               if (resolvedPricing) {
                 ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+                const longContextPricing =
+                  matchLongContextPricing(usageForCost, resolvedPricing.priceData)?.pricing ?? null;
                 const cost = calculateRequestCost(
                   usageForCost,
                   resolvedPricing.priceData,
-                  provider.costMultiplier,
-                  session.getContext1mApplied(),
-                  priorityServiceTierApplied
+                  buildCostCalculationOptions(
+                    provider.costMultiplier,
+                    session.getContext1mApplied(),
+                    priorityServiceTierApplied,
+                    longContextPricing
+                  )
                 );
                 if (cost.gt(0)) {
                   costUsdStr = cost.toString();
@@ -1965,9 +2054,12 @@ export class ProxyResponseHandler {
                   const rawCost = calculateRequestCost(
                     usageForCost,
                     resolvedPricing.priceData,
-                    1.0,
-                    session.getContext1mApplied(),
-                    priorityServiceTierApplied
+                    buildCostCalculationOptions(
+                      1.0,
+                      session.getContext1mApplied(),
+                      priorityServiceTierApplied,
+                      longContextPricing
+                    )
                   );
                   if (rawCost.gt(0)) {
                     rawCostUsdStr = rawCost.toString();
@@ -1980,8 +2072,11 @@ export class ProxyResponseHandler {
                   costBreakdown = calculateRequestCostBreakdown(
                     usageForCost,
                     resolvedPricing.priceData,
-                    session.getContext1mApplied(),
-                    priorityServiceTierApplied
+                    {
+                      context1mApplied: session.getContext1mApplied(),
+                      priorityServiceTierApplied,
+                      longContextPricing,
+                    }
                   );
                 } catch {
                   /* non-critical */
@@ -2938,17 +3033,32 @@ async function updateRequestCostFromUsage(
   costMultiplier: number = 1.0,
   context1mApplied: boolean = false,
   priorityServiceTierApplied: boolean = false
-): Promise<void> {
+): Promise<{
+  costUsd: string | null;
+  resolvedPricing: Awaited<ReturnType<ProxySession["getResolvedPricingByBillingSource"]>> | null;
+  longContextPricing: ResolvedLongContextPricing | null;
+  longContextPricingApplied: boolean;
+}> {
   if (!usage) {
     logger.warn("[CostCalculation] No usage data, skipping cost update", {
       messageId,
     });
-    return;
+    return {
+      costUsd: null,
+      resolvedPricing: null,
+      longContextPricing: null,
+      longContextPricingApplied: false,
+    };
   }
 
   if (!originalModel && !redirectedModel) {
     logger.warn("[CostCalculation] No model name available", { messageId });
-    return;
+    return {
+      costUsd: null,
+      resolvedPricing: null,
+      longContextPricing: null,
+      longContextPricingApplied: false,
+    };
   }
 
   try {
@@ -2999,12 +3109,17 @@ async function updateRequestCostFromUsage(
       return;
     }
 
+    const longContextPricing =
+      matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null;
     const cost = calculateRequestCost(
       usage,
       resolvedPricing.priceData,
-      costMultiplier,
-      context1mApplied,
-      priorityServiceTierApplied
+      buildCostCalculationOptions(
+        costMultiplier,
+        context1mApplied,
+        priorityServiceTierApplied,
+        longContextPricing
+      )
     );
 
     logger.info("[CostCalculation] Cost calculated successfully", {
@@ -3019,6 +3134,12 @@ async function updateRequestCostFromUsage(
 
     if (cost.gt(0)) {
       await updateMessageRequestCost(messageId, cost);
+      return {
+        costUsd: cost.toString(),
+        resolvedPricing,
+        longContextPricing,
+        longContextPricingApplied: longContextPricing != null,
+      };
     } else {
       logger.warn("[CostCalculation] Calculated cost is zero or negative", {
         messageId,
@@ -3031,11 +3152,23 @@ async function updateRequestCostFromUsage(
         },
       });
     }
+    return {
+      costUsd: null,
+      resolvedPricing,
+      longContextPricing,
+      longContextPricingApplied: longContextPricing != null,
+    };
   } catch (error) {
     logger.error("[CostCalculation] Failed to update request cost, skipping billing", {
       messageId,
       error: error instanceof Error ? error.message : String(error),
     });
+    return {
+      costUsd: null,
+      resolvedPricing: null,
+      longContextPricing: null,
+      longContextPricingApplied: false,
+    };
   }
 }
 
@@ -3089,6 +3222,7 @@ export async function finalizeRequestStats(
     provider.swapCacheTtlBilling
   );
 
+<<<<<<< HEAD
   // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
   if (
     provider.providerType === "codex" &&
@@ -3099,6 +3233,9 @@ export async function finalizeRequestStats(
   }
 
   await updateRequestCostFromUsage(
+=======
+  const costUpdateResult = await updateRequestCostFromUsage(
+>>>>>>> b9df1888 (feat: support long-context pricing metadata)
     messageContext.id,
     session.getOriginalModel(),
     session.getCurrentModel(),
@@ -3108,9 +3245,18 @@ export async function finalizeRequestStats(
     session.getContext1mApplied(),
     priorityServiceTierApplied
   );
+  if (costUpdateResult.longContextPricingApplied) {
+    ensureLongContextPricingAudit(session, costUpdateResult.longContextPricing);
+  }
 
   // 5. 追踪消费到 Redis（用于限流）
-  await trackCostToRedis(session, normalizedUsage, priorityServiceTierApplied);
+  await trackCostToRedis(
+    session,
+    normalizedUsage,
+    priorityServiceTierApplied,
+    costUpdateResult.resolvedPricing,
+    costUpdateResult.longContextPricing
+  );
 
   // 6. 更新 session usage
   if (session.sessionId) {
@@ -3120,12 +3266,17 @@ export async function finalizeRequestStats(
         const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
         if (resolvedPricing) {
           ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+          const longContextPricing =
+            matchLongContextPricing(normalizedUsage, resolvedPricing.priceData)?.pricing ?? null;
           const cost = calculateRequestCost(
             normalizedUsage,
             resolvedPricing.priceData,
-            provider.costMultiplier,
-            session.getContext1mApplied(),
-            priorityServiceTierApplied
+            buildCostCalculationOptions(
+              provider.costMultiplier,
+              session.getContext1mApplied(),
+              priorityServiceTierApplied,
+              longContextPricing
+            )
           );
           if (cost.gt(0)) {
             costUsdStr = cost.toString();
@@ -3185,7 +3336,11 @@ export async function finalizeRequestStats(
 async function trackCostToRedis(
   session: ProxySession,
   usage: UsageMetrics | null,
-  priorityServiceTierApplied: boolean = false
+  priorityServiceTierApplied: boolean = false,
+  resolvedPricingOverride?: Awaited<
+    ReturnType<ProxySession["getResolvedPricingByBillingSource"]>
+  > | null,
+  longContextPricingOverride?: ResolvedLongContextPricing | null
 ): Promise<void> {
   if (!usage || !session.sessionId) return;
 
@@ -3200,17 +3355,27 @@ async function trackCostToRedis(
     const modelName = session.request.model;
     if (!modelName) return;
 
-    const resolvedPricing = await session.getResolvedPricingByBillingSource(provider);
+    const resolvedPricing =
+      resolvedPricingOverride === undefined
+        ? await session.getResolvedPricingByBillingSource(provider)
+        : resolvedPricingOverride;
     if (!resolvedPricing) return;
 
     ensurePricingResolutionSpecialSetting(session, resolvedPricing);
+    const longContextPricing =
+      longContextPricingOverride === undefined
+        ? (matchLongContextPricing(usage, resolvedPricing.priceData)?.pricing ?? null)
+        : longContextPricingOverride;
 
     const cost = calculateRequestCost(
       usage,
       resolvedPricing.priceData,
-      provider.costMultiplier,
-      session.getContext1mApplied(),
-      priorityServiceTierApplied
+      buildCostCalculationOptions(
+        provider.costMultiplier,
+        session.getContext1mApplied(),
+        priorityServiceTierApplied,
+        longContextPricing
+      )
     );
     if (cost.lte(0)) return;
 
