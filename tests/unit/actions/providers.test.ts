@@ -15,6 +15,7 @@ const saveProviderCircuitConfigMock = vi.fn();
 const deleteProviderCircuitConfigMock = vi.fn();
 const clearConfigCacheMock = vi.fn();
 const clearProviderStateMock = vi.fn();
+const terminateProviderSessionsBatchMock = vi.fn();
 
 const revalidatePathMock = vi.fn();
 
@@ -48,6 +49,12 @@ vi.mock("@/lib/circuit-breaker", () => ({
   clearProviderState: clearProviderStateMock,
   getAllHealthStatusAsync: vi.fn(async () => ({})),
   resetCircuit: vi.fn(),
+}));
+
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    terminateProviderSessionsBatch: terminateProviderSessionsBatchMock,
+  },
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -167,6 +174,7 @@ describe("Provider Actions - Async Optimization", () => {
     saveProviderCircuitConfigMock.mockResolvedValue(undefined);
     deleteProviderCircuitConfigMock.mockResolvedValue(undefined);
     clearProviderStateMock.mockResolvedValue(undefined);
+    terminateProviderSessionsBatchMock.mockResolvedValue(0);
     updateProviderPrioritiesBatchMock.mockResolvedValue(0);
   });
 
@@ -502,6 +510,7 @@ describe("Provider Actions - Async Optimization", () => {
 
       expect(result.ok).toBe(true);
       expect(revalidatePathMock).not.toHaveBeenCalled();
+      expect(terminateProviderSessionsBatchMock).not.toHaveBeenCalled();
     });
 
     it("editProvider endpoint sync: should forward url/provider_type edits to repository", async () => {
@@ -522,6 +531,7 @@ describe("Provider Actions - Async Optimization", () => {
         })
       );
       expect(publishProviderCacheInvalidationMock).toHaveBeenCalledTimes(1);
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
     });
 
     it("editProvider endpoint sync: should generate favicon_url when website_url is updated", async () => {
@@ -543,6 +553,7 @@ describe("Provider Actions - Async Optimization", () => {
           favicon_url: "https://www.google.com/s2/favicons?domain=vendor.example.com&sz=32",
         })
       );
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
     });
 
     it("editProvider endpoint sync: should clear favicon_url when website_url is cleared", async () => {
@@ -561,6 +572,26 @@ describe("Provider Actions - Async Optimization", () => {
           favicon_url: null,
         })
       );
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
+    });
+
+    it("editProvider: group or allowlist changes should also terminate sticky sessions", async () => {
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        group_tag: "gpt-load",
+        allowed_models: ["gpt-4.1"],
+      });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          group_tag: "gpt-load",
+          allowed_models: ["gpt-4.1"],
+        })
+      );
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
     });
   });
 
@@ -571,6 +602,7 @@ describe("Provider Actions - Async Optimization", () => {
 
       expect(result.ok).toBe(true);
       expect(revalidatePathMock).not.toHaveBeenCalled();
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
     });
   });
 });

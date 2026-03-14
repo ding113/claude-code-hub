@@ -2033,6 +2033,64 @@ export class SessionManager {
     }
   }
 
+  static async terminateProviderSessionsBatch(providerIds: number[]): Promise<number> {
+    const uniqueProviderIds = Array.from(
+      new Set(providerIds.filter((providerId) => Number.isInteger(providerId) && providerId > 0))
+    );
+    if (uniqueProviderIds.length === 0) {
+      return 0;
+    }
+
+    const redis = getRedisClient();
+    if (!redis || redis.status !== "ready") {
+      logger.warn("SessionManager: Redis not ready, cannot terminate provider sessions");
+      return 0;
+    }
+
+    try {
+      const pipeline = redis.pipeline();
+      for (const providerId of uniqueProviderIds) {
+        pipeline.zrange(`provider:${providerId}:active_sessions`, 0, -1);
+      }
+
+      const results = await pipeline.exec();
+      if (!results) {
+        return 0;
+      }
+
+      const sessionIds = new Set<string>();
+      for (const [, result] of results) {
+        if (!Array.isArray(result)) {
+          continue;
+        }
+
+        for (const sessionId of result) {
+          if (typeof sessionId === "string" && sessionId.trim()) {
+            sessionIds.add(sessionId);
+          }
+        }
+      }
+
+      if (sessionIds.size === 0) {
+        return 0;
+      }
+
+      const terminatedCount = await SessionManager.terminateSessionsBatch([...sessionIds]);
+      logger.info("SessionManager: Terminated provider sessions batch", {
+        providerIds: uniqueProviderIds,
+        sessionCount: sessionIds.size,
+        terminatedCount,
+      });
+      return terminatedCount;
+    } catch (error) {
+      logger.error("SessionManager: Failed to terminate provider sessions batch", {
+        error,
+        providerIds: uniqueProviderIds,
+      });
+      return 0;
+    }
+  }
+
   /**
    * 批量终止 Session
    *

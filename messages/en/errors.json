@@ -49,6 +49,7 @@
   "RESOURCE_BUSY": "Resource is currently in use",
   "INVALID_STATE": "Operation not allowed in current state",
   "CONFLICT": "Operation conflict",
+  "ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS": "This endpoint is still referenced by {count} enabled providers: {providers}",
 
   "RATE_LIMIT_RPM_EXCEEDED": "Rate limit exceeded: {current} requests per minute (limit: {limit}). Resets at {resetTime}",
   "RATE_LIMIT_5H_EXCEEDED": "5-hour cost limit exceeded: ${current} USD (limit: ${limit} USD). Resets at {resetTime}",

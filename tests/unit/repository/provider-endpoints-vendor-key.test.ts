@@ -3,13 +3,22 @@ import { computeVendorKey } from "@/repository/provider-endpoints";
 
 describe("computeVendorKey", () => {
   describe("with websiteUrl (priority over providerUrl)", () => {
-    test("returns hostname only, ignoring port", async () => {
+    test("returns hostname only when websiteUrl has no explicit port", async () => {
+      expect(
+        await computeVendorKey({
+          providerUrl: "https://api.example.com:8080/v1/messages",
+          websiteUrl: "https://example.com",
+        })
+      ).toBe("example.com");
+    });
+
+    test("preserves explicit websiteUrl port for local/self-hosted vendors", async () => {
       expect(
         await computeVendorKey({
           providerUrl: "https://api.example.com:8080/v1/messages",
           websiteUrl: "https://example.com:3000",
         })
-      ).toBe("example.com");
+      ).toBe("example.com:3000");
     });
 
     test("strips www prefix", async () => {
@@ -37,6 +46,21 @@ describe("computeVendorKey", () => {
           websiteUrl: "example.com",
         })
       ).toBe("example.com");
+    });
+
+    test("keeps distinct ports as distinct vendor keys when websiteUrl contains explicit ports", async () => {
+      const key1 = await computeVendorKey({
+        providerUrl: "http://192.168.1.1:8080/v1/messages",
+        websiteUrl: "http://192.168.1.1:111",
+      });
+      const key2 = await computeVendorKey({
+        providerUrl: "http://192.168.1.1:9090/v1/messages",
+        websiteUrl: "http://192.168.1.1:222",
+      });
+
+      expect(key1).toBe("192.168.1.1:111");
+      expect(key2).toBe("192.168.1.1:222");
+      expect(key1).not.toBe(key2);
     });
   });
 

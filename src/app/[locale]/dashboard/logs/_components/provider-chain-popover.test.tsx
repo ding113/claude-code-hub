@@ -427,10 +427,8 @@ describe("provider-chain-popover hedge/abort reason handling", () => {
     // hedge_triggered is informational, not an actual request
     // so the request count should be 2 (winner + loser), not 3
     const document = parseHtml(html);
-    const countBadge = Array.from(document.querySelectorAll('[data-slot="badge"]')).find((node) =>
-      (node.textContent ?? "").includes("times")
-    );
-    expect(countBadge?.textContent).toContain("2");
+    const requestRows = document.querySelectorAll("#root .relative.flex.gap-2");
+    expect(requestRows).toHaveLength(2);
   });
 
   test("hedge_winner is treated as successful provider", () => {

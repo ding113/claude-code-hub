@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { getProviderEndpoints, getProviderVendors } from "@/actions/provider-endpoints";
+import { getProviderEndpoints } from "@/actions/provider-endpoints";
 import {
   addProvider,
   editProvider,
@@ -27,12 +27,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { isValidUrl } from "@/lib/utils/validation";
-import type {
-  ProviderDisplay,
-  ProviderEndpoint,
-  ProviderType,
-  ProviderVendor,
-} from "@/types/provider";
+import type { ProviderDisplay, ProviderEndpoint, ProviderType } from "@/types/provider";
 import { FormTabNav, NAV_ORDER, PARENT_MAP, TAB_ORDER } from "./components/form-tab-nav";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { NavTargetId, SubTabId, TabId } from "./provider-form-types";
@@ -42,29 +37,6 @@ import { NetworkSection } from "./sections/network-section";
 import { OptionsSection } from "./sections/options-section";
 import { RoutingSection } from "./sections/routing-section";
 import { TestingSection } from "./sections/testing-section";
-
-function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
-  const trimmed = rawUrl.trim();
-  if (!trimmed) return null;
-
-  const candidates = [trimmed];
-  if (!/^[a-zA-Z][a-zA-Z\d+.-]*:\/\//.test(trimmed)) {
-    candidates.push(`https://${trimmed}`);
-  }
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = new URL(candidate);
-      const hostname = parsed.hostname?.toLowerCase();
-      if (!hostname) continue;
-      return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
-    } catch {
-      // ignore
-    }
-  }
-
-  return null;
-}
 
 export interface ProviderFormProps {
   mode: "create" | "edit";
@@ -101,29 +73,10 @@ function ProviderFormContent({
   const isEdit = mode === "edit";
 
   const queryClient = useQueryClient();
-  const { data: vendors = [] } = useQuery<ProviderVendor[]>({
-    queryKey: ["provider-vendors"],
-    queryFn: getProviderVendors,
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
-
-  const websiteDomain = useMemo(
-    () => normalizeWebsiteDomainFromUrl(state.basic.websiteUrl),
-    [state.basic.websiteUrl]
-  );
 
   const resolvedEndpointPoolVendorId = useMemo(() => {
-    // Edit mode: vendor id already attached to provider record
-    if (isEdit) {
-      return provider?.providerVendorId ?? null;
-    }
-
-    // Create/clone: resolve vendor from websiteUrl hostname
-    if (!websiteDomain) return null;
-    const vendor = vendors.find((v) => v.websiteDomain === websiteDomain);
-    return vendor?.id ?? null;
-  }, [isEdit, provider?.providerVendorId, vendors, websiteDomain]);
+    return isEdit ? (provider?.providerVendorId ?? null) : null;
+  }, [isEdit, provider?.providerVendorId]);
 
   const endpointPoolQueryKey = useMemo(() => {
     if (resolvedEndpointPoolVendorId == null) return null;
@@ -162,22 +115,6 @@ function ProviderFormContent({
     !hideUrl && resolvedEndpointPoolVendorId != null && endpointPoolHasEnabledEndpoints;
 
   // Keep state.basic.url usable across other sections when legacy URL input is hidden.
-  useEffect(() => {
-    if (isEdit) return;
-    if (hideUrl) return;
-    if (!endpointPoolHideLegacyUrlInput) return;
-    if (!endpointPoolPreferredUrl) return;
-    if (state.basic.url.trim()) return;
-    dispatch({ type: "SET_URL", payload: endpointPoolPreferredUrl });
-  }, [
-    isEdit,
-    hideUrl,
-    endpointPoolHideLegacyUrlInput,
-    endpointPoolPreferredUrl,
-    state.basic.url,
-    dispatch,
-  ]);
-
   // Update URL when resolved URL changes
   useEffect(() => {
     if (resolvedUrl && !state.basic.url && !isEdit) {

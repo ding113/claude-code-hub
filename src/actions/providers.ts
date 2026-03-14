@@ -43,6 +43,7 @@ import {
   saveProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
+import { SessionManager } from "@/lib/session-manager";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -178,6 +179,42 @@ async function broadcastProviderCacheInvalidation(context: {
   } catch (error) {
     logger.warn(`${context.operation} Provider:cache_invalidation_failed`, {
       providerId: context.providerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+const STICKY_SESSION_INVALIDATING_PROVIDER_FIELDS = new Set([
+  "url",
+  "website_url",
+  "provider_type",
+  "group_tag",
+  "is_enabled",
+  "allowed_models",
+  "allowed_clients",
+  "blocked_clients",
+  "model_redirects",
+  "active_time_start",
+  "active_time_end",
+]);
+
+function shouldInvalidateStickySessionsOnProviderEdit(data: Record<string, unknown>): boolean {
+  return Object.keys(data).some((key) => STICKY_SESSION_INVALIDATING_PROVIDER_FIELDS.has(key));
+}
+
+async function terminateStickySessionsForProviders(providerIds: number[], context: string) {
+  const uniqueProviderIds = Array.from(
+    new Set(providerIds.filter((providerId) => Number.isInteger(providerId) && providerId > 0))
+  );
+  if (uniqueProviderIds.length === 0) {
+    return;
+  }
+
+  try {
+    await SessionManager.terminateProviderSessionsBatch(uniqueProviderIds);
+  } catch (error) {
+    logger.warn(`${context}:terminate_provider_sessions_failed`, {
+      providerIds: uniqueProviderIds,
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -776,6 +813,10 @@ export async function editProvider(
       return { ok: false, error: "供应商不存在" };
     }
 
+    if (shouldInvalidateStickySessionsOnProviderEdit(payload)) {
+      await terminateStickySessionsForProviders([providerId], "editProvider");
+    }
+
     // 同步熔断器配置到 Redis（如果配置有变化）
     const hasCircuitConfigChange =
       validated.circuit_breaker_failure_threshold !== undefined ||
@@ -847,6 +888,8 @@ export async function removeProvider(
 
     const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
+
+    await terminateStickySessionsForProviders([providerId], "removeProvider");
 
     const undoToken = createProviderPatchUndoToken();
     const operationId = createProviderPatchOperationId();

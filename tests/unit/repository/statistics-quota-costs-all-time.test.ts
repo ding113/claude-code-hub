@@ -41,11 +41,28 @@ describe("sumUserQuotaCosts & sumKeyQuotaCostsById - all-time query support", ()
 
     vi.doMock("drizzle-orm", async () => {
       const actual = await vi.importActual<typeof import("drizzle-orm")>("drizzle-orm");
+      const sqlMock = Object.assign(
+        (strings: TemplateStringsArray, ...values: unknown[]) => ({
+          queryChunks: [...strings, ...values],
+        }),
+        {
+          raw: vi.fn(),
+          join: vi.fn(),
+          identifier: vi.fn(),
+        }
+      );
       return {
         ...actual,
+        relations: vi.fn(() => ({})),
+        eq: vi.fn((...args: unknown[]) => ({ kind: "eq", args })),
+        gte: vi.fn((...args: unknown[]) => ({ kind: "gte", args })),
+        inArray: vi.fn((...args: unknown[]) => ({ kind: "inArray", args })),
+        isNull: vi.fn((...args: unknown[]) => ({ kind: "isNull", args })),
+        lt: vi.fn((...args: unknown[]) => ({ kind: "lt", args })),
+        sql: sqlMock,
         and: (...args: unknown[]) => {
           capturedAndArgs = args;
-          return (actual as any).and(...args);
+          return { kind: "and", args };
         },
       };
     });
@@ -88,11 +105,28 @@ describe("sumUserQuotaCosts & sumKeyQuotaCostsById - all-time query support", ()
 
     vi.doMock("drizzle-orm", async () => {
       const actual = await vi.importActual<typeof import("drizzle-orm")>("drizzle-orm");
+      const sqlMock = Object.assign(
+        (strings: TemplateStringsArray, ...values: unknown[]) => ({
+          queryChunks: [...strings, ...values],
+        }),
+        {
+          raw: vi.fn(),
+          join: vi.fn(),
+          identifier: vi.fn(),
+        }
+      );
       return {
         ...actual,
+        relations: vi.fn(() => ({})),
+        eq: vi.fn((...args: unknown[]) => ({ kind: "eq", args })),
+        gte: vi.fn((...args: unknown[]) => ({ kind: "gte", args })),
+        inArray: vi.fn((...args: unknown[]) => ({ kind: "inArray", args })),
+        isNull: vi.fn((...args: unknown[]) => ({ kind: "isNull", args })),
+        lt: vi.fn((...args: unknown[]) => ({ kind: "lt", args })),
+        sql: sqlMock,
         and: (...args: unknown[]) => {
           capturedAndArgs = args;
-          return (actual as any).and(...args);
+          return { kind: "and", args };
         },
       };
     });

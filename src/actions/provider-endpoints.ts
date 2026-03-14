@@ -9,8 +9,12 @@ import {
   resetEndpointCircuit as resetEndpointCircuitState,
 } from "@/lib/endpoint-circuit-breaker";
 import { logger } from "@/lib/logger";
-import { PROVIDER_ENDPOINT_CONFLICT_CODE } from "@/lib/provider-endpoint-error-codes";
+import {
+  ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS_CODE,
+  PROVIDER_ENDPOINT_CONFLICT_CODE,
+} from "@/lib/provider-endpoint-error-codes";
 import { probeProviderEndpointAndRecordByEndpoint } from "@/lib/provider-endpoints/probe";
+import { SessionManager } from "@/lib/session-manager";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import {
@@ -35,8 +39,9 @@ import {
 } from "@/repository";
 import {
   findDashboardProviderEndpointsByVendorAndType,
+  findEnabledProviderIdsByVendorAndType,
+  findEnabledProviderReferencesForVendorTypeUrl,
   findEnabledProviderVendorTypePairs,
-  hasEnabledProviderReferenceForVendorTypeUrl,
 } from "@/repository/provider-endpoints";
 import {
   findProviderEndpointProbeLogsBatch,
@@ -217,6 +222,43 @@ function isForeignKeyViolationError(error: unknown): boolean {
     typeof candidate.cause?.message === "string" &&
     candidate.cause.message.includes("foreign key constraint")
   );
+}
+
+function formatProviderReferenceSummary(
+  references: Array<{ id: number; name: string }>,
+  maxDisplayCount: number = 3
+): string {
+  const uniqueNames = Array.from(
+    new Set(references.map((reference) => reference.name.trim()).filter(Boolean))
+  );
+  if (uniqueNames.length === 0) {
+    return "";
+  }
+
+  if (uniqueNames.length <= maxDisplayCount) {
+    return uniqueNames.join(", ");
+  }
+
+  const displayed = uniqueNames.slice(0, maxDisplayCount).join(", ");
+  return `${displayed} +${uniqueNames.length - maxDisplayCount}`;
+}
+
+async function terminateStickySessionsForProviders(providerIds: number[], context: string) {
+  const uniqueProviderIds = Array.from(
+    new Set(providerIds.filter((providerId) => Number.isInteger(providerId) && providerId > 0))
+  );
+  if (uniqueProviderIds.length === 0) {
+    return;
+  }
+
+  try {
+    await SessionManager.terminateProviderSessionsBatch(uniqueProviderIds);
+  } catch (error) {
+    logger.warn(`${context}:terminate_provider_sessions_failed`, {
+      providerIds: uniqueProviderIds,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 export async function getProviderVendors(): Promise<ProviderVendor[]> {
@@ -496,6 +538,18 @@ export async function editProviderEndpoint(
       }
     }
 
+    const shouldTerminateStickySessions =
+      parsed.data.url !== undefined ||
+      parsed.data.sortOrder !== undefined ||
+      parsed.data.isEnabled !== undefined;
+    if (shouldTerminateStickySessions) {
+      const affectedProviderIds = await findEnabledProviderIdsByVendorAndType(
+        endpoint.vendorId,
+        endpoint.providerType
+      );
+      await terminateStickySessionsForProviders(affectedProviderIds, "editProviderEndpoint");
+    }
+
     try {
       await publishProviderCacheInvalidation();
     } catch (error) {
@@ -551,18 +605,20 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
       };
     }
 
-    // 若该端点仍被启用 provider 引用，则不允许删除：否则会导致运行时 endpoint pool 变空/回填复活，
-    // 产生“删了但还在/仍被探测”的困惑（#781）。
-    const referencedByEnabledProvider = await hasEnabledProviderReferenceForVendorTypeUrl({
+    const references = await findEnabledProviderReferencesForVendorTypeUrl({
       vendorId: endpoint.vendorId,
       providerType: endpoint.providerType,
       url: endpoint.url,
     });
-    if (referencedByEnabledProvider) {
+    if (references.length > 0) {
       return {
         ok: false,
         error: "该端点仍被启用的供应商引用，请先修改或禁用相关供应商的 URL 后再删除",
-        errorCode: ERROR_CODES.CONFLICT,
+        errorCode: ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS_CODE,
+        errorParams: {
+          count: references.length,
+          providers: formatProviderReferenceSummary(references),
+        },
       };
     }
 
@@ -584,6 +640,12 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
         error: error instanceof Error ? error.message : String(error),
       });
     }
+
+    const affectedProviderIds = await findEnabledProviderIdsByVendorAndType(
+      endpoint.vendorId,
+      endpoint.providerType
+    );
+    await terminateStickySessionsForProviders(affectedProviderIds, "removeProviderEndpoint");
 
     // Auto cleanup: if the vendor has no active providers/endpoints, delete it as well.
     try {
