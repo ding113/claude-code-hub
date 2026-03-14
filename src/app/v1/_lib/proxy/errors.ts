@@ -733,7 +733,7 @@ export function isClientAbortError(error: Error): boolean {
  * @param error - Error to check
  * @returns true if error is a transport error
  */
-function isTransportError(error: Error): boolean {
+export function isTransportError(error: Error): boolean {
   const TRANSPORT_ERROR_CODES = new Set([
     "UND_ERR_SOCKET",
     "UND_ERR_CONNECT_TIMEOUT",
