@@ -312,7 +312,7 @@ const messages = {
           cacheRead: "Cache read",
           cacheTtl: "Cache TTL",
           context1m: "1M Context",
-          context1mPricing: "special pricing",
+          context1mEnabled: "1M context window enabled",
           multiplier: "Multiplier",
           totalCost: "Total cost",
         },

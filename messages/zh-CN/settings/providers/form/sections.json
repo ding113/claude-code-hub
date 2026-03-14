@@ -137,15 +137,6 @@
       "label": "Cache TTL 计费互换",
       "desc": "反转传入数据的缓存 TTL：1h 令牌视为 5 分钟，反之亦然。影响标记、成本及所有存储指标。"
     },
-    "context1m": {
-      "label": "1M 上下文窗口",
-      "options": {
-        "inherit": "跟随客户端",
-        "forceEnable": "强制启用",
-        "disabled": "禁用"
-      },
-      "desc": "配置 1M 上下文窗口支持。仅对 Sonnet 模型生效（claude-sonnet-4-5、claude-sonnet-4）。启用后将应用阶梯定价。"
-    },
     "codexOverrides": {
       "title": "Codex 参数覆写",
       "desc": "在供应商级别覆写 Codex (Responses API) 请求参数",

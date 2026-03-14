@@ -128,7 +128,6 @@ describe("getSessionDetails - unified specialSettings", () => {
     expect(types).toEqual(
       [
         "anthropic_cache_ttl_header_override",
-        "anthropic_context_1m_header_override",
         "guard_intercept",
       ].sort()
     );

@@ -43,7 +43,6 @@ import {
   saveProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
-import type { Context1mPreference } from "@/lib/special-attributes";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -498,7 +497,7 @@ export async function addProvider(data: {
   limit_total_usd?: number | null;
   limit_concurrent_sessions?: number | null;
   cache_ttl_preference?: CacheTtlPreference | null;
-  context_1m_preference?: Context1mPreference | null;
+  context_1m_preference?: string | null;
   codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
   codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
   codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;
@@ -675,7 +674,7 @@ export async function editProvider(
     limit_concurrent_sessions?: number | null;
     cache_ttl_preference?: "inherit" | "5m" | "1h";
     swap_cache_ttl_billing?: boolean;
-    context_1m_preference?: Context1mPreference | null;
+    context_1m_preference?: string | null;
     codex_reasoning_effort_preference?: CodexReasoningEffortPreference | null;
     codex_reasoning_summary_preference?: CodexReasoningSummaryPreference | null;
     codex_text_verbosity_preference?: CodexTextVerbosityPreference | null;

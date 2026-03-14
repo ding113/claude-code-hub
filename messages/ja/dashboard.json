@@ -287,7 +287,7 @@
         "fast": "fast",
         "fastPriority": "Priority service tier (fast モード)",
         "context1m": "1M コンテキスト",
-        "context1mPricing": "入力 2x >200k, 出力 1.5x >200k",
+        "context1mEnabled": "1Mコンテキストウィンドウ有効",
         "pricingProvider": "課金価格プロバイダー",
         "pricingSourceLabel": "課金価格ソース",
         "pricingSource": {
@@ -390,7 +390,7 @@
       "fast": "fast",
       "fastPriority": "Priority service tier (fast モード)",
       "context1m": "1M コンテキスト",
-      "context1mPricing": "入力 >200k 2倍, 出力 >200k 1.5倍",
+      "context1mEnabled": "1Mコンテキストウィンドウ有効",
       "pricingProvider": "課金価格プロバイダー",
       "pricingSourceLabel": "課金価格ソース",
       "pricingSource": {

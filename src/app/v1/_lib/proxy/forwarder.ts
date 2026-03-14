@@ -24,7 +24,6 @@ import {
 } from "@/lib/provider-endpoints/endpoint-selector";
 import { getGlobalAgentPool, getProxyAgentForProvider } from "@/lib/proxy-agent";
 import { SessionManager } from "@/lib/session-manager";
-import { CONTEXT_1M_BETA_HEADER, shouldApplyContext1m } from "@/lib/special-attributes";
 import {
   detectUpstreamErrorFromSseOrJsonText,
   inferUpstreamErrorStatusCodeFromText,
@@ -1823,23 +1822,11 @@ export class ProxyForwarder {
     );
     session.setCacheTtlResolved(resolvedCacheTtl);
 
-    // 解析 1M 上下文是否应用
-    // 注意：此时模型重定向尚未发生，getCurrentModel() 返回原始模型
-    // 1M 功能仅对 Anthropic 类型供应商有效
+    // 1M context: GA, no longer needs beta header. Just record if client sent the header.
     const isAnthropicProvider =
       provider.providerType === "claude" || provider.providerType === "claude-auth";
-    if (isAnthropicProvider) {
-      const currentModel = session.getCurrentModel() || "";
-      const clientRequests1m = session.clientRequestsContext1m();
-      // W-007: 添加类型验证，避免类型断言
-      const validPreferences = ["inherit", "force_enable", "disabled", null] as const;
-      type Context1mPref = (typeof validPreferences)[number];
-      const rawPref = provider.context1mPreference;
-      const context1mPref: Context1mPref = validPreferences.includes(rawPref as Context1mPref)
-        ? (rawPref as Context1mPref)
-        : null;
-      const context1mApplied = shouldApplyContext1m(context1mPref, currentModel, clientRequests1m);
-      session.setContext1mApplied(context1mApplied);
+    if (isAnthropicProvider && session.clientRequestsContext1m()) {
+      session.setContext1mApplied(true);
     }
 
     // Apply model redirect (if configured) - skip for raw passthrough endpoints
@@ -3718,34 +3705,6 @@ export class ProxyForwarder {
       if (betaFlags.size === 1) {
         betaFlags.add("prompt-caching-2024-07-31");
       }
-      overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
-    }
-
-    // 针对 1M 上下文，补充 Anthropic beta header
-    // 逻辑：根据供应商 context1mPreference 决定是否应用 1M 上下文
-    // - 'disabled': 不应用（已在调度阶段被过滤）
-    // - 'force_enable': 强制应用（仅对支持的模型）
-    // - 'inherit' 或 null: 遵循客户端请求
-    if (
-      session.getContext1mApplied?.() &&
-      (provider.providerType === "claude" || provider.providerType === "claude-auth")
-    ) {
-      session.addSpecialSetting({
-        type: "anthropic_context_1m_header_override",
-        scope: "request_header",
-        hit: true,
-        header: "anthropic-beta",
-        flag: CONTEXT_1M_BETA_HEADER,
-      });
-      const existingBeta =
-        overrides["anthropic-beta"] || session.headers.get("anthropic-beta") || "";
-      const betaFlags = new Set(
-        existingBeta
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      );
-      betaFlags.add(CONTEXT_1M_BETA_HEADER);
       overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 

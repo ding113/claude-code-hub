@@ -23,7 +23,6 @@ function createBatchState(): ProviderFormState {
       costMultiplier: 1.0,
       cacheTtlPreference: "inherit",
       swapCacheTtlBilling: false,
-      context1mPreference: "inherit",
       codexReasoningEffortPreference: "inherit",
       codexReasoningSummaryPreference: "inherit",
       codexTextVerbosityPreference: "inherit",
@@ -241,25 +240,6 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.swap_cache_ttl_billing).toEqual({ set: true });
-  });
-
-  it("clears context1mPreference when dirty and inherit", () => {
-    const state = createBatchState();
-    const dirty = new Set(["routing.context1mPreference"]);
-
-    const draft = buildPatchDraftFromFormState(state, dirty);
-
-    expect(draft.context_1m_preference).toEqual({ clear: true });
-  });
-
-  it("sets context1mPreference when dirty and not inherit", () => {
-    const state = createBatchState();
-    state.routing.context1mPreference = "force_enable";
-    const dirty = new Set(["routing.context1mPreference"]);
-
-    const draft = buildPatchDraftFromFormState(state, dirty);
-
-    expect(draft.context_1m_preference).toEqual({ set: "force_enable" });
   });
 
   it("clears codexReasoningEffortPreference when dirty and inherit", () => {

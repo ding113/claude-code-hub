@@ -864,7 +864,6 @@ export class ProxyProviderResolver {
           | "format_type_mismatch"
           | "type_mismatch"
           | "model_not_allowed"
-          | "context_1m_disabled"
           | "schedule_inactive"
           | "disabled" = "disabled";
         let details = "";
@@ -907,41 +906,9 @@ export class ProxyProviderResolver {
       return { provider: null, context };
     }
 
-    // Step 2.5: 1M Context filter - 当客户端请求 1M 上下文时，过滤掉禁用的供应商
-    let afterContext1mFilter = enabledProviders;
-    const clientRequestsContext1m = session?.clientRequestsContext1m() ?? false;
-    if (clientRequestsContext1m) {
-      afterContext1mFilter = enabledProviders.filter((p) => {
-        // 只有 context1mPreference === 'disabled' 的供应商才会被过滤
-        // 'inherit' 和 'force_enable' 都允许
-        return p.context1mPreference !== "disabled";
-      });
-
-      // 记录被 1M context 过滤的供应商
-      for (const p of enabledProviders) {
-        if (!afterContext1mFilter.includes(p)) {
-          context.filteredProviders?.push({
-            id: p.id,
-            name: p.name,
-            reason: "context_1m_disabled",
-            details: "供应商禁用了 1M 上下文功能",
-          });
-        }
-      }
-
-      if (afterContext1mFilter.length === 0) {
-        logger.warn("ProviderSelector: No providers support 1M context", {
-          requestedModel,
-          totalProviders: allProviders.length,
-          enabledCount: enabledProviders.length,
-        });
-        return { provider: null, context };
-      }
-    }
-
-    // Step 3: 候选供应商（分组过滤已在 Step 1 完成，1M 过滤在 Step 2.5 完成）
-    const candidateProviders = afterContext1mFilter;
-    context.afterGroupFilter = afterContext1mFilter.length;
+    // Step 3: Candidate providers (group filter done in Step 1)
+    const candidateProviders = enabledProviders;
+    context.afterGroupFilter = enabledProviders.length;
 
     context.beforeHealthCheck = candidateProviders.length;
 

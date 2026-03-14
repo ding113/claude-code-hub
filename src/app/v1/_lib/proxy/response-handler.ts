@@ -891,6 +891,15 @@ export class ProxyResponseHandler {
           );
         }
 
+        // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
+        if (
+          provider.providerType === "codex" &&
+          usageMetrics?.input_tokens != null &&
+          usageMetrics.input_tokens > 272000
+        ) {
+          session.setContext1mApplied(true);
+        }
+
         // Codex: Extract prompt_cache_key and update session binding
         if (provider.providerType === "codex" && session.sessionId && provider.id) {
           try {
@@ -1880,6 +1889,15 @@ export class ProxyResponseHandler {
             session,
             provider.swapCacheTtlBilling
           );
+        }
+
+        // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
+        if (
+          provider.providerType === "codex" &&
+          usageForCost?.input_tokens != null &&
+          usageForCost.input_tokens > 272000
+        ) {
+          session.setContext1mApplied(true);
         }
 
         // Codex: Extract prompt_cache_key from SSE events and update session binding
@@ -3070,6 +3088,15 @@ export async function finalizeRequestStats(
     session,
     provider.swapCacheTtlBilling
   );
+
+  // Codex: set context1mApplied when input exceeds 272k threshold (for 1M badge display)
+  if (
+    provider.providerType === "codex" &&
+    normalizedUsage.input_tokens != null &&
+    normalizedUsage.input_tokens > 272000
+  ) {
+    session.setContext1mApplied(true);
+  }
 
   await updateRequestCostFromUsage(
     messageContext.id,

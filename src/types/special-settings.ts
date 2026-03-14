@@ -15,7 +15,6 @@ export type SpecialSetting =
   | CodexSessionIdCompletionSpecialSetting
   | ClaudeMetadataUserIdInjectionSpecialSetting
   | AnthropicCacheTtlHeaderOverrideSpecialSetting
-  | AnthropicContext1mHeaderOverrideSpecialSetting
   | GeminiGoogleSearchOverrideSpecialSetting
   | PricingResolutionSpecialSetting
   | CodexServiceTierResultSpecialSetting
@@ -82,17 +81,6 @@ export type AnthropicCacheTtlHeaderOverrideSpecialSetting = {
   scope: "request_header";
   hit: boolean;
   ttl: string;
-};
-
-/**
- * Anthropic 1M 上下文相关标头覆写审计
- */
-export type AnthropicContext1mHeaderOverrideSpecialSetting = {
-  type: "anthropic_context_1m_header_override";
-  scope: "request_header";
-  hit: boolean;
-  header: "anthropic-beta";
-  flag: string;
 };
 
 /**

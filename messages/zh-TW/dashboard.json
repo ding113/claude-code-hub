@@ -287,7 +287,7 @@
         "fast": "fast",
         "fastPriority": "優先服務層級（fast 模式）",
         "context1m": "1M 上下文",
-        "context1mPricing": "輸入 2x >200k, 輸出 1.5x >200k",
+        "context1mEnabled": "1M 上下文視窗已啟用",
         "pricingProvider": "計費價格供應商",
         "pricingSourceLabel": "計費價格來源",
         "pricingSource": {
@@ -390,7 +390,7 @@
       "fast": "fast",
       "fastPriority": "優先服務層級（fast 模式）",
       "context1m": "1M 上下文長度",
-      "context1mPricing": "輸入 >200k 2倍, 輸出 >200k 1.5倍",
+      "context1mEnabled": "1M 上下文視窗已啟用",
       "pricingProvider": "計費價格供應商",
       "pricingSourceLabel": "計費價格來源",
       "pricingSource": {
