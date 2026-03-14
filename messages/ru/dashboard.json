@@ -158,6 +158,7 @@
       "nonBilling": "Не тарифицируется",
       "skipped": "Пропущено",
       "specialSettings": "Особые",
+      "anthropicEffort": "Effort: {effort}",
       "times": "раз",
       "loadedCount": "Загружено {count} записей",
       "loadingMore": "Загрузка...",

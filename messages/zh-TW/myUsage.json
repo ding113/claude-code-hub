@@ -58,7 +58,8 @@
     "next": "下一頁",
     "noLogs": "暫無日誌",
     "unknownModel": "未知的模型",
-    "billingModel": "計費：{model}"
+    "billingModel": "計費：{model}",
+    "anthropicEffort": "Effort: {effort}"
   },
   "expiration": {
     "title": "到期時間",

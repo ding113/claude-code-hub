@@ -158,6 +158,7 @@
       "nonBilling": "非計費",
       "skipped": "已跳過",
       "specialSettings": "特殊設定",
+      "anthropicEffort": "Effort: {effort}",
       "times": "次數",
       "loadedCount": "已載入 {count} 筆記錄",
       "loadingMore": "載入更多中...",

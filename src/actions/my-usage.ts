@@ -152,6 +152,7 @@ export interface MyUsageLogEntry {
   createdAt: Date | null;
   model: string | null;
   billingModel: string | null;
+  anthropicEffort?: string | null;
   modelRedirect: string | null;
   inputTokens: number;
   outputTokens: number;
@@ -506,6 +507,7 @@ export async function getMyUsageLogs(
         createdAt: log.createdAt,
         model: log.model,
         billingModel,
+        anthropicEffort: log.anthropicEffort ?? null,
         modelRedirect,
         inputTokens: log.inputTokens ?? 0,
         outputTokens: log.outputTokens ?? 0,

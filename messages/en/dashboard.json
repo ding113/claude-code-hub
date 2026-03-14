@@ -158,6 +158,7 @@
       "nonBilling": "Non-Billing",
       "skipped": "Skipped",
       "specialSettings": "Special",
+      "anthropicEffort": "Effort: {effort}",
       "times": "times",
       "loadedCount": "Loaded {count} records",
       "loadingMore": "Loading more...",

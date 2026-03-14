@@ -50,6 +50,8 @@ function buildSettingKey(setting: SpecialSetting): string {
       ]);
     case "guard_intercept":
       return JSON.stringify([setting.type, setting.guard, setting.action, setting.statusCode]);
+    case "anthropic_effort":
+      return JSON.stringify([setting.type, setting.hit, setting.effort]);
     case "anthropic_cache_ttl_header_override":
       return JSON.stringify([setting.type, setting.ttl]);
     case "thinking_signature_rectifier":

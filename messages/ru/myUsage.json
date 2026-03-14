@@ -58,7 +58,8 @@
     "next": "Вперед",
     "noLogs": "Нет записей",
     "unknownModel": "Неизвестная модель",
-    "billingModel": "Биллинг: {model}"
+    "billingModel": "Биллинг: {model}",
+    "anthropicEffort": "Effort: {effort}"
   },
   "expiration": {
     "title": "Срок действия",
