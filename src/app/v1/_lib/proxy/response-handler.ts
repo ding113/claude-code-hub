@@ -3108,7 +3108,12 @@ async function updateRequestCostFromUsage(
       });
 
       requestCloudPriceTableSync({ reason: "missing-model" });
-      return;
+      return {
+        costUsd: null,
+        resolvedPricing: null,
+        longContextPricing: null,
+        longContextPricingApplied: false,
+      };
     }
 
     const longContextPricing =
