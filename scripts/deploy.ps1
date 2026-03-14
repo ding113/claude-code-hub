@@ -23,6 +23,8 @@ param(
     
     [switch]$EnableCaddy,
     
+    [switch]$ForceNew,
+    
     [Alias("y")]
     [switch]$Yes,
     
@@ -43,6 +45,8 @@ $script:BRANCH_NAME = "main"
 $script:APP_PORT = "23000"
 $script:ENABLE_CADDY = $false
 $script:DOMAIN_ARG = ""
+$script:UPDATE_MODE = $false
+$script:FORCE_NEW = $false
 
 function Show-Help {
     $helpText = @"
@@ -57,6 +61,7 @@ Options:
   -DeployDir, -d <path>      Custom deployment directory
   -Domain <domain>           Domain for Caddy HTTPS (enables Caddy automatically)
   -EnableCaddy               Enable Caddy reverse proxy without HTTPS (HTTP only)
+  -ForceNew                  Force fresh installation (ignore existing deployment)
   -Yes, -y                   Non-interactive mode (skip prompts, use defaults)
   -Help, -h                  Show this help message
 
@@ -67,6 +72,8 @@ Examples:
   .\deploy.ps1 -AdminToken "my-secure-token" -Yes # Use custom admin token
   .\deploy.ps1 -Domain hub.example.com -Yes       # Deploy with Caddy HTTPS
   .\deploy.ps1 -EnableCaddy -Yes                  # Deploy with Caddy HTTP-only
+  .\deploy.ps1 -Yes                               # Update existing deployment (auto-detected)
+  .\deploy.ps1 -ForceNew -Yes                     # Force fresh install even if deployment exists
 
 For more information, visit: https://github.com/ding113/claude-code-hub
 "@
@@ -113,6 +120,10 @@ function Initialize-Parameters {
     
     if ($EnableCaddy) {
         $script:ENABLE_CADDY = $true
+    }
+
+    if ($ForceNew) {
+        $script:FORCE_NEW = $true
     }
 }
 
@@ -262,6 +273,68 @@ function New-DbPassword {
     $password = [Convert]::ToBase64String($bytes) -replace '[/+=]', ''
     $script:DB_PASSWORD = $password.Substring(0, [Math]::Min(24, $password.Length))
     Write-ColorOutput "Generated secure database password" -Type Info
+}
+
+function Test-ExistingDeployment {
+    if ($script:FORCE_NEW) {
+        Write-ColorOutput "Force-new flag set, skipping existing deployment detection" -Type Info
+        return $false
+    }
+    if ((Test-Path "$($script:DEPLOY_DIR)\.env") -and (Test-Path "$($script:DEPLOY_DIR)\docker-compose.yaml")) {
+        Write-ColorOutput "Detected existing deployment in $($script:DEPLOY_DIR)" -Type Info
+        $script:UPDATE_MODE = $true
+        return $true
+    }
+    return $false
+}
+
+function Get-SuffixFromCompose {
+    $composeFile = "$($script:DEPLOY_DIR)\docker-compose.yaml"
+    $content = Get-Content $composeFile -Raw
+    if ($content -match 'container_name: claude-code-hub-db-([a-z0-9]+)') {
+        $script:SUFFIX = $Matches[1]
+        Write-ColorOutput "Using existing suffix: $($script:SUFFIX)" -Type Info
+    }
+    else {
+        Write-ColorOutput "Could not extract suffix from docker-compose.yaml, generating new one" -Type Warning
+        New-RandomSuffix
+    }
+}
+
+function Import-ExistingEnv {
+    $envFile = "$($script:DEPLOY_DIR)\.env"
+
+    # Load DB_PASSWORD
+    $dbPwLine = Select-String -Path $envFile -Pattern '^DB_PASSWORD=' | Select-Object -First 1
+    if ($dbPwLine) {
+        $script:DB_PASSWORD = ($dbPwLine.Line -split '=', 2)[1]
+        Write-ColorOutput "Preserved existing database password" -Type Info
+    }
+    else {
+        Write-ColorOutput "DB_PASSWORD not found in existing .env, generating new one" -Type Warning
+        New-DbPassword
+    }
+
+    # Load ADMIN_TOKEN (CLI argument takes priority)
+    if (-not $script:ADMIN_TOKEN) {
+        $tokenLine = Select-String -Path $envFile -Pattern '^ADMIN_TOKEN=' | Select-Object -First 1
+        if ($tokenLine) {
+            $script:ADMIN_TOKEN = ($tokenLine.Line -split '=', 2)[1]
+            Write-ColorOutput "Preserved existing admin token" -Type Info
+        }
+        else {
+            Write-ColorOutput "ADMIN_TOKEN not found in existing .env, generating new one" -Type Warning
+            New-AdminToken
+        }
+    }
+
+    # Load APP_PORT (CLI argument takes priority)
+    if ($Port -eq 0) {
+        $portLine = Select-String -Path $envFile -Pattern '^APP_PORT=' | Select-Object -First 1
+        if ($portLine) {
+            $script:APP_PORT = ($portLine.Line -split '=', 2)[1]
+        }
+    }
 }
 
 function New-DeploymentDirectory {
@@ -460,6 +533,14 @@ $($script:DOMAIN_ARG) {
 
 function Write-EnvFile {
     Write-ColorOutput "Writing .env file..." -Type Info
+
+    # Update mode: backup existing .env, then restore custom variables after writing
+    $backupFile = $null
+    if ($script:UPDATE_MODE -and (Test-Path "$($script:DEPLOY_DIR)\.env")) {
+        $backupFile = "$($script:DEPLOY_DIR)\.env.bak"
+        Copy-Item "$($script:DEPLOY_DIR)\.env" $backupFile
+        Write-ColorOutput "Backed up existing .env to .env.bak" -Type Info
+    }
     
     # Determine secure cookies setting based on Caddy and domain
     $secureCookies = "true"
@@ -513,6 +594,27 @@ LOG_LEVEL=info
     
     try {
         Set-Content -Path "$DEPLOY_DIR\.env" -Value $envContent -Encoding UTF8
+
+        # Restore user custom variables from backup (variables not managed by this script)
+        if ($backupFile -and (Test-Path $backupFile)) {
+            $managedKeys = @(
+                "ADMIN_TOKEN", "DB_USER", "DB_PASSWORD", "DB_NAME",
+                "APP_PORT", "APP_URL", "AUTO_MIGRATE", "ENABLE_RATE_LIMIT",
+                "SESSION_TTL", "STORE_SESSION_MESSAGES", "STORE_SESSION_RESPONSE_BODY",
+                "ENABLE_SECURE_COOKIES", "ENABLE_CIRCUIT_BREAKER_ON_NETWORK_ERRORS",
+                "ENABLE_ENDPOINT_CIRCUIT_BREAKER", "NODE_ENV", "TZ", "LOG_LEVEL"
+            )
+            $customVars = Get-Content $backupFile | Where-Object {
+                if (-not $_ -or -not $_.Trim() -or $_.TrimStart().StartsWith('#')) { return $false }
+                $key = ($_ -split '=', 2)[0].Trim()
+                return ($managedKeys -notcontains $key)
+            }
+            if ($customVars -and $customVars.Count -gt 0) {
+                $customBlock = "`n# User Custom Configuration (preserved from previous deployment)`n" + ($customVars -join "`n")
+                Add-Content -Path "$DEPLOY_DIR\.env" -Value $customBlock -Encoding UTF8
+                Write-ColorOutput "Preserved $($customVars.Count) custom environment variables" -Type Info
+            }
+        }
 
         # W-015: Restrict .env file permissions (equivalent to chmod 600)
         # Remove inheritance and set owner-only access
@@ -634,7 +736,12 @@ function Show-SuccessMessage {
     Write-Host ""
     Write-Host "+================================================================+" -ForegroundColor Green
     Write-Host "|                                                                |" -ForegroundColor Green
-    Write-Host "|          Claude Code Hub Deployed Successfully!               |" -ForegroundColor Green
+    if ($script:UPDATE_MODE) {
+        Write-Host "|          Claude Code Hub Updated Successfully!                |" -ForegroundColor Green
+    }
+    else {
+        Write-Host "|          Claude Code Hub Deployed Successfully!               |" -ForegroundColor Green
+    }
     Write-Host "|                                                                |" -ForegroundColor Green
     Write-Host "+================================================================+" -ForegroundColor Green
     Write-Host ""
@@ -663,10 +770,13 @@ function Show-SuccessMessage {
         }
     }
     Write-Host ""
-    
-    Write-Host "Admin Token (KEEP THIS SECRET!):" -ForegroundColor Blue
-    Write-Host "   $ADMIN_TOKEN" -ForegroundColor Yellow
-    Write-Host ""
+
+    # In update mode, skip printing the admin token (user already knows it)
+    if (-not $script:UPDATE_MODE) {
+        Write-Host "Admin Token (KEEP THIS SECRET!):" -ForegroundColor Blue
+        Write-Host "   $ADMIN_TOKEN" -ForegroundColor Yellow
+        Write-Host ""
+    }
     
     Write-Host "Usage Documentation:" -ForegroundColor Blue
     if ($script:ENABLE_CADDY -and $script:DOMAIN_ARG) {
@@ -703,7 +813,12 @@ function Show-SuccessMessage {
     }
 
     Write-Host ""
-    Write-Host "IMPORTANT: Please save the admin token in a secure location!" -ForegroundColor Red
+    if (-not $script:UPDATE_MODE) {
+        Write-Host "IMPORTANT: Please save the admin token in a secure location!" -ForegroundColor Red
+    }
+    else {
+        Write-Host "NOTE: Your existing secrets and custom configuration have been preserved." -ForegroundColor Blue
+    }
     Write-Host ""
 }
 
@@ -725,10 +840,20 @@ function Main {
     }
     
     Select-Branch
-    
-    New-RandomSuffix
-    New-AdminToken
-    New-DbPassword
+
+    # Key branch: detect existing deployment
+    if (Test-ExistingDeployment) {
+        Write-ColorOutput "=== UPDATE MODE ===" -Type Info
+        Write-ColorOutput "Updating existing deployment (secrets and custom config will be preserved)" -Type Info
+        Get-SuffixFromCompose
+        Import-ExistingEnv
+    }
+    else {
+        Write-ColorOutput "=== FRESH INSTALL MODE ===" -Type Info
+        New-RandomSuffix
+        New-AdminToken
+        New-DbPassword
+    }
     
     New-DeploymentDirectory
     Write-ComposeFile
@@ -743,7 +868,12 @@ function Main {
         Show-SuccessMessage
     }
     else {
-        Write-ColorOutput "Deployment completed but some services may not be fully healthy yet" -Type Warning
+        if ($script:UPDATE_MODE) {
+            Write-ColorOutput "Update completed but some services may not be fully healthy yet" -Type Warning
+        }
+        else {
+            Write-ColorOutput "Deployment completed but some services may not be fully healthy yet" -Type Warning
+        }
         Write-ColorOutput "Please check the logs: cd $DEPLOY_DIR; docker compose logs -f" -Type Info
         Show-SuccessMessage
     }
