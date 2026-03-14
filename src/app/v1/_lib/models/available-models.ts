@@ -247,6 +247,7 @@ async function fetchModelsFromProvider(provider: Provider): Promise<FetchedModel
   const configMap: Record<Provider["providerType"], UpstreamFetchConfig> = {
     claude: UPSTREAM_CONFIGS.claude,
     "claude-auth": UPSTREAM_CONFIGS.claude,
+    openai: UPSTREAM_CONFIGS.openai,
     "openai-compatible": UPSTREAM_CONFIGS.openai,
     codex: UPSTREAM_CONFIGS.openai,
     gemini: UPSTREAM_CONFIGS.gemini,
@@ -275,8 +276,8 @@ export function getProviderTypesForFormat(clientFormat: ClientFormat): Provider[
     case "claude":
       return ["claude", "claude-auth"];
     case "openai":
-      // openai 格式需要对 codex 和 openai-compatible 分别决策
-      return ["codex", "openai-compatible"];
+      // openai 格式需要对 codex / openai / openai-compatible 分别决策
+      return ["codex", "openai", "openai-compatible"];
     case "gemini":
     case "gemini-cli":
       return ["gemini", "gemini-cli"];
@@ -578,10 +579,10 @@ export const handleCodexModels = createFixedProviderTypesModelsHandler(
 );
 
 /**
- * 处理 /v1/chat/completions/models 或 /v1/chat/models 请求（只返回 openai-compatible 类型）
+ * 处理 /v1/chat/completions/models 或 /v1/chat/models 请求（返回 openai 与 openai-compatible 类型）
  */
 export const handleOpenAICompatibleModels = createFixedProviderTypesModelsHandler(
-  ["openai-compatible"],
+  ["openai", "openai-compatible"],
   "chat/models"
 );
 

@@ -84,6 +84,7 @@ export function ModelMultiSelect({
       claude: t("claude"),
       "claude-auth": t("claude"),
       codex: t("openai"),
+      openai: t("openai"),
       gemini: t("gemini"),
       "gemini-cli": t("gemini"),
       "openai-compatible": t("openai"),

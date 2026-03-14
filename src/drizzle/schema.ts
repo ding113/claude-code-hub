@@ -142,16 +142,19 @@ export const providers = pgTable('providers', {
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
   groupTag: varchar('group_tag', { length: 50 }),
 
-  // 供应商类型：扩展支持 5 种类型
+  // 供应商类型：扩展支持 7 种类型
   // - claude: Anthropic 提供商（标准认证）
   // - claude-auth: Claude 中转服务（仅 Bearer 认证，不发送 x-api-key）
   // - codex: Codex CLI (Response API)
   // - gemini-cli: Gemini CLI
+  // - openai: OpenAI 官方 API
   // - openai-compatible: OpenAI Compatible API
   providerType: varchar('provider_type', { length: 20 })
     .notNull()
     .default('claude')
-    .$type<'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai-compatible'>(),
+    .$type<
+      'claude' | 'claude-auth' | 'codex' | 'gemini-cli' | 'gemini' | 'openai' | 'openai-compatible'
+    >(),
   // 是否透传客户端 IP（默认关闭，避免暴露真实来源）
   preserveClientIp: boolean('preserve_client_ip').notNull().default(false),
 

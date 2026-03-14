@@ -114,6 +114,10 @@ export function previewProxyUrls(baseUrl: string, providerType?: string): Record
       { name: "Claude Count Tokens", path: "/v1/messages/count_tokens" },
     ],
     codex: [{ name: "Codex Responses", path: "/v1/responses" }],
+    openai: [
+      { name: "OpenAI Chat Completions", path: "/v1/chat/completions" },
+      { name: "OpenAI Models", path: "/v1/models" },
+    ],
     "openai-compatible": [
       { name: "OpenAI Chat Completions", path: "/v1/chat/completions" },
       { name: "OpenAI Models", path: "/v1/models" },

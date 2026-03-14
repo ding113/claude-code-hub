@@ -88,4 +88,30 @@ describe("ProxyProviderResolver.selectProviderByType - /v1/models 分组隔离",
 
     expect(provider?.id).toBe(inGroup.id);
   });
+
+  test("应支持选择 openai 类型供应商", async () => {
+    findAllProvidersMock.mockResolvedValue([
+      {
+        id: 3,
+        name: "openai-provider",
+        isEnabled: true,
+        providerType: "openai",
+        groupTag: null,
+        weight: 1,
+        priority: 0,
+        costMultiplier: 1,
+      } as unknown as Provider,
+    ]);
+
+    const { provider, context } = await ProxyProviderResolver.selectProviderByType(
+      {
+        user: { id: 1, providerGroup: null },
+        key: { providerGroup: null },
+      },
+      "openai"
+    );
+
+    expect(provider?.id).toBe(3);
+    expect(context.targetType).toBe("openai");
+  });
 });

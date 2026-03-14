@@ -876,20 +876,13 @@ export function ProviderForm({
                       <SelectItem value="codex">{t("providerTypes.codex")}</SelectItem>
                       <SelectItem value="gemini">{t("providerTypes.gemini")}</SelectItem>
                       <SelectItem value="gemini-cli">{t("providerTypes.geminiCli")}</SelectItem>
-                      <SelectItem value="openai-compatible" disabled={!enableMultiProviderTypes}>
-                        {t("providerTypes.openaiCompatible")}{" "}
-                        {!enableMultiProviderTypes && t("providerTypes.openaiCompatibleDisabled")}
+                      <SelectItem value="openai">{t("providerTypes.openai")}</SelectItem>
+                      <SelectItem value="openai-compatible">
+                        {t("providerTypes.openaiCompatible")}
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {t("sections.routing.providerTypeDesc")}
-                    {!enableMultiProviderTypes && (
-                      <span className="text-amber-600 ml-1">
-                        {t("sections.routing.providerTypeDisabledNote")}
-                      </span>
-                    )}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{t("sections.routing.providerTypeDesc")}</p>
                 </div>
 
                 <div className="space-y-2">
@@ -1042,6 +1035,7 @@ export function ProviderForm({
                         | "codex"
                         | "gemini"
                         | "gemini-cli"
+                        | "openai"
                         | "openai-compatible"
                     }
                     selectedModels={allowedModels}

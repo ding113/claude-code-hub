@@ -260,7 +260,7 @@
       "placeholder": "Выберите тип провайдера"
     },
     "providerTypeDesc": "Выберите формат API провайдера.",
-    "providerTypeDisabledNote": "Примечание: функции типа OpenAI Compatible находятся в разработке и пока недоступны",
+    "providerTypeDisabledNote": "",
     "scheduleParams": {
       "costMultiplier": {
         "desc": "Множитель при расчёте стоимости. Официальный=1.0, дешевле на 20%=0.8, дороже на 20%=1.2 (до 4 знаков после запятой)",

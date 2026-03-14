@@ -12,7 +12,7 @@
       "placeholder": "选择供应商类型"
     },
     "providerTypeDesc": "选择供应商的 API 格式类型。",
-    "providerTypeDisabledNote": "注：Gemini CLI 和 OpenAI Compatible 类型功能正在开发中，暂不可用",
+    "providerTypeDisabledNote": "",
     "modelRedirects": {
       "label": "模型重定向配置",
       "optional": "(可选)"

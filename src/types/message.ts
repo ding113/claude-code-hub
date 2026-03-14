@@ -117,7 +117,7 @@ export interface ProviderChainItem {
     // --- 供应商池状态 ---
     totalProviders: number; // 系统总供应商数
     enabledProviders: number; // 启用的供应商数
-    targetType: "claude" | "codex" | "openai-compatible" | "gemini" | "gemini-cli"; // 目标类型（基于请求格式推断）
+    targetType: "claude" | "codex" | "openai" | "openai-compatible" | "gemini" | "gemini-cli"; // 目标类型（基于请求格式推断）
     requestedModel?: string; // 请求的模型名称（用于追踪）
 
     // --- 用户分组筛选 ---

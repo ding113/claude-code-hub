@@ -5,6 +5,7 @@
   "gemini": "Gemini (Google Gemini API)",
   "geminiCli": "Gemini CLI",
   "geminiCliDisabled": " - 功能开发中",
+  "openai": "OpenAI (Official API)",
   "openaiCompatible": "OpenAI Compatible",
-  "openaiCompatibleDisabled": " - 功能开发中"
+  "openaiCompatibleDisabled": ""
 }

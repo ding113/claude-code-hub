@@ -1,0 +1,16 @@
+{
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an echo bot. Always say pong."
+    },
+    {
+      "role": "user",
+      "content": "ping"
+    }
+  ],
+  "max_tokens": 20,
+  "temperature": 0,
+  "stream": false
+}

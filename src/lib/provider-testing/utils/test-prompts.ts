@@ -23,6 +23,7 @@ export const USER_AGENTS: Record<ProviderType, string> = {
   claude: "claude-cli/2.0.50 (external, cli)",
   "claude-auth": "claude-cli/2.0.50 (external, cli)",
   codex: "codex_cli_rs/0.63.0",
+  openai: "OpenAI/NodeJS/3.2.1",
   "openai-compatible": "OpenAI/NodeJS/3.2.1",
   gemini: "GeminiCLI/v0.17.1 (darwin; arm64)",
   "gemini-cli": "GeminiCLI/v0.17.1 (darwin; arm64)",
@@ -178,6 +179,7 @@ export const DEFAULT_MODELS: Record<ProviderType, string> = {
   claude: "claude-sonnet-4-5-20250929",
   "claude-auth": "claude-sonnet-4-5-20250929",
   codex: "gpt-5-codex",
+  openai: "gpt-4o",
   "openai-compatible": "gpt-4o",
   gemini: "gemini-2.0-flash",
   "gemini-cli": "gemini-2.0-flash",
@@ -190,6 +192,7 @@ export const DEFAULT_SUCCESS_CONTAINS: Record<ProviderType, string> = {
   claude: "pong",
   "claude-auth": "pong",
   codex: "pong",
+  openai: "pong",
   "openai-compatible": "pong",
   gemini: "pong",
   "gemini-cli": "pong",
@@ -202,6 +205,7 @@ export const API_ENDPOINTS: Record<ProviderType, string> = {
   claude: "/v1/messages",
   "claude-auth": "/v1/messages",
   codex: "/v1/responses",
+  openai: "/v1/chat/completions",
   "openai-compatible": "/v1/chat/completions",
   gemini: "/v1beta/models/{model}:streamGenerateContent",
   "gemini-cli": "/v1beta/models/{model}:streamGenerateContent",
@@ -221,6 +225,7 @@ export function getTestBody(providerType: ProviderType, model?: string): Record<
     case "codex":
       return { ...CODEX_TEST_BODY, model: targetModel };
 
+    case "openai":
     case "openai-compatible":
       return { ...OPENAI_TEST_BODY, model: targetModel };
 
@@ -262,6 +267,7 @@ export function getTestHeaders(providerType: ProviderType, apiKey: string): Reco
       };
 
     case "codex":
+    case "openai":
     case "openai-compatible":
       return {
         ...baseHeaders,

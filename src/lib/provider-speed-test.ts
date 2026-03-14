@@ -121,7 +121,7 @@ function buildTestRequest(provider: Provider): {
   }
 
   // OpenAI 兼容类型
-  if (provider.providerType === "openai-compatible") {
+  if (provider.providerType === "openai" || provider.providerType === "openai-compatible") {
     return {
       url: `${baseUrl}/v1/chat/completions`,
       headers: {

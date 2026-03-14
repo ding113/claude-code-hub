@@ -23,6 +23,7 @@ function isProviderType(value: string): value is ProviderType {
     value === "codex" ||
     value === "gemini" ||
     value === "gemini-cli" ||
+    value === "openai" ||
     value === "openai-compatible"
   );
 }
@@ -34,7 +35,7 @@ export const runtime = "nodejs";
  * 获取排行榜数据
  * GET /api/leaderboard?period=daily|weekly|monthly|allTime|custom&scope=user|provider|providerCacheHitRate|model
  * 当 period=custom 时，需要提供 startDate 和 endDate 参数 (YYYY-MM-DD 格式)
- * 当 scope=providerCacheHitRate 时，可选 providerType=claude|claude-auth|codex|gemini|gemini-cli|openai-compatible
+ * 当 scope=providerCacheHitRate 时，可选 providerType=claude|claude-auth|codex|gemini|gemini-cli|openai|openai-compatible
  *
  * 需要认证，普通用户需要 allowGlobalUsageView 权限
  * 实时计算 + Redis 乐观缓存（60 秒 TTL）

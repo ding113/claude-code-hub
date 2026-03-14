@@ -44,6 +44,11 @@ export const PROVIDER_TYPE_CONFIG: Record<
     iconColor: "text-emerald-600",
     bgColor: "bg-emerald-500/15",
   },
+  openai: {
+    icon: OpenAI,
+    iconColor: "text-sky-600",
+    bgColor: "bg-sky-500/15",
+  },
   "openai-compatible": {
     icon: OpenAI, // OpenAI 无文字版本（默认 Mono）
     iconColor: "text-cyan-600",

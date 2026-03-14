@@ -9,6 +9,7 @@ export type ProviderType =
   | "codex"
   | "gemini"
   | "gemini-cli"
+  | "openai"
   | "openai-compatible";
 
 // Codex（Responses API）请求参数覆写偏好

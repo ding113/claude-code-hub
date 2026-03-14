@@ -260,7 +260,7 @@
       "placeholder": "Select provider type"
     },
     "providerTypeDesc": "Choose the API format type of the provider.",
-    "providerTypeDisabledNote": "Note: OpenAI Compatible is under development and currently unavailable",
+    "providerTypeDisabledNote": "",
     "scheduleParams": {
       "costMultiplier": {
         "desc": "Cost multiplier. Official provider = 1.0, 20% cheaper = 0.8, 20% more expensive = 1.2 (up to 4 decimals)",

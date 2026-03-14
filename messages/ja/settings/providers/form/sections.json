@@ -260,7 +260,7 @@
       "placeholder": "プロバイダー種別を選択"
     },
     "providerTypeDesc": "プロバイダーの API 形式を選択します。",
-    "providerTypeDisabledNote": "注: OpenAI Compatible は開発中のため、現在は使用できません",
+    "providerTypeDisabledNote": "",
     "scheduleParams": {
       "costMultiplier": {
         "desc": "コスト計算の倍率。公式=1.0、20% 安い=0.8、20% 高い=1.2（小数4桁まで）",

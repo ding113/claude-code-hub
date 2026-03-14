@@ -40,6 +40,7 @@ const providerTypeToApiFormat: Partial<Record<ProviderType, ApiFormat>> = {
   claude: "anthropic-messages",
   "claude-auth": "anthropic-messages",
   codex: "openai-responses",
+  openai: "openai-chat",
   "openai-compatible": "openai-chat",
   gemini: "gemini",
   "gemini-cli": "gemini",
@@ -47,7 +48,7 @@ const providerTypeToApiFormat: Partial<Record<ProviderType, ApiFormat>> = {
 
 const apiFormatDefaultModel: Record<ApiFormat, string> = {
   "anthropic-messages": "claude-sonnet-4-5-20250929",
-  "openai-chat": "gpt-5.1-codex",
+  "openai-chat": "gpt-4o",
   "openai-responses": "gpt-5.1-codex",
   gemini: "gemini-3-pro-preview",
 };
@@ -89,7 +90,6 @@ export function ApiTestButton({
   enableMultiProviderTypes,
 }: ApiTestButtonProps) {
   const t = useTranslations("settings.providers.form.apiTest");
-  const providerTypeT = useTranslations("settings.providers.form.providerTypes");
   const normalizedAllowedModels = useMemo(() => {
     const unique = new Set<string>();
     allowedModels.forEach((model) => {
@@ -134,7 +134,7 @@ export function ApiTestButton({
   const apiFormatToProviderType: Record<ApiFormat, ProviderType> = useMemo(
     () => ({
       "anthropic-messages": providerType === "claude-auth" ? "claude-auth" : "claude",
-      "openai-chat": "openai-compatible",
+      "openai-chat": providerType === "openai" ? "openai" : "openai-compatible",
       "openai-responses": "codex",
       gemini: providerType === "gemini-cli" ? "gemini-cli" : "gemini",
     }),
@@ -445,10 +445,7 @@ export function ApiTestButton({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="anthropic-messages">{t("formatAnthropicMessages")}</SelectItem>
-            <SelectItem value="openai-chat" disabled={!enableMultiProviderTypes}>
-              {t("formatOpenAIChat")}
-              {!enableMultiProviderTypes && providerTypeT("openaiCompatibleDisabled")}
-            </SelectItem>
+            <SelectItem value="openai-chat">{t("formatOpenAIChat")}</SelectItem>
             <SelectItem value="openai-responses">{t("formatOpenAIResponses")}</SelectItem>
             <SelectItem value="gemini">Gemini API</SelectItem>
           </SelectContent>

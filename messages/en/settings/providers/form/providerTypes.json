@@ -5,6 +5,7 @@
   "gemini": "Gemini (Google Gemini API)",
   "geminiCli": "Gemini CLI",
   "geminiCliDisabled": " - in development",
+  "openai": "OpenAI (Official API)",
   "openaiCompatible": "OpenAI Compatible",
-  "openaiCompatibleDisabled": " - in development"
+  "openaiCompatibleDisabled": ""
 }

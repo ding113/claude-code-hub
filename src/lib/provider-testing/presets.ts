@@ -12,6 +12,7 @@ import type { ProviderType } from "@/types/provider";
 import ccBase from "./data/cc_base.json";
 import ccSonnet from "./data/cc_sonnet.json";
 import cxBase from "./data/cx_base.json";
+import openaiChat from "./data/openai_chat.json";
 import publicCcBase from "./data/public_cc_base.json";
 
 // ============================================================================
@@ -68,10 +69,18 @@ export const PRESETS: Record<string, PresetConfig> = {
   cx_base: {
     id: "cx_base",
     description: "Codex CLI (Response API)",
-    providerTypes: ["codex", "openai-compatible"],
+    providerTypes: ["codex"],
     payload: cxBase,
     defaultSuccessContains: "pong",
     defaultModel: "gpt-5-codex",
+  },
+  openai_chat: {
+    id: "openai_chat",
+    description: "OpenAI Chat Completions (basic)",
+    providerTypes: ["openai", "openai-compatible"],
+    payload: openaiChat,
+    defaultSuccessContains: "pong",
+    defaultModel: "gpt-4o",
   },
 };
 
@@ -82,7 +91,8 @@ export const PRESET_MAPPING: Record<ProviderType, string[]> = {
   claude: ["cc_base", "cc_sonnet", "public_cc_base"],
   "claude-auth": ["cc_base", "cc_sonnet", "public_cc_base"],
   codex: ["cx_base"],
-  "openai-compatible": ["cx_base"],
+  openai: ["openai_chat"],
+  "openai-compatible": ["openai_chat"],
   gemini: [], // Gemini uses its own format
   "gemini-cli": [],
 };

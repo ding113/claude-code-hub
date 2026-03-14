@@ -125,8 +125,9 @@ export function mapClientFormatToTransformer(clientFormat: ClientFormat): Format
  * @returns 转换器使用的格式
  */
 export function mapProviderTypeToTransformer(providerType: ProviderType): Format {
-  // Provider Type 和 Transformer Format 完全一致
-  // 这个函数主要用于类型安全和显式映射
+  if (providerType === "openai") {
+    return "openai-compatible";
+  }
   return providerType as Format;
 }
 
