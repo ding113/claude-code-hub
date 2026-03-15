@@ -1799,7 +1799,7 @@ export class ProxyForwarder {
 
     // ⭐ 不暴露供应商详情，仅返回简单错误
     await ProxyForwarder.clearSessionProviderBinding(session);
-    throw new ProxyError("所有供应商暂时不可用，请稍后重试", 503); // Service Unavailable
+    throw ProxyForwarder.buildAllProvidersUnavailableError(); // Service Unavailable
   }
 
   /**
@@ -2957,6 +2957,7 @@ export class ProxyForwarder {
     let noMoreProviders = false;
     let launchingAlternative: Promise<void> | null = null;
     let lastError: Error | null = null;
+    let lastErrorCategory: ErrorCategory | null = null;
     const attempts = new Set<StreamingHedgeAttempt>();
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
@@ -3012,13 +3013,7 @@ export class ProxyForwarder {
 
     const finishIfExhausted = async () => {
       if (!settled && noMoreProviders && attempts.size === 0) {
-        await settleFailure(
-          lastError ??
-            new ProxyError("No available providers", 503, {
-              body: "",
-              providerId: initialProvider.id,
-            })
-        );
+        await settleFailure(ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory));
       }
     };
 
@@ -3056,11 +3051,8 @@ export class ProxyForwarder {
             providerName: initialProvider.name,
           });
 
-          lastError = new ProxyError("No available providers", 503, {
-            body: "",
-            providerId: initialProvider.id,
-            providerName: initialProvider.name,
-          });
+          lastError = ProxyForwarder.buildAllProvidersUnavailableError();
+          lastErrorCategory = null;
           noMoreProviders = true;
           abortAllAttempts(undefined, "hedge_launch_failed");
           await finishIfExhausted();
@@ -3084,6 +3076,7 @@ export class ProxyForwarder {
       lastError = error;
 
       const errorCategory = await categorizeErrorAsync(error);
+      lastErrorCategory = errorCategory;
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
 
       if (attempt.endpointAudit.endpointId != null) {
@@ -3119,12 +3112,20 @@ export class ProxyForwarder {
         reason:
           errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
             ? "resource_not_found"
-            : "retry_failed",
+            : errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
+              ? "client_error_non_retryable"
+              : "retry_failed",
         attemptNumber: attempt.sequence,
         statusCode,
         errorMessage: error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message,
         circuitState: getCircuitState(attempt.provider.id),
       });
+
+      if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
+        abortAllAttempts(undefined, "client_error_non_retryable");
+        await settleFailure(error);
+        return;
+      }
 
       await launchAlternative();
       await finishIfExhausted();
@@ -3234,6 +3235,7 @@ export class ProxyForwarder {
         endpointSelection = await ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider);
       } catch (endpointError) {
         lastError = endpointError as Error;
+        lastErrorCategory = null;
         await launchAlternative();
         await finishIfExhausted();
         return;
@@ -3370,6 +3372,7 @@ export class ProxyForwarder {
           if (settled || winnerCommitted) return;
           noMoreProviders = true;
           lastError = new ProxyError("Request aborted by client", 499, undefined, true);
+          lastErrorCategory = ErrorCategory.CLIENT_ABORT;
           for (const attempt of Array.from(attempts)) {
             if (!attempt.settled) {
               session.addProviderToChain(attempt.provider, {
@@ -3581,6 +3584,25 @@ export class ProxyForwarder {
   private static async clearSessionProviderBinding(session: ProxySession): Promise<void> {
     if (!session.sessionId) return;
     await SessionManager.clearSessionProvider(session.sessionId);
+  }
+
+  private static buildAllProvidersUnavailableError(): ProxyError {
+    return new ProxyError("所有供应商暂时不可用，请稍后重试", 503);
+  }
+
+  private static resolveHedgeTerminalError(
+    lastError: Error | null,
+    lastErrorCategory: ErrorCategory | null
+  ): Error {
+    if (
+      lastError &&
+      (lastErrorCategory === ErrorCategory.CLIENT_ABORT ||
+        lastErrorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR)
+    ) {
+      return lastError;
+    }
+
+    return ProxyForwarder.buildAllProvidersUnavailableError();
   }
 
   private static async readFirstReadableChunk(

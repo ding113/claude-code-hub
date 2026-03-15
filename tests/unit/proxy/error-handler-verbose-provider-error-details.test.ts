@@ -181,4 +181,46 @@ describe("ProxyErrorHandler.handle - verboseProviderError details", () => {
     const body = await res.json();
     expect(body.error.details).toBeUndefined();
   });
+
+  test("有 response-body override 时，应返回覆写 body/status，且不混入 verbose details", async () => {
+    mocks.getCachedSystemSettings.mockResolvedValue({ verboseProviderError: true } as any);
+    mocks.getErrorOverrideAsync.mockResolvedValue({
+      statusCode: 451,
+      response: {
+        error: {
+          type: "invalid_request_error",
+          message: "custom rewritten message",
+          param: "messages",
+          code: "provider_unavailable",
+        },
+      },
+    });
+
+    const session = createSession();
+    const err = new ProxyError("FAKE_200_JSON_ERROR_NON_EMPTY", 429, {
+      body: "sanitized",
+      providerId: 1,
+      providerName: "p1",
+      requestId: "req_123",
+      rawBody: '{"error":"boom"}',
+      rawBodyTruncated: false,
+      statusCodeInferred: true,
+      statusCodeInferenceMatcherId: "rate_limit",
+    });
+
+    const res = await ProxyErrorHandler.handle(session, err);
+    expect(res.status).toBe(451);
+
+    const body = await res.json();
+    expect(body).toEqual({
+      error: {
+        type: "invalid_request_error",
+        message: "custom rewritten message",
+        param: "messages",
+        code: "provider_unavailable",
+      },
+    });
+    expect(body.error.details).toBeUndefined();
+    expect(body.request_id).toBeUndefined();
+  });
 });
