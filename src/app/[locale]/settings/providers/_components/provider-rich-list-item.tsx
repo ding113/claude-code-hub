@@ -16,7 +16,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   editProvider,
@@ -64,6 +64,7 @@ import {
 } from "@/lib/constants/provider.constants";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { getProviderTypeConfig, getProviderTypeTranslationKey } from "@/lib/provider-type-utils";
+import { cn } from "@/lib/utils";
 import { copyToClipboard, isClipboardSupported } from "@/lib/utils/clipboard";
 import { getContrastTextColor, getGroupColor } from "@/lib/utils/color";
 import type { CurrencyCode } from "@/lib/utils/currency";
@@ -73,6 +74,7 @@ import type { User } from "@/types/user";
 import { ProviderForm } from "./forms/provider-form";
 import { GroupEditCombobox } from "./group-edit-combobox";
 import { InlineEditPopover } from "./inline-edit-popover";
+import { invalidateProviderQueries } from "./invalidate-provider-queries";
 import { PriorityEditPopover } from "./priority-edit-popover";
 import { ProviderEndpointHover } from "./provider-endpoint-hover";
 
@@ -110,7 +112,7 @@ interface ProviderRichListItemProps {
   isAdmin?: boolean;
 }
 
-export function ProviderRichListItem({
+function ProviderRichListItemInner({
   provider,
   vendor,
   currentUser,
@@ -133,9 +135,47 @@ export function ProviderRichListItem({
 }: ProviderRichListItemProps) {
   const queryClient = useQueryClient();
 
+  const doInvalidate = useCallback(() => invalidateProviderQueries(queryClient), [queryClient]);
+
   const [openEdit, setOpenEdit] = useState(false);
   const [openClone, setOpenClone] = useState(false);
   const [showKeyDialog, setShowKeyDialog] = useState(false);
+
+  // Defer heavy ProviderForm mount so dialog animation doesn't compete with React work
+  const [editFormReady, setEditFormReady] = useState(false);
+  const [cloneFormReady, setCloneFormReady] = useState(false);
+
+  useEffect(() => {
+    if (openEdit) {
+      let cancelled = false;
+      const id = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!cancelled) setEditFormReady(true);
+        });
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(id);
+      };
+    }
+    setEditFormReady(false);
+  }, [openEdit]);
+
+  useEffect(() => {
+    if (openClone) {
+      let cancelled = false;
+      const id = requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!cancelled) setCloneFormReady(true);
+        });
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(id);
+      };
+    }
+    setCloneFormReady(false);
+  }, [openClone]);
   const [mobileDeleteDialogOpen, setMobileDeleteDialogOpen] = useState(false);
   const [unmaskedKey, setUnmaskedKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -231,9 +271,7 @@ export function ProviderRichListItem({
                     const undoResult = await undoProviderDelete({ undoToken, operationId });
                     if (undoResult.ok) {
                       toast.success(tBatchEdit("undo.singleDeleteUndone"));
-                      await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                      await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                      await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                      await doInvalidate();
                     } else if (
                       undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
                     ) {
@@ -248,9 +286,7 @@ export function ProviderRichListItem({
               },
             });
 
-            queryClient.invalidateQueries({ queryKey: ["providers"] });
-            queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-            queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+            doInvalidate();
           } else {
             toast.error(tList("deleteFailed"), {
               description: res.error || tList("unknownError"),
@@ -319,8 +355,7 @@ export function ProviderRichListItem({
           toast.success(tList("resetCircuitSuccess"), {
             description: tList("resetCircuitSuccessDesc", { name: provider.name }),
           });
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
-          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          doInvalidate();
         } else {
           toast.error(tList("resetCircuitFailed"), {
             description: res.error || tList("unknownError"),
@@ -344,8 +379,7 @@ export function ProviderRichListItem({
           toast.success(tList("resetUsageSuccess"), {
             description: tList("resetUsageSuccessDesc", { name: provider.name }),
           });
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
-          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          doInvalidate();
         } else {
           toast.error(tList("resetUsageFailed"), {
             description: res.error || tList("unknownError"),
@@ -372,8 +406,7 @@ export function ProviderRichListItem({
           toast.success(tList("toggleSuccess", { status }), {
             description: tList("toggleSuccessDesc", { name: provider.name }),
           });
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
-          queryClient.invalidateQueries({ queryKey: ["providers-health"] });
+          doInvalidate();
         } else {
           toast.error(tList("toggleFailed"), {
             description: res.error || tList("unknownError"),
@@ -396,7 +429,7 @@ export function ProviderRichListItem({
         >[1]);
         if (res.ok) {
           toast.success(tInline("saveSuccess"));
-          queryClient.invalidateQueries({ queryKey: ["providers"] });
+          doInvalidate();
           return true;
         }
         toast.error(tInline("saveFailed"), { description: res.error || tList("unknownError") });
@@ -462,9 +495,27 @@ export function ProviderRichListItem({
     }
   };
 
+  const hasKeyCircuitOpen = healthStatus?.circuitState === "open";
+  const hasEndpointCircuitOpen = endpointCircuitInfo?.some((ep) => ep.circuitState === "open");
+  const accentColor = hasKeyCircuitOpen
+    ? "border-l-red-500"
+    : hasEndpointCircuitOpen
+      ? "border-l-amber-500"
+      : provider.isEnabled
+        ? "border-l-emerald-500"
+        : "border-l-gray-300 dark:border-l-gray-600";
+
   return (
     <>
-      <div className="rounded-lg border bg-card p-4 md:rounded-none md:border-0 md:border-b md:bg-transparent md:p-0 md:py-3 md:px-4 flex flex-col gap-3 md:flex-row md:items-center md:gap-4 hover:bg-muted/50 transition-colors">
+      <div
+        className={cn(
+          "rounded-lg border border-l-[3px] bg-card shadow-sm p-4",
+          "md:shadow-none md:rounded-none md:border-0 md:border-b md:border-l-[3px] md:bg-transparent md:p-0 md:py-3 md:px-4",
+          "flex flex-col gap-3 md:flex-row md:items-center md:gap-4",
+          "hover:bg-muted/50 transition-colors",
+          accentColor
+        )}
+      >
         {/* Checkbox: shared between mobile and desktop */}
         {isMultiSelectMode && (
           <Checkbox
@@ -830,10 +881,12 @@ export function ProviderRichListItem({
         </div>
 
         {/* Desktop: metrics */}
-        <div className="hidden md:grid grid-cols-3 gap-4 text-center flex-shrink-0">
-          <div>
-            <div className="text-xs text-muted-foreground">{tList("priority")}</div>
-            <div className="font-medium">
+        <div className="hidden md:grid grid-cols-3 gap-2 text-center flex-shrink-0">
+          <div className="rounded-md bg-muted/30 px-2.5 py-1.5">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+              {tList("priority")}
+            </div>
+            <div className="font-semibold text-sm">
               {canEdit ? (
                 <PriorityEditPopover
                   globalPriority={provider.priority}
@@ -848,9 +901,11 @@ export function ProviderRichListItem({
               )}
             </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">{tList("weight")}</div>
-            <div className="font-medium">
+          <div className="rounded-md bg-muted/30 px-2.5 py-1.5">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+              {tList("weight")}
+            </div>
+            <div className="font-semibold text-sm">
               {canEdit ? (
                 <InlineEditPopover
                   value={provider.weight}
@@ -864,9 +919,11 @@ export function ProviderRichListItem({
               )}
             </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">{tList("costMultiplier")}</div>
-            <div className="font-medium">
+          <div className="rounded-md bg-muted/30 px-2.5 py-1.5">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+              {tList("costMultiplier")}
+            </div>
+            <div className="font-semibold text-sm">
               {canEdit ? (
                 <InlineEditPopover
                   value={provider.costMultiplier}
@@ -884,8 +941,10 @@ export function ProviderRichListItem({
         </div>
 
         {/* Desktop: today usage */}
-        <div className="hidden lg:block text-center flex-shrink-0 min-w-[100px]">
-          <div className="text-xs text-muted-foreground">{tList("todayUsageLabel")}</div>
+        <div className="hidden lg:block text-center flex-shrink-0 min-w-[100px] rounded-md bg-muted/30 px-2.5 py-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+            {tList("todayUsageLabel")}
+          </div>
           {statisticsLoading ? (
             <>
               <Skeleton className="h-5 w-16 mx-auto my-0.5" />
@@ -893,7 +952,7 @@ export function ProviderRichListItem({
             </>
           ) : (
             <>
-              <div className="font-medium">
+              <div className="font-semibold text-sm">
                 {tList("todayUsageCount", {
                   count: statistics?.todayCalls ?? provider.todayCallCount ?? 0,
                 })}
@@ -1009,41 +1068,49 @@ export function ProviderRichListItem({
         </div>
       </div>
 
-      {/* 编辑 Dialog */}
+      {/* Edit Dialog */}
       <Dialog open={openEdit} onOpenChange={setOpenEdit}>
         <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
           <VisuallyHidden>
             <DialogTitle>{t("editProvider")}</DialogTitle>
           </VisuallyHidden>
-          <FormErrorBoundary>
-            <ProviderForm
-              mode="edit"
-              provider={provider}
-              onSuccess={() => {
-                setOpenEdit(false);
-              }}
-              enableMultiProviderTypes={enableMultiProviderTypes}
-            />
-          </FormErrorBoundary>
+          {editFormReady ? (
+            <FormErrorBoundary>
+              <ProviderForm
+                mode="edit"
+                provider={provider}
+                onSuccess={() => {
+                  setOpenEdit(false);
+                }}
+                enableMultiProviderTypes={enableMultiProviderTypes}
+              />
+            </FormErrorBoundary>
+          ) : (
+            <DialogFormSkeleton />
+          )}
         </DialogContent>
       </Dialog>
 
-      {/* 克隆 Dialog */}
+      {/* Clone Dialog */}
       <Dialog open={openClone} onOpenChange={setOpenClone}>
         <DialogContent className="max-w-6xl max-h-[var(--cch-viewport-height-90)] flex flex-col overflow-hidden p-0 gap-0">
           <VisuallyHidden>
             <DialogTitle>{t("clone")}</DialogTitle>
           </VisuallyHidden>
-          <FormErrorBoundary>
-            <ProviderForm
-              mode="create"
-              cloneProvider={provider}
-              onSuccess={() => {
-                setOpenClone(false);
-              }}
-              enableMultiProviderTypes={enableMultiProviderTypes}
-            />
-          </FormErrorBoundary>
+          {cloneFormReady ? (
+            <FormErrorBoundary>
+              <ProviderForm
+                mode="create"
+                cloneProvider={provider}
+                onSuccess={() => {
+                  setOpenClone(false);
+                }}
+                enableMultiProviderTypes={enableMultiProviderTypes}
+              />
+            </FormErrorBoundary>
+          ) : (
+            <DialogFormSkeleton />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -1076,5 +1143,55 @@ export function ProviderRichListItem({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+export const ProviderRichListItem = memo(ProviderRichListItemInner, (prev, next) => {
+  // Skip function props — they are safe to ignore because:
+  // - onSelectProvider (parent) uses useCallback + functional setState (prev => ...)
+  // - onSelectChange (ProviderList) binds stable provider.id to the above
+  // - onEdit/onClone/onDelete are undefined in ProviderList (use internal handlers)
+  // If any of these assumptions change, add the relevant prop to this comparison.
+  return (
+    prev.provider === next.provider &&
+    prev.vendor === next.vendor &&
+    prev.currentUser === next.currentUser &&
+    prev.healthStatus === next.healthStatus &&
+    prev.endpointCircuitInfo === next.endpointCircuitInfo &&
+    prev.statistics === next.statistics &&
+    prev.statisticsLoading === next.statisticsLoading &&
+    prev.currencyCode === next.currencyCode &&
+    prev.enableMultiProviderTypes === next.enableMultiProviderTypes &&
+    prev.isMultiSelectMode === next.isMultiSelectMode &&
+    prev.isSelected === next.isSelected &&
+    prev.activeGroupFilter === next.activeGroupFilter &&
+    prev.allGroups === next.allGroups &&
+    prev.userGroups === next.userGroups &&
+    prev.isAdmin === next.isAdmin
+  );
+});
+
+/** Lightweight placeholder shown while ProviderForm mounts (keeps dialog animation smooth) */
+function DialogFormSkeleton() {
+  return (
+    <div className="flex flex-col h-[60vh] animate-pulse">
+      <div className="flex flex-1 min-h-0">
+        <div className="hidden lg:block w-48 shrink-0 border-r p-4 space-y-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+        <div className="flex-1 p-6 space-y-6">
+          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-6 w-36 mt-4" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </div>
+      <div className="shrink-0 px-6 py-4 border-t">
+        <Skeleton className="h-10 w-24 ml-auto" />
+      </div>
+    </div>
   );
 }
