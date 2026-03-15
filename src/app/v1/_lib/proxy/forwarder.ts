@@ -262,6 +262,10 @@ function resolveMaxAttemptsForProvider(
   return clampRetryAttempts(provider.maxRetryAttempts);
 }
 
+function buildEndpointAttemptKey(endpointId: number | null, endpointUrl: string): string {
+  return endpointId != null ? `id:${endpointId}` : `url:${endpointUrl}`;
+}
+
 /**
  * undici request 超时配置（毫秒）
  *
@@ -665,8 +669,12 @@ export class ProxyForwarder {
         });
       }
 
-      let endpointAttemptsEvaluated = 0;
-      let allEndpointAttemptsTimedOut = true;
+      const endpointCandidateKeys = new Set(
+        endpointCandidates.map((endpoint) =>
+          buildEndpointAttemptKey(endpoint.endpointId, endpoint.baseUrl)
+        )
+      );
+      const timedOutEndpointKeys = new Set<string>();
 
       // Endpoint stickiness: track current endpoint index separately from attemptCount
       // - SYSTEM_ERROR (network error): advance to next endpoint
@@ -1026,11 +1034,11 @@ export class ProxyForwarder {
               : lastError.message;
 
           const isTimeoutError = lastError instanceof ProxyError && lastError.statusCode === 524;
-          if (attemptCount <= endpointCandidates.length) {
-            endpointAttemptsEvaluated = attemptCount;
-            if (!isTimeoutError) {
-              allEndpointAttemptsTimedOut = false;
-            }
+
+          if (isTimeoutError) {
+            timedOutEndpointKeys.add(
+              buildEndpointAttemptKey(activeEndpoint.endpointId, activeEndpoint.baseUrl)
+            );
           }
 
           if (activeEndpoint.endpointId != null) {
@@ -1646,10 +1654,10 @@ export class ProxyForwarder {
             if (
               !isMcpRequest &&
               statusCode === 524 &&
-              endpointCandidates.length > 0 &&
-              endpointAttemptsEvaluated >= endpointCandidates.length &&
-              allEndpointAttemptsTimedOut &&
-              currentProvider.providerVendorId
+              currentProvider.providerVendorId &&
+              endpointCandidateKeys.size > 0 &&
+              timedOutEndpointKeys.size >= endpointCandidateKeys.size &&
+              !willRetry
             ) {
               // Record to decision chain BEFORE triggering vendor-type circuit breaker
               session.addProviderToChain(currentProvider, {
@@ -1736,6 +1744,16 @@ export class ProxyForwarder {
 
             // 未耗尽重试次数：等待 100ms 后继续重试当前供应商
             if (willRetry) {
+              if (statusCode === 524) {
+                currentEndpointIndex++;
+                logger.debug("ProxyForwarder: Advancing endpoint index due to upstream timeout", {
+                  providerId: currentProvider.id,
+                  previousEndpointIndex: currentEndpointIndex - 1,
+                  newEndpointIndex: currentEndpointIndex,
+                  maxEndpointIndex: endpointCandidates.length - 1,
+                });
+              }
+
               await new Promise((resolve) => setTimeout(resolve, 100));
               continue;
             }

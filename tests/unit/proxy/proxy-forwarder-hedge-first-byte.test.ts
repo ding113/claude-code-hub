@@ -343,6 +343,85 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
     }
   });
 
+  test("characterization: hedge still launches alternative provider when maxRetryAttempts > 1", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const provider1 = createProvider({
+        id: 1,
+        name: "p1",
+        maxRetryAttempts: 3,
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const provider2 = createProvider({
+        id: 2,
+        name: "p2",
+        maxRetryAttempts: 3,
+        firstByteTimeoutStreamingMs: 100,
+      });
+      const session = createSession();
+      session.setProvider(provider1);
+
+      mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as {
+          doForward: (...args: unknown[]) => Promise<Response>;
+        },
+        "doForward"
+      );
+
+      const controller1 = new AbortController();
+      const controller2 = new AbortController();
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller1;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p1",
+          firstChunkDelayMs: 220,
+          controller: controller1,
+        });
+      });
+
+      doForward.mockImplementationOnce(async (attemptSession) => {
+        const runtime = attemptSession as ProxySession & AttemptRuntime;
+        runtime.responseController = controller2;
+        runtime.clearResponseTimeout = vi.fn();
+        return createStreamingResponse({
+          label: "p2",
+          firstChunkDelayMs: 40,
+          controller: controller2,
+        });
+      });
+
+      const responsePromise = ProxyForwarder.send(session);
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(mocks.pickRandomProviderWithExclusion).toHaveBeenCalledTimes(1);
+
+      const chainBeforeWinner = session.getProviderChain();
+      expect(chainBeforeWinner).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reason: "hedge_triggered", id: 1 }),
+          expect.objectContaining({ reason: "hedge_launched", id: 2 }),
+        ])
+      );
+
+      await vi.advanceTimersByTimeAsync(50);
+      const response = await responsePromise;
+
+      expect(await response.text()).toContain('"provider":"p2"');
+      expect(controller1.signal.aborted).toBe(true);
+      expect(session.provider?.id).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("first provider can still win after hedge started if it emits first chunk earlier than fallback", async () => {
     vi.useFakeTimers();
 
