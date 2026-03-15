@@ -201,7 +201,6 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
     expect(resultHeaders.get("anthropic-beta")).toContain("extended-cache-ttl-2025-04-11");
     expect(resultHeaders.get("anthropic-beta")).toContain("prompt-caching-2024-07-31");
   });
-
 });
 
 describe("ProxyForwarder - buildGeminiHeaders headers passthrough", () => {
