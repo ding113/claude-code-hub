@@ -105,6 +105,7 @@ type StreamingHedgeAttempt = {
   firstByteTimeoutMs: number;
   providerAttemptNumber: number;
   maxAttemptsPerProvider: number;
+  requestVersion: number;
   sequence: number;
   settled: boolean;
   thresholdTriggered: boolean;
@@ -2978,6 +2979,21 @@ export class ProxyForwarder {
     const providerAttemptCounts = new Map<number, number>();
     const signatureRectifierRetriedProviderIds = new Set<number>();
     const budgetRectifierRetriedProviderIds = new Set<number>();
+    let requestVersion = 0;
+    let rectifierLock = Promise.resolve();
+    const withRectifierLock = async <T>(fn: () => Promise<T>): Promise<T> => {
+      const previous = rectifierLock;
+      let release!: () => void;
+      rectifierLock = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        return await fn();
+      } finally {
+        release();
+      }
+    };
 
     const launchedProviderIds = new Set<number>();
     const startedProviderIds = new Set<number>();
@@ -3154,7 +3170,53 @@ export class ProxyForwarder {
             errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
             lastErrorCategory = errorCategory;
 
-            if (!signatureRectifierRetriedProviderIds.has(attempt.provider.id)) {
+            const handled = await withRectifierLock(async () => {
+              if (settled || winnerCommitted) return false;
+
+              // If request has been rectified since this attempt started, treat its error as stale.
+              // Do not terminate early based on an outdated request snapshot.
+              if (attempt.requestVersion < requestVersion) {
+                const hasProviderInFlight = Array.from(attempts).some(
+                  (other) =>
+                    other.provider.id === attempt.provider.id &&
+                    other.requestVersion === requestVersion &&
+                    !other.settled
+                );
+                if (hasProviderInFlight) {
+                  return true;
+                }
+                if (!hasProviderInFlight) {
+                  const currentAttemptNumber =
+                    providerAttemptCounts.get(attempt.provider.id) ?? attempt.providerAttemptNumber;
+                  const hasRetryBudget = currentAttemptNumber < attempt.maxAttemptsPerProvider;
+                  session.addProviderToChain(attempt.provider, {
+                    ...attempt.endpointAudit,
+                    reason: "retry_failed",
+                    attemptNumber: attempt.sequence,
+                    statusCode,
+                    errorMessage,
+                    circuitState: getCircuitState(attempt.provider.id),
+                  });
+
+                  if (hasRetryBudget) {
+                    await startAttempt(
+                      attempt.provider,
+                      attempt.provider.id === initialProvider.id,
+                      { allowDuplicateProvider: true }
+                    );
+                    return true;
+                  }
+                }
+
+                await launchAlternative();
+                await finishIfExhausted();
+                return true;
+              }
+
+              if (signatureRectifierRetriedProviderIds.has(attempt.provider.id)) {
+                return false;
+              }
+
               const requestDetailsBeforeRectify = buildRequestDetails(session);
               const rectified = rectifyAnthropicRequestMessage(
                 session.request.message as Record<string, unknown>
@@ -3179,60 +3241,68 @@ export class ProxyForwarder {
 
               await persistSpecialSettings(session);
 
-              if (rectified.applied) {
-                // Record this failure as entering retry/failover flow (not as a terminal client error).
-                if (error instanceof ProxyError) {
-                  session.addProviderToChain(attempt.provider, {
-                    ...attempt.endpointAudit,
-                    reason: "retry_failed",
-                    circuitState: getCircuitState(attempt.provider.id),
-                    attemptNumber: attempt.sequence,
-                    errorMessage,
-                    statusCode: error.statusCode,
-                    statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
-                    errorDetails: {
-                      provider: {
-                        id: attempt.provider.id,
-                        name: attempt.provider.name,
-                        statusCode: error.statusCode,
-                        statusText: error.message,
-                        upstreamBody: error.upstreamError?.body,
-                        upstreamParsed: error.upstreamError?.parsed,
-                      },
-                      request: requestDetailsBeforeRectify,
-                    },
-                  });
-                } else {
-                  session.addProviderToChain(attempt.provider, {
-                    ...attempt.endpointAudit,
-                    reason: "retry_failed",
-                    circuitState: getCircuitState(attempt.provider.id),
-                    attemptNumber: attempt.sequence,
-                    errorMessage,
-                    errorDetails: {
-                      system: {
-                        errorType: error.constructor.name,
-                        errorName: error.name,
-                        errorMessage: error.message || error.name || "Unknown error",
-                        errorStack: error.stack?.split("\n").slice(0, 3).join("\n"),
-                      },
-                      request: requestDetailsBeforeRectify,
-                    },
-                  });
-                }
-
-                if (hasRetryBudget) {
-                  signatureRectifierRetriedProviderIds.add(attempt.provider.id);
-                  await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
-                    allowDuplicateProvider: true,
-                  });
-                  return;
-                }
-
-                await launchAlternative();
-                await finishIfExhausted();
-                return;
+              if (!rectified.applied) {
+                return false;
               }
+
+              requestVersion += 1;
+
+              // Record this failure as entering retry/failover flow (not as a terminal client error).
+              if (error instanceof ProxyError) {
+                session.addProviderToChain(attempt.provider, {
+                  ...attempt.endpointAudit,
+                  reason: "retry_failed",
+                  circuitState: getCircuitState(attempt.provider.id),
+                  attemptNumber: attempt.sequence,
+                  errorMessage,
+                  statusCode: error.statusCode,
+                  statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+                  errorDetails: {
+                    provider: {
+                      id: attempt.provider.id,
+                      name: attempt.provider.name,
+                      statusCode: error.statusCode,
+                      statusText: error.message,
+                      upstreamBody: error.upstreamError?.body,
+                      upstreamParsed: error.upstreamError?.parsed,
+                    },
+                    request: requestDetailsBeforeRectify,
+                  },
+                });
+              } else {
+                session.addProviderToChain(attempt.provider, {
+                  ...attempt.endpointAudit,
+                  reason: "retry_failed",
+                  circuitState: getCircuitState(attempt.provider.id),
+                  attemptNumber: attempt.sequence,
+                  errorMessage,
+                  errorDetails: {
+                    system: {
+                      errorType: error.constructor.name,
+                      errorName: error.name,
+                      errorMessage: error.message || error.name || "Unknown error",
+                      errorStack: error.stack?.split("\n").slice(0, 3).join("\n"),
+                    },
+                    request: requestDetailsBeforeRectify,
+                  },
+                });
+              }
+
+              if (hasRetryBudget) {
+                signatureRectifierRetriedProviderIds.add(attempt.provider.id);
+                await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
+                  allowDuplicateProvider: true,
+                });
+                return true;
+              }
+
+              await launchAlternative();
+              await finishIfExhausted();
+              return true;
+            });
+
+            if (handled) {
+              return;
             }
           }
         }
@@ -3247,7 +3317,51 @@ export class ProxyForwarder {
             errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
             lastErrorCategory = errorCategory;
 
-            if (!budgetRectifierRetriedProviderIds.has(attempt.provider.id)) {
+            const handled = await withRectifierLock(async () => {
+              if (settled || winnerCommitted) return false;
+
+              if (attempt.requestVersion < requestVersion) {
+                const hasProviderInFlight = Array.from(attempts).some(
+                  (other) =>
+                    other.provider.id === attempt.provider.id &&
+                    other.requestVersion === requestVersion &&
+                    !other.settled
+                );
+                if (hasProviderInFlight) {
+                  return true;
+                }
+                if (!hasProviderInFlight) {
+                  const currentAttemptNumber =
+                    providerAttemptCounts.get(attempt.provider.id) ?? attempt.providerAttemptNumber;
+                  const hasRetryBudget = currentAttemptNumber < attempt.maxAttemptsPerProvider;
+                  session.addProviderToChain(attempt.provider, {
+                    ...attempt.endpointAudit,
+                    reason: "retry_failed",
+                    attemptNumber: attempt.sequence,
+                    statusCode,
+                    errorMessage,
+                    circuitState: getCircuitState(attempt.provider.id),
+                  });
+
+                  if (hasRetryBudget) {
+                    await startAttempt(
+                      attempt.provider,
+                      attempt.provider.id === initialProvider.id,
+                      { allowDuplicateProvider: true }
+                    );
+                    return true;
+                  }
+                }
+
+                await launchAlternative();
+                await finishIfExhausted();
+                return true;
+              }
+
+              if (budgetRectifierRetriedProviderIds.has(attempt.provider.id)) {
+                return false;
+              }
+
               const requestDetailsBeforeRectify = buildRequestDetails(session);
               const rectified = rectifyThinkingBudget(
                 session.request.message as Record<string, unknown>
@@ -3271,59 +3385,67 @@ export class ProxyForwarder {
 
               await persistSpecialSettings(session);
 
-              if (rectified.applied) {
-                if (error instanceof ProxyError) {
-                  session.addProviderToChain(attempt.provider, {
-                    ...attempt.endpointAudit,
-                    reason: "retry_failed",
-                    circuitState: getCircuitState(attempt.provider.id),
-                    attemptNumber: attempt.sequence,
-                    errorMessage,
-                    statusCode: error.statusCode,
-                    statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
-                    errorDetails: {
-                      provider: {
-                        id: attempt.provider.id,
-                        name: attempt.provider.name,
-                        statusCode: error.statusCode,
-                        statusText: error.message,
-                        upstreamBody: error.upstreamError?.body,
-                        upstreamParsed: error.upstreamError?.parsed,
-                      },
-                      request: requestDetailsBeforeRectify,
-                    },
-                  });
-                } else {
-                  session.addProviderToChain(attempt.provider, {
-                    ...attempt.endpointAudit,
-                    reason: "retry_failed",
-                    circuitState: getCircuitState(attempt.provider.id),
-                    attemptNumber: attempt.sequence,
-                    errorMessage,
-                    errorDetails: {
-                      system: {
-                        errorType: error.constructor.name,
-                        errorName: error.name,
-                        errorMessage: error.message || error.name || "Unknown error",
-                        errorStack: error.stack?.split("\n").slice(0, 3).join("\n"),
-                      },
-                      request: requestDetailsBeforeRectify,
-                    },
-                  });
-                }
-
-                if (hasRetryBudget) {
-                  budgetRectifierRetriedProviderIds.add(attempt.provider.id);
-                  await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
-                    allowDuplicateProvider: true,
-                  });
-                  return;
-                }
-
-                await launchAlternative();
-                await finishIfExhausted();
-                return;
+              if (!rectified.applied) {
+                return false;
               }
+
+              requestVersion += 1;
+
+              if (error instanceof ProxyError) {
+                session.addProviderToChain(attempt.provider, {
+                  ...attempt.endpointAudit,
+                  reason: "retry_failed",
+                  circuitState: getCircuitState(attempt.provider.id),
+                  attemptNumber: attempt.sequence,
+                  errorMessage,
+                  statusCode: error.statusCode,
+                  statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+                  errorDetails: {
+                    provider: {
+                      id: attempt.provider.id,
+                      name: attempt.provider.name,
+                      statusCode: error.statusCode,
+                      statusText: error.message,
+                      upstreamBody: error.upstreamError?.body,
+                      upstreamParsed: error.upstreamError?.parsed,
+                    },
+                    request: requestDetailsBeforeRectify,
+                  },
+                });
+              } else {
+                session.addProviderToChain(attempt.provider, {
+                  ...attempt.endpointAudit,
+                  reason: "retry_failed",
+                  circuitState: getCircuitState(attempt.provider.id),
+                  attemptNumber: attempt.sequence,
+                  errorMessage,
+                  errorDetails: {
+                    system: {
+                      errorType: error.constructor.name,
+                      errorName: error.name,
+                      errorMessage: error.message || error.name || "Unknown error",
+                      errorStack: error.stack?.split("\n").slice(0, 3).join("\n"),
+                    },
+                    request: requestDetailsBeforeRectify,
+                  },
+                });
+              }
+
+              if (hasRetryBudget) {
+                budgetRectifierRetriedProviderIds.add(attempt.provider.id);
+                await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
+                  allowDuplicateProvider: true,
+                });
+                return true;
+              }
+
+              await launchAlternative();
+              await finishIfExhausted();
+              return true;
+            });
+
+            if (handled) {
+              return;
             }
           }
         }
@@ -3509,6 +3631,7 @@ export class ProxyForwarder {
           provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
         providerAttemptNumber,
         maxAttemptsPerProvider,
+        requestVersion,
         sequence: launchedProviderCount,
         settled: false,
         thresholdTriggered: false,

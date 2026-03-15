@@ -1058,6 +1058,101 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
     }
   });
 
+  test("streaming hedge + thinking signature rectifier: stale concurrent attempt should not terminate the hedge", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      (session.request.message as any).stream = true;
+
+      // Make rectifier actually apply: include a thinking block to be removed.
+      (session.request.message as any).messages = [
+        {
+          role: "user",
+          content: [
+            { type: "thinking", text: "t" },
+            { type: "text", text: "hello" },
+          ],
+        },
+      ];
+
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+        firstByteTimeoutStreamingMs: 10,
+      });
+      const providerB = createProvider({
+        id: 2,
+        name: "p2",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+        firstByteTimeoutStreamingMs: 0,
+      });
+      session.setProvider(providerA);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      // A first, then B is hedged in after firstByte timeout.
+      // B triggers rectifier and retries; A fails later with a stale snapshot and must not abort B.
+      selectAlternative.mockResolvedValueOnce(providerB);
+      selectAlternative.mockResolvedValueOnce(null);
+
+      doForward.mockImplementation(async (...args) => {
+        const provider = args[1] as Provider;
+        const attemptNumber = args[4] as number;
+
+        if (provider.id === 1 && attemptNumber === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          throw new ProxyError("invalid signature in thinking block", 400);
+        }
+
+        if (provider.id === 2 && attemptNumber === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          throw new ProxyError("invalid signature in thinking block", 400);
+        }
+
+        if (provider.id === 2 && attemptNumber === 2) {
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          return new Response("data", {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+
+        throw new Error(
+          `Unexpected doForward call: provider=${provider.id}, attempt=${attemptNumber}`
+        );
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(80);
+      const response = await sendPromise;
+      expect(response.status).toBe(200);
+
+      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(selectAlternative).toHaveBeenCalledTimes(2);
+
+      const providerIds = doForward.mock.calls.map((call) => (call[1] as Provider).id);
+      expect(providerIds).toEqual([1, 2, 2]);
+
+      const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
+      expect(attemptNumbers).toEqual([1, 1, 2]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("streaming hedge + thinking budget rectifier: maxRetryAttempts=1 should switch provider", async () => {
     vi.useFakeTimers();
 
@@ -1250,6 +1345,94 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       expect(chain.some((entry) => entry.reason === "hedge_winner")).toBe(false);
       expect(chain.some((entry) => entry.reason === "hedge_launched")).toBe(false);
       expect(chain.some((entry) => entry.reason === "hedge_triggered")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("streaming hedge + thinking budget rectifier: stale concurrent attempt should not terminate the hedge", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      (session.request.message as any).stream = true;
+
+      (session.request.message as any).thinking = { type: "enabled", budget_tokens: 1 };
+      delete (session.request.message as any).max_tokens;
+
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+        firstByteTimeoutStreamingMs: 10,
+      });
+      const providerB = createProvider({
+        id: 2,
+        name: "p2",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+        firstByteTimeoutStreamingMs: 0,
+      });
+      session.setProvider(providerA);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      selectAlternative.mockResolvedValueOnce(providerB);
+      selectAlternative.mockResolvedValueOnce(null);
+
+      const budgetErrorMessage =
+        "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024";
+
+      doForward.mockImplementation(async (...args) => {
+        const provider = args[1] as Provider;
+        const attemptNumber = args[4] as number;
+
+        if (provider.id === 1 && attemptNumber === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          throw new ProxyError(budgetErrorMessage, 400);
+        }
+
+        if (provider.id === 2 && attemptNumber === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          throw new ProxyError(budgetErrorMessage, 400);
+        }
+
+        if (provider.id === 2 && attemptNumber === 2) {
+          await new Promise((resolve) => setTimeout(resolve, 40));
+          return new Response("data", {
+            status: 200,
+            headers: { "content-type": "text/event-stream" },
+          });
+        }
+
+        throw new Error(
+          `Unexpected doForward call: provider=${provider.id}, attempt=${attemptNumber}`
+        );
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.advanceTimersByTimeAsync(80);
+      const response = await sendPromise;
+      expect(response.status).toBe(200);
+
+      expect(doForward).toHaveBeenCalledTimes(3);
+      expect(selectAlternative).toHaveBeenCalledTimes(2);
+
+      const providerIds = doForward.mock.calls.map((call) => (call[1] as Provider).id);
+      expect(providerIds).toEqual([1, 2, 2]);
+
+      const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
+      expect(attemptNumbers).toEqual([1, 1, 2]);
     } finally {
       vi.useRealTimers();
     }
