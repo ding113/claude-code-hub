@@ -122,6 +122,10 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyError, ErrorCategory, categorizeErrorAsync } from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import {
+  MAX_THINKING_BUDGET,
+  MAX_TOKENS_VALUE,
+} from "@/app/v1/_lib/proxy/thinking-budget-rectifier";
 import type { Provider, ProviderEndpoint, ProviderType } from "@/types/provider";
 
 function makeEndpoint(input: {
@@ -469,8 +473,8 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
 
       const thinking = (session.request.message as any).thinking;
       expect(thinking.type).toBe("enabled");
-      expect(thinking.budget_tokens).toBe(32000);
-      expect((session.request.message as any).max_tokens).toBe(64000);
+      expect(thinking.budget_tokens).toBe(MAX_THINKING_BUDGET);
+      expect((session.request.message as any).max_tokens).toBe(MAX_TOKENS_VALUE);
 
       const chain = session.getProviderChain();
       expect(chain).toHaveLength(2);
