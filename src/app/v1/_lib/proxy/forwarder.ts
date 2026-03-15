@@ -3185,27 +3185,25 @@ export class ProxyForwarder {
                 if (hasProviderInFlight) {
                   return true;
                 }
-                if (!hasProviderInFlight) {
-                  const currentAttemptNumber =
-                    providerAttemptCounts.get(attempt.provider.id) ?? attempt.providerAttemptNumber;
-                  const hasRetryBudget = currentAttemptNumber < attempt.maxAttemptsPerProvider;
-                  session.addProviderToChain(attempt.provider, {
-                    ...attempt.endpointAudit,
-                    reason: "retry_failed",
-                    attemptNumber: attempt.sequence,
-                    statusCode,
-                    errorMessage,
-                    circuitState: getCircuitState(attempt.provider.id),
-                  });
 
-                  if (hasRetryBudget) {
-                    await startAttempt(
-                      attempt.provider,
-                      attempt.provider.id === initialProvider.id,
-                      { allowDuplicateProvider: true }
-                    );
-                    return true;
-                  }
+                // hasProviderInFlight === false here (we returned above if it was true)
+                const currentAttemptNumber =
+                  providerAttemptCounts.get(attempt.provider.id) ?? attempt.providerAttemptNumber;
+                const hasRetryBudget = currentAttemptNumber < attempt.maxAttemptsPerProvider;
+                session.addProviderToChain(attempt.provider, {
+                  ...attempt.endpointAudit,
+                  reason: "retry_failed",
+                  attemptNumber: attempt.sequence,
+                  statusCode,
+                  errorMessage,
+                  circuitState: getCircuitState(attempt.provider.id),
+                });
+
+                if (hasRetryBudget) {
+                  await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
+                    allowDuplicateProvider: true,
+                  });
+                  return true;
                 }
 
                 await launchAlternative();
@@ -3330,27 +3328,25 @@ export class ProxyForwarder {
                 if (hasProviderInFlight) {
                   return true;
                 }
-                if (!hasProviderInFlight) {
-                  const currentAttemptNumber =
-                    providerAttemptCounts.get(attempt.provider.id) ?? attempt.providerAttemptNumber;
-                  const hasRetryBudget = currentAttemptNumber < attempt.maxAttemptsPerProvider;
-                  session.addProviderToChain(attempt.provider, {
-                    ...attempt.endpointAudit,
-                    reason: "retry_failed",
-                    attemptNumber: attempt.sequence,
-                    statusCode,
-                    errorMessage,
-                    circuitState: getCircuitState(attempt.provider.id),
-                  });
 
-                  if (hasRetryBudget) {
-                    await startAttempt(
-                      attempt.provider,
-                      attempt.provider.id === initialProvider.id,
-                      { allowDuplicateProvider: true }
-                    );
-                    return true;
-                  }
+                // hasProviderInFlight === false here (we returned above if it was true)
+                const currentAttemptNumber =
+                  providerAttemptCounts.get(attempt.provider.id) ?? attempt.providerAttemptNumber;
+                const hasRetryBudget = currentAttemptNumber < attempt.maxAttemptsPerProvider;
+                session.addProviderToChain(attempt.provider, {
+                  ...attempt.endpointAudit,
+                  reason: "retry_failed",
+                  attemptNumber: attempt.sequence,
+                  statusCode,
+                  errorMessage,
+                  circuitState: getCircuitState(attempt.provider.id),
+                });
+
+                if (hasRetryBudget) {
+                  await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
+                    allowDuplicateProvider: true,
+                  });
+                  return true;
                 }
 
                 await launchAlternative();
