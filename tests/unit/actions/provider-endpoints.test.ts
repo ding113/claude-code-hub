@@ -449,10 +449,7 @@ describe("provider-endpoints actions", () => {
     });
 
     expect(res.ok).toBe(true);
-    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith(
-      [7, 8],
-      "editProviderEndpoint"
-    );
+    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([7, 8], "editProviderEndpoint");
   });
 
   it("probeProviderEndpoint: calls probeProviderEndpointAndRecordByEndpoint and returns result", async () => {
