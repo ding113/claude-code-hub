@@ -1,6 +1,7 @@
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
+import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { getResetInfo, getResetInfoWithMode } from "@/lib/rate-limit/time-utils";
 import { SessionManager } from "@/lib/session-manager";
 import { ERROR_CODES, getErrorMessageServer } from "@/lib/utils/error-messages";
@@ -57,6 +58,8 @@ export class ProxyRateLimitGuard {
 
     if (!user || !key) return;
 
+    const keyCostResetAt = resolveKeyCostResetAt(key.costResetAt ?? null, user.costResetAt ?? null);
+
     // ========== 第一层：永久硬限制 ==========
 
     // 1. Key 总限额（用户明确要求优先检查）
@@ -64,7 +67,7 @@ export class ProxyRateLimitGuard {
       key.id,
       "key",
       key.limitTotalUsd ?? null,
-      { keyHash: key.key, resetAt: user.costResetAt }
+      { keyHash: key.key, resetAt: keyCostResetAt }
     );
 
     if (!keyTotalCheck.allowed) {
@@ -230,7 +233,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null, // 仅检查 5h
       limit_weekly_usd: null,
       limit_monthly_usd: null,
-      cost_reset_at: user.costResetAt ?? null,
+      cost_reset_at: keyCostResetAt,
     });
 
     if (!key5hCheck.allowed) {
@@ -306,7 +309,7 @@ export class ProxyRateLimitGuard {
       daily_reset_time: key.dailyResetTime,
       limit_weekly_usd: null,
       limit_monthly_usd: null,
-      cost_reset_at: user.costResetAt ?? null,
+      cost_reset_at: keyCostResetAt,
     });
 
     if (!keyDailyCheck.allowed) {
@@ -455,7 +458,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null,
       limit_weekly_usd: key.limitWeeklyUsd,
       limit_monthly_usd: null,
-      cost_reset_at: user.costResetAt ?? null,
+      cost_reset_at: keyCostResetAt,
     });
 
     if (!keyWeeklyCheck.allowed) {
@@ -527,7 +530,7 @@ export class ProxyRateLimitGuard {
       limit_daily_usd: null,
       limit_weekly_usd: null,
       limit_monthly_usd: key.limitMonthlyUsd,
-      cost_reset_at: user.costResetAt ?? null,
+      cost_reset_at: keyCostResetAt,
     });
 
     if (!keyMonthlyCheck.allowed) {

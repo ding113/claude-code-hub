@@ -36,6 +36,7 @@ export async function findKeyById(id: number): Promise<Key | null> {
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
+      costResetAt: keys.costResetAt,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
@@ -67,6 +68,7 @@ export async function findKeyList(userId: number): Promise<Key[]> {
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
+      costResetAt: keys.costResetAt,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
@@ -106,6 +108,7 @@ export async function findKeyListBatch(userIds: number[]): Promise<Map<number, K
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
+      costResetAt: keys.costResetAt,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
@@ -149,6 +152,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitMonthlyUsd:
       keyData.limit_monthly_usd != null ? keyData.limit_monthly_usd.toString() : null,
     limitTotalUsd: keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null,
+    costResetAt: keyData.cost_reset_at ?? null,
     limitConcurrentSessions: keyData.limit_concurrent_sessions,
     providerGroup: keyData.provider_group ?? null,
     cacheTtlPreference: keyData.cache_ttl_preference ?? null,
@@ -169,6 +173,7 @@ export async function createKey(keyData: CreateKeyData): Promise<Key> {
     limitWeeklyUsd: keys.limitWeeklyUsd,
     limitMonthlyUsd: keys.limitMonthlyUsd,
     limitTotalUsd: keys.limitTotalUsd,
+    costResetAt: keys.costResetAt,
     limitConcurrentSessions: keys.limitConcurrentSessions,
     providerGroup: keys.providerGroup,
     cacheTtlPreference: keys.cacheTtlPreference,
@@ -237,6 +242,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
   if (keyData.limit_total_usd !== undefined)
     dbData.limitTotalUsd =
       keyData.limit_total_usd != null ? keyData.limit_total_usd.toString() : null;
+  if (keyData.cost_reset_at !== undefined) dbData.costResetAt = keyData.cost_reset_at;
   if (keyData.limit_concurrent_sessions !== undefined)
     dbData.limitConcurrentSessions = keyData.limit_concurrent_sessions;
   if (keyData.provider_group !== undefined) dbData.providerGroup = keyData.provider_group;
@@ -262,6 +268,7 @@ export async function updateKey(id: number, keyData: UpdateKeyData): Promise<Key
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
+      costResetAt: keys.costResetAt,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
@@ -304,6 +311,7 @@ export async function findActiveKeyByUserIdAndName(
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
+      costResetAt: keys.costResetAt,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
@@ -449,6 +457,20 @@ export async function deleteKey(id: number): Promise<boolean> {
   return result.length > 0;
 }
 
+export async function resetKeyCostResetAt(keyId: number, resetAt: Date | null): Promise<boolean> {
+  const result = await db
+    .update(keys)
+    .set({ costResetAt: resetAt, updatedAt: new Date() })
+    .where(and(eq(keys.id, keyId), isNull(keys.deletedAt)))
+    .returning({ id: keys.id, key: keys.key });
+
+  if (result.length > 0) {
+    await invalidateCachedKey(result[0].key).catch(() => {});
+  }
+
+  return result.length > 0;
+}
+
 export async function findActiveKeyByKeyString(keyString: string): Promise<Key | null> {
   const vfSaysMissing = apiKeyVacuumFilter.isDefinitelyNotPresent(keyString) === true;
 
@@ -485,6 +507,7 @@ export async function findActiveKeyByKeyString(keyString: string): Promise<Key |
       limitWeeklyUsd: keys.limitWeeklyUsd,
       limitMonthlyUsd: keys.limitMonthlyUsd,
       limitTotalUsd: keys.limitTotalUsd,
+      costResetAt: keys.costResetAt,
       limitConcurrentSessions: keys.limitConcurrentSessions,
       providerGroup: keys.providerGroup,
       cacheTtlPreference: keys.cacheTtlPreference,
@@ -592,6 +615,7 @@ export async function validateApiKeyAndGetUser(
       keyLimitWeeklyUsd: keys.limitWeeklyUsd,
       keyLimitMonthlyUsd: keys.limitMonthlyUsd,
       keyLimitTotalUsd: keys.limitTotalUsd,
+      keyCostResetAt: keys.costResetAt,
       keyLimitConcurrentSessions: keys.limitConcurrentSessions,
       keyProviderGroup: keys.providerGroup,
       keyCacheTtlPreference: keys.cacheTtlPreference,
@@ -680,6 +704,7 @@ export async function validateApiKeyAndGetUser(
     limitWeeklyUsd: row.keyLimitWeeklyUsd,
     limitMonthlyUsd: row.keyLimitMonthlyUsd,
     limitTotalUsd: row.keyLimitTotalUsd,
+    costResetAt: row.keyCostResetAt,
     limitConcurrentSessions: row.keyLimitConcurrentSessions,
     providerGroup: row.keyProviderGroup,
     cacheTtlPreference: row.keyCacheTtlPreference,

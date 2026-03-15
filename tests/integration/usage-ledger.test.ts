@@ -7,7 +7,10 @@ import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { backfillUsageLedger } from "@/lib/ledger-backfill";
 import { isLedgerOnlyMode } from "@/lib/ledger-fallback";
 import { findUsageLogs } from "@/repository/message";
-import { sumProviderTotalCost, sumUserTotalCost } from "@/repository/statistics";
+import {
+  sumProviderTotalCost,
+  sumUserTotalCost,
+} from "@/repository/statistics";
 
 if (!process.env.DSN && process.env.DATABASE_URL) {
   process.env.DSN = process.env.DATABASE_URL;
@@ -122,7 +125,9 @@ async function selectLedgerRowByRequestId(requestId: number) {
 
 async function cleanupTestRows() {
   const keyLike = `${KEY_PREFIX}%`;
-  await db.delete(messageRequest).where(sql`${messageRequest.key} LIKE ${keyLike}`);
+  await db
+    .delete(messageRequest)
+    .where(sql`${messageRequest.key} LIKE ${keyLike}`);
   await db.delete(usageLedger).where(sql`${usageLedger.key} LIKE ${keyLike}`);
 }
 
@@ -278,71 +283,83 @@ run("usage ledger integration", () => {
   });
 
   describe("backfill", () => {
-    test("backfill copies non-warmup message_request rows when ledger rows are missing", {
-      timeout: 60_000,
-    }, async () => {
-      const userId = nextUserId();
-      const providerId = nextProviderId();
-      const keepA = await insertMessageRequestRow({
-        key: nextKey("backfill-a"),
-        userId,
-        providerId,
-        costUsd: "1.100000000000000",
-      });
-      const keepB = await insertMessageRequestRow({
-        key: nextKey("backfill-b"),
-        userId,
-        providerId,
-        costUsd: "2.200000000000000",
-      });
-      const warmup = await insertMessageRequestRow({
-        key: nextKey("backfill-warmup"),
-        userId,
-        providerId,
-        blockedBy: "warmup",
-      });
+    test(
+      "backfill copies non-warmup message_request rows when ledger rows are missing",
+      {
+        timeout: 60_000,
+      },
+      async () => {
+        const userId = nextUserId();
+        const providerId = nextProviderId();
+        const keepA = await insertMessageRequestRow({
+          key: nextKey("backfill-a"),
+          userId,
+          providerId,
+          costUsd: "1.100000000000000",
+        });
+        const keepB = await insertMessageRequestRow({
+          key: nextKey("backfill-b"),
+          userId,
+          providerId,
+          costUsd: "2.200000000000000",
+        });
+        const warmup = await insertMessageRequestRow({
+          key: nextKey("backfill-warmup"),
+          userId,
+          providerId,
+          blockedBy: "warmup",
+        });
 
-      await db.delete(usageLedger).where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
+        await db
+          .delete(usageLedger)
+          .where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
 
-      const summary = await backfillUsageLedger();
-      expect(summary.totalProcessed).toBeGreaterThanOrEqual(2);
+        const summary = await backfillUsageLedger();
+        expect(summary.totalProcessed).toBeGreaterThanOrEqual(2);
 
-      const rows = await db
-        .select({ requestId: usageLedger.requestId })
-        .from(usageLedger)
-        .where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
-      const requestIds = rows.map((row) => row.requestId);
+        const rows = await db
+          .select({ requestId: usageLedger.requestId })
+          .from(usageLedger)
+          .where(inArray(usageLedger.requestId, [keepA, keepB, warmup]));
+        const requestIds = rows.map((row) => row.requestId);
 
-      expect(requestIds).toContain(keepA);
-      expect(requestIds).toContain(keepB);
-      expect(requestIds).not.toContain(warmup);
-    });
+        expect(requestIds).toContain(keepA);
+        expect(requestIds).toContain(keepB);
+        expect(requestIds).not.toContain(warmup);
+      },
+    );
 
-    test("backfill is idempotent when running twice", { timeout: 60_000 }, async () => {
-      const requestId = await insertMessageRequestRow({
-        key: nextKey("backfill-idempotent"),
-        userId: nextUserId(),
-        providerId: nextProviderId(),
-        costUsd: "6.600000000000000",
-      });
+    test(
+      "backfill is idempotent when running twice",
+      { timeout: 60_000 },
+      async () => {
+        const requestId = await insertMessageRequestRow({
+          key: nextKey("backfill-idempotent"),
+          userId: nextUserId(),
+          providerId: nextProviderId(),
+          costUsd: "6.600000000000000",
+        });
 
-      await db.delete(usageLedger).where(eq(usageLedger.requestId, requestId));
+        await db
+          .delete(usageLedger)
+          .where(eq(usageLedger.requestId, requestId));
 
-      await backfillUsageLedger();
-      const countAfterFirst = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(usageLedger)
-        .where(eq(usageLedger.requestId, requestId));
+        await backfillUsageLedger();
+        const countAfterFirst = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(usageLedger)
+          .where(eq(usageLedger.requestId, requestId));
 
-      await backfillUsageLedger();
-      const countAfterSecond = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(usageLedger)
-        .where(eq(usageLedger.requestId, requestId));
+        await backfillUsageLedger();
+        const countAfterSecond = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(usageLedger)
+          .where(eq(usageLedger.requestId, requestId));
 
-      expect(countAfterFirst[0]?.count ?? 0).toBe(1);
-      expect(countAfterSecond[0]?.count ?? 0).toBe(1);
-    });
+        expect(countAfterFirst[0]?.count ?? 0).toBe(1);
+        expect(countAfterSecond[0]?.count ?? 0).toBe(1);
+      },
+    );
   });
 
   describe("read path consistency", () => {
@@ -384,16 +401,25 @@ run("usage ledger integration", () => {
         costUsd: "5.550000000000000",
       });
 
-      const beforeUserCost = await sumUserTotalCost(userId, Number.POSITIVE_INFINITY);
+      const beforeUserCost = await sumUserTotalCost(
+        userId,
+        Number.POSITIVE_INFINITY,
+      );
       const beforeProviderCost = await sumProviderTotalCost(providerId);
 
       await db
         .delete(messageRequest)
         .where(
-          and(eq(messageRequest.userId, userId), inArray(messageRequest.id, [requestA, requestB]))
+          and(
+            eq(messageRequest.userId, userId),
+            inArray(messageRequest.id, [requestA, requestB]),
+          ),
         );
 
-      const afterUserCost = await sumUserTotalCost(userId, Number.POSITIVE_INFINITY);
+      const afterUserCost = await sumUserTotalCost(
+        userId,
+        Number.POSITIVE_INFINITY,
+      );
       const afterProviderCost = await sumProviderTotalCost(providerId);
 
       expect(afterUserCost).toBeCloseTo(beforeUserCost, 10);
@@ -425,15 +451,24 @@ run("usage ledger integration", () => {
         .from(messageRequest);
 
       if ((remaining?.count ?? 0) > 0) {
-        const source = await readFile(resolve(process.cwd(), "src/repository/message.ts"), "utf8");
+        const source = await readFile(
+          resolve(process.cwd(), "src/repository/message.ts"),
+          "utf8",
+        );
         expect(source).toContain("if (!(await isLedgerOnlyMode()))");
         expect(source).toContain(".from(usageLedger)");
         return;
       }
 
       vi.resetModules();
-      const { findUsageLogs: findUsageLogsFresh } = await import("@/repository/message");
-      const result = await findUsageLogsFresh({ userId, page: 1, pageSize: 20 });
+      const { findUsageLogs: findUsageLogsFresh } = await import(
+        "@/repository/message"
+      );
+      const result = await findUsageLogsFresh({
+        userId,
+        page: 1,
+        pageSize: 20,
+      });
 
       expect(result.logs.some((row) => row.id === requestId)).toBe(true);
       expect(result.total).toBeGreaterThanOrEqual(1);

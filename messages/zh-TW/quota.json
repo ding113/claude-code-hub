@@ -323,7 +323,19 @@
       "success": "金鑰更新成功",
       "error": "金鑰更新失敗",
       "retryError": "儲存失敗，請稍後重試",
-      "keyInfoMissing": "金鑰資訊不存在"
+      "keyInfoMissing": "金鑰資訊不存在",
+      "resetLimits": {
+        "title": "重置限額",
+        "description": "重置該金鑰的所有限額累計消費計數器。請求日誌和統計數據將被保留。",
+        "button": "重置限額",
+        "confirmTitle": "確認重置限額？",
+        "confirmDescription": "這將把所有累計消費計數器（5小時、每日、每周、每月、總計）歸零。請求日誌和使用統計將被保留。",
+        "confirm": "是的，重置限額",
+        "loading": "正在重置...",
+        "error": "重置限額失敗",
+        "success": "所有限額已重置",
+        "lastResetAt": "上次重置: {date}"
+      }
     }
   }
 }

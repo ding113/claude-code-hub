@@ -10,9 +10,13 @@ import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
+import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
-import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
+import {
+  normalizeProviderGroup,
+  parseProviderGroups,
+} from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { KeyFormSchema } from "@/lib/validation/schemas";
 import { toKey } from "@/repository/_shared/transformers";
@@ -25,19 +29,23 @@ import {
   findKeyById,
   findKeyList,
   findKeysWithStatistics,
+  resetKeyCostResetAt,
   updateKey,
 } from "@/repository/key";
 import type { Key } from "@/types/key";
 import type { ActionResult } from "./types";
 import { type BatchUpdateResult, syncUserProviderGroupFromKeys } from "./users";
 
-type TranslationFunction = (key: string, values?: Record<string, string>) => string;
+type TranslationFunction = (
+  key: string,
+  values?: Record<string, string>,
+) => string;
 
 function validateNonAdminProviderGroup(
   userProviderGroup: string,
   requestedProviderGroup: string,
   options: { hasDefaultKey: boolean },
-  tError: TranslationFunction
+  tError: TranslationFunction,
 ): string {
   const userGroups = parseProviderGroups(userProviderGroup);
   const requestedGroups = parseProviderGroups(requestedProviderGroup);
@@ -48,13 +56,18 @@ function validateNonAdminProviderGroup(
 
   const userGroupSet = new Set(userGroups);
 
-  if (requestedGroups.includes(PROVIDER_GROUP.DEFAULT) && !options.hasDefaultKey) {
+  if (
+    requestedGroups.includes(PROVIDER_GROUP.DEFAULT) &&
+    !options.hasDefaultKey
+  ) {
     throw new Error(tError("NO_DEFAULT_GROUP_PERMISSION"));
   }
 
   const invalidGroups = requestedGroups.filter((g) => !userGroupSet.has(g));
   if (invalidGroups.length > 0) {
-    throw new Error(tError("NO_GROUP_PERMISSION", { groups: invalidGroups.join(", ") }));
+    throw new Error(
+      tError("NO_GROUP_PERMISSION", { groups: invalidGroups.join(", ") }),
+    );
   }
 
   return requestedProviderGroup;
@@ -147,8 +160,8 @@ export async function addKey(data: {
       const userKeys = await findKeyList(data.userId);
       const hasDefaultKey = userKeys.some((k) =>
         parseProviderGroups(normalizeProviderGroup(k.providerGroup)).includes(
-          PROVIDER_GROUP.DEFAULT
-        )
+          PROVIDER_GROUP.DEFAULT,
+        ),
       );
       providerGroupForKey = validateNonAdminProviderGroup(
         userProviderGroup,
@@ -156,7 +169,7 @@ export async function addKey(data: {
         {
           hasDefaultKey,
         },
-        tError
+        tError,
       );
     }
 
@@ -177,7 +190,10 @@ export async function addKey(data: {
     });
 
     // 检查是否存在同名的生效key
-    const existingKey = await findActiveKeyByUserIdAndName(data.userId, validatedData.name);
+    const existingKey = await findActiveKeyByUserIdAndName(
+      data.userId,
+      validatedData.name,
+    );
     if (existingKey) {
       return {
         ok: false,
@@ -321,7 +337,8 @@ export async function addKey(data: {
     return { ok: true, data: { generatedKey, name: validatedData.name } };
   } catch (error) {
     logger.error("添加密钥失败:", error);
-    const message = error instanceof Error ? error.message : "添加密钥失败，请稍后重试";
+    const message =
+      error instanceof Error ? error.message : "添加密钥失败，请稍后重试";
     return { ok: false, error: message };
   }
 }
@@ -344,7 +361,7 @@ export async function editKey(
     limitConcurrentSessions?: number;
     providerGroup?: string | null;
     cacheTtlPreference?: "inherit" | "5m" | "1h";
-  }
+  },
 ): Promise<ActionResult> {
   try {
     // providerGroup 为 admin-only 字段：
@@ -515,7 +532,10 @@ export async function editKey(
       } else {
         try {
           const timezone = await resolveSystemTimezone();
-          expiresAt = parseDateInputAsTimezone(validatedData.expiresAt, timezone);
+          expiresAt = parseDateInputAsTimezone(
+            validatedData.expiresAt,
+            timezone,
+          );
         } catch {
           return {
             ok: false,
@@ -528,8 +548,11 @@ export async function editKey(
 
     const isAdmin = session.user.role === "admin";
     const prevProviderGroup = normalizeProviderGroup(key.providerGroup);
-    const nextProviderGroup = isAdmin ? normalizeProviderGroup(validatedData.providerGroup) : null;
-    const providerGroupChanged = isAdmin && nextProviderGroup !== prevProviderGroup;
+    const nextProviderGroup = isAdmin
+      ? normalizeProviderGroup(validatedData.providerGroup)
+      : null;
+    const providerGroupChanged =
+      isAdmin && nextProviderGroup !== prevProviderGroup;
 
     await updateKey(keyId, {
       name: validatedData.name,
@@ -545,7 +568,11 @@ export async function editKey(
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
       // providerGroup 为 admin-only 字段：非管理员不允许更新该字段
-      ...(isAdmin ? { provider_group: normalizeProviderGroup(validatedData.providerGroup) } : {}),
+      ...(isAdmin
+        ? {
+            provider_group: normalizeProviderGroup(validatedData.providerGroup),
+          }
+        : {}),
       cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
@@ -558,7 +585,8 @@ export async function editKey(
     return { ok: true };
   } catch (error) {
     logger.error("Failed to update key:", error);
-    const message = error instanceof Error ? error.message : "更新密钥失败，请稍后重试";
+    const message =
+      error instanceof Error ? error.message : "更新密钥失败，请稍后重试";
     return { ok: false, error: message };
   }
 }
@@ -610,7 +638,9 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
 
       const { findUserById } = await import("@/repository/user");
       const user = await findUserById(key.userId);
-      const currentGroups = parseProviderGroups(normalizeProviderGroup(user?.providerGroup));
+      const currentGroups = parseProviderGroups(
+        normalizeProviderGroup(user?.providerGroup),
+      );
 
       if (currentGroups.length > 0 && remainingGroups.size === 0) {
         return {
@@ -630,7 +660,8 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
     return { ok: true };
   } catch (error) {
     logger.error("删除密钥失败:", error);
-    const message = error instanceof Error ? error.message : "删除密钥失败，请稍后重试";
+    const message =
+      error instanceof Error ? error.message : "删除密钥失败，请稍后重试";
     return { ok: false, error: message };
   }
 }
@@ -658,7 +689,7 @@ export async function getKeys(userId: number): Promise<ActionResult<Key[]>> {
 
 // 获取用户密钥的统计信息
 export async function getKeysWithStatistics(
-  userId: number
+  userId: number,
 ): Promise<ActionResult<KeyStatistics[]>> {
   try {
     const session = await getSession();
@@ -705,7 +736,10 @@ export async function getKeyLimitUsage(keyId: number): Promise<
         userCostResetAt: usersTable.costResetAt,
       })
       .from(keysTable)
-      .leftJoin(usersTable, and(eq(keysTable.userId, usersTable.id), isNull(usersTable.deletedAt)))
+      .leftJoin(
+        usersTable,
+        and(eq(keysTable.userId, usersTable.id), isNull(usersTable.deletedAt)),
+      )
       .where(and(eq(keysTable.id, keyId), isNull(keysTable.deletedAt)))
       .limit(1);
 
@@ -728,14 +762,18 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       getTimeRangeForPeriod,
       getTimeRangeForPeriodWithMode,
     } = await import("@/lib/rate-limit/time-utils");
-    const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import("@/repository/statistics");
+    const { sumKeyTotalCost, sumKeyCostInTimeRange } = await import(
+      "@/repository/statistics"
+    );
     const effectiveConcurrentLimit = resolveKeyConcurrentSessionLimit(
       key.limitConcurrentSessions,
-      result.userLimitConcurrentSessions ?? null
+      result.userLimitConcurrentSessions ?? null,
     );
 
-    // Clip time range start by costResetAt (for limits-only reset)
-    const costResetAt = result.userCostResetAt ?? null;
+    const costResetAt = resolveKeyCostResetAt(
+      key.costResetAt ?? null,
+      result.userCostResetAt,
+    );
     const clipStart = (start: Date): Date =>
       costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
 
@@ -743,7 +781,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     const keyDailyTimeRange = await getTimeRangeForPeriodWithMode(
       "daily",
       key.dailyResetTime,
-      key.dailyResetMode ?? "fixed"
+      key.dailyResetMode ?? "fixed",
     );
 
     // 5h/weekly/monthly use unified time ranges
@@ -752,26 +790,44 @@ export async function getKeyLimitUsage(keyId: number): Promise<
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // 获取金额消费（使用 DB direct，与 my-usage.ts 保持一致）
-    const [cost5h, costDaily, costWeekly, costMonthly, totalCost, concurrentSessions] =
-      await Promise.all([
-        sumKeyCostInTimeRange(keyId, clipStart(range5h.startTime), range5h.endTime),
-        sumKeyCostInTimeRange(
-          keyId,
-          clipStart(keyDailyTimeRange.startTime),
-          keyDailyTimeRange.endTime
-        ),
-        sumKeyCostInTimeRange(keyId, clipStart(rangeWeekly.startTime), rangeWeekly.endTime),
-        sumKeyCostInTimeRange(keyId, clipStart(rangeMonthly.startTime), rangeMonthly.endTime),
-        sumKeyTotalCost(key.key, Infinity, costResetAt),
-        SessionTracker.getKeySessionCount(keyId),
-      ]);
+    const [
+      cost5h,
+      costDaily,
+      costWeekly,
+      costMonthly,
+      totalCost,
+      concurrentSessions,
+    ] = await Promise.all([
+      sumKeyCostInTimeRange(
+        keyId,
+        clipStart(range5h.startTime),
+        range5h.endTime,
+      ),
+      sumKeyCostInTimeRange(
+        keyId,
+        clipStart(keyDailyTimeRange.startTime),
+        keyDailyTimeRange.endTime,
+      ),
+      sumKeyCostInTimeRange(
+        keyId,
+        clipStart(rangeWeekly.startTime),
+        rangeWeekly.endTime,
+      ),
+      sumKeyCostInTimeRange(
+        keyId,
+        clipStart(rangeMonthly.startTime),
+        rangeMonthly.endTime,
+      ),
+      sumKeyTotalCost(key.key, Infinity, costResetAt),
+      SessionTracker.getKeySessionCount(keyId),
+    ]);
 
     // 获取重置时间
     const resetInfo5h = await getResetInfo("5h");
     const resetInfoDaily = await getResetInfoWithMode(
       "daily",
       key.dailyResetTime,
-      key.dailyResetMode ?? "fixed"
+      key.dailyResetMode ?? "fixed",
     );
     const resetInfoWeekly = await getResetInfo("weekly");
     const resetInfoMonthly = await getResetInfo("monthly");
@@ -815,21 +871,105 @@ export async function getKeyLimitUsage(keyId: number): Promise<
   }
 }
 
+export async function resetKeyLimitsOnly(keyId: number): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const updated = await resetKeyCostResetAt(keyId, new Date());
+    if (!updated) {
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    try {
+      const { clearSingleKeyCostCache } = await import(
+        "@/lib/redis/cost-cache-cleanup"
+      );
+      const cacheResult = await clearSingleKeyCostCache({
+        keyId,
+        keyHash: key.key,
+      });
+      if (cacheResult) {
+        logger.info("Reset key limits only - Redis cost cache cleared", {
+          keyId,
+          userId: key.userId,
+          ...cacheResult,
+        });
+      }
+    } catch (error) {
+      logger.error("Failed to clear Redis cache during key limits reset", {
+        keyId,
+        userId: key.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    logger.info("Reset key limits only (costResetAt set)", {
+      keyId,
+      userId: key.userId,
+    });
+    revalidatePath("/dashboard/users");
+    revalidatePath("/dashboard");
+
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to reset key limits:", error);
+    const tError = await getTranslations("errors");
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
+
 /**
  * 切换密钥启用/禁用状态
  */
-export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise<ActionResult> {
+export async function toggleKeyEnabled(
+  keyId: number,
+  enabled: boolean,
+): Promise<ActionResult> {
   try {
     const tError = await getTranslations("errors");
 
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
     }
 
     // 权限检查：用户只能管理自己的Key，管理员可以管理所有Key
@@ -860,7 +1000,8 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
   } catch (error) {
     logger.error("切换密钥状态失败:", error);
     const tError = await getTranslations("errors");
-    const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
+    const message =
+      error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
@@ -871,7 +1012,7 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
  * 注意：仅管理员可用。
  */
 export async function batchUpdateKeys(
-  params: BatchUpdateKeysParams
+  params: BatchUpdateKeysParams,
 ): Promise<ActionResult<BatchUpdateResult>> {
   try {
     const tError = await getTranslations("errors");
@@ -893,9 +1034,15 @@ export async function batchUpdateKeys(
     }
 
     const MAX_BATCH_SIZE = 500;
-    const requestedIds = Array.from(new Set(params.keyIds)).filter((id) => Number.isInteger(id));
+    const requestedIds = Array.from(new Set(params.keyIds)).filter((id) =>
+      Number.isInteger(id),
+    );
     if (requestedIds.length === 0) {
-      return { ok: false, error: tError("REQUIRED_FIELD"), errorCode: ERROR_CODES.REQUIRED_FIELD };
+      return {
+        ok: false,
+        error: tError("REQUIRED_FIELD"),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
     }
     if (requestedIds.length > MAX_BATCH_SIZE) {
       return {
@@ -908,7 +1055,11 @@ export async function batchUpdateKeys(
     const updates = params.updates ?? {};
     const hasAnyUpdate = Object.values(updates).some((v) => v !== undefined);
     if (!hasAnyUpdate) {
-      return { ok: false, error: tError("EMPTY_UPDATE"), errorCode: ERROR_CODES.EMPTY_UPDATE };
+      return {
+        ok: false,
+        error: tError("EMPTY_UPDATE"),
+        errorCode: ERROR_CODES.EMPTY_UPDATE,
+      };
     }
 
     const normalizedProviderGroup =
@@ -923,14 +1074,16 @@ export async function batchUpdateKeys(
       const existingRows = await tx
         .select({ id: keysTable.id, userId: keysTable.userId })
         .from(keysTable)
-        .where(and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)));
+        .where(
+          and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)),
+        );
 
       const existingSet = new Set(existingRows.map((r) => r.id));
       const missingIds = requestedIds.filter((id) => !existingSet.has(id));
       if (missingIds.length > 0) {
         throw new BatchUpdateError(
           `部分 Key 不存在: ${missingIds.join(", ")}`,
-          ERROR_CODES.NOT_FOUND
+          ERROR_CODES.NOT_FOUND,
         );
       }
 
@@ -944,13 +1097,21 @@ export async function batchUpdateKeys(
             isEnabled: keysTable.isEnabled,
           })
           .from(keysTable)
-          .where(and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)));
+          .where(
+            and(
+              inArray(keysTable.id, requestedIds),
+              isNull(keysTable.deletedAt),
+            ),
+          );
 
         // 按用户分组，统计每个用户将被禁用的已启用 Key 数量
         const userDisableCounts = new Map<number, number>();
         for (const key of currentKeyStates) {
           if (key.isEnabled) {
-            userDisableCounts.set(key.userId, (userDisableCounts.get(key.userId) ?? 0) + 1);
+            userDisableCounts.set(
+              key.userId,
+              (userDisableCounts.get(key.userId) ?? 0) + 1,
+            );
           }
         }
 
@@ -967,8 +1128,8 @@ export async function batchUpdateKeys(
               and(
                 inArray(keysTable.userId, affectedUserIdsList),
                 eq(keysTable.isEnabled, true),
-                isNull(keysTable.deletedAt)
-              )
+                isNull(keysTable.deletedAt),
+              ),
             )
             .groupBy(keysTable.userId);
 
@@ -983,7 +1144,7 @@ export async function batchUpdateKeys(
             if (currentEnabledCount - disableCount < 1) {
               throw new BatchUpdateError(
                 tError("CANNOT_DISABLE_LAST_KEY"),
-                ERROR_CODES.OPERATION_FAILED
+                ERROR_CODES.OPERATION_FAILED,
               );
             }
           }
@@ -994,31 +1155,46 @@ export async function batchUpdateKeys(
 
       const dbUpdates: Record<string, unknown> = { updatedAt: new Date() };
 
-      if (updates.isEnabled !== undefined) dbUpdates.isEnabled = updates.isEnabled;
-      if (updates.canLoginWebUi !== undefined) dbUpdates.canLoginWebUi = updates.canLoginWebUi;
-      if (normalizedProviderGroup !== undefined) dbUpdates.providerGroup = normalizedProviderGroup;
+      if (updates.isEnabled !== undefined)
+        dbUpdates.isEnabled = updates.isEnabled;
+      if (updates.canLoginWebUi !== undefined)
+        dbUpdates.canLoginWebUi = updates.canLoginWebUi;
+      if (normalizedProviderGroup !== undefined)
+        dbUpdates.providerGroup = normalizedProviderGroup;
       if (updates.limit5hUsd !== undefined)
-        dbUpdates.limit5hUsd = updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
+        dbUpdates.limit5hUsd =
+          updates.limit5hUsd === null ? null : updates.limit5hUsd.toString();
       if (updates.limitDailyUsd !== undefined)
         dbUpdates.limitDailyUsd =
-          updates.limitDailyUsd === null ? null : updates.limitDailyUsd.toString();
+          updates.limitDailyUsd === null
+            ? null
+            : updates.limitDailyUsd.toString();
       if (updates.limitWeeklyUsd !== undefined)
         dbUpdates.limitWeeklyUsd =
-          updates.limitWeeklyUsd === null ? null : updates.limitWeeklyUsd.toString();
+          updates.limitWeeklyUsd === null
+            ? null
+            : updates.limitWeeklyUsd.toString();
       if (updates.limitMonthlyUsd !== undefined)
         dbUpdates.limitMonthlyUsd =
-          updates.limitMonthlyUsd === null ? null : updates.limitMonthlyUsd.toString();
+          updates.limitMonthlyUsd === null
+            ? null
+            : updates.limitMonthlyUsd.toString();
 
       const updatedRows = await tx
         .update(keysTable)
         .set(dbUpdates)
-        .where(and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)))
+        .where(
+          and(inArray(keysTable.id, requestedIds), isNull(keysTable.deletedAt)),
+        )
         .returning({ id: keysTable.id });
 
       updatedIds = updatedRows.map((r) => r.id);
 
       if (updatedIds.length !== requestedIds.length) {
-        throw new BatchUpdateError("批量更新失败：更新行数不匹配", ERROR_CODES.UPDATE_FAILED);
+        throw new BatchUpdateError(
+          "批量更新失败：更新行数不匹配",
+          ERROR_CODES.UPDATE_FAILED,
+        );
       }
 
       // CRITICAL: Post-update validation to prevent race conditions
@@ -1033,14 +1209,14 @@ export async function batchUpdateKeys(
               and(
                 eq(keysTable.userId, userId),
                 eq(keysTable.isEnabled, true),
-                isNull(keysTable.deletedAt)
-              )
+                isNull(keysTable.deletedAt),
+              ),
             );
 
           if (Number(remainingEnabled?.count ?? 0) < 1) {
             throw new BatchUpdateError(
               tError("CANNOT_DISABLE_LAST_KEY"),
-              ERROR_CODES.OPERATION_FAILED
+              ERROR_CODES.OPERATION_FAILED,
             );
           }
         }
@@ -1049,7 +1225,9 @@ export async function batchUpdateKeys(
 
     // 同步用户分组（用户分组 = Key 分组并集）
     if (normalizedProviderGroup !== undefined && affectedUserIds.length > 0) {
-      await Promise.all(affectedUserIds.map((userId) => syncUserProviderGroupFromKeys(userId)));
+      await Promise.all(
+        affectedUserIds.map((userId) => syncUserProviderGroupFromKeys(userId)),
+      );
     }
 
     revalidatePath("/dashboard");
@@ -1067,7 +1245,8 @@ export async function batchUpdateKeys(
     }
 
     logger.error("批量更新 Key 失败:", error);
-    const message = error instanceof Error ? error.message : "批量更新 Key 失败";
+    const message =
+      error instanceof Error ? error.message : "批量更新 Key 失败";
     return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }
@@ -1080,19 +1259,27 @@ export async function batchUpdateKeys(
  */
 export async function renewKeyExpiresAt(
   keyId: number,
-  data: { expiresAt: string; enableKey?: boolean }
+  data: { expiresAt: string; enableKey?: boolean },
 ): Promise<ActionResult> {
   try {
     const tError = await getTranslations("errors");
 
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
     }
 
     // 权限检查：用户只能续期自己的Key，管理员可以续期所有Key
@@ -1119,7 +1306,8 @@ export async function renewKeyExpiresAt(
   } catch (error) {
     logger.error("快捷续期密钥失败:", error);
     const tError = await getTranslations("errors");
-    const message = error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
+    const message =
+      error instanceof Error ? error.message : tError("UPDATE_KEY_FAILED");
     return { ok: false, error: message, errorCode: ERROR_CODES.UPDATE_FAILED };
   }
 }

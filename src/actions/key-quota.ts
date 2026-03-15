@@ -7,6 +7,7 @@ import { keys as keysTable, users as usersTable } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
+import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
@@ -111,8 +112,7 @@ export async function getKeyQuotaUsage(keyId: number): Promise<ActionResult<KeyQ
     const rangeWeekly = await getTimeRangeForPeriod("weekly");
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
-    // Clip time range starts by user's costResetAt (for limits-only reset)
-    const costResetAt = result.userCostResetAt ?? null;
+    const costResetAt = resolveKeyCostResetAt(keyRow.costResetAt ?? null, result.userCostResetAt);
     const clipStart = (start: Date): Date =>
       costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
 

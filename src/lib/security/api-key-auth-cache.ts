@@ -141,6 +141,7 @@ function hydrateKeyFromCache(keyString: string, payload: CachedKeyPayloadV1): Ke
 
   const expiresAt = parseOptionalDate(key.expiresAt);
   const deletedAt = parseOptionalDate(key.deletedAt);
+  const costResetAt = parseOptionalDate(key.costResetAt);
   if (key.expiresAt != null && !expiresAt) return null;
   if (key.deletedAt != null && !deletedAt) return null;
 
@@ -151,6 +152,7 @@ function hydrateKeyFromCache(keyString: string, payload: CachedKeyPayloadV1): Ke
     updatedAt,
     expiresAt: expiresAt === undefined ? undefined : expiresAt,
     deletedAt: deletedAt === undefined ? undefined : deletedAt,
+    costResetAt: costResetAt === undefined ? undefined : costResetAt,
   } as Key;
 }
 

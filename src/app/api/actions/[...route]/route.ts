@@ -342,6 +342,22 @@ const { route: getKeyLimitUsageRoute, handler: getKeyLimitUsageHandler } = creat
 );
 app.openapi(getKeyLimitUsageRoute, getKeyLimitUsageHandler);
 
+const { route: resetKeyLimitsOnlyRoute, handler: resetKeyLimitsOnlyHandler } = createActionRoute(
+  "keys",
+  "resetKeyLimitsOnly",
+  keyActions.resetKeyLimitsOnly,
+  {
+    requestSchema: z.object({
+      keyId: z.number().int().positive(),
+    }),
+    description: "仅重置单个密钥的消费限额累计（不删除日志）",
+    summary: "重置密钥限额累计",
+    tags: ["密钥管理"],
+    requiredRole: "admin",
+  }
+);
+app.openapi(resetKeyLimitsOnlyRoute, resetKeyLimitsOnlyHandler);
+
 // ==================== 供应商管理 ====================
 
 const ProviderTypeSchema = z.enum([

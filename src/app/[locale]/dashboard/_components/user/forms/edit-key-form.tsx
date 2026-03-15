@@ -1,14 +1,27 @@
 "use client";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { editKey } from "@/actions/keys";
+import { editKey, resetKeyLimitsOnly } from "@/actions/keys";
 import { getAvailableProviderGroups } from "@/actions/providers";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -40,6 +53,7 @@ interface EditKeyFormProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
+    costResetAt?: string | null;
   };
   user?: KeyDialogUserContext;
   isAdmin?: boolean;
@@ -49,6 +63,9 @@ interface EditKeyFormProps {
 export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditKeyFormProps) {
   const [isPending, startTransition] = useTransition();
   const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
+  const [isResettingLimits, setIsResettingLimits] = useState(false);
+  const [resetLimitsDialogOpen, setResetLimitsDialogOpen] = useState(false);
+  const locale = useLocale();
   const router = useRouter();
   const queryClient = useQueryClient();
   const t = useTranslations("quota.keys.editKeyForm");
@@ -70,6 +87,26 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
         console.warn("[EditKeyForm] Failed to load provider group suggestions:", err);
       });
   }, [isAdmin]);
+
+  const handleResetLimitsOnly = async () => {
+    if (!keyData?.id) return;
+    setIsResettingLimits(true);
+    try {
+      const res = await resetKeyLimitsOnly(keyData.id);
+      if (!res.ok) {
+        toast.error(res.error || t("resetLimits.error"));
+        return;
+      }
+      toast.success(t("resetLimits.success"));
+      setResetLimitsDialogOpen(false);
+      window.location.reload();
+    } catch (error) {
+      console.error("[EditKeyForm] reset limits only failed", error);
+      toast.error(t("resetLimits.error"));
+    } finally {
+      setIsResettingLimits(false);
+    }
+  };
 
   const formatExpiresAt = (expiresAt: string) => {
     if (!expiresAt) return "";
@@ -386,6 +423,74 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
           {...form.getFieldProps("limitConcurrentSessions")}
         />
       </FormGrid>
+
+      {/* Reset Quota Section - Less destructive (amber) */}
+      <section className="rounded-lg border border-muted p-4 space-y-3 mt-6">
+        <h3 className="text-sm font-medium">{t("resetLimits.title")}</h3>
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <h4 className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                {t("resetLimits.title")}
+              </h4>
+              <p className="text-xs text-muted-foreground">{t("resetLimits.description")}</p>
+              {keyData?.costResetAt && (
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
+                  {t("resetLimits.lastResetAt", {
+                    date: new Intl.DateTimeFormat(locale as string, {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(keyData.costResetAt)),
+                  })}
+                </p>
+              )}
+            </div>
+
+            <AlertDialog open={resetLimitsDialogOpen} onOpenChange={setResetLimitsDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  {t("resetLimits.button")}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>{t("resetLimits.confirmTitle")}</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {t("resetLimits.confirmDescription")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isResettingLimits}>
+                    {tCommon("cancel")}
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleResetLimitsOnly();
+                    }}
+                    disabled={isResettingLimits}
+                    className="bg-amber-600 text-white hover:bg-amber-700"
+                  >
+                    {isResettingLimits ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        {t("resetLimits.loading")}
+                      </>
+                    ) : (
+                      t("resetLimits.confirm")
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </section>
     </DialogFormLayout>
   );
 }
