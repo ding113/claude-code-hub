@@ -270,9 +270,19 @@ function UsageLogsViewContent({
 
   const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
 
-  const activeFilterCount = Object.values(statsFilters).filter(
-    (v) => v !== undefined && v !== false
-  ).length;
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (statsFilters.startTime || statsFilters.endTime) count++;
+    if (statsFilters.userId !== undefined) count++;
+    if (statsFilters.keyId !== undefined) count++;
+    if (statsFilters.providerId !== undefined) count++;
+    if (statsFilters.sessionId) count++;
+    if (statsFilters.statusCode !== undefined || statsFilters.excludeStatusCode200) count++;
+    if (statsFilters.model) count++;
+    if (statsFilters.endpoint) count++;
+    if (statsFilters.minRetryCount !== undefined && statsFilters.minRetryCount > 0) count++;
+    return count;
+  }, [statsFilters]);
   const [isFilterOpen, setIsFilterOpen] = useState(activeFilterCount > 0);
 
   return (
@@ -361,7 +371,7 @@ function UsageLogsViewContent({
             </div>
           </div>
 
-          <CollapsibleContent>
+          <CollapsibleContent forceMount className={cn(!isFilterOpen && "hidden")}>
             <div className="mt-3 rounded-lg border border-border/60 bg-card p-4">
               <UsageLogsFilters
                 isAdmin={isAdmin}
