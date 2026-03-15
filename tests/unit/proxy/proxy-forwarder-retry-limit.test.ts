@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => {
         enableThinkingSignatureRectifier: true,
         enableThinkingBudgetRectifier: true,
         enableBillingHeaderRectifier: true,
+        enableResponseInputRectifier: true,
         enableCodexSessionIdCompletion: true,
         enableClaudeMetadataUserIdInjection: true,
         enableResponseFixer: true,
