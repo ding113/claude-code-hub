@@ -400,6 +400,14 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       expect(chain[0].id).toBe(1);
       expect(chain[1].id).toBe(2);
 
+      const specialSettings = session.getSpecialSettings() ?? [];
+      const audits = specialSettings.filter(
+        (setting) => setting.type === "thinking_signature_rectifier"
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0].attemptNumber).toBe(1);
+      expect(audits[0].retryAttemptNumber).toBeUndefined();
+
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
@@ -478,6 +486,14 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       expect(chain[0].id).toBe(1);
       expect(chain[1].id).toBe(2);
 
+      const specialSettings = session.getSpecialSettings() ?? [];
+      const audits = specialSettings.filter(
+        (setting) => setting.type === "thinking_budget_rectifier"
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0].attemptNumber).toBe(1);
+      expect(audits[0].retryAttemptNumber).toBeUndefined();
+
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();
@@ -528,6 +544,15 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       await vi.runAllTimersAsync();
       await instanceCheck;
       await statusCheck;
+
+      const specialSettings = session.getSpecialSettings() ?? [];
+      const audits = specialSettings.filter(
+        (setting) => setting.type === "thinking_signature_rectifier"
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0].attemptNumber).toBe(1);
+      expect(audits[0].retryAttemptNumber).toBeUndefined();
+
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
@@ -575,6 +600,15 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       await vi.runAllTimersAsync();
       await instanceCheck;
       await statusCheck;
+
+      const specialSettings = session.getSpecialSettings() ?? [];
+      const audits = specialSettings.filter(
+        (setting) => setting.type === "thinking_budget_rectifier"
+      );
+      expect(audits).toHaveLength(1);
+      expect(audits[0].attemptNumber).toBe(1);
+      expect(audits[0].retryAttemptNumber).toBeUndefined();
+
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
