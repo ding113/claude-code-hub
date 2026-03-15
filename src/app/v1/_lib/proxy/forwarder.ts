@@ -1129,34 +1129,7 @@ export class ProxyForwarder {
                   removedSignatureFields: rectified.removedSignatureFields,
                 });
 
-                const specialSettings = session.getSpecialSettings();
-                if (specialSettings && session.sessionId) {
-                  try {
-                    await SessionManager.storeSessionSpecialSettings(
-                      session.sessionId,
-                      specialSettings,
-                      session.requestSequence
-                    );
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to store special settings", {
-                      error: persistError,
-                      sessionId: session.sessionId,
-                    });
-                  }
-                }
-
-                if (specialSettings && session.messageContext?.id) {
-                  try {
-                    await updateMessageRequestDetails(session.messageContext.id, {
-                      specialSettings,
-                    });
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to persist special settings", {
-                      error: persistError,
-                      messageRequestId: session.messageContext.id,
-                    });
-                  }
-                }
+                await persistSpecialSettings(session);
 
                 // 无任何可整流内容：不做无意义重试，直接走既有“不可重试客户端错误”分支
                 if (!rectified.applied) {
@@ -1285,34 +1258,7 @@ export class ProxyForwarder {
                   after: budgetRectified.after,
                 });
 
-                const specialSettings = session.getSpecialSettings();
-                if (specialSettings && session.sessionId) {
-                  try {
-                    await SessionManager.storeSessionSpecialSettings(
-                      session.sessionId,
-                      specialSettings,
-                      session.requestSequence
-                    );
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to store special settings", {
-                      error: persistError,
-                      sessionId: session.sessionId,
-                    });
-                  }
-                }
-
-                if (specialSettings && session.messageContext?.id) {
-                  try {
-                    await updateMessageRequestDetails(session.messageContext.id, {
-                      specialSettings,
-                    });
-                  } catch (persistError) {
-                    logger.error("[ProxyForwarder] Failed to persist special settings", {
-                      error: persistError,
-                      messageRequestId: session.messageContext.id,
-                    });
-                  }
-                }
+                await persistSpecialSettings(session);
 
                 if (!budgetRectified.applied) {
                   logger.info(
@@ -3036,6 +2982,7 @@ export class ProxyForwarder {
     const launchedProviderIds = new Set<number>();
     const startedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
+    let hedgeTriggered = false;
     let settled = false;
     let winnerCommitted = false;
     let noMoreProviders = false;
@@ -3230,34 +3177,7 @@ export class ProxyForwarder {
                 removedSignatureFields: rectified.removedSignatureFields,
               });
 
-              const specialSettings = session.getSpecialSettings();
-              if (specialSettings && session.sessionId) {
-                try {
-                  await SessionManager.storeSessionSpecialSettings(
-                    session.sessionId,
-                    specialSettings,
-                    session.requestSequence
-                  );
-                } catch (persistError) {
-                  logger.error("[ProxyForwarder] Failed to store special settings", {
-                    error: persistError,
-                    sessionId: session.sessionId,
-                  });
-                }
-              }
-
-              if (specialSettings && session.messageContext?.id) {
-                try {
-                  await updateMessageRequestDetails(session.messageContext.id, {
-                    specialSettings,
-                  });
-                } catch (persistError) {
-                  logger.error("[ProxyForwarder] Failed to persist special settings", {
-                    error: persistError,
-                    messageRequestId: session.messageContext.id,
-                  });
-                }
-              }
+              await persistSpecialSettings(session);
 
               if (rectified.applied) {
                 // Record this failure as entering retry/failover flow (not as a terminal client error).
@@ -3349,34 +3269,7 @@ export class ProxyForwarder {
                 after: rectified.after,
               });
 
-              const specialSettings = session.getSpecialSettings();
-              if (specialSettings && session.sessionId) {
-                try {
-                  await SessionManager.storeSessionSpecialSettings(
-                    session.sessionId,
-                    specialSettings,
-                    session.requestSequence
-                  );
-                } catch (persistError) {
-                  logger.error("[ProxyForwarder] Failed to store special settings", {
-                    error: persistError,
-                    sessionId: session.sessionId,
-                  });
-                }
-              }
-
-              if (specialSettings && session.messageContext?.id) {
-                try {
-                  await updateMessageRequestDetails(session.messageContext.id, {
-                    specialSettings,
-                  });
-                } catch (persistError) {
-                  logger.error("[ProxyForwarder] Failed to persist special settings", {
-                    error: persistError,
-                    messageRequestId: session.messageContext.id,
-                  });
-                }
-              }
+              await persistSpecialSettings(session);
 
               if (rectified.applied) {
                 if (error instanceof ProxyError) {
@@ -3484,21 +3377,17 @@ export class ProxyForwarder {
       session.setProvider(attempt.provider);
 
       const uniqueProvidersAttempted = startedProviderIds.size;
-      // Only mark as hedge_winner when an actual hedge race occurred (i.e. more than one unique provider).
-      const isActualHedgeWin = uniqueProvidersAttempted > 1;
-      const isFirstAttempt =
-        uniqueProvidersAttempted === 1 &&
-        attempt.provider.id === initialProvider.id &&
-        attempt.providerAttemptNumber === 1;
-      const isRetrySuccess = !isActualHedgeWin && attempt.providerAttemptNumber > 1;
+      const didInitialProviderStart = startedProviderIds.has(initialProvider.id);
+      const isHedgeWin = hedgeTriggered && uniqueProvidersAttempted > 1;
+      const isRetrySuccess =
+        !isHedgeWin && (uniqueProvidersAttempted > 1 || attempt.providerAttemptNumber > 1);
+      const isFirstAttempt = uniqueProvidersAttempted === 1 && attempt.providerAttemptNumber === 1;
+      const isFailoverSuccess =
+        didInitialProviderStart && attempt.provider.id !== initialProvider.id;
 
       session.addProviderToChain(attempt.provider, {
         ...attempt.endpointAudit,
-        reason: isActualHedgeWin
-          ? "hedge_winner"
-          : isRetrySuccess
-            ? "retry_success"
-            : "request_success",
+        reason: isHedgeWin ? "hedge_winner" : isRetrySuccess ? "retry_success" : "request_success",
         attemptNumber: attempt.sequence,
         statusCode: attempt.response.status,
       });
@@ -3512,11 +3401,11 @@ export class ProxyForwarder {
             attempt.provider.id,
             attempt.provider.priority || 0,
             isFirstAttempt,
-            attempt.provider.id !== initialProvider.id
+            isFailoverSuccess
           );
 
           if (bindingResult.updated) {
-            logger.info("ProxyForwarder: Hedge winner binding updated", {
+            logger.info("ProxyForwarder: Streaming winner binding updated", {
               sessionId: session.sessionId,
               providerId: attempt.provider.id,
               providerName: attempt.provider.name,
@@ -3530,9 +3419,12 @@ export class ProxyForwarder {
             providerName: attempt.provider.name,
           });
         })().catch((bindingError) => {
-          logger.error("ProxyForwarder: Failed to update session provider info for hedge winner", {
-            error: bindingError,
-          });
+          logger.error(
+            "ProxyForwarder: Failed to update session provider info for streaming winner",
+            {
+              error: bindingError,
+            }
+          );
         });
       }
 
@@ -3543,11 +3435,11 @@ export class ProxyForwarder {
         attemptNumber: attempt.sequence,
         totalProvidersAttempted: uniqueProvidersAttempted,
         isFirstAttempt,
-        isFailoverSuccess: attempt.provider.id !== initialProvider.id,
+        isFailoverSuccess,
         endpointId: attempt.endpointAudit.endpointId,
         endpointUrl: attempt.endpointAudit.endpointUrl,
         upstreamStatusCode: attempt.response.status,
-        isHedgeWinner: isActualHedgeWin,
+        isHedgeWinner: isHedgeWin,
       });
 
       const response = new Response(
@@ -3629,7 +3521,7 @@ export class ProxyForwarder {
 
       // Record hedge participant launch in decision chain
       // (first provider is already recorded via initial_selection or session_reuse)
-      if (isNewProviderLaunch && startedProviderIds.size > 1) {
+      if (hedgeTriggered && isNewProviderLaunch && startedProviderIds.size > 1) {
         session.addProviderToChain(provider, {
           ...attempt.endpointAudit,
           reason: "hedge_launched",
@@ -3642,6 +3534,7 @@ export class ProxyForwarder {
         attempt.thresholdTimer = setTimeout(() => {
           if (settled || attempt.settled || attempt.thresholdTriggered) return;
           attempt.thresholdTriggered = true;
+          hedgeTriggered = true;
           attempt.session.addProviderToChain(attempt.provider, {
             ...attempt.endpointAudit,
             reason: "hedge_triggered",
