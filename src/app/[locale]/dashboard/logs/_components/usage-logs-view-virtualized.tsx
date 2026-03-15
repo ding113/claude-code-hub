@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Expand, Filter, ListOrdered, Minimize2, Pause, Play, RefreshCw } from "lucide-react";
+import { ChevronDown, Expand, Filter, Minimize2, RefreshCw } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,11 +10,13 @@ import { getKeys } from "@/actions/keys";
 import type { OverviewData } from "@/actions/overview";
 import { getOverviewData } from "@/actions/overview";
 import { getProviders } from "@/actions/providers";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Switch } from "@/components/ui/switch";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { getHiddenColumns, type LogsTableColumn } from "@/lib/column-visibility";
+import { cn } from "@/lib/utils";
 import type { CurrencyCode } from "@/lib/utils/currency";
 import { formatCurrency } from "@/lib/utils/currency";
 import type { Key } from "@/types/key";
@@ -268,129 +270,125 @@ function UsageLogsViewContent({
 
   const hasStatsFilters = Object.values(statsFilters).some((v) => v !== undefined && v !== false);
 
+  const activeFilterCount = Object.values(statsFilters).filter(
+    (v) => v !== undefined && v !== false
+  ).length;
+  const [isFilterOpen, setIsFilterOpen] = useState(activeFilterCount > 0);
+
   return (
     <>
-      <div className="space-y-4">
-        {/* Stats Summary - Collapsible */}
+      <div className="space-y-3">
+        {/* Stats Summary */}
         {hasStatsFilters && (
           <UsageLogsStatsPanel filters={statsFilters} currencyCode={resolvedCurrencyCode} />
         )}
 
-        {/* Filter Criteria */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted/50">
-                <Filter className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <CardTitle className="text-base">{t("title.filterCriteria")}</CardTitle>
-                <CardDescription className="text-xs">
-                  {t("title.filterCriteriaDescription")}
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <UsageLogsFilters
-              isAdmin={isAdmin}
-              providers={resolvedProviders}
-              initialKeys={resolvedKeys}
-              filters={filters}
-              onChange={handleFilterChange}
-              onReset={() => router.push("/dashboard/logs")}
-              isProvidersLoading={isProvidersLoading}
-              isKeysLoading={isKeysLoading}
-              serverTimeZone={serverTimeZone}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Usage Records Table */}
-        <Card className="border-border/50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted/50">
-                  <ListOrdered className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div>
-                  <CardTitle className="text-base">{t("title.usageLogs")}</CardTitle>
-                  <CardDescription className="text-xs">
-                    {t("title.usageLogsDescription")}
-                  </CardDescription>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <ColumnVisibilityDropdown
-                  userId={userId}
-                  tableId="usage-logs"
-                  onVisibilityChange={setHiddenColumns}
+        {/* Toolbar + Filter */}
+        <Collapsible open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+          <div className="flex items-center justify-between gap-3">
+            {/* Left: Filter trigger */}
+            <CollapsibleTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:border-border cursor-pointer select-none transition-colors"
+              >
+                <Filter className="h-3.5 w-3.5" />
+                <span>{t("title.filterCriteria")}</span>
+                {activeFilterCount > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="bg-primary/10 text-primary text-[10px] h-4.5 min-w-[18px] px-1 rounded-full"
+                  >
+                    {activeFilterCount}
+                  </Badge>
+                )}
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 text-muted-foreground/50 transition-transform duration-200",
+                    isFilterOpen && "rotate-180"
+                  )}
                 />
+              </button>
+            </CollapsibleTrigger>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleEnterFullscreen()}
-                  className="gap-1.5 h-8"
-                  aria-label={t("logs.actions.fullscreen")}
-                >
-                  <Expand className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">{t("logs.actions.fullscreen")}</span>
-                </Button>
+            {/* Right: Table controls */}
+            <div className="flex items-center gap-1">
+              <ColumnVisibilityDropdown
+                userId={userId}
+                tableId="usage-logs"
+                onVisibilityChange={setHiddenColumns}
+              />
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleManualRefresh}
-                  className="gap-1.5 h-8"
-                  disabled={isFullscreenOpen}
-                  aria-label={t("logs.actions.refresh")}
-                >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${isManualRefreshing ? "animate-spin" : ""}`}
-                  />
-                  <span className="hidden sm:inline">{t("logs.actions.refresh")}</span>
-                </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => void handleEnterFullscreen()}
+                className="h-8 w-8"
+                aria-label={t("logs.actions.fullscreen")}
+              >
+                <Expand className="h-3.5 w-3.5" />
+              </Button>
 
-                <Button
-                  variant={isAutoRefresh ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setIsAutoRefresh(!isAutoRefresh)}
-                  className="gap-1.5 h-8"
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleManualRefresh}
+                className="h-8 w-8"
+                disabled={isFullscreenOpen}
+                aria-label={t("logs.actions.refresh")}
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", isManualRefreshing && "animate-spin")} />
+              </Button>
+
+              <div className="flex items-center gap-1.5 ml-1 pl-2 border-l border-border/40">
+                {isAutoRefresh && (
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  </span>
+                )}
+                <Switch
+                  checked={isAutoRefresh}
+                  onCheckedChange={setIsAutoRefresh}
                   disabled={isFullscreenOpen}
                   aria-label={
                     isAutoRefresh
                       ? t("logs.actions.stopAutoRefresh")
                       : t("logs.actions.startAutoRefresh")
                   }
-                >
-                  {isAutoRefresh ? (
-                    <>
-                      <Pause className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{t("logs.actions.stopAutoRefresh")}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="h-3.5 w-3.5" />
-                      <span className="hidden sm:inline">{t("logs.actions.startAutoRefresh")}</span>
-                    </>
-                  )}
-                </Button>
+                />
               </div>
             </div>
-          </CardHeader>
-          <CardContent className="px-0 pt-0">
-            <VirtualizedLogsTable
-              filters={filters}
-              currencyCode={resolvedCurrencyCode}
-              billingModelSource={resolvedBillingModelSource}
-              autoRefreshEnabled={!isFullscreenOpen && isAutoRefresh}
-              autoRefreshIntervalMs={logsRefreshIntervalMs ?? 5000}
-              hiddenColumns={hiddenColumns}
-            />
-          </CardContent>
-        </Card>
+          </div>
+
+          <CollapsibleContent>
+            <div className="mt-3 rounded-lg border border-border/60 bg-card p-4">
+              <UsageLogsFilters
+                isAdmin={isAdmin}
+                providers={resolvedProviders}
+                initialKeys={resolvedKeys}
+                filters={filters}
+                onChange={handleFilterChange}
+                onReset={() => router.push("/dashboard/logs")}
+                isProvidersLoading={isProvidersLoading}
+                isKeysLoading={isKeysLoading}
+                serverTimeZone={serverTimeZone}
+              />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        {/* Table */}
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <VirtualizedLogsTable
+            filters={filters}
+            currencyCode={resolvedCurrencyCode}
+            billingModelSource={resolvedBillingModelSource}
+            autoRefreshEnabled={!isFullscreenOpen && isAutoRefresh}
+            autoRefreshIntervalMs={logsRefreshIntervalMs ?? 5000}
+            hiddenColumns={hiddenColumns}
+          />
+        </div>
       </div>
 
       {isFullscreenOpen ? (
