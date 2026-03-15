@@ -4019,18 +4019,18 @@ export class ProxyForwarder {
           }
         });
 
-        // ⭐ 关键：吞掉错误事件，避免 "terminated" 冒泡
+        // ⭐ 关键：将上游流错误传播到下游 reader，确保 ResponseHandler 能检测到截断
         nodeStream.on("error", (err) => {
-          logger.warn("ProxyForwarder: Upstream stream error (gracefully closed)", {
+          logger.warn("ProxyForwarder: Upstream stream error (signaling downstream)", {
             providerId,
             providerName,
             error: err.message,
             errorName: err.name,
           });
           try {
-            controller.close();
+            controller.error(err);
           } catch {
-            // 如果已关闭，忽略
+            // 如果已关闭或已出错，忽略
           }
         });
       },

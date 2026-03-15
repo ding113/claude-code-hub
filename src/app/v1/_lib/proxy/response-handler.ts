@@ -39,7 +39,7 @@ import type { SessionUsageUpdate } from "@/types/session";
 import type { LongContextPricingSpecialSetting } from "@/types/special-settings";
 import { GeminiAdapter } from "../gemini/adapter";
 import type { GeminiResponse } from "../gemini/types";
-import { isClientAbortError } from "./errors";
+import { isClientAbortError, isTransportError } from "./errors";
 import type { ProxySession } from "./session";
 import { consumeDeferredStreamingFinalization } from "./stream-finalization";
 
@@ -2370,6 +2370,39 @@ export class ProxyResponseHandler {
                 finalizeError,
               });
             }
+          }
+        } else if (isTransportError(err)) {
+          // 上游流传输错误（SocketError, ECONNRESET 等）：与 upstream abort 相同处理
+          // 参见 #916 — controller.error(err) 传播的 transport error
+          logger.error("ResponseHandler: Upstream stream transport error", {
+            taskId,
+            providerId: provider.id,
+            providerName: provider.name,
+            messageId: messageContext.id,
+            chunksCollected: chunks.length,
+            errorName: err.name,
+            errorMessage: err.message || "(empty message)",
+            errorCode: (err as NodeJS.ErrnoException).code,
+          });
+
+          try {
+            const allContent = flushAndJoin();
+            await finalizeStream(allContent, false, false, "STREAM_UPSTREAM_ABORTED");
+          } catch (finalizeError) {
+            logger.error("ResponseHandler: Failed to finalize transport-error stream", {
+              taskId,
+              messageId: messageContext.id,
+              finalizeError,
+            });
+
+            await persistRequestFailure({
+              session,
+              messageContext,
+              statusCode: 502,
+              error: err,
+              taskId,
+              phase: "stream",
+            });
           }
         } else {
           logger.error("Failed to save SSE content:", error);
