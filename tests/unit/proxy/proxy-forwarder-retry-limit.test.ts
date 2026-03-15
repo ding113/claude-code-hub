@@ -527,9 +527,11 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      void vi.runAllTimersAsync();
-      await expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
-      await expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
+      const instanceCheck = expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
+      const statusCheck = expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
+      await vi.runAllTimersAsync();
+      await instanceCheck;
+      await statusCheck;
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
@@ -572,9 +574,11 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      void vi.runAllTimersAsync();
-      await expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
-      await expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
+      const instanceCheck = expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
+      const statusCheck = expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
+      await vi.runAllTimersAsync();
+      await instanceCheck;
+      await statusCheck;
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
@@ -840,11 +844,7 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       const networkError = new TypeError("fetch failed");
       Object.assign(networkError, { code: "ECONNREFUSED" });
 
-      // All attempts fail except the last one
-      doForward.mockImplementation(async () => {
-        throw networkError;
-      });
-      // 5th attempt succeeds
+      // First 4 attempts fail, 5th succeeds
       doForward.mockImplementationOnce(async () => {
         throw networkError;
       });

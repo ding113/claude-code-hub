@@ -1190,7 +1190,7 @@ export class ProxyForwarder {
                     );
                   }
 
-                  // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
+                  // 记录本次失败尝试：reason=retry_failed 表示进入“重试/故障转移”流程（不代表已在同供应商上重试过）
                   if (lastError instanceof ProxyError) {
                     session.addProviderToChain(currentProvider, {
                       ...endpointAudit,
