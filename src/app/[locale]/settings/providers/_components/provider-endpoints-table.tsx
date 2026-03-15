@@ -527,6 +527,7 @@ export function AddEndpointButton({
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     const endpointUrl = formData.get("url") as string;
@@ -696,6 +697,7 @@ function EditEndpointDialog({ endpoint }: { endpoint: ProviderEndpoint }) {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsSubmitting(true);
     const formData = new FormData(e.currentTarget);
     const url = formData.get("url") as string;
