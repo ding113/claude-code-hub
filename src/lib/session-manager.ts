@@ -2059,7 +2059,13 @@ export class SessionManager {
       }
 
       const sessionIds = new Set<string>();
-      for (const [, result] of results) {
+      for (const [err, result] of results) {
+        if (err) {
+          logger.warn("SessionManager: Pipeline command error in terminateProviderSessionsBatch", {
+            error: err,
+          });
+          continue;
+        }
         if (!Array.isArray(result)) {
           continue;
         }
@@ -2088,6 +2094,27 @@ export class SessionManager {
         providerIds: uniqueProviderIds,
       });
       return 0;
+    }
+  }
+
+  static async terminateStickySessionsForProviders(
+    providerIds: number[],
+    context: string
+  ): Promise<void> {
+    const uniqueProviderIds = Array.from(
+      new Set(providerIds.filter((providerId) => Number.isInteger(providerId) && providerId > 0))
+    );
+    if (uniqueProviderIds.length === 0) {
+      return;
+    }
+
+    try {
+      await SessionManager.terminateProviderSessionsBatch(uniqueProviderIds);
+    } catch (error) {
+      logger.warn(`${context}:terminate_provider_sessions_failed`, {
+        providerIds: uniqueProviderIds,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

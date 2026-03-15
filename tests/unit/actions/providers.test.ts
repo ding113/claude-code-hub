@@ -54,6 +54,7 @@ vi.mock("@/lib/circuit-breaker", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     terminateProviderSessionsBatch: terminateProviderSessionsBatchMock,
+    terminateStickySessionsForProviders: terminateProviderSessionsBatchMock,
   },
 }));
 
@@ -531,7 +532,7 @@ describe("Provider Actions - Async Optimization", () => {
         })
       );
       expect(publishProviderCacheInvalidationMock).toHaveBeenCalledTimes(1);
-      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "editProvider");
     });
 
     it("editProvider endpoint sync: should generate favicon_url when website_url is updated", async () => {
@@ -553,7 +554,7 @@ describe("Provider Actions - Async Optimization", () => {
           favicon_url: "https://www.google.com/s2/favicons?domain=vendor.example.com&sz=32",
         })
       );
-      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "editProvider");
     });
 
     it("editProvider endpoint sync: should clear favicon_url when website_url is cleared", async () => {
@@ -572,7 +573,7 @@ describe("Provider Actions - Async Optimization", () => {
           favicon_url: null,
         })
       );
-      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "editProvider");
     });
 
     it("editProvider: group or allowlist changes should also terminate sticky sessions", async () => {
@@ -591,7 +592,7 @@ describe("Provider Actions - Async Optimization", () => {
           allowed_models: ["gpt-4.1"],
         })
       );
-      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "editProvider");
     });
   });
 
@@ -602,7 +603,7 @@ describe("Provider Actions - Async Optimization", () => {
 
       expect(result.ok).toBe(true);
       expect(revalidatePathMock).not.toHaveBeenCalled();
-      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1]);
+      expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "removeProvider");
     });
   });
 });

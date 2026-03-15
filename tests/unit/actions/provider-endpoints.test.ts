@@ -12,7 +12,6 @@ const tryDeleteProviderVendorIfEmptyMock = vi.fn();
 const updateProviderEndpointMock = vi.fn();
 const findProviderEndpointProbeLogsBatchMock = vi.fn();
 const findVendorTypeEndpointStatsBatchMock = vi.fn();
-const hasEnabledProviderReferenceForVendorTypeUrlMock = vi.fn();
 const findEnabledProviderReferencesForVendorTypeUrlMock = vi.fn();
 const findEnabledProviderIdsByVendorAndTypeMock = vi.fn();
 const findDashboardProviderEndpointsByVendorAndTypeMock = vi.fn();
@@ -62,6 +61,7 @@ vi.mock("@/lib/provider-endpoints/probe", () => ({
 vi.mock("@/lib/session-manager", () => ({
   SessionManager: {
     terminateProviderSessionsBatch: terminateProviderSessionsBatchMock,
+    terminateStickySessionsForProviders: terminateProviderSessionsBatchMock,
   },
 }));
 
@@ -73,7 +73,6 @@ vi.mock("@/repository/provider-endpoints-batch", () => ({
 vi.mock("@/repository/provider-endpoints", () => ({
   findDashboardProviderEndpointsByVendorAndType: findDashboardProviderEndpointsByVendorAndTypeMock,
   findEnabledProviderVendorTypePairs: vi.fn(async () => []),
-  hasEnabledProviderReferenceForVendorTypeUrl: hasEnabledProviderReferenceForVendorTypeUrlMock,
   findEnabledProviderReferencesForVendorTypeUrl: findEnabledProviderReferencesForVendorTypeUrlMock,
   findEnabledProviderIdsByVendorAndType: findEnabledProviderIdsByVendorAndTypeMock,
 }));
@@ -95,7 +94,6 @@ vi.mock("@/repository", () => ({
 describe("provider-endpoints actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
     findEnabledProviderReferencesForVendorTypeUrlMock.mockResolvedValue([]);
     findEnabledProviderIdsByVendorAndTypeMock.mockResolvedValue([]);
     findDashboardProviderEndpointsByVendorAndTypeMock.mockResolvedValue([]);
@@ -358,7 +356,6 @@ describe("provider-endpoints actions", () => {
     });
     softDeleteProviderEndpointMock.mockResolvedValue(true);
     tryDeleteProviderVendorIfEmptyMock.mockResolvedValue(true);
-    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
     findEnabledProviderIdsByVendorAndTypeMock.mockResolvedValue([11, 12]);
 
     const { removeProviderEndpoint } = await import("@/actions/provider-endpoints");
@@ -369,7 +366,10 @@ describe("provider-endpoints actions", () => {
     const { resetEndpointCircuit } = await import("@/lib/endpoint-circuit-breaker");
     expect(resetEndpointCircuit).toHaveBeenCalledWith(99);
     expect(tryDeleteProviderVendorIfEmptyMock).toHaveBeenCalledWith(123);
-    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([11, 12]);
+    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith(
+      [11, 12],
+      "removeProviderEndpoint"
+    );
   });
 
   it("removeProviderEndpoint: returns detailed conflict when endpoint is still referenced", async () => {
@@ -393,7 +393,6 @@ describe("provider-endpoints actions", () => {
       updatedAt: new Date(),
       deletedAt: null,
     });
-    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(true);
     findEnabledProviderReferencesForVendorTypeUrlMock.mockResolvedValue([
       { id: 1, name: "CPA Primary" },
       { id: 2, name: "CPA Backup" },
@@ -450,7 +449,10 @@ describe("provider-endpoints actions", () => {
     });
 
     expect(res.ok).toBe(true);
-    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([7, 8]);
+    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith(
+      [7, 8],
+      "editProviderEndpoint"
+    );
   });
 
   it("probeProviderEndpoint: calls probeProviderEndpointAndRecordByEndpoint and returns result", async () => {

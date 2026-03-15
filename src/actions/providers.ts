@@ -184,41 +184,28 @@ async function broadcastProviderCacheInvalidation(context: {
   }
 }
 
-const STICKY_SESSION_INVALIDATING_PROVIDER_FIELDS = new Set([
+const STICKY_SESSION_INVALIDATING_PROVIDER_KEYS = new Set<string>([
   "url",
-  "website_url",
-  "provider_type",
-  "group_tag",
-  "is_enabled",
-  "allowed_models",
-  "allowed_clients",
-  "blocked_clients",
-  "model_redirects",
-  "active_time_start",
-  "active_time_end",
+  "websiteUrl",
+  "providerType",
+  "groupTag",
+  "isEnabled",
+  "allowedModels",
+  "allowedClients",
+  "blockedClients",
+  "modelRedirects",
+  "activeTimeStart",
+  "activeTimeEnd",
 ]);
 
-function shouldInvalidateStickySessionsOnProviderEdit(data: Record<string, unknown>): boolean {
-  return Object.keys(data).some((key) => STICKY_SESSION_INVALIDATING_PROVIDER_FIELDS.has(key));
-}
-
-async function terminateStickySessionsForProviders(providerIds: number[], context: string) {
-  const uniqueProviderIds = Array.from(
-    new Set(providerIds.filter((providerId) => Number.isInteger(providerId) && providerId > 0))
+function shouldInvalidateStickySessionsOnProviderEdit(
+  changedProviderFields: Record<string, unknown>
+): boolean {
+  return Object.keys(changedProviderFields).some((key) =>
+    STICKY_SESSION_INVALIDATING_PROVIDER_KEYS.has(key)
   );
-  if (uniqueProviderIds.length === 0) {
-    return;
-  }
-
-  try {
-    await SessionManager.terminateProviderSessionsBatch(uniqueProviderIds);
-  } catch (error) {
-    logger.warn(`${context}:terminate_provider_sessions_failed`, {
-      providerIds: uniqueProviderIds,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
 }
+
 
 // 获取服务商数据
 export async function getProviders(): Promise<ProviderDisplay[]> {
@@ -813,8 +800,8 @@ export async function editProvider(
       return { ok: false, error: "供应商不存在" };
     }
 
-    if (shouldInvalidateStickySessionsOnProviderEdit(payload)) {
-      await terminateStickySessionsForProviders([providerId], "editProvider");
+    if (shouldInvalidateStickySessionsOnProviderEdit(preimageFields)) {
+      await SessionManager.terminateStickySessionsForProviders([providerId], "editProvider");
     }
 
     // 同步熔断器配置到 Redis（如果配置有变化）
@@ -889,7 +876,7 @@ export async function removeProvider(
     const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
 
-    await terminateStickySessionsForProviders([providerId], "removeProvider");
+    await SessionManager.terminateStickySessionsForProviders([providerId], "removeProvider");
 
     const undoToken = createProviderPatchUndoToken();
     const operationId = createProviderPatchOperationId();
@@ -1323,6 +1310,8 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   active_time_end: "activeTimeEnd",
   model_redirects: "modelRedirects",
   allowed_models: "allowedModels",
+  allowed_clients: "allowedClients",
+  blocked_clients: "blockedClients",
   limit_5h_usd: "limit5hUsd",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",

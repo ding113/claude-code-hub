@@ -243,24 +243,6 @@ function formatProviderReferenceSummary(
   return `${displayed} +${uniqueNames.length - maxDisplayCount}`;
 }
 
-async function terminateStickySessionsForProviders(providerIds: number[], context: string) {
-  const uniqueProviderIds = Array.from(
-    new Set(providerIds.filter((providerId) => Number.isInteger(providerId) && providerId > 0))
-  );
-  if (uniqueProviderIds.length === 0) {
-    return;
-  }
-
-  try {
-    await SessionManager.terminateProviderSessionsBatch(uniqueProviderIds);
-  } catch (error) {
-    logger.warn(`${context}:terminate_provider_sessions_failed`, {
-      providerIds: uniqueProviderIds,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
 export async function getProviderVendors(): Promise<ProviderVendor[]> {
   try {
     const session = await getAdminSession();
@@ -547,7 +529,10 @@ export async function editProviderEndpoint(
         endpoint.vendorId,
         endpoint.providerType
       );
-      await terminateStickySessionsForProviders(affectedProviderIds, "editProviderEndpoint");
+      await SessionManager.terminateStickySessionsForProviders(
+        affectedProviderIds,
+        "editProviderEndpoint"
+      );
     }
 
     try {
@@ -645,7 +630,10 @@ export async function removeProviderEndpoint(input: unknown): Promise<ActionResu
       endpoint.vendorId,
       endpoint.providerType
     );
-    await terminateStickySessionsForProviders(affectedProviderIds, "removeProviderEndpoint");
+    await SessionManager.terminateStickySessionsForProviders(
+      affectedProviderIds,
+      "removeProviderEndpoint"
+    );
 
     // Auto cleanup: if the vendor has no active providers/endpoints, delete it as well.
     try {
