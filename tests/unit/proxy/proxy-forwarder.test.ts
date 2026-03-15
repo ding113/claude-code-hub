@@ -52,6 +52,8 @@ function createSession({
 
 function createCodexProvider(): Provider {
   return {
+    id: 1,
+    name: "codex-test",
     providerType: "codex",
     url: "https://example.com/v1/responses",
     key: "test-outbound-key",
@@ -59,8 +61,21 @@ function createCodexProvider(): Provider {
   } as unknown as Provider;
 }
 
+function createClaudeProvider(providerType: "claude" | "claude-auth" = "claude"): Provider {
+  return {
+    id: 2,
+    name: "claude-test",
+    providerType,
+    url: "https://example.com/v1/messages",
+    key: "test-outbound-key",
+    preserveClientIp: false,
+  } as unknown as Provider;
+}
+
 function createGeminiProvider(providerType: "gemini" | "gemini-cli"): Provider {
   return {
+    id: 3,
+    name: `${providerType}-test`,
     providerType,
     url: "https://generativelanguage.googleapis.com/v1beta",
     key: "test-outbound-key",
@@ -69,7 +84,7 @@ function createGeminiProvider(providerType: "gemini" | "gemini-cli"): Provider {
 }
 
 describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
-  it("应该优先使用过滤器修改的 user-agent（Codex provider）", () => {
+  it("应该优先使用过滤器修改的 user-agent（Codex provider）", async () => {
     const session = createSession({
       userAgent: "Original-UA/1.0",
       headers: new Headers([["user-agent", "Filtered-UA/2.0"]]),
@@ -79,14 +94,14 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
 
     const provider = createCodexProvider();
     const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+      buildHeaders: (session: ProxySession, provider: Provider) => Promise<Headers>;
     };
-    const resultHeaders = buildHeaders(session, provider);
+    const resultHeaders = await buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Filtered-UA/2.0");
   });
 
-  it("应该使用原始 user-agent 当未被过滤器修改时", () => {
+  it("应该使用原始 user-agent 当未被过滤器修改时", async () => {
     const session = createSession({
       userAgent: "Original-UA/1.0",
       headers: new Headers([["user-agent", "Original-UA/1.0"]]),
@@ -96,14 +111,14 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
 
     const provider = createCodexProvider();
     const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+      buildHeaders: (session: ProxySession, provider: Provider) => Promise<Headers>;
     };
-    const resultHeaders = buildHeaders(session, provider);
+    const resultHeaders = await buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Original-UA/1.0");
   });
 
-  it("应该使用原始 user-agent 当过滤器删除 header 时", () => {
+  it("应该使用原始 user-agent 当过滤器删除 header 时", async () => {
     const session = createSession({
       userAgent: "Original-UA/1.0",
       headers: new Headers(), // user-agent 被删除
@@ -113,14 +128,14 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
 
     const provider = createCodexProvider();
     const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+      buildHeaders: (session: ProxySession, provider: Provider) => Promise<Headers>;
     };
-    const resultHeaders = buildHeaders(session, provider);
+    const resultHeaders = await buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe("Original-UA/1.0");
   });
 
-  it("应该使用兜底 user-agent 当原始值为空且未修改时", () => {
+  it("应该使用兜底 user-agent 当原始值为空且未修改时", async () => {
     const session = createSession({
       userAgent: null,
       headers: new Headers(),
@@ -129,16 +144,16 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
 
     const provider = createCodexProvider();
     const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+      buildHeaders: (session: ProxySession, provider: Provider) => Promise<Headers>;
     };
-    const resultHeaders = buildHeaders(session, provider);
+    const resultHeaders = await buildHeaders(session, provider);
 
     expect(resultHeaders.get("user-agent")).toBe(
       "codex_cli_rs/0.55.0 (Mac OS 26.1.0; arm64) vscode/2.0.64"
     );
   });
 
-  it("应该保留过滤器设置的空字符串 user-agent", () => {
+  it("应该保留过滤器设置的空字符串 user-agent", async () => {
     const session = createSession({
       userAgent: "Original-UA/1.0",
       headers: new Headers([["user-agent", ""]]), // 空字符串
@@ -148,13 +163,45 @@ describe("ProxyForwarder - buildHeaders User-Agent resolution", () => {
 
     const provider = createCodexProvider();
     const { buildHeaders } = ProxyForwarder as unknown as {
-      buildHeaders: (session: ProxySession, provider: Provider) => Headers;
+      buildHeaders: (session: ProxySession, provider: Provider) => Promise<Headers>;
     };
-    const resultHeaders = buildHeaders(session, provider);
+    const resultHeaders = await buildHeaders(session, provider);
 
     // 空字符串应该被保留（使用 ?? 而非 ||）
     expect(resultHeaders.get("user-agent")).toBe("");
   });
+
+  it("请求体显式使用 1h cache ttl 时应自动补充 Anthropic beta header", async () => {
+    const session = createSession({
+      userAgent: "Claude-Client/1.0",
+      headers: new Headers(),
+    });
+    session.request.message = {
+      system: [
+        {
+          type: "text",
+          text: "Long-lived cached instructions",
+          cache_control: { type: "ephemeral", ttl: "1h" },
+        },
+      ],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "ping" }],
+        },
+      ],
+    };
+
+    const provider = createClaudeProvider();
+    const { buildHeaders } = ProxyForwarder as unknown as {
+      buildHeaders: (session: ProxySession, provider: Provider) => Promise<Headers>;
+    };
+    const resultHeaders = await buildHeaders(session, provider);
+
+    expect(resultHeaders.get("anthropic-beta")).toContain("extended-cache-ttl-2025-04-11");
+    expect(resultHeaders.get("anthropic-beta")).toContain("prompt-caching-2024-07-31");
+  });
+
 });
 
 describe("ProxyForwarder - buildGeminiHeaders headers passthrough", () => {

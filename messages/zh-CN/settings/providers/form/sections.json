@@ -66,10 +66,15 @@
     },
     "cacheTtl": {
       "label": "Cache TTL 覆写",
+      "advancedLabel": "高级 TTL 策略",
       "options": {
         "inherit": "不覆写（跟随客户端）",
         "5m": "5 分钟",
         "1h": "1 小时"
+      },
+      "switch": {
+        "label": "强制启用 1 小时缓存",
+        "desc": "开启后，包含 cache_control 的请求会默认按 1h TTL 转发。"
       },
       "desc": "强制设置 prompt cache TTL；仅影响包含 cache_control 的请求。"
     },

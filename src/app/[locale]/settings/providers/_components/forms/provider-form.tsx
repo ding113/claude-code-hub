@@ -1155,27 +1155,49 @@ export function ProviderForm({
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>{t("sections.routing.cacheTtl.label")}</Label>
-                    <Select
-                      value={cacheTtlPreference}
-                      onValueChange={(val) => setCacheTtlPreference(val as "inherit" | "5m" | "1h")}
-                      disabled={isPending}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="inherit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="inherit">
-                          {t("sections.routing.cacheTtl.options.inherit")}
-                        </SelectItem>
-                        <SelectItem value="5m">
-                          {t("sections.routing.cacheTtl.options.5m")}
-                        </SelectItem>
-                        <SelectItem value="1h">
-                          {t("sections.routing.cacheTtl.options.1h")}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+                      <div className="space-y-1">
+                        <Label>{t("sections.routing.cacheTtl.switch.label")}</Label>
+                        <p className="text-xs text-muted-foreground">
+                          {t("sections.routing.cacheTtl.switch.desc")}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={cacheTtlPreference === "1h"}
+                        onCheckedChange={(checked) =>
+                          setCacheTtlPreference((current) => {
+                            if (checked) return "1h";
+                            return current === "1h" ? "inherit" : current;
+                          })
+                        }
+                        disabled={isPending}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t("sections.routing.cacheTtl.advancedLabel")}</Label>
+                      <Select
+                        value={cacheTtlPreference}
+                        onValueChange={(val) =>
+                          setCacheTtlPreference(val as "inherit" | "5m" | "1h")
+                        }
+                        disabled={isPending}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="inherit" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inherit">
+                            {t("sections.routing.cacheTtl.options.inherit")}
+                          </SelectItem>
+                          <SelectItem value="5m">
+                            {t("sections.routing.cacheTtl.options.5m")}
+                          </SelectItem>
+                          <SelectItem value="1h">
+                            {t("sections.routing.cacheTtl.options.1h")}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {t("sections.routing.cacheTtl.desc")}
                     </p>

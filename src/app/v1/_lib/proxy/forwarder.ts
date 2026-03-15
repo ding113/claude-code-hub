@@ -108,47 +108,93 @@ function resolveCacheTtlPreference(
   return normalize(keyPref) ?? normalize(providerPref) ?? null;
 }
 
+function mapAnthropicCacheControlBlocks(
+  message: Record<string, unknown>,
+  mapper: (item: Record<string, unknown>) => Record<string, unknown>
+): boolean {
+  let changed = false;
+
+  const mapBlocks = (blocks: unknown): unknown => {
+    if (!Array.isArray(blocks)) return blocks;
+
+    return blocks.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const nextItem = mapper(item as Record<string, unknown>);
+      if (nextItem !== item) {
+        changed = true;
+      }
+      return nextItem;
+    });
+  };
+
+  if (Array.isArray(message.system)) {
+    message.system = mapBlocks(message.system);
+  }
+
+  if (Array.isArray(message.tools)) {
+    message.tools = mapBlocks(message.tools);
+  }
+
+  if (Array.isArray(message.messages)) {
+    message.messages = message.messages.map((msg) => {
+      if (!msg || typeof msg !== "object") return msg;
+      const msgObj = msg as Record<string, unknown>;
+      if (!Array.isArray(msgObj.content)) return msg;
+
+      return {
+        ...msgObj,
+        content: mapBlocks(msgObj.content),
+      };
+    });
+  }
+
+  return changed;
+}
+
 function applyCacheTtlOverrideToMessage(
   message: Record<string, unknown>,
   ttl: CacheTtlResolved
 ): boolean {
-  let applied = false;
-  const messages = (message as Record<string, unknown>).messages;
+  return mapAnthropicCacheControlBlocks(message, (item) => {
+    const cacheControl = item.cache_control;
 
-  if (!Array.isArray(messages)) {
-    return applied;
-  }
-
-  for (const msg of messages) {
-    if (!msg || typeof msg !== "object") continue;
-    const msgObj = msg as Record<string, unknown>;
-    const content = msgObj.content;
-
-    if (!Array.isArray(content)) continue;
-
-    msgObj.content = content.map((item) => {
-      if (!item || typeof item !== "object") return item;
-      const itemObj = item as Record<string, unknown>;
-      const cacheControl = itemObj.cache_control;
-
-      if (cacheControl && typeof cacheControl === "object") {
-        const ccObj = cacheControl as Record<string, unknown>;
-        if (ccObj.type === "ephemeral") {
-          applied = true;
-          return {
-            ...itemObj,
-            cache_control: {
-              ...ccObj,
-              ttl: ttl === "1h" ? "1h" : "5m",
-            },
-          };
-        }
-      }
+    if (!cacheControl || typeof cacheControl !== "object") {
       return item;
-    });
-  }
+    }
 
-  return applied;
+    const ccObj = cacheControl as Record<string, unknown>;
+    if (ccObj.type !== "ephemeral") {
+      return item;
+    }
+
+    return {
+      ...item,
+      cache_control: {
+        ...ccObj,
+        ttl,
+      },
+    };
+  });
+}
+
+function requestHas1hCacheTtl(message: Record<string, unknown>): boolean {
+  let found = false;
+
+  mapAnthropicCacheControlBlocks(message, (item) => {
+    const cacheControl = item.cache_control;
+    if (!cacheControl || typeof cacheControl !== "object") {
+      return item;
+    }
+
+    const ccObj = cacheControl as Record<string, unknown>;
+    if (ccObj.type === "ephemeral" && ccObj.ttl === "1h") {
+      found = true;
+    }
+
+    return item;
+  });
+
+  return found;
 }
 
 function clampRetryAttempts(value: number): number {
@@ -1519,20 +1565,6 @@ export class ProxyForwarder {
         }
       }
 
-      if (
-        resolvedCacheTtl &&
-        (provider.providerType === "claude" || provider.providerType === "claude-auth")
-      ) {
-        const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
-        if (applied) {
-          logger.info("ProxyForwarder: Applied cache TTL override to request", {
-            providerId: provider.id,
-            providerName: provider.name,
-            cacheTtl: resolvedCacheTtl,
-          });
-        }
-      }
-
       // Codex 请求清洗（即使格式相同也要执行，除非是官方客户端）
       if (toFormat === "codex") {
         const isOfficialClient = isOfficialCodexClient(session.userAgent);
@@ -1631,9 +1663,10 @@ export class ProxyForwarder {
       ) {
         const applied = applyCacheTtlOverrideToMessage(session.request.message, resolvedCacheTtl);
         if (applied) {
-          logger.debug("ProxyForwarder: Applied cache TTL override to request", {
+          logger.info("ProxyForwarder: Applied cache TTL override to request", {
             providerId: provider.id,
-            ttl: resolvedCacheTtl,
+            providerName: provider.name,
+            cacheTtl: resolvedCacheTtl,
           });
         }
       }
@@ -2592,8 +2625,12 @@ export class ProxyForwarder {
       overrides["x-real-ip"] = globalSettings.forwardedClientIp;
     }
 
+    const requestMessage = session.request.message as Record<string, unknown>;
+    const needsExtendedCacheTtlHeader =
+      session.getCacheTtlResolved?.() === "1h" || requestHas1hCacheTtl(requestMessage);
+
     // 针对 1h 缓存 TTL，补充 Anthropic beta header（避免客户端遗漏）
-    if (session.getCacheTtlResolved && session.getCacheTtlResolved() === "1h") {
+    if (needsExtendedCacheTtlHeader) {
       const existingBeta = session.headers.get("anthropic-beta") || "";
       const betaFlags = new Set(
         existingBeta

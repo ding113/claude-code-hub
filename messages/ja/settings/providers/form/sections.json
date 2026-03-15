@@ -166,12 +166,17 @@
   },
   "routing": {
     "cacheTtl": {
+      "advancedLabel": "詳細 TTL ポリシー",
       "desc": "プロンプトキャッシュのTTLを強制設定。cache_controlを含むリクエストにのみ適用されます。",
       "label": "キャッシュTTLオーバーライド",
       "options": {
         "1h": "1時間",
         "5m": "5分",
         "inherit": "オーバーライドしない（クライアントに従う）"
+      },
+      "switch": {
+        "label": "1時間キャッシュを強制",
+        "desc": "有効にすると、cache_control を含むリクエストは既定で 1h TTL で転送されます。"
       }
     },
     "codexOverrides": {

@@ -166,12 +166,17 @@
   },
   "routing": {
     "cacheTtl": {
+      "advancedLabel": "進階 TTL 策略",
       "desc": "強制設定 prompt cache TTL；僅影響包含 cache_control 的請求。",
       "label": "Cache TTL 覆寫",
       "options": {
         "1h": "1 小時",
         "5m": "5 分鐘",
         "inherit": "不覆寫（跟隨客戶端）"
+      },
+      "switch": {
+        "label": "強制啟用 1 小時快取",
+        "desc": "開啟後，包含 cache_control 的請求會預設以 1h TTL 轉發。"
       }
     },
     "codexOverrides": {

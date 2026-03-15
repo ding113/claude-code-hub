@@ -166,12 +166,17 @@
   },
   "routing": {
     "cacheTtl": {
+      "advancedLabel": "Advanced TTL Policy",
       "desc": "Force prompt cache TTL; only affects requests with cache_control.",
       "label": "Cache TTL Override",
       "options": {
         "1h": "1 hour",
         "5m": "5 minutes",
         "inherit": "No override (follow client)"
+      },
+      "switch": {
+        "label": "Force 1-hour cache",
+        "desc": "When enabled, requests containing cache_control are forwarded with a 1h TTL by default."
       }
     },
     "codexOverrides": {

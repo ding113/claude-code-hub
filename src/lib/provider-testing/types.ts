@@ -224,7 +224,7 @@ export interface ClaudeTestBody {
   system?: Array<{
     type: "text";
     text: string;
-    cache_control?: { type: "ephemeral" };
+    cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" };
   }>;
   max_tokens: number;
   stream: boolean;
