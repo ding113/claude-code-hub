@@ -1109,6 +1109,7 @@ export class ProxyForwarder {
                 const rectified = rectifyAnthropicRequestMessage(
                   session.request.message as Record<string, unknown>
                 );
+                const hasRetryBudget = attemptCount < maxAttemptsPerProvider;
 
                 // 写入审计字段（specialSettings）
                 session.addSpecialSetting({
@@ -1119,7 +1120,7 @@ export class ProxyForwarder {
                   providerName: currentProvider.name,
                   trigger: rectifierTrigger,
                   attemptNumber: attemptCount,
-                  retryAttemptNumber: attemptCount + 1,
+                  retryAttemptNumber: hasRetryBudget ? attemptCount + 1 : attemptCount,
                   removedThinkingBlocks: rectified.removedThinkingBlocks,
                   removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
                   removedSignatureFields: rectified.removedSignatureFields,
@@ -1167,8 +1168,6 @@ export class ProxyForwarder {
                   );
                   errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
                 } else {
-                  const hasRetryBudget = attemptCount < maxAttemptsPerProvider;
-
                   if (hasRetryBudget) {
                     logger.info("ProxyForwarder: Thinking signature rectifier applied, retrying", {
                       providerId: currentProvider.id,
@@ -1266,6 +1265,7 @@ export class ProxyForwarder {
                 const budgetRectified = rectifyThinkingBudget(
                   session.request.message as Record<string, unknown>
                 );
+                const hasRetryBudget = attemptCount < maxAttemptsPerProvider;
 
                 session.addSpecialSetting({
                   type: "thinking_budget_rectifier",
@@ -1275,7 +1275,7 @@ export class ProxyForwarder {
                   providerName: currentProvider.name,
                   trigger: budgetRectifierTrigger,
                   attemptNumber: attemptCount,
-                  retryAttemptNumber: attemptCount + 1,
+                  retryAttemptNumber: hasRetryBudget ? attemptCount + 1 : attemptCount,
                   before: budgetRectified.before,
                   after: budgetRectified.after,
                 });
@@ -1321,8 +1321,6 @@ export class ProxyForwarder {
                   );
                   errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
                 } else {
-                  const hasRetryBudget = attemptCount < maxAttemptsPerProvider;
-
                   if (hasRetryBudget) {
                     logger.info("ProxyForwarder: Thinking budget rectifier applied, retrying", {
                       providerId: currentProvider.id,
@@ -1833,6 +1831,7 @@ export class ProxyForwarder {
 
       if (!alternativeProvider) {
         if (lastRectifierSwitchError) {
+          await ProxyForwarder.clearSessionProviderBinding(session);
           throw lastRectifierSwitchError;
         }
 

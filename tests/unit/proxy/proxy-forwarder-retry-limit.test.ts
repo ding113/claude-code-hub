@@ -526,14 +526,9 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      let caught: unknown = null;
-      sendPromise.catch((error) => {
-        caught = error;
-      });
-      await vi.runAllTimersAsync();
-
-      expect(caught).toBeInstanceOf(ProxyError);
-      expect((caught as ProxyError).statusCode).toBe(400);
+      void vi.runAllTimersAsync();
+      await expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
+      await expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
@@ -576,14 +571,9 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      let caught: unknown = null;
-      sendPromise.catch((error) => {
-        caught = error;
-      });
-      await vi.runAllTimersAsync();
-
-      expect(caught).toBeInstanceOf(ProxyError);
-      expect((caught as ProxyError).statusCode).toBe(400);
+      void vi.runAllTimersAsync();
+      await expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
+      await expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).toHaveBeenCalledTimes(1);
     } finally {
