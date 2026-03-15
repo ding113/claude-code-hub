@@ -14,6 +14,47 @@ const mocks = vi.hoisted(() => {
       health: { failureCount: 0 },
       config: { failureThreshold: 3 },
     })),
+    getCachedSystemSettings: vi.fn(async () => {
+      const now = new Date("2026-01-01T00:00:00.000Z");
+      return {
+        id: 0,
+        siteTitle: "Claude Code Hub",
+        allowGlobalUsageView: false,
+        currencyDisplay: "USD",
+        billingModelSource: "original",
+        timezone: null,
+        enableAutoCleanup: false,
+        cleanupRetentionDays: 30,
+        cleanupSchedule: "0 2 * * *",
+        cleanupBatchSize: 10000,
+        enableClientVersionCheck: false,
+        verboseProviderError: false,
+        enableHttp2: false,
+        interceptAnthropicWarmupRequests: false,
+        enableThinkingSignatureRectifier: true,
+        enableThinkingBudgetRectifier: true,
+        enableBillingHeaderRectifier: true,
+        enableCodexSessionIdCompletion: true,
+        enableClaudeMetadataUserIdInjection: true,
+        enableResponseFixer: true,
+        responseFixerConfig: {
+          fixTruncatedJson: true,
+          fixSseFormat: true,
+          fixEncoding: true,
+          maxJsonDepth: 200,
+          maxFixSize: 1024 * 1024,
+        },
+        quotaDbRefreshIntervalSeconds: 10,
+        quotaLeasePercent5h: 0.05,
+        quotaLeasePercentDaily: 0.05,
+        quotaLeasePercentWeekly: 0.05,
+        quotaLeasePercentMonthly: 0.05,
+        quotaLeaseCapUsd: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+    }),
+    isHttp2Enabled: vi.fn(async () => false),
     isVendorTypeCircuitOpen: vi.fn(async () => false),
     recordVendorTypeAllEndpointsTimeout: vi.fn(async () => {}),
     findAllProviders: vi.fn(async () => []),
@@ -47,6 +88,15 @@ vi.mock("@/lib/circuit-breaker", () => ({
   recordSuccess: mocks.recordSuccess,
   recordFailure: mocks.recordFailure,
 }));
+
+vi.mock("@/lib/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/config")>();
+  return {
+    ...actual,
+    getCachedSystemSettings: mocks.getCachedSystemSettings,
+    isHttp2Enabled: mocks.isHttp2Enabled,
+  };
+});
 
 vi.mock("@/lib/vendor-type-circuit-breaker", () => ({
   isVendorTypeCircuitOpen: mocks.isVendorTypeCircuitOpen,
@@ -263,6 +313,393 @@ describe("ProxyForwarder - raw passthrough policy parity (T5 RED)", () => {
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).not.toHaveBeenCalled();
       expect(mocks.recordFailure).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking rectifiers", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("thinking signature rectifier: maxRetryAttempts=1 should switch provider (not retry same provider)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      const providerB = createProvider({
+        id: 2,
+        name: "p2",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      session.setProvider(providerA);
+
+      // Make rectifier actually apply: include a thinking block to be removed.
+      (session.request.message as any).messages = [
+        {
+          role: "user",
+          content: [
+            { type: "thinking", text: "t" },
+            { type: "text", text: "hello" },
+          ],
+        },
+      ];
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      selectAlternative.mockResolvedValue(providerB);
+
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError("invalid signature in thinking block", 400);
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.runAllTimersAsync();
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      const providerIds = doForward.mock.calls.map((call) => (call[1] as Provider).id);
+      expect(providerIds).toEqual([1, 2]);
+
+      const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
+      expect(attemptNumbers).toEqual([1, 1]);
+
+      const content = (session.request.message as any).messages?.[0]?.content;
+      expect(Array.isArray(content)).toBe(true);
+      expect(content.some((b: any) => b?.type === "thinking")).toBe(false);
+
+      const chain = session.getProviderChain();
+      expect(chain).toHaveLength(2);
+      expect(chain[0].id).toBe(1);
+      expect(chain[1].id).toBe(2);
+
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("thinking budget rectifier: maxRetryAttempts=1 should switch provider (not retry same provider)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      const providerB = createProvider({
+        id: 2,
+        name: "p2",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      session.setProvider(providerA);
+
+      // Make budget rectifier apply by setting low budget_tokens.
+      (session.request.message as any).thinking = { type: "enabled", budget_tokens: 1 };
+      delete (session.request.message as any).max_tokens;
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      selectAlternative.mockResolvedValue(providerB);
+
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError(
+          "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024",
+          400
+        );
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.runAllTimersAsync();
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      const providerIds = doForward.mock.calls.map((call) => (call[1] as Provider).id);
+      expect(providerIds).toEqual([1, 2]);
+
+      const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
+      expect(attemptNumbers).toEqual([1, 1]);
+
+      const thinking = (session.request.message as any).thinking;
+      expect(thinking.type).toBe("enabled");
+      expect(thinking.budget_tokens).toBe(32000);
+      expect((session.request.message as any).max_tokens).toBe(64000);
+
+      const chain = session.getProviderChain();
+      expect(chain).toHaveLength(2);
+      expect(chain[0].id).toBe(1);
+      expect(chain[1].id).toBe(2);
+
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("thinking signature rectifier: maxRetryAttempts=1 + no alternative provider should throw original 400 (not 503)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      session.setProvider(providerA);
+
+      (session.request.message as any).messages = [
+        {
+          role: "user",
+          content: [
+            { type: "thinking", text: "t" },
+            { type: "text", text: "hello" },
+          ],
+        },
+      ];
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      selectAlternative.mockResolvedValue(null);
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError("invalid signature in thinking block", 400);
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      let caught: unknown = null;
+      sendPromise.catch((error) => {
+        caught = error;
+      });
+      await vi.runAllTimersAsync();
+
+      expect(caught).toBeInstanceOf(ProxyError);
+      expect((caught as ProxyError).statusCode).toBe(400);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("thinking budget rectifier: maxRetryAttempts=1 + no alternative provider should throw original 400 (not 503)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      session.setProvider(providerA);
+
+      (session.request.message as any).thinking = { type: "enabled", budget_tokens: 1 };
+      delete (session.request.message as any).max_tokens;
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      selectAlternative.mockResolvedValue(null);
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError(
+          "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024",
+          400
+        );
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      let caught: unknown = null;
+      sendPromise.catch((error) => {
+        caught = error;
+      });
+      await vi.runAllTimersAsync();
+
+      expect(caught).toBeInstanceOf(ProxyError);
+      expect((caught as ProxyError).statusCode).toBe(400);
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("thinking signature rectifier: maxRetryAttempts=2 should retry same provider (not switch)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+      });
+      session.setProvider(providerA);
+
+      (session.request.message as any).messages = [
+        {
+          role: "user",
+          content: [
+            { type: "thinking", text: "t" },
+            { type: "text", text: "hello" },
+          ],
+        },
+      ];
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError("invalid signature in thinking block", 400);
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.runAllTimersAsync();
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(selectAlternative).not.toHaveBeenCalled();
+
+      const providerIds = doForward.mock.calls.map((call) => (call[1] as Provider).id);
+      expect(providerIds).toEqual([1, 1]);
+
+      const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
+      expect(attemptNumbers).toEqual([1, 2]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("thinking budget rectifier: maxRetryAttempts=2 should retry same provider (not switch)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+      });
+      session.setProvider(providerA);
+
+      (session.request.message as any).thinking = { type: "enabled", budget_tokens: 1 };
+      delete (session.request.message as any).max_tokens;
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError(
+          "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024",
+          400
+        );
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json", "content-length": "2" },
+        })
+      );
+
+      const sendPromise = ProxyForwarder.send(session);
+      await vi.runAllTimersAsync();
+      const response = await sendPromise;
+
+      expect(response.status).toBe(200);
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(selectAlternative).not.toHaveBeenCalled();
+
+      const providerIds = doForward.mock.calls.map((call) => (call[1] as Provider).id);
+      expect(providerIds).toEqual([1, 1]);
+
+      const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
+      expect(attemptNumbers).toEqual([1, 2]);
     } finally {
       vi.useRealTimers();
     }

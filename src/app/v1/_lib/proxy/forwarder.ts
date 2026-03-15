@@ -543,13 +543,15 @@ export class ProxyForwarder {
     let currentProvider = session.provider;
     const failedProviderIds: number[] = []; // 记录已失败的供应商ID
     let totalProvidersAttempted = 0; // 已尝试的供应商数量（用于日志）
+    let lastRectifierSwitchError: Error | null = null; // 整流器触发但因重试上限而切换供应商时，保留原始错误（用于无替代供应商时回退抛出）
 
     // ========== 外层循环：供应商切换（最多 MAX_PROVIDER_SWITCHES 次）==========
     while (totalProvidersAttempted < MAX_PROVIDER_SWITCHES) {
       totalProvidersAttempted++;
       let attemptCount = 0; // 当前供应商的尝试次数
+      lastRectifierSwitchError = null;
 
-      let maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
+      const maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
         currentProvider,
         envDefaultMaxAttempts
       );
@@ -1078,12 +1080,13 @@ export class ProxyForwarder {
             throw lastError;
           }
 
-          // 2.5 Thinking signature 整流器：命中后对同供应商“整流 + 重试一次”
+          // 2.5 Thinking signature 整流器：命中后尝试“整流 + 重试”
           // 目标：解决 Anthropic 与非 Anthropic 渠道切换导致的 thinking 签名不兼容问题
           // 约束：
           // - 仅对 Anthropic 类型供应商生效
           // - 不依赖 error rules 开关（用户可能关闭规则，但仍希望整流生效）
-          // - 不计入熔断器、不触发供应商切换
+          // - 不计入熔断器
+          // - 严格遵守 maxRetryAttempts：有预算则对同供应商重试，否则切换供应商（若存在替代）
           const isAnthropicProvider =
             currentProvider.providerType === "claude" ||
             currentProvider.providerType === "claude-auth";
@@ -1164,15 +1167,29 @@ export class ProxyForwarder {
                   );
                   errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
                 } else {
-                  logger.info("ProxyForwarder: Thinking signature rectifier applied, retrying", {
-                    providerId: currentProvider.id,
-                    providerName: currentProvider.name,
-                    trigger: rectifierTrigger,
-                    attemptNumber: attemptCount,
-                    willRetryAttemptNumber: attemptCount + 1,
-                  });
+                  const hasRetryBudget = attemptCount < maxAttemptsPerProvider;
 
-                  thinkingSignatureRectifierRetried = true;
+                  if (hasRetryBudget) {
+                    logger.info("ProxyForwarder: Thinking signature rectifier applied, retrying", {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      trigger: rectifierTrigger,
+                      attemptNumber: attemptCount,
+                      willRetryAttemptNumber: attemptCount + 1,
+                    });
+                  } else {
+                    logger.info(
+                      "ProxyForwarder: Thinking signature rectifier applied but maxRetryAttempts reached, switching provider",
+                      {
+                        providerId: currentProvider.id,
+                        providerName: currentProvider.name,
+                        trigger: rectifierTrigger,
+                        attemptNumber: attemptCount,
+                        maxRetryAttempts: maxAttemptsPerProvider,
+                        totalProvidersAttempted,
+                      }
+                    );
+                  }
 
                   // 记录失败的第一次请求（以 retry_failed 体现“发生过一次重试”）
                   if (lastError instanceof ProxyError) {
@@ -1215,15 +1232,23 @@ export class ProxyForwarder {
                     });
                   }
 
-                  // 确保即使 maxAttemptsPerProvider=1 也能完成一次额外重试
-                  maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
-                  continue;
+                  // 尊重“单供应商最大尝试次数”：只在还有预算时才对同一供应商重试；否则直接进入供应商切换逻辑。
+                  if (hasRetryBudget) {
+                    thinkingSignatureRectifierRetried = true;
+                    continue;
+                  }
+
+                  // 记录原始错误：若无可用替代供应商，回退抛出该错误而非 503，避免掩盖客户端输入问题。
+                  lastRectifierSwitchError = lastError;
+                  failedProviderIds.push(currentProvider.id);
+                  break;
                 }
               }
             }
           }
 
-          // 2.6 Thinking budget rectifier: fix budget_tokens < 1024 errors and retry once
+          // 2.6 Thinking budget 整流器：命中后尝试修正 budget_tokens 并重试
+          // 约束同上：仅 Anthropic、生效不依赖 error rules、不计入熔断器，且严格遵守 maxRetryAttempts
           const budgetRectifierTrigger = isAnthropicProvider
             ? detectThinkingBudgetRectifierTrigger(errorMessage)
             : null;
@@ -1296,17 +1321,33 @@ export class ProxyForwarder {
                   );
                   errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
                 } else {
-                  logger.info("ProxyForwarder: Thinking budget rectifier applied, retrying", {
-                    providerId: currentProvider.id,
-                    providerName: currentProvider.name,
-                    trigger: budgetRectifierTrigger,
-                    attemptNumber: attemptCount,
-                    willRetryAttemptNumber: attemptCount + 1,
-                    before: budgetRectified.before,
-                    after: budgetRectified.after,
-                  });
+                  const hasRetryBudget = attemptCount < maxAttemptsPerProvider;
 
-                  thinkingBudgetRectifierRetried = true;
+                  if (hasRetryBudget) {
+                    logger.info("ProxyForwarder: Thinking budget rectifier applied, retrying", {
+                      providerId: currentProvider.id,
+                      providerName: currentProvider.name,
+                      trigger: budgetRectifierTrigger,
+                      attemptNumber: attemptCount,
+                      willRetryAttemptNumber: attemptCount + 1,
+                      before: budgetRectified.before,
+                      after: budgetRectified.after,
+                    });
+                  } else {
+                    logger.info(
+                      "ProxyForwarder: Thinking budget rectifier applied but maxRetryAttempts reached, switching provider",
+                      {
+                        providerId: currentProvider.id,
+                        providerName: currentProvider.name,
+                        trigger: budgetRectifierTrigger,
+                        attemptNumber: attemptCount,
+                        maxRetryAttempts: maxAttemptsPerProvider,
+                        totalProvidersAttempted,
+                        before: budgetRectified.before,
+                        after: budgetRectified.after,
+                      }
+                    );
+                  }
 
                   if (lastError instanceof ProxyError) {
                     session.addProviderToChain(currentProvider, {
@@ -1348,8 +1389,16 @@ export class ProxyForwarder {
                     });
                   }
 
-                  maxAttemptsPerProvider = Math.max(maxAttemptsPerProvider, attemptCount + 1);
-                  continue;
+                  // 尊重“单供应商最大尝试次数”：只在还有预算时才对同一供应商重试；否则直接进入供应商切换逻辑。
+                  if (hasRetryBudget) {
+                    thinkingBudgetRectifierRetried = true;
+                    continue;
+                  }
+
+                  // 记录原始错误：若无可用替代供应商，回退抛出该错误而非 503，避免掩盖客户端输入问题。
+                  lastRectifierSwitchError = lastError;
+                  failedProviderIds.push(currentProvider.id);
+                  break;
                 }
               }
             }
@@ -1783,6 +1832,10 @@ export class ProxyForwarder {
       );
 
       if (!alternativeProvider) {
+        if (lastRectifierSwitchError) {
+          throw lastRectifierSwitchError;
+        }
+
         // ⭐ 无可用供应商：所有供应商都失败了
         logger.error("ProxyForwarder: All providers failed", {
           totalProvidersAttempted,
