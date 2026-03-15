@@ -208,7 +208,7 @@ export function VirtualizedLogsTable({
     <div className="space-y-4">
       {/* Status bar */}
       {hideStatusBar ? null : (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
+        <div className="flex items-center justify-between text-xs text-muted-foreground/70 px-3 pt-2">
           <span>{t("logs.table.loadedCount", { count: allLogs.length })}</span>
           {isFetchingNextPage && (
             <span className="flex items-center gap-2">
@@ -221,11 +221,11 @@ export function VirtualizedLogsTable({
       )}
 
       {/* Table with virtual scrolling */}
-      <div className="border-t overflow-x-auto">
+      <div className="overflow-x-auto">
         <div className="min-w-[800px]">
           {/* Fixed header */}
-          <div className="bg-muted/40 border-b sticky top-0 z-10">
-            <div className="flex items-center h-9 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <div className="bg-muted/30 border-b sticky top-0 z-10">
+            <div className="flex items-center h-8 text-[11px] font-medium text-muted-foreground/80 tracking-wide">
               <div className="flex-[0.6] min-w-[56px] pl-3 truncate" title={t("logs.columns.time")}>
                 {t("logs.columns.time")}
               </div>
@@ -360,8 +360,8 @@ export function VirtualizedLogsTable({
                       transform: `translateY(${virtualRow.start}px)`,
                     }}
                     className={cn(
-                      "flex items-center text-sm border-b transition-colors hover:bg-muted/30",
-                      isNonBilling ? "bg-muted/40 text-muted-foreground dark:bg-muted/20" : ""
+                      "flex items-center text-sm border-b border-border/40 transition-colors hover:bg-accent/50",
+                      isNonBilling ? "bg-muted/30 text-muted-foreground dark:bg-muted/15" : ""
                     )}
                   >
                     {/* Time */}
