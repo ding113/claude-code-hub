@@ -103,6 +103,8 @@ type StreamingHedgeAttempt = {
   responseController: AbortController | null;
   clearResponseTimeout: (() => void) | null;
   firstByteTimeoutMs: number;
+  providerAttemptNumber: number;
+  maxAttemptsPerProvider: number;
   sequence: number;
   settled: boolean;
   thresholdTriggered: boolean;
@@ -1121,7 +1123,7 @@ export class ProxyForwarder {
                   providerName: currentProvider.name,
                   trigger: rectifierTrigger,
                   attemptNumber: attemptCount,
-                  retryAttemptNumber: hasRetryBudget ? attemptCount + 1 : attemptCount,
+                  ...(hasRetryBudget ? { retryAttemptNumber: attemptCount + 1 } : {}),
                   removedThinkingBlocks: rectified.removedThinkingBlocks,
                   removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
                   removedSignatureFields: rectified.removedSignatureFields,
@@ -1278,7 +1280,7 @@ export class ProxyForwarder {
                   providerName: currentProvider.name,
                   trigger: budgetRectifierTrigger,
                   attemptNumber: attemptCount,
-                  retryAttemptNumber: hasRetryBudget ? attemptCount + 1 : attemptCount,
+                  ...(hasRetryBudget ? { retryAttemptNumber: attemptCount + 1 } : {}),
                   before: budgetRectified.before,
                   after: budgetRectified.after,
                 });
@@ -3025,7 +3027,14 @@ export class ProxyForwarder {
       throw new Error("代理上下文缺少供应商");
     }
 
+    const env = getEnvConfig();
+    const envDefaultMaxAttempts = clampRetryAttempts(env.MAX_RETRY_ATTEMPTS_DEFAULT);
+    const providerAttemptCounts = new Map<number, number>();
+    const signatureRectifierRetriedProviderIds = new Set<number>();
+    const budgetRectifierRetriedProviderIds = new Set<number>();
+
     const launchedProviderIds = new Set<number>();
+    const startedProviderIds = new Set<number>();
     let launchedProviderCount = 0;
     let settled = false;
     let winnerCommitted = false;
@@ -3150,9 +3159,11 @@ export class ProxyForwarder {
       attempts.delete(attempt);
       lastError = error;
 
-      const errorCategory = await categorizeErrorAsync(error);
-      lastErrorCategory = errorCategory;
+      let errorCategory = await categorizeErrorAsync(error);
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
+      const errorMessage =
+        error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message;
+      lastErrorCategory = errorCategory;
 
       if (attempt.endpointAudit.endpointId != null) {
         const isTimeoutError = error instanceof ProxyError && error.statusCode === 524;
@@ -3178,6 +3189,253 @@ export class ProxyForwarder {
         return;
       }
 
+      const isAnthropicProvider =
+        attempt.provider.providerType === "claude" ||
+        attempt.provider.providerType === "claude-auth";
+      if (isAnthropicProvider) {
+        // Align streaming-hedge behavior with send(): rectify specific Anthropic 400s and then retry/failover,
+        // while strictly respecting provider-level maxRetryAttempts.
+        const signatureTrigger = detectThinkingSignatureRectifierTrigger(errorMessage);
+        if (signatureTrigger) {
+          const settings = await getCachedSystemSettings();
+          const enabled = settings.enableThinkingSignatureRectifier ?? true;
+
+          if (enabled) {
+            // This is a client input / request-shape issue, and must not be counted into circuit breakers.
+            // Also, keep NON_RETRYABLE_CLIENT_ERROR so that if no alternative provider exists,
+            // resolveHedgeTerminalError() returns the original error instead of a generic 503.
+            errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+            lastErrorCategory = errorCategory;
+
+            if (!signatureRectifierRetriedProviderIds.has(attempt.provider.id)) {
+              const requestDetailsBeforeRectify = buildRequestDetails(session);
+              const rectified = rectifyAnthropicRequestMessage(
+                session.request.message as Record<string, unknown>
+              );
+              const hasRetryBudget = attempt.providerAttemptNumber < attempt.maxAttemptsPerProvider;
+
+              session.addSpecialSetting({
+                type: "thinking_signature_rectifier",
+                scope: "request",
+                hit: rectified.applied,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+                trigger: signatureTrigger,
+                attemptNumber: attempt.providerAttemptNumber,
+                ...(hasRetryBudget
+                  ? { retryAttemptNumber: attempt.providerAttemptNumber + 1 }
+                  : {}),
+                removedThinkingBlocks: rectified.removedThinkingBlocks,
+                removedRedactedThinkingBlocks: rectified.removedRedactedThinkingBlocks,
+                removedSignatureFields: rectified.removedSignatureFields,
+              });
+
+              const specialSettings = session.getSpecialSettings();
+              if (specialSettings && session.sessionId) {
+                try {
+                  await SessionManager.storeSessionSpecialSettings(
+                    session.sessionId,
+                    specialSettings,
+                    session.requestSequence
+                  );
+                } catch (persistError) {
+                  logger.error("[ProxyForwarder] Failed to store special settings", {
+                    error: persistError,
+                    sessionId: session.sessionId,
+                  });
+                }
+              }
+
+              if (specialSettings && session.messageContext?.id) {
+                try {
+                  await updateMessageRequestDetails(session.messageContext.id, {
+                    specialSettings,
+                  });
+                } catch (persistError) {
+                  logger.error("[ProxyForwarder] Failed to persist special settings", {
+                    error: persistError,
+                    messageRequestId: session.messageContext.id,
+                  });
+                }
+              }
+
+              if (rectified.applied) {
+                // Record this failure as entering retry/failover flow (not as a terminal client error).
+                if (error instanceof ProxyError) {
+                  session.addProviderToChain(attempt.provider, {
+                    ...attempt.endpointAudit,
+                    reason: "retry_failed",
+                    circuitState: getCircuitState(attempt.provider.id),
+                    attemptNumber: attempt.sequence,
+                    errorMessage,
+                    statusCode: error.statusCode,
+                    statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+                    errorDetails: {
+                      provider: {
+                        id: attempt.provider.id,
+                        name: attempt.provider.name,
+                        statusCode: error.statusCode,
+                        statusText: error.message,
+                        upstreamBody: error.upstreamError?.body,
+                        upstreamParsed: error.upstreamError?.parsed,
+                      },
+                      request: requestDetailsBeforeRectify,
+                    },
+                  });
+                } else {
+                  session.addProviderToChain(attempt.provider, {
+                    ...attempt.endpointAudit,
+                    reason: "retry_failed",
+                    circuitState: getCircuitState(attempt.provider.id),
+                    attemptNumber: attempt.sequence,
+                    errorMessage,
+                    errorDetails: {
+                      system: {
+                        errorType: error.constructor.name,
+                        errorName: error.name,
+                        errorMessage: error.message || error.name || "Unknown error",
+                        errorStack: error.stack?.split("\n").slice(0, 3).join("\n"),
+                      },
+                      request: requestDetailsBeforeRectify,
+                    },
+                  });
+                }
+
+                if (hasRetryBudget) {
+                  signatureRectifierRetriedProviderIds.add(attempt.provider.id);
+                  await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
+                    allowDuplicateProvider: true,
+                  });
+                  return;
+                }
+
+                await launchAlternative();
+                await finishIfExhausted();
+                return;
+              }
+            }
+          }
+        }
+
+        const budgetTrigger = detectThinkingBudgetRectifierTrigger(errorMessage);
+        if (budgetTrigger) {
+          const settings = await getCachedSystemSettings();
+          const enabled = settings.enableThinkingBudgetRectifier ?? true;
+
+          if (enabled) {
+            // Same reasoning as signature rectifier above.
+            errorCategory = ErrorCategory.NON_RETRYABLE_CLIENT_ERROR;
+            lastErrorCategory = errorCategory;
+
+            if (!budgetRectifierRetriedProviderIds.has(attempt.provider.id)) {
+              const requestDetailsBeforeRectify = buildRequestDetails(session);
+              const rectified = rectifyThinkingBudget(
+                session.request.message as Record<string, unknown>
+              );
+              const hasRetryBudget = attempt.providerAttemptNumber < attempt.maxAttemptsPerProvider;
+
+              session.addSpecialSetting({
+                type: "thinking_budget_rectifier",
+                scope: "request",
+                hit: rectified.applied,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+                trigger: budgetTrigger,
+                attemptNumber: attempt.providerAttemptNumber,
+                ...(hasRetryBudget
+                  ? { retryAttemptNumber: attempt.providerAttemptNumber + 1 }
+                  : {}),
+                before: rectified.before,
+                after: rectified.after,
+              });
+
+              const specialSettings = session.getSpecialSettings();
+              if (specialSettings && session.sessionId) {
+                try {
+                  await SessionManager.storeSessionSpecialSettings(
+                    session.sessionId,
+                    specialSettings,
+                    session.requestSequence
+                  );
+                } catch (persistError) {
+                  logger.error("[ProxyForwarder] Failed to store special settings", {
+                    error: persistError,
+                    sessionId: session.sessionId,
+                  });
+                }
+              }
+
+              if (specialSettings && session.messageContext?.id) {
+                try {
+                  await updateMessageRequestDetails(session.messageContext.id, {
+                    specialSettings,
+                  });
+                } catch (persistError) {
+                  logger.error("[ProxyForwarder] Failed to persist special settings", {
+                    error: persistError,
+                    messageRequestId: session.messageContext.id,
+                  });
+                }
+              }
+
+              if (rectified.applied) {
+                if (error instanceof ProxyError) {
+                  session.addProviderToChain(attempt.provider, {
+                    ...attempt.endpointAudit,
+                    reason: "retry_failed",
+                    circuitState: getCircuitState(attempt.provider.id),
+                    attemptNumber: attempt.sequence,
+                    errorMessage,
+                    statusCode: error.statusCode,
+                    statusCodeInferred: error.upstreamError?.statusCodeInferred ?? false,
+                    errorDetails: {
+                      provider: {
+                        id: attempt.provider.id,
+                        name: attempt.provider.name,
+                        statusCode: error.statusCode,
+                        statusText: error.message,
+                        upstreamBody: error.upstreamError?.body,
+                        upstreamParsed: error.upstreamError?.parsed,
+                      },
+                      request: requestDetailsBeforeRectify,
+                    },
+                  });
+                } else {
+                  session.addProviderToChain(attempt.provider, {
+                    ...attempt.endpointAudit,
+                    reason: "retry_failed",
+                    circuitState: getCircuitState(attempt.provider.id),
+                    attemptNumber: attempt.sequence,
+                    errorMessage,
+                    errorDetails: {
+                      system: {
+                        errorType: error.constructor.name,
+                        errorName: error.name,
+                        errorMessage: error.message || error.name || "Unknown error",
+                        errorStack: error.stack?.split("\n").slice(0, 3).join("\n"),
+                      },
+                      request: requestDetailsBeforeRectify,
+                    },
+                  });
+                }
+
+                if (hasRetryBudget) {
+                  budgetRectifierRetriedProviderIds.add(attempt.provider.id);
+                  await startAttempt(attempt.provider, attempt.provider.id === initialProvider.id, {
+                    allowDuplicateProvider: true,
+                  });
+                  return;
+                }
+
+                await launchAlternative();
+                await finishIfExhausted();
+                return;
+              }
+            }
+          }
+        }
+      }
+
       if (errorCategory === ErrorCategory.PROVIDER_ERROR && statusCode !== 404) {
         await recordFailure(attempt.provider.id, error);
       }
@@ -3192,7 +3450,7 @@ export class ProxyForwarder {
               : "retry_failed",
         attemptNumber: attempt.sequence,
         statusCode,
-        errorMessage: error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message,
+        errorMessage,
         circuitState: getCircuitState(attempt.provider.id),
       });
 
@@ -3225,14 +3483,22 @@ export class ProxyForwarder {
       }
       session.setProvider(attempt.provider);
 
-      // Determine if this is truly a hedge winner or just a regular success
-      // Only mark as hedge_winner when an actual hedge race occurred
-      // Note: launchedProviderCount is the most reliable indicator - if > 1, multiple providers were launched
-      const isActualHedgeWin = launchedProviderCount > 1;
+      const uniqueProvidersAttempted = startedProviderIds.size;
+      // Only mark as hedge_winner when an actual hedge race occurred (i.e. more than one unique provider).
+      const isActualHedgeWin = uniqueProvidersAttempted > 1;
+      const isFirstAttempt =
+        uniqueProvidersAttempted === 1 &&
+        attempt.provider.id === initialProvider.id &&
+        attempt.providerAttemptNumber === 1;
+      const isRetrySuccess = !isActualHedgeWin && attempt.providerAttemptNumber > 1;
 
       session.addProviderToChain(attempt.provider, {
         ...attempt.endpointAudit,
-        reason: isActualHedgeWin ? "hedge_winner" : "request_success",
+        reason: isActualHedgeWin
+          ? "hedge_winner"
+          : isRetrySuccess
+            ? "retry_success"
+            : "request_success",
         attemptNumber: attempt.sequence,
         statusCode: attempt.response.status,
       });
@@ -3245,7 +3511,7 @@ export class ProxyForwarder {
             session.sessionId!,
             attempt.provider.id,
             attempt.provider.priority || 0,
-            launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
+            isFirstAttempt,
             attempt.provider.id !== initialProvider.id
           );
 
@@ -3275,8 +3541,8 @@ export class ProxyForwarder {
         providerName: attempt.provider.name,
         providerPriority: attempt.provider.priority || 0,
         attemptNumber: attempt.sequence,
-        totalProvidersAttempted: launchedProviderCount,
-        isFirstAttempt: launchedProviderCount === 1 && attempt.provider.id === initialProvider.id,
+        totalProvidersAttempted: uniqueProvidersAttempted,
+        isFirstAttempt,
         isFailoverSuccess: attempt.provider.id !== initialProvider.id,
         endpointId: attempt.endpointAudit.endpointId,
         endpointUrl: attempt.endpointAudit.endpointUrl,
@@ -3296,10 +3562,24 @@ export class ProxyForwarder {
       settleSuccess(response);
     };
 
-    const startAttempt = async (provider: Provider, useOriginalSession: boolean) => {
-      if (settled || winnerCommitted || launchedProviderIds.has(provider.id)) return;
+    const startAttempt = async (
+      provider: Provider,
+      useOriginalSession: boolean,
+      options?: { allowDuplicateProvider?: boolean }
+    ) => {
+      if (settled || winnerCommitted) return;
 
-      launchedProviderIds.add(provider.id);
+      const isDuplicateProvider = launchedProviderIds.has(provider.id);
+      if (isDuplicateProvider && !options?.allowDuplicateProvider) return;
+
+      const isNewProviderLaunch = !isDuplicateProvider;
+      if (isNewProviderLaunch) {
+        launchedProviderIds.add(provider.id);
+      }
+
+      const providerAttemptNumber = (providerAttemptCounts.get(provider.id) ?? 0) + 1;
+      providerAttemptCounts.set(provider.id, providerAttemptNumber);
+      const maxAttemptsPerProvider = resolveMaxAttemptsForProvider(provider, envDefaultMaxAttempts);
 
       let endpointSelection: {
         endpointId: number | null;
@@ -3316,6 +3596,7 @@ export class ProxyForwarder {
         return;
       }
 
+      startedProviderIds.add(provider.id);
       launchedProviderCount += 1;
 
       const attemptSession = useOriginalSession
@@ -3334,6 +3615,8 @@ export class ProxyForwarder {
         clearResponseTimeout: null,
         firstByteTimeoutMs:
           provider.firstByteTimeoutStreamingMs > 0 ? provider.firstByteTimeoutStreamingMs : 0,
+        providerAttemptNumber,
+        maxAttemptsPerProvider,
         sequence: launchedProviderCount,
         settled: false,
         thresholdTriggered: false,
@@ -3346,7 +3629,7 @@ export class ProxyForwarder {
 
       // Record hedge participant launch in decision chain
       // (first provider is already recorded via initial_selection or session_reuse)
-      if (launchedProviderCount > 1) {
+      if (isNewProviderLaunch && startedProviderIds.size > 1) {
         session.addProviderToChain(provider, {
           ...attempt.endpointAudit,
           reason: "hedge_launched",
@@ -3379,7 +3662,7 @@ export class ProxyForwarder {
         providerForRequest,
         endpointSelection.baseUrl,
         attempt.endpointAudit,
-        1
+        attempt.providerAttemptNumber
       )
         .then(async (response) => {
           if (settled || winnerCommitted) {

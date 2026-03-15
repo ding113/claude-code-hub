@@ -141,7 +141,13 @@ export type ThinkingSignatureRectifierSpecialSetting = {
     | "assistant_message_must_start_with_thinking"
     | "invalid_request";
   attemptNumber: number;
-  retryAttemptNumber: number;
+  /**
+   * 当整流命中且仍有同供应商重试预算时，记录“计划重试”的 attemptNumber。
+   *
+   * 若已达到 maxRetryAttempts 而直接进入供应商切换流程，则该字段可能缺省，
+   * 避免把一次不存在的“同供应商重试”误记到审计数据中。
+   */
+  retryAttemptNumber?: number;
   removedThinkingBlocks: number;
   removedRedactedThinkingBlocks: number;
   removedSignatureFields: number;
@@ -200,7 +206,13 @@ export type ThinkingBudgetRectifierSpecialSetting = {
   providerName: string | null;
   trigger: "budget_tokens_too_low";
   attemptNumber: number;
-  retryAttemptNumber: number;
+  /**
+   * 当整流命中且仍有同供应商重试预算时，记录“计划重试”的 attemptNumber。
+   *
+   * 若已达到 maxRetryAttempts 而直接进入供应商切换流程，则该字段可能缺省，
+   * 避免把一次不存在的“同供应商重试”误记到审计数据中。
+   */
+  retryAttemptNumber?: number;
   before: {
     maxTokens: number | null;
     thinkingType: string | null;
