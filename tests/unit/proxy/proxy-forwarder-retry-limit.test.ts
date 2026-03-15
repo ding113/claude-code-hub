@@ -308,13 +308,9 @@ describe("ProxyForwarder - raw passthrough policy parity (T5 RED)", () => {
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      let caughtError: Error | null = null;
-      sendPromise.catch((error) => {
-        caughtError = error as Error;
-      });
+      const rejection = expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
       await vi.runAllTimersAsync();
-
-      expect(caughtError).toBeInstanceOf(ProxyError);
+      await rejection;
       expect(doForward).toHaveBeenCalledTimes(1);
       expect(selectAlternative).not.toHaveBeenCalled();
       expect(mocks.recordFailure).not.toHaveBeenCalled();
@@ -1132,15 +1128,9 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      // Attach catch handler immediately to prevent unhandled rejection warnings
-      let caughtError: Error | null = null;
-      sendPromise.catch((e) => {
-        caughtError = e;
-      });
+      const rejection = expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
       await vi.runAllTimersAsync();
-
-      expect(caughtError).not.toBeNull();
-      expect(caughtError).toBeInstanceOf(ProxyError);
+      await rejection;
 
       // Should only call doForward twice (maxRetryAttempts=2), NOT 4 times
       expect(doForward).toHaveBeenCalledTimes(2);
@@ -1516,16 +1506,9 @@ describe("ProxyForwarder - endpoint stickiness on retry", () => {
       });
 
       const sendPromise = ProxyForwarder.send(session);
-      // Attach catch handler immediately to prevent unhandled rejection warnings
-      let caughtError: Error | null = null;
-      sendPromise.catch((e) => {
-        caughtError = e;
-      });
+      const rejection = expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
       await vi.runAllTimersAsync();
-
-      // Should fail eventually (no successful response)
-      expect(caughtError).not.toBeNull();
-      expect(caughtError).toBeInstanceOf(ProxyError);
+      await rejection;
 
       const chain = session.getProviderChain();
 

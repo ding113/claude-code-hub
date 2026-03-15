@@ -543,13 +543,14 @@ export class ProxyForwarder {
     let currentProvider = session.provider;
     const failedProviderIds: number[] = []; // 记录已失败的供应商ID
     let totalProvidersAttempted = 0; // 已尝试的供应商数量（用于日志）
-    let lastRectifierSwitchError: Error | null = null; // 整流器触发但因重试上限而切换供应商时，保留原始错误（用于无替代供应商时回退抛出）
 
     // ========== 外层循环：供应商切换（最多 MAX_PROVIDER_SWITCHES 次）==========
     while (totalProvidersAttempted < MAX_PROVIDER_SWITCHES) {
       totalProvidersAttempted++;
       let attemptCount = 0; // 当前供应商的尝试次数
-      lastRectifierSwitchError = null;
+      // 整流器触发但因重试上限而切换供应商时，保留原始错误（用于无替代供应商时回退抛出）
+      // 仅作用于当前外层循环迭代：一旦切换到新的 provider，就不应再用旧的 rectifier error 覆盖后续失败原因。
+      let lastRectifierSwitchError: Error | null = null;
 
       const maxAttemptsPerProvider = resolveMaxAttemptsForProvider(
         currentProvider,
@@ -1238,6 +1239,8 @@ export class ProxyForwarder {
                   }
 
                   // 记录原始错误：若无可用替代供应商，回退抛出该错误而非 503，避免掩盖客户端输入问题。
+                  // 注意：这里直接进入供应商切换逻辑，并刻意不再尝试该 provider 的其它端点（若存在）。
+                  // 该类错误通常为请求体校验（400），更换端点无助。
                   lastRectifierSwitchError = lastError;
                   failedProviderIds.push(currentProvider.id);
                   break;
@@ -1394,6 +1397,8 @@ export class ProxyForwarder {
                   }
 
                   // 记录原始错误：若无可用替代供应商，回退抛出该错误而非 503，避免掩盖客户端输入问题。
+                  // 注意：这里直接进入供应商切换逻辑，并刻意不再尝试该 provider 的其它端点（若存在）。
+                  // 该类错误通常为请求体校验（400），更换端点无助。
                   lastRectifierSwitchError = lastError;
                   failedProviderIds.push(currentProvider.id);
                   break;
