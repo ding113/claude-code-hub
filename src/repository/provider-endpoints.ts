@@ -75,7 +75,7 @@ function toNullableDate(value: unknown): Date | null {
   return toDate(value);
 }
 
-function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
+function normalizeWebsiteDomainKeyFromUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
 
@@ -89,9 +89,16 @@ function normalizeWebsiteDomainFromUrl(rawUrl: string): string | null {
       const parsed = new URL(candidate);
       const hostname = parsed.hostname?.toLowerCase();
       if (!hostname) continue;
-      return hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+
+      const normalizedHostname = hostname.startsWith("www.") ? hostname.slice(4) : hostname;
+
+      if (!parsed.port) {
+        return normalizedHostname;
+      }
+
+      return `${normalizedHostname}:${parsed.port}`;
     } catch (error) {
-      logger.debug("[ProviderVendor] Failed to parse URL", {
+      logger.debug("[ProviderVendor] Failed to parse website URL for vendor key", {
         candidateLength: candidate.length,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -150,7 +157,9 @@ function normalizeHostWithPort(rawUrl: string): string | null {
  * Compute vendor clustering key based on URLs.
  *
  * Rules:
- * - If websiteUrl is non-empty: key = normalized hostname (strip www, lowercase), ignore port
+ * - If websiteUrl is non-empty:
+ *   - hostname only when no explicit port
+ *   - host:port when an explicit port is present
  * - If websiteUrl is empty: key = host:port
  *   - IPv6 format: [ipv6]:port
  *   - Missing port: use protocol default (http=80, https=443)
@@ -164,7 +173,7 @@ export async function computeVendorKey(input: {
 
   // Case 1: websiteUrl is non-empty - use hostname only (existing behavior)
   if (websiteUrl?.trim()) {
-    return normalizeWebsiteDomainFromUrl(websiteUrl);
+    return normalizeWebsiteDomainKeyFromUrl(websiteUrl);
   }
 
   // Case 2: websiteUrl is empty - use host:port as key
@@ -737,6 +746,64 @@ export async function hasEnabledProviderReferenceForVendorTypeUrl(input: {
     .limit(1);
 
   return Boolean(row);
+}
+
+export async function findEnabledProviderReferencesForVendorTypeUrl(input: {
+  vendorId: number;
+  providerType: ProviderType;
+  url: string;
+  excludeProviderId?: number;
+}): Promise<Array<{ id: number; name: string }>> {
+  const trimmedUrl = input.url.trim();
+  if (!trimmedUrl) {
+    return [];
+  }
+
+  const whereClauses = [
+    eq(providers.providerVendorId, input.vendorId),
+    eq(providers.providerType, input.providerType),
+    eq(providers.url, trimmedUrl),
+    eq(providers.isEnabled, true),
+    isNull(providers.deletedAt),
+  ];
+
+  if (input.excludeProviderId != null) {
+    whereClauses.push(ne(providers.id, input.excludeProviderId));
+  }
+
+  const rows = await db
+    .select({
+      id: providers.id,
+      name: providers.name,
+    })
+    .from(providers)
+    .where(and(...whereClauses))
+    .orderBy(asc(providers.id));
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+  }));
+}
+
+export async function findEnabledProviderIdsByVendorAndType(
+  vendorId: number,
+  providerType: ProviderType
+): Promise<number[]> {
+  const rows = await db
+    .select({ id: providers.id })
+    .from(providers)
+    .where(
+      and(
+        eq(providers.providerVendorId, vendorId),
+        eq(providers.providerType, providerType),
+        eq(providers.isEnabled, true),
+        isNull(providers.deletedAt)
+      )
+    )
+    .orderBy(asc(providers.id));
+
+  return rows.map((row) => row.id);
 }
 
 /**

@@ -43,6 +43,7 @@ import {
   saveProviderCircuitConfig,
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
+import { SessionManager } from "@/lib/session-manager";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -181,6 +182,28 @@ async function broadcastProviderCacheInvalidation(context: {
       error: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+const STICKY_SESSION_INVALIDATING_PROVIDER_KEYS = new Set<string>([
+  "url",
+  "websiteUrl",
+  "providerType",
+  "groupTag",
+  "isEnabled",
+  "allowedModels",
+  "allowedClients",
+  "blockedClients",
+  "modelRedirects",
+  "activeTimeStart",
+  "activeTimeEnd",
+]);
+
+function shouldInvalidateStickySessionsOnProviderEdit(
+  changedProviderFields: Record<string, unknown>
+): boolean {
+  return Object.keys(changedProviderFields).some((key) =>
+    STICKY_SESSION_INVALIDATING_PROVIDER_KEYS.has(key)
+  );
 }
 
 // 获取服务商数据
@@ -776,6 +799,10 @@ export async function editProvider(
       return { ok: false, error: "供应商不存在" };
     }
 
+    if (shouldInvalidateStickySessionsOnProviderEdit(preimageFields)) {
+      await SessionManager.terminateStickySessionsForProviders([providerId], "editProvider");
+    }
+
     // 同步熔断器配置到 Redis（如果配置有变化）
     const hasCircuitConfigChange =
       validated.circuit_breaker_failure_threshold !== undefined ||
@@ -847,6 +874,8 @@ export async function removeProvider(
 
     const provider = await findProviderById(providerId);
     await deleteProvider(providerId);
+
+    await SessionManager.terminateStickySessionsForProviders([providerId], "removeProvider");
 
     const undoToken = createProviderPatchUndoToken();
     const operationId = createProviderPatchOperationId();
@@ -1280,6 +1309,8 @@ const SINGLE_EDIT_PREIMAGE_FIELD_TO_PROVIDER_KEY: Record<string, keyof Provider>
   active_time_end: "activeTimeEnd",
   model_redirects: "modelRedirects",
   allowed_models: "allowedModels",
+  allowed_clients: "allowedClients",
+  blocked_clients: "blockedClients",
   limit_5h_usd: "limit5hUsd",
   limit_daily_usd: "limitDailyUsd",
   daily_reset_mode: "dailyResetMode",

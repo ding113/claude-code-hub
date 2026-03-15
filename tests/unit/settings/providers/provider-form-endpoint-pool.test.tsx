@@ -11,7 +11,11 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { ProviderForm } from "../../../../src/app/[locale]/settings/providers/_components/forms/provider-form";
 import { Dialog } from "../../../../src/components/ui/dialog";
 import enMessages from "../../../../messages/en";
-import type { ProviderEndpoint, ProviderVendor } from "../../../../src/types/provider";
+import type {
+  ProviderDisplay,
+  ProviderEndpoint,
+  ProviderVendor,
+} from "../../../../src/types/provider";
 
 const sonnerMocks = vi.hoisted(() => ({
   toast: {
@@ -111,6 +115,68 @@ function setNativeValue(element: HTMLInputElement, value: string) {
   element.value = value;
 }
 
+function makeCloneProvider(overrides: Partial<ProviderDisplay> = {}): ProviderDisplay {
+  return {
+    id: 88,
+    name: "CPA Provider",
+    url: "https://old.example.com/v1/messages",
+    maskedKey: "sk-****1234",
+    isEnabled: true,
+    weight: 1,
+    priority: 0,
+    groupPriorities: null,
+    costMultiplier: 1,
+    groupTag: null,
+    providerType: "claude",
+    providerVendorId: 1,
+    preserveClientIp: false,
+    modelRedirects: null,
+    allowedModels: null,
+    allowedClients: [],
+    blockedClients: [],
+    mcpPassthroughType: "none",
+    mcpPassthroughUrl: null,
+    limit5hUsd: null,
+    limitDailyUsd: null,
+    dailyResetMode: "fixed",
+    dailyResetTime: "00:00",
+    limitWeeklyUsd: null,
+    limitMonthlyUsd: null,
+    limitTotalUsd: null,
+    limitConcurrentSessions: 0,
+    maxRetryAttempts: null,
+    circuitBreakerFailureThreshold: 5,
+    circuitBreakerOpenDuration: 1800000,
+    circuitBreakerHalfOpenSuccessThreshold: 2,
+    proxyUrl: null,
+    proxyFallbackToDirect: false,
+    firstByteTimeoutStreamingMs: 30000,
+    streamingIdleTimeoutMs: 60000,
+    requestTimeoutNonStreamingMs: 120000,
+    websiteUrl: "https://example.com",
+    faviconUrl: null,
+    cacheTtlPreference: null,
+    swapCacheTtlBilling: false,
+    context1mPreference: null,
+    codexReasoningEffortPreference: null,
+    codexReasoningSummaryPreference: null,
+    codexTextVerbosityPreference: null,
+    codexParallelToolCallsPreference: null,
+    codexServiceTierPreference: null,
+    anthropicMaxTokensPreference: null,
+    anthropicThinkingBudgetPreference: null,
+    anthropicAdaptiveThinking: null,
+    geminiGoogleSearchPreference: null,
+    tpm: null,
+    rpm: null,
+    rpd: null,
+    cc: null,
+    createdAt: "2026-01-01",
+    updatedAt: "2026-01-01",
+    ...overrides,
+  };
+}
+
 describe("ProviderForm: endpoint pool integration", () => {
   beforeEach(() => {
     queryClient = new QueryClient({
@@ -144,7 +210,7 @@ describe("ProviderForm: endpoint pool integration", () => {
     unmount();
   });
 
-  test("When vendor resolves and endpoints exist, should show endpoint pool and hide URL input", async () => {
+  test("Create mode should keep manual URL input even when websiteUrl matches an existing vendor", async () => {
     providerEndpointsActionMocks.getProviderVendors.mockResolvedValueOnce([
       {
         id: 1,
@@ -195,9 +261,94 @@ describe("ProviderForm: endpoint pool integration", () => {
 
     await flushTicks(6);
 
-    expect(document.getElementById("url")).toBeNull();
-    expect(document.body.textContent || "").toContain("Endpoints");
-    expect(document.body.textContent || "").toContain("Add Endpoint");
+    expect(providerEndpointsActionMocks.getProviderEndpoints).not.toHaveBeenCalled();
+    expect(document.getElementById("url")).toBeTruthy();
+    expect(document.body.textContent || "").not.toContain("Add Endpoint");
+
+    unmount();
+  });
+
+  test("Clone mode should submit the explicit URL instead of inheriting an existing vendor endpoint pool", async () => {
+    providerEndpointsActionMocks.getProviderVendors.mockResolvedValueOnce([
+      {
+        id: 1,
+        websiteDomain: "example.com",
+        displayName: "Example",
+        websiteUrl: "https://example.com",
+        faviconUrl: null,
+        createdAt: new Date("2026-01-01"),
+        updatedAt: new Date("2026-01-01"),
+      },
+    ]);
+    providerEndpointsActionMocks.getProviderEndpoints.mockResolvedValueOnce([
+      {
+        id: 10,
+        vendorId: 1,
+        providerType: "claude",
+        url: "https://api.example.com/v1",
+        label: null,
+        sortOrder: 0,
+        isEnabled: true,
+        lastProbedAt: null,
+        lastProbeOk: null,
+        lastProbeStatusCode: null,
+        lastProbeLatencyMs: null,
+        lastProbeErrorType: null,
+        lastProbeErrorMessage: null,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+        deletedAt: null,
+      },
+    ]);
+
+    const { unmount } = renderWithProviders(
+      <ProviderForm mode="create" enableMultiProviderTypes cloneProvider={makeCloneProvider()} />
+    );
+
+    await flushTicks(2);
+
+    const nameInput = document.getElementById("name") as HTMLInputElement | null;
+    const urlInput = document.getElementById("url") as HTMLInputElement | null;
+    const keyInput = document.getElementById("key") as HTMLInputElement | null;
+
+    expect(nameInput).toBeTruthy();
+    expect(urlInput).toBeTruthy();
+    expect(keyInput).toBeTruthy();
+
+    await act(async () => {
+      if (!nameInput || !urlInput || !keyInput) return;
+      setNativeValue(nameInput, "CPA Provider_Copy");
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+      nameInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      setNativeValue(urlInput, "https://manual.example.com/v1/messages");
+      urlInput.dispatchEvent(new Event("input", { bubbles: true }));
+      urlInput.dispatchEvent(new Event("change", { bubbles: true }));
+
+      setNativeValue(keyInput, "new-key");
+      keyInput.dispatchEvent(new Event("input", { bubbles: true }));
+      keyInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    const form = document.body.querySelector("form") as HTMLFormElement | null;
+    expect(form).toBeTruthy();
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    for (let i = 0; i < 8; i++) {
+      if (providersActionMocks.addProvider.mock.calls.length > 0) break;
+      await flushTicks(1);
+    }
+
+    expect(providerEndpointsActionMocks.getProviderEndpoints).not.toHaveBeenCalled();
+    expect(providersActionMocks.addProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://manual.example.com/v1/messages",
+        website_url: "https://example.com",
+      })
+    );
 
     unmount();
   });

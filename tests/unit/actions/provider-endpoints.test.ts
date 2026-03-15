@@ -12,8 +12,10 @@ const tryDeleteProviderVendorIfEmptyMock = vi.fn();
 const updateProviderEndpointMock = vi.fn();
 const findProviderEndpointProbeLogsBatchMock = vi.fn();
 const findVendorTypeEndpointStatsBatchMock = vi.fn();
-const hasEnabledProviderReferenceForVendorTypeUrlMock = vi.fn();
+const findEnabledProviderReferencesForVendorTypeUrlMock = vi.fn();
+const findEnabledProviderIdsByVendorAndTypeMock = vi.fn();
 const findDashboardProviderEndpointsByVendorAndTypeMock = vi.fn();
+const terminateProviderSessionsBatchMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
@@ -56,6 +58,13 @@ vi.mock("@/lib/provider-endpoints/probe", () => ({
   probeProviderEndpointAndRecordByEndpoint: vi.fn(async () => null),
 }));
 
+vi.mock("@/lib/session-manager", () => ({
+  SessionManager: {
+    terminateProviderSessionsBatch: terminateProviderSessionsBatchMock,
+    terminateStickySessionsForProviders: terminateProviderSessionsBatchMock,
+  },
+}));
+
 vi.mock("@/repository/provider-endpoints-batch", () => ({
   findProviderEndpointProbeLogsBatch: findProviderEndpointProbeLogsBatchMock,
   findVendorTypeEndpointStatsBatch: findVendorTypeEndpointStatsBatchMock,
@@ -64,7 +73,8 @@ vi.mock("@/repository/provider-endpoints-batch", () => ({
 vi.mock("@/repository/provider-endpoints", () => ({
   findDashboardProviderEndpointsByVendorAndType: findDashboardProviderEndpointsByVendorAndTypeMock,
   findEnabledProviderVendorTypePairs: vi.fn(async () => []),
-  hasEnabledProviderReferenceForVendorTypeUrl: hasEnabledProviderReferenceForVendorTypeUrlMock,
+  findEnabledProviderReferencesForVendorTypeUrl: findEnabledProviderReferencesForVendorTypeUrlMock,
+  findEnabledProviderIdsByVendorAndType: findEnabledProviderIdsByVendorAndTypeMock,
 }));
 
 vi.mock("@/repository", () => ({
@@ -84,8 +94,10 @@ vi.mock("@/repository", () => ({
 describe("provider-endpoints actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
+    findEnabledProviderReferencesForVendorTypeUrlMock.mockResolvedValue([]);
+    findEnabledProviderIdsByVendorAndTypeMock.mockResolvedValue([]);
     findDashboardProviderEndpointsByVendorAndTypeMock.mockResolvedValue([]);
+    terminateProviderSessionsBatchMock.mockResolvedValue(0);
   });
 
   it("editProviderVendor: requires admin", async () => {
@@ -344,7 +356,7 @@ describe("provider-endpoints actions", () => {
     });
     softDeleteProviderEndpointMock.mockResolvedValue(true);
     tryDeleteProviderVendorIfEmptyMock.mockResolvedValue(true);
-    hasEnabledProviderReferenceForVendorTypeUrlMock.mockResolvedValue(false);
+    findEnabledProviderIdsByVendorAndTypeMock.mockResolvedValue([11, 12]);
 
     const { removeProviderEndpoint } = await import("@/actions/provider-endpoints");
     const res = await removeProviderEndpoint({ endpointId: 99 });
@@ -354,6 +366,90 @@ describe("provider-endpoints actions", () => {
     const { resetEndpointCircuit } = await import("@/lib/endpoint-circuit-breaker");
     expect(resetEndpointCircuit).toHaveBeenCalledWith(99);
     expect(tryDeleteProviderVendorIfEmptyMock).toHaveBeenCalledWith(123);
+    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith(
+      [11, 12],
+      "removeProviderEndpoint"
+    );
+  });
+
+  it("removeProviderEndpoint: returns detailed conflict when endpoint is still referenced", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    findProviderEndpointByIdMock.mockResolvedValue({
+      id: 99,
+      vendorId: 123,
+      providerType: "claude",
+      url: "https://api.example.com",
+      label: null,
+      sortOrder: 0,
+      isEnabled: true,
+      lastProbedAt: null,
+      lastProbeOk: null,
+      lastProbeStatusCode: null,
+      lastProbeLatencyMs: null,
+      lastProbeErrorType: null,
+      lastProbeErrorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+    });
+    findEnabledProviderReferencesForVendorTypeUrlMock.mockResolvedValue([
+      { id: 1, name: "CPA Primary" },
+      { id: 2, name: "CPA Backup" },
+      { id: 3, name: "CPA Canary" },
+      { id: 4, name: "CPA Extra" },
+    ]);
+
+    const { removeProviderEndpoint } = await import("@/actions/provider-endpoints");
+    const res = await removeProviderEndpoint({ endpointId: 99 });
+
+    expect(res.ok).toBe(false);
+    expect(res.errorCode).toBe("ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS");
+    expect(res.errorParams).toEqual({
+      count: 4,
+      providers: "CPA Primary, CPA Backup, CPA Canary +1",
+    });
+    expect(softDeleteProviderEndpointMock).not.toHaveBeenCalled();
+    expect(terminateProviderSessionsBatchMock).not.toHaveBeenCalled();
+  });
+
+  it("editProviderEndpoint: route-affecting changes terminate affected provider sessions", async () => {
+    getSessionMock.mockResolvedValue({ user: { role: "admin" } });
+
+    const endpoint = {
+      id: 42,
+      vendorId: 123,
+      providerType: "claude" as const,
+      url: "https://next.example.com/v1/messages",
+      label: "primary",
+      sortOrder: 7,
+      isEnabled: true,
+      lastProbedAt: null,
+      lastProbeOk: null,
+      lastProbeStatusCode: null,
+      lastProbeLatencyMs: null,
+      lastProbeErrorType: null,
+      lastProbeErrorMessage: null,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+      deletedAt: null,
+    };
+
+    findProviderEndpointByIdMock.mockResolvedValue(endpoint);
+    updateProviderEndpointMock.mockResolvedValue({
+      ...endpoint,
+      isEnabled: false,
+    });
+    findEnabledProviderIdsByVendorAndTypeMock.mockResolvedValue([7, 8]);
+
+    const { editProviderEndpoint } = await import("@/actions/provider-endpoints");
+    const res = await editProviderEndpoint({
+      endpointId: 42,
+      isEnabled: false,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([7, 8], "editProviderEndpoint");
   });
 
   it("probeProviderEndpoint: calls probeProviderEndpointAndRecordByEndpoint and returns result", async () => {

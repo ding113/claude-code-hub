@@ -234,6 +234,7 @@ function EndpointRow({
   circuitState: EndpointCircuitState | null;
 }) {
   const t = useTranslations("settings.providers");
+  const tErrors = useTranslations("errors");
   const tStatus = useTranslations("settings.providers.endpointStatus");
   const tCommon = useTranslations("settings.common");
   const queryClient = useQueryClient();
@@ -274,7 +275,9 @@ function EndpointRow({
   const deleteMutation = useMutation({
     mutationFn: async () => {
       const res = await removeProviderEndpoint({ endpointId: endpoint.id });
-      if (!res.ok) throw new Error(res.error);
+      if (!res.ok) {
+        throw Object.assign(new Error(res.error), { actionResult: res });
+      }
       return res.data;
     },
     onSuccess: () => {
@@ -282,8 +285,21 @@ function EndpointRow({
       queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
       toast.success(t("endpointDeleteSuccess"));
     },
-    onError: () => {
-      toast.error(t("endpointDeleteFailed"));
+    onError: (
+      error: Error & {
+        actionResult?: {
+          error?: string;
+          errorCode?: string;
+          errorParams?: Record<string, string | number>;
+        };
+      }
+    ) => {
+      const actionResult = error.actionResult;
+      toast.error(
+        actionResult?.errorCode
+          ? getErrorMessage(tErrors, actionResult.errorCode, actionResult.errorParams)
+          : (actionResult?.error ?? t("endpointDeleteFailed"))
+      );
     },
   });
 
