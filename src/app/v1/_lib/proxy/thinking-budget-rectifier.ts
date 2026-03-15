@@ -20,8 +20,8 @@ export type ThinkingBudgetRectifierResult = {
   };
 };
 
-export const MAX_THINKING_BUDGET = 32000;
-export const MAX_TOKENS_VALUE = 64000;
+const MAX_THINKING_BUDGET = 32000;
+const MAX_TOKENS_VALUE = 64000;
 const MIN_MAX_TOKENS_FOR_BUDGET = MAX_THINKING_BUDGET + 1;
 
 /**

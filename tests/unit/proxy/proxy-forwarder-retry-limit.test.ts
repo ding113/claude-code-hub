@@ -123,11 +123,10 @@ vi.mock("@/app/v1/_lib/proxy/errors", async (importOriginal) => {
 import { ProxyForwarder } from "@/app/v1/_lib/proxy/forwarder";
 import { ProxyError, ErrorCategory, categorizeErrorAsync } from "@/app/v1/_lib/proxy/errors";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
-import {
-  MAX_THINKING_BUDGET,
-  MAX_TOKENS_VALUE,
-} from "@/app/v1/_lib/proxy/thinking-budget-rectifier";
 import type { Provider, ProviderEndpoint, ProviderType } from "@/types/provider";
+
+const EXPECTED_THINKING_BUDGET_MAX = 32000;
+const EXPECTED_MAX_TOKENS_VALUE = 64000;
 
 function makeEndpoint(input: {
   id: number;
@@ -478,8 +477,8 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
 
       const thinking = (session.request.message as any).thinking;
       expect(thinking.type).toBe("enabled");
-      expect(thinking.budget_tokens).toBe(MAX_THINKING_BUDGET);
-      expect((session.request.message as any).max_tokens).toBe(MAX_TOKENS_VALUE);
+      expect(thinking.budget_tokens).toBe(EXPECTED_THINKING_BUDGET_MAX);
+      expect((session.request.message as any).max_tokens).toBe(EXPECTED_MAX_TOKENS_VALUE);
 
       const chain = session.getProviderChain();
       expect(chain).toHaveLength(2);
@@ -923,6 +922,75 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
 
       const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
       expect(attemptNumbers).toEqual([1, 1]);
+
+      const chain = session.getProviderChain();
+      expect(chain).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 2, reason: "retry_success" })])
+      );
+      expect(chain.some((entry) => entry.reason === "hedge_winner")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_launched")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_triggered")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("streaming hedge + thinking signature rectifier: maxRetryAttempts=1 + no alternative provider should throw original 400 (not 503)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      (session.request.message as any).stream = true;
+
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      session.setProvider(providerA);
+
+      // Make rectifier actually apply: include a thinking block to be removed.
+      (session.request.message as any).messages = [
+        {
+          role: "user",
+          content: [
+            { type: "thinking", text: "t" },
+            { type: "text", text: "hello" },
+          ],
+        },
+      ];
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      selectAlternative.mockResolvedValueOnce(null);
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError("invalid signature in thinking block", 400);
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      const instanceCheck = expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
+      const statusCheck = expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
+      await vi.runAllTimersAsync();
+      await instanceCheck;
+      await statusCheck;
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+
+      const chain = session.getProviderChain();
+      expect(chain.some((entry) => entry.reason === "hedge_winner")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_launched")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_triggered")).toBe(false);
     } finally {
       vi.useRealTimers();
     }
@@ -1052,6 +1120,136 @@ describe("ProxyForwarder - maxRetryAttempts should not be bypassed by thinking r
 
       const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
       expect(attemptNumbers).toEqual([1, 1]);
+
+      const chain = session.getProviderChain();
+      expect(chain).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 2, reason: "retry_success" })])
+      );
+      expect(chain.some((entry) => entry.reason === "hedge_winner")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_launched")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_triggered")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("streaming hedge + thinking budget rectifier: maxRetryAttempts=1 + no alternative provider should throw original 400 (not 503)", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      (session.request.message as any).stream = true;
+
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 1,
+      });
+      session.setProvider(providerA);
+
+      (session.request.message as any).thinking = { type: "enabled", budget_tokens: 1 };
+      delete (session.request.message as any).max_tokens;
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      selectAlternative.mockResolvedValueOnce(null);
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError(
+          "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024",
+          400
+        );
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      const instanceCheck = expect(sendPromise).rejects.toBeInstanceOf(ProxyError);
+      const statusCheck = expect(sendPromise).rejects.toMatchObject({ statusCode: 400 });
+      await vi.runAllTimersAsync();
+      await instanceCheck;
+      await statusCheck;
+
+      expect(doForward).toHaveBeenCalledTimes(1);
+      expect(selectAlternative).toHaveBeenCalledTimes(1);
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+
+      const chain = session.getProviderChain();
+      expect(chain.some((entry) => entry.reason === "hedge_winner")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_launched")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_triggered")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("streaming hedge + thinking budget rectifier: maxRetryAttempts=2 should retry same provider", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      (session.request.message as any).stream = true;
+
+      const providerA = createProvider({
+        id: 1,
+        name: "p1",
+        providerType: "claude",
+        providerVendorId: null,
+        maxRetryAttempts: 2,
+      });
+      session.setProvider(providerA);
+
+      (session.request.message as any).thinking = { type: "enabled", budget_tokens: 1 };
+      delete (session.request.message as any).max_tokens;
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+      const selectAlternative = vi.spyOn(
+        ProxyForwarder as unknown as { selectAlternative: (...args: unknown[]) => unknown },
+        "selectAlternative"
+      );
+
+      doForward.mockImplementationOnce(async () => {
+        throw new ProxyError(
+          "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024",
+          400
+        );
+      });
+      doForward.mockResolvedValueOnce(
+        new Response("data", {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        })
+      );
+
+      const response = await ProxyForwarder.send(session);
+      expect(response.status).toBe(200);
+
+      expect(doForward).toHaveBeenCalledTimes(2);
+      expect(selectAlternative).not.toHaveBeenCalled();
+      expect(mocks.recordFailure).not.toHaveBeenCalled();
+
+      const providerIds = doForward.mock.calls.map((call) => (call[1] as Provider).id);
+      expect(providerIds).toEqual([1, 1]);
+
+      const attemptNumbers = doForward.mock.calls.map((call) => call[4] as number);
+      expect(attemptNumbers).toEqual([1, 2]);
+
+      const chain = session.getProviderChain();
+      expect(chain).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 1, reason: "retry_success" })])
+      );
+      expect(chain.some((entry) => entry.reason === "hedge_winner")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_launched")).toBe(false);
+      expect(chain.some((entry) => entry.reason === "hedge_triggered")).toBe(false);
     } finally {
       vi.useRealTimers();
     }
