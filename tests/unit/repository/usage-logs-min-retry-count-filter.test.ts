@@ -37,8 +37,10 @@ describe("Usage logs minRetryCount filter", () => {
     const [condition] = buildUsageLogConditions({ minRetryCount: 1 });
     const whereSql = sqlToString(condition).toLowerCase();
     expect(whereSql).toContain("jsonb_array_length");
-    expect(whereSql).toMatch(/-\s*2/);
+    expect(whereSql).toMatch(/-\s*2\b/);
     expect(whereSql).not.toMatch(/-\s*1\b/);
+    expect(whereSql).toContain("greatest");
+    expect(whereSql).toContain("coalesce");
     expect(whereSql).toContain("hedge_triggered");
   });
 
@@ -79,8 +81,10 @@ describe("Usage logs minRetryCount filter", () => {
     expect(whereArgs).toHaveLength(1);
     const whereSql = sqlToString(whereArgs[0] as SQL).toLowerCase();
     expect(whereSql).toContain("jsonb_array_length");
-    expect(whereSql).toMatch(/-\s*2/);
+    expect(whereSql).toMatch(/-\s*2\b/);
     expect(whereSql).not.toMatch(/-\s*1\b/);
+    expect(whereSql).toContain("greatest");
+    expect(whereSql).toContain("coalesce");
     expect(whereSql).toContain("hedge_triggered");
   });
 
