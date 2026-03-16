@@ -93,6 +93,19 @@ describe("applyGeminiGoogleSearchOverride", () => {
 
       expect(result.tools).toEqual([{ googleSearch: {} }]);
     });
+
+    test("should not inject googleSearch for non-generation Gemini actions when pathname is provided", () => {
+      const provider = { providerType: "gemini", geminiGoogleSearchPreference: "enabled" };
+      const request = { content: { parts: [{ text: "hello" }] } };
+
+      const result = applyGeminiGoogleSearchOverride(
+        provider,
+        request,
+        "/v1beta/models/gemini-embedding-001:embedContent"
+      );
+
+      expect(result).toBe(request);
+    });
   });
 
   describe("disabled preference", () => {
@@ -224,6 +237,25 @@ describe("applyGeminiGoogleSearchOverrideWithAudit", () => {
         preference: "enabled",
         hadGoogleSearchInRequest: true,
       });
+    });
+
+    test("should skip audit for non-generation Gemini actions when pathname is provided", () => {
+      const provider = {
+        id: 5,
+        name: "Gemini Embeddings",
+        providerType: "gemini",
+        geminiGoogleSearchPreference: "enabled",
+      };
+      const request = { content: { parts: [{ text: "hello" }] } };
+
+      const { request: result, audit } = applyGeminiGoogleSearchOverrideWithAudit(
+        provider,
+        request,
+        "/v1beta/models/gemini-embedding-001:embedContent"
+      );
+
+      expect(result).toBe(request);
+      expect(audit).toBeNull();
     });
   });
 

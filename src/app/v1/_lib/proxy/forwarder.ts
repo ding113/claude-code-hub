@@ -43,6 +43,8 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
+import { isStrictStandardEndpointPath } from "./endpoint-paths";
 import {
   buildRequestDetails,
   categorizeErrorAsync,
@@ -72,23 +74,6 @@ import {
 /** Default User-Agent for Codex CLI requests when none is provided */
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
-
-const STANDARD_ENDPOINTS = [
-  "/v1/messages",
-  "/v1/messages/count_tokens",
-  "/v1/responses",
-  "/v1/responses/compact",
-  "/v1/chat/completions",
-  "/v1/embeddings",
-  "/v1/models",
-];
-
-const STRICT_STANDARD_ENDPOINTS = [
-  "/v1/messages",
-  "/v1/responses",
-  "/v1/chat/completions",
-  "/v1/embeddings",
-];
 
 const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
 
@@ -567,9 +552,9 @@ export class ProxyForwarder {
       const isMcpRequest =
         currentProvider.providerType !== "gemini" &&
         currentProvider.providerType !== "gemini-cli" &&
-        !STANDARD_ENDPOINTS.includes(requestPath);
+        !isStandardProxyEndpointPath(requestPath);
       const shouldEnforceStrictEndpointPool =
-        !isMcpRequest && STRICT_STANDARD_ENDPOINTS.includes(requestPath) && providerVendorId > 0;
+        !isMcpRequest && isStrictStandardEndpointPath(requestPath) && providerVendorId > 0;
       let endpointSelectionError: Error | null = null;
 
       const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
@@ -1878,7 +1863,11 @@ export class ProxyForwarder {
 
         // Apply Gemini Google Search override if configured
         const { request: overriddenBody, audit: googleSearchAudit } =
-          applyGeminiGoogleSearchOverrideWithAudit(provider, bodyToSerialize);
+          applyGeminiGoogleSearchOverrideWithAudit(
+            provider,
+            bodyToSerialize,
+            session.requestUrl.pathname
+          );
         if (googleSearchAudit) {
           session.addSpecialSetting(googleSearchAudit);
           bodyToSerialize = overriddenBody;
@@ -2164,8 +2153,7 @@ export class ProxyForwarder {
 
       // 检测是否为 MCP 请求（非标准 Claude/Codex/OpenAI 端点）
       const requestPath = session.requestUrl.pathname;
-      // pathname does not include query params, so exact match is sufficient
-      const isStandardRequest = STANDARD_ENDPOINTS.includes(requestPath);
+      const isStandardRequest = isStandardProxyEndpointPath(requestPath);
       const isMcpRequest = !isStandardRequest;
 
       if (isMcpRequest && provider.mcpPassthroughType && provider.mcpPassthroughType !== "none") {
@@ -3432,9 +3420,9 @@ export class ProxyForwarder {
     const isMcpRequest =
       provider.providerType !== "gemini" &&
       provider.providerType !== "gemini-cli" &&
-      !STANDARD_ENDPOINTS.includes(requestPath);
+      !isStandardProxyEndpointPath(requestPath);
     const shouldEnforceStrictEndpointPool =
-      !isMcpRequest && STRICT_STANDARD_ENDPOINTS.includes(requestPath) && providerVendorId > 0;
+      !isMcpRequest && isStrictStandardEndpointPath(requestPath) && providerVendorId > 0;
 
     if (
       !isMcpRequest &&

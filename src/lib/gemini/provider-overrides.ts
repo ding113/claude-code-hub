@@ -1,3 +1,4 @@
+import { isGeminiGenerationEndpointPath } from "@/app/v1/_lib/proxy/endpoint-family-catalog";
 import { logger } from "@/lib/logger";
 import type { GeminiGoogleSearchPreference, ProviderType } from "@/types/provider";
 import type { GeminiGoogleSearchOverrideSpecialSetting } from "@/types/special-settings";
@@ -44,9 +45,14 @@ function removeGoogleSearchTools(tools: unknown[]): unknown[] {
  */
 export function applyGeminiGoogleSearchOverride(
   provider: GeminiProviderOverrideConfig,
-  request: Record<string, unknown>
+  request: Record<string, unknown>,
+  endpointPathname?: string | null
 ): Record<string, unknown> {
   if (provider.providerType !== "gemini" && provider.providerType !== "gemini-cli") {
+    return request;
+  }
+
+  if (endpointPathname && !isGeminiGenerationEndpointPath(endpointPathname)) {
     return request;
   }
 
@@ -95,9 +101,14 @@ export function applyGeminiGoogleSearchOverride(
  */
 export function applyGeminiGoogleSearchOverrideWithAudit(
   provider: GeminiProviderOverrideConfig,
-  request: Record<string, unknown>
+  request: Record<string, unknown>,
+  endpointPathname?: string | null
 ): { request: Record<string, unknown>; audit: GeminiGoogleSearchOverrideSpecialSetting | null } {
   if (provider.providerType !== "gemini" && provider.providerType !== "gemini-cli") {
+    return { request, audit: null };
+  }
+
+  if (endpointPathname && !isGeminiGenerationEndpointPath(endpointPathname)) {
     return { request, audit: null };
   }
 
@@ -125,7 +136,7 @@ export function applyGeminiGoogleSearchOverrideWithAudit(
     return { request, audit: null };
   }
 
-  const nextRequest = applyGeminiGoogleSearchOverride(provider, request);
+  const nextRequest = applyGeminiGoogleSearchOverride(provider, request, endpointPathname);
 
   const audit: GeminiGoogleSearchOverrideSpecialSetting = {
     type: "gemini_google_search_override",

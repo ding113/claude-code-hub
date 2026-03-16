@@ -843,10 +843,11 @@ export class ProxyProviderResolver {
         }
       }
 
-      // 2c. 模型匹配（保留原有逻辑）
+      // 2c. 模型匹配
       if (!requestedModel) {
-        // 没有模型信息时，只选择 Anthropic 提供商（向后兼容）
-        return provider.providerType === "claude";
+        // 资源类端点通常不携带 model，此时仅按格式兼容性筛选 provider，
+        // 不应再因为缺失模型而把请求错误收窄到 claude。
+        return true;
       }
 
       return providerSupportsModel(provider, requestedModel);
