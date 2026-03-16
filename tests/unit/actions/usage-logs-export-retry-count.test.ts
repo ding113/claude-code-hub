@@ -177,7 +177,10 @@ describe("Usage logs CSV export retryCount", () => {
     expect(result.ok).toBe(true);
     const csv = result.data;
     const csvNoBom = csv.replace(/^\uFEFF/, "");
-    const lines = csvNoBom.trim().split("\n").map((line) => line.replace(/\r$/, ""));
+    const lines = csvNoBom
+      .trim()
+      .split("\n")
+      .map((line) => line.replace(/\r$/, ""));
 
     expect(lines).toHaveLength(4);
     const header = parseCsvLine(lines[0] ?? "");
