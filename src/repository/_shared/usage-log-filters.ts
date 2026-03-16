@@ -13,6 +13,58 @@ export interface UsageLogFilterParams {
   minRetryCount?: number;
 }
 
+// 重试次数计算：
+// - 对齐前端 getRetryCount/isActualRequest：只统计“实际请求”的次数，再 - 1 得到重试次数
+// - Hedge Race（并发尝试）按 0 处理（并发不算顺序重试，且 UI 优先展示 Hedge Race）
+// - provider_chain 为空/NULL 时按 0 处理
+export const RETRY_COUNT_EXPR: SQL = sql`(
+  SELECT
+    CASE
+      WHEN COALESCE(
+        bool_or(
+          (elem->>'reason') IN (
+            'hedge_triggered',
+            'hedge_launched',
+            'hedge_winner',
+            'hedge_loser_cancelled'
+          )
+        ),
+        false
+      )
+      THEN 0
+      ELSE GREATEST(
+        COALESCE(
+          sum(
+            CASE
+              WHEN (
+                (elem->>'reason') IN (
+                  'concurrent_limit_failed',
+                  'retry_failed',
+                  'system_error',
+                  'resource_not_found',
+                  'client_error_non_retryable',
+                  'endpoint_pool_exhausted',
+                  'vendor_type_all_timeout',
+                  'client_abort',
+                  'http2_fallback'
+                )
+                OR (
+                  (elem->>'reason') IN ('request_success', 'retry_success')
+                  AND (elem->>'statusCode') IS NOT NULL
+                )
+              )
+              THEN 1
+              ELSE 0
+            END
+          ),
+          0
+        ) - 1,
+        0
+      )
+    END
+  FROM jsonb_array_elements(COALESCE(${messageRequest.providerChain}, '[]'::jsonb)) AS elem
+)`;
+
 export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
   const conditions: SQL[] = [];
 
@@ -47,10 +99,9 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
     conditions.push(eq(messageRequest.endpoint, filters.endpoint));
   }
 
-  if (filters.minRetryCount !== undefined) {
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${filters.minRetryCount}`
-    );
+  const minRetryCount = filters.minRetryCount ?? 0;
+  if (minRetryCount > 0) {
+    conditions.push(sql`${RETRY_COUNT_EXPR} >= ${minRetryCount}`);
   }
 
   return conditions;

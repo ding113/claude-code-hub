@@ -12,7 +12,7 @@ import type { SpecialSetting } from "@/types/special-settings";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { escapeLike } from "./_shared/like";
 import { EXCLUDE_WARMUP_CONDITION } from "./_shared/message-request-conditions";
-import { buildUsageLogConditions } from "./_shared/usage-log-filters";
+import { buildUsageLogConditions, RETRY_COUNT_EXPR } from "./_shared/usage-log-filters";
 
 export interface UsageLogFilters {
   userId?: number;
@@ -29,7 +29,7 @@ export interface UsageLogFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
-  /** 最低重试次数（provider_chain 长度 - 1） */
+  /** 最低重试次数（按 provider_chain 中“实际请求”数量 - 1 计算；<= 0 视为不筛选） */
   minRetryCount?: number;
   page?: number;
   pageSize?: number;
@@ -83,6 +83,18 @@ export interface UsageLogSummary {
   totalCacheCreation5mTokens: number;
   totalCacheCreation1hTokens: number;
 }
+
+const EMPTY_USAGE_LOG_SUMMARY: UsageLogSummary = {
+  totalRequests: 0,
+  totalCost: 0,
+  totalTokens: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  totalCacheCreationTokens: 0,
+  totalCacheReadTokens: 0,
+  totalCacheCreation5mTokens: 0,
+  totalCacheCreation1hTokens: 0,
+};
 
 export interface UsageLogsResult {
   logs: UsageLogRow[];
@@ -405,7 +417,7 @@ interface UsageLogSlimFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
-  /** 最低重试次数（provider_chain 长度 - 1） */
+  /** 最低重试次数（按 provider_chain 中“实际请求”数量 - 1 计算；<= 0 视为不筛选） */
   minRetryCount?: number;
   page?: number;
   pageSize?: number;
@@ -1011,6 +1023,13 @@ export async function findUsageLogsStats(
 ): Promise<UsageLogSummary> {
   const { userId, keyId, providerId } = filters;
 
+  // 在 ledger-only 模式下，message_request 为空 —— 依赖它的筛选条件必须短路处理。
+  const ledgerOnly = await isLedgerOnlyMode();
+  const minRetryCount = filters.minRetryCount ?? 0;
+  if (ledgerOnly && minRetryCount > 0) {
+    return EMPTY_USAGE_LOG_SUMMARY;
+  }
+
   const conditions = [LEDGER_BILLING_CONDITION];
 
   if (userId !== undefined) {
@@ -1052,10 +1071,8 @@ export async function findUsageLogsStats(
     conditions.push(eq(usageLedger.endpoint, filters.endpoint));
   }
 
-  if (filters.minRetryCount !== undefined) {
-    conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${filters.minRetryCount}`
-    );
+  if (minRetryCount > 0 && !ledgerOnly) {
+    conditions.push(sql`${RETRY_COUNT_EXPR} >= ${minRetryCount}`);
   }
 
   const baseQuery = db
@@ -1076,10 +1093,8 @@ export async function findUsageLogsStats(
       ? baseQuery.innerJoin(keysTable, eq(usageLedger.key, keysTable.key))
       : baseQuery;
 
-  // In ledger-only mode, message_request is empty — skip the innerJoin to avoid zeroing all results
-  const ledgerOnly = await isLedgerOnlyMode();
   const query =
-    filters.minRetryCount !== undefined && !ledgerOnly
+    minRetryCount > 0 && !ledgerOnly
       ? queryByKey.innerJoin(messageRequest, eq(usageLedger.requestId, messageRequest.id))
       : queryByKey;
 
