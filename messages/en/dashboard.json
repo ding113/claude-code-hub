@@ -493,8 +493,8 @@
       "overview": "Overview",
       "keyTrend": "Key Usage Trend",
       "modelBreakdown": "Model Breakdown",
-      "todayRequests": "Today Requests",
-      "todayCost": "Today Cost",
+      "requests": "Requests",
+      "cost": "Cost",
       "avgResponseTime": "Avg Response Time",
       "errorRate": "Error Rate",
       "timeRange": {

@@ -1,10 +1,18 @@
 "use server";
 
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, avg, count, desc, eq, gte, lt, sql, sum } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { providers, usageLedger } from "@/drizzle/schema";
+import { Decimal, toCostDecimal } from "@/lib/utils/currency";
 import { LEDGER_BILLING_CONDITION } from "./_shared/ledger-conditions";
 import { getSystemSettings } from "./system-config";
+
+export interface UserInsightsOverviewMetrics {
+  requestCount: number;
+  totalCost: number;
+  avgResponseTime: number;
+  errorRate: number;
+}
 
 export interface AdminUserModelBreakdownItem {
   model: string | null;
@@ -29,6 +37,50 @@ export interface AdminUserProviderBreakdownItem {
   outputTokens: number;
   cacheCreationTokens: number;
   cacheReadTokens: number;
+}
+
+/**
+ * Get overview metrics for a specific user within a date range.
+ */
+export async function getUserOverviewMetrics(
+  userId: number,
+  startDate?: string,
+  endDate?: string
+): Promise<UserInsightsOverviewMetrics> {
+  const conditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.userId, userId)];
+
+  if (startDate) {
+    conditions.push(gte(usageLedger.createdAt, sql`${startDate}::date`));
+  }
+
+  if (endDate) {
+    conditions.push(lt(usageLedger.createdAt, sql`(${endDate}::date + INTERVAL '1 day')`));
+  }
+
+  const [result] = await db
+    .select({
+      requestCount: count(),
+      totalCost: sum(usageLedger.costUsd),
+      avgDuration: avg(usageLedger.durationMs),
+      errorCount: sql<number>`count(*) FILTER (WHERE NOT ${usageLedger.isSuccess})`,
+    })
+    .from(usageLedger)
+    .where(and(...conditions));
+
+  const costDecimal = toCostDecimal(result?.totalCost) ?? new Decimal(0);
+  const totalCost = costDecimal.toDecimalPlaces(6).toNumber();
+  const requestCount = Number(result?.requestCount || 0);
+  const errorCount = Number(result?.errorCount || 0);
+  const avgResponseTime = result?.avgDuration ? Math.round(Number(result.avgDuration)) : 0;
+  const errorRate =
+    requestCount > 0 ? parseFloat(((errorCount / requestCount) * 100).toFixed(2)) : 0;
+
+  return {
+    requestCount,
+    totalCost,
+    avgResponseTime,
+    errorRate,
+  };
 }
 
 /**

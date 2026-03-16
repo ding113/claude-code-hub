@@ -493,8 +493,8 @@
       "overview": "Обзор",
       "keyTrend": "Тренд использования ключей",
       "modelBreakdown": "Разбивка по моделям",
-      "todayRequests": "Запросы за сегодня",
-      "todayCost": "Стоимость за сегодня",
+      "requests": "Запросы",
+      "cost": "Стоимость",
       "avgResponseTime": "Среднее время ответа",
       "errorRate": "Частота ошибок",
       "timeRange": {

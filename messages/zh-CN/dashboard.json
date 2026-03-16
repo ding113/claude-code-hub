@@ -493,8 +493,8 @@
       "overview": "概览",
       "keyTrend": "Key 使用趋势",
       "modelBreakdown": "模型明细",
-      "todayRequests": "今日请求",
-      "todayCost": "今日费用",
+      "requests": "请求数",
+      "cost": "费用",
       "avgResponseTime": "平均响应时间",
       "errorRate": "错误率",
       "timeRange": {
