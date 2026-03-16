@@ -1,38 +1,17 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { buildUsageLogConditions } from "@/repository/_shared/usage-log-filters";
+import type { SQL } from "drizzle-orm";
+import { CasingCache } from "drizzle-orm/casing";
 
-function sqlToString(sqlObj: unknown): string {
-  const visited = new Set<unknown>();
-
-  const walk = (node: unknown): string => {
-    if (!node || visited.has(node)) return "";
-    visited.add(node);
-
-    if (typeof node === "string") return node;
-
-    if (typeof node === "object") {
-      const anyNode = node as any;
-      if (Array.isArray(anyNode)) {
-        return anyNode.map(walk).join("");
-      }
-
-      if (anyNode.value) {
-        if (Array.isArray(anyNode.value)) {
-          return anyNode.value.map(String).join("");
-        }
-        return String(anyNode.value);
-      }
-
-      if (anyNode.queryChunks) {
-        return walk(anyNode.queryChunks);
-      }
-    }
-
-    return "";
-  };
-
-  return walk(sqlObj);
+function sqlToString(sqlObj: SQL): string {
+  return sqlObj.toQuery({
+    escapeName: (name: string) => `"${name}"`,
+    escapeParam: (num: number, _value: unknown) => `$${num}`,
+    escapeString: (value: string) => `'${value}'`,
+    casing: new CasingCache(),
+    paramStartIndex: { value: 1 },
+  }).sql;
 }
 
 function createThenableQuery<T>(result: T, whereArgs?: unknown[]) {
@@ -97,7 +76,7 @@ describe("Usage logs minRetryCount filter", () => {
     await findUsageLogsStats({ minRetryCount: 1 });
 
     expect(whereArgs).toHaveLength(1);
-    const whereSql = sqlToString(whereArgs[0]).toLowerCase();
+    const whereSql = sqlToString(whereArgs[0] as SQL).toLowerCase();
     expect(whereSql).toContain("jsonb_array_length");
     expect(whereSql).toMatch(/-\s*2/);
     expect(whereSql).not.toMatch(/-\s*1\b/);

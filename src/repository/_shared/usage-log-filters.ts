@@ -13,7 +13,7 @@ export interface UsageLogFilterParams {
   minRetryCount?: number;
 }
 
-// 重试次数计算：provider_chain 长度 - 2（排除 selection 记录 + 最终结果），并做下限 0 保护
+// 重试次数计算：provider_chain 长度 - 2（排除 index 0 的 selection 记录 + index 1 的首次请求），并做下限 0 保护
 export const RETRY_COUNT_EXPR: SQL = sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 2, 0), 0)`;
 
 export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
@@ -50,8 +50,9 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
     conditions.push(eq(messageRequest.endpoint, filters.endpoint));
   }
 
-  if (filters.minRetryCount !== undefined) {
-    conditions.push(sql`${RETRY_COUNT_EXPR} >= ${filters.minRetryCount}`);
+  const minRetryCount = filters.minRetryCount ?? 0;
+  if (minRetryCount > 0) {
+    conditions.push(sql`${RETRY_COUNT_EXPR} >= ${minRetryCount}`);
   }
 
   return conditions;
