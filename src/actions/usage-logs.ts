@@ -121,7 +121,7 @@ function generateCsv(logs: UsageLogRow[]): string {
   ];
 
   const rows = logs.map((log) => {
-    const retryCount = log.providerChain ? Math.max(0, log.providerChain.length - 1) : 0;
+    const retryCount = log.providerChain ? Math.max(0, log.providerChain.length - 2) : 0;
     return [
       log.createdAt ? new Date(log.createdAt).toISOString() : "",
       escapeCsvField(log.userName),

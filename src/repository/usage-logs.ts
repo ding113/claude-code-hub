@@ -29,7 +29,7 @@ export interface UsageLogFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
-  /** 最低重试次数（provider_chain 长度 - 1） */
+  /** 最低重试次数（provider_chain 长度 - 2） */
   minRetryCount?: number;
   page?: number;
   pageSize?: number;
@@ -405,7 +405,7 @@ interface UsageLogSlimFilters {
   excludeStatusCode200?: boolean;
   model?: string;
   endpoint?: string;
-  /** 最低重试次数（provider_chain 长度 - 1） */
+  /** 最低重试次数（provider_chain 长度 - 2） */
   minRetryCount?: number;
   page?: number;
   pageSize?: number;
@@ -1054,7 +1054,7 @@ export async function findUsageLogsStats(
 
   if (filters.minRetryCount !== undefined) {
     conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${filters.minRetryCount}`
+      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 2, 0), 0) >= ${filters.minRetryCount}`
     );
   }
 

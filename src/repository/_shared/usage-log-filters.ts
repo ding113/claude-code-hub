@@ -49,7 +49,7 @@ export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
 
   if (filters.minRetryCount !== undefined) {
     conditions.push(
-      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 1, 0), 0) >= ${filters.minRetryCount}`
+      sql`GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 2, 0), 0) >= ${filters.minRetryCount}`
     );
   }
 
