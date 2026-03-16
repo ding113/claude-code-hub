@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderEndpoint, ProviderType } from "@/types/provider";
+import { invalidateProviderQueries } from "../../invalidate-provider-queries";
 import { FormTabNav, NAV_ORDER, PARENT_MAP, TAB_ORDER } from "./components/form-tab-nav";
 import { ProviderFormProvider, useProviderForm } from "./provider-form-context";
 import type { NavTargetId, SubTabId, TabId } from "./provider-form-types";
@@ -73,6 +74,8 @@ function ProviderFormContent({
   const isEdit = mode === "edit";
 
   const queryClient = useQueryClient();
+
+  const doInvalidate = useCallback(() => invalidateProviderQueries(queryClient), [queryClient]);
 
   const resolvedEndpointPoolVendorId = useMemo(() => {
     return isEdit ? (provider?.providerVendorId ?? null) : null;
@@ -134,6 +137,15 @@ function ProviderFormContent({
   const rafRef = useRef<number | null>(null);
   const scrollLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollEndListenerRef = useRef<(() => void) | null>(null);
+
+  // Refs for scroll handler to avoid re-creating the callback on every tab change
+  const activeTabRef = useRef(state.ui.activeTab);
+  const activeSubTabRef = useRef(state.ui.activeSubTab);
+
+  useEffect(() => {
+    activeTabRef.current = state.ui.activeTab;
+    activeSubTabRef.current = state.ui.activeSubTab;
+  }, [state.ui.activeTab, state.ui.activeSubTab]);
 
   useEffect(() => {
     return () => {
@@ -201,11 +213,11 @@ function ProviderFormContent({
           ? PARENT_MAP[activeSection as SubTabId]
           : (activeSection as TabId);
       const subTab = activeSection in PARENT_MAP ? (activeSection as SubTabId) : null;
-      if (state.ui.activeTab !== parentTab || state.ui.activeSubTab !== subTab) {
+      if (activeTabRef.current !== parentTab || activeSubTabRef.current !== subTab) {
         dispatch({ type: "SET_ACTIVE_NAV", payload: { tab: parentTab, subTab } });
       }
     });
-  }, [dispatch, state.ui.activeSubTab, state.ui.activeTab]);
+  }, [dispatch]);
 
   const handleTabChange = (tab: TabId) => {
     dispatch({ type: "SET_ACTIVE_TAB", payload: tab });
@@ -359,10 +371,7 @@ function ProviderFormContent({
                   const undoResult = await undoProviderPatch({ undoToken, operationId });
                   if (undoResult.ok) {
                     toast.success(tBatchEdit("undo.singleEditUndone"));
-                    await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                    await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                    await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-                    await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                    await doInvalidate();
                   } else if (
                     undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED
                   ) {
@@ -377,10 +386,7 @@ function ProviderFormContent({
             },
           });
 
-          void queryClient.invalidateQueries({ queryKey: ["providers"] });
-          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-          void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+          void doInvalidate();
         } else {
           // For create: key is required
           const createFormData = { ...baseFormData, key: trimmedKey };
@@ -390,10 +396,7 @@ function ProviderFormContent({
             return;
           }
 
-          void queryClient.invalidateQueries({ queryKey: ["providers"] });
-          void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-          void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-          void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+          void doInvalidate();
 
           toast.success(t("success.created"));
           dispatch({ type: "RESET_FORM" });
@@ -451,10 +454,7 @@ function ProviderFormContent({
                 const undoResult = await undoProviderDelete({ undoToken, operationId });
                 if (undoResult.ok) {
                   toast.success(tBatchEdit("undo.singleDeleteUndone"));
-                  await queryClient.invalidateQueries({ queryKey: ["providers"] });
-                  await queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-                  await queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-                  await queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+                  await doInvalidate();
                 } else if (undoResult.errorCode === PROVIDER_BATCH_PATCH_ERROR_CODES.UNDO_EXPIRED) {
                   toast.error(tBatchEdit("undo.expired"));
                 } else {
@@ -467,10 +467,7 @@ function ProviderFormContent({
           },
         });
 
-        void queryClient.invalidateQueries({ queryKey: ["providers"] });
-        void queryClient.invalidateQueries({ queryKey: ["providers-health"] });
-        void queryClient.invalidateQueries({ queryKey: ["providers-statistics"] });
-        void queryClient.invalidateQueries({ queryKey: ["provider-vendors"] });
+        void doInvalidate();
         onSuccess?.();
       } catch (e) {
         console.error("Delete error:", e);
@@ -479,8 +476,8 @@ function ProviderFormContent({
     });
   };
 
-  // Tab status indicators
-  const getTabStatus = (): Partial<Record<TabId, "default" | "warning" | "configured">> => {
+  // Tab status indicators (memoized to avoid object recreation per render)
+  const tabStatus = useMemo((): Partial<Record<TabId, "default" | "warning" | "configured">> => {
     const status: Partial<Record<TabId, "default" | "warning" | "configured">> = {};
 
     // Basic - warning if required fields missing
@@ -544,7 +541,15 @@ function ProviderFormContent({
     }
 
     return status;
-  };
+  }, [
+    state.basic,
+    state.routing,
+    state.rateLimit,
+    state.network,
+    state.mcp,
+    hideUrl,
+    endpointPoolHideLegacyUrlInput,
+  ]);
 
   return (
     <form
@@ -561,7 +566,7 @@ function ProviderFormContent({
             onTabChange={handleTabChange}
             onSubTabChange={handleSubTabChange}
             disabled={isPending}
-            tabStatus={getTabStatus()}
+            tabStatus={tabStatus}
           />
         </div>
 

@@ -11,6 +11,11 @@ import type { User } from "@/types/user";
 import type { EndpointCircuitInfoMap } from "./provider-manager";
 import { ProviderRichListItem } from "./provider-rich-list-item";
 
+// Stable default references to avoid re-creating on every render (defeats React.memo)
+const EMPTY_STRING_ARRAY: string[] = [];
+const EMPTY_OBJECT: Record<string, never> = {};
+const EMPTY_SET = new Set<number>();
+
 interface ProviderListProps {
   providers: ProviderDisplay[];
   currentUser?: User;
@@ -43,17 +48,17 @@ export function ProviderList({
   providers,
   currentUser,
   healthStatus,
-  endpointCircuitInfo = {},
-  statistics = {},
+  endpointCircuitInfo = EMPTY_OBJECT,
+  statistics = EMPTY_OBJECT,
   statisticsLoading = false,
   currencyCode = "USD",
   enableMultiProviderTypes,
   activeGroupFilter = null,
   isMultiSelectMode = false,
-  selectedProviderIds = new Set(),
+  selectedProviderIds = EMPTY_SET,
   onSelectProvider,
-  allGroups = [],
-  userGroups = [],
+  allGroups = EMPTY_STRING_ARRAY,
+  userGroups = EMPTY_STRING_ARRAY,
   isAdmin = false,
 }: ProviderListProps) {
   const t = useTranslations("settings.providers");
