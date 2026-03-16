@@ -14,20 +14,56 @@ export interface UsageLogFilterParams {
 }
 
 // 重试次数计算：
-// - 基本公式：provider_chain 长度 - 2（排除 index 0 的 selection 记录 + index 1 的首次请求）
-// - Hedge Race（并发尝试）按 0 处理（对齐前端 getRetryCount/isHedgeRace 语义）
-// - 下限 0 保护
-const IS_HEDGE_RACE_EXPR: SQL = sql`(
-  COALESCE(${messageRequest.providerChain} @> '[{"reason": "hedge_triggered"}]'::jsonb, false)
-  OR COALESCE(${messageRequest.providerChain} @> '[{"reason": "hedge_launched"}]'::jsonb, false)
-  OR COALESCE(${messageRequest.providerChain} @> '[{"reason": "hedge_winner"}]'::jsonb, false)
-  OR COALESCE(${messageRequest.providerChain} @> '[{"reason": "hedge_loser_cancelled"}]'::jsonb, false)
+// - 对齐前端 getRetryCount/isActualRequest：只统计“实际请求”的次数，再 - 1 得到重试次数
+// - Hedge Race（并发尝试）按 0 处理（并发不算顺序重试，且 UI 优先展示 Hedge Race）
+// - provider_chain 为空/NULL 时按 0 处理
+export const RETRY_COUNT_EXPR: SQL = sql`(
+  SELECT
+    CASE
+      WHEN COALESCE(
+        bool_or(
+          (elem->>'reason') IN (
+            'hedge_triggered',
+            'hedge_launched',
+            'hedge_winner',
+            'hedge_loser_cancelled'
+          )
+        ),
+        false
+      )
+      THEN 0
+      ELSE GREATEST(
+        COALESCE(
+          sum(
+            CASE
+              WHEN (
+                (elem->>'reason') IN (
+                  'concurrent_limit_failed',
+                  'retry_failed',
+                  'system_error',
+                  'resource_not_found',
+                  'client_error_non_retryable',
+                  'endpoint_pool_exhausted',
+                  'vendor_type_all_timeout',
+                  'client_abort',
+                  'http2_fallback'
+                )
+                OR (
+                  (elem->>'reason') IN ('request_success', 'retry_success')
+                  AND (elem->>'statusCode') IS NOT NULL
+                )
+              )
+              THEN 1
+              ELSE 0
+            END
+          ),
+          0
+        ) - 1,
+        0
+      )
+    END
+  FROM jsonb_array_elements(COALESCE(${messageRequest.providerChain}, '[]'::jsonb)) AS elem
 )`;
-
-export const RETRY_COUNT_EXPR: SQL = sql`CASE
-  WHEN ${IS_HEDGE_RACE_EXPR} THEN 0
-  ELSE GREATEST(COALESCE(jsonb_array_length(${messageRequest.providerChain}) - 2, 0), 0)
-END`;
 
 export function buildUsageLogConditions(filters: UsageLogFilterParams): SQL[] {
   const conditions: SQL[] = [];
