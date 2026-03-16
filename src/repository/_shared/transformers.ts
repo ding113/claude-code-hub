@@ -4,10 +4,7 @@ import type { Key } from "@/types/key";
 import type { MessageRequest } from "@/types/message";
 import type { ModelPrice } from "@/types/model-price";
 import type { Provider } from "@/types/provider";
-import type {
-  ResponseFixerConfig,
-  SystemSettings,
-} from "@/types/system-config";
+import type { ResponseFixerConfig, SystemSettings } from "@/types/system-config";
 import type { User } from "@/types/user";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,8 +33,7 @@ export function toUser(dbUser: any): User {
       return parsed > 0 ? parsed : null;
     })(),
     dailyQuota: (() => {
-      if (dbUser?.dailyQuota === null || dbUser?.dailyQuota === undefined)
-        return null;
+      if (dbUser?.dailyQuota === null || dbUser?.dailyQuota === undefined) return null;
       const parsed = Number.parseFloat(dbUser.dailyQuota);
       return parsed > 0 ? parsed : null;
     })(),
@@ -47,9 +43,7 @@ export function toUser(dbUser: any): User {
     limitWeeklyUsd: parseOptionalNumber(dbUser?.limitWeeklyUsd),
     limitMonthlyUsd: parseOptionalNumber(dbUser?.limitMonthlyUsd),
     limitTotalUsd: parseOptionalNumber(dbUser?.limitTotalUsd),
-    limitConcurrentSessions: parseOptionalInteger(
-      dbUser?.limitConcurrentSessions,
-    ),
+    limitConcurrentSessions: parseOptionalInteger(dbUser?.limitConcurrentSessions),
     dailyResetMode: dbUser?.dailyResetMode ?? "fixed",
     dailyResetTime: dbUser?.dailyResetTime ?? "00:00",
     isEnabled: dbUser?.isEnabled ?? true,
@@ -70,16 +64,10 @@ export function toKey(dbKey: any): Key {
     isEnabled: dbKey?.isEnabled ?? true,
     canLoginWebUi: dbKey?.canLoginWebUi ?? true,
     limit5hUsd: dbKey?.limit5hUsd ? parseFloat(dbKey.limit5hUsd) : null,
-    limitDailyUsd: dbKey?.limitDailyUsd
-      ? parseFloat(dbKey.limitDailyUsd)
-      : null,
+    limitDailyUsd: dbKey?.limitDailyUsd ? parseFloat(dbKey.limitDailyUsd) : null,
     dailyResetTime: dbKey?.dailyResetTime ?? "00:00",
-    limitWeeklyUsd: dbKey?.limitWeeklyUsd
-      ? parseFloat(dbKey.limitWeeklyUsd)
-      : null,
-    limitMonthlyUsd: dbKey?.limitMonthlyUsd
-      ? parseFloat(dbKey.limitMonthlyUsd)
-      : null,
+    limitWeeklyUsd: dbKey?.limitWeeklyUsd ? parseFloat(dbKey.limitWeeklyUsd) : null,
+    limitMonthlyUsd: dbKey?.limitMonthlyUsd ? parseFloat(dbKey.limitMonthlyUsd) : null,
     limitTotalUsd:
       dbKey?.limitTotalUsd !== null && dbKey?.limitTotalUsd !== undefined
         ? parseFloat(dbKey.limitTotalUsd)
@@ -102,9 +90,7 @@ export function toProvider(dbProvider: any): Provider {
     weight: dbProvider?.weight ?? 1,
     priority: dbProvider?.priority ?? 0,
     groupPriorities: dbProvider?.groupPriorities ?? null,
-    costMultiplier: dbProvider?.costMultiplier
-      ? parseFloat(dbProvider.costMultiplier)
-      : 1.0,
+    costMultiplier: dbProvider?.costMultiplier ? parseFloat(dbProvider.costMultiplier) : 1.0,
     groupTag: dbProvider?.groupTag ?? null,
     providerType: dbProvider?.providerType ?? "claude",
     preserveClientIp: dbProvider?.preserveClientIp ?? false,
@@ -113,47 +99,31 @@ export function toProvider(dbProvider: any): Provider {
     activeTimeEnd: dbProvider?.activeTimeEnd ?? null,
     mcpPassthroughType: dbProvider?.mcpPassthroughType ?? "none",
     mcpPassthroughUrl: dbProvider?.mcpPassthroughUrl ?? null,
-    limit5hUsd: dbProvider?.limit5hUsd
-      ? parseFloat(dbProvider.limit5hUsd)
-      : null,
-    limitDailyUsd: dbProvider?.limitDailyUsd
-      ? parseFloat(dbProvider.limitDailyUsd)
-      : null,
+    limit5hUsd: dbProvider?.limit5hUsd ? parseFloat(dbProvider.limit5hUsd) : null,
+    limitDailyUsd: dbProvider?.limitDailyUsd ? parseFloat(dbProvider.limitDailyUsd) : null,
     dailyResetTime: dbProvider?.dailyResetTime ?? "00:00",
-    limitWeeklyUsd: dbProvider?.limitWeeklyUsd
-      ? parseFloat(dbProvider.limitWeeklyUsd)
-      : null,
-    limitMonthlyUsd: dbProvider?.limitMonthlyUsd
-      ? parseFloat(dbProvider.limitMonthlyUsd)
-      : null,
+    limitWeeklyUsd: dbProvider?.limitWeeklyUsd ? parseFloat(dbProvider.limitWeeklyUsd) : null,
+    limitMonthlyUsd: dbProvider?.limitMonthlyUsd ? parseFloat(dbProvider.limitMonthlyUsd) : null,
     limitTotalUsd:
-      dbProvider?.limitTotalUsd !== null &&
-      dbProvider?.limitTotalUsd !== undefined
+      dbProvider?.limitTotalUsd !== null && dbProvider?.limitTotalUsd !== undefined
         ? parseFloat(dbProvider.limitTotalUsd)
         : null,
-    totalCostResetAt: dbProvider?.totalCostResetAt
-      ? new Date(dbProvider.totalCostResetAt)
-      : null,
+    totalCostResetAt: dbProvider?.totalCostResetAt ? new Date(dbProvider.totalCostResetAt) : null,
     limitConcurrentSessions: dbProvider?.limitConcurrentSessions ?? 0,
     maxRetryAttempts:
-      dbProvider?.maxRetryAttempts !== undefined &&
-      dbProvider?.maxRetryAttempts !== null
+      dbProvider?.maxRetryAttempts !== undefined && dbProvider?.maxRetryAttempts !== null
         ? Number(dbProvider.maxRetryAttempts)
         : null,
-    circuitBreakerFailureThreshold:
-      dbProvider?.circuitBreakerFailureThreshold ?? 5,
-    circuitBreakerOpenDuration:
-      dbProvider?.circuitBreakerOpenDuration ?? 1800000,
-    circuitBreakerHalfOpenSuccessThreshold:
-      dbProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2,
+    circuitBreakerFailureThreshold: dbProvider?.circuitBreakerFailureThreshold ?? 5,
+    circuitBreakerOpenDuration: dbProvider?.circuitBreakerOpenDuration ?? 1800000,
+    circuitBreakerHalfOpenSuccessThreshold: dbProvider?.circuitBreakerHalfOpenSuccessThreshold ?? 2,
     proxyUrl: dbProvider?.proxyUrl ?? null,
     proxyFallbackToDirect: dbProvider?.proxyFallbackToDirect ?? false,
     firstByteTimeoutStreamingMs:
       dbProvider?.firstByteTimeoutStreamingMs ??
       PROVIDER_TIMEOUT_DEFAULTS.FIRST_BYTE_TIMEOUT_STREAMING_MS,
     streamingIdleTimeoutMs:
-      dbProvider?.streamingIdleTimeoutMs ??
-      PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
+      dbProvider?.streamingIdleTimeoutMs ?? PROVIDER_TIMEOUT_DEFAULTS.STREAMING_IDLE_TIMEOUT_MS,
     requestTimeoutNonStreamingMs:
       dbProvider?.requestTimeoutNonStreamingMs ??
       PROVIDER_TIMEOUT_DEFAULTS.REQUEST_TIMEOUT_NON_STREAMING_MS,
@@ -162,32 +132,21 @@ export function toProvider(dbProvider: any): Provider {
     cacheTtlPreference: dbProvider?.cacheTtlPreference ?? null,
     swapCacheTtlBilling: dbProvider?.swapCacheTtlBilling ?? false,
     context1mPreference: dbProvider?.context1mPreference ?? null,
-    codexReasoningEffortPreference:
-      dbProvider?.codexReasoningEffortPreference ?? null,
-    codexReasoningSummaryPreference:
-      dbProvider?.codexReasoningSummaryPreference ?? null,
-    codexTextVerbosityPreference:
-      dbProvider?.codexTextVerbosityPreference ?? null,
-    codexParallelToolCallsPreference:
-      dbProvider?.codexParallelToolCallsPreference ?? null,
+    codexReasoningEffortPreference: dbProvider?.codexReasoningEffortPreference ?? null,
+    codexReasoningSummaryPreference: dbProvider?.codexReasoningSummaryPreference ?? null,
+    codexTextVerbosityPreference: dbProvider?.codexTextVerbosityPreference ?? null,
+    codexParallelToolCallsPreference: dbProvider?.codexParallelToolCallsPreference ?? null,
     codexServiceTierPreference: dbProvider?.codexServiceTierPreference ?? null,
-    anthropicMaxTokensPreference:
-      dbProvider?.anthropicMaxTokensPreference ?? null,
-    anthropicThinkingBudgetPreference:
-      dbProvider?.anthropicThinkingBudgetPreference ?? null,
+    anthropicMaxTokensPreference: dbProvider?.anthropicMaxTokensPreference ?? null,
+    anthropicThinkingBudgetPreference: dbProvider?.anthropicThinkingBudgetPreference ?? null,
     anthropicAdaptiveThinking: dbProvider?.anthropicAdaptiveThinking ?? null,
-    geminiGoogleSearchPreference:
-      dbProvider?.geminiGoogleSearchPreference ?? null,
+    geminiGoogleSearchPreference: dbProvider?.geminiGoogleSearchPreference ?? null,
     tpm: dbProvider?.tpm ?? null,
     rpm: dbProvider?.rpm ?? null,
     rpd: dbProvider?.rpd ?? null,
     cc: dbProvider?.cc ?? null,
-    createdAt: dbProvider?.createdAt
-      ? new Date(dbProvider.createdAt)
-      : new Date(),
-    updatedAt: dbProvider?.updatedAt
-      ? new Date(dbProvider.updatedAt)
-      : new Date(),
+    createdAt: dbProvider?.createdAt ? new Date(dbProvider.createdAt) : new Date(),
+    updatedAt: dbProvider?.updatedAt ? new Date(dbProvider.updatedAt) : new Date(),
   };
 }
 
@@ -195,24 +154,16 @@ export function toProvider(dbProvider: any): Provider {
 export function toMessageRequest(dbMessage: any): MessageRequest {
   return {
     ...dbMessage,
-    costMultiplier: dbMessage?.costMultiplier
-      ? parseFloat(dbMessage.costMultiplier)
-      : undefined,
+    costMultiplier: dbMessage?.costMultiplier ? parseFloat(dbMessage.costMultiplier) : undefined,
     requestSequence: dbMessage?.requestSequence ?? undefined,
-    createdAt: dbMessage?.createdAt
-      ? new Date(dbMessage.createdAt)
-      : new Date(),
-    updatedAt: dbMessage?.updatedAt
-      ? new Date(dbMessage.updatedAt)
-      : new Date(),
+    createdAt: dbMessage?.createdAt ? new Date(dbMessage.createdAt) : new Date(),
+    updatedAt: dbMessage?.updatedAt ? new Date(dbMessage.updatedAt) : new Date(),
     costUsd: (() => {
       const formatted = formatCostForStorage(dbMessage?.costUsd);
       return formatted ?? undefined;
     })(),
-    cacheCreation5mInputTokens:
-      dbMessage?.cacheCreation5mInputTokens ?? undefined,
-    cacheCreation1hInputTokens:
-      dbMessage?.cacheCreation1hInputTokens ?? undefined,
+    cacheCreation5mInputTokens: dbMessage?.cacheCreation5mInputTokens ?? undefined,
+    cacheCreation1hInputTokens: dbMessage?.cacheCreation1hInputTokens ?? undefined,
     cacheTtlApplied: dbMessage?.cacheTtlApplied ?? null,
     context1mApplied: dbMessage?.context1mApplied ?? false,
     swapCacheTtlApplied: dbMessage?.swapCacheTtlApplied ?? false,
@@ -254,27 +205,19 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     enableClientVersionCheck: dbSettings?.enableClientVersionCheck ?? false,
     verboseProviderError: dbSettings?.verboseProviderError ?? false,
     enableHttp2: dbSettings?.enableHttp2 ?? false,
-    interceptAnthropicWarmupRequests:
-      dbSettings?.interceptAnthropicWarmupRequests ?? false,
-    enableThinkingSignatureRectifier:
-      dbSettings?.enableThinkingSignatureRectifier ?? true,
-    enableThinkingBudgetRectifier:
-      dbSettings?.enableThinkingBudgetRectifier ?? true,
-    enableBillingHeaderRectifier:
-      dbSettings?.enableBillingHeaderRectifier ?? true,
-    enableResponseInputRectifier:
-      dbSettings?.enableResponseInputRectifier ?? true,
-    enableCodexSessionIdCompletion:
-      dbSettings?.enableCodexSessionIdCompletion ?? true,
-    enableClaudeMetadataUserIdInjection:
-      dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
+    interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
+    enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
+    enableThinkingBudgetRectifier: dbSettings?.enableThinkingBudgetRectifier ?? true,
+    enableBillingHeaderRectifier: dbSettings?.enableBillingHeaderRectifier ?? true,
+    enableResponseInputRectifier: dbSettings?.enableResponseInputRectifier ?? true,
+    enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
+    enableClaudeMetadataUserIdInjection: dbSettings?.enableClaudeMetadataUserIdInjection ?? true,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
     responseFixerConfig: {
       ...defaultResponseFixerConfig,
       ...(dbSettings?.responseFixerConfig ?? {}),
     },
-    quotaDbRefreshIntervalSeconds:
-      dbSettings?.quotaDbRefreshIntervalSeconds ?? 10,
+    quotaDbRefreshIntervalSeconds: dbSettings?.quotaDbRefreshIntervalSeconds ?? 10,
     quotaLeasePercent5h: dbSettings?.quotaLeasePercent5h
       ? parseFloat(dbSettings.quotaLeasePercent5h)
       : 0.05,
@@ -287,14 +230,8 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     quotaLeasePercentMonthly: dbSettings?.quotaLeasePercentMonthly
       ? parseFloat(dbSettings.quotaLeasePercentMonthly)
       : 0.05,
-    quotaLeaseCapUsd: dbSettings?.quotaLeaseCapUsd
-      ? parseFloat(dbSettings.quotaLeaseCapUsd)
-      : null,
-    createdAt: dbSettings?.createdAt
-      ? new Date(dbSettings.createdAt)
-      : new Date(),
-    updatedAt: dbSettings?.updatedAt
-      ? new Date(dbSettings.updatedAt)
-      : new Date(),
+    quotaLeaseCapUsd: dbSettings?.quotaLeaseCapUsd ? parseFloat(dbSettings.quotaLeaseCapUsd) : null,
+    createdAt: dbSettings?.createdAt ? new Date(dbSettings.createdAt) : new Date(),
+    updatedAt: dbSettings?.updatedAt ? new Date(dbSettings.updatedAt) : new Date(),
   };
 }
