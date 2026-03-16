@@ -1,3 +1,5 @@
+import { normalizeEndpointPath } from "./endpoint-paths";
+
 export type EndpointClientFormat = "response" | "openai" | "claude" | "gemini" | "gemini-cli";
 
 export type EndpointAccountingTier = "required_usage" | "optional_usage" | "none";
@@ -13,35 +15,66 @@ export interface EndpointFamily {
 
 const GEMINI_GENERATION_ACTIONS = new Set(["generatecontent", "streamgeneratecontent"]);
 
-function normalizePathname(pathname: string): string {
-  const pathWithoutQuery = pathname.split("?")[0] ?? pathname;
-  const trimmedPath =
-    pathWithoutQuery.length > 1 && pathWithoutQuery.endsWith("/")
-      ? pathWithoutQuery.slice(0, -1)
-      : pathWithoutQuery;
-
-  return trimmedPath.toLowerCase();
-}
-
 function hasPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
 }
 
+type GeminiActionPrefix =
+  | "/v1beta/models/"
+  | "/v1/publishers/google/models/"
+  | "/v1/models/"
+  | "/v1internal/models/";
+
+const GEMINI_STANDARD_MODEL_PREFIXES = [
+  "/v1beta/models/",
+  "/v1/publishers/google/models/",
+  "/v1/models/",
+] as const satisfies readonly GeminiActionPrefix[];
+
+const GEMINI_PREDICT_MODEL_PREFIXES = [
+  "/v1beta/models/",
+  "/v1/publishers/google/models/",
+] as const satisfies readonly GeminiActionPrefix[];
+
+const GEMINI_CLI_MODEL_PREFIXES = [
+  "/v1internal/models/",
+] as const satisfies readonly GeminiActionPrefix[];
+
+/**
+ * 匹配受信任的 Gemini action 路径。
+ *
+ * 注意：`actions` 只能来自当前模块内的硬编码常量，绝不能接收用户输入。
+ */
 function matchGeminiModelAction(
   pathname: string,
-  prefix:
-    | "/v1beta/models/"
-    | "/v1/publishers/google/models/"
-    | "/v1/models/"
-    | "/v1internal/models/",
+  prefix: GeminiActionPrefix,
   actions: readonly string[]
 ): boolean {
-  const actionPattern = actions.join("|");
-  const regex = new RegExp(
-    `^${prefix.replaceAll("/", String.raw`\/`)}[^/:]+:(?:${actionPattern})$`,
-    "i"
-  );
-  return regex.test(pathname);
+  if (!pathname.startsWith(prefix)) {
+    return false;
+  }
+
+  const remainder = pathname.slice(prefix.length);
+  const separatorIndex = remainder.indexOf(":");
+  if (separatorIndex <= 0) {
+    return false;
+  }
+
+  const model = remainder.slice(0, separatorIndex);
+  const action = remainder.slice(separatorIndex + 1);
+  if (!model || model.includes("/") || model.includes(":")) {
+    return false;
+  }
+
+  return action.length > 0 && !action.includes("/") && actions.includes(action);
+}
+
+function matchGeminiModelActionOnPrefixes(
+  pathname: string,
+  prefixes: readonly GeminiActionPrefix[],
+  actions: readonly string[]
+): boolean {
+  return prefixes.some((prefix) => matchGeminiModelAction(pathname, prefix, actions));
 }
 
 const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
@@ -116,9 +149,9 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["generatecontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", ["generatecontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/models/", ["generatecontent"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_STANDARD_MODEL_PREFIXES, [
+        "generatecontent",
+      ]),
   },
   {
     id: "gemini-stream-generate-content",
@@ -127,11 +160,9 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["streamgeneratecontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", [
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_STANDARD_MODEL_PREFIXES, [
         "streamgeneratecontent",
-      ]) ||
-      matchGeminiModelAction(pathname, "/v1/models/", ["streamgeneratecontent"]),
+      ]),
   },
   {
     id: "gemini-count-tokens",
@@ -140,9 +171,7 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["counttokens"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", ["counttokens"]) ||
-      matchGeminiModelAction(pathname, "/v1/models/", ["counttokens"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_STANDARD_MODEL_PREFIXES, ["counttokens"]),
   },
   {
     id: "gemini-embed-content",
@@ -151,9 +180,7 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["embedcontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", ["embedcontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/models/", ["embedcontent"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_STANDARD_MODEL_PREFIXES, ["embedcontent"]),
   },
   {
     id: "gemini-batch-generate-content",
@@ -162,9 +189,9 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["batchgeneratecontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", ["batchgeneratecontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/models/", ["batchgeneratecontent"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_STANDARD_MODEL_PREFIXES, [
+        "batchgeneratecontent",
+      ]),
   },
   {
     id: "gemini-batch-embed-contents",
@@ -173,9 +200,9 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["batchembedcontents"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", ["batchembedcontents"]) ||
-      matchGeminiModelAction(pathname, "/v1/models/", ["batchembedcontents"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_STANDARD_MODEL_PREFIXES, [
+        "batchembedcontents",
+      ]),
   },
   {
     id: "gemini-async-batch-embed-content",
@@ -184,11 +211,9 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["asyncbatchembedcontent"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", [
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_STANDARD_MODEL_PREFIXES, [
         "asyncbatchembedcontent",
-      ]) ||
-      matchGeminiModelAction(pathname, "/v1/models/", ["asyncbatchembedcontent"]),
+      ]),
   },
   {
     id: "gemini-predict",
@@ -197,8 +222,7 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["predict"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", ["predict"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_PREDICT_MODEL_PREFIXES, ["predict"]),
   },
   {
     id: "gemini-predict-long-running",
@@ -207,8 +231,9 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1beta/models/", ["predictlongrunning"]) ||
-      matchGeminiModelAction(pathname, "/v1/publishers/google/models/", ["predictlongrunning"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_PREDICT_MODEL_PREFIXES, [
+        "predictlongrunning",
+      ]),
   },
   {
     id: "gemini-files",
@@ -236,7 +261,7 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1internal/models/", ["generatecontent"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_CLI_MODEL_PREFIXES, ["generatecontent"]),
   },
   {
     id: "gemini-cli-stream-generate-content",
@@ -245,7 +270,9 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
     modelRequired: true,
     rawPassthrough: false,
     match: (pathname) =>
-      matchGeminiModelAction(pathname, "/v1internal/models/", ["streamgeneratecontent"]),
+      matchGeminiModelActionOnPrefixes(pathname, GEMINI_CLI_MODEL_PREFIXES, [
+        "streamgeneratecontent",
+      ]),
   },
   {
     id: "openai-completions",
@@ -424,7 +451,7 @@ export function listKnownEndpointFamilies(): readonly EndpointFamily[] {
 }
 
 export function resolveEndpointFamilyByPath(pathname: string): EndpointFamily | null {
-  const normalizedPath = normalizePathname(pathname);
+  const normalizedPath = normalizeEndpointPath(pathname);
   return KNOWN_ENDPOINT_FAMILIES.find((family) => family.match(normalizedPath)) ?? null;
 }
 
@@ -437,7 +464,7 @@ export function isStandardProxyEndpointPath(pathname: string): boolean {
 }
 
 export function isGeminiGenerationEndpointPath(pathname: string): boolean {
-  const normalizedPath = normalizePathname(pathname);
+  const normalizedPath = normalizeEndpointPath(pathname);
   const matches = normalizedPath.match(/:([^/]+)$/);
   return matches?.[1] ? GEMINI_GENERATION_ACTIONS.has(matches[1]) : false;
 }

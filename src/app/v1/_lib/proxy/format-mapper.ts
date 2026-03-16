@@ -84,19 +84,30 @@ export function detectClientFormat(requestBody: Record<string, unknown>): Client
 
   // 3. 检测 Gemini batch 格式
   if (Array.isArray(requestBody.requests)) {
+    const isGeminiContentPayload = (value: unknown): boolean => {
+      if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return false;
+      }
+
+      const payload = value as Record<string, unknown>;
+      return Array.isArray(payload.parts) || Array.isArray(payload.contents);
+    };
+
     const hasGeminiBatchShape = requestBody.requests.some((entry) => {
       if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
         return false;
       }
 
       const record = entry as Record<string, unknown>;
-      if (typeof record.model === "string" || typeof record.content === "object") {
+      if (typeof record.model === "string" && isGeminiContentPayload(record.content)) {
         return true;
       }
 
       if (typeof record.request === "object" && record.request !== null) {
         const nestedRequest = record.request as Record<string, unknown>;
-        return typeof nestedRequest.model === "string" || typeof nestedRequest.content === "object";
+        return (
+          typeof nestedRequest.model === "string" && isGeminiContentPayload(nestedRequest.content)
+        );
       }
 
       return false;

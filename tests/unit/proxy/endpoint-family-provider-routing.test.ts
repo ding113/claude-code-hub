@@ -281,7 +281,7 @@ describe("endpoint family -> provider routing matrix", () => {
     } as any;
   }
 
-  function createProvider(
+  function createTestProvider(
     id: number,
     providerType: Provider["providerType"],
     overrides: Partial<Provider> = {}
@@ -289,15 +289,65 @@ describe("endpoint family -> provider routing matrix", () => {
     return {
       id,
       name: `provider-${id}`,
+      url: "https://provider.example.com",
+      key: "provider-key",
+      providerVendorId: null,
       isEnabled: true,
-      providerType,
-      groupTag: null,
       weight: 1,
       priority: 0,
+      groupPriorities: null,
       costMultiplier: 1,
+      groupTag: null,
+      providerType,
+      preserveClientIp: false,
+      modelRedirects: null,
+      activeTimeStart: null,
+      activeTimeEnd: null,
       allowedModels: null,
+      allowedClients: [],
+      blockedClients: [],
+      mcpPassthroughType: "none",
+      mcpPassthroughUrl: null,
+      limit5hUsd: null,
+      limitDailyUsd: null,
+      dailyResetMode: "fixed",
+      dailyResetTime: "00:00",
+      limitWeeklyUsd: null,
+      limitMonthlyUsd: null,
+      limitTotalUsd: null,
+      totalCostResetAt: null,
+      limitConcurrentSessions: 0,
+      maxRetryAttempts: null,
+      circuitBreakerFailureThreshold: 0,
+      circuitBreakerOpenDuration: 0,
+      circuitBreakerHalfOpenSuccessThreshold: 0,
+      proxyUrl: null,
+      proxyFallbackToDirect: false,
+      firstByteTimeoutStreamingMs: 0,
+      streamingIdleTimeoutMs: 0,
+      requestTimeoutNonStreamingMs: 0,
+      websiteUrl: null,
+      faviconUrl: null,
+      cacheTtlPreference: null,
+      swapCacheTtlBilling: false,
+      context1mPreference: null,
+      codexReasoningEffortPreference: null,
+      codexReasoningSummaryPreference: null,
+      codexTextVerbosityPreference: null,
+      codexParallelToolCallsPreference: null,
+      codexServiceTierPreference: null,
+      anthropicMaxTokensPreference: null,
+      anthropicThinkingBudgetPreference: null,
+      anthropicAdaptiveThinking: null,
+      geminiGoogleSearchPreference: null,
+      tpm: null,
+      rpm: null,
+      rpd: null,
+      cc: null,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
       ...overrides,
-    } as unknown as Provider;
+    };
   }
 
   async function setupResolverMocks() {
@@ -330,17 +380,13 @@ describe("endpoint family -> provider routing matrix", () => {
     const ProxyProviderResolver = await setupResolverMocks();
 
     const providers: Provider[] = [
-      createProvider(1, "claude"),
-      createProvider(2, "claude-auth"),
-      createProvider(3, "codex"),
-      createProvider(4, "openai-compatible"),
-      createProvider(5, "gemini"),
-      createProvider(6, "gemini-cli"),
+      createTestProvider(1, "claude"),
+      createTestProvider(2, "claude-auth"),
+      createTestProvider(3, "codex"),
+      createTestProvider(4, "openai-compatible"),
+      createTestProvider(5, "gemini"),
+      createTestProvider(6, "gemini-cli"),
     ];
-
-    const preferredProviderId = providers.find(
-      (provider) => provider.providerType === expectedProviderType
-    )!.id;
     const session = createSessionStub(path, requestedModel);
     session.getProvidersSnapshot = async () => providers;
 
@@ -350,7 +396,6 @@ describe("endpoint family -> provider routing matrix", () => {
     );
 
     expect(provider?.providerType).toBe(expectedProviderType);
-    expect(provider?.id).toBe(preferredProviderId);
     expect(context.requestedModel).toBe(requestedModel);
   });
 
@@ -358,8 +403,8 @@ describe("endpoint family -> provider routing matrix", () => {
     const ProxyProviderResolver = await setupResolverMocks();
     const session = createSessionStub("/v1/chat/completions", "gpt-4o");
     session.getProvidersSnapshot = async () => [
-      createProvider(1, "codex"),
-      createProvider(2, "openai-compatible"),
+      createTestProvider(1, "codex"),
+      createTestProvider(2, "openai-compatible"),
     ];
 
     const { provider } = await (ProxyProviderResolver as any).pickRandomProvider(session, []);
@@ -371,8 +416,8 @@ describe("endpoint family -> provider routing matrix", () => {
     const ProxyProviderResolver = await setupResolverMocks();
     const session = createSessionStub("/v1/responses", "codex-mini-latest");
     session.getProvidersSnapshot = async () => [
-      createProvider(1, "openai-compatible"),
-      createProvider(2, "codex"),
+      createTestProvider(1, "openai-compatible"),
+      createTestProvider(2, "codex"),
     ];
 
     const { provider } = await (ProxyProviderResolver as any).pickRandomProvider(session, []);
