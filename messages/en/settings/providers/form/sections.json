@@ -391,6 +391,18 @@
         "desc": "Weighted random. Within the same priority, higher weight increases selection probability. Example 1:2:3 ≈ 16%:33%:50%",
         "label": "Weight",
         "placeholder": "1"
+      },
+      "costMultiplierCalculator": {
+        "trigger": "Calculate cost multiplier",
+        "title": "Cost Multiplier Calculator",
+        "description": "For subscription-based providers, calculate the actual cost multiplier from your payment and quota.",
+        "paymentLabel": "Actual Payment Amount",
+        "paymentPlaceholder": "e.g. 142.87",
+        "quotaLabel": "Quota / Credit Received (USD)",
+        "quotaPlaceholder": "e.g. 210",
+        "resultLabel": "Calculated Multiplier",
+        "formula": "{payment} ÷ {quota} = multiplier",
+        "apply": "Apply Multiplier"
       }
     },
     "activeTime": {

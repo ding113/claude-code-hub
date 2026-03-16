@@ -112,6 +112,18 @@
         "desc": "为特定分组设置独立的优先级。留空则使用上方的全局优先级。",
         "placeholder": "使用全局优先级",
         "noGroups": "请先设置分组标签，才能配置分组优先级"
+      },
+      "costMultiplierCalculator": {
+        "trigger": "计算成本倍率",
+        "title": "成本倍率计算器",
+        "description": "按月付费的站点，输入实际付费金额和获得的额度，自动计算成本倍率。",
+        "paymentLabel": "实际付费金额",
+        "paymentPlaceholder": "例如 142.87",
+        "quotaLabel": "获得额度（美元）",
+        "quotaPlaceholder": "例如 210",
+        "resultLabel": "计算结果",
+        "formula": "{payment} ÷ {quota} = 倍率",
+        "apply": "应用倍率"
       }
     },
     "activeTime": {

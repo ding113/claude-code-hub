@@ -156,8 +156,7 @@
       "none": "無制限",
       "total": "総: ${amount}",
       "weekly": "週: ${amount}"
-    },
-    "title": "レート制限"
+    }
   },
   "limits": {
     "timeBased": "時間ベースの制限",
@@ -392,6 +391,18 @@
         "desc": "重み付きランダム。同一優先度内では重みが高いほど選ばれる確率が上がります。例 1:2:3 ≈ 16%:33%:50%",
         "label": "重み",
         "placeholder": "1"
+      },
+      "costMultiplierCalculator": {
+        "trigger": "コスト倍率を計算",
+        "title": "コスト倍率計算ツール",
+        "description": "サブスクリプション型プロバイダーの場合、実際の支払い額とクォータからコスト倍率を計算します。",
+        "paymentLabel": "実際の支払い額",
+        "paymentPlaceholder": "例: 142.87",
+        "quotaLabel": "取得クォータ（USD）",
+        "quotaPlaceholder": "例: 210",
+        "resultLabel": "計算結果",
+        "formula": "{payment} ÷ {quota} = 倍率",
+        "apply": "倍率を適用"
       }
     },
     "activeTime": {

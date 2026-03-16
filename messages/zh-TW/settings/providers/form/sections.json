@@ -156,8 +156,7 @@
       "none": "無限制",
       "total": "總：${amount}",
       "weekly": "週：${amount}"
-    },
-    "title": "流量限制"
+    }
   },
   "limits": {
     "timeBased": "時間維度限制",
@@ -392,6 +391,18 @@
         "desc": "加權隨機。同一優先級內，權重越高被選中機率越大。例如 1:2:3 約為 16%:33%:50%",
         "label": "權重",
         "placeholder": "1"
+      },
+      "costMultiplierCalculator": {
+        "trigger": "計算成本倍率",
+        "title": "成本倍率計算器",
+        "description": "按月付費的站點，輸入實際付費金額和獲得的額度，自動計算成本倍率。",
+        "paymentLabel": "實際付費金額",
+        "paymentPlaceholder": "例如 142.87",
+        "quotaLabel": "獲得額度（美元）",
+        "quotaPlaceholder": "例如 210",
+        "resultLabel": "計算結果",
+        "formula": "{payment} ÷ {quota} = 倍率",
+        "apply": "套用倍率"
       }
     },
     "activeTime": {

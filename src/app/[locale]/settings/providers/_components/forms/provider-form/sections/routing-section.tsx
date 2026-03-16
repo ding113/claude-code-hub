@@ -24,6 +24,7 @@ import { ModelMultiSelect } from "../../../model-multi-select";
 import { ModelRedirectEditor } from "../../../model-redirect-editor";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
+import { CostMultiplierCalculator } from "../components/cost-multiplier-calculator";
 
 const GROUP_TAG_MAX_TOTAL_LENGTH = 50;
 
@@ -386,28 +387,36 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
               description={t("sections.routing.scheduleParams.costMultiplier.desc")}
             >
               <div className="space-y-2">
-                <Input
-                  id={isEdit ? "edit-cost" : "cost"}
-                  type="number"
-                  value={state.routing.costMultiplier}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === "") {
-                      dispatch({ type: "SET_COST_MULTIPLIER", payload: 1.0 });
-                      return;
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    id={isEdit ? "edit-cost" : "cost"}
+                    type="number"
+                    value={state.routing.costMultiplier}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === "") {
+                        dispatch({ type: "SET_COST_MULTIPLIER", payload: 1.0 });
+                        return;
+                      }
+                      const num = parseFloat(value);
+                      dispatch({
+                        type: "SET_COST_MULTIPLIER",
+                        payload: Number.isNaN(num) ? 1.0 : num,
+                      });
+                    }}
+                    onFocus={(e) => e.target.select()}
+                    placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
+                    disabled={state.ui.isPending}
+                    min="0"
+                    step="0.0001"
+                  />
+                  <CostMultiplierCalculator
+                    onApply={(multiplier) =>
+                      dispatch({ type: "SET_COST_MULTIPLIER", payload: multiplier })
                     }
-                    const num = parseFloat(value);
-                    dispatch({
-                      type: "SET_COST_MULTIPLIER",
-                      payload: Number.isNaN(num) ? 1.0 : num,
-                    });
-                  }}
-                  onFocus={(e) => e.target.select()}
-                  placeholder={t("sections.routing.scheduleParams.costMultiplier.placeholder")}
-                  disabled={state.ui.isPending}
-                  min="0"
-                  step="0.0001"
-                />
+                    disabled={state.ui.isPending}
+                  />
+                </div>
                 {isBatch && batchAnalysis?.routing.costMultiplier.status === "mixed" && (
                   <MixedValueIndicator values={batchAnalysis.routing.costMultiplier.values} />
                 )}
