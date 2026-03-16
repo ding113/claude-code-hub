@@ -323,6 +323,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
               limitMonthlyUsd: key.limitMonthlyUsd,
               limitTotalUsd: key.limitTotalUsd,
               limitConcurrentSessions: key.limitConcurrentSessions || 0,
+              costResetAt: key.costResetAt?.toISOString() ?? null,
               providerGroup: key.providerGroup,
             };
           }),
@@ -592,6 +593,7 @@ export async function getUsersBatch(
               limitMonthlyUsd: key.limitMonthlyUsd,
               limitTotalUsd: key.limitTotalUsd,
               limitConcurrentSessions: key.limitConcurrentSessions || 0,
+              costResetAt: key.costResetAt?.toISOString() ?? null,
               providerGroup: key.providerGroup,
             };
           }),
@@ -740,6 +742,7 @@ export async function getUsersBatchCore(
           limitMonthlyUsd: key.limitMonthlyUsd,
           limitTotalUsd: key.limitTotalUsd,
           limitConcurrentSessions: key.limitConcurrentSessions || 0,
+          costResetAt: key.costResetAt?.toISOString() ?? null,
           providerGroup: key.providerGroup,
         })),
       };

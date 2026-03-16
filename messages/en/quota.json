@@ -348,7 +348,19 @@
       "success": "Key updated successfully",
       "error": "Failed to update key",
       "retryError": "Save failed, please try again later",
-      "keyInfoMissing": "Key information does not exist"
+      "keyInfoMissing": "Key information does not exist",
+      "resetLimits": {
+        "title": "Reset Quota",
+        "description": "Reset all limit counters for this key. Usage logs will be preserved.",
+        "button": "Reset Quota",
+        "confirmTitle": "Reset Quota?",
+        "confirmDescription": "This will reset all accumulated usage counters (5h, daily, weekly, monthly, total) to zero. Usage logs and statistics will be kept.",
+        "confirm": "Yes, reset quota",
+        "loading": "Resetting...",
+        "error": "Failed to reset quota",
+        "success": "Quota has been reset successfully",
+        "lastResetAt": "Last reset: {date}"
+      }
     }
   }
 }

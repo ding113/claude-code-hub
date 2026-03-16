@@ -7,6 +7,7 @@ import { messageRequest, usageLedger } from "@/drizzle/schema";
 import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
+import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import type { DailyResetMode } from "@/lib/rate-limit/time-utils";
 import { SessionTracker } from "@/lib/session-tracker";
 import type { CurrencyCode } from "@/lib/utils";
@@ -244,25 +245,47 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
     const rangeMonthly = await getTimeRangeForPeriod("monthly");
 
     // Clip time range starts by costResetAt (for limits-only reset)
-    const costResetAt = user.costResetAt ?? null;
-    const clipStart = (start: Date): Date =>
-      costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
+    // Key uses MAX(key.costResetAt, user.costResetAt); User uses only user.costResetAt
+    const userCostResetAt = user.costResetAt ?? null;
+    const keyCostResetAtResolved = resolveKeyCostResetAt(key.costResetAt ?? null, userCostResetAt);
+    const keyClipStart = (start: Date): Date =>
+      keyCostResetAtResolved instanceof Date && keyCostResetAtResolved > start
+        ? keyCostResetAtResolved
+        : start;
+    const userClipStart = (start: Date): Date =>
+      userCostResetAt instanceof Date && userCostResetAt > start ? userCostResetAt : start;
 
-    const clippedRange5h = { startTime: clipStart(range5h.startTime), endTime: range5h.endTime };
-    const clippedRangeWeekly = {
-      startTime: clipStart(rangeWeekly.startTime),
+    const keyClippedRange5h = {
+      startTime: keyClipStart(range5h.startTime),
+      endTime: range5h.endTime,
+    };
+    const keyClippedRangeWeekly = {
+      startTime: keyClipStart(rangeWeekly.startTime),
       endTime: rangeWeekly.endTime,
     };
-    const clippedRangeMonthly = {
-      startTime: clipStart(rangeMonthly.startTime),
+    const keyClippedRangeMonthly = {
+      startTime: keyClipStart(rangeMonthly.startTime),
       endTime: rangeMonthly.endTime,
     };
     const clippedKeyDaily = {
-      startTime: clipStart(keyDailyTimeRange.startTime),
+      startTime: keyClipStart(keyDailyTimeRange.startTime),
       endTime: keyDailyTimeRange.endTime,
     };
+
+    const userClippedRange5h = {
+      startTime: userClipStart(range5h.startTime),
+      endTime: range5h.endTime,
+    };
+    const userClippedRangeWeekly = {
+      startTime: userClipStart(rangeWeekly.startTime),
+      endTime: rangeWeekly.endTime,
+    };
+    const userClippedRangeMonthly = {
+      startTime: userClipStart(rangeMonthly.startTime),
+      endTime: rangeMonthly.endTime,
+    };
     const clippedUserDaily = {
-      startTime: clipStart(userDailyTimeRange.startTime),
+      startTime: userClipStart(userDailyTimeRange.startTime),
       endTime: userDailyTimeRange.endTime,
     };
 
@@ -276,26 +299,26 @@ export async function getMyQuota(): Promise<ActionResult<MyUsageQuota>> {
       sumKeyQuotaCostsById(
         key.id,
         {
-          range5h: clippedRange5h,
+          range5h: keyClippedRange5h,
           rangeDaily: clippedKeyDaily,
-          rangeWeekly: clippedRangeWeekly,
-          rangeMonthly: clippedRangeMonthly,
+          rangeWeekly: keyClippedRangeWeekly,
+          rangeMonthly: keyClippedRangeMonthly,
         },
         ALL_TIME_MAX_AGE_DAYS,
-        costResetAt
+        keyCostResetAtResolved
       ),
       SessionTracker.getKeySessionCount(key.id),
       // User 配额：直接查 DB
       sumUserQuotaCosts(
         user.id,
         {
-          range5h: clippedRange5h,
+          range5h: userClippedRange5h,
           rangeDaily: clippedUserDaily,
-          rangeWeekly: clippedRangeWeekly,
-          rangeMonthly: clippedRangeMonthly,
+          rangeWeekly: userClippedRangeWeekly,
+          rangeMonthly: userClippedRangeMonthly,
         },
         ALL_TIME_MAX_AGE_DAYS,
-        costResetAt
+        userCostResetAt
       ),
       getUserConcurrentSessions(user.id),
     ]);

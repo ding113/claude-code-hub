@@ -10,6 +10,7 @@ import { getSession } from "@/lib/auth";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { resolveKeyConcurrentSessionLimit } from "@/lib/rate-limit/concurrent-session-limit";
+import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
 import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
@@ -25,6 +26,7 @@ import {
   findKeyById,
   findKeyList,
   findKeysWithStatistics,
+  resetKeyCostResetAt,
   updateKey,
 } from "@/repository/key";
 import type { Key } from "@/types/key";
@@ -545,7 +547,11 @@ export async function editKey(
       limit_total_usd: validatedData.limitTotalUsd,
       limit_concurrent_sessions: validatedData.limitConcurrentSessions,
       // providerGroup 为 admin-only 字段：非管理员不允许更新该字段
-      ...(isAdmin ? { provider_group: normalizeProviderGroup(validatedData.providerGroup) } : {}),
+      ...(isAdmin
+        ? {
+            provider_group: normalizeProviderGroup(validatedData.providerGroup),
+          }
+        : {}),
       cache_ttl_preference: validatedData.cacheTtlPreference,
     });
 
@@ -734,8 +740,7 @@ export async function getKeyLimitUsage(keyId: number): Promise<
       result.userLimitConcurrentSessions ?? null
     );
 
-    // Clip time range start by costResetAt (for limits-only reset)
-    const costResetAt = result.userCostResetAt ?? null;
+    const costResetAt = resolveKeyCostResetAt(key.costResetAt ?? null, result.userCostResetAt);
     const clipStart = (start: Date): Date =>
       costResetAt instanceof Date && costResetAt > start ? costResetAt : start;
 
@@ -815,6 +820,77 @@ export async function getKeyLimitUsage(keyId: number): Promise<
   }
 }
 
+export async function resetKeyLimitsOnly(keyId: number): Promise<ActionResult> {
+  try {
+    const tError = await getTranslations("errors");
+
+    const session = await getSession();
+    if (!session || session.user.role !== "admin") {
+      return {
+        ok: false,
+        error: tError("PERMISSION_DENIED"),
+        errorCode: ERROR_CODES.PERMISSION_DENIED,
+      };
+    }
+
+    const key = await findKeyById(keyId);
+    if (!key) {
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    const updated = await resetKeyCostResetAt(keyId, new Date());
+    if (!updated) {
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
+    }
+
+    try {
+      const { clearSingleKeyCostCache } = await import("@/lib/redis/cost-cache-cleanup");
+      const cacheResult = await clearSingleKeyCostCache({
+        keyId,
+        keyHash: key.key,
+      });
+      if (cacheResult) {
+        logger.info("Reset key limits only - Redis cost cache cleared", {
+          keyId,
+          userId: key.userId,
+          ...cacheResult,
+        });
+      }
+    } catch (error) {
+      logger.error("Failed to clear Redis cache during key limits reset", {
+        keyId,
+        userId: key.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    logger.info("Reset key limits only (costResetAt set)", {
+      keyId,
+      userId: key.userId,
+    });
+    revalidatePath("/dashboard/users");
+    revalidatePath("/dashboard");
+
+    return { ok: true };
+  } catch (error) {
+    logger.error("Failed to reset key limits:", error);
+    const tError = await getTranslations("errors");
+    return {
+      ok: false,
+      error: tError("OPERATION_FAILED"),
+      errorCode: ERROR_CODES.OPERATION_FAILED,
+    };
+  }
+}
+
 /**
  * 切换密钥启用/禁用状态
  */
@@ -824,12 +900,20 @@ export async function toggleKeyEnabled(keyId: number, enabled: boolean): Promise
 
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
     }
 
     // 权限检查：用户只能管理自己的Key，管理员可以管理所有Key
@@ -895,7 +979,11 @@ export async function batchUpdateKeys(
     const MAX_BATCH_SIZE = 500;
     const requestedIds = Array.from(new Set(params.keyIds)).filter((id) => Number.isInteger(id));
     if (requestedIds.length === 0) {
-      return { ok: false, error: tError("REQUIRED_FIELD"), errorCode: ERROR_CODES.REQUIRED_FIELD };
+      return {
+        ok: false,
+        error: tError("REQUIRED_FIELD"),
+        errorCode: ERROR_CODES.REQUIRED_FIELD,
+      };
     }
     if (requestedIds.length > MAX_BATCH_SIZE) {
       return {
@@ -908,7 +996,11 @@ export async function batchUpdateKeys(
     const updates = params.updates ?? {};
     const hasAnyUpdate = Object.values(updates).some((v) => v !== undefined);
     if (!hasAnyUpdate) {
-      return { ok: false, error: tError("EMPTY_UPDATE"), errorCode: ERROR_CODES.EMPTY_UPDATE };
+      return {
+        ok: false,
+        error: tError("EMPTY_UPDATE"),
+        errorCode: ERROR_CODES.EMPTY_UPDATE,
+      };
     }
 
     const normalizedProviderGroup =
@@ -1087,12 +1179,20 @@ export async function renewKeyExpiresAt(
 
     const session = await getSession();
     if (!session) {
-      return { ok: false, error: tError("UNAUTHORIZED"), errorCode: ERROR_CODES.UNAUTHORIZED };
+      return {
+        ok: false,
+        error: tError("UNAUTHORIZED"),
+        errorCode: ERROR_CODES.UNAUTHORIZED,
+      };
     }
 
     const key = await findKeyById(keyId);
     if (!key) {
-      return { ok: false, error: tError("KEY_NOT_FOUND"), errorCode: ERROR_CODES.NOT_FOUND };
+      return {
+        ok: false,
+        error: tError("KEY_NOT_FOUND"),
+        errorCode: ERROR_CODES.NOT_FOUND,
+      };
     }
 
     // 权限检查：用户只能续期自己的Key，管理员可以续期所有Key
