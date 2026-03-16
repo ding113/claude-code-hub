@@ -79,10 +79,16 @@ const STANDARD_ENDPOINTS = [
   "/v1/responses",
   "/v1/responses/compact",
   "/v1/chat/completions",
+  "/v1/embeddings",
   "/v1/models",
 ];
 
-const STRICT_STANDARD_ENDPOINTS = ["/v1/messages", "/v1/responses", "/v1/chat/completions"];
+const STRICT_STANDARD_ENDPOINTS = [
+  "/v1/messages",
+  "/v1/responses",
+  "/v1/chat/completions",
+  "/v1/embeddings",
+];
 
 const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
 

@@ -31,8 +31,8 @@ export type ClientFormat = "response" | "openai" | "claude" | "gemini" | "gemini
  * 支持的端点模式：
  * - Claude Messages API: `/v1/messages`, `/v1/messages/count_tokens`
  * - Codex Response API: `/v1/responses`
- * - OpenAI Compatible: `/v1/chat/completions`
- * - Gemini Direct: `/v1beta/models/{model}:generateContent`
+ * - OpenAI Compatible: `/v1/chat/completions`, `/v1/embeddings`
+ * - Gemini Direct: `/v1beta/models/{model}:generateContent`, `/v1beta/models/{model}:embedContent`
  * - Gemini CLI: `/v1internal/models/{model}:generateContent`
  *
  * @param pathname - URL 路径（如 `/v1/messages`）
@@ -58,19 +58,20 @@ export function detectFormatByEndpoint(pathname: string): ClientFormat | null {
     // Codex / Response API
     { pattern: /^\/v1\/responses$/i, format: "response" },
 
-    // OpenAI Chat Completions
-    { pattern: /^\/v1\/chat\/completions$/i, format: "openai" },
+    // OpenAI Chat Completions / Embeddings
+    { pattern: /^\/v1\/(?:chat\/completions|embeddings)$/i, format: "openai" },
 
     // Gemini Vertex AI (publishers path)
     {
       pattern:
-        /^\/v1\/publishers\/google\/models\/[^/:]+:(?:generateContent|streamGenerateContent|countTokens)$/i,
+        /^\/v1\/publishers\/google\/models\/[^/:]+:(?:generateContent|streamGenerateContent|countTokens|embedContent)$/i,
       format: "gemini",
     },
 
     // Gemini Direct API
     {
-      pattern: /^\/v1beta\/models\/[^/:]+:(?:generateContent|streamGenerateContent|countTokens)$/i,
+      pattern:
+        /^\/v1beta\/models\/[^/:]+:(?:generateContent|streamGenerateContent|countTokens|embedContent)$/i,
       format: "gemini",
     },
 

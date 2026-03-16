@@ -6,6 +6,7 @@ const targetEndpoints = [
   "/responses", // Codex Response API
   "/messages", // Claude Messages API
   "/chat/completions", // OpenAI Compatible
+  "/embeddings", // OpenAI Compatible Embeddings
   "/models", // Gemini & OpenAI models
 ] as const;
 
