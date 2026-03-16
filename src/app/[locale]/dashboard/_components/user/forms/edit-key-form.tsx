@@ -99,7 +99,8 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
       }
       toast.success(t("resetLimits.success"));
       setResetLimitsDialogOpen(false);
-      window.location.reload();
+      router.refresh();
+      queryClient.invalidateQueries();
     } catch (error) {
       console.error("[EditKeyForm] reset limits only failed", error);
       toast.error(t("resetLimits.error"));
@@ -424,73 +425,75 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
         />
       </FormGrid>
 
-      {/* Reset Quota Section - Less destructive (amber) */}
-      <section className="rounded-lg border border-muted p-4 space-y-3 mt-6">
-        <h3 className="text-sm font-medium">{t("resetLimits.title")}</h3>
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <h4 className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                {t("resetLimits.title")}
-              </h4>
-              <p className="text-xs text-muted-foreground">{t("resetLimits.description")}</p>
-              {keyData?.costResetAt && (
-                <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
-                  {t("resetLimits.lastResetAt", {
-                    date: new Intl.DateTimeFormat(locale as string, {
-                      dateStyle: "medium",
-                      timeStyle: "short",
-                    }).format(new Date(keyData.costResetAt)),
-                  })}
-                </p>
-              )}
-            </div>
+      {/* Reset Quota Section - Admin only, less destructive (amber) */}
+      {isAdmin && (
+        <section className="rounded-lg border border-muted p-4 space-y-3 mt-6">
+          <h3 className="text-sm font-medium">{t("resetLimits.title")}</h3>
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <h4 className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  {t("resetLimits.title")}
+                </h4>
+                <p className="text-xs text-muted-foreground">{t("resetLimits.description")}</p>
+                {keyData?.costResetAt && (
+                  <p className="text-xs text-amber-600/80 dark:text-amber-400/80">
+                    {t("resetLimits.lastResetAt", {
+                      date: new Intl.DateTimeFormat(locale as string, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      }).format(new Date(keyData.costResetAt)),
+                    })}
+                  </p>
+                )}
+              </div>
 
-            <AlertDialog open={resetLimitsDialogOpen} onOpenChange={setResetLimitsDialogOpen}>
-              <AlertDialogTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/10"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  {t("resetLimits.button")}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>{t("resetLimits.confirmTitle")}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("resetLimits.confirmDescription")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isResettingLimits}>
-                    {tCommon("cancel")}
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleResetLimitsOnly();
-                    }}
-                    disabled={isResettingLimits}
-                    className="bg-amber-600 text-white hover:bg-amber-700"
+              <AlertDialog open={resetLimitsDialogOpen} onOpenChange={setResetLimitsDialogOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-amber-500/50 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400 dark:hover:bg-amber-500/10"
                   >
-                    {isResettingLimits ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        {t("resetLimits.loading")}
-                      </>
-                    ) : (
-                      t("resetLimits.confirm")
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    {t("resetLimits.button")}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t("resetLimits.confirmTitle")}</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t("resetLimits.confirmDescription")}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isResettingLimits}>
+                      {tCommon("cancel")}
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleResetLimitsOnly();
+                      }}
+                      disabled={isResettingLimits}
+                      className="bg-amber-600 text-white hover:bg-amber-700"
+                    >
+                      {isResettingLimits ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          {t("resetLimits.loading")}
+                        </>
+                      ) : (
+                        t("resetLimits.confirm")
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </DialogFormLayout>
   );
 }
