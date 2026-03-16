@@ -505,6 +505,28 @@ describe("extractUsageMetrics", () => {
       expect(result.usageMetrics?.output_image_tokens).toBe(2100);
       expect(result.usageMetrics?.output_tokens).toBe(240);
     });
+
+    it("Gemini 官方 embedContent 响应无 usageMetadata 时应保持保守语义", () => {
+      const response = JSON.stringify({
+        embedding: {
+          values: [0.1, 0.2, 0.3],
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "gemini");
+
+      expect(result.usageMetrics).toBeNull();
+    });
+
+    it("Gemini 官方 countTokens 响应只有 totalTokens 时不应伪造 usage", () => {
+      const response = JSON.stringify({
+        totalTokens: 128,
+      });
+
+      const result = parseUsageFromResponseText(response, "gemini");
+
+      expect(result.usageMetrics).toBeNull();
+    });
   });
 
   describe("OpenAI Response API 格式", () => {
@@ -571,6 +593,22 @@ describe("extractUsageMetrics", () => {
       const result = parseUsageFromResponseText(response, "openai");
 
       expect(result.usageMetrics?.cache_read_input_tokens).toBe(300);
+    });
+
+    it("应支持 OpenAI embeddings 响应的 prompt-only usage", () => {
+      const response = JSON.stringify({
+        object: "list",
+        data: [{ object: "embedding", embedding: [0.1, 0.2], index: 0 }],
+        usage: {
+          prompt_tokens: 12,
+          total_tokens: 12,
+        },
+      });
+
+      const result = parseUsageFromResponseText(response, "openai");
+
+      expect(result.usageMetrics?.input_tokens).toBe(12);
+      expect(result.usageMetrics?.output_tokens).toBeUndefined();
     });
   });
 
