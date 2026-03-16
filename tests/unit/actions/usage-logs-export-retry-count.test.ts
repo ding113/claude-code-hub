@@ -31,13 +31,56 @@ vi.mock("@/repository/usage-logs", () => {
   };
 });
 
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (!char) continue;
+
+    if (inQuotes) {
+      if (char === '"') {
+        const next = line[i + 1];
+        if (next === '"') {
+          current += '"';
+          i += 1;
+          continue;
+        }
+        inQuotes = false;
+        continue;
+      }
+
+      current += char;
+      continue;
+    }
+
+    if (char === ",") {
+      fields.push(current);
+      current = "";
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+      continue;
+    }
+
+    current += char;
+  }
+
+  fields.push(current);
+  return fields;
+}
+
 describe("Usage logs CSV export retryCount", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
   });
 
-  test("exportUsageLogs: Retry Count 应为 provider_chain.length - 2（最小为 0）", async () => {
+  test("exportUsageLogs: Retry Count 应对齐 getRetryCount（hedge race 为 0）", async () => {
     findUsageLogsWithDetailsMock.mockResolvedValue({
       logs: [
         {
@@ -87,14 +130,40 @@ describe("Usage logs CSV export retryCount", () => {
             { reason: "retry_success", statusCode: 200, attemptNumber: 1 },
           ],
         },
+        {
+          createdAt: new Date("2026-03-16T00:00:02.000Z"),
+          userName: "u",
+          keyName: "k",
+          providerName: "p",
+          model: "m",
+          originalModel: "om",
+          endpoint: "/v1/messages",
+          statusCode: 200,
+          inputTokens: 1,
+          outputTokens: 2,
+          cacheCreation5mInputTokens: 0,
+          cacheCreation1hInputTokens: 0,
+          cacheReadInputTokens: 0,
+          totalTokens: 3,
+          costUsd: "0",
+          durationMs: 10,
+          sessionId: "s3",
+          providerChain: [
+            { reason: "initial_selection" },
+            { reason: "hedge_triggered" },
+            { reason: "hedge_launched" },
+            { reason: "hedge_winner", statusCode: 200 },
+            { reason: "hedge_loser_cancelled" },
+          ],
+        },
       ],
-      total: 2,
+      total: 3,
       summary: {
-        totalRequests: 2,
+        totalRequests: 3,
         totalCost: 0,
-        totalTokens: 6,
-        totalInputTokens: 2,
-        totalOutputTokens: 4,
+        totalTokens: 9,
+        totalInputTokens: 3,
+        totalOutputTokens: 6,
         totalCacheCreationTokens: 0,
         totalCacheReadTokens: 0,
         totalCacheCreation5mTokens: 0,
@@ -108,12 +177,18 @@ describe("Usage logs CSV export retryCount", () => {
     expect(result.ok).toBe(true);
     const csv = result.data;
     const csvNoBom = csv.replace(/^\uFEFF/, "");
-    const lines = csvNoBom.trim().split("\n");
+    const lines = csvNoBom.trim().split("\n").map((line) => line.replace(/\r$/, ""));
 
-    expect(lines).toHaveLength(3);
-    const row1 = lines[1]?.split(",") ?? [];
-    const row2 = lines[2]?.split(",") ?? [];
-    expect(row1[row1.length - 1]).toBe("0");
-    expect(row2[row2.length - 1]).toBe("1");
+    expect(lines).toHaveLength(4);
+    const header = parseCsvLine(lines[0] ?? "");
+    const retryCountIndex = header.indexOf("Retry Count");
+    expect(retryCountIndex).toBeGreaterThanOrEqual(0);
+
+    const row1 = parseCsvLine(lines[1] ?? "");
+    const row2 = parseCsvLine(lines[2] ?? "");
+    const row3 = parseCsvLine(lines[3] ?? "");
+    expect(row1[retryCountIndex]).toBe("0");
+    expect(row2[retryCountIndex]).toBe("1");
+    expect(row3[retryCountIndex]).toBe("0");
   });
 });

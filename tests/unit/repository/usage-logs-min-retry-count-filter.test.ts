@@ -39,6 +39,7 @@ describe("Usage logs minRetryCount filter", () => {
     expect(whereSql).toContain("jsonb_array_length");
     expect(whereSql).toMatch(/-\s*2/);
     expect(whereSql).not.toMatch(/-\s*1\b/);
+    expect(whereSql).toContain("hedge_triggered");
   });
 
   test("findUsageLogsStats: 应使用 provider_chain 长度 - 2", async () => {
@@ -80,6 +81,7 @@ describe("Usage logs minRetryCount filter", () => {
     expect(whereSql).toContain("jsonb_array_length");
     expect(whereSql).toMatch(/-\s*2/);
     expect(whereSql).not.toMatch(/-\s*1\b/);
+    expect(whereSql).toContain("hedge_triggered");
   });
 
   test("findUsageLogsStats: ledger-only 且 minRetryCount > 0 时应短路返回 0", async () => {
