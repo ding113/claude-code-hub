@@ -31,6 +31,9 @@ const TEST_TRANSLATIONS = {
     "sdk-py": "SDK (Python)",
     "cli-sdk": "CLI SDK",
     "gh-action": "GitHub Action",
+    "codex-cli-core": "CLI / TUI",
+    desktop: "Desktop",
+    exec: "Exec",
   },
   nSelected: "{count} selected",
 };

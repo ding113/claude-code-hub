@@ -81,7 +81,7 @@ describe("client restriction presets", () => {
 
   describe("child selection helpers", () => {
     const claudeCodePreset = CLIENT_RESTRICTION_PRESET_OPTIONS[0];
-    const geminiPreset = CLIENT_RESTRICTION_PRESET_OPTIONS[1];
+    const geminiPreset = CLIENT_RESTRICTION_PRESET_OPTIONS.find((p) => p.value === "gemini-cli")!;
     const allChildValues = claudeCodePreset.children!.map((c) => c.value);
 
     test("getSelectedChildren returns all children when parent value is present", () => {
