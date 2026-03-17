@@ -1668,7 +1668,22 @@ export class ProxyForwarder {
             providerName: provider.name,
             cacheTtl: resolvedCacheTtl,
           });
+        } else {
+          logger.warn("ProxyForwarder: Cache TTL override configured but no ephemeral cache_control blocks found in request", {
+            providerId: provider.id,
+            providerName: provider.name,
+            cacheTtl: resolvedCacheTtl,
+            keyId: session.authState?.key?.id,
+            hasSystem: Array.isArray((session.request.message as Record<string, unknown>).system),
+            hasMessages: Array.isArray((session.request.message as Record<string, unknown>).messages),
+          });
         }
+      } else if (!resolvedCacheTtl && session.authState?.key?.cacheTtlPreference && session.authState.key.cacheTtlPreference !== "inherit") {
+        logger.warn("ProxyForwarder: Key has cacheTtlPreference but resolvedCacheTtl is null", {
+          keyId: session.authState.key.id,
+          keyPref: session.authState.key.cacheTtlPreference,
+          providerPref: provider.cacheTtlPreference,
+        });
       }
 
       processedHeaders = await ProxyForwarder.buildHeaders(session, provider);
