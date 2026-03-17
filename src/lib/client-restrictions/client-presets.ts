@@ -32,9 +32,18 @@ export const CLIENT_RESTRICTION_PRESET_OPTIONS: readonly ClientRestrictionPreset
       { value: "claude-code-gh-action", labelKey: "gh-action" },
     ],
   },
+  {
+    value: "codex-cli",
+    aliases: ["codex-cli", "codex_cli_core", "codex_vscode", "Codex Desktop", "codex_exec"],
+    children: [
+      { value: "codex_cli_core", labelKey: "codex-cli-core" },
+      { value: "codex_vscode", labelKey: "vscode" },
+      { value: "Codex Desktop", labelKey: "desktop" },
+      { value: "codex_exec", labelKey: "exec" },
+    ],
+  },
   { value: "gemini-cli", aliases: ["gemini-cli"] },
   { value: "factory-cli", aliases: ["factory-cli"] },
-  { value: "codex-cli", aliases: ["codex-cli", "codex_vscode", "Codex Desktop"] },
 ];
 
 const PRESET_OPTION_MAP = new Map(

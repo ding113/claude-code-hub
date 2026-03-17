@@ -52,6 +52,33 @@ describe("client restriction presets", () => {
     ).toEqual(["claude-code-sdk-ts", "codex-cli", "my-ide"]);
   });
 
+  describe("codex-cli preset children", () => {
+    test("codex-cli preset has children", () => {
+      const codexPreset = CLIENT_RESTRICTION_PRESET_OPTIONS.find((p) => p.value === "codex-cli");
+      expect(codexPreset).toBeDefined();
+      expect(codexPreset!.children).toBeDefined();
+      expect(codexPreset!.children!.length).toBe(4);
+    });
+
+    test("codex-cli aliases include new values", () => {
+      const codexPreset = CLIENT_RESTRICTION_PRESET_OPTIONS.find((p) => p.value === "codex-cli");
+      expect(codexPreset!.aliases).toContain("codex_cli_core");
+      expect(codexPreset!.aliases).toContain("codex_exec");
+      expect(codexPreset!.aliases).toContain("codex_vscode");
+      expect(codexPreset!.aliases).toContain("Codex Desktop");
+    });
+
+    test("new codex aliases are recognized as preset values", () => {
+      expect(isPresetClientValue("codex_cli_core")).toBe(true);
+      expect(isPresetClientValue("codex_exec")).toBe(true);
+    });
+
+    test("codex-cli is in second position (after claude-code)", () => {
+      expect(CLIENT_RESTRICTION_PRESET_OPTIONS[0].value).toBe("claude-code");
+      expect(CLIENT_RESTRICTION_PRESET_OPTIONS[1].value).toBe("codex-cli");
+    });
+  });
+
   describe("child selection helpers", () => {
     const claudeCodePreset = CLIENT_RESTRICTION_PRESET_OPTIONS[0];
     const geminiPreset = CLIENT_RESTRICTION_PRESET_OPTIONS[1];

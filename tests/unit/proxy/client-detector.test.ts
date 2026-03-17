@@ -286,9 +286,29 @@ describe("client-detector", () => {
       expect(matchClientPattern(session, "codex-cli")).toBe(true);
     });
 
-    test("should match codex_vscode against codex desktop alias", () => {
+    test("should NOT match codex_vscode against codex desktop UA (different family)", () => {
       const session = createMockSession({ userAgent: "Codex Desktop/1.0" });
-      expect(matchClientPattern(session, "codex_vscode")).toBe(true);
+      expect(matchClientPattern(session, "codex_vscode")).toBe(false);
+    });
+
+    test("should match codex-tui UA against codex-cli", () => {
+      const session = createMockSession({
+        userAgent:
+          "codex-tui/0.115.0 (Mac OS 15.7.3; arm64) Apple_Terminal/455.1 (codex-tui; 0.115.0)",
+      });
+      expect(matchClientPattern(session, "codex-cli")).toBe(true);
+    });
+
+    test("should match codex_cli_rs UA against codex-cli", () => {
+      const session = createMockSession({
+        userAgent: "codex_cli_rs/0.114.0 (Windows 10.0.26200; x86_64) xterm-256color",
+      });
+      expect(matchClientPattern(session, "codex-cli")).toBe(true);
+    });
+
+    test("should match codex_exec UA against codex-cli", () => {
+      const session = createMockSession({ userAgent: "codex_exec/1.0.0" });
+      expect(matchClientPattern(session, "codex-cli")).toBe(true);
     });
 
     test("should return false when User-Agent is empty", () => {
@@ -568,6 +588,85 @@ describe("client-detector", () => {
     });
   });
 
+  describe("codex family UA matching via matchesCodexFamilyAlias", () => {
+    test("codex-tui UA matches codex-cli allowlist", () => {
+      const session = createMockSession({
+        userAgent:
+          "codex-tui/0.115.0 (Mac OS 15.7.3; arm64) Apple_Terminal/455.1 (codex-tui; 0.115.0)",
+      });
+      const result = isClientAllowedDetailed(session, ["codex-cli"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchedPattern).toBe("codex-cli");
+    });
+
+    test("codex_cli_rs UA matches codex-cli allowlist", () => {
+      const session = createMockSession({
+        userAgent: "codex_cli_rs/0.114.0 (Windows 10.0.26200; x86_64) xterm-256color",
+      });
+      const result = isClientAllowedDetailed(session, ["codex-cli"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchedPattern).toBe("codex-cli");
+    });
+
+    test("codex_exec UA matches codex-cli allowlist", () => {
+      const session = createMockSession({ userAgent: "codex_exec/1.0.0" });
+      const result = isClientAllowedDetailed(session, ["codex-cli"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchedPattern).toBe("codex-cli");
+    });
+
+    test("codex-tui UA matches codex_cli_core child pattern", () => {
+      const session = createMockSession({
+        userAgent: "codex-tui/0.115.0 (Mac OS 15.7.3; arm64)",
+      });
+      const result = isClientAllowedDetailed(session, ["codex_cli_core"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchedPattern).toBe("codex_cli_core");
+    });
+
+    test("codex_cli_rs UA matches codex_cli_core child pattern", () => {
+      const session = createMockSession({
+        userAgent: "codex_cli_rs/0.114.0 (Windows 10.0.26200; x86_64)",
+      });
+      const result = isClientAllowedDetailed(session, ["codex_cli_core"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchedPattern).toBe("codex_cli_core");
+    });
+
+    test("codex_exec UA matches codex_exec child pattern", () => {
+      const session = createMockSession({ userAgent: "codex_exec/1.0.0" });
+      const result = isClientAllowedDetailed(session, ["codex_exec"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchedPattern).toBe("codex_exec");
+    });
+
+    test("codex-tui UA does NOT match codex_vscode pattern (isolation)", () => {
+      const session = createMockSession({
+        userAgent: "codex-tui/0.115.0 (Mac OS 15.7.3; arm64)",
+      });
+      const result = isClientAllowedDetailed(session, ["codex_vscode"], []);
+      expect(result.allowed).toBe(false);
+    });
+
+    test("codex-tui UA does NOT match codex_exec pattern (isolation)", () => {
+      const session = createMockSession({ userAgent: "codex-tui/0.115.0" });
+      const result = isClientAllowedDetailed(session, ["codex_exec"], []);
+      expect(result.allowed).toBe(false);
+    });
+
+    test("Codex Desktop UA still matches codex-cli (regression)", () => {
+      const session = createMockSession({ userAgent: "Codex Desktop/1.0" });
+      const result = isClientAllowedDetailed(session, ["codex-cli"], []);
+      expect(result.allowed).toBe(true);
+    });
+
+    test("Codex Desktop UA still matches Codex Desktop pattern (regression)", () => {
+      const session = createMockSession({ userAgent: "Codex Desktop/1.0" });
+      const result = isClientAllowedDetailed(session, ["Codex Desktop"], []);
+      expect(result.allowed).toBe(true);
+    });
+  });
+
   describe("detectClientFull", () => {
     test("should return matched=true for confirmed claude-code wildcard", () => {
       const session = createConfirmedClaudeCodeSession("claude-cli/1.2.3 (external, sdk-ts)");
@@ -619,11 +718,11 @@ describe("client-detector", () => {
       expect(result.subClient).toBeNull();
     });
 
-    test("should match codex_vscode via codex desktop alias in detectClientFull", () => {
+    test("should NOT match codex_vscode via codex desktop UA (different family)", () => {
       const session = createMockSession({ userAgent: "Codex Desktop/1.0" });
       const result = detectClientFull(session, "codex_vscode");
 
-      expect(result.matched).toBe(true);
+      expect(result.matched).toBe(false);
       expect(result.hubConfirmed).toBe(false);
     });
   });

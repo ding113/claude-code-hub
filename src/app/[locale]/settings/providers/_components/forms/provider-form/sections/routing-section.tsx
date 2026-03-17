@@ -306,6 +306,11 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                     "sdk-py": t("sections.routing.clientRestrictions.subClients.sdk-py"),
                     "cli-sdk": t("sections.routing.clientRestrictions.subClients.cli-sdk"),
                     "gh-action": t("sections.routing.clientRestrictions.subClients.gh-action"),
+                    "codex-cli-core": t(
+                      "sections.routing.clientRestrictions.subClients.codex-cli-core"
+                    ),
+                    desktop: t("sections.routing.clientRestrictions.subClients.desktop"),
+                    exec: t("sections.routing.clientRestrictions.subClients.exec"),
                   },
                   nSelected: t("sections.routing.clientRestrictions.nSelected", {
                     count: "{count}",

@@ -33,17 +33,39 @@ export interface ClientRestrictionResult {
 
 const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, "");
 
-function matchesCodexDesktopAlias(pattern: string, userAgent: string): boolean {
-  if (!/^codex desktop\b/i.test(userAgent)) {
-    return false;
-  }
+// Map: UA prefix regex -> set of alias values that should match
+// All matchValues must be lowercase (pattern is lowercased before lookup)
+const CODEX_FAMILY_RULES: Array<{ test: RegExp; matchValues: Set<string> }> = [
+  {
+    test: /^codex desktop\b/i,
+    matchValues: new Set(["codex-cli", "codex desktop"]),
+  },
+  {
+    test: /^codex[_-]?tui\b/i,
+    matchValues: new Set(["codex-cli", "codex_cli_core"]),
+  },
+  {
+    test: /^codex[_-]?cli[_-]?rs\b/i,
+    matchValues: new Set(["codex-cli", "codex_cli_core"]),
+  },
+  {
+    test: /^codex[_-]?exec\b/i,
+    matchValues: new Set(["codex-cli", "codex_exec"]),
+  },
+  {
+    test: /^codex[_-]?vscode\b/i,
+    matchValues: new Set(["codex-cli", "codex_vscode"]),
+  },
+];
 
+function matchesCodexFamilyAlias(pattern: string, userAgent: string): boolean {
   const normalizedPattern = pattern.trim().toLowerCase();
-  return (
-    normalizedPattern === "codex-cli" ||
-    normalizedPattern === "codex_vscode" ||
-    normalizedPattern === "codex desktop"
-  );
+  for (const rule of CODEX_FAMILY_RULES) {
+    if (rule.test.test(userAgent)) {
+      return rule.matchValues.has(normalizedPattern);
+    }
+  }
+  return false;
 }
 
 function globMatch(pattern: string, text: string): boolean {
@@ -144,7 +166,7 @@ export function matchClientPattern(session: ProxySession, pattern: string): bool
       return false;
     }
 
-    if (matchesCodexDesktopAlias(pattern, ua)) {
+    if (matchesCodexFamilyAlias(pattern, ua)) {
       return true;
     }
 
@@ -187,7 +209,7 @@ export function detectClientFull(session: ProxySession, pattern: string): Client
   } else {
     const ua = session.userAgent?.trim();
     if (ua) {
-      if (matchesCodexDesktopAlias(pattern, ua)) {
+      if (matchesCodexFamilyAlias(pattern, ua)) {
         matched = true;
       } else if (pattern.includes("*")) {
         matched = globMatch(pattern, ua);
@@ -247,7 +269,7 @@ export function isClientAllowedDetailed(
   const matches = (pattern: string): boolean => {
     if (!isBuiltinKeyword(pattern)) {
       if (!ua) return false;
-      if (matchesCodexDesktopAlias(pattern, ua)) {
+      if (matchesCodexFamilyAlias(pattern, ua)) {
         return true;
       }
       if (pattern.includes("*")) {
