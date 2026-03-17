@@ -513,6 +513,7 @@ export function UserKeyTableRow({
                 expiresAt: editingKey.expiresAt,
                 canLoginWebUi: editingKey.canLoginWebUi,
                 providerGroup: editingKey.providerGroup ?? null,
+                cacheTtlPreference: editingKey.cacheTtlPreference ?? "inherit",
                 limit5hUsd: editingKey.limit5hUsd,
                 limitDailyUsd: editingKey.limitDailyUsd,
                 dailyResetMode: editingKey.dailyResetMode,
