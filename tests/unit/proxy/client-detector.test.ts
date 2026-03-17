@@ -615,6 +615,13 @@ describe("client-detector", () => {
       expect(result.matchedPattern).toBe("codex-cli");
     });
 
+    test("codex_vscode UA matches codex-cli allowlist", () => {
+      const session = createMockSession({ userAgent: "codex_vscode/1.0.0" });
+      const result = isClientAllowedDetailed(session, ["codex-cli"], []);
+      expect(result.allowed).toBe(true);
+      expect(result.matchedPattern).toBe("codex-cli");
+    });
+
     test("codex-tui UA matches codex_cli_core child pattern", () => {
       const session = createMockSession({
         userAgent: "codex-tui/0.115.0 (Mac OS 15.7.3; arm64)",

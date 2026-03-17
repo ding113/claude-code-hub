@@ -58,6 +58,16 @@ const CODEX_FAMILY_RULES: Array<{ test: RegExp; matchValues: Set<string> }> = [
   },
 ];
 
+if (process.env.NODE_ENV !== "production") {
+  for (const rule of CODEX_FAMILY_RULES) {
+    for (const v of rule.matchValues) {
+      if (v !== v.toLowerCase()) {
+        throw new Error(`CODEX_FAMILY_RULES matchValue "${v}" must be lowercase`);
+      }
+    }
+  }
+}
+
 function matchesCodexFamilyAlias(pattern: string, userAgent: string): boolean {
   const normalizedPattern = pattern.trim().toLowerCase();
   for (const rule of CODEX_FAMILY_RULES) {
