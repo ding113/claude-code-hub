@@ -2664,9 +2664,7 @@ export class ProxyForwarder {
       );
       betaFlags.add("extended-cache-ttl-2025-04-11");
       // 确保包含基础的 prompt-caching 标记
-      if (betaFlags.size === 1) {
-        betaFlags.add("prompt-caching-2024-07-31");
-      }
+      betaFlags.add("prompt-caching-2024-07-31");
       overrides["anthropic-beta"] = Array.from(betaFlags).join(", ");
     }
 
