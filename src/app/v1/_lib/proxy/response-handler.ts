@@ -745,7 +745,7 @@ export class ProxyResponseHandler {
             cacheReadInputTokens: usageMetrics?.cache_read_input_tokens,
             cacheCreation5mInputTokens: usageMetrics?.cache_creation_5m_input_tokens,
             cacheCreation1hInputTokens: usageMetrics?.cache_creation_1h_input_tokens,
-            cacheTtlApplied: usageMetrics?.cache_ttl ?? null,
+            cacheTtlApplied: usageMetrics?.cache_ttl ?? session.getCacheTtlResolved?.() ?? null,
             providerChain: session.getProviderChain(),
             model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
             providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
@@ -1396,7 +1396,7 @@ export class ProxyResponseHandler {
           cacheReadInputTokens: usageForCost?.cache_read_input_tokens,
           cacheCreation5mInputTokens: usageForCost?.cache_creation_5m_input_tokens,
           cacheCreation1hInputTokens: usageForCost?.cache_creation_1h_input_tokens,
-          cacheTtlApplied: usageForCost?.cache_ttl ?? null,
+          cacheTtlApplied: usageForCost?.cache_ttl ?? session.getCacheTtlResolved?.() ?? null,
           providerChain: session.getProviderChain(),
           model: session.getCurrentModel() ?? undefined, // ⭐ 更新重定向后的模型
           providerId: session.provider?.id, // ⭐ 更新最终供应商ID（重试切换后）
