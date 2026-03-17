@@ -274,7 +274,10 @@ const { route: addKeyRoute, handler: addKeyHandler } = createActionRoute(
       providerGroup: z.string().max(200).nullable().optional(),
       isEnabled: z.boolean().optional(),
       dailyResetMode: z.enum(["fixed", "rolling"]).optional(),
-      dailyResetTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+      dailyResetTime: z
+        .string()
+        .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
+        .optional(),
       cacheTtlPreference: z.enum(["inherit", "5m", "1h"]).optional(),
     }),
     responseSchema: z.object({
@@ -304,10 +307,16 @@ const { route: editKeyRoute, handler: editKeyHandler } = createActionRoute(
       limitMonthlyUsd: z.number().nullable().optional(),
       limitTotalUsd: z.number().nullable().optional(),
       limitConcurrentSessions: z.number().optional(),
-      providerGroup: z.string().max(200).nullable().optional(),
+      providerGroup: z.string().max(200).nullable().optional().openapi({
+        description:
+          "Admin-only: Only admins can edit this field. Non-admins may not change this field.",
+      }),
       isEnabled: z.boolean().optional(),
       dailyResetMode: z.enum(["fixed", "rolling"]).optional(),
-      dailyResetTime: z.string().regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).optional(),
+      dailyResetTime: z
+        .string()
+        .regex(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/)
+        .optional(),
       cacheTtlPreference: z.enum(["inherit", "5m", "1h"]).optional(),
     }),
     description: "编辑密钥信息",
