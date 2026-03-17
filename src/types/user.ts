@@ -123,7 +123,7 @@ export interface UserKeyDisplay {
   // Provider group override (null = inherit from user)
   providerGroup?: string | null;
   // Cache TTL preference
-  cacheTtlPreference?: "inherit" | "5m" | "1h" | null;
+  cacheTtlPreference?: "inherit" | "5m" | "1h";
 }
 
 /**

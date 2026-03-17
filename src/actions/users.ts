@@ -273,7 +273,7 @@ export async function getUsers(): Promise<UserDisplay[]> {
               limitTotalUsd: key.limitTotalUsd,
               limitConcurrentSessions: key.limitConcurrentSessions || 0,
               providerGroup: key.providerGroup,
-              cacheTtlPreference: key.cacheTtlPreference,
+              cacheTtlPreference: key.cacheTtlPreference ?? undefined,
             };
           }),
         };
@@ -533,7 +533,7 @@ export async function getUsersBatch(
               limitTotalUsd: key.limitTotalUsd,
               limitConcurrentSessions: key.limitConcurrentSessions || 0,
               providerGroup: key.providerGroup,
-              cacheTtlPreference: key.cacheTtlPreference,
+              cacheTtlPreference: key.cacheTtlPreference ?? undefined,
             };
           }),
         };
