@@ -3092,7 +3092,7 @@ export class ProxyForwarder {
         attempt.requestAttemptCount
       )
         .then(async (response) => {
-          if (settled || winnerCommitted) {
+          if (settled || winnerCommitted || attempt.settled) {
             const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
             try {
               attemptRuntime.responseController?.abort(new Error("hedge_loser"));
@@ -3241,13 +3241,17 @@ export class ProxyForwarder {
             buildRetryFailedChainEntry(
               attempt.provider,
               attempt.endpointAudit,
-              attempt.sequence,
+              attempt.requestAttemptCount,
               error,
               errorMessage,
               reactiveRectifierResult.requestDetailsBeforeRectify
             )
           );
 
+          if (attempt.thresholdTimer) {
+            clearTimeout(attempt.thresholdTimer);
+            attempt.thresholdTimer = null;
+          }
           attempt.requestAttemptCount += 1;
           runAttempt(attempt);
           return;
@@ -3670,7 +3674,15 @@ export class ProxyForwarder {
       }
     }
     targetState.providerChain = mergedProviderChain;
-    targetState.specialSettings = [...sourceState.specialSettings];
+    // 合并 specialSettings，避免覆盖已有的 rectifier audit 记录
+    const existingKeys = new Set(targetState.specialSettings.map((s) => JSON.stringify(s)));
+    const merged = [...targetState.specialSettings];
+    for (const setting of sourceState.specialSettings) {
+      if (!existingKeys.has(JSON.stringify(setting))) {
+        merged.push(setting);
+      }
+    }
+    targetState.specialSettings = merged;
     targetState.originalModelName = sourceState.originalModelName;
     targetState.originalUrlPathname = sourceState.originalUrlPathname;
     targetState.clearResponseTimeout = sourceRuntime.clearResponseTimeout;
