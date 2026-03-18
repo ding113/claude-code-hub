@@ -213,6 +213,9 @@ export function useUserTranslations(
         "sdk-py": t("userEditSection.subClients.sdk-py"),
         "cli-sdk": t("userEditSection.subClients.cli-sdk"),
         "gh-action": t("userEditSection.subClients.gh-action"),
+        "codex-cli-core": t("userEditSection.subClients.codex-cli-core"),
+        desktop: t("userEditSection.subClients.desktop"),
+        exec: t("userEditSection.subClients.exec"),
       },
       nSelected: t("userEditSection.nSelected", { count: "{count}" }),
       limitRules: {

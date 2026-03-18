@@ -302,7 +302,8 @@ describe("ProxyClientGuard", () => {
       expect(result).not.toBeNull();
       expect(result?.status).toBe(400);
       const body = await result!.json();
-      expect(body.error.message).toContain("Signals(3/4)");
+      expect(body.error.message).toContain("Client not allowed");
+      expect(body.error.message).not.toContain("Signals");
     });
 
     test("should reject when anthropic-beta header is missing (only 3-of-4 signals)", async () => {
@@ -318,7 +319,8 @@ describe("ProxyClientGuard", () => {
       expect(result).not.toBeNull();
       expect(result?.status).toBe(400);
       const body = await result!.json();
-      expect(body.error.message).toContain("Signals(3/4)");
+      expect(body.error.message).toContain("Client not allowed");
+      expect(body.error.message).not.toContain("Signals");
     });
 
     test("should allow when all 4 signals present with claude-code allowlist", async () => {
