@@ -129,7 +129,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     expect(trackSessionMock).toHaveBeenCalledWith("session_assigned", 1, 1);
   });
 
-  test("Claude 旧版本请求缺少 user_id 但有 metadata.session_id 时，应先补全旧格式再提取", async () => {
+  test("Claude 旧版本请求缺少 user_id 但有 metadata.session_id 时，应使用最终 sessionId 补全 user_id", async () => {
     const ProxySessionGuard = await loadGuard();
     extractClientSessionIdMock.mockImplementation((requestMessage: Record<string, unknown>) => {
       const metadata =
@@ -166,7 +166,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     await ProxySessionGuard.ensure(session);
 
     expect((session.request.message.metadata as Record<string, unknown>).user_id).toMatch(
-      /^user_[a-f0-9]{64}_account__session_sess_legacy_seed$/
+      /^user_[a-f0-9]{64}_account__session_session_assigned$/
     );
     expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], "sess_legacy_seed");
   });

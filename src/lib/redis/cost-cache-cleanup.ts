@@ -227,7 +227,7 @@ export async function clearSingleKeyCostCache(
       error,
     });
     return {
-      costKeysDeleted: allCostKeys.length,
+      costKeysDeleted: 0,
       activeSessionsDeleted: 0,
       durationMs: Date.now() - startTime,
     };

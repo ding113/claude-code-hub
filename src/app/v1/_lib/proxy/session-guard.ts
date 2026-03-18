@@ -87,26 +87,6 @@ export class ProxySessionGuard {
         !!session.authState.apiKey &&
         systemSettings.interceptAnthropicWarmupRequests;
 
-      const extractedClaudeSessionId =
-        claudeMetadataCompletionEnabled &&
-        !warmupMaybeIntercepted &&
-        session.originalFormat === "claude" &&
-        !isCodexRequest
-          ? SessionManager.extractClientSessionId(requestMessage, null, session.userAgent)
-          : null;
-
-      if (extractedClaudeSessionId) {
-        const completedMessage = injectClaudeMetadataUserIdWithContext(requestMessage, {
-          keyId,
-          sessionId: extractedClaudeSessionId,
-          userAgent: session.userAgent,
-        });
-
-        if (completedMessage !== requestMessage) {
-          session.request.message = completedMessage;
-        }
-      }
-
       // 1. 尝试从客户端提取 session_id（兼容 metadata.user_id / metadata.session_id）
       const clientSessionId = SessionManager.extractClientSessionId(
         session.request.message,
