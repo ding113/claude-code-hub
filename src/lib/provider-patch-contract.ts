@@ -234,6 +234,7 @@ function isValidSetValue(field: ProviderBatchPatchField, value: unknown): boolea
     case "request_timeout_non_streaming_ms":
       return typeof value === "number" && Number.isFinite(value);
     case "group_tag":
+      return typeof value === "string" && value.length <= 255;
     case "daily_reset_time":
     case "proxy_url":
     case "mcp_passthrough_url":

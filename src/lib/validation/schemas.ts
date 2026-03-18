@@ -441,7 +441,7 @@ export const CreateProviderSchema = z
       .optional()
       .default(null),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional().default(1.0),
-    group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
+    group_tag: z.string().max(255, "分组标签不能超过255个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
     provider_type: z
       .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
@@ -679,7 +679,7 @@ export const UpdateProviderSchema = z
       .nullable()
       .optional(),
     cost_multiplier: z.coerce.number().min(0, "成本倍率不能为负数").optional(),
-    group_tag: z.string().max(50, "分组标签不能超过50个字符").nullable().optional(),
+    group_tag: z.string().max(255, "分组标签不能超过255个字符").nullable().optional(),
     // Codex 支持:供应商类型和模型重定向
     provider_type: z
       .enum(["claude", "claude-auth", "codex", "gemini", "gemini-cli", "openai-compatible"])
