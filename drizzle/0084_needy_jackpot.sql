@@ -1,0 +1,1 @@
+ALTER TABLE "providers" ALTER COLUMN "group_tag" SET DATA TYPE varchar(255);

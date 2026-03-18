@@ -33,7 +33,7 @@ export function buildPatchDraftFromFormState(
     draft.cost_multiplier = { set: state.routing.costMultiplier };
   }
   if (dirtyFields.has("routing.groupTag")) {
-    const joined = state.routing.groupTag.join(", ");
+    const joined = state.routing.groupTag.join(",");
     if (joined === "") {
       draft.group_tag = { clear: true };
     } else {
