@@ -10,6 +10,14 @@ import {
 } from "@/app/v1/_lib/proxy/client-detector";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 
+const LEGACY_METADATA_USER_ID =
+  "user_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_account__session_sess_legacy_123";
+const JSON_METADATA_USER_ID = JSON.stringify({
+  device_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  account_uuid: "",
+  session_id: "sess_json_123",
+});
+
 type SessionOptions = {
   userAgent?: string | null;
   xApp?: string | null;
@@ -49,7 +57,7 @@ function createConfirmedClaudeCodeSession(userAgent: string): ProxySession {
     userAgent,
     xApp: "cli",
     anthropicBeta: "claude-code-test",
-    metadataUserId: "user_123",
+    metadataUserId: LEGACY_METADATA_USER_ID,
   });
 }
 
@@ -92,7 +100,7 @@ describe("client-detector", () => {
         userAgent: "claude-cli/1.0.0 (external, cli)",
         xApp: "cli",
         anthropicBeta: "interleaved-thinking-2025-05-14",
-        metadataUserId: "user_abc",
+        metadataUserId: LEGACY_METADATA_USER_ID,
       });
 
       const result = detectClientFull(session, "claude-code");
@@ -111,7 +119,25 @@ describe("client-detector", () => {
         userAgent: "claude-cli/1.0.0 (external, cli)",
         xApp: "cli",
         anthropicBeta: "claude-code-cache-control-20260101",
-        metadataUserId: "user_abc",
+        metadataUserId: LEGACY_METADATA_USER_ID,
+      });
+
+      const result = detectClientFull(session, "claude-code");
+      expect(result.hubConfirmed).toBe(true);
+      expect(result.signals).toEqual([
+        "x-app-cli",
+        "ua-prefix",
+        "betas-present",
+        "metadata-user-id",
+      ]);
+    });
+
+    test("should confirm when metadata.user_id uses JSON string format", () => {
+      const session = createMockSession({
+        userAgent: "claude-cli/2.1.78 (external, cli)",
+        xApp: "cli",
+        anthropicBeta: "interleaved-thinking-2025-05-14",
+        metadataUserId: JSON_METADATA_USER_ID,
       });
 
       const result = detectClientFull(session, "claude-code");
@@ -130,7 +156,7 @@ describe("client-detector", () => {
         options: {
           userAgent: "claude-cli/1.0.0 (external, cli)",
           anthropicBeta: "some-beta",
-          metadataUserId: "user_abc",
+          metadataUserId: LEGACY_METADATA_USER_ID,
         },
       },
       {
@@ -139,7 +165,7 @@ describe("client-detector", () => {
           userAgent: "GeminiCLI/1.0",
           xApp: "cli",
           anthropicBeta: "some-beta",
-          metadataUserId: "user_abc",
+          metadataUserId: LEGACY_METADATA_USER_ID,
         },
       },
       {
@@ -147,7 +173,7 @@ describe("client-detector", () => {
         options: {
           userAgent: "claude-cli/1.0.0 (external, cli)",
           xApp: "cli",
-          metadataUserId: "user_abc",
+          metadataUserId: LEGACY_METADATA_USER_ID,
         },
       },
       {
@@ -228,7 +254,7 @@ describe("client-detector", () => {
         userAgent: "claude-cli/1.2.3 external, cli",
         xApp: "cli",
         anthropicBeta: "claude-code-a",
-        metadataUserId: "user_abc",
+        metadataUserId: LEGACY_METADATA_USER_ID,
       });
       const result = detectClientFull(session, "claude-code");
 

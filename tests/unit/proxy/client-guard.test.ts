@@ -2,6 +2,14 @@ import { describe, expect, test, vi } from "vitest";
 import { ProxyClientGuard } from "@/app/v1/_lib/proxy/client-guard";
 import type { ProxySession } from "@/app/v1/_lib/proxy/session";
 
+const LEGACY_METADATA_USER_ID =
+  "user_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_account__session_sess_legacy_123";
+const JSON_METADATA_USER_ID = JSON.stringify({
+  device_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  account_uuid: "",
+  session_id: "sess_json_123",
+});
+
 // Mock ProxyResponses
 vi.mock("@/app/v1/_lib/proxy/responses", () => ({
   ProxyResponses: {
@@ -34,7 +42,8 @@ function createClaudeCodeSession(
   userAgent: string,
   allowedClients: string[] = [],
   blockedClients: string[] = [],
-  betaHeader = "claude-code-test"
+  betaHeader = "claude-code-test",
+  metadataUserId = LEGACY_METADATA_USER_ID
 ): ProxySession {
   const headers = new Headers();
   headers.set("x-app", "cli");
@@ -42,7 +51,7 @@ function createClaudeCodeSession(
   return {
     userAgent,
     headers,
-    request: { message: { metadata: { user_id: "user_123" } } },
+    request: { message: { metadata: { user_id: metadataUserId } } },
     authState: {
       user: { allowedClients, blockedClients },
     },
@@ -302,7 +311,7 @@ describe("ProxyClientGuard", () => {
       const session = {
         userAgent: "claude-cli/2.0.70 (external, cli)",
         headers,
-        request: { message: { metadata: { user_id: "user_abc" } } },
+        request: { message: { metadata: { user_id: LEGACY_METADATA_USER_ID } } },
         authState: { user: { allowedClients: ["claude-code"], blockedClients: [] } },
       } as unknown as import("@/app/v1/_lib/proxy/session").ProxySession;
       const result = await ProxyClientGuard.ensure(session);
@@ -314,6 +323,18 @@ describe("ProxyClientGuard", () => {
 
     test("should allow when all 4 signals present with claude-code allowlist", async () => {
       const session = createClaudeCodeSession("claude-cli/1.0.0 (external, cli)", ["claude-code"]);
+      const result = await ProxyClientGuard.ensure(session);
+      expect(result).toBeNull();
+    });
+
+    test("should allow JSON string metadata.user_id with claude-code allowlist", async () => {
+      const session = createClaudeCodeSession(
+        "claude-cli/2.1.78 (external, cli)",
+        ["claude-code"],
+        [],
+        "interleaved-thinking-2025-05-14",
+        JSON_METADATA_USER_ID
+      );
       const result = await ProxyClientGuard.ensure(session);
       expect(result).toBeNull();
     });

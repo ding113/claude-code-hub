@@ -29,6 +29,7 @@ async function loadHelpers() {
   return {
     headersToSanitizedObject: mod.headersToSanitizedObject,
     parseHeaderRecord: mod.parseHeaderRecord,
+    extractClientSessionId: mod.SessionManager.extractClientSessionId,
   };
 }
 
@@ -124,5 +125,50 @@ describe("SessionManager 辅助函数", () => {
 
     expect(headersToSanitizedObject(headers)).toEqual({ "x-test": "a:b:c" });
     expect(sanitizeHeadersMock).toHaveBeenCalledWith(headers);
+  });
+
+  test("extractClientSessionId：应兼容旧格式 metadata.user_id", async () => {
+    vi.clearAllMocks();
+    const { extractClientSessionId } = await loadHelpers();
+
+    expect(
+      extractClientSessionId({
+        metadata: {
+          user_id:
+            "user_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_account__session_sess_legacy_123",
+        },
+      })
+    ).toBe("sess_legacy_123");
+  });
+
+  test("extractClientSessionId：应兼容 JSON 字符串 metadata.user_id", async () => {
+    vi.clearAllMocks();
+    const { extractClientSessionId } = await loadHelpers();
+
+    expect(
+      extractClientSessionId({
+        metadata: {
+          user_id: JSON.stringify({
+            device_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            account_uuid: "",
+            session_id: "sess_json_123",
+          }),
+        },
+      })
+    ).toBe("sess_json_123");
+  });
+
+  test("extractClientSessionId：无效 user_id 时应回退到 metadata.session_id", async () => {
+    vi.clearAllMocks();
+    const { extractClientSessionId } = await loadHelpers();
+
+    expect(
+      extractClientSessionId({
+        metadata: {
+          user_id: "invalid_user_id",
+          session_id: "sess_fallback_123",
+        },
+      })
+    ).toBe("sess_fallback_123");
   });
 });
