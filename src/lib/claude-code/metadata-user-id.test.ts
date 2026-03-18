@@ -6,7 +6,7 @@ import {
   injectClaudeMetadataUserIdWithContext,
   parseClaudeMetadataUserId,
   resolveClaudeMetadataUserIdFormat,
-} from "./metadata-user-id";
+} from "@/lib/claude-code/metadata-user-id";
 
 describe("Claude metadata.user_id helper", () => {
   test("解析旧格式 user_id 时应提取 sessionId 和 deviceId", () => {
@@ -33,6 +33,33 @@ describe("Claude metadata.user_id helper", () => {
       format: "json",
       deviceId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       accountUuid: "",
+    });
+  });
+
+  test("解析 JSON 字符串 user_id 时应 trim sessionId", () => {
+    const userId = JSON.stringify({
+      device_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      account_uuid: "",
+      session_id: "  sess_json_trimmed  ",
+    });
+
+    expect(parseClaudeMetadataUserId(userId)).toEqual({
+      sessionId: "sess_json_trimmed",
+      format: "json",
+      deviceId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      accountUuid: "",
+    });
+  });
+
+  test("解析旧格式 user_id 时应 trim sessionId", () => {
+    const userId =
+      "user_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_account__session_  sess_legacy_trimmed  ";
+
+    expect(parseClaudeMetadataUserId(userId)).toEqual({
+      sessionId: "sess_legacy_trimmed",
+      format: "legacy",
+      deviceId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      accountUuid: null,
     });
   });
 
@@ -98,7 +125,7 @@ describe("Claude metadata.user_id helper", () => {
     });
   });
 
-  test("注入时应保留已有 metadata.user_id", () => {
+  test("注入时应保留有效 metadata.user_id", () => {
     const message = {
       metadata: {
         user_id: "existing_user_id",
@@ -113,5 +140,26 @@ describe("Claude metadata.user_id helper", () => {
         userAgent: "claude-cli/2.1.78 (external, cli)",
       })
     ).toBe(message);
+  });
+
+  test("注入时遇到空白 metadata.user_id 应继续补全", () => {
+    const message = {
+      metadata: {
+        user_id: "   ",
+      },
+    };
+
+    const result = injectClaudeMetadataUserIdWithContext(message, {
+      keyId: 1,
+      sessionId: "sess_fill_blank",
+      userAgent: "claude-cli/2.1.78 (external, cli)",
+    });
+
+    expect(result).not.toBe(message);
+    expect(JSON.parse((result.metadata as Record<string, unknown>).user_id as string)).toEqual({
+      device_id: buildClaudeMetadataDeviceId(1),
+      account_uuid: "",
+      session_id: "sess_fill_blank",
+    });
   });
 });

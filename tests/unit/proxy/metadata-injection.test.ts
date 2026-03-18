@@ -72,7 +72,7 @@ describe("injectClaudeMetadataUserId", () => {
     expect((result.metadata as Record<string, unknown>).user_id).toBe("existing_user_id");
   });
 
-  it("metadata.user_id 为空字符串时应保持原样不注入", () => {
+  it("metadata.user_id 为空字符串时应继续补全", () => {
     const message: Record<string, unknown> = {
       metadata: {
         user_id: "",
@@ -82,8 +82,10 @@ describe("injectClaudeMetadataUserId", () => {
 
     const result = injectClaudeMetadataUserId(message, session);
 
-    expect(result).toBe(message);
-    expect((result.metadata as Record<string, unknown>).user_id).toBe("");
+    expect(result).not.toBe(message);
+    expect((result.metadata as Record<string, unknown>).user_id).toMatch(
+      /^user_[a-f0-9]{64}_account__session_sess_abc123$/
+    );
   });
 
   it("keyId 缺失时应跳过注入并返回原始 message", () => {

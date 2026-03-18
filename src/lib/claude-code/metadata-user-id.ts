@@ -41,6 +41,14 @@ export function buildClaudeMetadataDeviceId(keyId: number): string {
   return crypto.createHash("sha256").update(`claude_user_${keyId}`).digest("hex");
 }
 
+export function hasUsableClaudeMetadataUserId(userId: unknown): boolean {
+  if (typeof userId === "string") {
+    return userId.trim().length > 0;
+  }
+
+  return userId !== undefined && userId !== null;
+}
+
 export function resolveClaudeMetadataUserIdFormat(
   userAgent?: string | null
 ): ClaudeMetadataUserIdFormat {
@@ -69,9 +77,7 @@ export function parseClaudeMetadataUserId(userId: unknown): ClaudeMetadataUserId
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       const parsedObj = parsed as Record<string, unknown>;
       const sessionId =
-        typeof parsedObj.session_id === "string" && parsedObj.session_id.trim().length > 0
-          ? parsedObj.session_id
-          : null;
+        typeof parsedObj.session_id === "string" ? parsedObj.session_id.trim() : null;
 
       if (sessionId) {
         return {
@@ -91,7 +97,8 @@ export function parseClaudeMetadataUserId(userId: unknown): ClaudeMetadataUserId
     return emptyParseResult();
   }
 
-  const [, deviceId, sessionId] = legacyMatch;
+  const [, deviceId, rawSessionId] = legacyMatch;
+  const sessionId = rawSessionId?.trim();
   if (!sessionId) {
     return emptyParseResult();
   }
@@ -128,7 +135,7 @@ export function injectClaudeMetadataUserIdWithContext(
       ? (message.metadata as Record<string, unknown>)
       : undefined;
 
-  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
+  if (hasUsableClaudeMetadataUserId(existingMetadata?.user_id)) {
     return message;
   }
 

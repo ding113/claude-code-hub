@@ -10,7 +10,10 @@ import {
   recordFailure,
   recordSuccess,
 } from "@/lib/circuit-breaker";
-import { injectClaudeMetadataUserIdWithContext } from "@/lib/claude-code/metadata-user-id";
+import {
+  hasUsableClaudeMetadataUserId,
+  injectClaudeMetadataUserIdWithContext,
+} from "@/lib/claude-code/metadata-user-id";
 import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overrides";
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -362,17 +365,6 @@ export function injectClaudeMetadataUserId(
   message: Record<string, unknown>,
   session: ProxySession
 ): Record<string, unknown> {
-  const existingMetadata =
-    typeof message.metadata === "object" && message.metadata !== null
-      ? (message.metadata as Record<string, unknown>)
-      : undefined;
-
-  // 检查是否已存在 metadata.user_id
-  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
-    return message;
-  }
-
-  // 获取必要信息
   const keyId = session.authState?.key?.id;
   const sessionId = session.sessionId;
 
@@ -407,7 +399,7 @@ function applyClaudeMetadataUserIdInjectionWithAudit(
       ? (message.metadata as Record<string, unknown>)
       : undefined;
 
-  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
+  if (hasUsableClaudeMetadataUserId(existingMetadata?.user_id)) {
     logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
       enabled,
       hit: false,

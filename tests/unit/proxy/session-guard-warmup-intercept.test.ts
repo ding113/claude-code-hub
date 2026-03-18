@@ -101,7 +101,10 @@ beforeEach(() => {
   extractClientSessionIdMock.mockReturnValue(null);
   getOrCreateSessionIdMock.mockResolvedValue("session_assigned");
   getNextRequestSequenceMock.mockResolvedValue(1);
-  getCachedSystemSettingsMock.mockResolvedValue({ interceptAnthropicWarmupRequests: true });
+  getCachedSystemSettingsMock.mockResolvedValue({
+    interceptAnthropicWarmupRequests: true,
+    enableClaudeMetadataUserIdInjection: true,
+  });
 });
 
 describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
@@ -157,6 +160,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
         },
         model: "claude-sonnet-4-5-20250929",
       },
+      isWarmupRequest: () => false,
     });
 
     await ProxySessionGuard.ensure(session);
@@ -167,9 +171,8 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], "sess_legacy_seed");
   });
 
-  test("Claude 无法获取版本且缺少 session 标识时，应生成 JSON user_id 供后续链路复用", async () => {
+  test("Claude 无客户端 session 时，不应预生成 session 写回请求体，而应回填已分配 session", async () => {
     const ProxySessionGuard = await loadGuard();
-    generateSessionIdMock.mockReturnValue("sess_generated_by_guard");
     extractClientSessionIdMock.mockImplementation((requestMessage: Record<string, unknown>) => {
       const metadata =
         requestMessage.metadata && typeof requestMessage.metadata === "object"
@@ -194,6 +197,7 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
         message: {},
         model: "claude-sonnet-4-5-20250929",
       },
+      isWarmupRequest: () => false,
     });
 
     await ProxySessionGuard.ensure(session);
@@ -203,8 +207,25 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
     ).toEqual({
       device_id: expect.stringMatching(/^[a-f0-9]{64}$/),
       account_uuid: "",
-      session_id: "sess_generated_by_guard",
+      session_id: "session_assigned",
     });
-    expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], "sess_generated_by_guard");
+    expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], null);
+    expect(generateSessionIdMock).not.toHaveBeenCalled();
+  });
+
+  test("当 warmup 请求会被拦截时，不应补全 Claude metadata.user_id", async () => {
+    const ProxySessionGuard = await loadGuard();
+    const session = createMockSession({
+      userAgent: "claude-cli/2.1.78 (external, cli)",
+      request: {
+        message: {},
+        model: "claude-sonnet-4-5-20250929",
+      },
+      isWarmupRequest: () => true,
+    });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect((session.request.message as Record<string, unknown>).metadata).toBeUndefined();
   });
 });

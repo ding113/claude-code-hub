@@ -79,25 +79,6 @@ export class ProxySessionGuard {
         }
       }
 
-      if (
-        claudeMetadataCompletionEnabled &&
-        session.originalFormat === "claude" &&
-        !isCodexRequest
-      ) {
-        const completionSessionId =
-          SessionManager.extractClientSessionId(requestMessage, null, session.userAgent) ??
-          SessionManager.generateSessionId();
-        const completedMessage = injectClaudeMetadataUserIdWithContext(requestMessage, {
-          keyId,
-          sessionId: completionSessionId,
-          userAgent: session.userAgent,
-        });
-
-        if (completedMessage !== requestMessage) {
-          session.request.message = completedMessage;
-        }
-      }
-
       const warmupMaybeIntercepted =
         session.isWarmupRequest() &&
         !!session.authState?.success &&
@@ -105,6 +86,26 @@ export class ProxySessionGuard {
         !!session.authState.key &&
         !!session.authState.apiKey &&
         systemSettings.interceptAnthropicWarmupRequests;
+
+      const extractedClaudeSessionId =
+        claudeMetadataCompletionEnabled &&
+        !warmupMaybeIntercepted &&
+        session.originalFormat === "claude" &&
+        !isCodexRequest
+          ? SessionManager.extractClientSessionId(requestMessage, null, session.userAgent)
+          : null;
+
+      if (extractedClaudeSessionId) {
+        const completedMessage = injectClaudeMetadataUserIdWithContext(requestMessage, {
+          keyId,
+          sessionId: extractedClaudeSessionId,
+          userAgent: session.userAgent,
+        });
+
+        if (completedMessage !== requestMessage) {
+          session.request.message = completedMessage;
+        }
+      }
 
       // 1. 尝试从客户端提取 session_id（兼容 metadata.user_id / metadata.session_id）
       const clientSessionId = SessionManager.extractClientSessionId(
@@ -121,6 +122,26 @@ export class ProxySessionGuard {
 
       // 4. 设置到 session 对象
       session.setSessionId(sessionId);
+
+      if (
+        claudeMetadataCompletionEnabled &&
+        !warmupMaybeIntercepted &&
+        session.originalFormat === "claude" &&
+        !isCodexRequest
+      ) {
+        const completedMessage = injectClaudeMetadataUserIdWithContext(
+          session.request.message as Record<string, unknown>,
+          {
+            keyId,
+            sessionId,
+            userAgent: session.userAgent,
+          }
+        );
+
+        if (completedMessage !== session.request.message) {
+          session.request.message = completedMessage;
+        }
+      }
 
       // 4.1 获取并设置请求序号（Session 内唯一标识每个请求）
       const requestSequence = await SessionManager.getNextRequestSequence(sessionId);
