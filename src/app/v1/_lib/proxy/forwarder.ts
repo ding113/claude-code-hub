@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
@@ -11,6 +10,7 @@ import {
   recordFailure,
   recordSuccess,
 } from "@/lib/circuit-breaker";
+import { injectClaudeMetadataUserIdWithContext } from "@/lib/claude-code/metadata-user-id";
 import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overrides";
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -351,9 +351,9 @@ async function persistSpecialSettings(session: ProxySession): Promise<void> {
 /**
  * 为 Claude 请求注入 metadata.user_id
  *
- * 格式：user_{stableHash}_account__session_{sessionId}
- * - stableHash: 基于 API Key ID 生成的稳定哈希（64位 hex），生成后保持不变
- * - sessionId: 当前请求的 session ID
+ * 格式选择：
+ * - Claude Code < v2.1.78: `user_{stableHash}_account__session_{sessionId}`
+ * - 无法识别版本 / >= v2.1.78: JSON 字符串 `{"device_id":"...","account_uuid":"","session_id":"..."}`
  *
  * 注意：如果请求体中已存在 metadata.user_id，则保持原样不修改
  * @internal
@@ -376,26 +376,11 @@ export function injectClaudeMetadataUserId(
   const keyId = session.authState?.key?.id;
   const sessionId = session.sessionId;
 
-  if (keyId == null || !sessionId) {
-    return message;
-  }
-
-  // 生成稳定的 user hash（基于 API Key ID）
-  const stableHash = crypto.createHash("sha256").update(`claude_user_${keyId}`).digest("hex");
-
-  // 构建 user_id
-  const userId = `user_${stableHash}_account__session_${sessionId}`;
-
-  // 注入 metadata
-  const newMetadata = {
-    ...existingMetadata,
-    user_id: userId,
-  };
-
-  return {
-    ...message,
-    metadata: newMetadata,
-  };
+  return injectClaudeMetadataUserIdWithContext(message, {
+    keyId,
+    sessionId,
+    userAgent: session.userAgent,
+  });
 }
 
 function applyClaudeMetadataUserIdInjectionWithAudit(

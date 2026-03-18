@@ -70,6 +70,7 @@ function createMockSession(overrides: Partial<ProxySession> = {}): ProxySession 
     requestUrl: "http://localhost/v1/messages",
     method: "POST",
     originalFormat: "claude",
+    addSpecialSetting: vi.fn(),
 
     sessionId: null,
     setSessionId(id: string) {
@@ -123,5 +124,87 @@ describe("ProxySessionGuard：warmup 拦截不应计入并发会话", () => {
 
     expect(trackSessionMock).toHaveBeenCalledTimes(1);
     expect(trackSessionMock).toHaveBeenCalledWith("session_assigned", 1, 1);
+  });
+
+  test("Claude 旧版本请求缺少 user_id 但有 metadata.session_id 时，应先补全旧格式再提取", async () => {
+    const ProxySessionGuard = await loadGuard();
+    extractClientSessionIdMock.mockImplementation((requestMessage: Record<string, unknown>) => {
+      const metadata =
+        requestMessage.metadata && typeof requestMessage.metadata === "object"
+          ? (requestMessage.metadata as Record<string, unknown>)
+          : {};
+
+      if (typeof metadata.session_id === "string") {
+        return metadata.session_id;
+      }
+
+      if (typeof metadata.user_id === "string") {
+        const marker = "_account__session_";
+        const markerIndex = metadata.user_id.indexOf(marker);
+        return markerIndex === -1 ? null : metadata.user_id.slice(markerIndex + marker.length);
+      }
+
+      return null;
+    });
+
+    const session = createMockSession({
+      userAgent: "claude-cli/2.1.77 (external, cli)",
+      request: {
+        message: {
+          metadata: {
+            session_id: "sess_legacy_seed",
+          },
+        },
+        model: "claude-sonnet-4-5-20250929",
+      },
+    });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect((session.request.message.metadata as Record<string, unknown>).user_id).toMatch(
+      /^user_[a-f0-9]{64}_account__session_sess_legacy_seed$/
+    );
+    expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], "sess_legacy_seed");
+  });
+
+  test("Claude 无法获取版本且缺少 session 标识时，应生成 JSON user_id 供后续链路复用", async () => {
+    const ProxySessionGuard = await loadGuard();
+    generateSessionIdMock.mockReturnValue("sess_generated_by_guard");
+    extractClientSessionIdMock.mockImplementation((requestMessage: Record<string, unknown>) => {
+      const metadata =
+        requestMessage.metadata && typeof requestMessage.metadata === "object"
+          ? (requestMessage.metadata as Record<string, unknown>)
+          : {};
+
+      if (typeof metadata.user_id === "string") {
+        try {
+          const parsed = JSON.parse(metadata.user_id) as { session_id?: string };
+          return parsed.session_id ?? null;
+        } catch {
+          return null;
+        }
+      }
+
+      return null;
+    });
+
+    const session = createMockSession({
+      userAgent: null,
+      request: {
+        message: {},
+        model: "claude-sonnet-4-5-20250929",
+      },
+    });
+
+    await ProxySessionGuard.ensure(session);
+
+    expect(
+      JSON.parse((session.request.message.metadata as Record<string, unknown>).user_id as string)
+    ).toEqual({
+      device_id: expect.stringMatching(/^[a-f0-9]{64}$/),
+      account_uuid: "",
+      session_id: "sess_generated_by_guard",
+    });
+    expect(getOrCreateSessionIdMock).toHaveBeenCalledWith(1, [], "sess_generated_by_guard");
   });
 });

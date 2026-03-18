@@ -3,6 +3,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { extractCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
 import { sanitizeHeaders, sanitizeUrl } from "@/app/v1/_lib/proxy/errors";
+import { parseClaudeMetadataUserId } from "@/lib/claude-code/metadata-user-id";
 import { getEnvConfig } from "@/lib/config/env.schema";
 import { logger } from "@/lib/logger";
 import {
@@ -119,7 +120,7 @@ export class SessionManager {
    * 从客户端请求中提取 session_id（支持 metadata 或 header）
    *
    * 优先级:
-   * 1. metadata.user_id (Claude Code 主要方式，典型格式: "user_{hash}_account__session_{sessionId}")
+   * 1. metadata.user_id (Claude Code 主要方式，兼容旧字符串格式和新 JSON 字符串格式)
    * 2. metadata.session_id (备选方式)
    */
   static extractClientSessionId(
@@ -149,21 +150,13 @@ export class SessionManager {
     const metadataObj = metadata as Record<string, unknown>;
 
     // 方案 A: 从 metadata.user_id 中提取 (Claude Code 主要方式)
-    // 典型格式: "user_{hash}_account__session_{sessionId}"
-    if (typeof metadataObj.user_id === "string" && metadataObj.user_id.length > 0) {
-      const userId = metadataObj.user_id;
-      const sessionMarker = "_session_";
-      const markerIndex = userId.indexOf(sessionMarker);
-
-      if (markerIndex !== -1) {
-        const extractedSessionId = userId.substring(markerIndex + sessionMarker.length);
-        if (extractedSessionId.length > 0) {
-          logger.trace("SessionManager: Extracted session from metadata.user_id", {
-            sessionId: extractedSessionId,
-          });
-          return extractedSessionId;
-        }
-      }
+    const extractedFromUserId = parseClaudeMetadataUserId(metadataObj.user_id);
+    if (extractedFromUserId.sessionId) {
+      logger.trace("SessionManager: Extracted session from metadata.user_id", {
+        sessionId: extractedFromUserId.sessionId,
+        format: extractedFromUserId.format,
+      });
+      return extractedFromUserId.sessionId;
     }
 
     // 方案 B: 直接从 metadata.session_id 读取 (备选方案)
