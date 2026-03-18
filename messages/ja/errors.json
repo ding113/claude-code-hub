@@ -58,6 +58,7 @@
   "RESOURCE_BUSY": "リソースは現在使用中です",
   "INVALID_STATE": "現在の状態では操作が許可されていません",
   "CONFLICT": "操作の競合",
+  "ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS": "このエンドポイントは {count} 件の有効なプロバイダーから参照されています: {providers}",
 
   "USER_NOT_FOUND": "ユーザーが見つかりません",
   "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "一般ユーザーはクォータ制限とプロバイダーグループを変更できません",

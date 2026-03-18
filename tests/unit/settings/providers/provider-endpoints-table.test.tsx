@@ -102,6 +102,7 @@ function loadMessages() {
 }
 
 let queryClient: QueryClient;
+const confirmMock = vi.fn(() => true);
 
 function renderWithProviders(node: ReactNode) {
   const container = document.createElement("div");
@@ -143,6 +144,8 @@ describe("ProviderEndpointsTable", () => {
       },
     });
     vi.clearAllMocks();
+    confirmMock.mockReturnValue(true);
+    vi.stubGlobal("confirm", confirmMock);
     while (document.body.firstChild) {
       document.body.removeChild(document.body.firstChild);
     }
@@ -266,6 +269,56 @@ describe("ProviderEndpointsTable", () => {
     expect(providerEndpointsActionMocks.probeProviderEndpoint).toHaveBeenCalledWith({
       endpointId: 1,
     });
+
+    unmount();
+  });
+
+  test("delete failure should show translated reference detail instead of generic error", async () => {
+    providerEndpointsActionMocks.removeProviderEndpoint.mockResolvedValueOnce({
+      ok: false,
+      errorCode: "ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS",
+      errorParams: {
+        count: 2,
+        providers: "CPA Primary, CPA Backup",
+      },
+    } as any);
+
+    const { unmount } = renderWithProviders(<ProviderEndpointsTable vendorId={1} />);
+
+    await flushTicks(6);
+
+    const endpointRow = Array.from(document.querySelectorAll("tr")).find((row) =>
+      row.textContent?.includes("https://api.claude.example.com/v1")
+    );
+    expect(endpointRow).toBeDefined();
+
+    const buttons = endpointRow?.querySelectorAll("button");
+    const moreButton = buttons?.[buttons.length - 1] as HTMLButtonElement | undefined;
+    expect(moreButton).toBeDefined();
+
+    act(() => {
+      moreButton?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+      moreButton?.click();
+    });
+
+    await flushTicks(2);
+
+    const deleteItem = Array.from(
+      document.querySelectorAll("[data-slot='dropdown-menu-item']")
+    ).find((item) => item.textContent?.includes("Delete")) as HTMLElement | undefined;
+
+    expect(deleteItem).toBeDefined();
+
+    act(() => {
+      deleteItem?.click();
+    });
+
+    await flushTicks(4);
+
+    expect(confirmMock).toHaveBeenCalledTimes(1);
+    expect(sonnerMocks.toast.error).toHaveBeenCalledWith(
+      "This endpoint is still referenced by 2 enabled providers: CPA Primary, CPA Backup"
+    );
 
     unmount();
   });

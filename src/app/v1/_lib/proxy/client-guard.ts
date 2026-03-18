@@ -32,15 +32,10 @@ export class ProxyClientGuard {
 
     if (!result.allowed) {
       const detected = result.detectedClient ? ` (detected: ${result.detectedClient})` : "";
-      let message: string;
-      if (result.matchType === "blocklist_hit") {
-        message = `Client blocked by pattern: ${result.matchedPattern}${detected}`;
-      } else {
-        message = `Client not in allowed list: [${allowedClients.join(", ")}]${detected}`;
-      }
-      if (result.signals) {
-        message += `\nSignals(${result.signals.length}/4): [${result.signals.join(", ")}]`;
-      }
+      const message =
+        result.matchType === "blocklist_hit"
+          ? `Client blocked${detected}`
+          : `Client not allowed${detected}`;
       return ProxyResponses.buildError(400, message, "invalid_request_error");
     }
 

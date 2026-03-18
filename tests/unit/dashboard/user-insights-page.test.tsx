@@ -11,17 +11,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import dashboardMessages from "@messages/en/dashboard.json";
 import myUsageMessages from "@messages/en/myUsage.json";
 import commonMessages from "@messages/en/common.json";
+import { resolveTimePresetDates } from "@/app/[locale]/dashboard/leaderboard/user/[userId]/_components/filters/types";
 
 // --- Hoisted mocks ---
 
 const mockGetUserInsightsOverview = vi.hoisted(() => vi.fn());
 const mockGetUserInsightsKeyTrend = vi.hoisted(() => vi.fn());
 const mockGetUserInsightsModelBreakdown = vi.hoisted(() => vi.fn());
+const mockGetUserInsightsProviderBreakdown = vi.hoisted(() => vi.fn());
 
 vi.mock("@/actions/admin-user-insights", () => ({
   getUserInsightsOverview: mockGetUserInsightsOverview,
   getUserInsightsKeyTrend: mockGetUserInsightsKeyTrend,
   getUserInsightsModelBreakdown: mockGetUserInsightsModelBreakdown,
+  getUserInsightsProviderBreakdown: mockGetUserInsightsProviderBreakdown,
 }));
 
 const routerPushMock = vi.fn();
@@ -123,14 +126,10 @@ describe("UserInsightsView", () => {
       data: {
         user: { id: 10, name: "TestUser" },
         overview: {
-          todayRequests: 42,
-          todayCost: 1.23,
+          requestCount: 42,
+          totalCost: 1.23,
           avgResponseTime: 850,
-          todayErrorRate: 2.5,
-          yesterdaySamePeriodRequests: 30,
-          yesterdaySamePeriodCost: 1.0,
-          yesterdaySamePeriodAvgResponseTime: 900,
-          recentMinuteRequests: 3,
+          errorRate: 2.5,
         },
         currencyCode: "USD",
       },
@@ -170,6 +169,25 @@ describe("UserInsightsView", () => {
         currencyCode: "USD",
       },
     });
+
+    mockGetUserInsightsProviderBreakdown.mockResolvedValue({
+      ok: true,
+      data: {
+        breakdown: [
+          {
+            providerId: 1,
+            providerName: "Provider A",
+            requests: 100,
+            cost: 1.5,
+            inputTokens: 5000,
+            outputTokens: 3000,
+            cacheCreationTokens: 1000,
+            cacheReadTokens: 500,
+          },
+        ],
+        currencyCode: "USD",
+      },
+    });
   });
 
   afterEach(() => {
@@ -194,6 +212,11 @@ describe("UserInsightsView", () => {
     expect(heading).not.toBeNull();
     expect(heading!.textContent).toContain("User Insights");
     expect(heading!.textContent).toContain("TestUser");
+    expect(mockGetUserInsightsOverview).toHaveBeenCalledWith(
+      10,
+      resolveTimePresetDates("7days").startDate,
+      resolveTimePresetDates("7days").endDate
+    );
 
     unmount();
   });
@@ -221,6 +244,32 @@ describe("UserInsightsView", () => {
 
     unmount();
   });
+
+  it("refetches overview with resolved 30-day range when timeRange changes", async () => {
+    const { UserInsightsView } = await import(
+      "@/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-insights-view"
+    );
+
+    const { container, unmount } = renderWithProviders(
+      <UserInsightsView userId={10} userName="TestUser" />
+    );
+
+    await flushMicrotasks();
+
+    const button = container.querySelector("[data-testid='user-insights-time-range-30days']");
+    expect(button).not.toBeNull();
+
+    act(() => {
+      (button as HTMLButtonElement).click();
+    });
+
+    await flushMicrotasks();
+
+    const { startDate, endDate } = resolveTimePresetDates("30days");
+    expect(mockGetUserInsightsOverview).toHaveBeenLastCalledWith(10, startDate, endDate);
+
+    unmount();
+  });
 });
 
 describe("UserOverviewCards", () => {
@@ -243,14 +292,10 @@ describe("UserOverviewCards", () => {
       data: {
         user: { id: 10, name: "TestUser" },
         overview: {
-          todayRequests: 42,
-          todayCost: 1.23,
+          requestCount: 42,
+          totalCost: 1.23,
           avgResponseTime: 850,
-          todayErrorRate: 2.5,
-          yesterdaySamePeriodRequests: 30,
-          yesterdaySamePeriodCost: 1.0,
-          yesterdaySamePeriodAvgResponseTime: 900,
-          recentMinuteRequests: 3,
+          errorRate: 2.5,
         },
         currencyCode: "USD",
       },
@@ -260,18 +305,20 @@ describe("UserOverviewCards", () => {
       "@/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-overview-cards"
     );
 
-    const { container, unmount } = renderWithProviders(<UserOverviewCards userId={10} />);
+    const { container, unmount } = renderWithProviders(
+      <UserOverviewCards userId={10} startDate="2026-03-01" endDate="2026-03-09" />
+    );
 
     await flushMicrotasks();
 
     const cards = container.querySelectorAll("[data-testid^='user-insights-metric-']");
     expect(cards.length).toBe(4);
 
-    const todayRequests = container.querySelector(
-      "[data-testid='user-insights-metric-todayRequests']"
+    const requestCount = container.querySelector(
+      "[data-testid='user-insights-metric-requestCount']"
     );
-    expect(todayRequests).not.toBeNull();
-    expect(todayRequests!.textContent).toContain("42");
+    expect(requestCount).not.toBeNull();
+    expect(requestCount!.textContent).toContain("42");
 
     const avgResponseTime = container.querySelector(
       "[data-testid='user-insights-metric-avgResponseTime']"
@@ -282,6 +329,7 @@ describe("UserOverviewCards", () => {
     const errorRate = container.querySelector("[data-testid='user-insights-metric-errorRate']");
     expect(errorRate).not.toBeNull();
     expect(errorRate!.textContent).toContain("2.5%");
+    expect(mockGetUserInsightsOverview).toHaveBeenCalledWith(10, "2026-03-01", "2026-03-09");
 
     unmount();
   });
@@ -294,7 +342,9 @@ describe("UserOverviewCards", () => {
       "@/app/[locale]/dashboard/leaderboard/user/[userId]/_components/user-overview-cards"
     );
 
-    const { container, unmount } = renderWithProviders(<UserOverviewCards userId={10} />);
+    const { container, unmount } = renderWithProviders(
+      <UserOverviewCards userId={10} startDate="2026-03-01" endDate="2026-03-09" />
+    );
 
     await flushMicrotasks();
 

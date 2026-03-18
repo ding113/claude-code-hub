@@ -493,8 +493,8 @@
       "overview": "概要",
       "keyTrend": "Key 使用トレンド",
       "modelBreakdown": "モデル内訳",
-      "todayRequests": "本日リクエスト",
-      "todayCost": "本日コスト",
+      "requests": "リクエスト数",
+      "cost": "コスト",
       "avgResponseTime": "平均応答時間",
       "errorRate": "エラー率",
       "timeRange": {
@@ -1897,7 +1897,10 @@
         "sdk-ts": "SDK (TypeScript)",
         "sdk-py": "SDK (Python)",
         "cli-sdk": "CLI SDK",
-        "gh-action": "GitHub Action"
+        "gh-action": "GitHub Action",
+        "codex-cli-core": "CLI / TUI",
+        "desktop": "Desktop",
+        "exec": "Exec"
       },
       "nSelected": "{count} 件選択"
     },

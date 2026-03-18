@@ -10,6 +10,8 @@ import { type CurrencyCode, formatCurrency } from "@/lib/utils";
 
 interface UserOverviewCardsProps {
   userId: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 function formatResponseTime(ms: number): string {
@@ -17,13 +19,13 @@ function formatResponseTime(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export function UserOverviewCards({ userId }: UserOverviewCardsProps) {
+export function UserOverviewCards({ userId, startDate, endDate }: UserOverviewCardsProps) {
   const t = useTranslations("dashboard.leaderboard.userInsights");
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["user-insights-overview", userId],
+    queryKey: ["user-insights-overview", userId, startDate, endDate],
     queryFn: async () => {
-      const result = await getUserInsightsOverview(userId);
+      const result = await getUserInsightsOverview(userId, startDate, endDate);
       if (!result.ok) throw new Error(result.error);
       return result.data;
     },
@@ -64,15 +66,15 @@ export function UserOverviewCards({ userId }: UserOverviewCardsProps) {
 
   const metrics = [
     {
-      key: "todayRequests",
-      label: t("todayRequests"),
-      value: overview.todayRequests.toLocaleString(),
+      key: "requestCount",
+      label: t("requests"),
+      value: overview.requestCount.toLocaleString(),
       icon: TrendingUp,
     },
     {
-      key: "todayCost",
-      label: t("todayCost"),
-      value: formatCurrency(overview.todayCost, cc),
+      key: "cost",
+      label: t("cost"),
+      value: formatCurrency(overview.totalCost, cc),
       icon: DollarSign,
     },
     {
@@ -84,7 +86,7 @@ export function UserOverviewCards({ userId }: UserOverviewCardsProps) {
     {
       key: "errorRate",
       label: t("errorRate"),
-      value: `${overview.todayErrorRate.toFixed(1)}%`,
+      value: `${overview.errorRate.toFixed(1)}%`,
       icon: Activity,
     },
   ];

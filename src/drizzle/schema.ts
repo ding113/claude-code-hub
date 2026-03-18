@@ -122,6 +122,7 @@ export const keys = pgTable('keys', {
   limitWeeklyUsd: numeric('limit_weekly_usd', { precision: 10, scale: 2 }),
   limitMonthlyUsd: numeric('limit_monthly_usd', { precision: 10, scale: 2 }),
   limitTotalUsd: numeric('limit_total_usd', { precision: 10, scale: 2 }),
+  costResetAt: timestamp('cost_reset_at', { withTimezone: true }),
   limitConcurrentSessions: integer('limit_concurrent_sessions').default(0),
 
   // Provider group for this key (explicit; defaults to "default")
@@ -176,7 +177,7 @@ export const providers = pgTable('providers', {
   priority: integer('priority').notNull().default(0),
   groupPriorities: jsonb('group_priorities').$type<Record<string, number> | null>().default(null),
   costMultiplier: numeric('cost_multiplier', { precision: 10, scale: 4 }).default('1.0'),
-  groupTag: varchar('group_tag', { length: 50 }),
+  groupTag: varchar('group_tag', { length: 255 }),
 
   // 供应商类型：扩展支持 5 种类型
   // - claude: Anthropic 提供商（标准认证）

@@ -433,7 +433,11 @@ run("usage ledger integration", () => {
 
       vi.resetModules();
       const { findUsageLogs: findUsageLogsFresh } = await import("@/repository/message");
-      const result = await findUsageLogsFresh({ userId, page: 1, pageSize: 20 });
+      const result = await findUsageLogsFresh({
+        userId,
+        page: 1,
+        pageSize: 20,
+      });
 
       expect(result.logs.some((row) => row.id === requestId)).toBe(true);
       expect(result.total).toBeGreaterThanOrEqual(1);

@@ -42,7 +42,7 @@ export function UserInsightsView({ userId, userName }: UserInsightsViewProps) {
         </div>
       </div>
 
-      <UserOverviewCards userId={userId} />
+      <UserOverviewCards userId={userId} startDate={startDate} endDate={endDate} />
 
       <UserInsightsFilterBar userId={userId} filters={filters} onFiltersChange={setFilters} />
 

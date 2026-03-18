@@ -25,7 +25,7 @@ import { ModelRedirectEditor } from "../../../model-redirect-editor";
 import { FieldGroup, SectionCard, SmartInputWrapper, ToggleRow } from "../components/section-card";
 import { useProviderForm } from "../provider-form-context";
 
-const GROUP_TAG_MAX_TOTAL_LENGTH = 50;
+const GROUP_TAG_MAX_TOTAL_LENGTH = 255;
 
 interface RoutingSectionProps {
   subSectionRefs?: {
@@ -158,13 +158,13 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 onChange={handleGroupTagChange}
                 placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                 disabled={state.ui.isPending}
-                maxTagLength={GROUP_TAG_MAX_TOTAL_LENGTH}
+                maxTagLength={50}
                 suggestions={groupSuggestions}
                 onInvalidTag={(_tag, reason) => {
                   const messages: Record<string, string> = {
                     empty: tUI("emptyTag"),
                     duplicate: tUI("duplicateTag"),
-                    too_long: tUI("tooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }),
+                    too_long: tUI("tooLong", { max: 50 }),
                     invalid_format: tUI("invalidFormat"),
                     max_tags: tUI("maxTags"),
                   };
@@ -306,6 +306,11 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                     "sdk-py": t("sections.routing.clientRestrictions.subClients.sdk-py"),
                     "cli-sdk": t("sections.routing.clientRestrictions.subClients.cli-sdk"),
                     "gh-action": t("sections.routing.clientRestrictions.subClients.gh-action"),
+                    "codex-cli-core": t(
+                      "sections.routing.clientRestrictions.subClients.codex-cli-core"
+                    ),
+                    desktop: t("sections.routing.clientRestrictions.subClients.desktop"),
+                    exec: t("sections.routing.clientRestrictions.subClients.exec"),
                   },
                   nSelected: t("sections.routing.clientRestrictions.nSelected", {
                     count: "{count}",

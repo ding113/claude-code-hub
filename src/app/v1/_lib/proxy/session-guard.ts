@@ -1,3 +1,4 @@
+import { injectClaudeMetadataUserIdWithContext } from "@/lib/claude-code/metadata-user-id";
 import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { resolveKeyUserConcurrentSessionLimits } from "@/lib/rate-limit/concurrent-session-limit";
@@ -53,6 +54,8 @@ export class ProxySessionGuard {
 
       // Codex Session ID 补全：在提取 clientSessionId 之前触发，避免落入不稳定的降级方案
       const codexCompletionEnabled = systemSettings.enableCodexSessionIdCompletion ?? true;
+      const claudeMetadataCompletionEnabled =
+        systemSettings.enableClaudeMetadataUserIdInjection ?? true;
       const requestMessage = session.request.message as Record<string, unknown>;
       const isCodexRequest = Array.isArray(requestMessage.input);
 
@@ -84,7 +87,7 @@ export class ProxySessionGuard {
         !!session.authState.apiKey &&
         systemSettings.interceptAnthropicWarmupRequests;
 
-      // 1. 尝试从客户端提取 session_id（metadata.session_id）
+      // 1. 尝试从客户端提取 session_id（兼容 metadata.user_id / metadata.session_id）
       const clientSessionId = SessionManager.extractClientSessionId(
         session.request.message,
         session.headers,
@@ -99,6 +102,26 @@ export class ProxySessionGuard {
 
       // 4. 设置到 session 对象
       session.setSessionId(sessionId);
+
+      if (
+        claudeMetadataCompletionEnabled &&
+        !warmupMaybeIntercepted &&
+        session.originalFormat === "claude" &&
+        !isCodexRequest
+      ) {
+        const completedMessage = injectClaudeMetadataUserIdWithContext(
+          session.request.message as Record<string, unknown>,
+          {
+            keyId,
+            sessionId,
+            userAgent: session.userAgent,
+          }
+        );
+
+        if (completedMessage !== session.request.message) {
+          session.request.message = completedMessage;
+        }
+      }
 
       // 4.1 获取并设置请求序号（Session 内唯一标识每个请求）
       const requestSequence = await SessionManager.getNextRequestSequence(sessionId);

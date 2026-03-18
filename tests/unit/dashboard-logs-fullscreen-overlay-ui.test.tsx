@@ -98,6 +98,12 @@ function findButtonByText(container: HTMLElement, text: string) {
   );
 }
 
+function findButtonByLabel(container: HTMLElement, label: string) {
+  return Array.from(container.querySelectorAll("button")).find(
+    (b) => b.getAttribute("aria-label") === label
+  );
+}
+
 async function click(element: Element | null) {
   if (!element) throw new Error("element not found");
   await act(async () => {
@@ -133,7 +139,7 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
       );
     });
 
-    await click(findButtonByText(container, "logs.actions.fullscreen") ?? null);
+    await click(findButtonByLabel(container, "logs.actions.fullscreen") ?? null);
 
     expect(fullscreenMocks.request).toHaveBeenCalledWith(document.documentElement);
     expect(container.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
@@ -177,7 +183,7 @@ describe("UsageLogsViewVirtualized fullscreen overlay", () => {
       );
     });
 
-    await click(findButtonByText(container, "logs.actions.fullscreen") ?? null);
+    await click(findButtonByLabel(container, "logs.actions.fullscreen") ?? null);
 
     expect(container.querySelector('[role="dialog"][aria-modal="true"]')).toBeNull();
     expect(toastMocks.error).toHaveBeenCalledTimes(1);

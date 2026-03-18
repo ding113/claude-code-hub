@@ -33,7 +33,7 @@ import {
 import type { ProviderType } from "@/types/provider";
 import { getRedisClient } from "./client";
 
-export type { LeaderboardPeriod, DateRangeParams };
+export type { DateRangeParams, LeaderboardPeriod };
 export type LeaderboardScope = "user" | "provider" | "providerCacheHitRate" | "model";
 
 type LeaderboardData =

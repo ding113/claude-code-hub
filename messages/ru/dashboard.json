@@ -493,8 +493,8 @@
       "overview": "Обзор",
       "keyTrend": "Тренд использования ключей",
       "modelBreakdown": "Разбивка по моделям",
-      "todayRequests": "Запросы за сегодня",
-      "todayCost": "Стоимость за сегодня",
+      "requests": "Запросы",
+      "cost": "Стоимость",
       "avgResponseTime": "Среднее время ответа",
       "errorRate": "Частота ошибок",
       "timeRange": {
@@ -1945,7 +1945,10 @@
         "sdk-ts": "SDK (TypeScript)",
         "sdk-py": "SDK (Python)",
         "cli-sdk": "CLI SDK",
-        "gh-action": "GitHub Action"
+        "gh-action": "GitHub Action",
+        "codex-cli-core": "CLI / TUI",
+        "desktop": "Desktop",
+        "exec": "Exec"
       },
       "nSelected": "Выбрано: {count}"
     },

@@ -493,8 +493,8 @@
       "overview": "Overview",
       "keyTrend": "Key Usage Trend",
       "modelBreakdown": "Model Breakdown",
-      "todayRequests": "Today Requests",
-      "todayCost": "Today Cost",
+      "requests": "Requests",
+      "cost": "Cost",
       "avgResponseTime": "Avg Response Time",
       "errorRate": "Error Rate",
       "timeRange": {
@@ -1961,7 +1961,10 @@
         "sdk-ts": "SDK (TypeScript)",
         "sdk-py": "SDK (Python)",
         "cli-sdk": "CLI SDK",
-        "gh-action": "GitHub Action"
+        "gh-action": "GitHub Action",
+        "codex-cli-core": "CLI / TUI",
+        "desktop": "Desktop",
+        "exec": "Exec"
       },
       "nSelected": "{count} selected"
     },

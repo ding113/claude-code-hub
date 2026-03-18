@@ -29,6 +29,7 @@ export interface EditKeyDialogProps {
     limitMonthlyUsd?: number | null;
     limitTotalUsd?: number | null;
     limitConcurrentSessions?: number;
+    costResetAt?: string | null;
   };
   user?: KeyDialogUserContext;
   isAdmin?: boolean;

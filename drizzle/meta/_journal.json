@@ -582,6 +582,20 @@
       "when": 1773423984994,
       "tag": "0082_hot_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1773768000000,
+      "tag": "0083_aromatic_wolverine",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1773809022650,
+      "tag": "0084_needy_jackpot",
+      "breakpoints": true
     }
   ]
 }

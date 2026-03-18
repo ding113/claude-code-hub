@@ -376,9 +376,9 @@ export class RateLimitService {
                 logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
                 return { allowed: true };
               }
-              current = await sumKeyTotalCost(options.keyHash, 365, options?.resetAt);
+              current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
             } else if (entityType === "user") {
-              current = await sumUserTotalCost(entityId, 365, options?.resetAt);
+              current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
             } else {
               current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
             }
@@ -394,9 +394,9 @@ export class RateLimitService {
             if (!options?.keyHash) {
               return { allowed: true };
             }
-            current = await sumKeyTotalCost(options.keyHash, 365, options?.resetAt);
+            current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
           } else if (entityType === "user") {
-            current = await sumUserTotalCost(entityId, 365, options?.resetAt);
+            current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
           } else {
             current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
           }
@@ -408,9 +408,9 @@ export class RateLimitService {
             logger.warn("[RateLimit] Missing key hash for total cost check, skip enforcement");
             return { allowed: true };
           }
-          current = await sumKeyTotalCost(options.keyHash, 365, options?.resetAt);
+          current = await sumKeyTotalCost(options.keyHash, Infinity, options?.resetAt);
         } else if (entityType === "user") {
-          current = await sumUserTotalCost(entityId, 365, options?.resetAt);
+          current = await sumUserTotalCost(entityId, Infinity, options?.resetAt);
         } else {
           current = await sumProviderTotalCost(entityId, options?.resetAt ?? null);
         }

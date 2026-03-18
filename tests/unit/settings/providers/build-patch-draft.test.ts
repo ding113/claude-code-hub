@@ -160,7 +160,7 @@ describe("buildPatchDraftFromFormState", () => {
 
     const draft = buildPatchDraftFromFormState(state, dirty);
 
-    expect(draft.group_tag).toEqual({ set: "tagA, tagB" });
+    expect(draft.group_tag).toEqual({ set: "tagA,tagB" });
   });
 
   it("clears modelRedirects when dirty and empty object", () => {

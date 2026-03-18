@@ -129,6 +129,7 @@ export interface UserKeyDisplay {
   limitMonthlyUsd: number | null; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
   limitConcurrentSessions: number; // 并发 Session 上限
+  costResetAt?: string | null; // 软重置时间
   // Provider group override (null = inherit from user)
   providerGroup?: string | null;
 }

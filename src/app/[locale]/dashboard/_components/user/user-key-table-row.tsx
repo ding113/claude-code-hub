@@ -617,6 +617,10 @@ export function UserKeyTableRow({
                 limitMonthlyUsd: editingKey.limitMonthlyUsd,
                 limitTotalUsd: editingKey.limitTotalUsd,
                 limitConcurrentSessions: editingKey.limitConcurrentSessions,
+                costResetAt:
+                  typeof editingKey.costResetAt === "string"
+                    ? editingKey.costResetAt
+                    : ((editingKey.costResetAt as Date | undefined)?.toISOString() ?? null),
               }}
               user={{
                 id: user.id,

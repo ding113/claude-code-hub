@@ -72,6 +72,7 @@ export function toKey(dbKey: any): Key {
       dbKey?.limitTotalUsd !== null && dbKey?.limitTotalUsd !== undefined
         ? parseFloat(dbKey.limitTotalUsd)
         : null,
+    costResetAt: dbKey?.costResetAt ? new Date(dbKey.costResetAt) : null,
     limitConcurrentSessions: dbKey?.limitConcurrentSessions ?? 0,
     providerGroup: dbKey?.providerGroup ?? null,
     cacheTtlPreference: dbKey?.cacheTtlPreference ?? null,

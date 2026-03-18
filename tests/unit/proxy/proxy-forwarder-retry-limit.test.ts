@@ -722,6 +722,143 @@ describe("ProxyForwarder - retry limit enforcement", () => {
       vi.useRealTimers();
     }
   });
+
+  test("524 with endpoint pool: should keep retrying until maxRetryAttempts before vendor_type_all_timeout", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider = createProvider({
+        providerType: "claude",
+        providerVendorId: 123,
+        maxRetryAttempts: 5,
+      });
+      session.setProvider(provider);
+
+      mocks.getPreferredProviderEndpoints.mockResolvedValue([
+        makeEndpoint({
+          id: 1,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep1.example.com",
+          lastProbeLatencyMs: 100,
+        }),
+        makeEndpoint({
+          id: 2,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep2.example.com",
+          lastProbeLatencyMs: 200,
+        }),
+      ]);
+
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+
+      doForward.mockImplementation(async () => {
+        throw new ProxyError("provider timeout", 524, {
+          body: "",
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      let caughtError: Error | null = null;
+      sendPromise.catch((error) => {
+        caughtError = error as Error;
+      });
+      await vi.runAllTimersAsync();
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError).toBeInstanceOf(ProxyError);
+      expect(doForward).toHaveBeenCalledTimes(5);
+
+      const chain = session.getProviderChain();
+      expect(chain).toHaveLength(5);
+      expect(chain.map((item) => item.endpointId)).toEqual([1, 2, 2, 2, 2]);
+
+      const vendorTimeoutItems = chain.filter((item) => item.reason === "vendor_type_all_timeout");
+      expect(vendorTimeoutItems).toHaveLength(1);
+      expect(vendorTimeoutItems[0]?.attemptNumber).toBe(5);
+
+      expect(mocks.recordVendorTypeAllEndpointsTimeout).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("524 with endpoint pool: maxRetryAttempts=2 should stop at budget exhaustion", async () => {
+    vi.useFakeTimers();
+
+    try {
+      const session = createSession();
+      const provider = createProvider({
+        providerType: "claude",
+        providerVendorId: 123,
+        maxRetryAttempts: 2,
+      });
+      session.setProvider(provider);
+
+      mocks.getPreferredProviderEndpoints.mockResolvedValue([
+        makeEndpoint({
+          id: 1,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep1.example.com",
+          lastProbeLatencyMs: 100,
+        }),
+        makeEndpoint({
+          id: 2,
+          vendorId: 123,
+          providerType: "claude",
+          url: "https://ep2.example.com",
+          lastProbeLatencyMs: 200,
+        }),
+      ]);
+
+      vi.mocked(categorizeErrorAsync).mockResolvedValue(ErrorCategory.PROVIDER_ERROR);
+
+      const doForward = vi.spyOn(
+        ProxyForwarder as unknown as { doForward: (...args: unknown[]) => unknown },
+        "doForward"
+      );
+
+      doForward.mockImplementation(async () => {
+        throw new ProxyError("provider timeout", 524, {
+          body: "",
+          providerId: provider.id,
+          providerName: provider.name,
+        });
+      });
+
+      const sendPromise = ProxyForwarder.send(session);
+      let caughtError: Error | null = null;
+      sendPromise.catch((error) => {
+        caughtError = error as Error;
+      });
+      await vi.runAllTimersAsync();
+
+      expect(caughtError).not.toBeNull();
+      expect(caughtError).toBeInstanceOf(ProxyError);
+      expect(doForward).toHaveBeenCalledTimes(2);
+
+      const chain = session.getProviderChain();
+      expect(chain.map((item) => item.endpointId)).toEqual([1, 2]);
+
+      const vendorTimeoutItems = chain.filter((item) => item.reason === "vendor_type_all_timeout");
+      expect(vendorTimeoutItems).toHaveLength(1);
+      expect(vendorTimeoutItems[0]?.attemptNumber).toBe(2);
+
+      expect(mocks.recordVendorTypeAllEndpointsTimeout).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("ProxyForwarder - endpoint stickiness on retry", () => {

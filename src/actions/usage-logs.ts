@@ -8,6 +8,7 @@ import {
 } from "@/lib/constants/usage-logs.constants";
 import { logger } from "@/lib/logger";
 import { readLiveChainBatch } from "@/lib/redis/live-chain-store";
+import { getRetryCount } from "@/lib/utils/provider-chain-formatter";
 import { isProviderFinalized } from "@/lib/utils/provider-display";
 import {
   findUsageLogSessionIdSuggestions,
@@ -121,7 +122,7 @@ function generateCsv(logs: UsageLogRow[]): string {
   ];
 
   const rows = logs.map((log) => {
-    const retryCount = log.providerChain ? Math.max(0, log.providerChain.length - 1) : 0;
+    const retryCount = log.providerChain ? getRetryCount(log.providerChain) : 0;
     return [
       log.createdAt ? new Date(log.createdAt).toISOString() : "",
       escapeCsvField(log.userName),

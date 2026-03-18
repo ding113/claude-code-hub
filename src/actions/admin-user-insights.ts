@@ -1,15 +1,15 @@
 "use server";
 
 import { getSession } from "@/lib/auth";
-import { getOverviewWithCache } from "@/lib/redis/overview-cache";
 import { getStatisticsWithCache } from "@/lib/redis/statistics-cache";
 import {
   type AdminUserModelBreakdownItem,
   type AdminUserProviderBreakdownItem,
   getUserModelBreakdown,
+  getUserOverviewMetrics,
   getUserProviderBreakdown,
+  type UserInsightsOverviewMetrics,
 } from "@/repository/admin-user-insights";
-import type { OverviewMetricsWithComparison } from "@/repository/overview";
 import { getSystemSettings } from "@/repository/system-config";
 import { findUserById } from "@/repository/user";
 import type { DatabaseKeyStatRow } from "@/types/statistics";
@@ -26,12 +26,16 @@ function isValidTimeRange(value: string): value is ValidTimeRange {
 }
 
 /**
- * Get overview metrics for a specific user (admin only).
+ * Get overview metrics for a specific user and date range (admin only).
  */
-export async function getUserInsightsOverview(targetUserId: number): Promise<
+export async function getUserInsightsOverview(
+  targetUserId: number,
+  startDate?: string,
+  endDate?: string
+): Promise<
   ActionResult<{
     user: User;
-    overview: OverviewMetricsWithComparison;
+    overview: UserInsightsOverviewMetrics;
     currencyCode: string;
   }>
 > {
@@ -40,13 +44,16 @@ export async function getUserInsightsOverview(targetUserId: number): Promise<
     return { ok: false, error: "Unauthorized" };
   }
 
+  const dateError = validateDateRange(startDate, endDate);
+  if (dateError) return dateError;
+
   const user = await findUserById(targetUserId);
   if (!user) {
     return { ok: false, error: "User not found" };
   }
 
   const [overview, settings] = await Promise.all([
-    getOverviewWithCache(targetUserId),
+    getUserOverviewMetrics(targetUserId, startDate, endDate),
     getSystemSettings(),
   ]);
 

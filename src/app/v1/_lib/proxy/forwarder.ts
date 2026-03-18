@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
@@ -11,6 +10,10 @@ import {
   recordFailure,
   recordSuccess,
 } from "@/lib/circuit-breaker";
+import {
+  hasUsableClaudeMetadataUserId,
+  injectClaudeMetadataUserIdWithContext,
+} from "@/lib/claude-code/metadata-user-id";
 import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overrides";
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -43,6 +46,8 @@ import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
 import { buildProxyUrl } from "../url";
 import { rectifyBillingHeader } from "./billing-header-rectifier";
+import { isStandardProxyEndpointPath } from "./endpoint-family-catalog";
+import { isStrictStandardEndpointPath } from "./endpoint-paths";
 import {
   buildRequestDetails,
   categorizeErrorAsync,
@@ -72,17 +77,6 @@ import {
 /** Default User-Agent for Codex CLI requests when none is provided */
 export const DEFAULT_CODEX_USER_AGENT =
   "codex_cli_rs/0.93.0 (Windows 10.0.26200; x86_64) vscode/1.108.1";
-
-const STANDARD_ENDPOINTS = [
-  "/v1/messages",
-  "/v1/messages/count_tokens",
-  "/v1/responses",
-  "/v1/responses/compact",
-  "/v1/chat/completions",
-  "/v1/models",
-];
-
-const STRICT_STANDARD_ENDPOINTS = ["/v1/messages", "/v1/responses", "/v1/chat/completions"];
 
 const OUTBOUND_TRANSPORT_HEADER_BLACKLIST = ["content-length", "connection", "transfer-encoding"];
 
@@ -262,6 +256,10 @@ function resolveMaxAttemptsForProvider(
   return clampRetryAttempts(provider.maxRetryAttempts);
 }
 
+function buildEndpointAttemptKey(endpointId: number | null, endpointUrl: string): string {
+  return endpointId != null ? `id:${endpointId}` : `url:${endpointUrl}`;
+}
+
 /**
  * undici request 超时配置（毫秒）
  *
@@ -356,9 +354,9 @@ async function persistSpecialSettings(session: ProxySession): Promise<void> {
 /**
  * 为 Claude 请求注入 metadata.user_id
  *
- * 格式：user_{stableHash}_account__session_{sessionId}
- * - stableHash: 基于 API Key ID 生成的稳定哈希（64位 hex），生成后保持不变
- * - sessionId: 当前请求的 session ID
+ * 格式选择：
+ * - Claude Code < v2.1.78: `user_{stableHash}_account__session_{sessionId}`
+ * - 无法识别版本 / >= v2.1.78: JSON 字符串 `{"device_id":"...","account_uuid":"","session_id":"..."}`
  *
  * 注意：如果请求体中已存在 metadata.user_id，则保持原样不修改
  * @internal
@@ -367,40 +365,14 @@ export function injectClaudeMetadataUserId(
   message: Record<string, unknown>,
   session: ProxySession
 ): Record<string, unknown> {
-  const existingMetadata =
-    typeof message.metadata === "object" && message.metadata !== null
-      ? (message.metadata as Record<string, unknown>)
-      : undefined;
-
-  // 检查是否已存在 metadata.user_id
-  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
-    return message;
-  }
-
-  // 获取必要信息
   const keyId = session.authState?.key?.id;
   const sessionId = session.sessionId;
 
-  if (keyId == null || !sessionId) {
-    return message;
-  }
-
-  // 生成稳定的 user hash（基于 API Key ID）
-  const stableHash = crypto.createHash("sha256").update(`claude_user_${keyId}`).digest("hex");
-
-  // 构建 user_id
-  const userId = `user_${stableHash}_account__session_${sessionId}`;
-
-  // 注入 metadata
-  const newMetadata = {
-    ...existingMetadata,
-    user_id: userId,
-  };
-
-  return {
-    ...message,
-    metadata: newMetadata,
-  };
+  return injectClaudeMetadataUserIdWithContext(message, {
+    keyId,
+    sessionId,
+    userAgent: session.userAgent,
+  });
 }
 
 function applyClaudeMetadataUserIdInjectionWithAudit(
@@ -427,7 +399,7 @@ function applyClaudeMetadataUserIdInjectionWithAudit(
       ? (message.metadata as Record<string, unknown>)
       : undefined;
 
-  if (existingMetadata?.user_id !== undefined && existingMetadata?.user_id !== null) {
+  if (hasUsableClaudeMetadataUserId(existingMetadata?.user_id)) {
     logger.info("[ProxyForwarder] Claude metadata.user_id injection skipped", {
       enabled,
       hit: false,
@@ -557,9 +529,9 @@ export class ProxyForwarder {
       const isMcpRequest =
         currentProvider.providerType !== "gemini" &&
         currentProvider.providerType !== "gemini-cli" &&
-        !STANDARD_ENDPOINTS.includes(requestPath);
+        !isStandardProxyEndpointPath(requestPath);
       const shouldEnforceStrictEndpointPool =
-        !isMcpRequest && STRICT_STANDARD_ENDPOINTS.includes(requestPath) && providerVendorId > 0;
+        !isMcpRequest && isStrictStandardEndpointPath(requestPath) && providerVendorId > 0;
       let endpointSelectionError: Error | null = null;
 
       const endpointCandidates: Array<{ endpointId: number | null; baseUrl: string }> = [];
@@ -665,8 +637,12 @@ export class ProxyForwarder {
         });
       }
 
-      let endpointAttemptsEvaluated = 0;
-      let allEndpointAttemptsTimedOut = true;
+      const endpointCandidateKeys = new Set(
+        endpointCandidates.map((endpoint) =>
+          buildEndpointAttemptKey(endpoint.endpointId, endpoint.baseUrl)
+        )
+      );
+      const timedOutEndpointKeys = new Set<string>();
 
       // Endpoint stickiness: track current endpoint index separately from attemptCount
       // - SYSTEM_ERROR (network error): advance to next endpoint
@@ -1026,11 +1002,11 @@ export class ProxyForwarder {
               : lastError.message;
 
           const isTimeoutError = lastError instanceof ProxyError && lastError.statusCode === 524;
-          if (attemptCount <= endpointCandidates.length) {
-            endpointAttemptsEvaluated = attemptCount;
-            if (!isTimeoutError) {
-              allEndpointAttemptsTimedOut = false;
-            }
+
+          if (isTimeoutError) {
+            timedOutEndpointKeys.add(
+              buildEndpointAttemptKey(activeEndpoint.endpointId, activeEndpoint.baseUrl)
+            );
           }
 
           if (activeEndpoint.endpointId != null) {
@@ -1646,10 +1622,10 @@ export class ProxyForwarder {
             if (
               !isMcpRequest &&
               statusCode === 524 &&
-              endpointCandidates.length > 0 &&
-              endpointAttemptsEvaluated >= endpointCandidates.length &&
-              allEndpointAttemptsTimedOut &&
-              currentProvider.providerVendorId
+              currentProvider.providerVendorId &&
+              endpointCandidateKeys.size > 0 &&
+              timedOutEndpointKeys.size >= endpointCandidateKeys.size &&
+              !willRetry
             ) {
               // Record to decision chain BEFORE triggering vendor-type circuit breaker
               session.addProviderToChain(currentProvider, {
@@ -1736,6 +1712,16 @@ export class ProxyForwarder {
 
             // 未耗尽重试次数：等待 100ms 后继续重试当前供应商
             if (willRetry) {
+              if (statusCode === 524) {
+                currentEndpointIndex++;
+                logger.debug("ProxyForwarder: Advancing endpoint index due to upstream timeout", {
+                  providerId: currentProvider.id,
+                  previousEndpointIndex: currentEndpointIndex - 1,
+                  newEndpointIndex: currentEndpointIndex,
+                  maxEndpointIndex: endpointCandidates.length - 1,
+                });
+              }
+
               await new Promise((resolve) => setTimeout(resolve, 100));
               continue;
             }
@@ -1799,7 +1785,7 @@ export class ProxyForwarder {
 
     // ⭐ 不暴露供应商详情，仅返回简单错误
     await ProxyForwarder.clearSessionProviderBinding(session);
-    throw new ProxyError("所有供应商暂时不可用，请稍后重试", 503); // Service Unavailable
+    throw ProxyForwarder.buildAllProvidersUnavailableError(); // Service Unavailable
   }
 
   /**
@@ -1854,7 +1840,11 @@ export class ProxyForwarder {
 
         // Apply Gemini Google Search override if configured
         const { request: overriddenBody, audit: googleSearchAudit } =
-          applyGeminiGoogleSearchOverrideWithAudit(provider, bodyToSerialize);
+          applyGeminiGoogleSearchOverrideWithAudit(
+            provider,
+            bodyToSerialize,
+            session.requestUrl.pathname
+          );
         if (googleSearchAudit) {
           session.addSpecialSetting(googleSearchAudit);
           bodyToSerialize = overriddenBody;
@@ -2140,8 +2130,7 @@ export class ProxyForwarder {
 
       // 检测是否为 MCP 请求（非标准 Claude/Codex/OpenAI 端点）
       const requestPath = session.requestUrl.pathname;
-      // pathname does not include query params, so exact match is sufficient
-      const isStandardRequest = STANDARD_ENDPOINTS.includes(requestPath);
+      const isStandardRequest = isStandardProxyEndpointPath(requestPath);
       const isMcpRequest = !isStandardRequest;
 
       if (isMcpRequest && provider.mcpPassthroughType && provider.mcpPassthroughType !== "none") {
@@ -2957,6 +2946,7 @@ export class ProxyForwarder {
     let noMoreProviders = false;
     let launchingAlternative: Promise<void> | null = null;
     let lastError: Error | null = null;
+    let lastErrorCategory: ErrorCategory | null = null;
     const attempts = new Set<StreamingHedgeAttempt>();
 
     let resolveResult: ((result: { response?: Response; error?: Error }) => void) | null = null;
@@ -3012,13 +3002,7 @@ export class ProxyForwarder {
 
     const finishIfExhausted = async () => {
       if (!settled && noMoreProviders && attempts.size === 0) {
-        await settleFailure(
-          lastError ??
-            new ProxyError("No available providers", 503, {
-              body: "",
-              providerId: initialProvider.id,
-            })
-        );
+        await settleFailure(ProxyForwarder.resolveHedgeTerminalError(lastError, lastErrorCategory));
       }
     };
 
@@ -3056,11 +3040,8 @@ export class ProxyForwarder {
             providerName: initialProvider.name,
           });
 
-          lastError = new ProxyError("No available providers", 503, {
-            body: "",
-            providerId: initialProvider.id,
-            providerName: initialProvider.name,
-          });
+          lastError = ProxyForwarder.buildAllProvidersUnavailableError();
+          lastErrorCategory = null;
           noMoreProviders = true;
           abortAllAttempts(undefined, "hedge_launch_failed");
           await finishIfExhausted();
@@ -3084,6 +3065,7 @@ export class ProxyForwarder {
       lastError = error;
 
       const errorCategory = await categorizeErrorAsync(error);
+      lastErrorCategory = errorCategory;
       const statusCode = error instanceof ProxyError ? error.statusCode : undefined;
 
       if (attempt.endpointAudit.endpointId != null) {
@@ -3119,12 +3101,20 @@ export class ProxyForwarder {
         reason:
           errorCategory === ErrorCategory.RESOURCE_NOT_FOUND
             ? "resource_not_found"
-            : "retry_failed",
+            : errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR
+              ? "client_error_non_retryable"
+              : "retry_failed",
         attemptNumber: attempt.sequence,
         statusCode,
         errorMessage: error instanceof ProxyError ? error.getDetailedErrorMessage() : error.message,
         circuitState: getCircuitState(attempt.provider.id),
       });
+
+      if (errorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR) {
+        abortAllAttempts(undefined, "client_error_non_retryable");
+        await settleFailure(error);
+        return;
+      }
 
       await launchAlternative();
       await finishIfExhausted();
@@ -3234,6 +3224,7 @@ export class ProxyForwarder {
         endpointSelection = await ProxyForwarder.resolveStreamingHedgeEndpoint(session, provider);
       } catch (endpointError) {
         lastError = endpointError as Error;
+        lastErrorCategory = null;
         await launchAlternative();
         await finishIfExhausted();
         return;
@@ -3370,6 +3361,7 @@ export class ProxyForwarder {
           if (settled || winnerCommitted) return;
           noMoreProviders = true;
           lastError = new ProxyError("Request aborted by client", 499, undefined, true);
+          lastErrorCategory = ErrorCategory.CLIENT_ABORT;
           for (const attempt of Array.from(attempts)) {
             if (!attempt.settled) {
               session.addProviderToChain(attempt.provider, {
@@ -3405,9 +3397,9 @@ export class ProxyForwarder {
     const isMcpRequest =
       provider.providerType !== "gemini" &&
       provider.providerType !== "gemini-cli" &&
-      !STANDARD_ENDPOINTS.includes(requestPath);
+      !isStandardProxyEndpointPath(requestPath);
     const shouldEnforceStrictEndpointPool =
-      !isMcpRequest && STRICT_STANDARD_ENDPOINTS.includes(requestPath) && providerVendorId > 0;
+      !isMcpRequest && isStrictStandardEndpointPath(requestPath) && providerVendorId > 0;
 
     if (
       !isMcpRequest &&
@@ -3581,6 +3573,25 @@ export class ProxyForwarder {
   private static async clearSessionProviderBinding(session: ProxySession): Promise<void> {
     if (!session.sessionId) return;
     await SessionManager.clearSessionProvider(session.sessionId);
+  }
+
+  private static buildAllProvidersUnavailableError(): ProxyError {
+    return new ProxyError("所有供应商暂时不可用，请稍后重试", 503);
+  }
+
+  private static resolveHedgeTerminalError(
+    lastError: Error | null,
+    lastErrorCategory: ErrorCategory | null
+  ): Error {
+    if (
+      lastError &&
+      (lastErrorCategory === ErrorCategory.CLIENT_ABORT ||
+        lastErrorCategory === ErrorCategory.NON_RETRYABLE_CLIENT_ERROR)
+    ) {
+      return lastError;
+    }
+
+    return ProxyForwarder.buildAllProvidersUnavailableError();
   }
 
   private static async readFirstReadableChunk(
@@ -4019,18 +4030,18 @@ export class ProxyForwarder {
           }
         });
 
-        // ⭐ 关键：吞掉错误事件，避免 "terminated" 冒泡
+        // ⭐ 关键：将上游流错误传播到下游 reader，确保 ResponseHandler 能检测到截断
         nodeStream.on("error", (err) => {
-          logger.warn("ProxyForwarder: Upstream stream error (gracefully closed)", {
+          logger.warn("ProxyForwarder: Upstream stream error (signaling downstream)", {
             providerId,
             providerName,
             error: err.message,
             errorName: err.name,
           });
           try {
-            controller.close();
+            controller.error(err);
           } catch {
-            // 如果已关闭，忽略
+            // 如果已关闭或已出错，忽略
           }
         });
       },

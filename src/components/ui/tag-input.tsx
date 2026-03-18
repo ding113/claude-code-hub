@@ -189,7 +189,10 @@ export function TagInput({
     return normalizedSuggestions.filter((s) => {
       const keywords = s.keywords?.join(" ") || "";
       const haystack = `${s.label} ${s.value} ${keywords}`.toLowerCase();
-      return haystack.includes(search) && (allowDuplicates || !value.includes(s.value));
+      return (
+        haystack.includes(search) &&
+        (allowDuplicates || !value.some((v) => v.toLowerCase() === s.value.toLowerCase()))
+      );
     });
   }, [normalizedSuggestions, inputValue, value, allowDuplicates]);
 
@@ -206,7 +209,7 @@ export function TagInput({
         return false;
       }
 
-      if (!allowDuplicates && currentTags.includes(tag)) {
+      if (!allowDuplicates && currentTags.some((t) => t.toLowerCase() === tag.toLowerCase())) {
         onInvalidTag?.(tag, "duplicate");
         return false;
       }

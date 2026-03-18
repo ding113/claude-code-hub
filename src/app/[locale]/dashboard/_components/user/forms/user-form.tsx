@@ -408,6 +408,9 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
                 "sdk-py": tUserEdit("subClients.sdk-py"),
                 "cli-sdk": tUserEdit("subClients.cli-sdk"),
                 "gh-action": tUserEdit("subClients.gh-action"),
+                "codex-cli-core": tUserEdit("subClients.codex-cli-core"),
+                desktop: tUserEdit("subClients.desktop"),
+                exec: tUserEdit("subClients.exec"),
               },
               nSelected: tUserEdit("nSelected", { count: "{count}" }),
             }}

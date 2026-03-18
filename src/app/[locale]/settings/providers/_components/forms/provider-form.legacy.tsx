@@ -55,7 +55,7 @@ import { ApiTestButton } from "./api-test-button";
 import { ProxyTestButton } from "./proxy-test-button";
 import { UrlPreview } from "./url-preview";
 
-const GROUP_TAG_MAX_TOTAL_LENGTH = 50;
+const GROUP_TAG_MAX_TOTAL_LENGTH = 255;
 
 type Mode = "create" | "edit";
 
@@ -430,7 +430,7 @@ export function ProviderForm({
       return;
     }
 
-    // group_tag 在 DB/schema 中限制为 varchar(50)，并且后端按整串校验 max(50)
+    // group_tag 在 DB/schema 中限制为 varchar(255)，并且后端按整串校验 max(255)
     // 这里限制逗号拼接后的总长度，避免"UI 看似可选多标签，但保存必失败"的体验
     const serializedGroupTag = groupTag.join(",");
     if (serializedGroupTag.length > GROUP_TAG_MAX_TOTAL_LENGTH) {
@@ -890,13 +890,13 @@ export function ProviderForm({
                     onChange={handleGroupTagChange}
                     placeholder={t("sections.routing.scheduleParams.group.placeholder")}
                     disabled={isPending}
-                    maxTagLength={GROUP_TAG_MAX_TOTAL_LENGTH}
+                    maxTagLength={50}
                     suggestions={groupSuggestions}
                     onInvalidTag={(_tag, reason) => {
                       const messages: Record<string, string> = {
                         empty: tUI("emptyTag"),
                         duplicate: tUI("duplicateTag"),
-                        too_long: tUI("tooLong", { max: GROUP_TAG_MAX_TOTAL_LENGTH }),
+                        too_long: tUI("tooLong", { max: 50 }),
                         invalid_format: tUI("invalidFormat"),
                         max_tags: tUI("maxTags"),
                       };

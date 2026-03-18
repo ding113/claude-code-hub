@@ -28,6 +28,15 @@ describe("buildProxyUrl", () => {
     expect(out).toBe("https://example.com/openai/responses?x=1");
   });
 
+  test("避免重复拼接：baseUrl 已包含 /embeddings 时不追加 /v1/embeddings", () => {
+    const out = buildProxyUrl(
+      "https://example.com/openai/embeddings",
+      new URL("https://dummy.com/v1/embeddings?x=1")
+    );
+
+    expect(out).toBe("https://example.com/openai/embeddings?x=1");
+  });
+
   test("子路径不丢失：baseUrl=/v1/messages + request=/v1/messages/count_tokens", () => {
     const out = buildProxyUrl(
       "https://api.example.com/v1/messages",

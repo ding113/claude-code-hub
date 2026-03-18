@@ -6,6 +6,7 @@ import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link, redirect } from "@/i18n/routing";
 import { getSession } from "@/lib/auth";
+import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { sumKeyTotalCostBatchByIds, sumUserTotalCostBatch } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
 import { UsersQuotaSkeleton } from "../_components/users-quota-skeleton";
@@ -27,8 +28,14 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   for (const u of users) {
     if (u.costResetAt instanceof Date) {
       userResetAtMap.set(u.id, u.costResetAt);
-      for (const k of u.keys) {
-        keyResetAtMap.set(k.id, u.costResetAt);
+    }
+    for (const k of u.keys) {
+      const resolved = resolveKeyCostResetAt(
+        k.costResetAt ? new Date(k.costResetAt) : null,
+        u.costResetAt instanceof Date ? u.costResetAt : null
+      );
+      if (resolved) {
+        keyResetAtMap.set(k.id, resolved);
       }
     }
   }
@@ -38,12 +45,12 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
     Promise.all(users.map((u) => getUserLimitUsage(u.id))),
     sumUserTotalCostBatch(
       allUserIds,
-      undefined,
+      Infinity,
       userResetAtMap.size > 0 ? userResetAtMap : undefined
     ),
     sumKeyTotalCostBatchByIds(
       allKeyIds,
-      undefined,
+      Infinity,
       keyResetAtMap.size > 0 ? keyResetAtMap : undefined
     ),
   ]);

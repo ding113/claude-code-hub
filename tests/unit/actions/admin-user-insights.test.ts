@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetSession = vi.hoisted(() => vi.fn());
 const mockFindUserById = vi.hoisted(() => vi.fn());
-const mockGetOverviewWithCache = vi.hoisted(() => vi.fn());
 const mockGetStatisticsWithCache = vi.hoisted(() => vi.fn());
+const mockGetUserOverviewMetrics = vi.hoisted(() => vi.fn());
 const mockGetUserModelBreakdown = vi.hoisted(() => vi.fn());
 const mockGetUserProviderBreakdown = vi.hoisted(() => vi.fn());
 const mockGetSystemSettings = vi.hoisted(() => vi.fn());
@@ -16,15 +16,12 @@ vi.mock("@/repository/user", () => ({
   findUserById: mockFindUserById,
 }));
 
-vi.mock("@/lib/redis/overview-cache", () => ({
-  getOverviewWithCache: mockGetOverviewWithCache,
-}));
-
 vi.mock("@/lib/redis/statistics-cache", () => ({
   getStatisticsWithCache: mockGetStatisticsWithCache,
 }));
 
 vi.mock("@/repository/admin-user-insights", () => ({
+  getUserOverviewMetrics: mockGetUserOverviewMetrics,
   getUserModelBreakdown: mockGetUserModelBreakdown,
   getUserProviderBreakdown: mockGetUserProviderBreakdown,
 }));
@@ -67,14 +64,10 @@ function createMockUser() {
 
 function createMockOverview() {
   return {
-    todayRequests: 50,
-    todayCost: 5.5,
+    requestCount: 50,
+    totalCost: 5.5,
     avgResponseTime: 200,
-    todayErrorRate: 2.0,
-    yesterdaySamePeriodRequests: 40,
-    yesterdaySamePeriodCost: 4.0,
-    yesterdaySamePeriodAvgResponseTime: 220,
-    recentMinuteRequests: 2,
+    errorRate: 2.0,
   };
 }
 
@@ -186,11 +179,11 @@ describe("getUserInsightsOverview", () => {
 
     mockGetSession.mockResolvedValueOnce(createAdminSession());
     mockFindUserById.mockResolvedValueOnce(user);
-    mockGetOverviewWithCache.mockResolvedValueOnce(overview);
+    mockGetUserOverviewMetrics.mockResolvedValueOnce(overview);
     mockGetSystemSettings.mockResolvedValueOnce(settings);
 
     const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
-    const result = await getUserInsightsOverview(10);
+    const result = await getUserInsightsOverview(10, "2026-03-01", "2026-03-09");
 
     expect(result.ok).toBe(true);
     if (result.ok) {
@@ -199,7 +192,46 @@ describe("getUserInsightsOverview", () => {
       expect(result.data.currencyCode).toBe("USD");
     }
     expect(mockFindUserById).toHaveBeenCalledWith(10);
-    expect(mockGetOverviewWithCache).toHaveBeenCalledWith(10);
+    expect(mockGetUserOverviewMetrics).toHaveBeenCalledWith(10, "2026-03-01", "2026-03-09");
+  });
+
+  it("rejects invalid startDate format", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsOverview(10, "not-a-date", "2026-03-09");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("startDate");
+    }
+    expect(mockGetUserOverviewMetrics).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid endDate format", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsOverview(10, "2026-03-01", "03/09/2026");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("endDate");
+    }
+    expect(mockGetUserOverviewMetrics).not.toHaveBeenCalled();
+  });
+
+  it("rejects startDate after endDate", async () => {
+    mockGetSession.mockResolvedValueOnce(createAdminSession());
+
+    const { getUserInsightsOverview } = await import("@/actions/admin-user-insights");
+    const result = await getUserInsightsOverview(10, "2026-03-09", "2026-03-01");
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("startDate must not be after endDate");
+    }
+    expect(mockGetUserOverviewMetrics).not.toHaveBeenCalled();
   });
 });
 

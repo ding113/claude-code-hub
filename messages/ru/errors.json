@@ -58,6 +58,7 @@
   "RESOURCE_BUSY": "Ресурс в настоящее время используется",
   "INVALID_STATE": "Операция не разрешена в текущем состоянии",
   "CONFLICT": "Конфликт операции",
+  "ENDPOINT_REFERENCED_BY_ENABLED_PROVIDERS": "Этот endpoint все еще используется {count} активными провайдерами: {providers}",
 
   "USER_NOT_FOUND": "Пользователь не найден",
   "USER_CANNOT_MODIFY_SENSITIVE_FIELDS": "Обычные пользователи не могут изменять лимиты квоты и группы провайдеров",
