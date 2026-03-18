@@ -206,7 +206,10 @@ export function TagInput({
         return false;
       }
 
-      if (!allowDuplicates && currentTags.includes(tag)) {
+      if (
+        !allowDuplicates &&
+        currentTags.some((t) => t.toLowerCase() === tag.toLowerCase())
+      ) {
         onInvalidTag?.(tag, "duplicate");
         return false;
       }
