@@ -2,8 +2,8 @@ import type { Context } from "hono";
 import { request as undiciRequest } from "undici";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
-import { findAllProviders } from "@/repository/provider";
 import { validateApiKeyAndGetUser } from "@/repository/key";
+import { findAllProviders } from "@/repository/provider";
 import type {
   AnthropicModelsResponse,
   GeminiModelsResponse,
@@ -13,6 +13,7 @@ import type { Provider } from "@/types/provider";
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
 import type { ClientFormat } from "../proxy/format-mapper";
 import { checkProviderGroupMatch, ProxyProviderResolver } from "../proxy/provider-selector";
+import { extractRoutePrefix } from "../proxy/route-prefix";
 
 type ResponseFormat = "openai" | "anthropic" | "gemini" | "codex";
 
@@ -304,14 +305,15 @@ async function getAvailableModels(
     user: { id: number; providerGroup: string | null };
     key: { providerGroup: string | null };
   },
-  clientFormat: ClientFormat
+  clientFormat: ClientFormat,
+  routePrefix: string | null = null
 ): Promise<{ models: FetchedModel[]; providerName?: string }> {
   const providerTypes = getProviderTypesForFormat(clientFormat);
-  const result = await getAvailableModelsByProviderTypes(authState, providerTypes);
+  const result = await getAvailableModelsByProviderTypes(authState, providerTypes, routePrefix);
 
   // 当 clientFormat 为 openai 时，额外聚合 joinOpenAIPool=true 的 claude/claude-auth 服务商模型
   if (clientFormat === "openai") {
-    const joinOpenAIResult = await getOpenAIPoolClaudeModels(authState);
+    const joinOpenAIResult = await getOpenAIPoolClaudeModels(authState, routePrefix);
     if (joinOpenAIResult.models.length > 0) {
       const seenIds = new Set(result.models.map((m) => m.id));
       for (const model of joinOpenAIResult.models) {
@@ -369,10 +371,13 @@ async function fetchModelsFromOpenAIPoolProvider(provider: Provider): Promise<Fe
  *
  * 这些服务商配置了加入 OpenAI 调度池，其 claude 模型应在 /v1/models 中对外暴露。
  */
-async function getOpenAIPoolClaudeModels(authState: {
-  user: { id: number; providerGroup: string | null };
-  key: { providerGroup: string | null };
-}): Promise<{ models: FetchedModel[]; providerName?: string }> {
+async function getOpenAIPoolClaudeModels(
+  authState: {
+    user: { id: number; providerGroup: string | null };
+    key: { providerGroup: string | null };
+  },
+  routePrefix: string | null = null
+): Promise<{ models: FetchedModel[]; providerName?: string }> {
   const allProviders = await findAllProviders();
 
   // 分组过滤（复用主流程的分组逻辑）
@@ -381,6 +386,15 @@ async function getOpenAIPoolClaudeModels(authState: {
   if (effectiveGroupPick) {
     candidates = allProviders.filter((p) =>
       checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
+    );
+  }
+  if (routePrefix) {
+    candidates = candidates.filter((p) =>
+      (p.groupTag || "")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .includes(routePrefix)
     );
   }
 
@@ -468,13 +482,15 @@ async function getAvailableModelsByProviderTypes(
     user: { id: number; providerGroup: string | null };
     key: { providerGroup: string | null };
   },
-  providerTypes: Provider["providerType"][]
+  providerTypes: Provider["providerType"][],
+  routePrefix: string | null = null
 ): Promise<{ models: FetchedModel[]; providerName?: string }> {
   const selectedProviders: Provider[] = [];
   for (const providerType of providerTypes) {
     const { provider, context } = await ProxyProviderResolver.selectProviderByType(
       authState,
-      providerType
+      providerType,
+      routePrefix
     );
     if (provider) {
       selectedProviders.push(provider);
@@ -544,6 +560,7 @@ function createFixedProviderTypesModelsHandler(
   return async (c: Context): Promise<Response> => {
     try {
       const { user, key } = await authenticateRequest(c);
+      const routePrefix = extractRoutePrefix(c.req.path);
 
       logger.debug("[AvailableModels] Fixed providerTypes request", {
         userId: user.id,
@@ -553,7 +570,8 @@ function createFixedProviderTypesModelsHandler(
 
       const { models, providerName } = await getAvailableModelsByProviderTypes(
         { user, key },
-        providerTypes
+        providerTypes,
+        routePrefix
       );
 
       logger.debug("[AvailableModels] Response ready", {
@@ -596,6 +614,7 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
     const responseFormat = detectResponseFormat(c);
     const clientFormatOverride = detectClientFormatOverride(c);
     const clientFormat = clientFormatOverride || mapResponseFormatToClientFormat(responseFormat);
+    const routePrefix = extractRoutePrefix(c.req.path);
 
     logger.debug("[AvailableModels] Request received", {
       userId: user.id,
@@ -604,7 +623,11 @@ export async function handleAvailableModels(c: Context): Promise<Response> {
       clientFormatOverride: clientFormatOverride || undefined,
     });
 
-    const { models, providerName } = await getAvailableModels({ user, key }, clientFormat);
+    const { models, providerName } = await getAvailableModels(
+      { user, key },
+      clientFormat,
+      routePrefix
+    );
 
     logger.debug("[AvailableModels] Response ready", {
       userId: user.id,

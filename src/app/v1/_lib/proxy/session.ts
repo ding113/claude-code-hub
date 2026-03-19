@@ -14,6 +14,7 @@ import type { SpecialSetting } from "@/types/special-settings";
 import type { User } from "@/types/user";
 import { ProxyError } from "./errors";
 import type { ClientFormat } from "./format-mapper";
+import { extractRoutePrefix, stripRoutePrefix } from "./route-prefix";
 
 export interface AuthState {
   user: User | null;
@@ -83,6 +84,7 @@ export class ProxySession {
 
   // 原始 URL 路径（用于 Gemini 模型重定向重置）
   private originalUrlPathname: string | null = null;
+  private routePrefix: string | null = null;
 
   // 上游决策链（记录尝试的供应商列表）
   private providerChain: ProviderChainItem[];
@@ -180,7 +182,12 @@ export class ProxySession {
   static async fromContext(c: Context): Promise<ProxySession> {
     const startTime = Date.now();
     const method = c.req.method.toUpperCase();
+    const originalRequestUrl = new URL(c.req.url);
     const requestUrl = new URL(c.req.url);
+    const routePrefix = extractRoutePrefix(originalRequestUrl.pathname);
+    if (routePrefix) {
+      requestUrl.pathname = stripRoutePrefix(originalRequestUrl.pathname);
+    }
     const headers = new Headers(c.req.header());
     const headerLog = formatHeadersForLog(headers);
     const bodyResult = await parseRequestBody(c);
@@ -216,7 +223,7 @@ export class ProxySession {
 
     if (!resolvedModel && isLargeRequestBody) {
       logger.warn("[ProxySession] Missing model for large request body", {
-        pathname: requestUrl.pathname,
+        pathname: originalRequestUrl.pathname,
         contentLength: bodyResult.contentLength ?? undefined,
         actualBodyBytes: bodyResult.actualBodyBytes ?? undefined,
       });
@@ -235,7 +242,7 @@ export class ProxySession {
       model: resolvedModel,
     };
 
-    return new ProxySession({
+    const session = new ProxySession({
       startTime,
       method,
       requestUrl,
@@ -246,6 +253,8 @@ export class ProxySession {
       context: c,
       clientAbortSignal,
     });
+    session.routePrefix = routePrefix;
+    return session;
   }
 
   /**
@@ -716,6 +725,10 @@ export class ProxySession {
    */
   getOriginalUrlPathname(): string | null {
     return this.originalUrlPathname;
+  }
+
+  getRoutePrefix(): string | null {
+    return this.routePrefix;
   }
 
   /**

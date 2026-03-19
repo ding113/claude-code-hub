@@ -91,6 +91,33 @@ function checkProviderGroupMatch(providerGroupTag: string | null, userGroups: st
   return providerTags.some((tag) => groups.includes(tag));
 }
 
+function checkRoutePrefixMatch(
+  providerGroupTag: string | null,
+  routePrefix: string | null
+): boolean {
+  if (!routePrefix) {
+    return true;
+  }
+
+  const providerTags = providerGroupTag
+    ? parseGroupString(providerGroupTag)
+    : [PROVIDER_GROUP.DEFAULT];
+
+  return providerTags.includes(routePrefix);
+}
+
+function checkProviderScopeMatch(
+  providerGroupTag: string | null,
+  userGroups: string | null,
+  routePrefix: string | null
+): boolean {
+  if (userGroups && !checkProviderGroupMatch(providerGroupTag, userGroups)) {
+    return false;
+  }
+
+  return checkRoutePrefixMatch(providerGroupTag, routePrefix);
+}
+
 /**
  * 检查供应商是否支持指定模型（用于调度器匹配）
  *
@@ -513,7 +540,7 @@ export class ProxyProviderResolver {
     const fixedProviderId = await SessionManager.getSessionFixedProvider(session.sessionId);
     if (fixedProviderId) {
       const provider = await session.getProviderById(fixedProviderId);
-      if (provider && provider.isEnabled) {
+      if (provider?.isEnabled) {
         // 检查健康状态（熔断、限额等）
         const healthCheck = await ProxyProviderResolver.checkProviderHealth(session, provider);
         if (healthCheck.healthy) {
@@ -601,10 +628,11 @@ export class ProxyProviderResolver {
 
     // 检查用户分组权限（配置限制，始终检查）
     const effectiveGroup = getEffectiveProviderGroup(session);
-    if (effectiveGroup && !checkProviderGroupMatch(provider.groupTag, effectiveGroup)) {
+    const routePrefix = session.getRoutePrefix();
+    if (!checkProviderScopeMatch(provider.groupTag, effectiveGroup, routePrefix)) {
       return {
         healthy: false,
-        reason: "group_mismatch",
+        reason: routePrefix ? "route_prefix_mismatch" : "group_mismatch",
       };
     }
 
@@ -677,6 +705,7 @@ export class ProxyProviderResolver {
     // 如果没有 session，回退到 findAllProviders（内部已使用缓存）
     const allProviders = session ? await session.getProvidersSnapshot() : await findAllProviders();
     const requestedModel = session?.getCurrentModel() || "";
+    const routePrefix = session?.getRoutePrefix() || null;
 
     // === Step 1: 分组预过滤（静默，用户只能看到自己分组内的供应商）===
     const effectiveGroupPick = getEffectiveProviderGroup(session);
@@ -710,7 +739,7 @@ export class ProxyProviderResolver {
 
     if (effectiveGroupPick) {
       const groupFiltered = allProviders.filter((p) =>
-        checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
+        checkProviderScopeMatch(p.groupTag, effectiveGroupPick, routePrefix)
       );
 
       if (groupFiltered.length > 0) {
@@ -725,6 +754,7 @@ export class ProxyProviderResolver {
         // 严格分组隔离：用户分组内没有供应商
         logger.error("ProviderSelector: User group has no providers", {
           effectiveGroup: effectiveGroupPick,
+          routePrefix: routePrefix || undefined,
         });
         return {
           provider: null,
@@ -745,6 +775,39 @@ export class ProxyProviderResolver {
           },
         };
       }
+    } else if (routePrefix) {
+      const routeFiltered = allProviders.filter((p) =>
+        checkRoutePrefixMatch(p.groupTag, routePrefix)
+      );
+
+      if (routeFiltered.length > 0) {
+        visibleProviders = routeFiltered;
+        logger.debug("ProviderSelector: Route prefix filter applied", {
+          routePrefix,
+          originalCount: allProviders.length,
+          filteredCount: routeFiltered.length,
+        });
+      } else {
+        logger.error("ProviderSelector: Route prefix has no providers", {
+          routePrefix,
+        });
+        return {
+          provider: null,
+          context: {
+            totalProviders: 0,
+            enabledProviders: 0,
+            targetType,
+            requestedModel,
+            groupFilterApplied: true,
+            beforeHealthCheck: 0,
+            afterHealthCheck: 0,
+            filteredProviders: [],
+            priorityLevels: [],
+            selectedPriority: 0,
+            candidatesAtPriority: [],
+          },
+        };
+      }
     }
 
     // === 初始化决策上下文（使用 visibleProviders）===
@@ -753,7 +816,7 @@ export class ProxyProviderResolver {
       enabledProviders: 0,
       targetType, // 根据原始请求格式推断目标供应商类型（修复：不再根据模型名推断）
       requestedModel, // 新增：记录请求的模型
-      groupFilterApplied: !!effectiveGroupPick,
+      groupFilterApplied: !!effectiveGroupPick || !!routePrefix,
       userGroup: effectiveGroupPick || undefined,
       beforeHealthCheck: 0,
       afterHealthCheck: 0,
@@ -1119,7 +1182,8 @@ export class ProxyProviderResolver {
       user: { id: number; providerGroup: string | null } | null;
       key: { providerGroup: string | null } | null;
     } | null,
-    providerType: Provider["providerType"]
+    providerType: Provider["providerType"],
+    routePrefix: string | null = null
   ): Promise<{
     provider: Provider | null;
     context: NonNullable<ProviderChainItem["decisionContext"]>;
@@ -1133,8 +1197,10 @@ export class ProxyProviderResolver {
     let visibleProviders = allProviders;
     if (effectiveGroupPick) {
       visibleProviders = allProviders.filter((p) =>
-        checkProviderGroupMatch(p.groupTag, effectiveGroupPick)
+        checkProviderScopeMatch(p.groupTag, effectiveGroupPick, routePrefix)
       );
+    } else if (routePrefix) {
+      visibleProviders = allProviders.filter((p) => checkRoutePrefixMatch(p.groupTag, routePrefix));
     }
 
     // 按 providerType 精确过滤
