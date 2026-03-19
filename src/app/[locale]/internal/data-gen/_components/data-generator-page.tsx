@@ -109,7 +109,7 @@ export function DataGeneratorPage() {
 
   const handleExportPDF = async () => {
     const html2canvas = (await import("html2canvas")).default;
-    const { jsPDF } = await import("jspdf");
+    const { jsPDF } = await import("jspdf/dist/jspdf.es.min.js");
 
     const element = document.getElementById("export-content");
     if (!element) return;
