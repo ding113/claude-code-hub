@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils";
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
 type ChartTooltipValue = number | string | ReadonlyArray<number | string>;
+type ChartTooltipName = number | string;
 type ChartTooltipPayloadEntry = NonNullable<
-  TooltipContentProps<ChartTooltipValue, string>["payload"]
+  TooltipContentProps<ChartTooltipValue, ChartTooltipName>["payload"]
 >[number];
 
 export type ChartConfig = {
@@ -121,7 +122,7 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: TooltipContentProps<ChartTooltipValue, string> &
+}: TooltipContentProps<ChartTooltipValue, ChartTooltipName> &
   React.ComponentProps<"div"> & {
     hideLabel?: boolean;
     hideIndicator?: boolean;
@@ -187,7 +188,7 @@ function ChartTooltipContent({
                   indicator === "dot" && "items-center"
                 )}
               >
-                {formatter && item?.value !== undefined && item.name ? (
+                {formatter && item?.value !== undefined && item.name !== undefined ? (
                   formatter(
                     item.value,
                     item.name,
