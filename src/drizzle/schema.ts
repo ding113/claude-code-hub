@@ -518,6 +518,12 @@ export const systemSettings = pgTable('system_settings', {
     .notNull()
     .default(true),
 
+  // Claude Code metadata.user_id 新格式开关（默认关闭）
+  // 开启后：生成 json{"device_id":"...","account_uuid":"...","session_id":"..."} 格式
+  enableClaudeCodeJsonUserIdFormat: boolean('enable_claude_code_json_user_id_format')
+    .notNull()
+    .default(false),
+
   // 响应整流（默认开启）
   enableResponseFixer: boolean('enable_response_fixer').notNull().default(true),
   responseFixerConfig: jsonb('response_fixer_config')

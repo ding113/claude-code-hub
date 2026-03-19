@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS: Pick<
   | "interceptAnthropicWarmupRequests"
   | "enableThinkingSignatureRectifier"
   | "enableCodexSessionIdCompletion"
+  | "enableClaudeCodeJsonUserIdFormat"
   | "enableResponseFixer"
   | "responseFixerConfig"
   | "enableCfOptimization"
@@ -39,6 +40,7 @@ const DEFAULT_SETTINGS: Pick<
   interceptAnthropicWarmupRequests: false,
   enableThinkingSignatureRectifier: true,
   enableCodexSessionIdCompletion: true,
+  enableClaudeCodeJsonUserIdFormat: false,
   enableResponseFixer: true,
   responseFixerConfig: {
     fixTruncatedJson: true,
@@ -110,6 +112,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       interceptAnthropicWarmupRequests: DEFAULT_SETTINGS.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: DEFAULT_SETTINGS.enableThinkingSignatureRectifier,
       enableCodexSessionIdCompletion: DEFAULT_SETTINGS.enableCodexSessionIdCompletion,
+      enableClaudeCodeJsonUserIdFormat: DEFAULT_SETTINGS.enableClaudeCodeJsonUserIdFormat,
       enableResponseFixer: DEFAULT_SETTINGS.enableResponseFixer,
       responseFixerConfig: DEFAULT_SETTINGS.responseFixerConfig,
       blockedUrls: [],
@@ -129,6 +132,10 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
 export async function isHttp2Enabled(): Promise<boolean> {
   const settings = await getCachedSystemSettings();
   return settings.enableHttp2;
+}
+
+export function getSystemSettingsSnapshot(): SystemSettings | null {
+  return cachedSettings;
 }
 
 /**

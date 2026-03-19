@@ -1,15 +1,9 @@
 "use client";
 
+import { Copy, Pencil, Terminal, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Pencil, Trash2, Copy, Terminal } from "lucide-react";
-import type { HeartbeatUrlConfig } from "@/repository/heartbeat-url-configs";
-import { copyToClipboard } from "@/lib/utils/clipboard";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +14,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
+import { copyToClipboard } from "@/lib/utils/clipboard";
+import type { HeartbeatUrlConfig } from "@/repository/heartbeat-url-configs";
 
 interface UrlConfigCardProps {
   config: HeartbeatUrlConfig;
@@ -80,7 +80,7 @@ export function UrlConfigCard({
         if (bodyObj.metadata && typeof bodyObj.metadata === "object") {
           bodyObj.metadata.user_id =
             bodyObj.metadata.user_id ||
-            "user_heartbeat_probe_account_heartbeat_session_00000000-0000-0000-0000-000000000000";
+            "user_heartbeat_probe_account_heartbeat_probe_session_00000000-0000-0000-0000-000000000000";
           body = JSON.stringify(bodyObj, null, 2);
         }
       } catch {

@@ -42,6 +42,8 @@
     "enableThinkingSignatureRectifierDesc": "当 Anthropic 类型供应商返回 thinking 签名不兼容或非法请求等错误时，自动移除不兼容的 thinking 相关块并对同一供应商重试一次（默认开启）。",
     "enableCodexSessionIdCompletion": "启用 Codex Session ID 补全",
     "enableCodexSessionIdCompletionDesc": "当 Codex 请求仅提供 session_id（请求头）或 prompt_cache_key（请求体）之一时，自动补全另一个；若两者均缺失，则生成 UUID v7 会话 ID，并在同一对话内稳定复用。",
+    "enableClaudeCodeJsonUserIdFormat": "启用 Claude Code metadata.user_id 新格式",
+    "enableClaudeCodeJsonUserIdFormatDesc": "开启后，代理生成的 metadata.user_id 将使用 json{\"device_id\":\"...\",\"account_uuid\":\"...\",\"session_id\":\"...\"} 新格式；关闭时继续使用旧的字符串拼接格式。解析阶段始终兼容新旧两种格式。",
     "forwardedClientIp": "转发客户端 IP",
     "forwardedClientIpPlaceholder": "例如：1.2.3.4",
     "forwardedClientIpDesc": "全局设置转发给上游的 x-forwarded-for / x-real-ip 值，留空则不注入。",

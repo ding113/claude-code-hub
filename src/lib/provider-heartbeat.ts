@@ -1,3 +1,5 @@
+import { buildClaudeCodeMetadataUserId } from "@/lib/claude-code-metadata-userid";
+import { getCachedSystemSettings } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { getHeartbeatSettings } from "@/repository/heartbeat-settings";
 import {
@@ -136,9 +138,17 @@ export class ProviderHeartbeat {
         try {
           const bodyObj = JSON.parse(body);
           if (bodyObj.metadata && typeof bodyObj.metadata === "object") {
+            const settings = await getCachedSystemSettings();
             bodyObj.metadata.user_id =
               bodyObj.metadata.user_id ||
-              "user_heartbeat_probe_account_heartbeat_session_00000000-0000-0000-0000-000000000000";
+              buildClaudeCodeMetadataUserId(
+                {
+                  deviceId: "heartbeat_probe",
+                  accountUuid: "heartbeat_probe",
+                  sessionId: "00000000-0000-0000-0000-000000000000",
+                },
+                settings.enableClaudeCodeJsonUserIdFormat ? "json" : "legacy"
+              );
             body = JSON.stringify(bodyObj);
           }
         } catch {

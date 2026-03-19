@@ -53,6 +53,8 @@
     "enableThinkingSignatureRectifierDesc": "Anthropic プロバイダーで thinking 署名の不整合や不正なリクエストエラーが発生した場合、thinking 関連ブロックを削除して同一プロバイダーへ1回だけ再試行します（既定で有効）。",
     "enableCodexSessionIdCompletion": "Codex セッションID補完を有効化",
     "enableCodexSessionIdCompletionDesc": "Codex リクエストで session_id（ヘッダー）または prompt_cache_key（ボディ）のどちらか一方しか提供されない場合に、欠けている方を自動補完します。両方ない場合は UUID v7 のセッションIDを生成し、同一対話内で安定して再利用します。",
+    "enableClaudeCodeJsonUserIdFormat": "Claude Code metadata.user_id の新形式を有効化",
+    "enableClaudeCodeJsonUserIdFormatDesc": "有効にすると、プロキシが生成する metadata.user_id は新しい json{\"device_id\":\"...\",\"account_uuid\":\"...\",\"session_id\":\"...\"} 形式を使用します。無効時は従来の連結文字列形式を継続使用します。解析処理は常に両形式に対応します。",
     "forwardedClientIp": "転送クライアント IP",
     "forwardedClientIpPlaceholder": "例：1.2.3.4",
     "forwardedClientIpDesc": "上流に転送する x-forwarded-for / x-real-ip の値をグローバルに設定します。空欄にすると注入しません。",

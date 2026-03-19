@@ -772,6 +772,8 @@ export const UpdateSystemSettingsSchema = z.object({
   enableThinkingSignatureRectifier: z.boolean().optional(),
   // Codex Session ID 补全（可选）
   enableCodexSessionIdCompletion: z.boolean().optional(),
+  // Claude Code metadata.user_id 新格式开关（可选）
+  enableClaudeCodeJsonUserIdFormat: z.boolean().optional(),
   // 响应整流（可选）
   enableResponseFixer: z.boolean().optional(),
   responseFixerConfig: z

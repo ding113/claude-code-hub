@@ -51,6 +51,8 @@
  * - thinkingConfig.thinkingBudget → thinking.budget_tokens
  */
 
+import { buildClaudeCodeMetadataUserId } from "@/lib/claude-code-metadata-userid";
+import { getSystemSettingsSnapshot } from "@/lib/config";
 import { logger } from "@/lib/logger";
 
 /**
@@ -141,8 +143,10 @@ interface ClaudeRequest {
  * 生成用户 ID（基于随机值）
  */
 function generateUserID(): string {
-  const randomPart = Math.random().toString(36).substring(2, 15);
-  return `user_gemini_${randomPart}`;
+  return buildClaudeCodeMetadataUserId(
+    {},
+    getSystemSettingsSnapshot()?.enableClaudeCodeJsonUserIdFormat ? "json" : "legacy"
+  );
 }
 
 /**

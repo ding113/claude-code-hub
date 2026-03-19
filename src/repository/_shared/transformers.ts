@@ -178,6 +178,7 @@ export function toSystemSettings(dbSettings: any): SystemSettings {
     interceptAnthropicWarmupRequests: dbSettings?.interceptAnthropicWarmupRequests ?? false,
     enableThinkingSignatureRectifier: dbSettings?.enableThinkingSignatureRectifier ?? true,
     enableCodexSessionIdCompletion: dbSettings?.enableCodexSessionIdCompletion ?? true,
+    enableClaudeCodeJsonUserIdFormat: dbSettings?.enableClaudeCodeJsonUserIdFormat ?? false,
     enableResponseFixer: dbSettings?.enableResponseFixer ?? true,
     responseFixerConfig: {
       ...defaultResponseFixerConfig,

@@ -41,6 +41,7 @@ export async function saveSystemSettings(formData: {
   interceptAnthropicWarmupRequests?: boolean;
   enableThinkingSignatureRectifier?: boolean;
   enableCodexSessionIdCompletion?: boolean;
+  enableClaudeCodeJsonUserIdFormat?: boolean;
   enableResponseFixer?: boolean;
   responseFixerConfig?: Partial<ResponseFixerConfig>;
   blockedUrls?: string[];
@@ -69,6 +70,7 @@ export async function saveSystemSettings(formData: {
       interceptAnthropicWarmupRequests: validated.interceptAnthropicWarmupRequests,
       enableThinkingSignatureRectifier: validated.enableThinkingSignatureRectifier,
       enableCodexSessionIdCompletion: validated.enableCodexSessionIdCompletion,
+      enableClaudeCodeJsonUserIdFormat: validated.enableClaudeCodeJsonUserIdFormat,
       enableResponseFixer: validated.enableResponseFixer,
       responseFixerConfig: validated.responseFixerConfig,
       blockedUrls: validated.blockedUrls,

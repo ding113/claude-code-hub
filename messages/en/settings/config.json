@@ -53,6 +53,8 @@
     "enableThinkingSignatureRectifierDesc": "When Anthropic providers return thinking signature incompatibility or invalid request errors, automatically removes incompatible thinking blocks and retries once against the same provider (enabled by default).",
     "enableCodexSessionIdCompletion": "Enable Codex Session ID Completion",
     "enableCodexSessionIdCompletionDesc": "When Codex requests provide only one of session_id (header) or prompt_cache_key (body), automatically completes the other. If both are missing, generates a UUID v7 session id and reuses it stably within the same conversation.",
+    "enableClaudeCodeJsonUserIdFormat": "Enable New Claude Code metadata.user_id Format",
+    "enableClaudeCodeJsonUserIdFormatDesc": "When enabled, generated metadata.user_id values use the new json{\"device_id\":\"...\",\"account_uuid\":\"...\",\"session_id\":\"...\"} format. When disabled, the proxy keeps generating the legacy concatenated string format. Parsing remains compatible with both formats.",
     "forwardedClientIp": "Forwarded Client IP",
     "forwardedClientIpPlaceholder": "e.g. 1.2.3.4",
     "forwardedClientIpDesc": "Globally set the x-forwarded-for / x-real-ip value forwarded to upstream. Leave empty to disable injection.",

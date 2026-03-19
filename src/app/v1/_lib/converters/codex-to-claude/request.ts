@@ -19,6 +19,11 @@
 
 import { randomBytes } from "node:crypto";
 import { normalizeCodexSessionId } from "@/app/v1/_lib/codex/session-extractor";
+import {
+  buildClaudeCodeMetadataUserId,
+  parseClaudeCodeMetadataUserId,
+} from "@/lib/claude-code-metadata-userid";
+import { getSystemSettingsSnapshot } from "@/lib/config";
 import { logger } from "@/lib/logger";
 
 /**
@@ -118,16 +123,25 @@ function generateToolCallID(): string {
  * 生成用户 ID（基于 account 和 session）
  */
 function generateUserID(originalMetadata?: Record<string, unknown>): string {
+  const format = getSystemSettingsSnapshot()?.enableClaudeCodeJsonUserIdFormat ? "json" : "legacy";
+  const existingUserId = parseClaudeCodeMetadataUserId(originalMetadata?.user_id);
   const sessionId = normalizeCodexSessionId(originalMetadata?.session_id);
-  if (sessionId) {
-    return `codex_session_${sessionId}`;
+  if (existingUserId?.sessionId || existingUserId?.deviceId || existingUserId?.accountUuid) {
+    return buildClaudeCodeMetadataUserId(
+      {
+        deviceId: existingUserId.deviceId,
+        accountUuid: existingUserId.accountUuid,
+        sessionId: sessionId ?? existingUserId.sessionId,
+      },
+      format
+    );
   }
 
-  // 简化实现：使用随机 UUID
-  const account = randomBytes(16).toString("hex");
-  const session = randomBytes(16).toString("hex");
-  const user = randomBytes(16).toString("hex");
-  return `user_${user}_account_${account}_session_${session}`;
+  if (sessionId) {
+    return buildClaudeCodeMetadataUserId({ sessionId }, format);
+  }
+
+  return buildClaudeCodeMetadataUserId({}, format);
 }
 
 /**

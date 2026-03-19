@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { STATUS_CODES } from "node:http";
 import type { Readable } from "node:stream";
 import { createGunzip, constants as zlibConstants } from "node:zlib";
@@ -13,6 +13,7 @@ import {
   recordFailure,
   recordSuccess,
 } from "@/lib/circuit-breaker";
+import { buildClaudeCodeMetadataUserId } from "@/lib/claude-code-metadata-userid";
 import { applyCodexProviderOverridesWithAudit } from "@/lib/codex/provider-overrides";
 import { getCachedSystemSettings, isHttp2Enabled } from "@/lib/config";
 import { getEnvConfig } from "@/lib/config/env.schema";
@@ -1552,12 +1553,15 @@ export class ProxyForwarder {
         }
 
         // 注入 metadata.user_id（Claude Code 请求标识）
-        // 格式: user_{64位hex}_account__session_{uuid}
+        // 统一使用新协议格式：json{"device_id":"...","account_uuid":"...","session_id":"..."}
         const metadata = (message.metadata ?? {}) as Record<string, unknown>;
         if (!metadata.user_id) {
-          const hex = randomBytes(32).toString("hex");
+          const globalSettings = await getCachedSystemSettings();
           const sessionId = randomUUID();
-          metadata.user_id = `user_${hex}_account__session_${sessionId}`;
+          metadata.user_id = buildClaudeCodeMetadataUserId(
+            { sessionId },
+            globalSettings.enableClaudeCodeJsonUserIdFormat ? "json" : "legacy"
+          );
           message.metadata = metadata;
           logger.debug("ProxyForwarder: Injected metadata.user_id for OpenAI->Claude", {
             providerId: provider.id,

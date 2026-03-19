@@ -32,6 +32,7 @@ interface SystemSettingsFormProps {
     | "interceptAnthropicWarmupRequests"
     | "enableThinkingSignatureRectifier"
     | "enableCodexSessionIdCompletion"
+    | "enableClaudeCodeJsonUserIdFormat"
     | "enableResponseFixer"
     | "responseFixerConfig"
     | "forwardedClientIp"
@@ -65,6 +66,9 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
   const [enableCodexSessionIdCompletion, setEnableCodexSessionIdCompletion] = useState(
     initialSettings.enableCodexSessionIdCompletion
   );
+  const [enableClaudeCodeJsonUserIdFormat, setEnableClaudeCodeJsonUserIdFormat] = useState(
+    initialSettings.enableClaudeCodeJsonUserIdFormat
+  );
   const [enableResponseFixer, setEnableResponseFixer] = useState(
     initialSettings.enableResponseFixer
   );
@@ -95,6 +99,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         interceptAnthropicWarmupRequests,
         enableThinkingSignatureRectifier,
         enableCodexSessionIdCompletion,
+        enableClaudeCodeJsonUserIdFormat,
         enableResponseFixer,
         responseFixerConfig,
         forwardedClientIp: forwardedClientIp.trim() || null,
@@ -115,6 +120,7 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
         setInterceptAnthropicWarmupRequests(result.data.interceptAnthropicWarmupRequests);
         setEnableThinkingSignatureRectifier(result.data.enableThinkingSignatureRectifier);
         setEnableCodexSessionIdCompletion(result.data.enableCodexSessionIdCompletion);
+        setEnableClaudeCodeJsonUserIdFormat(result.data.enableClaudeCodeJsonUserIdFormat);
         setEnableResponseFixer(result.data.enableResponseFixer);
         setResponseFixerConfig(result.data.responseFixerConfig);
         setForwardedClientIp(result.data.forwardedClientIp ?? "");
@@ -275,6 +281,23 @@ export function SystemSettingsForm({ initialSettings }: SystemSettingsFormProps)
           id="enable-codex-session-id-completion"
           checked={enableCodexSessionIdCompletion}
           onCheckedChange={(checked) => setEnableCodexSessionIdCompletion(checked)}
+          disabled={isPending}
+        />
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-border px-4 py-3">
+        <div>
+          <Label htmlFor="enable-claude-code-json-userid-format" className="text-sm font-medium">
+            {t("enableClaudeCodeJsonUserIdFormat")}
+          </Label>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("enableClaudeCodeJsonUserIdFormatDesc")}
+          </p>
+        </div>
+        <Switch
+          id="enable-claude-code-json-userid-format"
+          checked={enableClaudeCodeJsonUserIdFormat}
+          onCheckedChange={(checked) => setEnableClaudeCodeJsonUserIdFormat(checked)}
           disabled={isPending}
         />
       </div>

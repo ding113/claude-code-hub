@@ -53,6 +53,8 @@
     "enableThinkingSignatureRectifierDesc": "Если Anthropic-провайдер возвращает ошибку несовместимой подписи thinking или некорректного запроса, автоматически удаляет несовместимые thinking-блоки и повторяет запрос один раз к тому же провайдеру (включено по умолчанию).",
     "enableCodexSessionIdCompletion": "Включить дополнение Session ID для Codex",
     "enableCodexSessionIdCompletionDesc": "Если в Codex-запросе присутствует только session_id (в заголовках) или prompt_cache_key (в теле), автоматически дополняет отсутствующее поле. Если оба отсутствуют, генерирует UUID v7 и стабильно переиспользует его в рамках одного диалога.",
+    "enableClaudeCodeJsonUserIdFormat": "Включить новый формат Claude Code metadata.user_id",
+    "enableClaudeCodeJsonUserIdFormatDesc": "Если включено, генерируемый proxy metadata.user_id будет использовать новый формат json{\"device_id\":\"...\",\"account_uuid\":\"...\",\"session_id\":\"...\"}. Если выключено, proxy продолжит генерировать старый строковый формат. Разбор при этом остаётся совместимым с обоими форматами.",
     "forwardedClientIp": "IP-адрес клиента для передачи",
     "forwardedClientIpPlaceholder": "Например: 1.2.3.4",
     "forwardedClientIpDesc": "Глобально задаёт значение x-forwarded-for / x-real-ip, передаваемое вышестоящему серверу. Оставьте пустым, чтобы не добавлять заголовок.",

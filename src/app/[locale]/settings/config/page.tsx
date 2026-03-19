@@ -43,6 +43,7 @@ async function SettingsConfigContent() {
             interceptAnthropicWarmupRequests: settings.interceptAnthropicWarmupRequests,
             enableThinkingSignatureRectifier: settings.enableThinkingSignatureRectifier,
             enableCodexSessionIdCompletion: settings.enableCodexSessionIdCompletion,
+            enableClaudeCodeJsonUserIdFormat: settings.enableClaudeCodeJsonUserIdFormat,
             enableResponseFixer: settings.enableResponseFixer,
             responseFixerConfig: settings.responseFixerConfig,
             forwardedClientIp: settings.forwardedClientIp,
