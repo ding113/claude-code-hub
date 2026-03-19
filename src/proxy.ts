@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import createMiddleware from "next-intl/middleware";
+import { extractRoutePrefix } from "@/app/v1/_lib/proxy/route-prefix";
 import type { Locale } from "@/i18n/config";
 import { routing } from "@/i18n/routing";
 import { validateKey } from "@/lib/auth";
@@ -16,6 +17,10 @@ const READ_ONLY_PATH_PATTERNS = ["/my-usage"];
 
 const API_PROXY_PATH = "/v1";
 
+function isApiProxyPath(pathname: string): boolean {
+  return pathname.startsWith(API_PROXY_PATH) || extractRoutePrefix(pathname) !== null;
+}
+
 // Create next-intl middleware for locale detection and routing
 const intlMiddleware = createMiddleware(routing);
 
@@ -28,7 +33,7 @@ async function proxyHandler(request: NextRequest) {
   }
 
   // API 代理路由不需要 locale 处理和 Web 鉴权（使用自己的 Bearer token）
-  if (pathname.startsWith(API_PROXY_PATH)) {
+  if (isApiProxyPath(pathname)) {
     return NextResponse.next();
   }
 
