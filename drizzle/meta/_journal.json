@@ -463,6 +463,13 @@
       "when": 1772700000000,
       "tag": "0065_add_forwarded_client_ip",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1773907200000,
+      "tag": "0066_add_claude_code_json_user_id_format",
+      "breakpoints": true
     }
   ]
 }
