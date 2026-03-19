@@ -8,8 +8,9 @@ import { cn } from "@/lib/utils";
 
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
+type ChartTooltipValue = number | string | ReadonlyArray<number | string>;
 type ChartTooltipPayloadEntry = NonNullable<
-  TooltipContentProps<number | string, string>["payload"]
+  TooltipContentProps<ChartTooltipValue, string>["payload"]
 >[number];
 
 export type ChartConfig = {
@@ -120,7 +121,7 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: TooltipContentProps<number | string, string> &
+}: TooltipContentProps<ChartTooltipValue, string> &
   React.ComponentProps<"div"> & {
     hideLabel?: boolean;
     hideIndicator?: boolean;
