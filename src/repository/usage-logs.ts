@@ -423,7 +423,7 @@ interface UsageLogSlimFilters {
   pageSize?: number;
 }
 
-interface UsageLogSlimRow {
+export interface UsageLogSlimRow {
   id: number;
   createdAt: Date | null;
   model: string | null;
@@ -669,6 +669,181 @@ export async function findUsageLogsForKeySlim(
 
   usageLogSlimTotalCache.set(totalCacheKey, total);
   return { logs, total };
+}
+
+export interface UsageLogSlimBatchFilters {
+  keyString: string;
+  sessionId?: string;
+  startTime?: number;
+  endTime?: number;
+  statusCode?: number;
+  excludeStatusCode200?: boolean;
+  model?: string;
+  endpoint?: string;
+  minRetryCount?: number;
+  cursor?: { createdAt: string; id: number };
+  limit?: number;
+}
+
+export interface UsageLogSlimBatchResult {
+  logs: UsageLogSlimRow[];
+  nextCursor: { createdAt: string; id: number } | null;
+  hasMore: boolean;
+}
+
+/**
+ * Cursor-based pagination for key-scoped slim usage logs (keyset pagination)
+ * -- virtual scrolling: no COUNT query, constant performance
+ */
+export async function findUsageLogsForKeyBatch(
+  filters: UsageLogSlimBatchFilters
+): Promise<UsageLogSlimBatchResult> {
+  const { keyString, cursor, limit = 50 } = filters;
+
+  // 基础条件：未删除 + 指定 Key + 排除 warmup
+  const conditions = [
+    isNull(messageRequest.deletedAt),
+    eq(messageRequest.key, keyString),
+    EXCLUDE_WARMUP_CONDITION,
+  ];
+
+  conditions.push(...buildUsageLogConditions(filters));
+
+  // Cursor-based pagination: (created_at, id) < (cursor_created_at, cursor_id)
+  if (cursor) {
+    conditions.push(
+      sql`(${messageRequest.createdAt}, ${messageRequest.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
+    );
+  }
+
+  const fetchLimit = limit + 1;
+
+  const results = await db
+    .select({
+      id: messageRequest.id,
+      createdAt: messageRequest.createdAt,
+      createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      model: messageRequest.model,
+      originalModel: messageRequest.originalModel,
+      endpoint: messageRequest.endpoint,
+      statusCode: messageRequest.statusCode,
+      inputTokens: messageRequest.inputTokens,
+      outputTokens: messageRequest.outputTokens,
+      costUsd: messageRequest.costUsd,
+      durationMs: messageRequest.durationMs,
+      cacheCreationInputTokens: messageRequest.cacheCreationInputTokens,
+      cacheReadInputTokens: messageRequest.cacheReadInputTokens,
+      cacheCreation5mInputTokens: messageRequest.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: messageRequest.cacheCreation1hInputTokens,
+      cacheTtlApplied: messageRequest.cacheTtlApplied,
+      specialSettings: messageRequest.specialSettings,
+    })
+    .from(messageRequest)
+    .where(and(...conditions))
+    .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
+    .limit(fetchLimit);
+
+  const hasMore = results.length > limit;
+  const pageRows = hasMore ? results.slice(0, limit) : results;
+
+  // 从最后一条记录生成 nextCursor
+  const lastLog = pageRows[pageRows.length - 1];
+  const nextCursor =
+    hasMore && lastLog?.createdAtRaw ? { createdAt: lastLog.createdAtRaw, id: lastLog.id } : null;
+
+  const logs: UsageLogSlimRow[] = pageRows.map((row) => mapUsageLogSlimRow(row));
+
+  if (logs.length > 0) {
+    return { logs, nextCursor, hasMore };
+  }
+
+  // Ledger fallback: message_request 为空时尝试从 usage_ledger 查询
+  if (!(await isLedgerOnlyMode())) {
+    return { logs, nextCursor, hasMore };
+  }
+
+  // Ledger 不支持 minRetryCount 筛选
+  if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) {
+    return { logs: [], nextCursor: null, hasMore: false };
+  }
+
+  const ledgerConditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.key, keyString)];
+
+  const trimmedSessionId = filters.sessionId?.trim();
+  if (trimmedSessionId) {
+    ledgerConditions.push(eq(usageLedger.sessionId, trimmedSessionId));
+  }
+
+  if (filters.startTime) {
+    ledgerConditions.push(gte(usageLedger.createdAt, new Date(filters.startTime)));
+  }
+
+  if (filters.endTime) {
+    ledgerConditions.push(lt(usageLedger.createdAt, new Date(filters.endTime)));
+  }
+
+  if (filters.statusCode !== undefined) {
+    ledgerConditions.push(eq(usageLedger.statusCode, filters.statusCode));
+  } else if (filters.excludeStatusCode200) {
+    ledgerConditions.push(
+      sql`(${usageLedger.statusCode} IS NULL OR ${usageLedger.statusCode} <> 200)`
+    );
+  }
+
+  if (filters.model) {
+    ledgerConditions.push(eq(usageLedger.model, filters.model));
+  }
+
+  if (filters.endpoint) {
+    ledgerConditions.push(eq(usageLedger.endpoint, filters.endpoint));
+  }
+
+  if (cursor) {
+    ledgerConditions.push(
+      sql`(${usageLedger.createdAt}, ${usageLedger.requestId}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
+    );
+  }
+
+  const ledgerResults = await db
+    .select({
+      id: usageLedger.requestId,
+      createdAt: usageLedger.createdAt,
+      createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      model: usageLedger.model,
+      originalModel: usageLedger.originalModel,
+      endpoint: usageLedger.endpoint,
+      statusCode: usageLedger.statusCode,
+      inputTokens: usageLedger.inputTokens,
+      outputTokens: usageLedger.outputTokens,
+      costUsd: usageLedger.costUsd,
+      durationMs: usageLedger.durationMs,
+      cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
+      cacheReadInputTokens: usageLedger.cacheReadInputTokens,
+      cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
+      cacheTtlApplied: usageLedger.cacheTtlApplied,
+    })
+    .from(usageLedger)
+    .where(and(...ledgerConditions))
+    .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
+    .limit(fetchLimit);
+
+  const ledgerHasMore = ledgerResults.length > limit;
+  const ledgerPageRows = ledgerHasMore ? ledgerResults.slice(0, limit) : ledgerResults;
+
+  const ledgerLastLog = ledgerPageRows[ledgerPageRows.length - 1];
+  const ledgerNextCursor =
+    ledgerHasMore && ledgerLastLog?.createdAtRaw
+      ? { createdAt: ledgerLastLog.createdAtRaw, id: ledgerLastLog.id }
+      : null;
+
+  const ledgerLogs: UsageLogSlimRow[] = ledgerPageRows.map((row) => ({
+    ...row,
+    costUsd: row.costUsd?.toString() ?? null,
+    anthropicEffort: null,
+  }));
+
+  return { logs: ledgerLogs, nextCursor: ledgerNextCursor, hasMore: ledgerHasMore };
 }
 
 const distinctModelsByKeyCache = new TTLMap<string, string[]>({

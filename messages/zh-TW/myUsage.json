@@ -57,6 +57,10 @@
     "prev": "上一頁",
     "next": "下一頁",
     "noLogs": "暫無日誌",
+    "loadedCount": "已載入 {count} 筆紀錄",
+    "loadingMore": "載入更多...",
+    "noMoreData": "已載入全部紀錄",
+    "scrollToTop": "回到頂部",
     "unknownModel": "未知的模型",
     "billingModel": "計費：{model}",
     "anthropicEffort": "Effort: {effort}"

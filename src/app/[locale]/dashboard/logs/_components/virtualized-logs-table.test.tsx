@@ -17,16 +17,21 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
 }));
 
+let lastInfiniteQueryOptions: Record<string, unknown> | null = null;
+
 vi.mock("@tanstack/react-query", () => ({
-  useInfiniteQuery: () => ({
-    data: { pages: [{ logs: mockLogs, nextCursor: null, hasMore: false }] },
-    fetchNextPage: vi.fn(),
-    hasNextPage: mockHasNextPage,
-    isFetchingNextPage: mockIsFetchingNextPage,
-    isLoading: mockIsLoading,
-    isError: mockIsError,
-    error: mockError,
-  }),
+  useInfiniteQuery: (options: Record<string, unknown>) => {
+    lastInfiniteQueryOptions = options;
+    return {
+      data: { pages: [{ logs: mockLogs, nextCursor: null, hasMore: false }] },
+      fetchNextPage: vi.fn(),
+      hasNextPage: mockHasNextPage,
+      isFetchingNextPage: mockIsFetchingNextPage,
+      isLoading: mockIsLoading,
+      isError: mockIsError,
+      error: mockError,
+    };
+  },
 }));
 
 vi.mock("@/hooks/use-virtualizer", () => ({
@@ -495,5 +500,21 @@ describe("virtualized-logs-table live chain display", () => {
     );
     expect(html).toContain("logs.details.inProgress");
     expect(html).toContain("animate-spin");
+  });
+});
+
+describe("virtualized-logs-table infinite query config", () => {
+  test("should not set maxPages to allow all loaded pages to be retained", () => {
+    mockIsLoading = false;
+    mockIsError = false;
+    mockError = null;
+    mockHasNextPage = false;
+    mockIsFetchingNextPage = false;
+    mockLogs = [makeLog({ id: 1 })];
+
+    renderToStaticMarkup(<VirtualizedLogsTable filters={{}} autoRefreshEnabled={false} />);
+
+    expect(lastInfiniteQueryOptions).not.toBeNull();
+    expect(lastInfiniteQueryOptions).not.toHaveProperty("maxPages");
   });
 });

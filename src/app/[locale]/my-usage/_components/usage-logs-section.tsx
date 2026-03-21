@@ -1,13 +1,14 @@
 "use client";
 
-import { Check, ChevronDown, Filter, Loader2, RefreshCw, ScrollText, X } from "lucide-react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { Check, ChevronDown, Filter, RefreshCw, ScrollText, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getMyAvailableEndpoints,
   getMyAvailableModels,
-  getMyUsageLogs,
-  type MyUsageLogsResult,
+  getMyUsageLogsBatch,
+  type MyUsageLogsBatchFilters,
 } from "@/actions/my-usage";
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
 import { Badge } from "@/components/ui/badge";
@@ -23,11 +24,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { UsageLogsTable } from "./usage-logs-table";
+import { VirtualizedUsageLogsTable } from "./virtualized-usage-logs-table";
+
+const BATCH_SIZE = 50;
 
 interface UsageLogsSectionProps {
-  initialData?: MyUsageLogsResult | null;
-  loading?: boolean;
   autoRefreshSeconds?: number;
   defaultOpen?: boolean;
   serverTimeZone?: string;
@@ -41,12 +42,9 @@ interface Filters {
   excludeStatusCode200?: boolean;
   endpoint?: string;
   minRetryCount?: number;
-  page?: number;
 }
 
 export function UsageLogsSection({
-  initialData = null,
-  loading = false,
   autoRefreshSeconds,
   defaultOpen = false,
   serverTimeZone,
@@ -60,14 +58,44 @@ export function UsageLogsSection({
   const [endpoints, setEndpoints] = useState<string[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
   const [isEndpointsLoading, setIsEndpointsLoading] = useState(true);
-  const [draftFilters, setDraftFilters] = useState<Filters>({ page: 1 });
-  const [appliedFilters, setAppliedFilters] = useState<Filters>({ page: 1 });
-  const [data, setData] = useState<MyUsageLogsResult | null>(initialData);
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [draftFilters, setDraftFilters] = useState<Filters>({});
+  const [appliedFilters, setAppliedFilters] = useState<Filters>({});
 
-  // Compute metrics for header summary
-  const logs = data?.logs ?? [];
+  // 将 Section 的 Filters 转为 VirtualizedTable 接受的 MyUsageLogsBatchFilters
+  const tableFilters: MyUsageLogsBatchFilters = useMemo(
+    () => ({
+      startDate: appliedFilters.startDate,
+      endDate: appliedFilters.endDate,
+      model: appliedFilters.model,
+      statusCode: appliedFilters.statusCode,
+      excludeStatusCode200: appliedFilters.excludeStatusCode200,
+      endpoint: appliedFilters.endpoint,
+      minRetryCount: appliedFilters.minRetryCount,
+    }),
+    [appliedFilters]
+  );
+
+  // 共享 queryKey 读取缓存数据, 用于 header 摘要统计
+  // TanStack Query 会自动去重, 不会产生额外请求
+  const { data: queryData, isFetching } = useInfiniteQuery({
+    queryKey: ["my-usage-logs-batch", tableFilters],
+    queryFn: async ({ pageParam }) => {
+      const result = await getMyUsageLogsBatch({
+        ...tableFilters,
+        cursor: pageParam,
+        limit: BATCH_SIZE,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: undefined as { createdAt: string; id: number } | undefined,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+  });
+
+  // 从首页数据提取 header 摘要
+  const firstPageLogs = queryData?.pages?.[0]?.logs ?? [];
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -80,9 +108,9 @@ export function UsageLogsSection({
   }, [appliedFilters]);
 
   const lastLog = useMemo(() => {
-    if (!logs || logs.length === 0) return null;
-    return logs[0]; // First log is the most recent (sorted by createdAt DESC)
-  }, [logs]);
+    if (firstPageLogs.length === 0) return null;
+    return firstPageLogs[0];
+  }, [firstPageLogs]);
 
   const lastStatusText = useMemo(() => {
     if (!lastLog?.createdAt) return null;
@@ -99,10 +127,12 @@ export function UsageLogsSection({
   }, [lastLog]);
 
   const successRate = useMemo(() => {
-    if (!logs || logs.length === 0) return null;
-    const successCount = logs.filter((log) => log.statusCode && log.statusCode < 400).length;
-    return Math.round((successCount / logs.length) * 100);
-  }, [logs]);
+    if (firstPageLogs.length === 0) return null;
+    const successCount = firstPageLogs.filter(
+      (log) => log.statusCode && log.statusCode < 400
+    ).length;
+    return Math.round((successCount / firstPageLogs.length) * 100);
+  }, [firstPageLogs]);
 
   const lastStatusColor = useMemo(() => {
     if (!lastLog?.statusCode) return "";
@@ -110,14 +140,6 @@ export function UsageLogsSection({
     if (lastLog.statusCode >= 400) return "text-red-600 dark:text-red-400";
     return "";
   }, [lastLog]);
-
-  // Sync initialData from parent when it becomes available
-  // (useState only uses initialData on first mount, not on subsequent updates)
-  useEffect(() => {
-    if (initialData && !data) {
-      setData(initialData);
-    }
-  }, [initialData, data]);
 
   useEffect(() => {
     setIsModelsLoading(true);
@@ -140,104 +162,24 @@ export function UsageLogsSection({
       .finally(() => setIsEndpointsLoading(false));
   }, []);
 
-  const loadLogs = useCallback(
-    (nextFilters: Filters) => {
-      startTransition(async () => {
-        const result = await getMyUsageLogs(nextFilters);
-        if (result.ok && result.data) {
-          setData(result.data);
-          setAppliedFilters(nextFilters);
-          setError(null);
-        } else {
-          setError(!result.ok && "error" in result ? result.error : t("loadFailed"));
-        }
-      });
-    },
-    [t]
-  );
-
-  useEffect(() => {
-    // initial load if not provided
-    if (data) return;
-    if (!initialData && !loading) {
-      loadLogs({ page: 1 });
-    }
-  }, [data, initialData, loading, loadLogs]);
-
-  // Auto-refresh polling (only when on page 1 to avoid disrupting history browsing)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    if (!autoRefreshSeconds || autoRefreshSeconds <= 0) {
-      return;
-    }
-
-    const pollIntervalMs = autoRefreshSeconds * 1000;
-
-    const startPolling = () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-
-      intervalRef.current = setInterval(() => {
-        // Only auto-refresh when on page 1
-        if ((appliedFilters.page ?? 1) === 1) {
-          loadLogs(appliedFilters);
-        }
-      }, pollIntervalMs);
-    };
-
-    const stopPolling = () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        stopPolling();
-      } else {
-        // Refresh immediately when tab becomes visible (only if on page 1)
-        if ((appliedFilters.page ?? 1) === 1) {
-          loadLogs(appliedFilters);
-        }
-        startPolling();
-      }
-    };
-
-    startPolling();
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      stopPolling();
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [autoRefreshSeconds, appliedFilters, loadLogs]);
-
   const handleFilterChange = (changes: Partial<Filters>) => {
-    setDraftFilters((prev) => ({ ...prev, ...changes, page: 1 }));
+    setDraftFilters((prev) => ({ ...prev, ...changes }));
   };
 
   const handleApply = () => {
-    loadLogs({ ...draftFilters, page: 1 });
+    setAppliedFilters({ ...draftFilters });
   };
 
   const handleReset = () => {
-    setDraftFilters({ page: 1 });
-    loadLogs({ page: 1 });
+    setDraftFilters({});
+    setAppliedFilters({});
   };
 
   const handleDateRangeChange = (range: { startDate?: string; endDate?: string }) => {
     handleFilterChange(range);
   };
 
-  const handlePageChange = (page: number) => {
-    loadLogs({ ...appliedFilters, page });
-  };
-
-  const isInitialLoading = loading || (!data && isPending);
-  const isRefreshing = isPending && Boolean(data);
+  const autoRefreshMs = autoRefreshSeconds ? autoRefreshSeconds * 1000 : undefined;
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -306,7 +248,7 @@ export function UsageLogsSection({
                 {autoRefreshSeconds && (
                   <>
                     <span className="text-muted-foreground">|</span>
-                    <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+                    <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
                     <span className="text-xs text-muted-foreground">{autoRefreshSeconds}s</span>
                   </>
                 )}
@@ -350,7 +292,7 @@ export function UsageLogsSection({
                 {autoRefreshSeconds && (
                   <>
                     <span className="text-muted-foreground">|</span>
-                    <RefreshCw className={cn("h-3 w-3", isRefreshing && "animate-spin")} />
+                    <RefreshCw className={cn("h-3 w-3", isFetching && "animate-spin")} />
                   </>
                 )}
               </div>
@@ -486,37 +428,20 @@ export function UsageLogsSection({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={handleApply} disabled={isPending || loading}>
+              <Button size="sm" onClick={handleApply}>
                 {t("filters.apply")}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleReset}
-                disabled={isPending || loading}
-              >
+              <Button size="sm" variant="outline" onClick={handleReset}>
                 {t("filters.reset")}
               </Button>
             </div>
 
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            {isRefreshing ? (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>{tCommon("loading")}</span>
-              </div>
-            ) : null}
-
-            <UsageLogsTable
-              logs={data?.logs ?? []}
-              total={data?.total ?? 0}
-              page={appliedFilters.page ?? 1}
-              pageSize={data?.pageSize ?? 20}
-              onPageChange={handlePageChange}
-              currencyCode={data?.currencyCode}
-              loading={isInitialLoading}
-              loadingLabel={tCommon("loading")}
+            <VirtualizedUsageLogsTable
+              filters={tableFilters}
+              currencyCode={queryData?.pages?.[0]?.currencyCode}
+              billingModelSource={queryData?.pages?.[0]?.billingModelSource}
+              autoRefreshEnabled={Boolean(autoRefreshSeconds)}
+              autoRefreshIntervalMs={autoRefreshMs}
             />
           </div>
         </CollapsibleContent>

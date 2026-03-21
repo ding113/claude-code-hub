@@ -57,6 +57,10 @@
     "prev": "上一页",
     "next": "下一页",
     "noLogs": "暂无日志",
+    "loadedCount": "已加载 {count} 条记录",
+    "loadingMore": "加载更多...",
+    "noMoreData": "已加载全部记录",
+    "scrollToTop": "回到顶部",
     "unknownModel": "未知模型",
     "billingModel": "计费：{model}",
     "anthropicEffort": "Effort: {effort}"

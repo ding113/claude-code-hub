@@ -16,6 +16,7 @@ import { LEDGER_BILLING_CONDITION } from "@/repository/_shared/ledger-conditions
 import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-conditions";
 import { getSystemSettings } from "@/repository/system-config";
 import {
+  findUsageLogsForKeyBatch,
   findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
@@ -559,6 +560,103 @@ export async function getMyUsageLogs(
     };
   } catch (error) {
     logger.error("[my-usage] getMyUsageLogs failed", error);
+    return { ok: false, error: "Failed to get usage logs" };
+  }
+}
+
+export interface MyUsageLogsBatchFilters {
+  startDate?: string;
+  endDate?: string;
+  sessionId?: string;
+  model?: string;
+  statusCode?: number;
+  excludeStatusCode200?: boolean;
+  endpoint?: string;
+  minRetryCount?: number;
+  cursor?: { createdAt: string; id: number };
+  limit?: number;
+}
+
+export interface MyUsageLogsBatchResult {
+  logs: MyUsageLogEntry[];
+  nextCursor: { createdAt: string; id: number } | null;
+  hasMore: boolean;
+  currencyCode: CurrencyCode;
+  billingModelSource: BillingModelSource;
+}
+
+export async function getMyUsageLogsBatch(
+  filters: MyUsageLogsBatchFilters = {}
+): Promise<ActionResult<MyUsageLogsBatchResult>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const settings = await getSystemSettings();
+    const timezone = await resolveSystemTimezone();
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      filters.startDate,
+      filters.endDate,
+      timezone
+    );
+
+    const result = await findUsageLogsForKeyBatch({
+      keyString: session.key.key,
+      sessionId: filters.sessionId,
+      startTime,
+      endTime,
+      model: filters.model,
+      statusCode: filters.statusCode,
+      excludeStatusCode200: filters.excludeStatusCode200,
+      endpoint: filters.endpoint,
+      minRetryCount: filters.minRetryCount,
+      cursor: filters.cursor,
+      limit: filters.limit,
+    });
+
+    // 将 slim row 映射为 MyUsageLogEntry（与 getMyUsageLogs 相同的映射逻辑）
+    const logs: MyUsageLogEntry[] = result.logs.map((log) => {
+      const modelRedirect =
+        log.originalModel && log.model && log.originalModel !== log.model
+          ? `${log.originalModel} → ${log.model}`
+          : null;
+
+      const billingModel =
+        (settings.billingModelSource === "original" ? log.originalModel : log.model) ?? null;
+
+      return {
+        id: log.id,
+        createdAt: log.createdAt,
+        model: log.model,
+        billingModel,
+        anthropicEffort: log.anthropicEffort ?? null,
+        modelRedirect,
+        inputTokens: log.inputTokens ?? 0,
+        outputTokens: log.outputTokens ?? 0,
+        cost: log.costUsd ? Number(log.costUsd) : 0,
+        statusCode: log.statusCode,
+        duration: log.durationMs,
+        endpoint: log.endpoint,
+        cacheCreationInputTokens: log.cacheCreationInputTokens ?? null,
+        cacheReadInputTokens: log.cacheReadInputTokens ?? null,
+        cacheCreation5mInputTokens: log.cacheCreation5mInputTokens ?? null,
+        cacheCreation1hInputTokens: log.cacheCreation1hInputTokens ?? null,
+        cacheTtlApplied: log.cacheTtlApplied ?? null,
+      };
+    });
+
+    return {
+      ok: true,
+      data: {
+        logs,
+        nextCursor: result.nextCursor,
+        hasMore: result.hasMore,
+        currencyCode: settings.currencyDisplay,
+        billingModelSource: settings.billingModelSource,
+      },
+    };
+  } catch (error) {
+    logger.error("[my-usage] getMyUsageLogsBatch failed", error);
     return { ok: false, error: "Failed to get usage logs" };
   }
 }

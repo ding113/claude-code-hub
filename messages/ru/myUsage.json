@@ -57,6 +57,10 @@
     "prev": "Назад",
     "next": "Вперед",
     "noLogs": "Нет записей",
+    "loadedCount": "Загружено {count} записей",
+    "loadingMore": "Загрузка...",
+    "noMoreData": "Все записи загружены",
+    "scrollToTop": "Наверх",
     "unknownModel": "Неизвестная модель",
     "billingModel": "Биллинг: {model}",
     "anthropicEffort": "Effort: {effort}"

@@ -57,6 +57,10 @@
     "prev": "Prev",
     "next": "Next",
     "noLogs": "No logs",
+    "loadedCount": "Loaded {count} records",
+    "loadingMore": "Loading more...",
+    "noMoreData": "All records loaded",
+    "scrollToTop": "Back to top",
     "unknownModel": "Unknown model",
     "billingModel": "Billing: {model}",
     "anthropicEffort": "Effort: {effort}"

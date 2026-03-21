@@ -137,7 +137,6 @@ export function VirtualizedLogsTable({
         if (query.state.fetchStatus !== "idle") return false;
         return autoRefreshIntervalMs;
       },
-      maxPages: 5,
     });
 
   // Flatten all pages into a single array

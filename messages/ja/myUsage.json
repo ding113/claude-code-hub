@@ -57,6 +57,10 @@
     "prev": "前へ",
     "next": "次へ",
     "noLogs": "ログがありません",
+    "loadedCount": "{count} 件を読み込み済み",
+    "loadingMore": "読み込み中...",
+    "noMoreData": "すべて読み込み済み",
+    "scrollToTop": "先頭に戻る",
     "unknownModel": "不明なモデル",
     "billingModel": "課金: {model}",
     "anthropicEffort": "Effort: {effort}"
