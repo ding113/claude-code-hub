@@ -2,7 +2,10 @@ import type { Context } from "hono";
 import { request as undiciRequest } from "undici";
 import { logger } from "@/lib/logger";
 import { createProxyAgentForProvider } from "@/lib/proxy-agent";
+import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
+import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { validateApiKeyAndGetUser } from "@/repository/key";
+import { findAllProviders } from "@/repository/provider";
 import type {
   AnthropicModelsResponse,
   GeminiModelsResponse,
@@ -11,7 +14,7 @@ import type {
 import type { Provider } from "@/types/provider";
 import { extractApiKeyFromHeaders } from "../proxy/auth-guard";
 import type { ClientFormat } from "../proxy/format-mapper";
-import { ProxyProviderResolver } from "../proxy/provider-selector";
+import { checkProviderGroupMatch } from "../proxy/provider-selector";
 
 type ResponseFormat = "openai" | "anthropic" | "gemini" | "codex";
 
@@ -353,6 +356,11 @@ export function formatGeminiResponse(models: FetchedModel[]): GeminiModelsRespon
 
 /**
  * 根据指定的 providerTypes 获取模型列表
+ *
+ * 与代理请求不同，模型列表需要展示所有已启用 provider 的模型（不做健康检查），
+ * 因为模型列表的职责是"告诉用户有哪些模型可用"，实时可用性由代理请求时的守卫链处理。
+ *
+ * Fix: #956 — 之前复用 selectProviderByType() 导致每种类型只选 1 个 provider
  */
 async function getAvailableModelsByProviderTypes(
   authState: {
@@ -361,29 +369,28 @@ async function getAvailableModelsByProviderTypes(
   },
   providerTypes: Provider["providerType"][]
 ): Promise<{ models: FetchedModel[]; providerName?: string }> {
-  const selectedProviders: Provider[] = [];
-  for (const providerType of providerTypes) {
-    const { provider, context } = await ProxyProviderResolver.selectProviderByType(
-      authState,
-      providerType
+  const allProviders = await findAllProviders();
+
+  // 分组过滤
+  const effectiveGroup = authState.key.providerGroup || authState.user.providerGroup || null;
+  let visibleProviders = allProviders;
+  if (effectiveGroup) {
+    visibleProviders = allProviders.filter((p) =>
+      checkProviderGroupMatch(p.groupTag, effectiveGroup)
     );
-    if (provider) {
-      selectedProviders.push(provider);
-      logger.debug("[AvailableModels] Provider selected for type", {
-        providerType,
-        providerId: provider.id,
-        providerName: provider.name,
-        context,
-      });
-    } else {
-      logger.debug("[AvailableModels] No provider available for type", {
-        providerType,
-        context,
-      });
-    }
   }
 
-  if (selectedProviders.length === 0) {
+  // 按 providerType + 启用状态 + 调度时间窗口过滤
+  const providerTypeSet = new Set(providerTypes);
+  const systemTimezone = await resolveSystemTimezone();
+  const matchedProviders = visibleProviders.filter(
+    (p) =>
+      p.isEnabled &&
+      providerTypeSet.has(p.providerType) &&
+      isProviderActiveNow(p.activeTimeStart, p.activeTimeEnd, systemTimezone)
+  );
+
+  if (matchedProviders.length === 0) {
     logger.warn("[AvailableModels] No available provider", {
       userId: authState.user.id,
       triedTypes: providerTypes,
@@ -391,17 +398,17 @@ async function getAvailableModelsByProviderTypes(
     return { models: [] };
   }
 
-  logger.debug("[AvailableModels] Selected providers for models list", {
+  logger.debug("[AvailableModels] Matched providers for models list", {
     providerTypes,
-    providerCount: selectedProviders.length,
-    providers: selectedProviders.map((p) => ({ id: p.id, name: p.name, type: p.providerType })),
+    providerCount: matchedProviders.length,
+    providers: matchedProviders.map((p) => ({ id: p.id, name: p.name, type: p.providerType })),
   });
 
   const allModels: FetchedModel[] = [];
   const seenIds = new Set<string>();
 
   const fetchResults = await Promise.all(
-    selectedProviders.map((provider) => fetchModelsFromProvider(provider))
+    matchedProviders.map((provider) => fetchModelsFromProvider(provider))
   );
 
   for (const models of fetchResults) {
@@ -416,12 +423,12 @@ async function getAvailableModelsByProviderTypes(
   logger.info("[AvailableModels] Aggregated models", {
     userId: authState.user.id,
     modelCount: allModels.length,
-    providerCount: selectedProviders.length,
+    providerCount: matchedProviders.length,
   });
 
   return {
     models: allModels.sort((a, b) => a.id.localeCompare(b.id)),
-    providerName: selectedProviders.map((p) => p.name).join(", "),
+    providerName: matchedProviders.map((p) => p.name).join(", "),
   };
 }
 

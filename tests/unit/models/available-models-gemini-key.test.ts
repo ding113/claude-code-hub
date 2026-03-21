@@ -34,11 +34,24 @@ vi.mock("@/lib/proxy-agent", () => {
   };
 });
 
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn().mockResolvedValue("UTC"),
+}));
+
+vi.mock("@/lib/utils/provider-schedule", () => ({
+  isProviderActiveNow: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
+  checkProviderGroupMatch: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock("@/repository/provider", () => ({
+  findAllProviders: vi.fn().mockResolvedValue([]),
+}));
+
 describe("handleAvailableModels - Gemini key 传参", () => {
   test("Gemini 上游请求不应在 URL query 携带 key，应使用 x-goog-api-key 头", async () => {
-    const { ProxyProviderResolver } = await import("@/app/v1/_lib/proxy/provider-selector");
-    const { handleAvailableModels } = await import("@/app/v1/_lib/models/available-models");
-
     const geminiProvider = {
       id: 1,
       name: "gemini",
@@ -47,16 +60,16 @@ describe("handleAvailableModels - Gemini key 传参", () => {
       key: "upstream-api-key",
       preserveClientIp: false,
       allowedModels: null,
+      isEnabled: true,
+      activeTimeStart: null,
+      activeTimeEnd: null,
+      groupTag: null,
     } as unknown as Provider;
 
-    vi.spyOn(ProxyProviderResolver, "selectProviderByType").mockImplementation(
-      async (_authState, providerType) => {
-        if (providerType === "gemini") {
-          return { provider: geminiProvider, context: {} as any };
-        }
-        return { provider: null, context: {} as any };
-      }
-    );
+    const { findAllProviders } = await import("@/repository/provider");
+    vi.mocked(findAllProviders).mockResolvedValue([geminiProvider]);
+
+    const { handleAvailableModels } = await import("@/app/v1/_lib/models/available-models");
 
     const c = {
       req: {
