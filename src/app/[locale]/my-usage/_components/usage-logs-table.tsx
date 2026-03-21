@@ -139,7 +139,14 @@ export function UsageLogsTable({
 
       <div className="flex items-center justify-between text-xs text-muted-foreground/70 px-1 pt-1">
         <span>{tDashboard("logs.table.loadedCount", { count: logs.length })}</span>
-        {isFetchingNextPage ? (
+        {errorMessage && onLoadMore ? (
+          <span className="flex items-center gap-2 text-destructive">
+            <span>{errorMessage}</span>
+            <Button size="sm" variant="outline" onClick={onLoadMore}>
+              {tCommon("retry")}
+            </Button>
+          </span>
+        ) : isFetchingNextPage ? (
           <span className="flex items-center gap-2">
             <Loader2 className="h-3 w-3 animate-spin" />
             {tDashboard("logs.table.loadingMore")}
@@ -163,7 +170,11 @@ export function UsageLogsTable({
             </div>
           </div>
 
-          <div ref={parentRef} className="h-[520px] overflow-auto" onScroll={handleScroll}>
+          <div
+            ref={parentRef}
+            className="h-[520px] overflow-y-auto overflow-x-hidden"
+            onScroll={handleScroll}
+          >
             <div
               style={{
                 height: `${rowVirtualizer.getTotalSize()}px`,
@@ -189,7 +200,16 @@ export function UsageLogsTable({
                       }}
                       className="flex items-center justify-center border-b"
                     >
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      {errorMessage && onLoadMore ? (
+                        <div className="flex items-center gap-3 text-xs text-destructive">
+                          <span>{errorMessage}</span>
+                          <Button size="sm" variant="outline" onClick={onLoadMore}>
+                            {tCommon("retry")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
                     </div>
                   );
                 }
@@ -217,12 +237,13 @@ export function UsageLogsTable({
                         <div className="flex items-center gap-1.5 text-sm">
                           {log.model ? <ModelVendorIcon modelId={log.model} /> : null}
                           {log.model ? (
-                            <span
-                              className="cursor-pointer hover:underline truncate"
+                            <button
+                              type="button"
+                              className="max-w-full cursor-pointer truncate border-0 bg-transparent p-0 text-left hover:underline"
                               onClick={() => handleCopyModel(log.model!)}
                             >
                               {log.model}
-                            </span>
+                            </button>
                           ) : (
                             <span>{t("unknownModel")}</span>
                           )}

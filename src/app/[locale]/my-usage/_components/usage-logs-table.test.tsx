@@ -88,17 +88,38 @@ function makeLog(overrides: Partial<MyUsageLogEntry> = {}): MyUsageLogEntry {
 
 describe("my-usage usage logs table", () => {
   test("shows a non-blocking error message even when stale logs are still visible", () => {
+    const onLoadMore = vi.fn();
     const html = renderToStaticMarkup(
       <UsageLogsTable
         logs={[makeLog()]}
         hasNextPage={false}
         isFetchingNextPage={false}
         errorMessage="load failed"
+        onLoadMore={onLoadMore}
       />
     );
 
     expect(html).toContain("load failed");
     expect(html).toContain("logs.table.loadedCount");
+    expect(html).toContain("retry");
+    expect(html).toContain("gpt-4.1");
+  });
+
+  test("uses vertical-only scrolling for the inner virtualized body", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable logs={[makeLog()]} hasNextPage={false} isFetchingNextPage={false} />
+    );
+
+    expect(html).toContain("overflow-y-auto overflow-x-hidden");
+  });
+
+  test("renders model copy interaction as a native button", () => {
+    const html = renderToStaticMarkup(
+      <UsageLogsTable logs={[makeLog()]} hasNextPage={false} isFetchingNextPage={false} />
+    );
+
+    expect(html).toContain("<button");
+    expect(html).toContain("bg-transparent");
     expect(html).toContain("gpt-4.1");
   });
 });
