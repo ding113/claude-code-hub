@@ -62,6 +62,10 @@ export function UsageLogsTable({
     },
     [tCommon]
   );
+  const handleLoadMore = useCallback(() => {
+    onLoadMore?.();
+    return undefined;
+  }, [onLoadMore]);
 
   const getItemKey = useCallback((index: number) => logs[index]?.id ?? `loader-${index}`, [logs]);
 
@@ -77,10 +81,7 @@ export function UsageLogsTable({
     itemCount: logs.length,
     hasNextPage,
     isFetchingNextPage,
-    fetchNextPage: () => {
-      onLoadMore?.();
-      return undefined;
-    },
+    fetchNextPage: handleLoadMore,
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
     getItemKey,
