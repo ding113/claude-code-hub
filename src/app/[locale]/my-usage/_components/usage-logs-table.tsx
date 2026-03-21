@@ -135,6 +135,8 @@ export function UsageLogsTable({
 
   return (
     <div className="space-y-4">
+      {errorMessage ? <div className="px-1 text-xs text-destructive">{errorMessage}</div> : null}
+
       <div className="flex items-center justify-between text-xs text-muted-foreground/70 px-1 pt-1">
         <span>{tDashboard("logs.table.loadedCount", { count: logs.length })}</span>
         {isFetchingNextPage ? (

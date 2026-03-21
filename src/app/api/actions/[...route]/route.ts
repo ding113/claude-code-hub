@@ -1057,7 +1057,7 @@ const { route: getMyUsageLogsBatchRoute, handler: getMyUsageLogsBatchHandler } =
       cursor: z
         .object({
           createdAt: z.string(),
-          id: z.number(),
+          id: z.number().int(),
         })
         .optional(),
       limit: z.number().int().positive().max(100).default(20).optional(),
@@ -1086,7 +1086,7 @@ const { route: getMyUsageLogsBatchRoute, handler: getMyUsageLogsBatchHandler } =
       nextCursor: z
         .object({
           createdAt: z.string(),
-          id: z.number(),
+          id: z.number().int(),
         })
         .nullable(),
       hasMore: z.boolean(),
