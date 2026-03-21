@@ -101,10 +101,10 @@
     },
     "title": "代理設定",
     "url": {
-      "formats": "支援格式：",
+      "formats": "支援 http://、https://、socks5://、socks4:// 協定。需要認證時使用 http://user:password@host:port 格式（密碼中的特殊字元需 URL 編碼，如 # 編碼為 %23）",
       "label": "代理位址",
       "optional": "（選填）",
-      "placeholder": "例如：http://proxy.example.com:8080 或 socks5://127.0.0.1:1080"
+      "placeholder": "例如：http://proxy.example.com:8080 或 http://user:pass@proxy:8080"
     }
   },
   "rateLimit": {

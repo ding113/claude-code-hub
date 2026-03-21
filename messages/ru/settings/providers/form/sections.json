@@ -101,10 +101,10 @@
     },
     "title": "Прокси",
     "url": {
-      "formats": "Поддерживаемые форматы:",
+      "formats": "Поддерживаются протоколы http://, https://, socks5://, socks4://. Для прокси с аутентификацией используйте формат http://user:password@host:port (специальные символы в пароле кодируйте URL-кодировкой, например # как %23)",
       "label": "URL прокси",
       "optional": "(необязательно)",
-      "placeholder": "например: http://proxy.example.com:8080 или socks5://127.0.0.1:1080"
+      "placeholder": "например: http://proxy.example.com:8080 или http://user:pass@proxy:8080"
     }
   },
   "rateLimit": {

@@ -351,8 +351,8 @@
     "url": {
       "label": "代理地址",
       "optional": "(可选)",
-      "placeholder": "例如: http://proxy.example.com:8080 或 socks5://127.0.0.1:1080",
-      "formats": "支持格式:"
+      "placeholder": "例如: http://proxy.example.com:8080 或 http://user:pass@proxy:8080",
+      "formats": "支持 http://、https://、socks5://、socks4:// 协议。需要认证时使用 http://user:password@host:port 格式（密码中的特殊字符需 URL 编码，如 # 编码为 %23）"
     },
     "fallback": {
       "label": "代理失败时降级到直连",
