@@ -26,15 +26,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Development
 bun install               # Install dependencies
-bun run dev               # Start dev server (port 13500)
+bun run dev               # Run tsgo preflight, then start dev server (port 13500)
 
 # Build & Production
-bun run build             # Build for production (copies VERSION to standalone)
+bun run build             # Run tsgo preflight, then build for production
 bun run start             # Start production server
 
 # Quality Checks
 bun run typecheck         # Type check with tsgo (faster)
-bun run typecheck:tsc     # Type check with tsc
 bun run lint              # Lint with Biome
 bun run lint:fix          # Auto-fix lint issues
 bun run format            # Format code

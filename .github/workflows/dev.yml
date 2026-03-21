@@ -62,9 +62,10 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Install dependencies and format code
+      - name: Install dependencies, type check, and format code
         run: |
           bun install
+          bun run typecheck
           bun run format
 
       - name: Commit formatted code
