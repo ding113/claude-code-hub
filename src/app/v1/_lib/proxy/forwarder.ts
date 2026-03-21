@@ -1613,15 +1613,18 @@ export class ProxyForwarder {
             (message.system as unknown[]).unshift(claudeCodeSystemBlock);
           }
 
-          logger.debug("ProxyForwarder: Injected missing Claude Code system prompt for Claude provider", {
-            providerId: provider.id,
-            originalFormat: session.originalFormat,
-            existingSystemType: existingSystem
-              ? Array.isArray(existingSystem)
-                ? "array"
-                : typeof existingSystem
-              : "none",
-          });
+          logger.debug(
+            "ProxyForwarder: Injected missing Claude Code system prompt for Claude provider",
+            {
+              providerId: provider.id,
+              originalFormat: session.originalFormat,
+              existingSystemType: existingSystem
+                ? Array.isArray(existingSystem)
+                  ? "array"
+                  : typeof existingSystem
+                : "none",
+            }
+          );
         }
 
         (session as any)._systemPromptInjected = true;
