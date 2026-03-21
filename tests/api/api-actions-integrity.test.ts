@@ -118,7 +118,7 @@ describe("OpenAPI 端点完整性检查", () => {
       "/api/actions/my-usage/getMyUsageMetadata",
       "/api/actions/my-usage/getMyQuota",
       "/api/actions/my-usage/getMyTodayStats",
-      "/api/actions/my-usage/getMyUsageLogs",
+      "/api/actions/my-usage/getMyUsageLogsBatch",
       "/api/actions/my-usage/getMyAvailableModels",
       "/api/actions/my-usage/getMyAvailableEndpoints",
     ];

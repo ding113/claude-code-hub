@@ -1040,21 +1040,27 @@ const { route: getMyTodayStatsRoute, handler: getMyTodayStatsHandler } = createA
 );
 app.openapi(getMyTodayStatsRoute, getMyTodayStatsHandler);
 
-const { route: getMyUsageLogsRoute, handler: getMyUsageLogsHandler } = createActionRoute(
+const { route: getMyUsageLogsBatchRoute, handler: getMyUsageLogsBatchHandler } = createActionRoute(
   "my-usage",
-  "getMyUsageLogs",
-  myUsageActions.getMyUsageLogs,
+  "getMyUsageLogsBatch",
+  myUsageActions.getMyUsageLogsBatch,
   {
     requestSchema: z.object({
       startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
       endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+      sessionId: z.string().optional(),
       model: z.string().optional(),
       endpoint: z.string().optional(),
       statusCode: z.number().optional(),
       excludeStatusCode200: z.boolean().optional(),
       minRetryCount: z.number().int().nonnegative().optional(),
-      pageSize: z.number().int().positive().max(100).default(20).optional(),
-      page: z.number().int().positive().default(1).optional(),
+      cursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number(),
+        })
+        .optional(),
+      limit: z.number().int().positive().max(100).default(20).optional(),
     }),
     responseSchema: z.object({
       logs: z.array(
@@ -1077,19 +1083,23 @@ const { route: getMyUsageLogsRoute, handler: getMyUsageLogsHandler } = createAct
           cacheTtlApplied: z.string().nullable(),
         })
       ),
-      total: z.number(),
-      page: z.number(),
-      pageSize: z.number(),
+      nextCursor: z
+        .object({
+          createdAt: z.string(),
+          id: z.number(),
+        })
+        .nullable(),
+      hasMore: z.boolean(),
       currencyCode: z.string(),
       billingModelSource: z.enum(["original", "redirected"]),
     }),
-    description: "获取当前会话的使用日志（仅返回自己的数据）",
-    summary: "获取我的使用日志",
+    description: "获取当前会话的使用日志批量数据（仅返回自己的数据，游标分页）",
+    summary: "批量获取我的使用日志",
     tags: ["使用日志"],
     allowReadOnlyAccess: true,
   }
 );
-app.openapi(getMyUsageLogsRoute, getMyUsageLogsHandler);
+app.openapi(getMyUsageLogsBatchRoute, getMyUsageLogsBatchHandler);
 
 const { route: getMyAvailableModelsRoute, handler: getMyAvailableModelsHandler } =
   createActionRoute("my-usage", "getMyAvailableModels", myUsageActions.getMyAvailableModels, {

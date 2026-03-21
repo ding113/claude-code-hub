@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RelativeTime } from "@/components/ui/relative-time";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useVirtualizer } from "@/hooks/use-virtualizer";
+import { useVirtualizedInfiniteList } from "@/hooks/use-virtualized-infinite-list";
 import type { LogsTableColumn } from "@/lib/column-visibility";
 import { cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
@@ -80,9 +80,8 @@ export function VirtualizedLogsTable({
   const getPricingSourceLabel = (source: string) =>
     t(`logs.billingDetails.pricingSource.${source}`);
   const tChain = useTranslations("provider-chain");
-  const parentRef = useRef<HTMLDivElement>(null);
-  const [showScrollToTop, setShowScrollToTop] = useState(false);
-  const shouldPoll = autoRefreshEnabled && !showScrollToTop;
+  const [isHistoryBrowsing, setIsHistoryBrowsing] = useState(false);
+  const shouldPoll = autoRefreshEnabled && !isHistoryBrowsing;
 
   const hideProviderColumn = hiddenColumns?.includes("provider") ?? false;
   const hideUserColumn = hiddenColumns?.includes("user") ?? false;
@@ -137,51 +136,46 @@ export function VirtualizedLogsTable({
         if (query.state.fetchStatus !== "idle") return false;
         return autoRefreshIntervalMs;
       },
-      maxPages: 5,
     });
 
   // Flatten all pages into a single array
   const pages = data?.pages;
   const allLogs = useMemo(() => pages?.flatMap((page) => page.logs) ?? [], [pages]);
+  const filtersResetKey = useMemo(() => JSON.stringify(filters), [filters]);
+  const previousFiltersResetKeyRef = useRef(filtersResetKey);
 
-  // Virtual list setup
-  const rowVirtualizer = useVirtualizer({
-    count: hasNextPage ? allLogs.length + 1 : allLogs.length,
-    getScrollElement: () => parentRef.current,
+  const getItemKey = useCallback(
+    (index: number) => allLogs[index]?.id ?? `loader-${index}`,
+    [allLogs]
+  );
+
+  const {
+    parentRef,
+    rowVirtualizer,
+    virtualItems,
+    showScrollToTop,
+    handleScroll,
+    scrollToTop,
+    resetScrollPosition,
+  } = useVirtualizedInfiniteList({
+    itemCount: allLogs.length,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
     estimateSize: () => ROW_HEIGHT,
     overscan: 10,
+    getItemKey,
   });
 
-  const virtualItems = rowVirtualizer.getVirtualItems();
-  const lastItemIndex = virtualItems[virtualItems.length - 1]?.index ?? -1;
-
-  // Auto-fetch next page when scrolling near the bottom
   useEffect(() => {
-    // If the last visible item is a loading row or near the end, fetch more
-    if (lastItemIndex >= allLogs.length - 5 && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
-    }
-  }, [lastItemIndex, hasNextPage, isFetchingNextPage, allLogs.length, fetchNextPage]);
+    setIsHistoryBrowsing(showScrollToTop);
+  }, [showScrollToTop]);
 
-  // Track scroll position for "scroll to top" button
-  const handleScroll = useCallback(() => {
-    if (parentRef.current) {
-      setShowScrollToTop(parentRef.current.scrollTop > 500);
-    }
-  }, []);
-
-  // Scroll to top handler
-  const scrollToTop = useCallback(() => {
-    parentRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
-
-  // Reset scroll when filters change
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `filters` is an intentional trigger
   useEffect(() => {
-    if (parentRef.current) {
-      parentRef.current.scrollTop = 0;
-    }
-  }, [filters]);
+    if (previousFiltersResetKeyRef.current === filtersResetKey) return;
+    previousFiltersResetKeyRef.current = filtersResetKey;
+    resetScrollPosition();
+  });
 
   if (isLoading) {
     return (

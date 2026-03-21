@@ -406,9 +406,9 @@ describe("my-usage API：只读 Key 自助查询", () => {
     // 同时验证 usage logs：不应返回 B 的日志（不泄漏）
     const logs = await callActionsRoute({
       method: "POST",
-      pathname: "/api/actions/my-usage/getMyUsageLogs",
+      pathname: "/api/actions/my-usage/getMyUsageLogsBatch",
       authToken: keyA.key,
-      body: { page: 1, pageSize: 50 },
+      body: { limit: 50 },
     });
 
     expect(logs.response.status).toBe(200);
