@@ -160,6 +160,7 @@ export function RoutingSection({ subSectionRefs }: RoutingSectionProps) {
                 disabled={state.ui.isPending}
                 maxTagLength={50}
                 suggestions={groupSuggestions}
+                validateTag={() => true}
                 onInvalidTag={(_tag, reason) => {
                   const messages: Record<string, string> = {
                     empty: tUI("emptyTag"),

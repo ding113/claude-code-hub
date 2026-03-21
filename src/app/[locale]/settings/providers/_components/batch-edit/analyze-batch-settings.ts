@@ -1,3 +1,4 @@
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { CacheTtlPreference } from "@/types/cache";
 import type {
   AnthropicAdaptiveThinkingConfig,
@@ -116,14 +117,7 @@ export function analyzeBatchProviderSettings(providers: ProviderDisplay[]): Batc
       priority: analyzeField(providers, (p) => p.priority),
       weight: analyzeField(providers, (p) => p.weight),
       costMultiplier: analyzeField(providers, (p) => p.costMultiplier),
-      groupTag: analyzeField(providers, (p) =>
-        p.groupTag
-          ? p.groupTag
-              .split(",")
-              .map((t) => t.trim())
-              .filter(Boolean)
-          : []
-      ),
+      groupTag: analyzeField(providers, (p) => parseProviderGroups(p.groupTag)),
       preserveClientIp: analyzeField(providers, (p) => p.preserveClientIp),
       modelRedirects: analyzeField(providers, (p) => p.modelRedirects ?? {}),
       allowedModels: analyzeField(providers, (p) => p.allowedModels ?? []),

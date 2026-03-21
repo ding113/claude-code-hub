@@ -35,6 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { CURRENCY_CONFIG, type CurrencyCode, formatCurrency } from "@/lib/utils/currency";
 import { formatDate } from "@/lib/utils/date-format";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { formatTokenAmount } from "@/lib/utils/token";
 import { type QuickRenewKey, QuickRenewKeyDialog } from "./forms/quick-renew-key-dialog";
 import { KeyFullDisplayDialog } from "./key-full-display-dialog";
@@ -113,10 +114,7 @@ export interface KeyRowItemProps {
 const EXPIRING_SOON_MS = 72 * 60 * 60 * 1000; // 72小时
 
 function splitGroups(value?: string | null): string[] {
-  return (value ?? "")
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  return parseProviderGroups(value);
 }
 
 function formatExpiry(expiresAt: string | null | undefined, locale: string): string {

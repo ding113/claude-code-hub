@@ -34,6 +34,7 @@ import { TagInput } from "@/components/ui/tag-input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { PROVIDER_DEFAULTS, PROVIDER_TIMEOUT_DEFAULTS } from "@/lib/constants/provider.constants";
 import { getProviderTypeConfig } from "@/lib/provider-type-utils";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import {
   extractBaseUrl,
   isValidUrl,
@@ -175,14 +176,7 @@ export function ProviderForm({
   const [costMultiplier, setCostMultiplier] = useState<number>(
     sourceProvider?.costMultiplier ?? 1.0
   );
-  const [groupTag, setGroupTag] = useState<string[]>(
-    sourceProvider?.groupTag
-      ? sourceProvider.groupTag
-          .split(",")
-          .map((t) => t.trim())
-          .filter(Boolean)
-      : []
-  );
+  const [groupTag, setGroupTag] = useState<string[]>(parseProviderGroups(sourceProvider?.groupTag));
   const [groupSuggestions, setGroupSuggestions] = useState<string[]>([]);
   const [limit5hUsd, setLimit5hUsd] = useState<number | null>(sourceProvider?.limit5hUsd ?? null);
   const [limitDailyUsd, setLimitDailyUsd] = useState<number | null>(
@@ -892,6 +886,7 @@ export function ProviderForm({
                     disabled={isPending}
                     maxTagLength={50}
                     suggestions={groupSuggestions}
+                    validateTag={() => true}
                     onInvalidTag={(_tag, reason) => {
                       const messages: Record<string, string> = {
                         empty: tUI("emptyTag"),

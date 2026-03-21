@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderStatisticsMap, ProviderType } from "@/types/provider";
 import type { User } from "@/types/user";
 import {
@@ -144,10 +145,7 @@ export function ProviderManager({
     const groups = new Set<string>();
     let hasDefaultGroup = false;
     providers.forEach((p) => {
-      const tags = p.groupTag
-        ?.split(",")
-        .map((t) => t.trim())
-        .filter(Boolean);
+      const tags = parseProviderGroups(p.groupTag);
       if (!tags || tags.length === 0) {
         hasDefaultGroup = true;
       } else {
@@ -172,10 +170,7 @@ export function ProviderManager({
   // User's assigned groups (for non-admin users)
   const userGroups = useMemo(() => {
     if (!currentUser?.providerGroup) return [];
-    return currentUser.providerGroup
-      .split(",")
-      .map((g) => g.trim())
-      .filter(Boolean);
+    return parseProviderGroups(currentUser.providerGroup);
   }, [currentUser?.providerGroup]);
 
   // Check if current user is admin
@@ -192,10 +187,7 @@ export function ProviderManager({
         (p) =>
           p.name.toLowerCase().includes(term) ||
           p.url.toLowerCase().includes(term) ||
-          p.groupTag
-            ?.split(",")
-            .map((t) => t.trim().toLowerCase())
-            .some((tag) => tag.includes(term))
+          parseProviderGroups(p.groupTag).some((tag) => tag.toLowerCase().includes(term))
       );
     }
 
@@ -212,11 +204,7 @@ export function ProviderManager({
     // Filter by groups
     if (groupFilter.length > 0) {
       result = result.filter((p) => {
-        const providerGroups =
-          p.groupTag
-            ?.split(",")
-            .map((t) => t.trim())
-            .filter(Boolean) || [];
+        const providerGroups = parseProviderGroups(p.groupTag);
 
         // If provider has no groups and "default" is selected, include it
         if (providerGroups.length === 0 && groupFilter.includes("default")) {
@@ -341,11 +329,7 @@ export function ProviderManager({
       setSelectedProviderIds((prev) => {
         const next = new Set(prev);
         for (const p of filteredProviders) {
-          const tags =
-            p.groupTag
-              ?.split(",")
-              .map((tag) => tag.trim())
-              .filter(Boolean) ?? [];
+          const tags = parseProviderGroups(p.groupTag);
           if (tags.includes(group) || (group === "default" && tags.length === 0)) {
             next.add(p.id);
           }

@@ -24,6 +24,7 @@ import {
   isActualRequest,
   isHedgeRace,
 } from "@/lib/utils/provider-chain-formatter";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderChainItem } from "@/types/message";
 import { getFake200ReasonKey } from "./fake200-reason";
 
@@ -37,16 +38,7 @@ interface ProviderChainPopoverProps {
 }
 
 function parseGroupTags(groupTag?: string | null): string[] {
-  if (!groupTag) return [];
-  const seen = new Set<string>();
-  const groups: string[] = [];
-  for (const raw of groupTag.split(",")) {
-    const trimmed = raw.trim();
-    if (!trimmed || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    groups.push(trimmed);
-  }
-  return groups;
+  return Array.from(new Set(parseProviderGroups(groupTag)));
 }
 
 /**

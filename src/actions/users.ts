@@ -13,7 +13,7 @@ import { getUnauthorizedFields } from "@/lib/permissions/user-field-permissions"
 import { invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
 import { parseDateInputAsTimezone } from "@/lib/utils/date-input";
 import { ERROR_CODES } from "@/lib/utils/error-messages";
-import { normalizeProviderGroup } from "@/lib/utils/provider-group";
+import { normalizeProviderGroup, parseProviderGroups } from "@/lib/utils/provider-group";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { maskKey } from "@/lib/utils/validation";
 import { formatZodError } from "@/lib/utils/zod-i18n";
@@ -192,11 +192,7 @@ export async function syncUserProviderGroupFromKeys(userId: number): Promise<voi
     // NOTE(#400): Key.providerGroup is now required (no more null semantics).
     // For backward compatibility, treat null/empty as "default".
     const group = key.providerGroup || PROVIDER_GROUP.DEFAULT;
-    group
-      .split(",")
-      .map((g) => g.trim())
-      .filter(Boolean)
-      .forEach((g) => allGroups.add(g));
+    parseProviderGroups(group).forEach((g) => allGroups.add(g));
   }
 
   const newProviderGroup =

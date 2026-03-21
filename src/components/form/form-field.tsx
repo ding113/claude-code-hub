@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TagInput } from "@/components/ui/tag-input";
 import { cn } from "@/lib/utils";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 
 /**
  * 表单字段配置
@@ -175,12 +176,7 @@ export function TagInputField({
   const fieldId = tagInputProps.id || `field-${autoId}`;
 
   // 将字符串转换为数组
-  const tagsArray = value
-    ? value
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
+  const tagsArray = parseProviderGroups(value);
 
   // 将数组转换回字符串
   const handleChange = (tags: string[]) => {

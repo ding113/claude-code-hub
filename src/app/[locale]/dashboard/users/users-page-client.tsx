@@ -27,6 +27,7 @@ import { clearUsageCache } from "@/lib/dashboard/user-limit-usage-cache";
 import { loadUserUsagePagesSequentially } from "@/lib/dashboard/user-usage-loader";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import type { CurrencyCode } from "@/lib/utils/currency";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { User, UserDisplay } from "@/types/user";
 import { AddKeyDialog } from "../_components/user/add-key-dialog";
 import { BatchEditDialog } from "../_components/user/batch-edit/batch-edit-dialog";
@@ -38,10 +39,7 @@ import { UserManagementTable } from "../_components/user/user-management-table";
  * This matches the server-side providerGroup handling in provider-selector.ts
  */
 function splitTags(value?: string | null): string[] {
-  return (value ?? "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  return parseProviderGroups(value);
 }
 
 interface UsersPageClientProps {

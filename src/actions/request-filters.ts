@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 import { requestFilterEngine } from "@/lib/request-filter-engine";
 import type { FilterMatcher, FilterOperation, InsertOp } from "@/lib/request-filter-types";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import {
   createRequestFilter,
   deleteRequestFilter,
@@ -458,7 +459,7 @@ export async function getDistinctProviderGroupsAction(): Promise<ActionResult<st
     const allTags = new Set<string>();
     for (const row of result) {
       if (row.groupTag) {
-        const tags = row.groupTag.split(",").map((tag) => tag.trim());
+        const tags = parseProviderGroups(row.groupTag);
         for (const tag of tags) {
           if (tag) allTags.add(tag);
         }

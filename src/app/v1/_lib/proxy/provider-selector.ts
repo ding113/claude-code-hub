@@ -3,6 +3,7 @@ import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { logger } from "@/lib/logger";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionManager } from "@/lib/session-manager";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { isProviderActiveNow } from "@/lib/utils/provider-schedule";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { isVendorTypeCircuitOpen } from "@/lib/vendor-type-circuit-breaker";
@@ -48,10 +49,7 @@ async function getVerboseProviderErrorCached(): Promise<boolean> {
  * @returns 清理后的分组数组（去空格、去空项）
  */
 function parseGroupString(groupString: string): string[] {
-  return groupString
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  return parseProviderGroups(groupString);
 }
 
 /**

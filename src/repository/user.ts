@@ -4,6 +4,7 @@ import { and, asc, eq, isNull, type SQL, sql } from "drizzle-orm";
 import { db } from "@/drizzle/db";
 import { keys as keysTable, users } from "@/drizzle/schema";
 import { cacheUser, invalidateCachedUser } from "@/lib/security/api-key-auth-cache";
+import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { CreateUserData, UpdateUserData, User } from "@/types/user";
 import { toUser } from "./_shared/transformers";
 
@@ -245,7 +246,7 @@ export async function findUserListBatch(
   if (trimmedGroups.length > 0) {
     const groupConditions = trimmedGroups.map(
       (group) =>
-        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*,\\s*'))`
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，]+\\s*'))`
     );
     keyGroupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
   }
@@ -605,10 +606,7 @@ export async function getAllUserProviderGroups(): Promise<string[]> {
 
   const allGroups = new Set<string>();
   for (const row of result) {
-    const groups = row.providerGroup
-      ?.split(",")
-      .map((group) => group.trim())
-      .filter(Boolean);
+    const groups = parseProviderGroups(row.providerGroup);
     if (!groups || groups.length === 0) continue;
     for (const group of groups) {
       allGroups.add(group);

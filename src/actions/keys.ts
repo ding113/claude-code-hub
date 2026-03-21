@@ -607,11 +607,7 @@ export async function removeKey(keyId: number): Promise<ActionResult> {
       for (const k of userKeys) {
         if (k.id === keyId) continue;
         const group = k.providerGroup || PROVIDER_GROUP.DEFAULT;
-        group
-          .split(",")
-          .map((g) => g.trim())
-          .filter(Boolean)
-          .forEach((g) => remainingGroups.add(g));
+        parseProviderGroups(group).forEach((g) => remainingGroups.add(g));
       }
 
       const { findUserById } = await import("@/repository/user");

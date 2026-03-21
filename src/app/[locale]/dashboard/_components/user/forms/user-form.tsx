@@ -217,6 +217,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         placeholder={tForm("providerGroup.placeholder")}
         description={tForm("providerGroup.description")}
         suggestions={providerGroupSuggestions}
+        validateTag={() => true}
         onInvalidTag={(_tag, reason) => {
           const messages: Record<string, string> = {
             empty: tUI("emptyTag"),

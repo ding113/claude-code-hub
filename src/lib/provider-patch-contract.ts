@@ -1,3 +1,4 @@
+import { normalizeProviderGroupTag } from "@/lib/utils/provider-group";
 import type {
   ProviderBatchApplyUpdates,
   ProviderBatchPatch,
@@ -365,6 +366,11 @@ function normalizePatchField<T>(
 
     if (!isValidSetValue(field, input.set)) {
       return createInvalidPatchShapeError(field, "set mode value is invalid for this field");
+    }
+
+    if (field === "group_tag") {
+      const normalizedGroupTag = normalizeProviderGroupTag(input.set) ?? "";
+      return { ok: true, data: { mode: "set", value: normalizedGroupTag as T } };
     }
 
     return { ok: true, data: { mode: "set", value: input.set as T } };

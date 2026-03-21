@@ -44,6 +44,7 @@ import {
 } from "@/lib/redis/circuit-breaker-config";
 import { RedisKVStore } from "@/lib/redis/redis-kv-store";
 import { SessionManager } from "@/lib/session-manager";
+import { normalizeProviderGroupTag, parseProviderGroups } from "@/lib/utils/provider-group";
 import { maskKey } from "@/lib/utils/validation";
 import { extractZodErrorCode, formatZodError } from "@/lib/utils/zod-i18n";
 import { validateProviderUrlForConnectivity } from "@/lib/validation/provider-url";
@@ -431,10 +432,7 @@ export async function getAvailableProviderGroups(userId?: number): Promise<strin
     const { findUserById } = await import("@/repository/user");
     const user = await findUserById(userId);
 
-    const userGroups = (user?.providerGroup || PROVIDER_GROUP.DEFAULT)
-      .split(",")
-      .map((g) => g.trim())
-      .filter(Boolean);
+    const userGroups = parseProviderGroups(user?.providerGroup || PROVIDER_GROUP.DEFAULT);
 
     // 管理员通配符：可访问所有分组
     if (userGroups.includes(PROVIDER_GROUP.ALL)) {
@@ -462,16 +460,11 @@ export async function getProviderGroupsWithCount(): Promise<
     const groupCounts = new Map<string, number>();
 
     for (const provider of providers) {
-      const groupTag = provider.groupTag?.trim();
-      if (!groupTag) {
+      const groups = parseProviderGroups(provider.groupTag);
+      if (groups.length === 0) {
         groupCounts.set(PROVIDER_GROUP.DEFAULT, (groupCounts.get(PROVIDER_GROUP.DEFAULT) || 0) + 1);
         continue;
       }
-
-      const groups = groupTag
-        .split(",")
-        .map((g) => g.trim())
-        .filter(Boolean);
 
       for (const group of groups) {
         groupCounts.set(group, (groupCounts.get(group) || 0) + 1);
@@ -589,6 +582,7 @@ export async function addProvider(data: {
 
     const payload = {
       ...validated,
+      group_tag: normalizeProviderGroupTag(validated.group_tag),
       limit_5h_usd: validated.limit_5h_usd ?? null,
       limit_daily_usd: validated.limit_daily_usd ?? null,
       daily_reset_mode: validated.daily_reset_mode ?? "fixed",
@@ -766,6 +760,9 @@ export async function editProvider(
 
     const payload = {
       ...validated,
+      ...(validated.group_tag !== undefined && {
+        group_tag: normalizeProviderGroupTag(validated.group_tag),
+      }),
       ...(faviconUrl !== undefined && { favicon_url: faviconUrl }),
     };
 
@@ -2235,7 +2232,9 @@ export async function batchUpdateProviders(
     if (updates.cost_multiplier !== undefined) {
       repositoryUpdates.costMultiplier = updates.cost_multiplier.toString();
     }
-    if (updates.group_tag !== undefined) repositoryUpdates.groupTag = updates.group_tag;
+    if (updates.group_tag !== undefined) {
+      repositoryUpdates.groupTag = normalizeProviderGroupTag(updates.group_tag);
+    }
     if (updates.model_redirects !== undefined) {
       repositoryUpdates.modelRedirects = updates.model_redirects;
     }
@@ -4795,10 +4794,7 @@ async function fetchAnthropicModels(
  * 解析分组字符串为数组
  */
 function parseGroupString(groupString: string): string[] {
-  return groupString
-    .split(",")
-    .map((g) => g.trim())
-    .filter(Boolean);
+  return parseProviderGroups(groupString);
 }
 
 /**
