@@ -986,8 +986,8 @@ export function ProviderForm({
                     );
                   })()}
 
-                {/* joinOpenAIPool 开关 - 仅 Claude/Claude-Auth 供应商显示 */}
-                {(providerType === "claude" || providerType === "claude-auth") && (
+                {/* joinOpenAIPool 开关 - 仅 Claude/Claude-Auth/Codex/Gemini 供应商显示 */}
+                {(providerType === "claude" || providerType === "claude-auth" || providerType === "codex" || providerType === "gemini" || providerType === "gemini-cli") && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">

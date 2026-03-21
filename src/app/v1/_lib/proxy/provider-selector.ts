@@ -836,12 +836,13 @@ export class ProxyProviderResolver {
 
       // 2b. 格式类型匹配（新增）
       // 根据 session.originalFormat 限制候选供应商类型，避免格式错配
-      // joinOpenAIPool：允许 claude/claude-auth 供应商加入 openai 调度池
+      // joinOpenAIPool：允许 claude/claude-auth/codex/gemini/gemini-cli 供应商加入 openai 调度池
       if (session?.originalFormat) {
+        const joinPoolTypes = ["claude", "claude-auth", "codex", "gemini", "gemini-cli"];
         const isFormatCompatible =
           checkFormatProviderTypeCompatibility(session.originalFormat, provider.providerType) ||
           (session.originalFormat === "openai" &&
-            (provider.providerType === "claude" || provider.providerType === "claude-auth") &&
+            joinPoolTypes.includes(provider.providerType) &&
             provider.joinOpenAIPool);
         if (!isFormatCompatible) {
           return false; // 过滤掉格式不兼容的供应商

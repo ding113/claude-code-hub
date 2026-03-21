@@ -30,6 +30,7 @@ import type { Provider } from "@/types/provider";
 import { isOfficialCodexClient, sanitizeCodexRequest } from "../codex/utils/request-sanitizer";
 import { defaultRegistry } from "../converters";
 import type { Format } from "../converters/types";
+import { GeminiAdapter } from "../gemini/adapter";
 import { GeminiAuth } from "../gemini/auth";
 import { GEMINI_PROTOCOL } from "../gemini/protocol";
 import { HeaderProcessor } from "../headers";
@@ -1332,23 +1333,57 @@ export class ProxyForwarder {
 
     // --- GEMINI HANDLING ---
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
-      // 1. 直接透传请求体（不转换）- 仅对有 body 的请求
-      const hasBody = session.method !== "GET" && session.method !== "HEAD";
-      if (hasBody) {
-        const bodyString = JSON.stringify(session.request.message);
-        requestBody = bodyString;
-      }
+      // joinOpenAIPool: OpenAI 客户端请求路由到 Gemini 供应商
+      // 需要将 OpenAI 格式请求转换为 Gemini 格式，并构建正确的 Gemini API URL
+      const isOpenAIToGeminiConversion = session.originalFormat === "openai" && provider.joinOpenAIPool;
 
-      // 检测流式请求：Gemini 支持两种方式
-      // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
-      // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
-      const geminiPathname = session.requestUrl.pathname || "";
-      const geminiSearchParams = session.requestUrl.searchParams;
-      const originalBody = session.request.message as Record<string, unknown>;
-      isStreaming =
-        geminiPathname.includes("streamGenerateContent") ||
-        geminiSearchParams.get("alt") === "sse" ||
-        originalBody?.stream === true;
+      if (isOpenAIToGeminiConversion) {
+        // 检测客户端是否要求流式
+        const clientWantsStream =
+          (session.request.message as Record<string, unknown>).stream === true;
+        isStreaming = clientWantsStream;
+
+        // 使用 GeminiAdapter 将 OpenAI 格式转换为 Gemini 格式
+        const openAIBody = session.request.message as Record<string, unknown>;
+        const geminiBody = GeminiAdapter.transformRequest(
+          {
+            messages: openAIBody.messages,
+            system: openAIBody.system,
+            temperature: openAIBody.temperature,
+            top_p: openAIBody.top_p,
+            max_tokens: (openAIBody.max_tokens ?? openAIBody.max_completion_tokens),
+            stop_sequences: openAIBody.stop,
+          } as Parameters<typeof GeminiAdapter.transformRequest>[0],
+          provider.providerType as "gemini" | "gemini-cli"
+        );
+        requestBody = JSON.stringify(geminiBody);
+
+        logger.info("ProxyForwarder: joinOpenAIPool OpenAI->Gemini request transformed", {
+          providerId: provider.id,
+          providerName: provider.name,
+          providerType: provider.providerType,
+          model: session.request.model,
+          isStreaming: clientWantsStream,
+        });
+      } else {
+        // 1. 直接透传请求体（不转换）- 仅对有 body 的请求
+        const hasBody = session.method !== "GET" && session.method !== "HEAD";
+        if (hasBody) {
+          const bodyString = JSON.stringify(session.request.message);
+          requestBody = bodyString;
+        }
+
+        // 检测流式请求：Gemini 支持两种方式
+        // 1. URL 路径检测（官方 Gemini API）: /v1beta/models/xxx:streamGenerateContent?alt=sse
+        // 2. 请求体 stream 字段（某些兼容 API）: { stream: true }
+        const geminiPathname = session.requestUrl.pathname || "";
+        const geminiSearchParams = session.requestUrl.searchParams;
+        const originalBody = session.request.message as Record<string, unknown>;
+        isStreaming =
+          geminiPathname.includes("streamGenerateContent") ||
+          geminiSearchParams.get("alt") === "sse" ||
+          originalBody?.stream === true;
+      }
 
       // 2. 准备认证和 Headers（从令牌池选择 key，排除已失败的 key）
       const geminiFailedKeyIndices = session.getFailedKeyIndices(provider.id);
@@ -1369,14 +1404,43 @@ export class ProxyForwarder {
       const accessToken = await GeminiAuth.getAccessToken(selectedKey);
       const isApiKey = GeminiAuth.isApiKey(selectedKey);
 
-      // 3. 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
+      // 3. URL 构建
       const baseUrl =
         provider.url ||
         (provider.providerType === "gemini"
           ? GEMINI_PROTOCOL.OFFICIAL_ENDPOINT
           : GEMINI_PROTOCOL.CLI_ENDPOINT);
 
-      proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
+      if (isOpenAIToGeminiConversion) {
+        // joinOpenAIPool: 构建正确的 Gemini API URL
+        // OpenAI 客户端请求路径是 /v1/chat/completions，需要替换为 Gemini 的端点路径
+        const model = session.request.model || "gemini-2.5-flash";
+        const action = isStreaming ? "streamGenerateContent" : "generateContent";
+        const versionPrefix = provider.providerType === "gemini" ? "v1beta" : "v1internal";
+        const modelPath = `/models/${model}:${action}`;
+        const geminiUrl = new URL(baseUrl);
+        const basePath = geminiUrl.pathname.replace(/\/$/, "");
+        // 如果 baseUrl 已包含版本前缀（如 /v1beta 或 /v1internal），只拼接 /models/... 部分
+        if (basePath.endsWith(`/${versionPrefix}`)) {
+          geminiUrl.pathname = basePath + modelPath;
+        } else {
+          geminiUrl.pathname = basePath + `/${versionPrefix}` + modelPath;
+        }
+        if (isStreaming) {
+          geminiUrl.searchParams.set("alt", "sse");
+        }
+        proxyUrl = geminiUrl.toString();
+
+        logger.debug("ProxyForwarder: joinOpenAIPool constructed Gemini URL", {
+          providerId: provider.id,
+          proxyUrl,
+          model,
+          action,
+        });
+      } else {
+        // 直接透传：使用 buildProxyUrl() 拼接原始路径和查询参数
+        proxyUrl = buildProxyUrl(baseUrl, session.requestUrl);
+      }
 
       // 4. Headers 处理：默认透传 session.headers（含请求过滤器修改），但移除代理认证头并覆盖上游鉴权
       // 说明：之前 Gemini 分支使用 new Headers() 重建 headers，会导致 user-agent 丢失且过滤器不生效
@@ -1455,7 +1519,7 @@ export class ProxyForwarder {
           if (
             !clientWantsStream &&
             session.originalFormat === "openai" &&
-            (provider.providerType === "claude" || provider.providerType === "claude-auth")
+            (provider.providerType === "claude" || provider.providerType === "claude-auth" || provider.providerType === "codex")
           ) {
             (session as any)._joinPoolNonStream = true;
             logger.debug("ProxyForwarder: joinOpenAIPool non-stream client detected", {
