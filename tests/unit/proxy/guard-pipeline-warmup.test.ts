@@ -216,34 +216,46 @@ describe("GuardPipeline：warmup 拦截点", () => {
     expect(callOrder).not.toContain("messageContext");
   });
 
-  test("count_tokens 和 responses/compact 应通过 endpoint policy 选择同一 raw preset", async () => {
+  test("count_tokens 和 responses/compact 应通过 endpoint policy 选择不同 preset", async () => {
     const { GuardPipelineBuilder } = await import("@/app/v1/_lib/proxy/guard-pipeline");
 
-    const endpoints = [
-      V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
-      V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
-    ];
-    const orders: string[][] = [];
+    callOrder.length = 0;
+    const countTokensSession = {
+      getEndpointPolicy: () => resolveEndpointPolicy(V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS),
+      isProbeRequest: () => {
+        callOrder.push("probe");
+        return false;
+      },
+    } as any;
+    const countTokensPipeline = GuardPipelineBuilder.fromSession(countTokensSession);
+    const countTokensRes = await countTokensPipeline.run(countTokensSession);
+    expect(countTokensRes).toBeNull();
+    const countTokensOrder = [...callOrder];
 
-    for (const endpoint of endpoints) {
-      callOrder.length = 0;
-      const session = {
-        getEndpointPolicy: () => resolveEndpointPolicy(endpoint),
-        isProbeRequest: () => {
-          callOrder.push("probe");
-          return false;
-        },
-      } as any;
+    callOrder.length = 0;
+    const compactSession = {
+      getEndpointPolicy: () => resolveEndpointPolicy(V1_ENDPOINT_PATHS.RESPONSES_COMPACT),
+      isProbeRequest: () => {
+        callOrder.push("probe");
+        return false;
+      },
+    } as any;
+    const compactPipeline = GuardPipelineBuilder.fromSession(compactSession);
+    const compactRes = await compactPipeline.run(compactSession);
+    expect(compactRes).toBeInstanceOf(Response);
+    const compactOrder = [...callOrder];
 
-      const pipeline = GuardPipelineBuilder.fromSession(session);
-      const res = await pipeline.run(session);
-
-      expect(res).toBeNull();
-      orders.push([...callOrder]);
-    }
-
-    expect(orders[0]).toEqual(orders[1]);
-    expect(orders[0]).toEqual(["auth", "client", "model", "version", "probe", "provider"]);
+    expect(countTokensOrder).toEqual(["auth", "client", "model", "version", "probe", "provider"]);
+    expect(compactOrder).toEqual([
+      "auth",
+      "sensitive",
+      "client",
+      "model",
+      "version",
+      "probe",
+      "session",
+      "warmup",
+    ]);
   });
 
   test("/v1/messages 仍应通过 endpoint policy 选择现有 chat preset", async () => {

@@ -424,6 +424,29 @@ describe("Endpoint circuit breaker isolation", () => {
     expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
   });
 
+  it("non-200 client-driven 400 should NOT call recordFailure", async () => {
+    const session = createSession();
+    setDeferredStreamingFinalization(session, {
+      providerId: 1,
+      providerName: "test-provider",
+      providerPriority: 10,
+      attemptNumber: 1,
+      totalProvidersAttempted: 1,
+      isFirstAttempt: true,
+      isFailoverSuccess: false,
+      endpointId: 42,
+      endpointUrl: "https://api.test.com",
+      upstreamStatusCode: 400,
+    });
+
+    const response = createNon200StreamResponse(400, '{"error":{"message":"Invalid request"}}');
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(mockRecordFailure).not.toHaveBeenCalled();
+    expect(mockRecordEndpointFailure).not.toHaveBeenCalled();
+  });
+
   it("streaming success DOES call recordEndpointSuccess (regression guard)", async () => {
     const session = createSession();
     setDeferredMeta(session, 42);

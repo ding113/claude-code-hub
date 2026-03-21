@@ -5,7 +5,7 @@ export type EndpointGuardPreset = "chat" | "raw_passthrough";
 export type EndpointPoolStrictness = "inherit" | "strict";
 
 export interface EndpointPolicy {
-  readonly kind: "default" | "raw_passthrough";
+  readonly kind: "default" | "raw_passthrough" | "guarded_passthrough";
   readonly guardPreset: EndpointGuardPreset;
   readonly allowRetry: boolean;
   readonly allowProviderSwitch: boolean;
@@ -46,10 +46,22 @@ const RAW_PASSTHROUGH_ENDPOINT_POLICY: EndpointPolicy = Object.freeze({
   endpointPoolStrictness: "strict",
 });
 
-const rawPassthroughEndpointPathSet = new Set<string>([
-  V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
-  V1_ENDPOINT_PATHS.RESPONSES_COMPACT,
-]);
+const GUARDED_PASSTHROUGH_ENDPOINT_POLICY: EndpointPolicy = Object.freeze({
+  kind: "guarded_passthrough",
+  guardPreset: "chat",
+  allowRetry: false,
+  allowProviderSwitch: false,
+  allowCircuitBreakerAccounting: true,
+  trackConcurrentRequests: true,
+  bypassRequestFilters: false,
+  bypassForwarderPreprocessing: true,
+  bypassSpecialSettings: true,
+  bypassResponseRectifier: true,
+  endpointPoolStrictness: "strict",
+});
+
+const rawPassthroughEndpointPathSet = new Set<string>([V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS]);
+const guardedPassthroughEndpointPathSet = new Set<string>([V1_ENDPOINT_PATHS.RESPONSES_COMPACT]);
 
 export function isRawPassthroughEndpointPath(pathname: string): boolean {
   return rawPassthroughEndpointPathSet.has(normalizeEndpointPath(pathname));
@@ -62,6 +74,10 @@ export function isRawPassthroughEndpointPolicy(policy: EndpointPolicy): boolean 
 export function resolveEndpointPolicy(pathname: string): EndpointPolicy {
   if (isRawPassthroughEndpointPath(pathname)) {
     return RAW_PASSTHROUGH_ENDPOINT_POLICY;
+  }
+
+  if (guardedPassthroughEndpointPathSet.has(normalizeEndpointPath(pathname))) {
+    return GUARDED_PASSTHROUGH_ENDPOINT_POLICY;
   }
 
   return DEFAULT_ENDPOINT_POLICY;

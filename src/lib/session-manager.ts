@@ -391,94 +391,13 @@ export class SessionManager {
       return clientSessionId;
     }
 
-    // 2. 降级方案：计算 messages 内容哈希（TC-047 警告：不可靠）
-    logger.warn(
-      "SessionManager: No client session ID, falling back to content hash (unreliable for compressed dialogs)",
-      {
-        keyId,
-        messagesLength: Array.isArray(messages) ? messages.length : 0,
-      }
-    );
-    const contentHash = SessionManager.calculateMessagesHash(messages);
-    if (!contentHash) {
-      // 降级：无法计算哈希，生成新 session
-      const newId = SessionManager.generateSessionId();
-      logger.warn("SessionManager: Cannot calculate hash, generating new session", {
-        sessionId: newId,
-      });
-      return newId;
-    }
-
-    // 3. 尝试从 Redis 查找已有 session
-    if (redis && redis.status === "ready") {
-      try {
-        const hashKey = `hash:${contentHash}:session`;
-        const existingSessionId = await redis.get(hashKey);
-
-        if (existingSessionId) {
-          // 找到已有 session，刷新 TTL
-          await SessionManager.refreshSessionTTL(existingSessionId);
-          logger.trace("SessionManager: Reusing session via hash", {
-            sessionId: existingSessionId,
-            hash: contentHash,
-          });
-          return existingSessionId;
-        }
-
-        // 未找到：创建新 session
-        const newSessionId = SessionManager.generateSessionId();
-
-        // 存储映射关系（异步，不阻塞）
-        void SessionManager.storeSessionMapping(contentHash, newSessionId, keyId);
-
-        logger.trace("SessionManager: Created new session with hash", {
-          sessionId: newSessionId,
-          hash: contentHash,
-        });
-        return newSessionId;
-      } catch (error) {
-        logger.error("SessionManager: Redis error", { error });
-        // 降级：Redis 错误，生成新 session
-        return SessionManager.generateSessionId();
-      }
-    }
-
-    // 4. Redis 不可用，降级生成新 session
+    // 2. 安全降级：客户端未提供 session_id 时，始终生成新的 opaque session。
+    // 旧的 content-hash 复用会把不同 key/user 的同构请求错误合并进同一 session。
+    logger.warn("SessionManager: No client session ID, generating fresh opaque session", {
+      keyId,
+      messagesLength,
+    });
     return SessionManager.generateSessionId();
-  }
-
-  /**
-   * 存储 hash → session 映射关系
-   */
-  private static async storeSessionMapping(
-    contentHash: string,
-    sessionId: string,
-    keyId: number
-  ): Promise<void> {
-    const redis = getRedisClient();
-    if (!redis || redis.status !== "ready") return;
-
-    try {
-      const pipeline = redis.pipeline();
-      const hashKey = `hash:${contentHash}:session`;
-
-      // 存储映射关系
-      pipeline.setex(hashKey, SessionManager.SESSION_TTL, sessionId);
-
-      // 初始化 session 元数据
-      pipeline.setex(`session:${sessionId}:key`, SessionManager.SESSION_TTL, keyId.toString());
-      pipeline.setex(
-        `session:${sessionId}:last_seen`,
-        SessionManager.SESSION_TTL,
-        Date.now().toString()
-      );
-
-      await pipeline.exec();
-    } catch (error) {
-      logger.error("SessionManager: Failed to store session mapping", {
-        error,
-      });
-    }
   }
 
   /**

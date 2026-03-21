@@ -97,7 +97,7 @@ const KNOWN_ENDPOINT_FAMILIES: readonly EndpointFamily[] = Object.freeze([
   {
     id: "response-compact",
     surface: "response",
-    accountingTier: "none",
+    accountingTier: "required_usage",
     modelRequired: false,
     rawPassthrough: true,
     match: (pathname) => pathname === "/v1/responses/compact",
