@@ -213,8 +213,7 @@ export async function findUsageLogsBatch(
 
   // Calculate next cursor from the last record
   const lastLog = logsToReturn[logsToReturn.length - 1];
-  const nextCursor =
-    hasMore && lastLog?.createdAtRaw ? { createdAt: lastLog.createdAtRaw, id: lastLog.id } : null;
+  const nextCursor = buildNextCursorOrThrow(hasMore, lastLog, "findUsageLogsBatch");
 
   const logs: UsageLogRow[] = logsToReturn.map((row) => {
     const totalRowTokens =
@@ -353,10 +352,11 @@ export async function findUsageLogsBatch(
   const ledgerHasMore = ledgerResults.length > limit;
   const ledgerRowsToReturn = ledgerHasMore ? ledgerResults.slice(0, limit) : ledgerResults;
   const ledgerLastLog = ledgerRowsToReturn[ledgerRowsToReturn.length - 1];
-  const ledgerNextCursor =
-    ledgerHasMore && ledgerLastLog?.createdAtRaw
-      ? { createdAt: ledgerLastLog.createdAtRaw, id: ledgerLastLog.id }
-      : null;
+  const ledgerNextCursor = buildNextCursorOrThrow(
+    ledgerHasMore,
+    ledgerLastLog,
+    "findUsageLogsBatch ledger fallback"
+  );
 
   const fallbackLogs: UsageLogRow[] = ledgerRowsToReturn.map((row) => {
     const totalRowTokens =
@@ -451,6 +451,23 @@ export interface UsageLogSlimBatchResult {
   hasMore: boolean;
 }
 
+function buildNextCursorOrThrow(
+  hasMore: boolean,
+  lastRow:
+    | {
+        createdAtRaw?: string | null;
+        id: number;
+      }
+    | undefined,
+  context: string
+): { createdAt: string; id: number } | null {
+  if (!hasMore) return null;
+  if (!lastRow?.createdAtRaw) {
+    throw new Error(`${context}: expected next cursor when hasMore is true`);
+  }
+  return { createdAt: lastRow.createdAtRaw, id: lastRow.id };
+}
+
 function mapUsageLogSlimRow(row: {
   id: number;
   createdAt: Date | null;
@@ -537,8 +554,7 @@ export async function findUsageLogsForKeyBatch(
   const hasMore = results.length > safeLimit;
   const rowsToReturn = hasMore ? results.slice(0, safeLimit) : results;
   const lastRow = rowsToReturn[rowsToReturn.length - 1];
-  const nextCursor =
-    hasMore && lastRow?.createdAtRaw ? { createdAt: lastRow.createdAtRaw, id: lastRow.id } : null;
+  const nextCursor = buildNextCursorOrThrow(hasMore, lastRow, "findUsageLogsForKeyBatch");
 
   if (rowsToReturn.length > 0) {
     return {
@@ -620,10 +636,11 @@ export async function findUsageLogsForKeyBatch(
   const ledgerHasMore = ledgerResults.length > safeLimit;
   const ledgerRowsToReturn = ledgerHasMore ? ledgerResults.slice(0, safeLimit) : ledgerResults;
   const ledgerLastRow = ledgerRowsToReturn[ledgerRowsToReturn.length - 1];
-  const ledgerNextCursor =
-    ledgerHasMore && ledgerLastRow?.createdAtRaw
-      ? { createdAt: ledgerLastRow.createdAtRaw, id: ledgerLastRow.id }
-      : null;
+  const ledgerNextCursor = buildNextCursorOrThrow(
+    ledgerHasMore,
+    ledgerLastRow,
+    "findUsageLogsForKeyBatch ledger fallback"
+  );
 
   return {
     logs: ledgerRowsToReturn.map((row) => ({

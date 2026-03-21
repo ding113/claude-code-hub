@@ -109,6 +109,160 @@ describe("Usage logs sessionId filter", () => {
     expect(ledgerWhereSql).not.toContain("  abc  ");
   });
 
+  test("findUsageLogsBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
+    vi.resetModules();
+
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 101,
+          createdAt: new Date("2026-03-21T00:00:00Z"),
+          createdAtRaw: null,
+          sessionId: null,
+          requestSequence: null,
+          userName: "u",
+          keyName: "k",
+          providerName: "p",
+          model: "m",
+          originalModel: "m",
+          endpoint: "/v1/messages",
+          statusCode: 200,
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreation5mInputTokens: 0,
+          cacheCreation1hInputTokens: 0,
+          cacheTtlApplied: null,
+          costUsd: "0.01",
+          costMultiplier: null,
+          durationMs: 10,
+          ttfbMs: 5,
+          errorMessage: null,
+          providerChain: null,
+          blockedBy: null,
+          blockedReason: null,
+          userAgent: null,
+          messagesCount: null,
+          context1mApplied: null,
+          swapCacheTtlApplied: null,
+          specialSettings: null,
+        },
+        {
+          id: 100,
+          createdAt: new Date("2026-03-20T00:00:00Z"),
+          createdAtRaw: null,
+          sessionId: null,
+          requestSequence: null,
+          userName: "u",
+          keyName: "k",
+          providerName: "p",
+          model: "m",
+          originalModel: "m",
+          endpoint: "/v1/messages",
+          statusCode: 200,
+          inputTokens: 1,
+          outputTokens: 1,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreation5mInputTokens: 0,
+          cacheCreation1hInputTokens: 0,
+          cacheTtlApplied: null,
+          costUsd: "0.01",
+          costMultiplier: null,
+          durationMs: 10,
+          ttfbMs: 5,
+          errorMessage: null,
+          providerChain: null,
+          blockedBy: null,
+          blockedReason: null,
+          userAgent: null,
+          messagesCount: null,
+          context1mApplied: null,
+          swapCacheTtlApplied: null,
+          specialSettings: null,
+        },
+      ])
+    );
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => false),
+    }));
+
+    const { findUsageLogsBatch } = await import("@/repository/usage-logs");
+
+    await expect(findUsageLogsBatch({ limit: 1 })).rejects.toThrow(
+      "findUsageLogsBatch: expected next cursor when hasMore is true"
+    );
+  });
+
+  test("findUsageLogsForKeyBatch: hasMore 为 true 时缺失 createdAtRaw 应直接报错，避免静默截断", async () => {
+    vi.resetModules();
+
+    const selectMock = vi.fn(() =>
+      createThenableQuery([
+        {
+          id: 201,
+          createdAt: new Date("2026-03-21T00:00:00Z"),
+          createdAtRaw: null,
+          model: "m",
+          originalModel: "m",
+          endpoint: "/v1/messages",
+          statusCode: 200,
+          inputTokens: 1,
+          outputTokens: 1,
+          costUsd: "0.01",
+          durationMs: 10,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreation5mInputTokens: 0,
+          cacheCreation1hInputTokens: 0,
+          cacheTtlApplied: null,
+          specialSettings: null,
+        },
+        {
+          id: 200,
+          createdAt: new Date("2026-03-20T00:00:00Z"),
+          createdAtRaw: null,
+          model: "m",
+          originalModel: "m",
+          endpoint: "/v1/messages",
+          statusCode: 200,
+          inputTokens: 1,
+          outputTokens: 1,
+          costUsd: "0.01",
+          durationMs: 10,
+          cacheCreationInputTokens: 0,
+          cacheReadInputTokens: 0,
+          cacheCreation5mInputTokens: 0,
+          cacheCreation1hInputTokens: 0,
+          cacheTtlApplied: null,
+          specialSettings: null,
+        },
+      ])
+    );
+
+    vi.doMock("@/drizzle/db", () => ({
+      db: {
+        select: selectMock,
+      },
+    }));
+    vi.doMock("@/lib/ledger-fallback", () => ({
+      isLedgerOnlyMode: vi.fn(async () => false),
+    }));
+
+    const { findUsageLogsForKeyBatch } = await import("@/repository/usage-logs");
+
+    await expect(findUsageLogsForKeyBatch({ keyString: "k", limit: 1 })).rejects.toThrow(
+      "findUsageLogsForKeyBatch: expected next cursor when hasMore is true"
+    );
+  });
+
   test("findUsageLogsWithDetails: sessionId 为空/空白不应追加条件", async () => {
     vi.resetModules();
 

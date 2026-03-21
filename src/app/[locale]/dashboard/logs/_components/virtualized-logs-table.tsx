@@ -3,7 +3,15 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { ArrowUp, GitBranch, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 import { getUsageLogsBatch } from "@/actions/usage-logs";
 import { Badge } from "@/components/ui/badge";
@@ -171,11 +179,15 @@ export function VirtualizedLogsTable({
     setIsHistoryBrowsing(showScrollToTop);
   }, [showScrollToTop]);
 
-  useEffect(() => {
-    if (previousFiltersResetKeyRef.current === filtersResetKey) return;
-    previousFiltersResetKeyRef.current = filtersResetKey;
+  const handleFiltersReset = useEffectEvent((nextResetKey: string) => {
+    if (previousFiltersResetKeyRef.current === nextResetKey) return;
+    previousFiltersResetKeyRef.current = nextResetKey;
     resetScrollPosition();
   });
+
+  useEffect(() => {
+    handleFiltersReset(filtersResetKey);
+  }, [filtersResetKey]);
 
   if (isLoading) {
     return (
