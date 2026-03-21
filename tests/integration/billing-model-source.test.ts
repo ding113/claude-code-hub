@@ -78,6 +78,7 @@ vi.mock("@/lib/proxy-status-tracker", () => ({
 
 import { ProxyResponseHandler } from "@/app/v1/_lib/proxy/response-handler";
 import { ProxySession } from "@/app/v1/_lib/proxy/session";
+import { getCachedSystemSettings, invalidateSystemSettingsCache } from "@/lib/config";
 import { SessionManager } from "@/lib/session-manager";
 import { RateLimitService } from "@/lib/rate-limit";
 import { SessionTracker } from "@/lib/session-tracker";
@@ -91,10 +92,12 @@ import { getSystemSettings } from "@/repository/system-config";
 
 beforeEach(() => {
   cloudPriceSyncRequests.splice(0, cloudPriceSyncRequests.length);
+  invalidateSystemSettingsCache();
 });
 
 function makeSystemSettings(
-  billingModelSource: SystemSettings["billingModelSource"]
+  billingModelSource: SystemSettings["billingModelSource"],
+  codexPriorityBillingSource: SystemSettings["codexPriorityBillingSource"] = "requested"
 ): SystemSettings {
   const now = new Date();
   return {
@@ -103,6 +106,7 @@ function makeSystemSettings(
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource,
+    codexPriorityBillingSource,
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -112,6 +116,12 @@ function makeSystemSettings(
     verboseProviderError: false,
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
+    enableThinkingSignatureRectifier: true,
+    enableThinkingBudgetRectifier: true,
+    enableBillingHeaderRectifier: true,
+    enableResponseInputRectifier: true,
+    enableCodexSessionIdCompletion: true,
+    enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
     responseFixerConfig: {
       fixTruncatedJson: true,
@@ -267,6 +277,8 @@ async function runScenario({
   billingModelSource: SystemSettings["billingModelSource"];
   isStream: boolean;
 }): Promise<{ dbCostUsd: string; sessionCostUsd: string; rateLimitCost: number }> {
+  invalidateSystemSettingsCache();
+
   const usage = { input_tokens: 2, output_tokens: 3 };
   const originalModel = "original-model";
   const redirectedModel = "redirected-model";
@@ -441,7 +453,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(sessionCosts[0]).toBe("50");
   });
 
-  it("codex fast: uses priority pricing when response reports service_tier=priority", async () => {
+  it("codex fast: requested mode ignores actual priority when request tier is default", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
@@ -504,8 +516,8 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await ProxyResponseHandler.dispatch(session, response);
     await drainAsyncTasks();
 
-    expect(dbCosts[0]).toBe("64");
-    expect(sessionCosts[0]).toBe("64");
+    expect(dbCosts[0]).toBe("32");
+    expect(sessionCosts[0]).toBe("32");
   });
 
   it("codex fast: falls back to requested priority pricing when response omits service_tier", async () => {
@@ -630,7 +642,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     expect(sessionCosts[0]).toBe("1904147");
   });
 
-  it("codex fast: does not use priority pricing when response explicitly reports non-priority tier", async () => {
+  it("codex fast: requested mode keeps priority pricing even when actual tier is downgraded", async () => {
     vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected"));
     vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
     vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
@@ -669,6 +681,234 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
       redirectedModel: "gpt-5.4",
       sessionId: "sess-gpt54-priority-downgraded",
       messageId: 3202,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "priority" },
+    });
+
+    const response = createNonStreamResponse(
+      { input_tokens: 2, output_tokens: 3 },
+      { service_tier: "default" }
+    );
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("64");
+  });
+
+  it("codex fast: actual mode uses priority pricing when response reports service_tier=priority", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected", "actual"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 1,
+              output_cost_per_token: 10,
+              input_cost_per_token_priority: 2,
+              output_cost_per_token_priority: 20,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-priority-actual-mode-upgrade",
+      messageId: 3204,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "default" },
+    });
+
+    const response = createNonStreamResponse(
+      { input_tokens: 2, output_tokens: 3 },
+      { service_tier: "priority" }
+    );
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("64");
+  });
+
+  it("codex fast: actual mode does not use priority pricing when response explicitly reports non-priority tier", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected", "actual"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 1,
+              output_cost_per_token: 10,
+              input_cost_per_token_priority: 2,
+              output_cost_per_token_priority: 20,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-priority-actual-mode-downgrade",
+      messageId: 3205,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "priority" },
+    });
+
+    const response = createNonStreamResponse(
+      { input_tokens: 2, output_tokens: 3 },
+      { service_tier: "default" }
+    );
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("32");
+  });
+
+  it("codex fast: actual mode falls back to requested priority pricing when response omits service_tier", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValue(makeSystemSettings("redirected", "actual"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 1,
+              output_cost_per_token: 10,
+              input_cost_per_token_priority: 2,
+              output_cost_per_token_priority: 20,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-priority-actual-mode-fallback",
+      messageId: 3206,
+      providerOverrides: {
+        name: "ChatGPT",
+        url: "https://chatgpt.com/backend-api/codex",
+        providerType: "codex",
+      },
+      requestMessage: { service_tier: "priority" },
+    });
+
+    const response = createNonStreamResponse({ input_tokens: 2, output_tokens: 3 });
+    await ProxyResponseHandler.dispatch(session, response);
+    await drainAsyncTasks();
+
+    expect(dbCosts[0]).toBe("64");
+  });
+
+  it("codex fast: actual mode reuses cached system setting when direct settings read fails", async () => {
+    vi.mocked(getSystemSettings).mockResolvedValueOnce(makeSystemSettings("redirected", "actual"));
+    await getCachedSystemSettings();
+
+    vi.mocked(getSystemSettings).mockRejectedValueOnce(new Error("db down"));
+    vi.mocked(updateMessageRequestDetails).mockResolvedValue(undefined);
+    vi.mocked(updateMessageRequestDuration).mockResolvedValue(undefined);
+    vi.mocked(SessionManager.storeSessionResponse).mockResolvedValue(undefined);
+    vi.mocked(RateLimitService.trackUserDailyCost).mockResolvedValue(undefined);
+    vi.mocked(SessionTracker.refreshSession).mockResolvedValue(undefined);
+
+    vi.mocked(findLatestPriceByModel).mockImplementation(async (modelName: string) => {
+      if (modelName === "gpt-5.4") {
+        return makePriceRecord(modelName, {
+          mode: "responses",
+          model_family: "gpt",
+          litellm_provider: "chatgpt",
+          pricing: {
+            openai: {
+              input_cost_per_token: 1,
+              output_cost_per_token: 10,
+              input_cost_per_token_priority: 2,
+              output_cost_per_token_priority: 20,
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const dbCosts: string[] = [];
+    vi.mocked(updateMessageRequestCost).mockImplementation(
+      async (_id: number, costUsd: unknown) => {
+        dbCosts.push(String(costUsd));
+      }
+    );
+
+    const session = createSession({
+      originalModel: "gpt-5.4",
+      redirectedModel: "gpt-5.4",
+      sessionId: "sess-gpt54-priority-actual-mode-cached-settings",
+      messageId: 3207,
       providerOverrides: {
         name: "ChatGPT",
         url: "https://chatgpt.com/backend-api/codex",

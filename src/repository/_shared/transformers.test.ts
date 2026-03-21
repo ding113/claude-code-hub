@@ -277,6 +277,7 @@ describe("src/repository/_shared/transformers.ts", () => {
       expect(result.allowGlobalUsageView).toBe(true);
       expect(result.currencyDisplay).toBe("USD");
       expect(result.billingModelSource).toBe("original");
+      expect(result.codexPriorityBillingSource).toBe("requested");
       expect(result.timezone).toBeNull();
       expect(result.enableAutoCleanup).toBe(false);
       expect(result.cleanupRetentionDays).toBe(30);
@@ -293,10 +294,12 @@ describe("src/repository/_shared/transformers.ts", () => {
     it("应映射 interceptAnthropicWarmupRequests 字段", () => {
       const result = toSystemSettings({
         id: 1,
+        codexPriorityBillingSource: "actual",
         interceptAnthropicWarmupRequests: true,
       });
 
       expect(result.id).toBe(1);
+      expect(result.codexPriorityBillingSource).toBe("actual");
       expect(result.interceptAnthropicWarmupRequests).toBe(true);
     });
   });

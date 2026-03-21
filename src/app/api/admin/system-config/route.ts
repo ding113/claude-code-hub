@@ -59,6 +59,8 @@ export async function POST(req: Request) {
       siteTitle: validated.siteTitle?.trim(),
       allowGlobalUsageView: validated.allowGlobalUsageView,
       currencyDisplay: validated.currencyDisplay,
+      billingModelSource: validated.billingModelSource,
+      codexPriorityBillingSource: validated.codexPriorityBillingSource,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,
       cleanupSchedule: validated.cleanupSchedule,

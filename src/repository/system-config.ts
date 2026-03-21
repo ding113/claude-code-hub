@@ -140,6 +140,7 @@ function createFallbackSettings(): SystemSettings {
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource: "original",
+    codexPriorityBillingSource: "requested",
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -179,7 +180,7 @@ function createFallbackSettings(): SystemSettings {
  */
 export async function getSystemSettings(): Promise<SystemSettings> {
   async function selectSettingsRow() {
-    const fullSelection = {
+    const selectionWithoutCodexPriorityBillingSource = {
       id: systemSettings.id,
       siteTitle: systemSettings.siteTitle,
       allowGlobalUsageView: systemSettings.allowGlobalUsageView,
@@ -211,6 +212,10 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       createdAt: systemSettings.createdAt,
       updatedAt: systemSettings.updatedAt,
     };
+    const fullSelection = {
+      ...selectionWithoutCodexPriorityBillingSource,
+      codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
+    };
 
     try {
       const [row] = await db.select(fullSelection).from(systemSettings).limit(1);
@@ -222,18 +227,34 @@ export async function getSystemSettings(): Promise<SystemSettings> {
           error,
         });
 
-        const minimalSelection = {
-          id: systemSettings.id,
-          siteTitle: systemSettings.siteTitle,
-          allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-          currencyDisplay: systemSettings.currencyDisplay,
-          billingModelSource: systemSettings.billingModelSource,
-          createdAt: systemSettings.createdAt,
-          updatedAt: systemSettings.updatedAt,
-        };
+        try {
+          const [row] = await db
+            .select(selectionWithoutCodexPriorityBillingSource)
+            .from(systemSettings)
+            .limit(1);
+          return row ?? null;
+        } catch (fallbackError) {
+          if (!isUndefinedColumnError(fallbackError)) {
+            throw fallbackError;
+          }
 
-        const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
-        return row ?? null;
+          logger.warn("system_settings 表存在多个缺失列，继续使用最小字段集读取。", {
+            error: fallbackError,
+          });
+
+          const minimalSelection = {
+            id: systemSettings.id,
+            siteTitle: systemSettings.siteTitle,
+            allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+            currencyDisplay: systemSettings.currencyDisplay,
+            billingModelSource: systemSettings.billingModelSource,
+            createdAt: systemSettings.createdAt,
+            updatedAt: systemSettings.updatedAt,
+          };
+
+          const [row] = await db.select(minimalSelection).from(systemSettings).limit(1);
+          return row ?? null;
+        }
       }
 
       throw error;
@@ -247,15 +268,36 @@ export async function getSystemSettings(): Promise<SystemSettings> {
       return toSystemSettings(settings);
     }
 
-    await db
-      .insert(systemSettings)
-      .values({
-        siteTitle: DEFAULT_SITE_TITLE,
-        allowGlobalUsageView: false,
-        currencyDisplay: "USD",
-        billingModelSource: "original",
-      })
-      .onConflictDoNothing();
+    try {
+      await db
+        .insert(systemSettings)
+        .values({
+          siteTitle: DEFAULT_SITE_TITLE,
+          allowGlobalUsageView: false,
+          currencyDisplay: "USD",
+          billingModelSource: "original",
+          codexPriorityBillingSource: "requested",
+        })
+        .onConflictDoNothing();
+    } catch (error) {
+      if (!isUndefinedColumnError(error)) {
+        throw error;
+      }
+
+      logger.warn("system_settings 表列缺失，使用降级字段集初始化默认记录。", {
+        error,
+      });
+
+      await db
+        .insert(systemSettings)
+        .values({
+          siteTitle: DEFAULT_SITE_TITLE,
+          allowGlobalUsageView: false,
+          currencyDisplay: "USD",
+          billingModelSource: "original",
+        })
+        .onConflictDoNothing();
+    }
 
     const fallback = await selectSettingsRow();
     if (!fallback) {
@@ -278,9 +320,46 @@ export async function getSystemSettings(): Promise<SystemSettings> {
 export async function updateSystemSettings(
   payload: UpdateSystemSettingsInput
 ): Promise<SystemSettings> {
-  const current = await getSystemSettings();
+  const returningWithoutCodexPriorityBillingSource = {
+    id: systemSettings.id,
+    siteTitle: systemSettings.siteTitle,
+    allowGlobalUsageView: systemSettings.allowGlobalUsageView,
+    currencyDisplay: systemSettings.currencyDisplay,
+    billingModelSource: systemSettings.billingModelSource,
+    timezone: systemSettings.timezone,
+    enableAutoCleanup: systemSettings.enableAutoCleanup,
+    cleanupRetentionDays: systemSettings.cleanupRetentionDays,
+    cleanupSchedule: systemSettings.cleanupSchedule,
+    cleanupBatchSize: systemSettings.cleanupBatchSize,
+    enableClientVersionCheck: systemSettings.enableClientVersionCheck,
+    verboseProviderError: systemSettings.verboseProviderError,
+    enableHttp2: systemSettings.enableHttp2,
+    interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
+    enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
+    enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
+    enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
+    enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
+    enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
+    enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
+    enableResponseFixer: systemSettings.enableResponseFixer,
+    responseFixerConfig: systemSettings.responseFixerConfig,
+    quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
+    quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
+    quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
+    quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
+    quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
+    quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
+    createdAt: systemSettings.createdAt,
+    updatedAt: systemSettings.updatedAt,
+  };
+  const fullReturning = {
+    ...returningWithoutCodexPriorityBillingSource,
+    codexPriorityBillingSource: systemSettings.codexPriorityBillingSource,
+  };
 
   try {
+    const current = await getSystemSettings();
+
     // 构建更新对象，只更新提供的字段（非 undefined）
     const updates: Partial<typeof systemSettings.$inferInsert> = {
       updatedAt: new Date(),
@@ -302,6 +381,9 @@ export async function updateSystemSettings(
     // 计费模型来源配置字段（如果提供）
     if (payload.billingModelSource !== undefined) {
       updates.billingModelSource = payload.billingModelSource;
+    }
+    if (payload.codexPriorityBillingSource !== undefined) {
+      updates.codexPriorityBillingSource = payload.codexPriorityBillingSource;
     }
 
     // 系统时区配置字段（如果提供）
@@ -406,42 +488,31 @@ export async function updateSystemSettings(
         payload.quotaLeaseCapUsd === null ? null : String(payload.quotaLeaseCapUsd);
     }
 
-    const [updated] = await db
-      .update(systemSettings)
-      .set(updates)
-      .where(eq(systemSettings.id, current.id))
-      .returning({
-        id: systemSettings.id,
-        siteTitle: systemSettings.siteTitle,
-        allowGlobalUsageView: systemSettings.allowGlobalUsageView,
-        currencyDisplay: systemSettings.currencyDisplay,
-        billingModelSource: systemSettings.billingModelSource,
-        timezone: systemSettings.timezone,
-        enableAutoCleanup: systemSettings.enableAutoCleanup,
-        cleanupRetentionDays: systemSettings.cleanupRetentionDays,
-        cleanupSchedule: systemSettings.cleanupSchedule,
-        cleanupBatchSize: systemSettings.cleanupBatchSize,
-        enableClientVersionCheck: systemSettings.enableClientVersionCheck,
-        verboseProviderError: systemSettings.verboseProviderError,
-        enableHttp2: systemSettings.enableHttp2,
-        interceptAnthropicWarmupRequests: systemSettings.interceptAnthropicWarmupRequests,
-        enableThinkingSignatureRectifier: systemSettings.enableThinkingSignatureRectifier,
-        enableThinkingBudgetRectifier: systemSettings.enableThinkingBudgetRectifier,
-        enableBillingHeaderRectifier: systemSettings.enableBillingHeaderRectifier,
-        enableResponseInputRectifier: systemSettings.enableResponseInputRectifier,
-        enableCodexSessionIdCompletion: systemSettings.enableCodexSessionIdCompletion,
-        enableClaudeMetadataUserIdInjection: systemSettings.enableClaudeMetadataUserIdInjection,
-        enableResponseFixer: systemSettings.enableResponseFixer,
-        responseFixerConfig: systemSettings.responseFixerConfig,
-        quotaDbRefreshIntervalSeconds: systemSettings.quotaDbRefreshIntervalSeconds,
-        quotaLeasePercent5h: systemSettings.quotaLeasePercent5h,
-        quotaLeasePercentDaily: systemSettings.quotaLeasePercentDaily,
-        quotaLeasePercentWeekly: systemSettings.quotaLeasePercentWeekly,
-        quotaLeasePercentMonthly: systemSettings.quotaLeasePercentMonthly,
-        quotaLeaseCapUsd: systemSettings.quotaLeaseCapUsd,
-        createdAt: systemSettings.createdAt,
-        updatedAt: systemSettings.updatedAt,
+    let updated;
+    try {
+      [updated] = await db
+        .update(systemSettings)
+        .set(updates)
+        .where(eq(systemSettings.id, current.id))
+        .returning(fullReturning);
+    } catch (error) {
+      if (!isUndefinedColumnError(error)) {
+        throw error;
+      }
+
+      logger.warn("system_settings 表列缺失，使用降级字段集更新系统设置。", {
+        error,
       });
+
+      const downgradedUpdates = { ...updates };
+      delete downgradedUpdates.codexPriorityBillingSource;
+
+      [updated] = await db
+        .update(systemSettings)
+        .set(downgradedUpdates)
+        .where(eq(systemSettings.id, current.id))
+        .returning(returningWithoutCodexPriorityBillingSource);
+    }
 
     if (!updated) {
       throw new Error("更新系统设置失败");

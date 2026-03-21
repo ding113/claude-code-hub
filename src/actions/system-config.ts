@@ -8,7 +8,11 @@ import { logger } from "@/lib/logger";
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
-import type { ResponseFixerConfig, SystemSettings } from "@/types/system-config";
+import type {
+  CodexPriorityBillingSource,
+  ResponseFixerConfig,
+  SystemSettings,
+} from "@/types/system-config";
 import type { ActionResult } from "./types";
 
 export async function fetchSystemSettings(): Promise<ActionResult<SystemSettings>> {
@@ -47,6 +51,7 @@ export async function saveSystemSettings(formData: {
   allowGlobalUsageView?: boolean;
   currencyDisplay?: string;
   billingModelSource?: string;
+  codexPriorityBillingSource?: CodexPriorityBillingSource;
   timezone?: string | null;
   enableAutoCleanup?: boolean;
   cleanupRetentionDays?: number;
@@ -84,6 +89,7 @@ export async function saveSystemSettings(formData: {
       allowGlobalUsageView: validated.allowGlobalUsageView,
       currencyDisplay: validated.currencyDisplay,
       billingModelSource: validated.billingModelSource,
+      codexPriorityBillingSource: validated.codexPriorityBillingSource,
       timezone: validated.timezone,
       enableAutoCleanup: validated.enableAutoCleanup,
       cleanupRetentionDays: validated.cleanupRetentionDays,

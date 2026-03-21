@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { isRawPassthroughEndpointPolicy } from "@/app/v1/_lib/proxy/endpoint-policy";
 import { V1_ENDPOINT_PATHS } from "@/app/v1/_lib/proxy/endpoint-paths";
+import { invalidateSystemSettingsCache } from "@/lib/config";
 import type { ModelPrice, ModelPriceData } from "@/types/model-price";
 import type { SystemSettings } from "@/types/system-config";
 import type { Provider } from "@/types/provider";
@@ -27,6 +28,7 @@ function makeSystemSettings(
     allowGlobalUsageView: false,
     currencyDisplay: "USD",
     billingModelSource,
+    codexPriorityBillingSource: "requested",
     timezone: null,
     enableAutoCleanup: false,
     cleanupRetentionDays: 30,
@@ -36,6 +38,12 @@ function makeSystemSettings(
     verboseProviderError: false,
     enableHttp2: false,
     interceptAnthropicWarmupRequests: false,
+    enableThinkingSignatureRectifier: true,
+    enableThinkingBudgetRectifier: true,
+    enableBillingHeaderRectifier: true,
+    enableResponseInputRectifier: true,
+    enableCodexSessionIdCompletion: true,
+    enableClaudeMetadataUserIdInjection: true,
     enableResponseFixer: true,
     responseFixerConfig: {
       fixTruncatedJson: true,
@@ -48,6 +56,10 @@ function makeSystemSettings(
     updatedAt: now,
   };
 }
+
+beforeEach(() => {
+  invalidateSystemSettingsCache();
+});
 
 function makePriceRecord(modelName: string, priceData: ModelPriceData): ModelPrice {
   return {
@@ -255,7 +267,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     expect(findLatestPriceByModel).toHaveBeenNthCalledWith(2, "redirected-model");
   });
 
-  it("应在 getSystemSettings 失败时回退到 redirected", async () => {
+  it("应在 getSystemSettings 失败时通过缓存兜底回退到 redirected", async () => {
     const redirectedPriceData: ModelPriceData = {
       input_cost_per_token: 3,
       output_cost_per_token: 4,
@@ -273,7 +285,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
 
     const result = await session.getCachedPriceDataByBillingSource();
     expect(result).toEqual(redirectedPriceData);
-    expect(getSystemSettings).toHaveBeenCalledTimes(1);
+    expect(getSystemSettings).toHaveBeenCalledTimes(2);
     expect(findLatestPriceByModel).toHaveBeenCalledTimes(1);
     expect(findLatestPriceByModel).toHaveBeenCalledWith("redirected-model");
 

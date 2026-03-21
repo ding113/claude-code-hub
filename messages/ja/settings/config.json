@@ -13,6 +13,13 @@
       "redirected": "リダイレクト後（実際のモデル）"
     },
     "billingModelSourcePlaceholder": "課金モデルソースを選択",
+    "codexPriorityBillingSource": "Codex Priority 課金参照元",
+    "codexPriorityBillingSourceDesc": "Codex Priority（Fast Mode）の追加課金に使う service_tier を制御します。デフォルトは Requested Service Tier です。Actual Service Tier を選ぶとレスポンス値を優先し、レスポンスに無い場合はリクエスト値へフォールバックします。",
+    "codexPriorityBillingSourceOptions": {
+      "requested": "Requested Service Tier（デフォルト）",
+      "actual": "Actual Service Tier（無い場合は Requested へフォールバック）"
+    },
+    "codexPriorityBillingSourcePlaceholder": "Codex Priority の課金参照元を選択",
     "cleanupBatchSize": "バッチサイズ",
     "cleanupBatchSizeDesc": "バッチごとに削除するレコード数（範囲：1000-100000、推奨10000）",
     "cleanupBatchSizePlaceholder": "10000",

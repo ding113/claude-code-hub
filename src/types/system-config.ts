@@ -2,6 +2,7 @@ import type { CurrencyCode } from "@/lib/utils";
 
 // 计费模型来源: 'original' (重定向前) | 'redirected' (重定向后)
 export type BillingModelSource = "original" | "redirected";
+export type CodexPriorityBillingSource = "requested" | "actual";
 
 export interface ResponseFixerConfig {
   fixTruncatedJson: boolean;
@@ -21,6 +22,9 @@ export interface SystemSettings {
 
   // 计费模型来源配置
   billingModelSource: BillingModelSource;
+
+  // Codex Priority 单独计费口径
+  codexPriorityBillingSource: CodexPriorityBillingSource;
 
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
@@ -97,6 +101,9 @@ export interface UpdateSystemSettingsInput {
 
   // 计费模型来源配置（可选）
   billingModelSource?: BillingModelSource;
+
+  // Codex Priority 单独计费口径（可选）
+  codexPriorityBillingSource?: CodexPriorityBillingSource;
 
   // 系统时区配置（可选）
   timezone?: string | null;

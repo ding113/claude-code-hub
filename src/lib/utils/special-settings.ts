@@ -131,6 +131,8 @@ function buildSettingKey(setting: SpecialSetting): string {
         setting.hit,
         setting.requestedServiceTier,
         setting.actualServiceTier,
+        setting.billingSourcePreference ?? null,
+        setting.resolvedFrom ?? null,
         setting.effectivePriority,
       ]);
     case "response_input_rectifier":
@@ -207,7 +209,11 @@ export function hasPriorityServiceTierSpecialSetting(
       setting.type === "codex_service_tier_result"
   );
   if (codexServiceTierResult) {
-    if (codexServiceTierResult.actualServiceTier != null) {
+    if (
+      codexServiceTierResult.billingSourcePreference == null &&
+      codexServiceTierResult.resolvedFrom == null &&
+      codexServiceTierResult.actualServiceTier != null
+    ) {
       return codexServiceTierResult.actualServiceTier === "priority";
     }
     return codexServiceTierResult.effectivePriority;

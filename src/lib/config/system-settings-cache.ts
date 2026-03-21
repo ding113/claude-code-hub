@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS: Pick<
   SystemSettings,
   | "enableHttp2"
   | "interceptAnthropicWarmupRequests"
+  | "codexPriorityBillingSource"
   | "enableThinkingSignatureRectifier"
   | "enableThinkingBudgetRectifier"
   | "enableBillingHeaderRectifier"
@@ -39,6 +40,7 @@ const DEFAULT_SETTINGS: Pick<
 > = {
   enableHttp2: false,
   interceptAnthropicWarmupRequests: false,
+  codexPriorityBillingSource: "requested",
   enableThinkingSignatureRectifier: true,
   enableThinkingBudgetRectifier: true,
   enableBillingHeaderRectifier: true,
@@ -104,6 +106,7 @@ export async function getCachedSystemSettings(): Promise<SystemSettings> {
       allowGlobalUsageView: false,
       currencyDisplay: "USD",
       billingModelSource: "original",
+      codexPriorityBillingSource: DEFAULT_SETTINGS.codexPriorityBillingSource,
       timezone: null,
       verboseProviderError: false,
       enableAutoCleanup: false,
