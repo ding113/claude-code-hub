@@ -1,13 +1,11 @@
 "use client";
 
-import { useInfiniteQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, Filter, RefreshCw, ScrollText, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getMyAvailableEndpoints,
   getMyAvailableModels,
-  getMyUsageLogsBatch,
   type MyUsageLogsBatchFilters,
 } from "@/actions/my-usage";
 import { LogsDateRangePicker } from "@/app/[locale]/dashboard/logs/_components/logs-date-range-picker";
@@ -24,9 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { VirtualizedUsageLogsTable } from "./virtualized-usage-logs-table";
-
-const BATCH_SIZE = 50;
+import type { CurrencyCode } from "@/lib/utils/currency";
+import { type FirstPageData, VirtualizedUsageLogsTable } from "./virtualized-usage-logs-table";
 
 interface UsageLogsSectionProps {
   autoRefreshSeconds?: number;
@@ -61,7 +58,12 @@ export function UsageLogsSection({
   const [draftFilters, setDraftFilters] = useState<Filters>({});
   const [appliedFilters, setAppliedFilters] = useState<Filters>({});
 
-  // 将 Section 的 Filters 转为 VirtualizedTable 接受的 MyUsageLogsBatchFilters
+  // 从 VirtualizedTable 回调获取首页数据, 用于 header 摘要
+  const [firstPageData, setFirstPageData] = useState<FirstPageData | null>(null);
+  const handleFirstPageData = useCallback((data: FirstPageData) => {
+    setFirstPageData(data);
+  }, []);
+
   const tableFilters: MyUsageLogsBatchFilters = useMemo(
     () => ({
       startDate: appliedFilters.startDate,
@@ -75,27 +77,9 @@ export function UsageLogsSection({
     [appliedFilters]
   );
 
-  // 共享 queryKey 读取缓存数据, 用于 header 摘要统计
-  // TanStack Query 会自动去重, 不会产生额外请求
-  const { data: queryData, isFetching } = useInfiniteQuery({
-    queryKey: ["my-usage-logs-batch", tableFilters],
-    queryFn: async ({ pageParam }) => {
-      const result = await getMyUsageLogsBatch({
-        ...tableFilters,
-        cursor: pageParam,
-        limit: BATCH_SIZE,
-      });
-      if (!result.ok) throw new Error(result.error);
-      return result.data;
-    },
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    initialPageParam: undefined as { createdAt: string; id: number } | undefined,
-    staleTime: 30000,
-    refetchOnWindowFocus: false,
-  });
-
-  // 从首页数据提取 header 摘要
-  const firstPageLogs = queryData?.pages?.[0]?.logs ?? [];
+  // Header 摘要统计 (基于最近一批数据, 反映近期请求状态)
+  const firstPageLogs = firstPageData?.logs ?? [];
+  const isFetching = firstPageData?.isFetching ?? false;
 
   const activeFiltersCount = useMemo(() => {
     let count = 0;
@@ -428,20 +412,20 @@ export function UsageLogsSection({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={handleApply}>
+              <Button size="sm" onClick={handleApply} disabled={isFetching}>
                 {t("filters.apply")}
               </Button>
-              <Button size="sm" variant="outline" onClick={handleReset}>
+              <Button size="sm" variant="outline" onClick={handleReset} disabled={isFetching}>
                 {t("filters.reset")}
               </Button>
             </div>
 
             <VirtualizedUsageLogsTable
               filters={tableFilters}
-              currencyCode={queryData?.pages?.[0]?.currencyCode}
-              billingModelSource={queryData?.pages?.[0]?.billingModelSource}
+              currencyCode={firstPageData?.currencyCode as CurrencyCode | undefined}
               autoRefreshEnabled={Boolean(autoRefreshSeconds)}
               autoRefreshIntervalMs={autoRefreshMs}
+              onFirstPageData={handleFirstPageData}
             />
           </div>
         </CollapsibleContent>

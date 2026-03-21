@@ -5,7 +5,11 @@ import { ArrowUp, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getMyUsageLogsBatch, type MyUsageLogsBatchFilters } from "@/actions/my-usage";
+import {
+  getMyUsageLogsBatch,
+  type MyUsageLogEntry,
+  type MyUsageLogsBatchFilters,
+} from "@/actions/my-usage";
 import { ModelVendorIcon } from "@/components/customs/model-vendor-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,58 +19,79 @@ import { useVirtualizer } from "@/hooks/use-virtualizer";
 import { CURRENCY_CONFIG, cn, formatTokenAmount } from "@/lib/utils";
 import { copyTextToClipboard } from "@/lib/utils/clipboard";
 import type { CurrencyCode } from "@/lib/utils/currency";
-import type { BillingModelSource } from "@/types/system-config";
 
-const BATCH_SIZE = 50;
+export const BATCH_SIZE = 50;
 const ROW_HEIGHT = 48;
+
+export interface FirstPageData {
+  logs: MyUsageLogEntry[];
+  currencyCode?: string;
+  isFetching: boolean;
+}
 
 interface VirtualizedUsageLogsTableProps {
   filters: MyUsageLogsBatchFilters;
   currencyCode?: CurrencyCode;
-  billingModelSource?: BillingModelSource;
   autoRefreshEnabled?: boolean;
   autoRefreshIntervalMs?: number;
+  onFirstPageData?: (data: FirstPageData) => void;
 }
 
 export function VirtualizedUsageLogsTable({
   filters,
   currencyCode = "USD",
-  billingModelSource: _billingModelSource = "original",
   autoRefreshEnabled = true,
   autoRefreshIntervalMs = 5000,
+  onFirstPageData,
 }: VirtualizedUsageLogsTableProps) {
   const t = useTranslations("myUsage.logs");
+  const tStats = useTranslations("myUsage.stats");
   const tCommon = useTranslations("common");
   const parentRef = useRef<HTMLDivElement>(null);
   const [showScrollToTop, setShowScrollToTop] = useState(false);
   const shouldPoll = autoRefreshEnabled && !showScrollToTop;
 
   // Cursor-based infinite query
-  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
-    useInfiniteQuery({
-      queryKey: ["my-usage-logs-batch", filters],
-      queryFn: async ({ pageParam }) => {
-        const result = await getMyUsageLogsBatch({
-          ...filters,
-          cursor: pageParam,
-          limit: BATCH_SIZE,
-        });
-        if (!result.ok) throw new Error(result.error);
-        return result.data;
-      },
-      getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      initialPageParam: undefined as { createdAt: string; id: number } | undefined,
-      staleTime: 30000,
-      refetchOnWindowFocus: false,
-      refetchInterval: (query) => {
-        if (!shouldPoll) return false;
-        if (query.state.fetchStatus !== "idle") return false;
-        return autoRefreshIntervalMs;
-      },
-    });
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+  } = useInfiniteQuery({
+    queryKey: ["my-usage-logs-batch", filters],
+    queryFn: async ({ pageParam }) => {
+      const result = await getMyUsageLogsBatch({
+        ...filters,
+        cursor: pageParam,
+        limit: BATCH_SIZE,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return result.data;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    initialPageParam: undefined as { createdAt: string; id: number } | undefined,
+    staleTime: 30000,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      if (!shouldPoll) return false;
+      if (query.state.fetchStatus !== "idle") return false;
+      return autoRefreshIntervalMs;
+    },
+  });
 
   const pages = data?.pages;
   const allLogs = useMemo(() => pages?.flatMap((page) => page.logs) ?? [], [pages]);
+
+  // 向父组件传递首页数据 (header 摘要统计用)
+  const firstPageLogs = pages?.[0]?.logs ?? [];
+  const firstPageCurrency = pages?.[0]?.currencyCode;
+  useEffect(() => {
+    onFirstPageData?.({ logs: firstPageLogs, currencyCode: firstPageCurrency, isFetching });
+  }, [firstPageLogs, firstPageCurrency, isFetching, onFirstPageData]);
 
   // Virtual list setup
   const rowVirtualizer = useVirtualizer({
@@ -247,12 +272,13 @@ export function VirtualizedUsageLogsTable({
                         <div className="flex items-center gap-1.5">
                           {log.model ? <ModelVendorIcon modelId={log.model} /> : null}
                           {log.model ? (
-                            <span
-                              className="cursor-pointer hover:underline truncate"
+                            <button
+                              type="button"
+                              className="cursor-pointer truncate text-left hover:underline"
                               onClick={() => handleCopyModel(log.model!)}
                             >
                               {log.model}
-                            </span>
+                            </button>
                           ) : (
                             <span>{t("unknownModel")}</span>
                           )}
@@ -283,8 +309,12 @@ export function VirtualizedUsageLogsTable({
                             </div>
                           </TooltipTrigger>
                           <TooltipContent align="end" className="text-xs space-y-1">
-                            <div>Input: {formatTokenAmount(log.inputTokens)}</div>
-                            <div>Output: {formatTokenAmount(log.outputTokens)}</div>
+                            <div>
+                              {tStats("input")}: {formatTokenAmount(log.inputTokens)}
+                            </div>
+                            <div>
+                              {tStats("output")}: {formatTokenAmount(log.outputTokens)}
+                            </div>
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>

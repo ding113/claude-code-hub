@@ -699,6 +699,7 @@ export async function findUsageLogsForKeyBatch(
   filters: UsageLogSlimBatchFilters
 ): Promise<UsageLogSlimBatchResult> {
   const { keyString, cursor, limit = 50 } = filters;
+  const safeLimit = Math.min(100, Math.max(1, limit));
 
   // 基础条件：未删除 + 指定 Key + 排除 warmup
   const conditions = [
@@ -716,7 +717,7 @@ export async function findUsageLogsForKeyBatch(
     );
   }
 
-  const fetchLimit = limit + 1;
+  const fetchLimit = safeLimit + 1;
 
   const results = await db
     .select({
@@ -743,8 +744,8 @@ export async function findUsageLogsForKeyBatch(
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
     .limit(fetchLimit);
 
-  const hasMore = results.length > limit;
-  const pageRows = hasMore ? results.slice(0, limit) : results;
+  const hasMore = results.length > safeLimit;
+  const pageRows = hasMore ? results.slice(0, safeLimit) : results;
 
   // 从最后一条记录生成 nextCursor
   const lastLog = pageRows[pageRows.length - 1];
@@ -828,8 +829,8 @@ export async function findUsageLogsForKeyBatch(
     .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
     .limit(fetchLimit);
 
-  const ledgerHasMore = ledgerResults.length > limit;
-  const ledgerPageRows = ledgerHasMore ? ledgerResults.slice(0, limit) : ledgerResults;
+  const ledgerHasMore = ledgerResults.length > safeLimit;
+  const ledgerPageRows = ledgerHasMore ? ledgerResults.slice(0, safeLimit) : ledgerResults;
 
   const ledgerLastLog = ledgerPageRows[ledgerPageRows.length - 1];
   const ledgerNextCursor =
