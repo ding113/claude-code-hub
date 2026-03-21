@@ -55,6 +55,7 @@ describe("saveSystemSettings", () => {
       allowGlobalUsageView: false,
       currencyDisplay: "CNY",
       billingModelSource: "original",
+      codexPriorityBillingSource: "requested",
       timezone: null,
       enableAutoCleanup: false,
       cleanupRetentionDays: 30,
@@ -179,6 +180,7 @@ describe("saveSystemSettings", () => {
       allowGlobalUsageView: true,
       currencyDisplay: "USD",
       billingModelSource: "original",
+      codexPriorityBillingSource: "actual",
       timezone: "America/New_York",
       enableAutoCleanup: false,
       cleanupRetentionDays: 30,
@@ -217,6 +219,7 @@ describe("saveSystemSettings", () => {
       siteTitle: "Updated Title",
       allowGlobalUsageView: true,
       currencyDisplay: "USD",
+      codexPriorityBillingSource: "actual",
       timezone: "America/New_York",
       verboseProviderError: true,
       enableHttp2: true,
@@ -233,5 +236,18 @@ describe("saveSystemSettings", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toContain("Database error");
+  });
+
+  it("should pass codexPriorityBillingSource through validation and save", async () => {
+    const result = await saveSystemSettings({
+      codexPriorityBillingSource: "actual",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updateSystemSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        codexPriorityBillingSource: "actual",
+      })
+    );
   });
 });

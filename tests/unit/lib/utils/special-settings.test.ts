@@ -173,13 +173,15 @@ describe("hasPriorityServiceTierSpecialSetting", () => {
           hit: true,
           requestedServiceTier: "default",
           actualServiceTier: "priority",
+          billingSourcePreference: "actual",
+          resolvedFrom: "actual",
           effectivePriority: true,
         },
       ])
     ).toBe(true);
   });
 
-  test("returns false when codex actual service tier is non-priority even if request was priority", () => {
+  test("returns true when billing follows requested priority even if actual tier is downgraded", () => {
     expect(
       hasPriorityServiceTierSpecialSetting([
         {
@@ -198,6 +200,25 @@ describe("hasPriorityServiceTierSpecialSetting", () => {
           hit: true,
           requestedServiceTier: "priority",
           actualServiceTier: "default",
+          billingSourcePreference: "requested",
+          resolvedFrom: "requested",
+          effectivePriority: true,
+        },
+      ])
+    ).toBe(true);
+  });
+
+  test("returns false when billing follows actual non-priority tier", () => {
+    expect(
+      hasPriorityServiceTierSpecialSetting([
+        {
+          type: "codex_service_tier_result",
+          scope: "response",
+          hit: true,
+          requestedServiceTier: "priority",
+          actualServiceTier: "default",
+          billingSourcePreference: "actual",
+          resolvedFrom: "actual",
           effectivePriority: false,
         },
       ])

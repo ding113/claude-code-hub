@@ -13,6 +13,13 @@
       "redirected": "После перенаправления (фактическая модель)"
     },
     "billingModelSourcePlaceholder": "Выберите источник модели для тарификации",
+    "codexPriorityBillingSource": "Источник тарификации Codex Priority",
+    "codexPriorityBillingSourceDesc": "Определяет, какой service_tier использовать для отдельной тарификации Codex Priority (Fast Mode). По умолчанию используется Requested Service Tier; если выбран Actual Service Tier, сначала берется значение из ответа, а при его отсутствии используется значение из запроса.",
+    "codexPriorityBillingSourceOptions": {
+      "requested": "Requested Service Tier (по умолчанию)",
+      "actual": "Actual Service Tier (с откатом к Requested)"
+    },
+    "codexPriorityBillingSourcePlaceholder": "Выберите источник тарификации Codex Priority",
     "cleanupBatchSize": "Размер пакета",
     "cleanupBatchSizeDesc": "Количество записей для удаления за раз (диапазон: 1000-100000, рекомендуется 10000)",
     "cleanupBatchSizePlaceholder": "10000",

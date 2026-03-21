@@ -678,6 +678,11 @@ export const systemSettings = pgTable('system_settings', {
   // 计费模型来源配置: 'original' (重定向前) | 'redirected' (重定向后)
   billingModelSource: varchar('billing_model_source', { length: 20 }).notNull().default('original'),
 
+  // Codex Priority 单独计费来源配置: 'requested' (请求值) | 'actual' (响应值)
+  codexPriorityBillingSource: varchar('codex_priority_billing_source', { length: 20 })
+    .notNull()
+    .default('requested'),
+
   // 系统时区配置 (IANA timezone identifier)
   // 用于统一后端时间边界计算和前端日期/时间显示
   // null 表示使用环境变量 TZ 或默认 UTC
