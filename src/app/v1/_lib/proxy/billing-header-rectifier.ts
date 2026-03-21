@@ -17,6 +17,15 @@ export type BillingHeaderRectifierResult = {
 };
 
 const BILLING_HEADER_PATTERN = /^\s*x-anthropic-billing-header\s*:/i;
+const REDACTED_BILLING_HEADER_VALUE = "x-anthropic-billing-header: [REDACTED]";
+
+function redactBillingHeaderAuditValue(value: string): string {
+  if (!BILLING_HEADER_PATTERN.test(value)) {
+    return value.trim();
+  }
+
+  return REDACTED_BILLING_HEADER_VALUE;
+}
 
 /**
  * Remove x-anthropic-billing-header text blocks from the request system prompt.
@@ -35,7 +44,7 @@ export function rectifyBillingHeader(
   // Case 2: system is a plain string
   if (typeof system === "string") {
     if (BILLING_HEADER_PATTERN.test(system)) {
-      const extractedValues = [system.trim()];
+      const extractedValues = [redactBillingHeaderAuditValue(system)];
       delete message.system;
       return { applied: true, removedCount: 1, extractedValues };
     }
@@ -55,7 +64,9 @@ export function rectifyBillingHeader(
         typeof (block as Record<string, unknown>).text === "string" &&
         BILLING_HEADER_PATTERN.test((block as Record<string, unknown>).text as string)
       ) {
-        extractedValues.push(((block as Record<string, unknown>).text as string).trim());
+        extractedValues.push(
+          redactBillingHeaderAuditValue((block as Record<string, unknown>).text as string)
+        );
       } else {
         filtered.push(block);
       }

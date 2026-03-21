@@ -104,18 +104,28 @@ function createSession({
 }
 
 describe("ProxySession endpoint policy", () => {
-  it.each([
-    V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS,
-    "/V1/RESPONSES/COMPACT/",
-  ])("应在创建时解析 raw passthrough policy: %s", (pathname) => {
+  it("应在创建时解析 count_tokens raw passthrough policy", () => {
     const session = createSession({
       redirectedModel: null,
-      requestUrl: new URL(`http://localhost${pathname}`),
+      requestUrl: new URL(`http://localhost${V1_ENDPOINT_PATHS.MESSAGES_COUNT_TOKENS}`),
     });
 
     const policy = session.getEndpointPolicy();
     expect(isRawPassthroughEndpointPolicy(policy)).toBe(true);
     expect(policy.trackConcurrentRequests).toBe(false);
+  });
+
+  it("应在创建时解析 responses/compact guarded passthrough policy", () => {
+    const session = createSession({
+      redirectedModel: null,
+      requestUrl: new URL("http://localhost/V1/RESPONSES/COMPACT/"),
+    });
+
+    const policy = session.getEndpointPolicy();
+    expect(isRawPassthroughEndpointPolicy(policy)).toBe(false);
+    expect(policy.kind).toBe("guarded_passthrough");
+    expect(policy.trackConcurrentRequests).toBe(true);
+    expect(policy.bypassForwarderPreprocessing).toBe(true);
   });
 
   it("应在请求路径后续变更后保持创建时 policy 不变", () => {

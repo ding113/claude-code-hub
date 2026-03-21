@@ -39,7 +39,7 @@ const FAMILY_SAMPLES = [
     id: "response-compact",
     path: "/v1/responses/compact",
     format: "response",
-    accountingTier: "none",
+    accountingTier: "required_usage",
     modelRequired: false,
   },
   {
