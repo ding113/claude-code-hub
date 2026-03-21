@@ -1335,7 +1335,8 @@ export class ProxyForwarder {
     if (provider.providerType === "gemini" || provider.providerType === "gemini-cli") {
       // joinOpenAIPool: OpenAI 客户端请求路由到 Gemini 供应商
       // 需要将 OpenAI 格式请求转换为 Gemini 格式，并构建正确的 Gemini API URL
-      const isOpenAIToGeminiConversion = session.originalFormat === "openai" && provider.joinOpenAIPool;
+      const isOpenAIToGeminiConversion =
+        session.originalFormat === "openai" && provider.joinOpenAIPool;
 
       if (isOpenAIToGeminiConversion) {
         // 检测客户端是否要求流式
@@ -1351,7 +1352,7 @@ export class ProxyForwarder {
             system: openAIBody.system,
             temperature: openAIBody.temperature,
             top_p: openAIBody.top_p,
-            max_tokens: (openAIBody.max_tokens ?? openAIBody.max_completion_tokens),
+            max_tokens: openAIBody.max_tokens ?? openAIBody.max_completion_tokens,
             stop_sequences: openAIBody.stop,
           } as Parameters<typeof GeminiAdapter.transformRequest>[0],
           provider.providerType as "gemini" | "gemini-cli"
@@ -1519,7 +1520,9 @@ export class ProxyForwarder {
           if (
             !clientWantsStream &&
             session.originalFormat === "openai" &&
-            (provider.providerType === "claude" || provider.providerType === "claude-auth" || provider.providerType === "codex")
+            (provider.providerType === "claude" ||
+              provider.providerType === "claude-auth" ||
+              provider.providerType === "codex")
           ) {
             (session as any)._joinPoolNonStream = true;
             logger.debug("ProxyForwarder: joinOpenAIPool non-stream client detected", {
