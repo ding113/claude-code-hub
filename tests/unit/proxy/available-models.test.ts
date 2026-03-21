@@ -10,9 +10,19 @@ vi.mock("@/repository/key", () => ({
 }));
 
 vi.mock("@/app/v1/_lib/proxy/provider-selector", () => ({
-  ProxyProviderResolver: {
-    selectProviderByType: vi.fn(),
-  },
+  checkProviderGroupMatch: vi.fn(),
+}));
+
+vi.mock("@/repository/provider", () => ({
+  findAllProviders: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("@/lib/utils/provider-schedule", () => ({
+  isProviderActiveNow: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: vi.fn().mockResolvedValue("UTC"),
 }));
 
 import {
