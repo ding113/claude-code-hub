@@ -371,23 +371,17 @@ async function getAvailableModelsByProviderTypes(
 ): Promise<{ models: FetchedModel[]; providerName?: string }> {
   const allProviders = await findAllProviders();
 
-  // 分组过滤
+  // 过滤出所有匹配的供应商
   const effectiveGroup = authState.key.providerGroup || authState.user.providerGroup || null;
-  let visibleProviders = allProviders;
-  if (effectiveGroup) {
-    visibleProviders = allProviders.filter((p) =>
-      checkProviderGroupMatch(p.groupTag, effectiveGroup)
-    );
-  }
-
-  // 按 providerType + 启用状态 + 调度时间窗口过滤
   const providerTypeSet = new Set(providerTypes);
   const systemTimezone = await resolveSystemTimezone();
-  const matchedProviders = visibleProviders.filter(
+
+  const matchedProviders = allProviders.filter(
     (p) =>
       p.isEnabled &&
       providerTypeSet.has(p.providerType) &&
-      isProviderActiveNow(p.activeTimeStart, p.activeTimeEnd, systemTimezone)
+      isProviderActiveNow(p.activeTimeStart, p.activeTimeEnd, systemTimezone) &&
+      (!effectiveGroup || checkProviderGroupMatch(p.groupTag, effectiveGroup))
   );
 
   if (matchedProviders.length === 0) {
