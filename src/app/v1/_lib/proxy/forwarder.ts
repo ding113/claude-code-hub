@@ -1582,6 +1582,51 @@ export class ProxyForwarder {
         });
       }
 
+      // 兜底：确保发送到 Claude/Claude-Auth 供应商的请求都包含 Claude Code 身份系统提示词
+      // 部分上游中转站（如 AnyRouter）要求请求必须带有该提示词才能通过校验
+      if (
+        (provider.providerType === "claude" || provider.providerType === "claude-auth") &&
+        !(session as any)._systemPromptInjected
+      ) {
+        const message = session.request.message as Record<string, unknown>;
+        const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
+        const claudeCodeSystemBlock = {
+          type: "text",
+          text: claudeCodeIdentity,
+          cache_control: { type: "ephemeral" },
+        };
+
+        const existingSystem = message.system;
+        // 检查是否已包含 Claude Code 身份提示，避免重复注入
+        const hasClaudeCodeIdentity =
+          Array.isArray(existingSystem) &&
+          (existingSystem as Array<Record<string, unknown>>).some(
+            (block) => typeof block.text === "string" && block.text.includes("Claude Code")
+          );
+
+        if (!hasClaudeCodeIdentity) {
+          if (!existingSystem) {
+            message.system = [claudeCodeSystemBlock, { type: "text", text: claudeCodeIdentity }];
+          } else if (typeof existingSystem === "string") {
+            message.system = [claudeCodeSystemBlock, { type: "text", text: existingSystem }];
+          } else if (Array.isArray(existingSystem)) {
+            (message.system as unknown[]).unshift(claudeCodeSystemBlock);
+          }
+
+          logger.debug("ProxyForwarder: Injected missing Claude Code system prompt for Claude provider", {
+            providerId: provider.id,
+            originalFormat: session.originalFormat,
+            existingSystemType: existingSystem
+              ? Array.isArray(existingSystem)
+                ? "array"
+                : typeof existingSystem
+              : "none",
+          });
+        }
+
+        (session as any)._systemPromptInjected = true;
+      }
+
       // joinOpenAIPool: 注入 thinking 和 metadata 字段
       // OpenAI 客户端不会发送这些 Claude Code 特有字段，需要由代理补充
       // 部分上游中转站会验证这些字段以确认请求来自 Claude Code
@@ -1618,9 +1663,12 @@ export class ProxyForwarder {
             });
           }
         }
+      }
 
-        // 注入 metadata.user_id（Claude Code 请求标识）
-        // 统一使用新协议格式：json{"device_id":"...","account_uuid":"...","session_id":"..."}
+      // 兜底：确保发送到 Claude/Claude-Auth 供应商的请求都包含 metadata.user_id
+      // 无论客户端格式如何，如果缺少 user_id，上游中转站可能会拒绝请求
+      if (provider.providerType === "claude" || provider.providerType === "claude-auth") {
+        const message = session.request.message as Record<string, unknown>;
         const metadata = (message.metadata ?? {}) as Record<string, unknown>;
         if (!metadata.user_id) {
           const globalSettings = await getCachedSystemSettings();
@@ -1630,8 +1678,9 @@ export class ProxyForwarder {
             globalSettings.enableClaudeCodeJsonUserIdFormat ? "json" : "legacy"
           );
           message.metadata = metadata;
-          logger.debug("ProxyForwarder: Injected metadata.user_id for OpenAI->Claude", {
+          logger.debug("ProxyForwarder: Injected missing metadata.user_id for Claude provider", {
             providerId: provider.id,
+            originalFormat: session.originalFormat,
           });
         }
       }
