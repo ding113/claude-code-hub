@@ -1,12 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  getMyQuota,
-  getMyUsageLogs,
-  type MyUsageLogsResult,
-  type MyUsageQuota,
-} from "@/actions/my-usage";
+import { getMyQuota, type MyUsageQuota } from "@/actions/my-usage";
 import { getServerTimeZone } from "@/actions/system-config";
 import { useRouter } from "@/i18n/routing";
 import { CollapsibleQuotaCard } from "./_components/collapsible-quota-card";
@@ -20,26 +15,17 @@ export default function MyUsagePage() {
   const router = useRouter();
 
   const [quota, setQuota] = useState<MyUsageQuota | null>(null);
-  const [logsData, setLogsData] = useState<MyUsageLogsResult | null>(null);
   const [isQuotaLoading, setIsQuotaLoading] = useState(true);
-  const [isLogsLoading, setIsLogsLoading] = useState(true);
   const [serverTimeZone, setServerTimeZone] = useState<string | undefined>(undefined);
 
   const loadInitial = useCallback(() => {
     setIsQuotaLoading(true);
-    setIsLogsLoading(true);
 
     void getMyQuota()
       .then((quotaResult) => {
         if (quotaResult.ok) setQuota(quotaResult.data);
       })
       .finally(() => setIsQuotaLoading(false));
-
-    void getMyUsageLogs({ page: 1 })
-      .then((logsResult) => {
-        if (logsResult.ok) setLogsData(logsResult.data ?? null);
-      })
-      .finally(() => setIsLogsLoading(false));
 
     void getServerTimeZone().then((tzResult) => {
       if (tzResult.ok) setServerTimeZone(tzResult.data.timeZone);
@@ -85,12 +71,7 @@ export default function MyUsagePage() {
 
       <StatisticsSummaryCard serverTimeZone={serverTimeZone} />
 
-      <UsageLogsSection
-        initialData={logsData}
-        loading={isLogsLoading}
-        autoRefreshSeconds={30}
-        serverTimeZone={serverTimeZone}
-      />
+      <UsageLogsSection autoRefreshSeconds={30} serverTimeZone={serverTimeZone} />
     </div>
   );
 }

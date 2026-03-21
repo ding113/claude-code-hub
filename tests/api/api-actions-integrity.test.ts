@@ -14,7 +14,36 @@ import { beforeAll, describe, expect, test } from "vitest";
 import { callActionsRoute } from "../test-utils";
 
 type OpenAPIDocument = {
-  paths: Record<string, Record<string, { summary?: string; tags?: string[] }>>;
+  paths: Record<
+    string,
+    Record<
+      string,
+      {
+        summary?: string;
+        tags?: string[];
+        requestBody?: {
+          content?: {
+            "application/json"?: {
+              schema?: {
+                properties?: Record<string, { type?: string; format?: string }>;
+              };
+            };
+          };
+        };
+        responses?: {
+          [status: string]: {
+            content?: {
+              "application/json"?: {
+                schema?: {
+                  properties?: Record<string, unknown>;
+                };
+              };
+            };
+          };
+        };
+      }
+    >
+  >;
 };
 
 describe("OpenAPI 端点完整性检查", () => {
@@ -118,7 +147,7 @@ describe("OpenAPI 端点完整性检查", () => {
       "/api/actions/my-usage/getMyUsageMetadata",
       "/api/actions/my-usage/getMyQuota",
       "/api/actions/my-usage/getMyTodayStats",
-      "/api/actions/my-usage/getMyUsageLogs",
+      "/api/actions/my-usage/getMyUsageLogsBatch",
       "/api/actions/my-usage/getMyAvailableModels",
       "/api/actions/my-usage/getMyAvailableEndpoints",
     ];
@@ -127,6 +156,26 @@ describe("OpenAPI 端点完整性检查", () => {
       expect(openApiDoc.paths[path]).toBeDefined();
       expect(openApiDoc.paths[path].post).toBeDefined();
     }
+  });
+
+  test("我的用量批量日志端点应将 cursor id 声明为整数", () => {
+    const operation = openApiDoc.paths["/api/actions/my-usage/getMyUsageLogsBatch"]?.post;
+    const requestCursorId = operation?.requestBody?.content?.["application/json"]?.schema
+      ?.properties?.cursor as
+      | { properties?: Record<string, { type?: string; format?: string }> }
+      | undefined;
+    const responseData = operation?.responses?.["200"]?.content?.["application/json"]?.schema
+      ?.properties?.data as
+      | {
+          properties?: Record<
+            string,
+            { properties?: Record<string, { type?: string; format?: string }> }
+          >;
+        }
+      | undefined;
+
+    expect(requestCursorId?.properties?.id?.type).toBe("integer");
+    expect(responseData?.properties?.nextCursor?.properties?.id?.type).toBe("integer");
   });
 
   test("概览模块的所有端点应该被注册", () => {

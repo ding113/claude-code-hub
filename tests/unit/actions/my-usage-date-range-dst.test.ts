@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
   getSystemSettings: vi.fn(),
   findUsageLogsForKeySlim: vi.fn(),
+  findUsageLogsForKeyBatch: vi.fn(),
   resolveSystemTimezone: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ vi.mock("@/repository/usage-logs", async (importOriginal) => {
   return {
     ...actual,
     findUsageLogsForKeySlim: mocks.findUsageLogsForKeySlim,
+    findUsageLogsForKeyBatch: mocks.findUsageLogsForKeyBatch,
   };
 });
 
@@ -29,7 +31,7 @@ vi.mock("@/lib/utils/timezone", () => ({
 }));
 
 describe("my-usage date range parsing", () => {
-  it("computes exclusive endTime as next local midnight across DST start", async () => {
+  it("computes exclusive endTime as next local midnight across DST start for batch logs", async () => {
     const tz = "America/Los_Angeles";
     mocks.resolveSystemTimezone.mockResolvedValue(tz);
 
@@ -43,22 +45,27 @@ describe("my-usage date range parsing", () => {
       billingModelSource: "original",
     });
 
-    mocks.findUsageLogsForKeySlim.mockResolvedValue({ logs: [], total: 0 });
+    mocks.findUsageLogsForKeyBatch.mockResolvedValue({
+      logs: [],
+      nextCursor: null,
+      hasMore: false,
+    });
 
-    const { getMyUsageLogs } = await import("@/actions/my-usage");
-    const res = await getMyUsageLogs({ startDate: "2024-03-10", endDate: "2024-03-10" });
+    const { getMyUsageLogsBatch } = await import("@/actions/my-usage");
+    const res = await getMyUsageLogsBatch({ startDate: "2024-03-10", endDate: "2024-03-10" });
 
     expect(res.ok).toBe(true);
-    expect(mocks.findUsageLogsForKeySlim).toHaveBeenCalledTimes(1);
+    expect(mocks.findUsageLogsForKeyBatch).toHaveBeenCalledTimes(1);
 
-    const args = mocks.findUsageLogsForKeySlim.mock.calls[0]?.[0];
+    const args = mocks.findUsageLogsForKeyBatch.mock.calls[0]?.[0];
     expect(args.startTime).toBe(fromZonedTime("2024-03-10T00:00:00", tz).getTime());
     expect(args.endTime).toBe(fromZonedTime("2024-03-11T00:00:00", tz).getTime());
+    expect(args.limit).toBe(20);
 
     expect(args.endTime - args.startTime).toBe(23 * 60 * 60 * 1000);
   });
 
-  it("computes exclusive endTime as next local midnight across DST end", async () => {
+  it("computes exclusive endTime as next local midnight across DST end for batch logs", async () => {
     const tz = "America/Los_Angeles";
     mocks.resolveSystemTimezone.mockResolvedValue(tz);
 
@@ -72,17 +79,22 @@ describe("my-usage date range parsing", () => {
       billingModelSource: "original",
     });
 
-    mocks.findUsageLogsForKeySlim.mockResolvedValue({ logs: [], total: 0 });
+    mocks.findUsageLogsForKeyBatch.mockResolvedValue({
+      logs: [],
+      nextCursor: null,
+      hasMore: false,
+    });
 
-    const { getMyUsageLogs } = await import("@/actions/my-usage");
-    const res = await getMyUsageLogs({ startDate: "2024-11-03", endDate: "2024-11-03" });
+    const { getMyUsageLogsBatch } = await import("@/actions/my-usage");
+    const res = await getMyUsageLogsBatch({ startDate: "2024-11-03", endDate: "2024-11-03" });
 
     expect(res.ok).toBe(true);
-    expect(mocks.findUsageLogsForKeySlim).toHaveBeenCalledTimes(1);
+    expect(mocks.findUsageLogsForKeyBatch).toHaveBeenCalledTimes(1);
 
-    const args = mocks.findUsageLogsForKeySlim.mock.calls[0]?.[0];
+    const args = mocks.findUsageLogsForKeyBatch.mock.calls[0]?.[0];
     expect(args.startTime).toBe(fromZonedTime("2024-11-03T00:00:00", tz).getTime());
     expect(args.endTime).toBe(fromZonedTime("2024-11-04T00:00:00", tz).getTime());
+    expect(args.limit).toBe(20);
 
     expect(args.endTime - args.startTime).toBe(25 * 60 * 60 * 1000);
   });

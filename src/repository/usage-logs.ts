@@ -213,8 +213,7 @@ export async function findUsageLogsBatch(
 
   // Calculate next cursor from the last record
   const lastLog = logsToReturn[logsToReturn.length - 1];
-  const nextCursor =
-    hasMore && lastLog?.createdAtRaw ? { createdAt: lastLog.createdAtRaw, id: lastLog.id } : null;
+  const nextCursor = buildNextCursorOrThrow(hasMore, lastLog, "findUsageLogsBatch");
 
   const logs: UsageLogRow[] = logsToReturn.map((row) => {
     const totalRowTokens =
@@ -353,10 +352,11 @@ export async function findUsageLogsBatch(
   const ledgerHasMore = ledgerResults.length > limit;
   const ledgerRowsToReturn = ledgerHasMore ? ledgerResults.slice(0, limit) : ledgerResults;
   const ledgerLastLog = ledgerRowsToReturn[ledgerRowsToReturn.length - 1];
-  const ledgerNextCursor =
-    ledgerHasMore && ledgerLastLog?.createdAtRaw
-      ? { createdAt: ledgerLastLog.createdAtRaw, id: ledgerLastLog.id }
-      : null;
+  const ledgerNextCursor = buildNextCursorOrThrow(
+    ledgerHasMore,
+    ledgerLastLog,
+    "findUsageLogsBatch ledger fallback"
+  );
 
   const fallbackLogs: UsageLogRow[] = ledgerRowsToReturn.map((row) => {
     const totalRowTokens =
@@ -419,8 +419,11 @@ interface UsageLogSlimFilters {
   endpoint?: string;
   /** 最低重试次数（按 provider_chain 中“实际请求”数量 - 1 计算；<= 0 视为不筛选） */
   minRetryCount?: number;
-  page?: number;
-  pageSize?: number;
+}
+
+interface UsageLogSlimBatchFilters extends UsageLogSlimFilters {
+  cursor?: { createdAt: string; id: number };
+  limit?: number;
 }
 
 interface UsageLogSlimRow {
@@ -440,6 +443,29 @@ interface UsageLogSlimRow {
   cacheCreation1hInputTokens: number | null;
   cacheTtlApplied: string | null;
   anthropicEffort?: string | null;
+}
+
+export interface UsageLogSlimBatchResult {
+  logs: UsageLogSlimRow[];
+  nextCursor: { createdAt: string; id: number } | null;
+  hasMore: boolean;
+}
+
+function buildNextCursorOrThrow(
+  hasMore: boolean,
+  lastRow:
+    | {
+        createdAtRaw?: string | null;
+        id: number;
+      }
+    | undefined,
+  context: string
+): { createdAt: string; id: number } | null {
+  if (!hasMore) return null;
+  if (!lastRow?.createdAtRaw) {
+    throw new Error(`${context}: expected next cursor when hasMore is true`);
+  }
+  return { createdAt: lastRow.createdAtRaw, id: lastRow.id };
 }
 
 function mapUsageLogSlimRow(row: {
@@ -478,16 +504,11 @@ function mapUsageLogSlimRow(row: {
   };
 }
 
-// my-usage logs: short TTL cache for total count to avoid repeated COUNT(*) on pagination/polling.
-const usageLogSlimTotalCache = new TTLMap<string, number>({ ttlMs: 10_000, maxSize: 1000 });
-
-export async function findUsageLogsForKeySlim(
-  filters: UsageLogSlimFilters
-): Promise<{ logs: UsageLogSlimRow[]; total: number }> {
-  const { keyString, page = 1, pageSize = 50 } = filters;
-
-  const safePage = page > 0 ? page : 1;
-  const safePageSize = Math.min(100, Math.max(1, pageSize));
+export async function findUsageLogsForKeyBatch(
+  filters: UsageLogSlimBatchFilters
+): Promise<UsageLogSlimBatchResult> {
+  const { keyString, cursor, limit = 20 } = filters;
+  const safeLimit = Math.min(100, Math.max(1, limit));
 
   const conditions = [
     isNull(messageRequest.deletedAt),
@@ -495,25 +516,21 @@ export async function findUsageLogsForKeySlim(
     EXCLUDE_WARMUP_CONDITION,
   ];
 
-  const totalCacheKey = [
-    keyString,
-    filters.sessionId?.trim() ?? "",
-    filters.startTime ?? "",
-    filters.endTime ?? "",
-    filters.statusCode ?? "",
-    filters.excludeStatusCode200 ? "1" : "0",
-    filters.model ?? "",
-    filters.endpoint ?? "",
-    filters.minRetryCount ?? "",
-  ].join("\u0001");
-
   conditions.push(...buildUsageLogConditions(filters));
 
-  const offset = (safePage - 1) * safePageSize;
+  if (cursor) {
+    conditions.push(
+      sql`(${messageRequest.createdAt}, ${messageRequest.id}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
+    );
+  }
+
+  const fetchLimit = safeLimit + 1;
+
   const results = await db
     .select({
       id: messageRequest.id,
       createdAt: messageRequest.createdAt,
+      createdAtRaw: sql<string>`to_char(${messageRequest.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       endpoint: messageRequest.endpoint,
@@ -532,143 +549,108 @@ export async function findUsageLogsForKeySlim(
     .from(messageRequest)
     .where(and(...conditions))
     .orderBy(desc(messageRequest.createdAt), desc(messageRequest.id))
-    .limit(safePageSize + 1)
-    .offset(offset);
+    .limit(fetchLimit);
 
-  const hasMore = results.length > safePageSize;
-  const pageRows = hasMore ? results.slice(0, safePageSize) : results;
+  const hasMore = results.length > safeLimit;
+  const rowsToReturn = hasMore ? results.slice(0, safeLimit) : results;
+  const lastRow = rowsToReturn[rowsToReturn.length - 1];
+  const nextCursor = buildNextCursorOrThrow(hasMore, lastRow, "findUsageLogsForKeyBatch");
 
-  if (pageRows.length === 0 && (await isLedgerOnlyMode())) {
-    if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) {
-      return { logs: [], total: 0 };
-    }
-
-    const ledgerConditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.key, keyString)];
-
-    const trimmedSessionId = filters.sessionId?.trim();
-    if (trimmedSessionId) {
-      ledgerConditions.push(eq(usageLedger.sessionId, trimmedSessionId));
-    }
-
-    if (filters.startTime) {
-      ledgerConditions.push(gte(usageLedger.createdAt, new Date(filters.startTime)));
-    }
-
-    if (filters.endTime) {
-      ledgerConditions.push(lt(usageLedger.createdAt, new Date(filters.endTime)));
-    }
-
-    if (filters.statusCode !== undefined) {
-      ledgerConditions.push(eq(usageLedger.statusCode, filters.statusCode));
-    } else if (filters.excludeStatusCode200) {
-      ledgerConditions.push(
-        sql`(${usageLedger.statusCode} IS NULL OR ${usageLedger.statusCode} <> 200)`
-      );
-    }
-
-    if (filters.model) {
-      ledgerConditions.push(eq(usageLedger.model, filters.model));
-    }
-
-    if (filters.endpoint) {
-      ledgerConditions.push(eq(usageLedger.endpoint, filters.endpoint));
-    }
-
-    const ledgerResults = await db
-      .select({
-        id: usageLedger.requestId,
-        createdAt: usageLedger.createdAt,
-        model: usageLedger.model,
-        originalModel: usageLedger.originalModel,
-        endpoint: usageLedger.endpoint,
-        statusCode: usageLedger.statusCode,
-        inputTokens: usageLedger.inputTokens,
-        outputTokens: usageLedger.outputTokens,
-        costUsd: usageLedger.costUsd,
-        durationMs: usageLedger.durationMs,
-        cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
-        cacheReadInputTokens: usageLedger.cacheReadInputTokens,
-        cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
-        cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
-        cacheTtlApplied: usageLedger.cacheTtlApplied,
-      })
-      .from(usageLedger)
-      .where(and(...ledgerConditions))
-      .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
-      .limit(safePageSize + 1)
-      .offset(offset);
-
-    const ledgerHasMore = ledgerResults.length > safePageSize;
-    const ledgerPageRows = ledgerHasMore ? ledgerResults.slice(0, safePageSize) : ledgerResults;
-
-    let ledgerTotal = offset + ledgerPageRows.length;
-
-    const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
-    if (cachedTotal !== undefined) {
-      ledgerTotal = Math.max(cachedTotal, ledgerTotal);
-      return {
-        logs: ledgerPageRows.map((row) => ({
-          ...row,
-          costUsd: row.costUsd?.toString() ?? null,
-          anthropicEffort: null,
-        })),
-        total: ledgerTotal,
-      };
-    }
-
-    if (ledgerPageRows.length === 0 && offset > 0) {
-      const countResults = await db
-        .select({ totalRows: sql<number>`count(*)::double precision` })
-        .from(usageLedger)
-        .where(and(...ledgerConditions));
-      ledgerTotal = countResults[0]?.totalRows ?? 0;
-    } else if (ledgerHasMore) {
-      const countResults = await db
-        .select({ totalRows: sql<number>`count(*)::double precision` })
-        .from(usageLedger)
-        .where(and(...ledgerConditions));
-      ledgerTotal = countResults[0]?.totalRows ?? 0;
-    }
-
-    const ledgerLogs: UsageLogSlimRow[] = ledgerPageRows.map((row) => ({
-      ...row,
-      costUsd: row.costUsd?.toString() ?? null,
-      anthropicEffort: null,
-    }));
-
-    usageLogSlimTotalCache.set(totalCacheKey, ledgerTotal);
-    return { logs: ledgerLogs, total: ledgerTotal };
-  }
-
-  let total = offset + pageRows.length;
-
-  const cachedTotal = usageLogSlimTotalCache.get(totalCacheKey);
-  if (cachedTotal !== undefined) {
-    total = Math.max(cachedTotal, total);
+  if (rowsToReturn.length > 0) {
     return {
-      logs: pageRows.map((row) => mapUsageLogSlimRow(row)),
-      total,
+      logs: rowsToReturn.map((row) => mapUsageLogSlimRow(row)),
+      nextCursor,
+      hasMore,
     };
   }
 
-  if (pageRows.length === 0 && offset > 0) {
-    const countResults = await db
-      .select({ totalRows: sql<number>`count(*)::double precision` })
-      .from(messageRequest)
-      .where(and(...conditions));
-    total = countResults[0]?.totalRows ?? 0;
-  } else if (hasMore) {
-    const countResults = await db
-      .select({ totalRows: sql<number>`count(*)::double precision` })
-      .from(messageRequest)
-      .where(and(...conditions));
-    total = countResults[0]?.totalRows ?? 0;
+  if (!(await isLedgerOnlyMode())) {
+    return { logs: [], nextCursor, hasMore };
   }
 
-  const logs: UsageLogSlimRow[] = pageRows.map((row) => mapUsageLogSlimRow(row));
+  if (filters.minRetryCount !== undefined && filters.minRetryCount > 0) {
+    return { logs: [], nextCursor: null, hasMore: false };
+  }
 
-  usageLogSlimTotalCache.set(totalCacheKey, total);
-  return { logs, total };
+  const ledgerConditions = [LEDGER_BILLING_CONDITION, eq(usageLedger.key, keyString)];
+
+  const trimmedSessionId = filters.sessionId?.trim();
+  if (trimmedSessionId) {
+    ledgerConditions.push(eq(usageLedger.sessionId, trimmedSessionId));
+  }
+
+  if (filters.startTime) {
+    ledgerConditions.push(gte(usageLedger.createdAt, new Date(filters.startTime)));
+  }
+
+  if (filters.endTime) {
+    ledgerConditions.push(lt(usageLedger.createdAt, new Date(filters.endTime)));
+  }
+
+  if (filters.statusCode !== undefined) {
+    ledgerConditions.push(eq(usageLedger.statusCode, filters.statusCode));
+  } else if (filters.excludeStatusCode200) {
+    ledgerConditions.push(
+      sql`(${usageLedger.statusCode} IS NULL OR ${usageLedger.statusCode} <> 200)`
+    );
+  }
+
+  if (filters.model) {
+    ledgerConditions.push(eq(usageLedger.model, filters.model));
+  }
+
+  if (filters.endpoint) {
+    ledgerConditions.push(eq(usageLedger.endpoint, filters.endpoint));
+  }
+
+  if (cursor) {
+    ledgerConditions.push(
+      sql`(${usageLedger.createdAt}, ${usageLedger.requestId}) < (${cursor.createdAt}::timestamptz, ${cursor.id})`
+    );
+  }
+
+  const ledgerResults = await db
+    .select({
+      id: usageLedger.requestId,
+      createdAt: usageLedger.createdAt,
+      createdAtRaw: sql<string>`to_char(${usageLedger.createdAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+      model: usageLedger.model,
+      originalModel: usageLedger.originalModel,
+      endpoint: usageLedger.endpoint,
+      statusCode: usageLedger.statusCode,
+      inputTokens: usageLedger.inputTokens,
+      outputTokens: usageLedger.outputTokens,
+      costUsd: usageLedger.costUsd,
+      durationMs: usageLedger.durationMs,
+      cacheCreationInputTokens: usageLedger.cacheCreationInputTokens,
+      cacheReadInputTokens: usageLedger.cacheReadInputTokens,
+      cacheCreation5mInputTokens: usageLedger.cacheCreation5mInputTokens,
+      cacheCreation1hInputTokens: usageLedger.cacheCreation1hInputTokens,
+      cacheTtlApplied: usageLedger.cacheTtlApplied,
+    })
+    .from(usageLedger)
+    .where(and(...ledgerConditions))
+    .orderBy(desc(usageLedger.createdAt), desc(usageLedger.requestId))
+    .limit(fetchLimit);
+
+  const ledgerHasMore = ledgerResults.length > safeLimit;
+  const ledgerRowsToReturn = ledgerHasMore ? ledgerResults.slice(0, safeLimit) : ledgerResults;
+  const ledgerLastRow = ledgerRowsToReturn[ledgerRowsToReturn.length - 1];
+  const ledgerNextCursor = buildNextCursorOrThrow(
+    ledgerHasMore,
+    ledgerLastRow,
+    "findUsageLogsForKeyBatch ledger fallback"
+  );
+
+  return {
+    logs: ledgerRowsToReturn.map((row) => ({
+      ...row,
+      costUsd: row.costUsd?.toString() ?? null,
+      anthropicEffort: null,
+    })),
+    nextCursor: ledgerNextCursor,
+    hasMore: ledgerHasMore,
+  };
 }
 
 const distinctModelsByKeyCache = new TTLMap<string, string[]>({
