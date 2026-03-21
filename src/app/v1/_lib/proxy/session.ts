@@ -129,7 +129,9 @@ export class ProxySession {
   private billingSettingsPromise?: Promise<{
     billingModelSource: BillingModelSource;
     codexPriorityBillingSource: CodexPriorityBillingSource;
+    source: "live" | "cache" | "default";
   }>;
+  private billingSettingsSource?: "live" | "cache" | "default";
 
   // Resolved pricing cache (per request/provider combination)
   private resolvedPricingCache = new Map<string, ResolvedPricing | null>();
@@ -740,6 +742,11 @@ export class ProxySession {
       await this.loadBillingSettings();
     }
 
+    if (!this.hasUsableBillingSettings()) {
+      logger.warn("[ProxySession] Billing settings unavailable, skip pricing resolution");
+      return null;
+    }
+
     const providerIdentity = provider ?? this.provider;
     const cacheKey = [
       this.cachedBillingModelSource,
@@ -821,17 +828,26 @@ export class ProxySession {
               ? systemSettings.billingModelSource
               : "redirected";
           const codexPriorityBillingSource =
-            systemSettings.codexPriorityBillingSource === "actual" ? "actual" : "requested";
+            systemSettings.codexPriorityBillingSource === "actual" ||
+            systemSettings.codexPriorityBillingSource === "requested"
+              ? systemSettings.codexPriorityBillingSource
+              : "requested";
 
           if (billingModelSource !== systemSettings.billingModelSource) {
             logger.warn(
               `[ProxySession] Invalid billingModelSource: ${String(systemSettings.billingModelSource)}, fallback to "redirected"`
             );
           }
+          if (codexPriorityBillingSource !== systemSettings.codexPriorityBillingSource) {
+            logger.warn(
+              `[ProxySession] Invalid codexPriorityBillingSource: ${String(systemSettings.codexPriorityBillingSource)}, fallback to "requested"`
+            );
+          }
 
           return {
             billingModelSource,
             codexPriorityBillingSource,
+            source: "live" as const,
           };
         } catch (error) {
           logger.warn(
@@ -841,30 +857,26 @@ export class ProxySession {
             }
           );
 
-          try {
-            const { getCachedSystemSettings } = await import("@/lib/config");
-            const cachedSettings = await getCachedSystemSettings();
-            const hasPersistedCachedSettings = cachedSettings.id !== 0;
+          const { getCachedSystemSettingsOnlyCache } = await import("@/lib/config");
+          const cachedSettings = getCachedSystemSettingsOnlyCache();
+          const hasPersistedCachedSettings = cachedSettings != null && cachedSettings.id !== 0;
+          if (hasPersistedCachedSettings && cachedSettings) {
             return {
-              billingModelSource: hasPersistedCachedSettings
-                ? cachedSettings.billingModelSource === "original"
-                  ? "original"
-                  : "redirected"
-                : "redirected",
+              billingModelSource:
+                cachedSettings.billingModelSource === "original" ? "original" : "redirected",
               codexPriorityBillingSource:
-                hasPersistedCachedSettings && cachedSettings.codexPriorityBillingSource === "actual"
-                  ? "actual"
-                  : "requested",
+                cachedSettings.codexPriorityBillingSource === "actual" ? "actual" : "requested",
+              source: "cache" as const,
             };
-          } catch (cachedError) {
-            logger.error("[ProxySession] Failed to load billing-related system settings", {
-              error: cachedError,
-            });
           }
 
+          logger.error("[ProxySession] Billing settings unavailable after direct read failure", {
+            error,
+          });
           return {
             billingModelSource: "redirected" as BillingModelSource,
             codexPriorityBillingSource: "requested" as CodexPriorityBillingSource,
+            source: "default" as const,
           };
         }
       })();
@@ -873,6 +885,11 @@ export class ProxySession {
     const settings = await this.billingSettingsPromise;
     this.cachedBillingModelSource = settings.billingModelSource;
     this.cachedCodexPriorityBillingSource = settings.codexPriorityBillingSource;
+    this.billingSettingsSource = settings.source;
+  }
+
+  private hasUsableBillingSettings(): boolean {
+    return this.billingSettingsSource !== "default";
   }
 }
 

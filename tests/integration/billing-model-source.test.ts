@@ -270,6 +270,16 @@ async function drainAsyncTasks(): Promise<void> {
   await Promise.all(tasks);
 }
 
+function captureRateLimitCosts(): number[] {
+  const rateLimitCosts: number[] = [];
+  vi.mocked(RateLimitService.trackCost).mockImplementation(
+    async (_keyId: number, _providerId: number, _sessionId: string, costUsd: number) => {
+      rateLimitCosts.push(costUsd);
+    }
+  );
+  return rateLimitCosts;
+}
+
 async function runScenario({
   billingModelSource,
   isStream,
@@ -423,6 +433,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const sessionCosts: string[] = [];
     vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
@@ -486,6 +497,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const sessionCosts: string[] = [];
     vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
@@ -518,6 +530,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
     expect(dbCosts[0]).toBe("32");
     expect(sessionCosts[0]).toBe("32");
+    expect(rateLimitCosts[0]).toBe(32);
   });
 
   it("codex fast: falls back to requested priority pricing when response omits service_tier", async () => {
@@ -553,6 +566,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
       originalModel: "gpt-5.4",
@@ -572,6 +586,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await drainAsyncTasks();
 
     expect(dbCosts[0]).toBe("64");
+    expect(rateLimitCosts[0]).toBe(64);
   });
 
   it("codex fast: uses long-context priority pricing when request is priority and response omits service_tier", async () => {
@@ -611,6 +626,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const sessionCosts: string[] = [];
     vi.mocked(SessionManager.updateSessionUsage).mockImplementation(
@@ -640,6 +656,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
 
     expect(dbCosts[0]).toBe("1904147");
     expect(sessionCosts[0]).toBe("1904147");
+    expect(rateLimitCosts[0]).toBe(1904147);
   });
 
   it("codex fast: requested mode keeps priority pricing even when actual tier is downgraded", async () => {
@@ -675,6 +692,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
       originalModel: "gpt-5.4",
@@ -697,6 +715,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await drainAsyncTasks();
 
     expect(dbCosts[0]).toBe("64");
+    expect(rateLimitCosts[0]).toBe(64);
   });
 
   it("codex fast: actual mode uses priority pricing when response reports service_tier=priority", async () => {
@@ -732,6 +751,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
       originalModel: "gpt-5.4",
@@ -754,6 +774,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await drainAsyncTasks();
 
     expect(dbCosts[0]).toBe("64");
+    expect(rateLimitCosts[0]).toBe(64);
   });
 
   it("codex fast: actual mode does not use priority pricing when response explicitly reports non-priority tier", async () => {
@@ -789,6 +810,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
       originalModel: "gpt-5.4",
@@ -811,6 +833,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await drainAsyncTasks();
 
     expect(dbCosts[0]).toBe("32");
+    expect(rateLimitCosts[0]).toBe(32);
   });
 
   it("codex fast: actual mode falls back to requested priority pricing when response omits service_tier", async () => {
@@ -846,6 +869,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
       originalModel: "gpt-5.4",
@@ -865,6 +889,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await drainAsyncTasks();
 
     expect(dbCosts[0]).toBe("64");
+    expect(rateLimitCosts[0]).toBe(64);
   });
 
   it("codex fast: actual mode reuses cached system setting when direct settings read fails", async () => {
@@ -903,6 +928,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
         dbCosts.push(String(costUsd));
       }
     );
+    const rateLimitCosts = captureRateLimitCosts();
 
     const session = createSession({
       originalModel: "gpt-5.4",
@@ -925,6 +951,7 @@ describe("Billing model source - Redis session cost vs DB cost", () => {
     await drainAsyncTasks();
 
     expect(dbCosts[0]).toBe("32");
+    expect(rateLimitCosts[0]).toBe(32);
   });
 });
 

@@ -242,6 +242,7 @@ export async function getSystemSettings(): Promise<SystemSettings> {
             error: fallbackError,
           });
 
+          // 第三层 / 最终回退：仅查询最小核心字段，剩余字段交给 toSystemSettings 补默认值。
           const minimalSelection = {
             id: systemSettings.id,
             siteTitle: systemSettings.siteTitle,

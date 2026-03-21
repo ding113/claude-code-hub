@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
+import { invalidateSystemSettingsCache } from "@/lib/config";
 import { logger } from "@/lib/logger";
 import { UpdateSystemSettingsSchema } from "@/lib/validation/schemas";
 import { getSystemSettings, updateSystemSettings } from "@/repository/system-config";
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
       userId: session.user.id,
       changes: validated,
     });
+    invalidateSystemSettingsCache();
 
     return Response.json(updated);
   } catch (error) {

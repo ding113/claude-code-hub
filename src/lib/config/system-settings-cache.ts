@@ -23,6 +23,14 @@ const CACHE_TTL_MS = 60 * 1000;
 let cachedSettings: SystemSettings | null = null;
 let cachedAt: number = 0;
 
+/**
+ * Read the current in-memory settings cache only.
+ * Never triggers a DB refresh.
+ */
+export function getCachedSystemSettingsOnlyCache(): SystemSettings | null {
+  return cachedSettings;
+}
+
 /** Default settings used when cache fetch fails */
 const DEFAULT_SETTINGS: Pick<
   SystemSettings,
