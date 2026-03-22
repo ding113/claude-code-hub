@@ -36,6 +36,11 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
+vi.mock("next-intl/server", () => ({
+  getLocale: vi.fn(async () => "en"),
+  getTranslations: vi.fn(async () => (key: string) => key),
+}));
+
 type TestKey = { id: number; userId: number; key: string; name: string };
 type TestUser = { id: number; name: string };
 
@@ -208,9 +213,21 @@ describe("my-usage API：只读 Key 自助查询", () => {
     expect(usersApi.response.status).toBe(200);
     expect(usersApi.json).toMatchObject({ ok: true });
     // 验证只返回自己的数据
-    const usersData = (usersApi.json as { ok: boolean; data: Array<{ id: number }> }).data;
+    const usersData = (
+      usersApi.json as {
+        ok: boolean;
+        data: Array<{
+          id: number;
+          keys: Array<{ id: number; maskedKey: string; fullKey?: string; canCopy: boolean }>;
+        }>;
+      }
+    ).data;
     expect(usersData.length).toBe(1);
     expect(usersData[0].id).toBe(user.id);
+    expect(usersData[0].keys).toHaveLength(1);
+    expect(usersData[0].keys[0].maskedKey).toBeTruthy();
+    expect(usersData[0].keys[0].fullKey).toBeUndefined();
+    expect(usersData[0].keys[0].canCopy).toBe(false);
 
     const usageLogsApi = await callActionsRoute({
       method: "POST",
