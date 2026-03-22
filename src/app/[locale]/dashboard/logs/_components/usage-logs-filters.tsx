@@ -3,10 +3,16 @@
 import { format, startOfDay, startOfWeek } from "date-fns";
 import { Clock, Download, Network, Server, User } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { exportUsageLogs } from "@/actions/usage-logs";
+import {
+  downloadUsageLogsExport,
+  getUsageLogsExportStatus,
+  startUsageLogsExport,
+  type UsageLogsExportStatus,
+} from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import { ActiveFiltersDisplay } from "./filters/active-filters-display";
@@ -70,7 +76,9 @@ export function UsageLogsFilters({
 
   const [localFilters, setLocalFilters] = useState<UsageLogFilters>(filters);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<UsageLogsExportStatus | null>(null);
   const [activePreset, setActivePreset] = useState<FilterPreset | null>(null);
+  const exportRunIdRef = useRef(0);
 
   // Track users and keys for display name resolution
   const [availableUsers, setAvailableUsers] = useState<Array<{ id: number; name: string }>>([]);
@@ -133,42 +141,128 @@ export function UsageLogsFilters({
     return count;
   }, [localFilters.statusCode, localFilters.excludeStatusCode200, localFilters.minRetryCount]);
 
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
+
+  useEffect(() => {
+    return () => {
+      exportRunIdRef.current += 1;
+    };
+  }, []);
+
   const handleApply = useCallback(() => {
     onChange(sanitizeFilters(localFilters));
   }, [localFilters, onChange]);
 
   const handleReset = useCallback(() => {
+    exportRunIdRef.current += 1;
     setLocalFilters({});
     setKeys([]);
     setActivePreset(null);
+    setIsExporting(false);
+    setExportStatus(null);
     onReset();
   }, [onReset]);
 
+  const downloadCsv = useCallback((csv: string) => {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `usage-logs-${format(new Date(), "yyyy-MM-dd-HHmmss")}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }, []);
+
   const handleExport = async () => {
+    const runId = exportRunIdRef.current + 1;
+    exportRunIdRef.current = runId;
     setIsExporting(true);
+    setExportStatus({
+      jobId: "",
+      status: "queued",
+      processedRows: 0,
+      totalRows: 0,
+      progressPercent: 0,
+    });
+
     try {
-      const result = await exportUsageLogs(localFilters);
-      if (!result.ok) {
-        toast.error(result.error || t("logs.filters.exportError"));
+      const exportFilters = sanitizeFilters(filters);
+      const startResult = await startUsageLogsExport(exportFilters);
+      if (exportRunIdRef.current !== runId) {
         return;
       }
 
-      const blob = new Blob([result.data], { type: "text/csv;charset=utf-8;" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `usage-logs-${format(new Date(), "yyyy-MM-dd-HHmmss")}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      if (!startResult.ok) {
+        setExportStatus(null);
+        toast.error(startResult.error || t("logs.filters.exportError"));
+        return;
+      }
+
+      const jobId = startResult.data.jobId;
+      const EXPORT_TIMEOUT_MS = 10 * 60 * 1000;
+      const deadline = Date.now() + EXPORT_TIMEOUT_MS;
+
+      while (true) {
+        if (exportRunIdRef.current !== runId) {
+          return;
+        }
+
+        if (Date.now() > deadline) {
+          setExportStatus(null);
+          toast.error(t("logs.filters.exportError"));
+          return;
+        }
+
+        const statusResult = await getUsageLogsExportStatus(jobId);
+        if (exportRunIdRef.current !== runId) {
+          return;
+        }
+
+        if (!statusResult.ok) {
+          setExportStatus(null);
+          toast.error(statusResult.error || t("logs.filters.exportError"));
+          return;
+        }
+
+        setExportStatus(statusResult.data);
+
+        if (statusResult.data.status === "failed") {
+          toast.error(statusResult.data.error || t("logs.filters.exportError"));
+          return;
+        }
+
+        if (statusResult.data.status === "completed") {
+          break;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 800));
+      }
+
+      const downloadResult = await downloadUsageLogsExport(jobId);
+      if (exportRunIdRef.current !== runId) {
+        return;
+      }
+
+      if (!downloadResult.ok) {
+        toast.error(downloadResult.error || t("logs.filters.exportError"));
+        return;
+      }
+
+      downloadCsv(downloadResult.data);
 
       toast.success(t("logs.filters.exportSuccess"));
     } catch (error) {
       console.error("Export failed:", error);
       toast.error(t("logs.filters.exportError"));
     } finally {
-      setIsExporting(false);
+      if (exportRunIdRef.current === runId) {
+        setExportStatus(null);
+        setIsExporting(false);
+      }
     }
   };
 
@@ -326,6 +420,22 @@ export function UsageLogsFilters({
           <Download className="mr-2 h-4 w-4" aria-hidden="true" />
           {isExporting ? t("logs.filters.exporting") : t("logs.filters.export")}
         </Button>
+        {isExporting && exportStatus ? (
+          <div className="min-w-[220px] flex-1 space-y-1 rounded-md border border-border/60 bg-muted/30 p-3">
+            <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>
+                {exportStatus.totalRows > 0
+                  ? t("logs.filters.exportProgress", {
+                      current: exportStatus.processedRows,
+                      total: exportStatus.totalRows,
+                    })
+                  : t("logs.filters.exportPreparing")}
+              </span>
+              <span>{exportStatus.progressPercent}%</span>
+            </div>
+            <Progress value={Math.max(exportStatus.progressPercent, 2)} />
+          </div>
+        ) : null}
       </div>
     </div>
   );

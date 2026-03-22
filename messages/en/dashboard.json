@@ -95,6 +95,8 @@
       "exporting": "Exporting...",
       "exportSuccess": "Export completed successfully",
       "exportError": "Export failed",
+      "exportPreparing": "Preparing export...",
+      "exportProgress": "Exported {current} / {total}",
       "quickFilters": {
         "today": "Today",
         "thisWeek": "This Week",

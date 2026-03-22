@@ -95,6 +95,8 @@
       "exporting": "エクスポート中...",
       "exportSuccess": "エクスポートが完了しました",
       "exportError": "エクスポートに失敗しました",
+      "exportPreparing": "エクスポートを準備中...",
+      "exportProgress": "{current} / {total} 件をエクスポート済み",
       "quickFilters": {
         "today": "今日",
         "thisWeek": "今週",
