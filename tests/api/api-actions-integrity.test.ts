@@ -61,6 +61,8 @@ describe("OpenAPI 端点完整性检查", () => {
   test("用户管理模块的所有端点应该被注册", () => {
     const expectedPaths = [
       "/api/actions/users/getUsers",
+      "/api/actions/users/getUsersBatch",
+      "/api/actions/users/searchUsers",
       "/api/actions/users/addUser",
       "/api/actions/users/editUser",
       "/api/actions/users/removeUser",

@@ -3,7 +3,7 @@
 import { ArrowUpDown } from "lucide-react";
 import { useLocale, useTranslations } from "next-intl";
 import * as React from "react";
-import { getUsers } from "@/actions/users";
+import { searchUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -36,10 +36,28 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
 
   // 加载用户详情
   React.useEffect(() => {
-    getUsers().then((userList) => {
-      setUsers(userList);
-      setLoading(false);
-    });
+    let cancelled = false;
+
+    void searchUsers()
+      .then((result) => {
+        if (!cancelled) {
+          setUsers(result.ok ? result.data : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUsers([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 组合数据：用户信息 + 事件计数
