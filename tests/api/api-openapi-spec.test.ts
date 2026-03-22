@@ -46,6 +46,29 @@ type OpenAPIDocument = {
   };
 };
 
+type JsonSchemaProperty = {
+  minimum?: number;
+  maximum?: number;
+  properties?: Record<string, JsonSchemaProperty>;
+};
+
+function getJsonRequestSchema(
+  openApiDoc: OpenAPIDocument,
+  path: string
+): JsonSchemaProperty | undefined {
+  const requestBody = openApiDoc.paths[path]?.post?.requestBody as
+    | {
+        content?: {
+          "application/json"?: {
+            schema?: JsonSchemaProperty;
+          };
+        };
+      }
+    | undefined;
+
+  return requestBody?.content?.["application/json"]?.schema;
+}
+
 describe("OpenAPI 规范验证", () => {
   let openApiDoc: OpenAPIDocument;
 
@@ -217,5 +240,16 @@ describe("OpenAPI 规范验证", () => {
     // 允许部分端点 summary 和 description 相同（简单操作）
     // 但不应该太多（允许 35% 以内）
     expect(violations.length).toBeLessThan(totalPaths * 0.35);
+  });
+
+  test("users 列表请求 schema 应与兼容参数归一化保持一致", () => {
+    for (const path of ["/api/actions/users/getUsers", "/api/actions/users/getUsersBatch"]) {
+      const schema = getJsonRequestSchema(openApiDoc, path);
+      const pageSchema = schema?.properties?.page;
+      const limitSchema = schema?.properties?.limit;
+
+      expect(pageSchema?.minimum).toBe(0);
+      expect(limitSchema?.maximum).toBeUndefined();
+    }
   });
 });

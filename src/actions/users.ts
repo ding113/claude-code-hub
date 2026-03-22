@@ -70,9 +70,14 @@ const USER_LIST_DEFAULT_LIMIT = 50;
 const USER_LIST_MAX_LIMIT = 200;
 
 function normalizeLegacySearchTerm(params?: GetUsersBatchParams): string | undefined {
-  const candidate = params?.searchTerm ?? params?.query ?? params?.keyword;
-  const trimmed = candidate?.trim();
-  return trimmed ? trimmed : undefined;
+  for (const candidate of [params?.searchTerm, params?.query, params?.keyword]) {
+    const trimmed = candidate?.trim();
+    if (trimmed) {
+      return trimmed;
+    }
+  }
+
+  return undefined;
 }
 
 function normalizeUserListParams(params?: GetUsersBatchParams): GetUsersBatchParams {
@@ -112,34 +117,37 @@ function normalizeUserListParams(params?: GetUsersBatchParams): GetUsersBatchPar
   };
 }
 
-function hasExplicitPaginationParams(params?: GetUsersBatchParams): boolean {
+function hasExplicitPaginationParams(
+  params?: GetUsersBatchParams,
+  normalizedParams = normalizeUserListParams(params)
+): boolean {
   return Boolean(
-    params?.cursor ||
-      params?.limit !== undefined ||
+    normalizedParams.cursor !== undefined ||
+      normalizedParams.limit !== undefined ||
       params?.page !== undefined ||
       params?.offset !== undefined
   );
 }
 
-function hasSearchOrFilterOverrides(params?: GetUsersBatchParams): boolean {
-  const normalized = normalizeUserListParams(params);
+function hasSearchOrFilterOverrides(normalizedParams: GetUsersBatchParams): boolean {
   return Boolean(
-    normalized.searchTerm ||
-      (normalized.tagFilters?.length ?? 0) > 0 ||
-      (normalized.keyGroupFilters?.length ?? 0) > 0 ||
-      normalized.statusFilter ||
-      normalized.sortBy ||
-      normalized.sortOrder
+    normalizedParams.searchTerm ||
+      (normalizedParams.tagFilters?.length ?? 0) > 0 ||
+      (normalizedParams.keyGroupFilters?.length ?? 0) > 0 ||
+      normalizedParams.statusFilter ||
+      normalizedParams.sortBy ||
+      normalizedParams.sortOrder
   );
 }
 
 async function loadAllUsersForAdmin(baseParams?: GetUsersBatchParams): Promise<User[]> {
   const users: User[] = [];
-  let cursor = normalizeUserListParams(baseParams).cursor;
+  const normalizedBaseParams = normalizeUserListParams(baseParams);
+  let cursor = normalizedBaseParams.cursor;
 
   while (true) {
     const page = await findUserListBatch({
-      ...normalizeUserListParams(baseParams),
+      ...normalizedBaseParams,
       cursor,
       limit: USER_LIST_MAX_LIMIT,
     });
@@ -308,15 +316,15 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
 
     // Treat any non-admin role as non-admin for safety.
     const isAdmin = session.user.role === "admin";
+    const normalizedParams = normalizeUserListParams(params);
 
     // 非 admin 用户只能看到自己的数据（从 DB 获取完整用户信息）
     let users: User[] = [];
     if (isAdmin) {
-      if (hasExplicitPaginationParams(params)) {
-        const normalizedParams = normalizeUserListParams(params);
+      if (hasExplicitPaginationParams(params, normalizedParams)) {
         users = (await findUserListBatch(normalizedParams)).users;
-      } else if (hasSearchOrFilterOverrides(params)) {
-        users = await loadAllUsersForAdmin(params);
+      } else if (hasSearchOrFilterOverrides(normalizedParams)) {
+        users = await loadAllUsersForAdmin(normalizedParams);
       } else {
         users = await loadAllUsersForAdmin();
       }

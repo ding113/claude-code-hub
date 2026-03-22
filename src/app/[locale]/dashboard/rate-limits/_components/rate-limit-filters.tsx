@@ -5,7 +5,7 @@ import { Calendar, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import * as React from "react";
 import { getProviders } from "@/actions/providers";
-import { getUsers } from "@/actions/users";
+import { searchUsers } from "@/actions/users";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,10 +61,28 @@ export function RateLimitFilters({
 
   // 加载用户列表
   React.useEffect(() => {
-    getUsers().then((userList) => {
-      setUsers(userList);
-      setLoadingUsers(false);
-    });
+    let cancelled = false;
+
+    void searchUsers()
+      .then((result) => {
+        if (!cancelled) {
+          setUsers(result.ok ? result.data : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUsers([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingUsers(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 加载供应商列表

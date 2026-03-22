@@ -125,11 +125,11 @@ const userListItemSchema = z.object({
 const getUsersBatchRequestSchema = z
   .object({
     cursor: z.string().optional(),
-    limit: z.number().int().positive().max(200).optional(),
+    limit: z.number().int().positive().optional(),
     searchTerm: z.string().optional(),
     query: z.string().optional(),
     keyword: z.string().optional(),
-    page: z.number().int().min(1).optional(),
+    page: z.number().int().min(0).optional(),
     offset: z.number().int().min(0).optional(),
     tagFilters: z.array(z.string()).optional(),
     keyGroupFilters: z.array(z.string()).optional(),
@@ -167,11 +167,11 @@ const { route: getUsersRoute, handler: getUsersHandler } = createActionRoute(
     requestSchema: z
       .object({
         cursor: z.string().optional().describe("游标，兼容旧 offset 游标"),
-        limit: z.number().int().positive().max(200).optional().describe("返回条数上限"),
+        limit: z.number().int().positive().optional().describe("返回条数上限"),
         searchTerm: z.string().optional().describe("搜索用户名/备注/标签/密钥"),
         query: z.string().optional().describe("旧版搜索参数别名"),
         keyword: z.string().optional().describe("旧版搜索参数别名"),
-        page: z.number().int().min(1).optional().describe("旧版页码，从 1 开始"),
+        page: z.number().int().min(0).optional().describe("旧版页码，从 0 或 1 开始"),
         offset: z.number().int().min(0).optional().describe("旧版偏移量"),
       })
       .passthrough()
@@ -224,7 +224,13 @@ const { route: searchUsersRoute, handler: searchUsersHandler } = createActionRou
     summary: "搜索用户",
     tags: ["用户管理"],
     requiredRole: "admin",
-    argsMapper: (body) => [body.searchTerm ?? body.query ?? body.keyword],
+    argsMapper: (body) => {
+      const searchTerm = [body.searchTerm, body.query, body.keyword]
+        .map((value: string | undefined) => value?.trim())
+        .find((value): value is string => Boolean(value));
+
+      return [searchTerm];
+    },
   }
 );
 app.openapi(searchUsersRoute, searchUsersHandler);

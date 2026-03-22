@@ -155,6 +155,32 @@ describe("getUsers compatibility", () => {
     expect(result[0]?.name).toBe("xiaolunanbei");
   });
 
+  test("falls back to legacy query when searchTerm is blank", async () => {
+    findUserListBatchMock.mockResolvedValueOnce({
+      users: [makeUser(77, "legacy-query-hit")],
+      nextCursor: null,
+      hasMore: false,
+    });
+
+    const { getUsersBatch } = await import("@/actions/users");
+
+    await getUsersBatch({
+      searchTerm: "   ",
+      query: "  alice  ",
+    });
+
+    expect(findUserListBatchMock).toHaveBeenCalledWith({
+      cursor: undefined,
+      limit: undefined,
+      searchTerm: "alice",
+      tagFilters: undefined,
+      keyGroupFilters: undefined,
+      statusFilter: undefined,
+      sortBy: undefined,
+      sortOrder: undefined,
+    });
+  });
+
   test("search-only getUsers requests keep paging until all matches are returned", async () => {
     findUserListBatchMock
       .mockResolvedValueOnce({
@@ -194,6 +220,52 @@ describe("getUsers compatibility", () => {
     });
     expect(result).toHaveLength(201);
     expect(result.at(-1)?.name).toBe("match-201");
+  });
+
+  test("treats whitespace cursor as missing pagination and keeps loading matches", async () => {
+    findUserListBatchMock
+      .mockResolvedValueOnce({
+        users: Array.from({ length: 200 }, (_, index) =>
+          makeUser(index + 1, `cursor-match-${index + 1}`)
+        ),
+        nextCursor: '{"v":"2026-03-01T00:00:00.000Z","id":200}',
+        hasMore: true,
+      })
+      .mockResolvedValueOnce({
+        users: [makeUser(201, "cursor-match-201")],
+        nextCursor: null,
+        hasMore: false,
+      });
+
+    const { getUsers } = await import("@/actions/users");
+
+    const result = await getUsers({
+      cursor: "   ",
+      query: "cursor-match",
+    });
+
+    expect(findUserListBatchMock).toHaveBeenNthCalledWith(1, {
+      cursor: undefined,
+      limit: 200,
+      searchTerm: "cursor-match",
+      tagFilters: undefined,
+      keyGroupFilters: undefined,
+      statusFilter: undefined,
+      sortBy: undefined,
+      sortOrder: undefined,
+    });
+    expect(findUserListBatchMock).toHaveBeenNthCalledWith(2, {
+      cursor: '{"v":"2026-03-01T00:00:00.000Z","id":200}',
+      limit: 200,
+      searchTerm: "cursor-match",
+      tagFilters: undefined,
+      keyGroupFilters: undefined,
+      statusFilter: undefined,
+      sortBy: undefined,
+      sortOrder: undefined,
+    });
+    expect(result).toHaveLength(201);
+    expect(result.at(-1)?.name).toBe("cursor-match-201");
   });
 
   test("normalizes legacy getUsersBatch keyword and offset params", async () => {
