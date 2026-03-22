@@ -281,8 +281,10 @@ export async function getUsers(): Promise<UserDisplay[]> {
           allowedModels: user.allowedModels ?? [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
-            // 用户可以查看和复制自己的密钥，管理员可以查看和复制所有密钥
-            const canUserManageKey = isAdmin || session.user.id === user.id;
+            // 仅允许具备 Web UI 登录权限的会话查看/复制完整密钥，避免只读 Key 通过
+            // allowReadOnlyAccess 进入 actions 后暴露 fullKey。
+            const canUserManageKey =
+              session.key.canLoginWebUi && (isAdmin || session.user.id === user.id);
             return {
               id: key.id,
               name: key.name,
