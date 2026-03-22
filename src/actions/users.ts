@@ -29,7 +29,6 @@ import {
   createUser,
   deleteUser,
   findUserById,
-  findUserList,
   findUserListBatch,
   getAllUserProviderGroups as getAllUserProviderGroupsRepository,
   getAllUserTags as getAllUserTagsRepository,
@@ -47,6 +46,10 @@ export interface GetUsersBatchParams {
   cursor?: string;
   limit?: number;
   searchTerm?: string;
+  query?: string;
+  keyword?: string;
+  page?: number;
+  offset?: number;
   tagFilters?: string[];
   keyGroupFilters?: string[];
   statusFilter?: "all" | "active" | "expired" | "expiringSoon" | "enabled" | "disabled";
@@ -61,6 +64,94 @@ export interface GetUsersBatchParams {
     | "limitMonthlyUsd"
     | "createdAt";
   sortOrder?: "asc" | "desc";
+}
+
+const USER_LIST_DEFAULT_LIMIT = 50;
+const USER_LIST_MAX_LIMIT = 200;
+
+function normalizeLegacySearchTerm(params?: GetUsersBatchParams): string | undefined {
+  const candidate = params?.searchTerm ?? params?.query ?? params?.keyword;
+  const trimmed = candidate?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function normalizeUserListParams(params?: GetUsersBatchParams): GetUsersBatchParams {
+  const limit =
+    typeof params?.limit === "number" && Number.isFinite(params.limit) && params.limit > 0
+      ? Math.min(Math.trunc(params.limit), USER_LIST_MAX_LIMIT)
+      : undefined;
+
+  let cursor = params?.cursor?.trim() || undefined;
+  if (!cursor) {
+    const offset =
+      typeof params?.offset === "number" && Number.isFinite(params.offset)
+        ? Math.max(0, Math.trunc(params.offset))
+        : undefined;
+    const page =
+      typeof params?.page === "number" && Number.isFinite(params.page)
+        ? Math.max(0, Math.trunc(params.page))
+        : undefined;
+
+    if (offset !== undefined) {
+      cursor = String(offset);
+    } else if (page !== undefined) {
+      const effectiveLimit = limit ?? USER_LIST_DEFAULT_LIMIT;
+      cursor = String(Math.max(page - 1, 0) * effectiveLimit);
+    }
+  }
+
+  return {
+    cursor,
+    limit,
+    searchTerm: normalizeLegacySearchTerm(params),
+    tagFilters: params?.tagFilters,
+    keyGroupFilters: params?.keyGroupFilters,
+    statusFilter: params?.statusFilter,
+    sortBy: params?.sortBy,
+    sortOrder: params?.sortOrder,
+  };
+}
+
+function hasExplicitPaginationParams(params?: GetUsersBatchParams): boolean {
+  return Boolean(
+    params?.cursor ||
+      params?.limit !== undefined ||
+      params?.page !== undefined ||
+      params?.offset !== undefined
+  );
+}
+
+function hasSearchOrFilterOverrides(params?: GetUsersBatchParams): boolean {
+  const normalized = normalizeUserListParams(params);
+  return Boolean(
+    normalized.searchTerm ||
+      (normalized.tagFilters?.length ?? 0) > 0 ||
+      (normalized.keyGroupFilters?.length ?? 0) > 0 ||
+      normalized.statusFilter ||
+      normalized.sortBy ||
+      normalized.sortOrder
+  );
+}
+
+async function loadAllUsersForAdmin(baseParams?: GetUsersBatchParams): Promise<User[]> {
+  const users: User[] = [];
+  let cursor = normalizeUserListParams(baseParams).cursor;
+
+  while (true) {
+    const page = await findUserListBatch({
+      ...normalizeUserListParams(baseParams),
+      cursor,
+      limit: USER_LIST_MAX_LIMIT,
+    });
+
+    users.push(...page.users);
+
+    if (!page.hasMore || !page.nextCursor) {
+      return users;
+    }
+
+    cursor = page.nextCursor;
+  }
 }
 
 /**
@@ -204,7 +295,7 @@ export async function syncUserProviderGroupFromKeys(userId: number): Promise<voi
 }
 
 // 获取用户数据
-export async function getUsers(): Promise<UserDisplay[]> {
+export async function getUsers(params?: GetUsersBatchParams): Promise<UserDisplay[]> {
   try {
     const session = await getSession();
     if (!session) {
@@ -221,7 +312,14 @@ export async function getUsers(): Promise<UserDisplay[]> {
     // 非 admin 用户只能看到自己的数据（从 DB 获取完整用户信息）
     let users: User[] = [];
     if (isAdmin) {
-      users = await findUserList(); // 管理员可以看到所有用户
+      if (hasExplicitPaginationParams(params)) {
+        const normalizedParams = normalizeUserListParams(params);
+        users = (await findUserListBatch(normalizedParams)).users;
+      } else if (hasSearchOrFilterOverrides(params)) {
+        users = await loadAllUsersForAdmin(params);
+      } else {
+        users = await loadAllUsersForAdmin();
+      }
     } else {
       const selfUser = await findUserById(session.user.id);
       users = selfUser ? [selfUser] : [];
@@ -394,6 +492,12 @@ export async function searchUsersForFilter(
   }
 }
 
+export async function searchUsers(
+  searchTerm?: string
+): Promise<ActionResult<Array<{ id: number; name: string }>>> {
+  return searchUsersForFilter(searchTerm);
+}
+
 /**
  * 获取所有用户标签（用于标签筛选下拉框）
  * 返回所有用户的标签，不受当前筛选条件影响
@@ -497,16 +601,8 @@ export async function getUsersBatch(
     const locale = await getLocale();
     const t = await getTranslations("users");
 
-    const { users, nextCursor, hasMore } = await findUserListBatch({
-      cursor: params.cursor,
-      limit: params.limit,
-      searchTerm: params.searchTerm,
-      tagFilters: params.tagFilters,
-      keyGroupFilters: params.keyGroupFilters,
-      statusFilter: params.statusFilter,
-      sortBy: params.sortBy,
-      sortOrder: params.sortOrder,
-    });
+    const normalizedParams = normalizeUserListParams(params);
+    const { users, nextCursor, hasMore } = await findUserListBatch(normalizedParams);
 
     if (users.length === 0) {
       return { ok: true, data: { users: [], nextCursor, hasMore } };
@@ -665,16 +761,8 @@ export async function getUsersBatchCore(
     const locale = await getLocale();
     const t = await getTranslations("users");
 
-    const { users, nextCursor, hasMore } = await findUserListBatch({
-      cursor: params.cursor,
-      limit: params.limit,
-      searchTerm: params.searchTerm,
-      tagFilters: params.tagFilters,
-      keyGroupFilters: params.keyGroupFilters,
-      statusFilter: params.statusFilter,
-      sortBy: params.sortBy,
-      sortOrder: params.sortOrder,
-    });
+    const normalizedParams = normalizeUserListParams(params);
+    const { users, nextCursor, hasMore } = await findUserListBatch(normalizedParams);
 
     if (users.length === 0) {
       return { ok: true, data: { users: [], nextCursor, hasMore } };

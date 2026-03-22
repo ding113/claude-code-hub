@@ -164,6 +164,8 @@ describe("API 端点可达性测试", () => {
   const criticalEndpoints = [
     // 用户管理
     { module: "users", action: "getUsers" },
+    { module: "users", action: "getUsersBatch" },
+    { module: "users", action: "searchUsers" },
     { module: "users", action: "addUser" },
     { module: "users", action: "editUser" },
     { module: "users", action: "removeUser" },
