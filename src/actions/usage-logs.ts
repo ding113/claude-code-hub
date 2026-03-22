@@ -246,7 +246,17 @@ async function runUsageLogsExportJob(
       return;
     }
 
-    await usageLogsExportCsvStore.set(usageLogsExportCsvKey(jobId), csv);
+    const csvStored = await usageLogsExportCsvStore.set(usageLogsExportCsvKey(jobId), csv);
+    if (!csvStored) {
+      await usageLogsExportStatusStore.set(jobId, {
+        ...currentJob,
+        status: "failed",
+        progressPercent: 0,
+        error: "Failed to persist CSV to Redis",
+      });
+      return;
+    }
+
     await usageLogsExportStatusStore.set(jobId, {
       ...currentJob,
       status: "completed",
@@ -254,7 +264,7 @@ async function runUsageLogsExportJob(
       error: undefined,
     });
   } catch (error) {
-    logger.error("生成使用日志导出任务失败:", error);
+    logger.error("Failed to run usage logs export job:", error);
     const currentJob = await usageLogsExportStatusStore.get(jobId);
     if (!currentJob) {
       return;
@@ -264,7 +274,7 @@ async function runUsageLogsExportJob(
       ...currentJob,
       status: "failed",
       progressPercent: 0,
-      error: error instanceof Error ? error.message : "导出使用日志失败",
+      error: error instanceof Error ? error.message : "Export failed",
     });
   }
 }
@@ -340,17 +350,19 @@ export async function startUsageLogsExport(
     });
 
     if (!stored) {
-      return { ok: false, error: "导出任务初始化失败" };
+      return { ok: false, error: "Export job initialization failed" };
     }
 
+    // Defer to next tick so the action returns the jobId immediately.
+    // Safe for self-hosted Bun server (long-lived process); NOT suitable for serverless.
     setTimeout(() => {
       void runUsageLogsExportJob(jobId, finalFilters);
     }, 0);
 
     return { ok: true, data: { jobId } };
   } catch (error) {
-    logger.error("启动使用日志导出任务失败:", error);
-    const message = error instanceof Error ? error.message : "启动导出任务失败";
+    logger.error("Failed to start usage logs export:", error);
+    const message = error instanceof Error ? error.message : "Failed to start export";
     return { ok: false, error: message };
   }
 }
@@ -366,13 +378,13 @@ export async function getUsageLogsExportStatus(
 
     const job = getUsageLogsExportJob(session, await usageLogsExportStatusStore.get(jobId), jobId);
     if (!job) {
-      return { ok: false, error: "导出任务不存在或已过期" };
+      return { ok: false, error: "Export job not found or expired" };
     }
 
     return { ok: true, data: toUsageLogsExportStatus(job) };
   } catch (error) {
-    logger.error("获取使用日志导出进度失败:", error);
-    const message = error instanceof Error ? error.message : "获取导出进度失败";
+    logger.error("Failed to get usage logs export status:", error);
+    const message = error instanceof Error ? error.message : "Failed to get export status";
     return { ok: false, error: message };
   }
 }
@@ -386,26 +398,26 @@ export async function downloadUsageLogsExport(jobId: string): Promise<ActionResu
 
     const job = getUsageLogsExportJob(session, await usageLogsExportStatusStore.get(jobId), jobId);
     if (!job) {
-      return { ok: false, error: "导出任务不存在或已过期" };
+      return { ok: false, error: "Export job not found or expired" };
     }
 
     if (job.status === "failed") {
-      return { ok: false, error: job.error || "导出使用日志失败" };
+      return { ok: false, error: job.error || "Export failed" };
     }
 
     if (job.status !== "completed") {
-      return { ok: false, error: "导出尚未完成" };
+      return { ok: false, error: "Export not yet completed" };
     }
 
     const csv = await usageLogsExportCsvStore.get(usageLogsExportCsvKey(jobId));
     if (!csv) {
-      return { ok: false, error: "导出文件不存在或已过期" };
+      return { ok: false, error: "Export file not found or expired" };
     }
 
     return { ok: true, data: csv };
   } catch (error) {
-    logger.error("下载使用日志导出文件失败:", error);
-    const message = error instanceof Error ? error.message : "下载导出文件失败";
+    logger.error("Failed to download usage logs export:", error);
+    const message = error instanceof Error ? error.message : "Failed to download export";
     return { ok: false, error: message };
   }
 }

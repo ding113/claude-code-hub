@@ -203,9 +203,17 @@ export function UsageLogsFilters({
       }
 
       const jobId = startResult.data.jobId;
+      const EXPORT_TIMEOUT_MS = 5 * 60 * 1000;
+      const deadline = Date.now() + EXPORT_TIMEOUT_MS;
 
       while (true) {
         if (exportRunIdRef.current !== runId) {
+          return;
+        }
+
+        if (Date.now() > deadline) {
+          setExportStatus(null);
+          toast.error(t("logs.filters.exportError"));
           return;
         }
 
