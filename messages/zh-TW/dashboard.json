@@ -95,6 +95,8 @@
       "exporting": "匯出中...",
       "exportSuccess": "匯出成功",
       "exportError": "匯出失敗",
+      "exportPreparing": "正在準備匯出...",
+      "exportProgress": "已匯出 {current} / {total} 筆",
       "quickFilters": {
         "today": "今天",
         "thisWeek": "本週",

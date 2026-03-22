@@ -95,6 +95,8 @@
       "exporting": "Экспорт...",
       "exportSuccess": "Экспорт завершен",
       "exportError": "Ошибка экспорта",
+      "exportPreparing": "Подготовка экспорта...",
+      "exportProgress": "Экспортировано {current} / {total}",
       "quickFilters": {
         "today": "Сегодня",
         "thisWeek": "Эта неделя",
