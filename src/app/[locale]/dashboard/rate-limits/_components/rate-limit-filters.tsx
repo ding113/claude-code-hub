@@ -58,6 +58,8 @@ export function RateLimitFilters({
   const [providers, setProviders] = React.useState<Array<{ id: number; name: string }>>([]);
   const [loadingUsers, setLoadingUsers] = React.useState(true);
   const [loadingProviders, setLoadingProviders] = React.useState(true);
+  const [usersLoadError, setUsersLoadError] = React.useState(false);
+  const [providersLoadError, setProvidersLoadError] = React.useState(false);
 
   // 加载用户列表
   React.useEffect(() => {
@@ -67,11 +69,14 @@ export function RateLimitFilters({
       .then((result) => {
         if (!cancelled) {
           setUsers(result.ok ? result.data : []);
+          setUsersLoadError(!result.ok);
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("RateLimitFilters: failed to load users", error);
         if (!cancelled) {
           setUsers([]);
+          setUsersLoadError(true);
         }
       })
       .finally(() => {
@@ -87,10 +92,31 @@ export function RateLimitFilters({
 
   // 加载供应商列表
   React.useEffect(() => {
-    getProviders().then((providerList) => {
-      setProviders(providerList);
-      setLoadingProviders(false);
-    });
+    let cancelled = false;
+
+    void getProviders()
+      .then((providerList) => {
+        if (!cancelled) {
+          setProviders(providerList);
+          setProvidersLoadError(false);
+        }
+      })
+      .catch((error) => {
+        console.error("RateLimitFilters: failed to load providers", error);
+        if (!cancelled) {
+          setProviders([]);
+          setProvidersLoadError(true);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingProviders(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 应用过滤器
@@ -154,6 +180,7 @@ export function RateLimitFilters({
         {/* 用户选择器 */}
         <div className="space-y-2">
           <Label htmlFor="user-select">{t("user")}</Label>
+          {usersLoadError ? <p className="text-xs text-destructive">{t("loadError")}</p> : null}
           <Select
             value={userId?.toString() || "all"}
             onValueChange={(value) => setUserId(value === "all" ? undefined : Number(value))}
@@ -176,6 +203,7 @@ export function RateLimitFilters({
         {/* 供应商选择器 */}
         <div className="space-y-2">
           <Label htmlFor="provider-select">{t("provider")}</Label>
+          {providersLoadError ? <p className="text-xs text-destructive">{t("loadError")}</p> : null}
           <Select
             value={providerId?.toString() || "all"}
             onValueChange={(value) => setProviderId(value === "all" ? undefined : Number(value))}

@@ -743,8 +743,10 @@ export class ProxySession {
     }
 
     if (!this.hasUsableBillingSettings()) {
-      logger.warn("[ProxySession] Billing settings unavailable, skip pricing resolution");
-      return null;
+      logger.warn("[ProxySession] Billing settings unavailable, using fallback billing source", {
+        billingSettingsSource: this.billingSettingsSource,
+        fallbackBillingModelSource: this.cachedBillingModelSource,
+      });
     }
 
     const providerIdentity = provider ?? this.provider;
@@ -889,7 +891,9 @@ export class ProxySession {
   }
 
   private hasUsableBillingSettings(): boolean {
-    return this.billingSettingsSource !== "default";
+    return (
+      this.cachedBillingModelSource === "original" || this.cachedBillingModelSource === "redirected"
+    );
   }
 }
 

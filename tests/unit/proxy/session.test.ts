@@ -284,9 +284,10 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     });
 
     const result = await session.getCachedPriceDataByBillingSource();
-    expect(result).toBeNull();
+    expect(result).toEqual(redirectedPriceData);
     expect(getSystemSettings).toHaveBeenCalledTimes(1);
-    expect(findLatestPriceByModel).not.toHaveBeenCalled();
+    expect(findLatestPriceByModel).toHaveBeenCalledTimes(1);
+    expect(findLatestPriceByModel).toHaveBeenCalledWith("redirected-model");
 
     const internal = session as unknown as { cachedBillingModelSource?: unknown };
     expect(internal.cachedBillingModelSource).toBe("redirected");

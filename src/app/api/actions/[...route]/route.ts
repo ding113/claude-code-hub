@@ -1173,6 +1173,58 @@ const { route: getMyTodayStatsRoute, handler: getMyTodayStatsHandler } = createA
 );
 app.openapi(getMyTodayStatsRoute, getMyTodayStatsHandler);
 
+const { route: getMyUsageLogsRoute, handler: getMyUsageLogsHandler } = createActionRoute(
+  "my-usage",
+  "getMyUsageLogs",
+  myUsageActions.getMyUsageLogs,
+  {
+    requestSchema: z.object({
+      startDate: z.string().optional().describe("开始日期（YYYY-MM-DD，可为空）"),
+      endDate: z.string().optional().describe("结束日期（YYYY-MM-DD，可为空）"),
+      sessionId: z.string().optional(),
+      model: z.string().optional(),
+      endpoint: z.string().optional(),
+      statusCode: z.number().optional(),
+      excludeStatusCode200: z.boolean().optional(),
+      minRetryCount: z.number().int().nonnegative().optional(),
+      page: z.number().int().positive().default(1).optional(),
+      pageSize: z.number().int().positive().max(100).default(20).optional(),
+    }),
+    responseSchema: z.object({
+      logs: z.array(
+        z.object({
+          id: z.number(),
+          createdAt: z.string().nullable(),
+          model: z.string().nullable(),
+          billingModel: z.string().nullable(),
+          modelRedirect: z.string().nullable(),
+          inputTokens: z.number(),
+          outputTokens: z.number(),
+          cost: z.number(),
+          statusCode: z.number().nullable(),
+          duration: z.number().nullable(),
+          endpoint: z.string().nullable(),
+          cacheCreationInputTokens: z.number().nullable(),
+          cacheReadInputTokens: z.number().nullable(),
+          cacheCreation5mInputTokens: z.number().nullable(),
+          cacheCreation1hInputTokens: z.number().nullable(),
+          cacheTtlApplied: z.string().nullable(),
+        })
+      ),
+      total: z.number(),
+      page: z.number().int(),
+      pageSize: z.number().int(),
+      currencyCode: z.string(),
+      billingModelSource: z.enum(["original", "redirected"]),
+    }),
+    description: "获取当前用户的使用日志（兼容旧版 page/pageSize 分页接口）",
+    summary: "获取当前用户的使用日志（兼容旧版）",
+    tags: ["使用日志分析"],
+    allowReadOnlyAccess: true,
+  }
+);
+app.openapi(getMyUsageLogsRoute, getMyUsageLogsHandler);
+
 const { route: getMyUsageLogsBatchRoute, handler: getMyUsageLogsBatchHandler } = createActionRoute(
   "my-usage",
   "getMyUsageLogsBatch",

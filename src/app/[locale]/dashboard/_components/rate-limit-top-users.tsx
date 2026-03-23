@@ -31,6 +31,7 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
   const locale = useLocale();
   const [users, setUsers] = React.useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
   const [sortField, setSortField] = React.useState<SortField>("count");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
 
@@ -38,15 +39,18 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
   React.useEffect(() => {
     let cancelled = false;
 
-    void searchUsers()
+    void searchUsers(undefined, 5000)
       .then((result) => {
         if (!cancelled) {
           setUsers(result.ok ? result.data : []);
+          setLoadError(!result.ok);
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("RateLimitTopUsers: failed to load users", error);
         if (!cancelled) {
           setUsers([]);
+          setLoadError(true);
         }
       })
       .finally(() => {
@@ -107,6 +111,10 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
         {loading ? (
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">
             {t("loading")}
+          </div>
+        ) : loadError ? (
+          <div className="flex h-[280px] items-center justify-center text-destructive">
+            {t("loadError")}
           </div>
         ) : tableData.length === 0 ? (
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">

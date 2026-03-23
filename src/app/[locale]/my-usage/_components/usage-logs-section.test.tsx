@@ -74,14 +74,33 @@ import { UsageLogsSection } from "./usage-logs-section";
 
 describe("my-usage usage logs section", () => {
   test("uses infinite query instead of the old page-based getMyUsageLogs flow", async () => {
-    mocks.useInfiniteQuery.mockReturnValue({
-      data: { pages: [{ logs: [], nextCursor: null, hasMore: false }] },
-      fetchNextPage: vi.fn(),
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      isLoading: false,
-      isError: false,
-      error: null,
+    let capturedQueryFn:
+      | ((context: {
+          pageParam?: { createdAt: string; id: number } | undefined;
+        }) => Promise<unknown>)
+      | undefined;
+
+    mocks.useInfiniteQuery.mockImplementation((options: { queryFn: typeof capturedQueryFn }) => {
+      capturedQueryFn = options.queryFn;
+      return {
+        data: { pages: [{ logs: [], nextCursor: null, hasMore: false }] },
+        fetchNextPage: vi.fn(),
+        hasNextPage: false,
+        isFetchingNextPage: false,
+        isLoading: false,
+        isError: false,
+        error: null,
+      };
+    });
+    mocks.getMyUsageLogsBatch.mockResolvedValue({
+      ok: true,
+      data: {
+        logs: [],
+        nextCursor: null,
+        hasMore: false,
+        currencyCode: "USD",
+        billingModelSource: "original",
+      },
     });
     mocks.getMyUsageLogs.mockResolvedValue({
       ok: true,
@@ -98,7 +117,12 @@ describe("my-usage usage logs section", () => {
       root.render(<UsageLogsSection defaultOpen />);
     });
 
+    await act(async () => {
+      await capturedQueryFn?.({ pageParam: undefined });
+    });
+
     expect(mocks.useInfiniteQuery).toHaveBeenCalled();
+    expect(mocks.getMyUsageLogsBatch).toHaveBeenCalled();
     expect(mocks.getMyUsageLogs).not.toHaveBeenCalled();
 
     await act(async () => {

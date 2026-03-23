@@ -117,7 +117,6 @@ export function UsageLogsSection({
     error,
     isRefetching = false,
   } = query;
-  const refetch = query.refetch ?? (async (): Promise<unknown> => undefined);
 
   const logs = useMemo(() => data?.pages.flatMap((page) => page.logs) ?? [], [data]);
   const latestPage = data?.pages[0];
@@ -168,7 +167,6 @@ export function UsageLogsSection({
   const handleApply = () => {
     const nextFilters = { ...draftFilters };
     if (JSON.stringify(nextFilters) === JSON.stringify(appliedFilters)) {
-      void refetch();
       return;
     }
     setAppliedFilters(nextFilters);
@@ -177,7 +175,6 @@ export function UsageLogsSection({
   const handleReset = () => {
     setDraftFilters({});
     if (Object.keys(appliedFilters).length === 0) {
-      void refetch();
       return;
     }
     setAppliedFilters({});

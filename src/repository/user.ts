@@ -134,7 +134,8 @@ export async function findUserList(limit: number = 50, offset: number = 0): Prom
 }
 
 export async function searchUsersForFilter(
-  searchTerm?: string
+  searchTerm?: string,
+  limit = 200
 ): Promise<Array<{ id: number; name: string }>> {
   const conditions = [isNull(users.deletedAt)];
 
@@ -152,7 +153,7 @@ export async function searchUsersForFilter(
     .from(users)
     .where(and(...conditions))
     .orderBy(sql`CASE WHEN ${users.role} = 'admin' THEN 0 ELSE 1 END`, users.id)
-    .limit(200);
+    .limit(Math.max(1, Math.min(limit, 5000)));
 }
 
 /** Sort columns that are NOT NULL and support keyset cursor pagination */
@@ -246,7 +247,7 @@ export async function findUserListBatch(
   if (trimmedGroups.length > 0) {
     const groupConditions = trimmedGroups.map(
       (group) =>
-        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，]+\\s*'))`
+        sql`${group} = ANY(regexp_split_to_array(coalesce(${users.providerGroup}, ''), '\\s*[,，\n\r]+\\s*'))`
     );
     keyGroupFilterCondition = sql`(${sql.join(groupConditions, sql` OR `)})`;
   }
