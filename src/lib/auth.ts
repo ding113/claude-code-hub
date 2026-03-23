@@ -179,6 +179,8 @@ export async function validateKey(
       providerGroup: null,
       isEnabled: true,
       expiresAt: null,
+      fiveHourResetMode: "rolling",
+      fiveHourResetAnchor: null,
       dailyResetMode: "fixed",
       dailyResetTime: "00:00",
       createdAt: now,
@@ -194,6 +196,8 @@ export async function validateKey(
       canLoginWebUi: true, // Admin Token
       providerGroup: null,
       limit5hUsd: null,
+      fiveHourResetMode: "rolling",
+      fiveHourResetAnchor: null,
       limitDailyUsd: null,
       dailyResetMode: "fixed",
       dailyResetTime: "00:00",

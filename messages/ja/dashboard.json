@@ -1051,6 +1051,21 @@
       "placeholder": "空白の場合は無制限",
       "description": "5時間以内の最大消費金額"
     },
+    "fiveHourResetMode": {
+      "label": "5時間リセットモード",
+      "options": {
+        "fixed": "固定周期リセット",
+        "rolling": "ローリングウィンドウ（5時間）"
+      },
+      "desc": {
+        "fixed": "固定の5時間周期でクォータをリセット",
+        "rolling": "過去5時間のスライディングウィンドウ"
+      }
+    },
+    "fiveHourResetAnchor": {
+      "label": "5時間リセットアンカー時刻",
+      "description": "固定周期モードの起算時刻。デフォルトは作成時刻です。"
+    },
     "limitWeeklyUsd": {
       "label": "週間制限 (USD)",
       "placeholder": "空白の場合は無制限",

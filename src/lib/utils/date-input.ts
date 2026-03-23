@@ -1,6 +1,77 @@
 import { parse } from "date-fns";
 import { fromZonedTime } from "date-fns-tz";
 
+const DATETIME_LOCAL_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(\.\d{1,3})?)?$/;
+const DATETIME_WITH_TZ_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d)(\.\d{1,3})?)?([zZ]|[+-]\d{2}:?\d{2})$/;
+
+function isLeapYear(year: number): boolean {
+  return year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0);
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  switch (month) {
+    case 2:
+      return isLeapYear(year) ? 29 : 28;
+    case 4:
+    case 6:
+    case 9:
+    case 11:
+      return 30;
+    default:
+      return 31;
+  }
+}
+
+function hasValidCalendarDate(yearText: string, monthText: string, dayText: string): boolean {
+  const year = Number.parseInt(yearText, 10);
+  const month = Number.parseInt(monthText, 10);
+  const day = Number.parseInt(dayText, 10);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return false;
+  }
+
+  if (month < 1 || month > 12) {
+    return false;
+  }
+
+  return day >= 1 && day <= getDaysInMonth(year, month);
+}
+
+export function isValidDateTimeLocalString(input: string): boolean {
+  const match = DATETIME_LOCAL_PATTERN.exec(input);
+  if (!match) {
+    return false;
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  return hasValidCalendarDate(yearText, monthText, dayText);
+}
+
+export function isValidDateTimeString(input: string): boolean {
+  if (isValidDateTimeLocalString(input)) {
+    return true;
+  }
+
+  const match = DATETIME_WITH_TZ_PATTERN.exec(input);
+  if (!match) {
+    return false;
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  if (!hasValidCalendarDate(yearText, monthText, dayText)) {
+    return false;
+  }
+
+  return !Number.isNaN(new Date(input).getTime());
+}
+
+export function isFutureDate(date: Date, now: Date = new Date()): boolean {
+  return date.getTime() > now.getTime();
+}
+
 /**
  * Parse a date string input and interpret it in the specified timezone.
  *

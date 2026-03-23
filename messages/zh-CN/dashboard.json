@@ -1060,6 +1060,21 @@
       "placeholder": "留空表示无限制",
       "description": "5小时内最大消费金额"
     },
+    "fiveHourResetMode": {
+      "label": "5小时重置模式",
+      "options": {
+        "fixed": "固定周期重置",
+        "rolling": "滚动窗口（5小时）"
+      },
+      "desc": {
+        "fixed": "按固定5小时周期重置额度",
+        "rolling": "过去5小时的滑动窗口"
+      }
+    },
+    "fiveHourResetAnchor": {
+      "label": "5小时重置锚点时间",
+      "description": "固定周期模式下的起始计算时间，默认为创建时间"
+    },
     "limitWeeklyUsd": {
       "label": "周限额 (USD)",
       "placeholder": "留空表示无限制",

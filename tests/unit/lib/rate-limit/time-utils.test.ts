@@ -7,6 +7,8 @@ vi.mock("@/lib/utils/timezone", () => ({
 
 import { resolveSystemTimezone } from "@/lib/utils/timezone";
 import {
+  get5hFixedBlockRange,
+  get5hFixedBlockKeySuffix,
   getDailyResetTime,
   getResetInfo,
   getResetInfoWithMode,
@@ -16,6 +18,7 @@ import {
   getTTLForPeriod,
   getTTLForPeriodWithMode,
   normalizeResetTime,
+  resolveEffective5hFixedAnchor,
 } from "@/lib/rate-limit/time-utils";
 
 describe("rate-limit time-utils", () => {
@@ -55,6 +58,38 @@ describe("rate-limit time-utils", () => {
 
   it("getTTLForPeriod: 5h TTL should be 5h", async () => {
     expect(await getTTLForPeriod("5h")).toBe(5 * 3600);
+  });
+
+  it("get5hFixedBlockKeySuffix: should change with fixed block boundary", () => {
+    const anchor = new Date("2026-03-23T00:00:00.000Z");
+
+    const firstBlockSuffix = get5hFixedBlockKeySuffix(new Date("2026-03-23T04:59:59.000Z"), anchor);
+    const secondBlockSuffix = get5hFixedBlockKeySuffix(
+      new Date("2026-03-23T05:00:00.000Z"),
+      anchor
+    );
+
+    expect(firstBlockSuffix).not.toBe(secondBlockSuffix);
+    expect(firstBlockSuffix).toBe(String(new Date("2026-03-23T00:00:00.000Z").getTime()));
+    expect(secondBlockSuffix).toBe(String(new Date("2026-03-23T05:00:00.000Z").getTime()));
+  });
+
+  it("get5hFixedBlockKeySuffix: should reflect anchor changes immediately", () => {
+    const now = new Date("2026-03-23T06:00:00.000Z");
+    const originalAnchor = new Date("2026-03-23T00:00:00.000Z");
+    const updatedAnchor = new Date("2026-03-23T01:00:00.000Z");
+
+    expect(get5hFixedBlockKeySuffix(now, originalAnchor)).not.toBe(
+      get5hFixedBlockKeySuffix(now, updatedAnchor)
+    );
+  });
+
+  it("resolveEffective5hFixedAnchor: should fall back to createdAt when configured anchor is in the future", () => {
+    const now = new Date("2026-03-23T06:00:00.000Z");
+    const futureAnchor = new Date("2026-03-24T00:00:00.000Z");
+    const createdAt = new Date("2026-03-20T08:00:00.000Z");
+
+    expect(resolveEffective5hFixedAnchor(futureAnchor, createdAt, now)).toEqual(createdAt);
   });
 
   it("getSecondsUntilMidnight/getDailyResetTime: should compute reasonable daily reset time", async () => {
@@ -497,5 +532,138 @@ describe("timezone edge cases", () => {
     // 21:00 Shanghai = not yet, window starts yesterday 21:00 = 2024-01-14 13:00 UTC
     const range21 = await getTimeRangeForPeriod("daily", "21:00");
     expect(range21.startTime.toISOString()).toBe("2024-01-14T13:00:00.000Z");
+  });
+});
+
+/**
+ * 5h Fixed Window Tests
+ *
+ * Verify that 5h fixed window calculations work correctly
+ * with per-entity anchor timestamps.
+ */
+describe("5h fixed window", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("get5hFixedBlockRange: should calculate correct block from anchor", () => {
+    // Anchor: 2024-01-15 14:30 UTC, Now: 2024-01-15 16:00 UTC (1.5h into block 0)
+    const anchor = new Date("2024-01-15T14:30:00.000Z");
+    const now = new Date("2024-01-15T16:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const range = get5hFixedBlockRange(now, anchor);
+
+    expect(range.startTime.toISOString()).toBe("2024-01-15T14:30:00.000Z");
+    expect(range.endTime.toISOString()).toBe("2024-01-15T19:30:00.000Z");
+  });
+
+  it("get5hFixedBlockRange: should advance to next block after 5h", () => {
+    // Anchor: 2024-01-15 14:30 UTC, Now: 2024-01-15 20:00 UTC (5.5h later = block 1)
+    const anchor = new Date("2024-01-15T14:30:00.000Z");
+    const now = new Date("2024-01-15T20:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const range = get5hFixedBlockRange(now, anchor);
+
+    expect(range.startTime.toISOString()).toBe("2024-01-15T19:30:00.000Z");
+    expect(range.endTime.toISOString()).toBe("2024-01-16T00:30:00.000Z");
+  });
+
+  it("get5hFixedBlockRange: should handle cross-day boundaries", () => {
+    // Anchor: 2024-01-15 22:00 UTC, Now: 2024-01-16 01:00 UTC (3h into block 0)
+    const anchor = new Date("2024-01-15T22:00:00.000Z");
+    const now = new Date("2024-01-16T01:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const range = get5hFixedBlockRange(now, anchor);
+
+    expect(range.startTime.toISOString()).toBe("2024-01-15T22:00:00.000Z");
+    expect(range.endTime.toISOString()).toBe("2024-01-16T03:00:00.000Z");
+  });
+
+  it("get5hFixedBlockRange: should handle now before anchor (clamp to 0)", () => {
+    // Anchor: 2024-01-15 14:30 UTC, Now: 2024-01-15 12:00 UTC (before anchor)
+    const anchor = new Date("2024-01-15T14:30:00.000Z");
+    const now = new Date("2024-01-15T12:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const range = get5hFixedBlockRange(now, anchor);
+
+    // elapsed is clamped to 0, so block 0 starts at anchor
+    expect(range.startTime.toISOString()).toBe("2024-01-15T14:30:00.000Z");
+    expect(range.endTime.toISOString()).toBe("2024-01-15T19:30:00.000Z");
+  });
+
+  it("get5hFixedBlockRange: should handle many blocks (24h+ later)", () => {
+    // Anchor: 2024-01-15 00:00 UTC, Now: 2024-01-16 03:00 UTC (27h later = block 5)
+    const anchor = new Date("2024-01-15T00:00:00.000Z");
+    const now = new Date("2024-01-16T03:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const range = get5hFixedBlockRange(now, anchor);
+
+    // Block 5: 25h-30h from anchor = [01:00 next day, 06:00 next day)
+    expect(range.startTime.toISOString()).toBe("2024-01-16T01:00:00.000Z");
+    expect(range.endTime.toISOString()).toBe("2024-01-16T06:00:00.000Z");
+  });
+
+  it("getTimeRangeForPeriodWithMode: 5h fixed should use anchor", async () => {
+    const anchor = new Date("2024-01-15T10:00:00.000Z");
+    const now = new Date("2024-01-15T12:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const range = await getTimeRangeForPeriodWithMode("5h", "00:00", "fixed", anchor);
+
+    expect(range.startTime.toISOString()).toBe("2024-01-15T10:00:00.000Z");
+    expect(range.endTime.toISOString()).toBe("2024-01-15T15:00:00.000Z");
+  });
+
+  it("getTTLForPeriodWithMode: 5h fixed should return time to block end", async () => {
+    const anchor = new Date("2024-01-15T10:00:00.000Z");
+    const now = new Date("2024-01-15T12:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const ttl = await getTTLForPeriodWithMode("5h", "00:00", "fixed", anchor);
+
+    // Block ends at 15:00, now is 12:00, TTL = 3h = 10800s
+    expect(ttl).toBe(3 * 3600);
+  });
+
+  it("getResetInfoWithMode: 5h fixed should return custom type with resetAt", async () => {
+    const anchor = new Date("2024-01-15T10:00:00.000Z");
+    const now = new Date("2024-01-15T12:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const info = await getResetInfoWithMode("5h", "00:00", "fixed", anchor);
+
+    expect(info.type).toBe("custom");
+    expect(info.resetAt?.toISOString()).toBe("2024-01-15T15:00:00.000Z");
+  });
+
+  it("getResetInfoWithMode: 5h rolling should still return rolling type", async () => {
+    const now = new Date("2024-01-15T12:00:00.000Z");
+    vi.setSystemTime(now);
+
+    const info = await getResetInfoWithMode("5h", "00:00", "rolling");
+
+    expect(info.type).toBe("rolling");
+    expect(info.period).toBe("5 小时");
+  });
+
+  it("getTimeRangeForPeriodWithMode: 5h rolling should still use sliding window", async () => {
+    const now = new Date("2024-01-15T12:00:00.000Z");
+    vi.setSystemTime(now);
+
+    // Without anchor, 5h rolling should work as before
+    const range = await getTimeRangeForPeriodWithMode("5h", "00:00", "rolling");
+
+    expect(range.endTime.toISOString()).toBe("2024-01-15T12:00:00.000Z");
+    expect(range.startTime.toISOString()).toBe("2024-01-15T07:00:00.000Z");
   });
 });

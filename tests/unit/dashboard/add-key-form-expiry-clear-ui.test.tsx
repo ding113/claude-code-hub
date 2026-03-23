@@ -75,49 +75,64 @@ describe("AddKeyForm: expiresAt 清除测试", () => {
     document.body.innerHTML = "";
   });
 
+  function expectNoIntlMissingMessage(spy: ReturnType<typeof vi.spyOn>) {
+    const output = spy.mock.calls.flat().map(String).join("\n");
+    expect(output).not.toContain("MISSING_MESSAGE");
+  }
+
   test("提交时应携带 expiresAt 字段（即使为空）", async () => {
     const messages = loadMessages();
     const onSuccess = vi.fn();
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const { unmount } = render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <Dialog open onOpenChange={() => {}}>
-          <AddKeyForm userId={1} isAdmin onSuccess={onSuccess} />
-        </Dialog>
-      </NextIntlClientProvider>
-    );
+    try {
+      const { unmount } = render(
+        <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+          <Dialog open onOpenChange={() => {}}>
+            <AddKeyForm userId={1} isAdmin onSuccess={onSuccess} />
+          </Dialog>
+        </NextIntlClientProvider>
+      );
 
-    // 填写必填字段 - Key Name
-    const nameInput = document.body.querySelector('input[placeholder*="key"]') as HTMLInputElement;
-    if (nameInput) {
+      // 填写必填字段 - Key Name
+      const nameInput = document.body.querySelector(
+        'input[placeholder*="key"]'
+      ) as HTMLInputElement;
+      if (nameInput) {
+        await act(async () => {
+          nameInput.value = "test-key";
+          nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+          nameInput.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+      }
+
+      // 提交表单
+      const submit = document.body.querySelector(
+        'button[type="submit"]'
+      ) as HTMLButtonElement | null;
+      expect(submit).toBeTruthy();
+
       await act(async () => {
-        nameInput.value = "test-key";
-        nameInput.dispatchEvent(new Event("input", { bubbles: true }));
-        nameInput.dispatchEvent(new Event("change", { bubbles: true }));
+        submit?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        await new Promise((r) => setTimeout(r, 50));
       });
+
+      // 验证 addKey 被调用且 expiresAt 字段存在
+      if (keysActionMocks.addKey.mock.calls.length > 0) {
+        const payload = keysActionMocks.addKey.mock.calls[0][0] as Record<string, unknown>;
+
+        // 关键点：expiresAt 必须存在于 payload 中
+        // 即使值为空字符串，也必须显式传递，后端才能识别为"清除"
+        expect(Object.hasOwn(payload, "expiresAt")).toBe(true);
+        // 空字符串或 undefined 都是有效的清除值，但根据修复，应该是空字符串
+        expect(payload.expiresAt === "" || payload.expiresAt === undefined).toBe(true);
+      }
+
+      expectNoIntlMissingMessage(consoleErrorSpy);
+      unmount();
+    } finally {
+      consoleErrorSpy.mockRestore();
     }
-
-    // 提交表单
-    const submit = document.body.querySelector('button[type="submit"]') as HTMLButtonElement | null;
-    expect(submit).toBeTruthy();
-
-    await act(async () => {
-      submit?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await new Promise((r) => setTimeout(r, 50));
-    });
-
-    // 验证 addKey 被调用且 expiresAt 字段存在
-    if (keysActionMocks.addKey.mock.calls.length > 0) {
-      const payload = keysActionMocks.addKey.mock.calls[0][0] as Record<string, unknown>;
-
-      // 关键点：expiresAt 必须存在于 payload 中
-      // 即使值为空字符串，也必须显式传递，后端才能识别为"清除"
-      expect(Object.hasOwn(payload, "expiresAt")).toBe(true);
-      // 空字符串或 undefined 都是有效的清除值，但根据修复，应该是空字符串
-      expect(payload.expiresAt === "" || payload.expiresAt === undefined).toBe(true);
-    }
-
-    unmount();
   });
 
   test("expiresAt 使用 ?? 而非 || 确保空字符串不被转换", async () => {

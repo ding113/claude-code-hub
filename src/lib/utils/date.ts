@@ -1,6 +1,20 @@
 import { formatInTimeZone } from "date-fns-tz";
 
 /**
+ * Convert a Date to an HTML datetime-local input value (YYYY-MM-DDTHH:mm)
+ */
+export function formatDateToDatetimeLocal(date: Date | string): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+/**
  * Format a date to relative time (e.g., "2 hours ago")
  */
 export function formatRelativeTime(date: Date): string {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getSessionMock = vi.fn();
+const getTranslationsMock = vi.fn(async () => (key: string) => key);
 
 const findProviderByIdMock = vi.fn();
 const findAllProvidersFreshMock = vi.fn();
@@ -18,9 +19,14 @@ const clearProviderStateMock = vi.fn();
 const terminateProviderSessionsBatchMock = vi.fn();
 
 const revalidatePathMock = vi.fn();
+const resolveSystemTimezoneMock = vi.fn(async () => "Asia/Shanghai");
 
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
+}));
+
+vi.mock("next-intl/server", () => ({
+  getTranslations: getTranslationsMock,
 }));
 
 vi.mock("@/repository/provider", () => ({
@@ -72,6 +78,10 @@ vi.mock("next/cache", () => ({
   revalidatePath: revalidatePathMock,
 }));
 
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: resolveSystemTimezoneMock,
+}));
+
 function nowMs(): number {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
@@ -97,6 +107,7 @@ describe("Provider Actions - Async Optimization", () => {
     vi.clearAllMocks();
 
     getSessionMock.mockResolvedValue({ user: { id: 1, role: "admin" } });
+    resolveSystemTimezoneMock.mockResolvedValue("Asia/Shanghai");
 
     findAllProvidersFreshMock.mockResolvedValue([
       {
@@ -500,6 +511,51 @@ describe("Provider Actions - Async Optimization", () => {
       expect(elapsed).toBeLessThan(500);
       expect(revalidatePathMock).not.toHaveBeenCalled();
     });
+
+    it("should normalize datetime-local five_hour_reset_anchor using system timezone", async () => {
+      const { addProvider } = await import("@/actions/providers");
+      const result = await addProvider({
+        name: "p2",
+        url: "https://api.example.com",
+        key: "sk-test-2",
+        five_hour_reset_mode: "fixed",
+        five_hour_reset_anchor: "2026-03-23T12:30",
+        tpm: null,
+        rpm: null,
+        rpd: null,
+        cc: null,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(createProviderMock).toHaveBeenCalledTimes(1);
+
+      const createPayload = createProviderMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      expect(createPayload.five_hour_reset_anchor).toBeInstanceOf(Date);
+      expect((createPayload.five_hour_reset_anchor as Date).toISOString()).toBe(
+        "2026-03-23T04:30:00.000Z"
+      );
+    });
+
+    it("should reject a future five_hour_reset_anchor", async () => {
+      const { addProvider } = await import("@/actions/providers");
+      const result = await addProvider({
+        name: "p2",
+        url: "https://api.example.com",
+        key: "sk-test-2",
+        five_hour_reset_mode: "fixed",
+        five_hour_reset_anchor: "2099-03-23T12:30",
+        tpm: null,
+        rpm: null,
+        rpd: null,
+        cc: null,
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.errorCode).toBe("FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE");
+      }
+      expect(createProviderMock).not.toHaveBeenCalled();
+    });
   });
 
   // 说明：当前代码实现的函数名为 editProvider/removeProvider。
@@ -593,6 +649,56 @@ describe("Provider Actions - Async Optimization", () => {
         })
       );
       expect(terminateProviderSessionsBatchMock).toHaveBeenCalledWith([1], "editProvider");
+    });
+
+    it("editProvider: omitted five_hour_reset_anchor should not clear persisted anchor", async () => {
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        name: "p1-updated",
+        five_hour_reset_mode: "fixed",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderMock).toHaveBeenCalledTimes(1);
+
+      const updatePayload = updateProviderMock.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(updatePayload.five_hour_reset_mode).toBe("fixed");
+      expect(Object.hasOwn(updatePayload, "five_hour_reset_anchor")).toBe(false);
+    });
+
+    it("editProvider: datetime-local five_hour_reset_anchor should be normalized to exact UTC Date", async () => {
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        five_hour_reset_mode: "fixed",
+        five_hour_reset_anchor: "2026-03-23T12:30",
+      });
+
+      expect(result.ok).toBe(true);
+      expect(updateProviderMock).toHaveBeenCalledTimes(1);
+
+      const updatePayload = updateProviderMock.mock.calls[0]?.[1] as Record<string, unknown>;
+      expect(updatePayload.five_hour_reset_mode).toBe("fixed");
+      expect(updatePayload.five_hour_reset_anchor).toBeInstanceOf(Date);
+      expect((updatePayload.five_hour_reset_anchor as Date).toISOString()).toBe(
+        "2026-03-23T04:30:00.000Z"
+      );
+    });
+
+    it("editProvider: should reject a future five_hour_reset_anchor", async () => {
+      const { editProvider } = await import("@/actions/providers");
+
+      const result = await editProvider(1, {
+        five_hour_reset_mode: "fixed",
+        five_hour_reset_anchor: "2099-03-23T12:30",
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.errorCode).toBe("FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE");
+      }
+      expect(updateProviderMock).not.toHaveBeenCalled();
     });
   });
 

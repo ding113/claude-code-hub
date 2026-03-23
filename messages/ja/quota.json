@@ -202,6 +202,21 @@
         "label": "日次リセット時刻",
         "placeholder": "HH:mm"
       },
+      "fiveHourResetMode": {
+        "label": "5時間リセットモード",
+        "options": {
+          "fixed": "固定周期リセット",
+          "rolling": "ローリングウィンドウ（5時間）"
+        },
+        "desc": {
+          "fixed": "固定の5時間周期でクォータをリセット",
+          "rolling": "過去5時間のスライディングウィンドウ"
+        }
+      },
+      "fiveHourResetAnchor": {
+        "label": "5時間リセットアンカー時刻",
+        "description": "固定周期モードの起算時刻。デフォルトは作成時刻です。"
+      },
       "costWeekly": {
         "label": "週次クォータ (USD)",
         "placeholder": "無制限",
@@ -288,6 +303,21 @@
         "label": "日次リセット時刻",
         "placeholder": "HH:mm",
         "description": "日次制限のリセット時刻（システムタイムゾーン使用）"
+      },
+      "fiveHourResetMode": {
+        "label": "5時間リセットモード",
+        "options": {
+          "fixed": "固定周期リセット",
+          "rolling": "ローリングウィンドウ（5時間）"
+        },
+        "desc": {
+          "fixed": "固定の5時間周期でクォータをリセット",
+          "rolling": "過去5時間のスライディングウィンドウ"
+        }
+      },
+      "fiveHourResetAnchor": {
+        "label": "5時間リセットアンカー時刻",
+        "description": "固定周期モードの起算時刻。デフォルトは作成時刻です。"
       },
       "limitWeeklyUsd": {
         "label": "週間消費上限 (USD)",

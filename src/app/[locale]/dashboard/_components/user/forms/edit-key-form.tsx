@@ -22,6 +22,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -33,6 +34,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { useZodForm } from "@/lib/hooks/use-zod-form";
+import { formatDateToDatetimeLocal } from "@/lib/utils/date";
 import { getErrorMessage } from "@/lib/utils/error-messages";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import { KeyFormSchema } from "@/lib/validation/schemas";
@@ -47,6 +49,8 @@ interface EditKeyFormProps {
     providerGroup?: string | null;
     cacheTtlPreference?: "inherit" | "5m" | "1h";
     limit5hUsd?: number | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: Date | null;
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
@@ -121,6 +125,10 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
     }
   };
 
+  const initialFiveHourResetAnchor = keyData?.fiveHourResetAnchor
+    ? formatDateToDatetimeLocal(keyData.fiveHourResetAnchor)
+    : "";
+
   const form = useZodForm({
     schema: KeyFormSchema,
     defaultValues: {
@@ -130,6 +138,10 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
       providerGroup: keyData?.providerGroup || PROVIDER_GROUP.DEFAULT,
       cacheTtlPreference: keyData?.cacheTtlPreference ?? "inherit",
       limit5hUsd: keyData?.limit5hUsd ?? null,
+      fiveHourResetMode: keyData?.fiveHourResetMode ?? "rolling",
+      fiveHourResetAnchor: keyData?.fiveHourResetAnchor
+        ? formatDateToDatetimeLocal(keyData.fiveHourResetAnchor)
+        : "",
       limitDailyUsd: keyData?.limitDailyUsd ?? null,
       dailyResetMode: keyData?.dailyResetMode ?? "fixed",
       dailyResetTime: keyData?.dailyResetTime ?? "00:00",
@@ -145,6 +157,8 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
 
       startTransition(async () => {
         try {
+          const hasFiveHourResetAnchorChanged =
+            data.fiveHourResetAnchor !== initialFiveHourResetAnchor;
           const res = await editKey(keyData.id, {
             name: data.name,
             // 重要：清除到期时间时用空字符串表达，避免 undefined 在 Server Action 序列化时被丢弃
@@ -152,6 +166,12 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             canLoginWebUi: data.canLoginWebUi,
             cacheTtlPreference: data.cacheTtlPreference,
             limit5hUsd: data.limit5hUsd,
+            fiveHourResetMode: data.fiveHourResetMode,
+            ...(hasFiveHourResetAnchorChanged
+              ? {
+                  fiveHourResetAnchor: data.fiveHourResetAnchor || null,
+                }
+              : {}),
             limitDailyUsd: data.limitDailyUsd,
             dailyResetMode: data.dailyResetMode,
             dailyResetTime: data.dailyResetTime,
@@ -324,6 +344,46 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
           step={0.01}
           {...form.getFieldProps("limitDailyUsd")}
         />
+      </FormGrid>
+
+      <FormGrid columns={2}>
+        <div className="space-y-2">
+          <Label htmlFor="5h-reset-mode">{t("fiveHourResetMode.label")}</Label>
+          <Select
+            value={form.values.fiveHourResetMode}
+            onValueChange={(value: "fixed" | "rolling") =>
+              form.setValue("fiveHourResetMode", value)
+            }
+            disabled={isPending}
+          >
+            <SelectTrigger id="5h-reset-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fixed">{t("fiveHourResetMode.options.fixed")}</SelectItem>
+              <SelectItem value="rolling">{t("fiveHourResetMode.options.rolling")}</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {form.values.fiveHourResetMode === "fixed"
+              ? t("fiveHourResetMode.desc.fixed")
+              : t("fiveHourResetMode.desc.rolling")}
+          </p>
+        </div>
+
+        {form.values.fiveHourResetMode === "fixed" && (
+          <div className="space-y-2">
+            <Label htmlFor="5h-reset-anchor">{t("fiveHourResetAnchor.label")}</Label>
+            <Input
+              id="5h-reset-anchor"
+              type="datetime-local"
+              value={form.values.fiveHourResetAnchor}
+              onChange={(e) => form.setValue("fiveHourResetAnchor", e.target.value)}
+              disabled={isPending}
+            />
+            <p className="text-xs text-muted-foreground">{t("fiveHourResetAnchor.description")}</p>
+          </div>
+        )}
       </FormGrid>
 
       <FormGrid columns={2}>

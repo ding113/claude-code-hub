@@ -2,11 +2,13 @@
 
 import { format } from "date-fns";
 import { Calendar, Gauge, Key, Plus, Sparkles } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { TagInputField, TextField } from "@/components/form/form-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -36,6 +38,8 @@ export interface KeyEditSectionProps {
     cacheTtlPreference?: "inherit" | "5m" | "1h";
     // 所有限额字段
     limit5hUsd?: number | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: string;
     limitDailyUsd?: number | null;
     dailyResetMode?: "fixed" | "rolling";
     dailyResetTime?: string;
@@ -144,6 +148,7 @@ export function KeyEditSection({
   scrollRef,
   translations,
 }: KeyEditSectionProps) {
+  const tFiveHour = useTranslations("quota.keys.editKeyForm");
   const [limitPickerOpen, setLimitPickerOpen] = useState(false);
 
   useEffect(() => {
@@ -203,7 +208,11 @@ export function KeyEditSection({
   const handleRemoveLimitRule = (type: string) => {
     switch (type) {
       case "limit5h":
-        onChange("limit5hUsd", null);
+        onChange({
+          limit5hUsd: null,
+          fiveHourResetMode: "rolling",
+          fiveHourResetAnchor: "",
+        });
         return;
       case "limitDaily":
         // Batch update to avoid race condition
@@ -301,13 +310,6 @@ export function KeyEditSection({
     if (!normalizedKeyProviderGroup) return [];
     return parseProviderGroups(normalizedKeyProviderGroup);
   }, [normalizedKeyProviderGroup]);
-  const _extraKeyGroupOption = useMemo(() => {
-    if (!normalizedKeyProviderGroup) return null;
-    if (normalizedKeyProviderGroup === normalizedUserProviderGroup) return null;
-    if (userGroups.includes(normalizedKeyProviderGroup)) return null;
-    return normalizedKeyProviderGroup;
-  }, [normalizedKeyProviderGroup, normalizedUserProviderGroup, userGroups]);
-
   // 普通用户选择分组时，自动移除 default
   const handleUserProviderGroupChange = useCallback(
     (newValue: string) => {
@@ -422,6 +424,56 @@ export function KeyEditSection({
             existingTypes={existingLimitTypes}
             translations={translations.limitRules || {}}
           />
+
+          {typeof keyData.limit5hUsd === "number" && keyData.limit5hUsd > 0 && (
+            <div className="grid gap-4 rounded-lg border border-dashed border-border bg-background px-4 py-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor={`key-${keyData.id}-5h-reset-mode`}>
+                  {tFiveHour("fiveHourResetMode.label")}
+                </Label>
+                <Select
+                  value={keyData.fiveHourResetMode ?? "rolling"}
+                  onValueChange={(value: "fixed" | "rolling") =>
+                    onChange("fiveHourResetMode", value)
+                  }
+                >
+                  <SelectTrigger id={`key-${keyData.id}-5h-reset-mode`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="fixed">
+                      {tFiveHour("fiveHourResetMode.options.fixed")}
+                    </SelectItem>
+                    <SelectItem value="rolling">
+                      {tFiveHour("fiveHourResetMode.options.rolling")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {keyData.fiveHourResetMode === "fixed"
+                    ? tFiveHour("fiveHourResetMode.desc.fixed")
+                    : tFiveHour("fiveHourResetMode.desc.rolling")}
+                </p>
+              </div>
+
+              {keyData.fiveHourResetMode === "fixed" && (
+                <div className="space-y-2">
+                  <Label htmlFor={`key-${keyData.id}-5h-reset-anchor`}>
+                    {tFiveHour("fiveHourResetAnchor.label")}
+                  </Label>
+                  <Input
+                    id={`key-${keyData.id}-5h-reset-anchor`}
+                    type="datetime-local"
+                    value={keyData.fiveHourResetAnchor ?? ""}
+                    onChange={(e) => onChange("fiveHourResetAnchor", e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {tFiveHour("fiveHourResetAnchor.description")}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 

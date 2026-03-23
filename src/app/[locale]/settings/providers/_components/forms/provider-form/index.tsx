@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { PROVIDER_BATCH_PATCH_ERROR_CODES } from "@/lib/provider-batch-patch-error-codes";
+import { formatDateToDatetimeLocal } from "@/lib/utils/date";
 import { isValidUrl } from "@/lib/utils/validation";
 import type { ProviderDisplay, ProviderEndpoint, ProviderType } from "@/types/provider";
 import { invalidateProviderQueries } from "../../invalidate-provider-queries";
@@ -72,6 +73,9 @@ function ProviderFormContent({
   const { state, dispatch, mode, provider, hideUrl } = useProviderForm();
   const [isPending, startTransition] = useTransition();
   const isEdit = mode === "edit";
+  const initialFiveHourResetAnchor = provider?.fiveHourResetAnchor
+    ? formatDateToDatetimeLocal(provider.fiveHourResetAnchor)
+    : "";
 
   const queryClient = useQueryClient();
 
@@ -325,6 +329,7 @@ function ProviderFormContent({
           active_time_start: state.routing.activeTimeStart || null,
           active_time_end: state.routing.activeTimeEnd || null,
           limit_5h_usd: state.rateLimit.limit5hUsd,
+          five_hour_reset_mode: state.rateLimit.fiveHourResetMode,
           limit_daily_usd: state.rateLimit.limitDailyUsd,
           daily_reset_mode: state.rateLimit.dailyResetMode,
           daily_reset_time: state.rateLimit.dailyResetTime,
@@ -350,9 +355,22 @@ function ProviderFormContent({
           cc: null,
         };
 
+        const hasFiveHourResetAnchorChanged =
+          state.rateLimit.fiveHourResetAnchor !== initialFiveHourResetAnchor;
+        const formDataWithOptionalAnchor = {
+          ...baseFormData,
+          ...(!isEdit || hasFiveHourResetAnchorChanged
+            ? {
+                five_hour_reset_anchor: state.rateLimit.fiveHourResetAnchor || null,
+              }
+            : {}),
+        };
+
         if (isEdit && provider) {
           // For edit: only include key if user provided a new one
-          const editFormData = trimmedKey ? { ...baseFormData, key: trimmedKey } : baseFormData;
+          const editFormData = trimmedKey
+            ? { ...formDataWithOptionalAnchor, key: trimmedKey }
+            : formDataWithOptionalAnchor;
           const res = await editProvider(provider.id, editFormData);
           if (!res.ok) {
             toast.error(res.error || t("errors.updateFailed"));
@@ -389,7 +407,7 @@ function ProviderFormContent({
           void doInvalidate();
         } else {
           // For create: key is required
-          const createFormData = { ...baseFormData, key: trimmedKey };
+          const createFormData = { ...formDataWithOptionalAnchor, key: trimmedKey };
           const res = await addProvider(createFormData);
           if (!res.ok) {
             toast.error(res.error || t("errors.addFailed"));

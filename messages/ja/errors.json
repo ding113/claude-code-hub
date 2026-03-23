@@ -81,6 +81,8 @@
   "EXPIRES_AT_FIELD": "有効期限",
   "EXPIRES_AT_MUST_BE_FUTURE": "有効期限は将来の日付である必要があります",
   "EXPIRES_AT_TOO_FAR": "有効期限は10年を超えることはできません",
+  "FIVE_HOUR_RESET_ANCHOR_FIELD": "5時間リセットアンカー時刻",
+  "FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE": "5時間リセットアンカー時刻は未来に設定できません",
   "CANNOT_DISABLE_SELF": "自分のアカウントを無効にすることはできません",
   "NO_DEFAULT_GROUP_PERMISSION": "defaultグループを使用する権限がありません。defaultグループのキーを持っていません",
   "NO_GROUP_PERMISSION": "以下のグループを使用する権限がありません: {groups}"

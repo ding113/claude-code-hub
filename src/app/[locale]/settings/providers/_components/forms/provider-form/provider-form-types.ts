@@ -77,6 +77,8 @@ export interface RoutingState {
 
 export interface RateLimitState {
   limit5hUsd: number | null;
+  fiveHourResetMode: "fixed" | "rolling";
+  fiveHourResetAnchor: string; // datetime-local format string
   limitDailyUsd: number | null;
   dailyResetMode: "fixed" | "rolling";
   dailyResetTime: string;
@@ -169,6 +171,8 @@ export type ProviderFormAction =
   | { type: "SET_ACTIVE_TIME_END"; payload: string | null }
   // Rate limit actions
   | { type: "SET_LIMIT_5H_USD"; payload: number | null }
+  | { type: "SET_FIVE_HOUR_RESET_MODE"; payload: "fixed" | "rolling" }
+  | { type: "SET_FIVE_HOUR_RESET_ANCHOR"; payload: string }
   | { type: "SET_LIMIT_DAILY_USD"; payload: number | null }
   | { type: "SET_DAILY_RESET_MODE"; payload: "fixed" | "rolling" }
   | { type: "SET_DAILY_RESET_TIME"; payload: string }

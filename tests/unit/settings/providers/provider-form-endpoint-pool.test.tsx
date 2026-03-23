@@ -467,4 +467,91 @@ describe("ProviderForm: endpoint pool integration", () => {
 
     unmount();
   });
+
+  test("Edit mode should omit unchanged five_hour_reset_anchor from edit payload", async () => {
+    providersActionMocks.editProvider.mockResolvedValueOnce({
+      ok: true,
+      data: { undoToken: "undo-token", operationId: "op-1" },
+    });
+
+    const provider = makeCloneProvider({
+      fiveHourResetMode: "fixed",
+      fiveHourResetAnchor: new Date("2026-03-23T04:30:15.123Z"),
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderForm mode="edit" provider={provider} enableMultiProviderTypes />
+    );
+
+    await flushTicks(2);
+
+    const form = document.body.querySelector("form") as HTMLFormElement | null;
+    expect(form).toBeTruthy();
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    for (let i = 0; i < 5; i++) {
+      if (providersActionMocks.editProvider.mock.calls.length > 0) break;
+      await flushTicks(1);
+    }
+
+    expect(providersActionMocks.editProvider).toHaveBeenCalledTimes(1);
+    const [, payload] = providersActionMocks.editProvider.mock.calls[0] as [number, any];
+    expect(Object.hasOwn(payload, "five_hour_reset_anchor")).toBe(false);
+
+    unmount();
+  });
+
+  test("Edit mode should submit raw datetime-local five_hour_reset_anchor", async () => {
+    providersActionMocks.editProvider.mockResolvedValueOnce({
+      ok: true,
+      data: { undoToken: "undo-token", operationId: "op-2" },
+    });
+
+    const provider = makeCloneProvider({
+      fiveHourResetMode: "fixed",
+      fiveHourResetAnchor: new Date("2026-03-23T04:30:15.123Z"),
+    });
+
+    const { unmount } = renderWithProviders(
+      <ProviderForm mode="edit" provider={provider} enableMultiProviderTypes />
+    );
+
+    await flushTicks(2);
+
+    const anchorInput = document.getElementById("edit-5h-reset-anchor") as HTMLInputElement | null;
+    expect(anchorInput).toBeTruthy();
+
+    await act(async () => {
+      if (anchorInput) {
+        setNativeValue(anchorInput, "2026-03-24T09:45");
+        anchorInput.dispatchEvent(new Event("input", { bubbles: true }));
+        anchorInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    });
+
+    const form = document.body.querySelector("form") as HTMLFormElement | null;
+    expect(form).toBeTruthy();
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    for (let i = 0; i < 5; i++) {
+      if (providersActionMocks.editProvider.mock.calls.length > 0) break;
+      await flushTicks(1);
+    }
+
+    expect(providersActionMocks.editProvider).toHaveBeenCalledTimes(1);
+    const [, payload] = providersActionMocks.editProvider.mock.calls[0] as [
+      number,
+      Record<string, unknown>,
+    ];
+    expect(payload.five_hour_reset_anchor).toBe("2026-03-24T09:45");
+    expect(payload.five_hour_reset_anchor).not.toBeInstanceOf(Date);
+
+    unmount();
+  });
 });

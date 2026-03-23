@@ -5,6 +5,7 @@ const getSessionMock = vi.fn();
 const findAllProvidersFreshMock = vi.fn();
 const updateProvidersBatchMock = vi.fn();
 const publishCacheInvalidationMock = vi.fn();
+const resolveSystemTimezoneMock = vi.fn(async () => "Asia/Shanghai");
 const redisStore = new Map<string, { value: string; expiresAt: number }>();
 
 function readRedisValue(key: string): string | null {
@@ -45,6 +46,10 @@ const redisEvalMock = vi.fn(async (_script: string, _numKeys: number, key: strin
   return value;
 });
 
+vi.mock("next-intl/server", () => ({
+  getTranslations: vi.fn(async () => (key: string) => key),
+}));
+
 vi.mock("@/lib/auth", () => ({
   getSession: getSessionMock,
 }));
@@ -84,6 +89,10 @@ vi.mock("@/lib/logger", () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/utils/timezone", () => ({
+  resolveSystemTimezone: resolveSystemTimezoneMock,
 }));
 
 function makeProvider(id: number, overrides: Record<string, unknown> = {}) {
@@ -160,6 +169,7 @@ describe("Apply Provider Batch Patch Engine", () => {
     findAllProvidersFreshMock.mockResolvedValue([]);
     updateProvidersBatchMock.mockResolvedValue(0);
     publishCacheInvalidationMock.mockResolvedValue(undefined);
+    resolveSystemTimezoneMock.mockResolvedValue("Asia/Shanghai");
   });
 
   /** Helper: create preview then apply with optional overrides */
@@ -200,6 +210,40 @@ describe("Apply Provider Batch Patch Engine", () => {
       [1, 2],
       expect.objectContaining({ groupTag: "new-group" })
     );
+  });
+
+  it("should parse five_hour_reset_anchor using system timezone before batch update", async () => {
+    findAllProvidersFreshMock.mockResolvedValue([makeProvider(1)]);
+    updateProvidersBatchMock.mockResolvedValue(1);
+
+    const { apply } = await setupPreviewAndApply([1], {
+      five_hour_reset_anchor: { set: "2026-03-23T12:30" },
+    });
+
+    expect(apply.ok).toBe(true);
+    expect(resolveSystemTimezoneMock).toHaveBeenCalledOnce();
+    expect(updateProvidersBatchMock).toHaveBeenCalledOnce();
+
+    const [, updates] = updateProvidersBatchMock.mock.calls[0] as [
+      number[],
+      { fiveHourResetAnchor?: Date | null },
+    ];
+    expect(updates.fiveHourResetAnchor).toBeInstanceOf(Date);
+    expect(updates.fiveHourResetAnchor?.toISOString()).toBe("2026-03-23T04:30:00.000Z");
+  });
+
+  it("should reject a future five_hour_reset_anchor before batch update", async () => {
+    findAllProvidersFreshMock.mockResolvedValue([makeProvider(1)]);
+
+    const { apply } = await setupPreviewAndApply([1], {
+      five_hour_reset_anchor: { set: "2099-03-23T12:30" },
+    });
+
+    expect(apply.ok).toBe(false);
+    if (!apply.ok) {
+      expect(apply.error).toBe("FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE");
+    }
+    expect(updateProvidersBatchMock).not.toHaveBeenCalled();
   });
 
   it("should publish cache invalidation after successful write", async () => {

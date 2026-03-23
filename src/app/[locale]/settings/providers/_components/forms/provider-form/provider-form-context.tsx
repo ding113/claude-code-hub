@@ -10,6 +10,7 @@ import {
   useReducer,
   useRef,
 } from "react";
+import { formatDateToDatetimeLocal } from "@/lib/utils/date";
 import { parseProviderGroups } from "@/lib/utils/provider-group";
 import type { ProviderDisplay, ProviderType } from "@/types/provider";
 import { analyzeBatchProviderSettings } from "../../batch-edit/analyze-batch-settings";
@@ -50,6 +51,8 @@ const ACTION_TO_FIELD_PATH: Partial<Record<ProviderFormAction["type"], string>> 
   SET_ACTIVE_TIME_START: "routing.activeTimeStart",
   SET_ACTIVE_TIME_END: "routing.activeTimeEnd",
   SET_LIMIT_5H_USD: "rateLimit.limit5hUsd",
+  SET_FIVE_HOUR_RESET_MODE: "rateLimit.fiveHourResetMode",
+  SET_FIVE_HOUR_RESET_ANCHOR: "rateLimit.fiveHourResetAnchor",
   SET_LIMIT_DAILY_USD: "rateLimit.limitDailyUsd",
   SET_DAILY_RESET_MODE: "rateLimit.dailyResetMode",
   SET_DAILY_RESET_TIME: "rateLimit.dailyResetTime",
@@ -187,6 +190,11 @@ export function createInitialState(
           analysis.rateLimit.limit5hUsd.status === "uniform"
             ? analysis.rateLimit.limit5hUsd.value
             : null,
+        fiveHourResetMode:
+          analysis.rateLimit.fiveHourResetMode.status === "uniform"
+            ? analysis.rateLimit.fiveHourResetMode.value
+            : "rolling",
+        fiveHourResetAnchor: "",
         limitDailyUsd:
           analysis.rateLimit.limitDailyUsd.status === "uniform"
             ? analysis.rateLimit.limitDailyUsd.value
@@ -306,6 +314,8 @@ export function createInitialState(
       },
       rateLimit: {
         limit5hUsd: null,
+        fiveHourResetMode: "rolling",
+        fiveHourResetAnchor: "",
         limitDailyUsd: null,
         dailyResetMode: "fixed",
         dailyResetTime: "00:00",
@@ -382,6 +392,10 @@ export function createInitialState(
     },
     rateLimit: {
       limit5hUsd: sourceProvider?.limit5hUsd ?? null,
+      fiveHourResetMode: sourceProvider?.fiveHourResetMode ?? "rolling",
+      fiveHourResetAnchor: sourceProvider?.fiveHourResetAnchor
+        ? formatDateToDatetimeLocal(sourceProvider.fiveHourResetAnchor)
+        : "",
       limitDailyUsd: sourceProvider?.limitDailyUsd ?? null,
       dailyResetMode: sourceProvider?.dailyResetMode ?? "fixed",
       dailyResetTime: sourceProvider?.dailyResetTime ?? "00:00",
@@ -582,6 +596,10 @@ export function providerFormReducer(
     // Rate limit
     case "SET_LIMIT_5H_USD":
       return { ...state, rateLimit: { ...state.rateLimit, limit5hUsd: action.payload } };
+    case "SET_FIVE_HOUR_RESET_MODE":
+      return { ...state, rateLimit: { ...state.rateLimit, fiveHourResetMode: action.payload } };
+    case "SET_FIVE_HOUR_RESET_ANCHOR":
+      return { ...state, rateLimit: { ...state.rateLimit, fiveHourResetAnchor: action.payload } };
     case "SET_LIMIT_DAILY_USD":
       return { ...state, rateLimit: { ...state.rateLimit, limitDailyUsd: action.payload } };
     case "SET_DAILY_RESET_MODE":

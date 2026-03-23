@@ -63,6 +63,8 @@ const EditUserSchema = UpdateUserSchema.extend({
 
 type EditUserValues = z.infer<typeof EditUserSchema>;
 
+import { formatDateToDatetimeLocal } from "@/lib/utils/date";
+
 function buildDefaultValues(user: UserDisplay): EditUserValues {
   return {
     name: user.name || "",
@@ -72,6 +74,10 @@ function buildDefaultValues(user: UserDisplay): EditUserValues {
     providerGroup: normalizeProviderGroup(user.providerGroup),
     rpm: user.rpm ?? 0,
     limit5hUsd: user.limit5hUsd ?? null,
+    fiveHourResetMode: user.fiveHourResetMode ?? "rolling",
+    fiveHourResetAnchor: user.fiveHourResetAnchor
+      ? formatDateToDatetimeLocal(user.fiveHourResetAnchor)
+      : "",
     dailyQuota: user.dailyQuota ?? null,
     limitWeeklyUsd: user.limitWeeklyUsd ?? null,
     limitMonthlyUsd: user.limitMonthlyUsd ?? null,
@@ -101,6 +107,9 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
   const userEditTranslations = useUserTranslations({ showProviderGroup: true });
 
   const defaultValues = useMemo(() => buildDefaultValues(user), [user]);
+  const initialFiveHourResetAnchor = user.fiveHourResetAnchor
+    ? formatDateToDatetimeLocal(user.fiveHourResetAnchor)
+    : "";
 
   const form = useZodForm({
     schema: EditUserSchema,
@@ -108,6 +117,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
     onSubmit: async (data) => {
       startTransition(async () => {
         try {
+          const hasFiveHourResetAnchorChanged =
+            data.fiveHourResetAnchor !== initialFiveHourResetAnchor;
           const userRes = await editUser(user.id, {
             name: data.name,
             note: data.note,
@@ -116,6 +127,12 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
             providerGroup: normalizeProviderGroup(data.providerGroup),
             rpm: data.rpm,
             limit5hUsd: data.limit5hUsd,
+            fiveHourResetMode: data.fiveHourResetMode,
+            ...(hasFiveHourResetAnchorChanged
+              ? {
+                  fiveHourResetAnchor: data.fiveHourResetAnchor || null,
+                }
+              : {}),
             dailyQuota: data.dailyQuota,
             limitWeeklyUsd: data.limitWeeklyUsd,
             limitMonthlyUsd: data.limitMonthlyUsd,
@@ -293,6 +310,8 @@ function EditUserDialogInner({ onOpenChange, user, onSuccess }: EditUserDialogPr
               providerGroup: normalizeProviderGroup(currentUserDraft.providerGroup),
               rpm: currentUserDraft.rpm ?? 0,
               limit5hUsd: currentUserDraft.limit5hUsd ?? null,
+              fiveHourResetMode: currentUserDraft.fiveHourResetMode ?? "rolling",
+              fiveHourResetAnchor: currentUserDraft.fiveHourResetAnchor ?? "",
               dailyQuota: currentUserDraft.dailyQuota ?? null,
               limitWeeklyUsd: currentUserDraft.limitWeeklyUsd ?? null,
               limitMonthlyUsd: currentUserDraft.limitMonthlyUsd ?? null,

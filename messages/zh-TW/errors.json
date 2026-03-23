@@ -81,6 +81,8 @@
   "EXPIRES_AT_FIELD": "過期時間",
   "EXPIRES_AT_MUST_BE_FUTURE": "過期時間必須是未來時間",
   "EXPIRES_AT_TOO_FAR": "過期時間不能超過10年",
+  "FIVE_HOUR_RESET_ANCHOR_FIELD": "5小時重置錨點時間",
+  "FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE": "5小時重置錨點時間不能是未來時間",
   "CANNOT_DISABLE_SELF": "不能禁用自己的帳戶",
   "NO_DEFAULT_GROUP_PERMISSION": "無權使用 default 分組，您當前沒有 default 分組的 Key",
   "NO_GROUP_PERMISSION": "無權使用以下分組: {groups}"

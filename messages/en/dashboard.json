@@ -1059,6 +1059,21 @@
       "placeholder": "Leave empty for unlimited",
       "description": "Maximum spending in 5 hours"
     },
+    "fiveHourResetMode": {
+      "label": "5h Reset Mode",
+      "options": {
+        "fixed": "Fixed Interval Reset",
+        "rolling": "Rolling Window (5h)"
+      },
+      "desc": {
+        "fixed": "Reset quota at fixed 5-hour intervals",
+        "rolling": "Sliding window covering the last 5 hours"
+      }
+    },
+    "fiveHourResetAnchor": {
+      "label": "5h Reset Anchor Time",
+      "description": "Start time for fixed interval mode. Defaults to creation time."
+    },
     "limitWeeklyUsd": {
       "label": "Weekly Quota (USD)",
       "placeholder": "Leave empty for unlimited",

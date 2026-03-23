@@ -35,6 +35,8 @@ function createBatchState(): ProviderFormState {
     },
     rateLimit: {
       limit5hUsd: null,
+      fiveHourResetMode: "rolling",
+      fiveHourResetAnchor: "",
       limitDailyUsd: null,
       dailyResetMode: "fixed",
       dailyResetTime: "00:00",
@@ -366,6 +368,37 @@ describe("buildPatchDraftFromFormState", () => {
     const draft = buildPatchDraftFromFormState(state, dirty);
 
     expect(draft.limit_5h_usd).toEqual({ set: 50 });
+  });
+
+  it("sets fiveHourResetMode when dirty", () => {
+    const state = createBatchState();
+    state.rateLimit.fiveHourResetMode = "fixed";
+    const dirty = new Set(["rateLimit.fiveHourResetMode"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.five_hour_reset_mode).toEqual({ set: "fixed" });
+  });
+
+  it("clears fiveHourResetAnchor when dirty and empty", () => {
+    const state = createBatchState();
+    const dirty = new Set(["rateLimit.fiveHourResetAnchor"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.five_hour_reset_anchor).toEqual({ clear: true });
+  });
+
+  it("sets fiveHourResetAnchor when dirty and non-empty", () => {
+    const state = createBatchState();
+    state.rateLimit.fiveHourResetAnchor = "2026-03-23T12:30";
+    const dirty = new Set(["rateLimit.fiveHourResetAnchor"]);
+
+    const draft = buildPatchDraftFromFormState(state, dirty);
+
+    expect(draft.five_hour_reset_anchor).toEqual({
+      set: "2026-03-23T12:30",
+    });
   });
 
   it("sets dailyResetMode when dirty", () => {

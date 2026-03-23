@@ -15,6 +15,8 @@ export interface User {
   deletedAt?: Date;
   // User-level quota fields
   limit5hUsd?: number; // 5小时消费上限（美元）
+  fiveHourResetMode: "fixed" | "rolling"; // 5h 限额重置模式
+  fiveHourResetAnchor: Date | null; // 5h fixed 模式锚点（null = 使用 createdAt）
   limitWeeklyUsd?: number; // 周消费上限（美元）
   limitMonthlyUsd?: number; // 月消费上限（美元）
   limitTotalUsd?: number | null; // 总消费上限（美元）
@@ -45,10 +47,12 @@ export interface CreateUserData {
   tags?: string[]; // 可选，用户标签
   // User-level quota fields
   limit5hUsd?: number;
-  limitWeeklyUsd?: number;
-  limitMonthlyUsd?: number;
+  fiveHourResetMode?: "fixed" | "rolling";
+  fiveHourResetAnchor?: Date | null;
+  limitWeeklyUsd?: number | null;
+  limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
-  limitConcurrentSessions?: number;
+  limitConcurrentSessions?: number | null;
   // Daily quota reset mode
   dailyResetMode?: "fixed" | "rolling";
   dailyResetTime?: string;
@@ -70,10 +74,12 @@ export interface UpdateUserData {
   description?: string;
   rpm?: number | null;
   dailyQuota?: number | null;
-  providerGroup?: string | null; // 可选，供应商分组
-  tags?: string[]; // 可选，用户标签
+  providerGroup?: string | null;
+  tags?: string[];
   // User-level quota fields
   limit5hUsd?: number | null;
+  fiveHourResetMode?: "fixed" | "rolling";
+  fiveHourResetAnchor?: Date | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;
@@ -86,7 +92,7 @@ export interface UpdateUserData {
   expiresAt?: Date | null;
   // Allowed clients (CLI/IDE restrictions)
   allowedClients?: string[];
-  blockedClients?: string[]; // Blocked client patterns (blacklist, checked before allowedClients)
+  blockedClients?: string[];
   // Allowed models (AI model restrictions)
   allowedModels?: string[];
 }
@@ -122,6 +128,8 @@ export interface UserKeyDisplay {
   canLoginWebUi: boolean; // 是否允许使用该 Key 登录 Web UI
   // 限额配置
   limit5hUsd: number | null; // 5小时消费上限（美元）
+  fiveHourResetMode?: "fixed" | "rolling";
+  fiveHourResetAnchor?: Date | null;
   limitDailyUsd: number | null; // 每日消费上限
   dailyResetMode: "fixed" | "rolling"; // 每日重置模式
   dailyResetTime: string; // 每日重置时间
@@ -149,6 +157,8 @@ export interface UserDisplay {
   keys: UserKeyDisplay[];
   // User-level quota fields
   limit5hUsd?: number | null;
+  fiveHourResetMode?: "fixed" | "rolling";
+  fiveHourResetAnchor?: Date | null;
   limitWeeklyUsd?: number | null;
   limitMonthlyUsd?: number | null;
   limitTotalUsd?: number | null;

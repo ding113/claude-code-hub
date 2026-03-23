@@ -124,6 +124,21 @@
     "dailyResetTime": {
       "label": "日次リセット時刻 (HH:mm)"
     },
+    "fiveHourResetMode": {
+      "label": "5時間リセットモード",
+      "options": {
+        "fixed": "固定周期リセット",
+        "rolling": "ローリングウィンドウ（5時間）"
+      },
+      "desc": {
+        "fixed": "固定の5時間周期でクォータをリセット",
+        "rolling": "過去5時間のスライディングウィンドウ"
+      }
+    },
+    "fiveHourResetAnchor": {
+      "label": "5時間リセットアンカー時刻",
+      "description": "固定周期モードの起算時刻。デフォルトは作成時刻です。"
+    },
     "limit5h": {
       "label": "5時間の上限 (USD)",
       "placeholder": "空欄で無制限"
@@ -161,6 +176,7 @@
   },
   "limits": {
     "timeBased": "時間ベースの制限",
+    "fiveHourReset": "5時間リセット設定",
     "dailyReset": "日次リセット設定",
     "otherLimits": "その他の制限"
   },

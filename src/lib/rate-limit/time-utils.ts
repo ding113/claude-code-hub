@@ -31,9 +31,28 @@ export interface ResetInfo {
   period?: string; // 滚动窗口的周期描述
 }
 
+export function resolveEffective5hFixedAnchor(
+  anchor?: Date | null,
+  fallback?: Date | null,
+  now: Date = new Date()
+): Date | undefined {
+  const isUsableAnchor = (value?: Date | null) =>
+    value instanceof Date && !Number.isNaN(value.getTime()) && value.getTime() <= now.getTime();
+
+  if (isUsableAnchor(anchor)) {
+    return anchor as Date;
+  }
+
+  if (isUsableAnchor(fallback)) {
+    return fallback as Date;
+  }
+
+  return undefined;
+}
+
 /**
  * 根据周期计算时间范围
- * - 5h: 滚动窗口（过去 5 小时）
+ * - 5h: 滚动窗口（过去 5 小时）或固定周期（从 anchor 每 5 小时重置）
  * - daily: 自定义每日重置时间到现在（需要额外的 resetTime 参数）
  * - weekly: 自然周（本周一 00:00 到现在）
  * - monthly: 自然月（本月 1 号 00:00 到现在）
@@ -84,6 +103,8 @@ export async function getTimeRangeForPeriod(
 
 /**
  * 根据周期和模式计算时间范围（支持滚动窗口模式）
+ * - 5h + rolling: 滚动窗口（过去 5 小时）
+ * - 5h + fixed: 固定周期（从 anchor 开始每 5 小时重置）
  * - daily + rolling: 滚动窗口（过去 24 小时）
  * - daily + fixed: 固定时间重置（使用 resetTime）
  * - 其他周期：使用原有逻辑
@@ -91,11 +112,19 @@ export async function getTimeRangeForPeriod(
 export async function getTimeRangeForPeriodWithMode(
   period: TimePeriod,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  anchor?: Date
 ): Promise<TimeRange> {
+  const now = new Date();
+  const effective5hAnchor =
+    period === "5h" && mode === "fixed" ? resolveEffective5hFixedAnchor(anchor, undefined, now) : undefined;
+
+  if (effective5hAnchor) {
+    return get5hFixedBlockRange(now, effective5hAnchor);
+  }
+
   if (period === "daily" && mode === "rolling") {
     // 滚动窗口：过去 24 小时
-    const now = new Date();
     return {
       startTime: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       endTime: now,
@@ -151,6 +180,7 @@ export async function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): 
 
 /**
  * 根据周期和模式计算 Redis Key 的 TTL（秒）
+ * - 5h + fixed: 到当前 5h 块结束的秒数
  * - daily + rolling: 24 小时（固定）
  * - daily + fixed: 到下一个自定义重置时间的秒数
  * - 其他周期：使用原有逻辑
@@ -158,8 +188,18 @@ export async function getTTLForPeriod(period: TimePeriod, resetTime = "00:00"): 
 export async function getTTLForPeriodWithMode(
   period: TimePeriod,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  anchor?: Date
 ): Promise<number> {
+  const now = new Date();
+  const effective5hAnchor =
+    period === "5h" && mode === "fixed" ? resolveEffective5hFixedAnchor(anchor, undefined, now) : undefined;
+
+  if (effective5hAnchor) {
+    const { endTime } = get5hFixedBlockRange(now, effective5hAnchor);
+    return Math.max(1, Math.ceil((endTime.getTime() - now.getTime()) / 1000));
+  }
+
   if (period === "daily" && mode === "rolling") {
     return 24 * 3600; // 24 小时
   }
@@ -222,8 +262,21 @@ export async function getResetInfo(period: TimePeriod, resetTime = "00:00"): Pro
 export async function getResetInfoWithMode(
   period: TimePeriod,
   resetTime = "00:00",
-  mode: DailyResetMode = "fixed"
+  mode: DailyResetMode = "fixed",
+  anchor?: Date
 ): Promise<ResetInfo> {
+  const now = new Date();
+  const effective5hAnchor =
+    period === "5h" && mode === "fixed" ? resolveEffective5hFixedAnchor(anchor, undefined, now) : undefined;
+
+  if (effective5hAnchor) {
+    const { endTime } = get5hFixedBlockRange(now, effective5hAnchor);
+    return {
+      type: "custom",
+      resetAt: endTime,
+    };
+  }
+
   if (period === "daily" && mode === "rolling") {
     return {
       type: "rolling",
@@ -232,6 +285,25 @@ export async function getResetInfoWithMode(
   }
 
   return getResetInfo(period, resetTime);
+}
+
+/**
+ * 计算当前所处 5h 固定块的时间范围
+ * @param now - 当前时间
+ * @param anchor - 锚点时间戳（实体创建时间或手动配置）
+ */
+export function get5hFixedBlockRange(now: Date, anchor: Date): TimeRange {
+  const blockSizeMs = 5 * 60 * 60 * 1000;
+  const elapsed = Math.max(0, now.getTime() - anchor.getTime());
+  const blockIndex = Math.floor(elapsed / blockSizeMs);
+  const startTime = new Date(anchor.getTime() + blockIndex * blockSizeMs);
+  const endTime = new Date(startTime.getTime() + blockSizeMs);
+  return { startTime, endTime };
+}
+
+export function get5hFixedBlockKeySuffix(now: Date, anchor: Date): string {
+  const { startTime } = get5hFixedBlockRange(now, anchor);
+  return String(startTime.getTime());
 }
 
 function getCustomDailyResetTime(now: Date, resetTime: string, timezone: string): Date {

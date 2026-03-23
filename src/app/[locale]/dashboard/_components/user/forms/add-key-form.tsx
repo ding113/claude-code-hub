@@ -8,6 +8,7 @@ import { getAvailableProviderGroups } from "@/actions/providers";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { NumberField, TagInputField, TextField } from "@/components/form/form-field";
 import { DialogFormLayout, FormGrid } from "@/components/form/form-layout";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -36,6 +37,7 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
   const [providerGroupSuggestions, setProviderGroupSuggestions] = useState<string[]>([]);
   const router = useRouter();
   const t = useTranslations("dashboard.addKeyForm");
+  const tKeyLimits = useTranslations("quota.keys.editKeyForm");
   const tBalancePage = useTranslations(
     "dashboard.userManagement.keyEditSection.fields.balanceQueryPage"
   );
@@ -61,6 +63,8 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
       providerGroup: PROVIDER_GROUP.DEFAULT,
       cacheTtlPreference: "inherit",
       limit5hUsd: null,
+      fiveHourResetMode: "rolling" as const,
+      fiveHourResetAnchor: "",
       limitDailyUsd: null,
       dailyResetMode: "fixed" as const,
       dailyResetTime: "00:00",
@@ -82,6 +86,8 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           expiresAt: data.expiresAt ?? "",
           canLoginWebUi: data.canLoginWebUi,
           limit5hUsd: data.limit5hUsd,
+          fiveHourResetMode: data.fiveHourResetMode,
+          fiveHourResetAnchor: data.fiveHourResetAnchor || null,
           limitDailyUsd: data.limitDailyUsd,
           dailyResetMode: data.dailyResetMode,
           dailyResetTime: data.dailyResetTime,
@@ -264,6 +270,50 @@ export function AddKeyForm({ userId, user, isAdmin = false, onSuccess }: AddKeyF
           step={0.01}
           {...form.getFieldProps("limitDailyUsd")}
         />
+      </FormGrid>
+
+      <FormGrid columns={2}>
+        <div className="space-y-2">
+          <Label htmlFor="5h-reset-mode">{tKeyLimits("fiveHourResetMode.label")}</Label>
+          <Select
+            value={form.values.fiveHourResetMode}
+            onValueChange={(value: "fixed" | "rolling") =>
+              form.setValue("fiveHourResetMode", value)
+            }
+            disabled={isPending}
+          >
+            <SelectTrigger id="5h-reset-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fixed">{tKeyLimits("fiveHourResetMode.options.fixed")}</SelectItem>
+              <SelectItem value="rolling">
+                {tKeyLimits("fiveHourResetMode.options.rolling")}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {form.values.fiveHourResetMode === "fixed"
+              ? tKeyLimits("fiveHourResetMode.desc.fixed")
+              : tKeyLimits("fiveHourResetMode.desc.rolling")}
+          </p>
+        </div>
+
+        {form.values.fiveHourResetMode === "fixed" && (
+          <div className="space-y-2">
+            <Label htmlFor="5h-reset-anchor">{tKeyLimits("fiveHourResetAnchor.label")}</Label>
+            <Input
+              id="5h-reset-anchor"
+              type="datetime-local"
+              value={form.values.fiveHourResetAnchor}
+              onChange={(e) => form.setValue("fiveHourResetAnchor", e.target.value)}
+              disabled={isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              {tKeyLimits("fiveHourResetAnchor.description")}
+            </p>
+          </div>
+        )}
       </FormGrid>
 
       <FormGrid columns={2}>

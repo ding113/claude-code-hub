@@ -69,6 +69,8 @@
   "EXPIRES_AT_FIELD": "过期时间",
   "EXPIRES_AT_MUST_BE_FUTURE": "过期时间必须是未来时间",
   "EXPIRES_AT_TOO_FAR": "过期时间不能超过10年",
+  "FIVE_HOUR_RESET_ANCHOR_FIELD": "5小时重置锚点时间",
+  "FIVE_HOUR_RESET_ANCHOR_MUST_NOT_BE_FUTURE": "5小时重置锚点时间不能是未来时间",
   "CANNOT_DISABLE_SELF": "不能禁用自己的账户",
 
   "KEY_NOT_FOUND": "密钥不存在",

@@ -76,6 +76,16 @@ function clickButtonByText(text: string) {
   btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
+function setNativeValue(element: HTMLInputElement, value: string) {
+  const prototype = Object.getPrototypeOf(element) as HTMLInputElement;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+  if (descriptor?.set) {
+    descriptor.set.call(element, value);
+    return;
+  }
+  element.value = value;
+}
+
 describe("EditKeyForm: 清除 expiresAt 后应携带 expiresAt 字段提交（用于触发后端清除）", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -132,6 +142,123 @@ describe("EditKeyForm: 清除 expiresAt 后应携带 expiresAt 字段提交（�
     const [, payload] = call;
 
     expect("expiresAt" in payload).toBe(true);
+
+    unmount();
+  });
+
+  test("编辑未修改 fiveHourResetAnchor 时提交不应携带该字段", async () => {
+    const messages = loadMessages();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <Dialog open onOpenChange={() => {}}>
+          <EditKeyForm
+            keyData={{
+              id: 1,
+              name: "k",
+              expiresAt: "2026-01-04T23:59:59.999Z",
+              fiveHourResetMode: "fixed",
+              fiveHourResetAnchor: new Date("2026-03-23T04:30:15.123Z"),
+            }}
+            user={{
+              id: 10,
+              name: "u",
+              description: "",
+              role: "user",
+              rpm: null,
+              dailyQuota: null,
+              providerGroup: "default",
+              tags: [],
+              dailyResetMode: "fixed",
+              dailyResetTime: "00:00",
+              isEnabled: true,
+              expiresAt: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }}
+            isAdmin
+          />
+        </Dialog>
+      </NextIntlClientProvider>
+    );
+
+    const submit = document.body.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+    expect(submit).toBeTruthy();
+
+    await act(async () => {
+      submit?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(keysActionMocks.editKey).toHaveBeenCalledTimes(1);
+    const call = keysActionMocks.editKey.mock.calls[0] as unknown as [number, any];
+    const [, payload] = call;
+
+    expect(Object.hasOwn(payload, "fiveHourResetAnchor")).toBe(false);
+
+    unmount();
+  });
+
+  test("编辑修改 fiveHourResetAnchor 时应提交原始 datetime-local 字符串", async () => {
+    const messages = loadMessages();
+
+    const { unmount } = render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <Dialog open onOpenChange={() => {}}>
+          <EditKeyForm
+            keyData={{
+              id: 1,
+              name: "k",
+              expiresAt: "2026-01-04T23:59:59.999Z",
+              fiveHourResetMode: "fixed",
+              fiveHourResetAnchor: new Date("2026-03-23T04:30:15.123Z"),
+            }}
+            user={{
+              id: 10,
+              name: "u",
+              description: "",
+              role: "user",
+              rpm: null,
+              dailyQuota: null,
+              providerGroup: "default",
+              tags: [],
+              dailyResetMode: "fixed",
+              dailyResetTime: "00:00",
+              isEnabled: true,
+              expiresAt: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }}
+            isAdmin
+          />
+        </Dialog>
+      </NextIntlClientProvider>
+    );
+
+    const anchorInput = document.getElementById("5h-reset-anchor") as HTMLInputElement | null;
+    expect(anchorInput).toBeTruthy();
+
+    await act(async () => {
+      if (anchorInput) {
+        setNativeValue(anchorInput, "2026-03-24T09:45");
+        anchorInput.dispatchEvent(new Event("input", { bubbles: true }));
+        anchorInput.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    const submit = document.body.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+    expect(submit).toBeTruthy();
+
+    await act(async () => {
+      submit?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(keysActionMocks.editKey).toHaveBeenCalledTimes(1);
+    const [, payload] = keysActionMocks.editKey.mock.calls[0] as [number, Record<string, unknown>];
+    expect(payload.fiveHourResetAnchor).toBe("2026-03-24T09:45");
+    expect(payload.fiveHourResetAnchor).not.toBeInstanceOf(Date);
 
     unmount();
   });

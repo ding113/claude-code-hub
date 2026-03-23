@@ -122,6 +122,21 @@
     "dailyResetTime": {
       "label": "Daily Reset Time (HH:mm)"
     },
+    "fiveHourResetMode": {
+      "label": "5h Reset Mode",
+      "options": {
+        "fixed": "Fixed Interval Reset",
+        "rolling": "Rolling Window (5h)"
+      },
+      "desc": {
+        "fixed": "Reset quota at fixed 5-hour intervals",
+        "rolling": "Sliding window covering the last 5 hours"
+      }
+    },
+    "fiveHourResetAnchor": {
+      "label": "5h Reset Anchor Time",
+      "description": "Start time for fixed interval mode. Defaults to creation time."
+    },
     "desc": "Configure spending limits to control costs across different time windows",
     "limit5h": {
       "label": "5h Spend Limit (USD)",
@@ -160,6 +175,7 @@
   },
   "limits": {
     "timeBased": "Time-based Limits",
+    "fiveHourReset": "5h Reset Settings",
     "dailyReset": "Daily Reset Settings",
     "otherLimits": "Other Limits"
   },

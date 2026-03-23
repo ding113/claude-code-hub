@@ -1,6 +1,7 @@
 "use client";
 
 import { Calendar, Gauge, Loader2, ShieldCheck, ShieldOff, User } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { DatePickerField } from "@/components/form/date-picker-field";
 import { ArrayTagInputField, TextField } from "@/components/form/form-field";
@@ -15,7 +16,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { PROVIDER_GROUP } from "@/lib/constants/provider.constants";
 import { cn } from "@/lib/utils";
@@ -36,6 +45,8 @@ export interface UserEditSectionProps {
     // 所有限额字段
     rpm?: number | null;
     limit5hUsd?: number | null;
+    fiveHourResetMode?: "fixed" | "rolling";
+    fiveHourResetAnchor?: string;
     dailyQuota?: number | null; // 新增：用户每日限额
     limitWeeklyUsd?: number | null;
     limitMonthlyUsd?: number | null;
@@ -170,6 +181,7 @@ export function UserEditSection({
   onChange,
   translations,
 }: UserEditSectionProps) {
+  const tFiveHour = useTranslations("dashboard.userForm");
   const [rulePickerOpen, setRulePickerOpen] = useState(false);
   const [toggleConfirmOpen, setToggleConfirmOpen] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
@@ -256,7 +268,11 @@ export function UserEditSection({
         emitChange("rpm", 0); // 0 = 无限制
         return;
       case "limit5h":
-        emitChange("limit5hUsd", null);
+        emitChange({
+          limit5hUsd: null,
+          fiveHourResetMode: "rolling",
+          fiveHourResetAnchor: "",
+        });
         return;
       case "limitDaily":
         // Batch update to avoid race condition
@@ -492,6 +508,54 @@ export function UserEditSection({
           existingTypes={existingTypes}
           translations={limitRuleTranslations}
         />
+
+        {typeof user.limit5hUsd === "number" && user.limit5hUsd > 0 && (
+          <div className="grid gap-4 rounded-lg border border-dashed border-border bg-background px-4 py-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="user-5h-reset-mode">{tFiveHour("fiveHourResetMode.label")}</Label>
+              <Select
+                value={user.fiveHourResetMode ?? "rolling"}
+                onValueChange={(value: "fixed" | "rolling") =>
+                  emitChange("fiveHourResetMode", value)
+                }
+              >
+                <SelectTrigger id="user-5h-reset-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed">
+                    {tFiveHour("fiveHourResetMode.options.fixed")}
+                  </SelectItem>
+                  <SelectItem value="rolling">
+                    {tFiveHour("fiveHourResetMode.options.rolling")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {user.fiveHourResetMode === "fixed"
+                  ? tFiveHour("fiveHourResetMode.desc.fixed")
+                  : tFiveHour("fiveHourResetMode.desc.rolling")}
+              </p>
+            </div>
+
+            {user.fiveHourResetMode === "fixed" && (
+              <div className="space-y-2">
+                <Label htmlFor="user-5h-reset-anchor">
+                  {tFiveHour("fiveHourResetAnchor.label")}
+                </Label>
+                <Input
+                  id="user-5h-reset-anchor"
+                  type="datetime-local"
+                  value={user.fiveHourResetAnchor ?? ""}
+                  onChange={(e) => emitChange("fiveHourResetAnchor", e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {tFiveHour("fiveHourResetAnchor.description")}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <AccessRestrictionsSection

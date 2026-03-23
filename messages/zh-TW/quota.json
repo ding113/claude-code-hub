@@ -200,6 +200,21 @@
         "label": "每日重置時間",
         "placeholder": "HH:mm"
       },
+      "fiveHourResetMode": {
+        "label": "5小時重置模式",
+        "options": {
+          "fixed": "固定週期重置",
+          "rolling": "滾動視窗（5小時）"
+        },
+        "desc": {
+          "fixed": "按固定5小時週期重置額度",
+          "rolling": "過去5小時的滑動視窗"
+        }
+      },
+      "fiveHourResetAnchor": {
+        "label": "5小時重置錨點時間",
+        "description": "固定週期模式下的起始計算時間，預設為建立時間"
+      },
       "costWeekly": {
         "label": "周限額 (USD)",
         "placeholder": "不限制",
@@ -286,6 +301,21 @@
         "label": "每日重置時間",
         "placeholder": "HH:mm",
         "description": "每日限額的重置時間（使用系統時區）"
+      },
+      "fiveHourResetMode": {
+        "label": "5小時重置模式",
+        "options": {
+          "fixed": "固定週期重置",
+          "rolling": "滾動視窗（5小時）"
+        },
+        "desc": {
+          "fixed": "按固定5小時週期重置額度",
+          "rolling": "過去5小時的滑動視窗"
+        }
+      },
+      "fiveHourResetAnchor": {
+        "label": "5小時重置錨點時間",
+        "description": "固定週期模式下的起始計算時間，預設為建立時間"
       },
       "limitWeeklyUsd": {
         "label": "週消費上限 (USD)",
