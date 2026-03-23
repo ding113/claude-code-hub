@@ -555,9 +555,13 @@ export async function getMyUsageLogs(
       filters.endDate,
       timezone
     );
-    const rawPageSize = filters.pageSize && filters.pageSize > 0 ? filters.pageSize : 20;
-    const pageSize = Math.min(rawPageSize, 100);
-    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const parsedPageSize = Number(filters.pageSize);
+    const pageSize =
+      Number.isFinite(parsedPageSize) && parsedPageSize > 0
+        ? Math.min(Math.trunc(parsedPageSize), 100)
+        : 20;
+    const parsedPage = Number(filters.page);
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.trunc(parsedPage) : 1;
     const result = await findUsageLogsForKeySlim({
       keyString: session.key.key,
       sessionId: filters.sessionId,
@@ -584,7 +588,7 @@ export async function getMyUsageLogs(
       },
     };
   } catch (error) {
-    logger.error("[my-usage] getMyUsageLogs failed", error);
+    logger.error("[my-usage] getMyUsageLogs failed", { error, filters });
     return { ok: false, error: "Failed to get usage logs" };
   }
 }

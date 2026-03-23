@@ -3042,7 +3042,7 @@ export class ProxyForwarder {
       attempt.thresholdTimer = setTimeout(() => {
         if (settled || attempt.settled || attempt.thresholdTriggered) return;
         attempt.thresholdTriggered = true;
-        attempt.session.addProviderToChain(attempt.provider, {
+        session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "hedge_triggered",
           attemptNumber: attempt.sequence,
@@ -3113,9 +3113,14 @@ export class ProxyForwarder {
     };
 
     const runAttempt = (attempt: StreamingHedgeAttempt) => {
+      const providerForRequest =
+        attempt.firstByteTimeoutMs > 0
+          ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
+          : attempt.provider;
+
       void ProxyForwarder.doForward(
         attempt.session,
-        attempt.provider,
+        providerForRequest,
         attempt.baseUrl,
         attempt.endpointAudit,
         attempt.requestAttemptCount

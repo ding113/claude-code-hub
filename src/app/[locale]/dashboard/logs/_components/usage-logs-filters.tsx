@@ -200,11 +200,8 @@ export function UsageLogsFilters({
 
       if (!startResult.ok) {
         setExportStatus(null);
-        toast.error(
-          startResult.errorCode
-            ? getErrorMessage(tErrors, startResult.errorCode, startResult.errorParams)
-            : t("logs.filters.exportError")
-        );
+        console.error("Failed to start usage logs export", startResult.error);
+        toast.error(t("logs.filters.exportError"));
         return;
       }
 
@@ -230,11 +227,7 @@ export function UsageLogsFilters({
 
         if (!statusResult.ok) {
           setExportStatus(null);
-          toast.error(
-            statusResult.errorCode
-              ? getErrorMessage(tErrors, statusResult.errorCode, statusResult.errorParams)
-              : t("logs.filters.exportError")
-          );
+          toast.error(t("logs.filters.exportError"));
           return;
         }
 

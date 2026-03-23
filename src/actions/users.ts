@@ -69,6 +69,7 @@ export interface GetUsersBatchParams {
 const USER_LIST_DEFAULT_LIMIT = 50;
 const USER_LIST_MAX_LIMIT = 200;
 const USER_LIST_ADMIN_SCAN_MAX = 2000;
+const SEARCH_USERS_MAX_LIMIT = 5000;
 
 type UserActionSession = {
   user: { id: number };
@@ -174,9 +175,16 @@ async function loadAllUsersForAdmin(baseParams?: GetUsersBatchParams): Promise<U
     searchTerm: normalizedBaseParams.searchTerm,
     tagFilterCount: normalizedBaseParams.tagFilters?.length ?? 0,
     keyGroupFilterCount: normalizedBaseParams.keyGroupFilters?.length ?? 0,
+    normalizedBaseParams,
   });
 
-  return users;
+  throw new Error(`getUsers scan cap reached (${USER_LIST_ADMIN_SCAN_MAX})`);
+}
+
+function normalizeSearchUsersLimit(limit?: number): number | undefined {
+  if (limit === undefined) return undefined;
+  if (!Number.isFinite(limit)) return SEARCH_USERS_MAX_LIMIT;
+  return Math.min(Math.max(1, Math.trunc(limit)), SEARCH_USERS_MAX_LIMIT);
 }
 
 function canExposeFullKey(
@@ -486,6 +494,9 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
     return userDisplays;
   } catch (error) {
     logger.error("Failed to fetch user data:", error);
+    if (error instanceof Error && error.message.includes("getUsers scan cap reached")) {
+      throw error;
+    }
     return [];
   }
 }
@@ -514,7 +525,10 @@ export async function searchUsersForFilter(
       };
     }
 
-    const users = await searchUsersForFilterRepository(searchTerm, limit);
+    const users = await searchUsersForFilterRepository(
+      searchTerm,
+      normalizeSearchUsersLimit(limit)
+    );
     return { ok: true, data: users };
   } catch (error) {
     logger.error("Failed to search users for filter:", error);

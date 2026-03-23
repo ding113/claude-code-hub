@@ -66,8 +66,8 @@ jobs:
         run: |
           bun install
           bun run typecheck
-          bun run lint
           bun run format
+          bun run lint
 
       - name: Commit formatted code
         run: |

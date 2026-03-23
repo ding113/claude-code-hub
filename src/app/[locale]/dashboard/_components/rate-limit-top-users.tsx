@@ -28,6 +28,7 @@ type SortDirection = "asc" | "desc";
  */
 export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
   const t = useTranslations("dashboard.rateLimits.topUsers");
+  const tRateLimits = useTranslations("dashboard.rateLimits");
   const locale = useLocale();
   const [users, setUsers] = React.useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = React.useState(true);
@@ -114,7 +115,7 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
           </div>
         ) : loadError ? (
           <div className="flex h-[280px] items-center justify-center text-destructive">
-            {t("loadError")}
+            {tRateLimits("error")}
           </div>
         ) : tableData.length === 0 ? (
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">

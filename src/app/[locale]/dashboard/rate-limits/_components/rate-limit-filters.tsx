@@ -43,6 +43,7 @@ export function RateLimitFilters({
   disabled = false,
 }: RateLimitFiltersProps) {
   const t = useTranslations("dashboard.rateLimits.filters");
+  const tRateLimits = useTranslations("dashboard.rateLimits");
 
   const [userId, setUserId] = React.useState<number | undefined>(initialFilters.user_id);
   const [providerId, setProviderId] = React.useState<number | undefined>(
@@ -180,7 +181,9 @@ export function RateLimitFilters({
         {/* 用户选择器 */}
         <div className="space-y-2">
           <Label htmlFor="user-select">{t("user")}</Label>
-          {usersLoadError ? <p className="text-xs text-destructive">{t("loadError")}</p> : null}
+          {usersLoadError ? (
+            <p className="text-xs text-destructive">{tRateLimits("error")}</p>
+          ) : null}
           <Select
             value={userId?.toString() || "all"}
             onValueChange={(value) => setUserId(value === "all" ? undefined : Number(value))}
@@ -203,7 +206,9 @@ export function RateLimitFilters({
         {/* 供应商选择器 */}
         <div className="space-y-2">
           <Label htmlFor="provider-select">{t("provider")}</Label>
-          {providersLoadError ? <p className="text-xs text-destructive">{t("loadError")}</p> : null}
+          {providersLoadError ? (
+            <p className="text-xs text-destructive">{tRateLimits("error")}</p>
+          ) : null}
           <Select
             value={providerId?.toString() || "all"}
             onValueChange={(value) => setProviderId(value === "all" ? undefined : Number(value))}

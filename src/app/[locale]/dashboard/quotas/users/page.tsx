@@ -1,7 +1,7 @@
 import { Info } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
-import { getUserLimitUsage, getUsers } from "@/actions/users";
+import { getUserLimitUsage, getUsersBatch } from "@/actions/users";
 import { QuotaToolbar } from "@/components/quota/quota-toolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link, redirect } from "@/i18n/routing";
@@ -9,6 +9,7 @@ import { getSession } from "@/lib/auth";
 import { resolveKeyCostResetAt } from "@/lib/rate-limit/cost-reset-utils";
 import { sumKeyTotalCostBatchByIds, sumUserTotalCostBatch } from "@/repository/statistics";
 import { getSystemSettings } from "@/repository/system-config";
+import type { UserDisplay } from "@/types/user";
 import { UsersQuotaSkeleton } from "../_components/users-quota-skeleton";
 import type { UserKeyWithUsage, UserQuotaWithUsage } from "./_components/types";
 import { UsersQuotaClient } from "./_components/users-quota-client";
@@ -17,7 +18,24 @@ import { UsersQuotaClient } from "./_components/users-quota-client";
 export const dynamic = "force-dynamic";
 
 async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
-  const users = await getUsers();
+  const collectedUsers: UserDisplay[] = [];
+  let cursor: string | undefined;
+
+  while (true) {
+    const result = await getUsersBatch({ cursor, limit: 200 });
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+
+    collectedUsers.push(...result.data.users);
+    if (!result.data.hasMore || !result.data.nextCursor) {
+      break;
+    }
+
+    cursor = result.data.nextCursor;
+  }
+
+  const users = collectedUsers;
 
   const allUserIds = users.map((u) => u.id);
   const allKeyIds = users.flatMap((u) => u.keys.map((k) => k.id));
