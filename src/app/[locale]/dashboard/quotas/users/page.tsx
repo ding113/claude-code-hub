@@ -19,9 +19,13 @@ export const dynamic = "force-dynamic";
 
 async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
   const collectedUsers: UserDisplay[] = [];
+  const MAX_USERS_FOR_QUOTAS = 2000;
+  const MAX_ITERATIONS = Math.ceil(MAX_USERS_FOR_QUOTAS / 200) + 1;
   let cursor: string | undefined;
+  let iterations = 0;
 
-  while (true) {
+  while (collectedUsers.length < MAX_USERS_FOR_QUOTAS && iterations < MAX_ITERATIONS) {
+    iterations += 1;
     const result = await getUsersBatch({ cursor, limit: 200 });
     if (!result.ok) {
       throw new Error(result.error);
@@ -33,6 +37,10 @@ async function getUsersWithQuotas(): Promise<UserQuotaWithUsage[]> {
     }
 
     cursor = result.data.nextCursor;
+  }
+
+  if (iterations >= MAX_ITERATIONS) {
+    console.warn("getUsersWithQuotas: reached max iterations, results may be incomplete");
   }
 
   const users = collectedUsers;

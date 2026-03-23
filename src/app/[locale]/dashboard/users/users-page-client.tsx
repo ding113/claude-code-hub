@@ -162,11 +162,6 @@ function UsersPageContent({ currentUser }: UsersPageClientProps) {
     initialPageParam: undefined as string | undefined,
   });
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    void refetch();
-  }, [isAdmin, refetch]);
-
   // Independent tag query - breaks circular dependency
   const { data: allTags = [] } = useQuery({
     queryKey: ["userTags"],

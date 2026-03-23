@@ -113,16 +113,15 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">
             {t("loading")}
           </div>
-        ) : loadError ? (
-          <div className="flex h-[280px] items-center justify-center text-destructive">
-            {tRateLimits("error")}
-          </div>
         ) : tableData.length === 0 ? (
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">
-            {t("noData")}
+            {loadError ? tRateLimits("error") : t("noData")}
           </div>
         ) : (
           <div className="relative max-h-[280px] overflow-auto">
+            {loadError ? (
+              <div className="mb-2 text-xs text-destructive">{tRateLimits("error")}</div>
+            ) : null}
             <Table>
               <TableHeader>
                 <TableRow>

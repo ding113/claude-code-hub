@@ -3001,7 +3001,7 @@ export class ProxyForwarder {
       }
       attempts.delete(attempt);
       if (reason === "hedge_loser") {
-        attempt.session.addProviderToChain(attempt.provider, {
+        session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "hedge_loser_cancelled",
           attemptNumber: attempt.sequence,

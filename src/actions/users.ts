@@ -68,7 +68,6 @@ export interface GetUsersBatchParams {
 
 const USER_LIST_DEFAULT_LIMIT = 50;
 const USER_LIST_MAX_LIMIT = 200;
-const USER_LIST_ADMIN_SCAN_MAX = 2000;
 const SEARCH_USERS_MAX_LIMIT = 5000;
 
 type UserActionSession = {
@@ -152,12 +151,11 @@ async function loadAllUsersForAdmin(baseParams?: GetUsersBatchParams): Promise<U
   const normalizedBaseParams = normalizeUserListParams(baseParams);
   let cursor = normalizedBaseParams.cursor;
 
-  while (users.length < USER_LIST_ADMIN_SCAN_MAX) {
-    const remaining = USER_LIST_ADMIN_SCAN_MAX - users.length;
+  while (true) {
     const page = await findUserListBatch({
       ...normalizedBaseParams,
       cursor,
-      limit: Math.min(USER_LIST_MAX_LIMIT, Math.max(1, remaining)),
+      limit: USER_LIST_MAX_LIMIT,
     });
 
     users.push(...page.users);
@@ -168,17 +166,6 @@ async function loadAllUsersForAdmin(baseParams?: GetUsersBatchParams): Promise<U
 
     cursor = page.nextCursor;
   }
-
-  logger.warn("[UserAction] getUsers admin fallback hit scan cap", {
-    cap: USER_LIST_ADMIN_SCAN_MAX,
-    cursor,
-    searchTerm: normalizedBaseParams.searchTerm,
-    tagFilterCount: normalizedBaseParams.tagFilters?.length ?? 0,
-    keyGroupFilterCount: normalizedBaseParams.keyGroupFilters?.length ?? 0,
-    normalizedBaseParams,
-  });
-
-  throw new Error(`getUsers scan cap reached (${USER_LIST_ADMIN_SCAN_MAX})`);
 }
 
 function normalizeSearchUsersLimit(limit?: number): number | undefined {
@@ -494,9 +481,6 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
     return userDisplays;
   } catch (error) {
     logger.error("Failed to fetch user data:", error);
-    if (error instanceof Error && error.message.includes("getUsers scan cap reached")) {
-      throw error;
-    }
     return [];
   }
 }
