@@ -185,12 +185,11 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
   const handleProviderGroupChange = useCallback(
     (newValue: string) => {
       const groups = parseProviderGroups(newValue);
-      if (groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)) {
-        const withoutDefault = groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT);
-        form.setValue("providerGroup", withoutDefault.join(","));
-      } else {
-        form.setValue("providerGroup", newValue);
-      }
+      const normalizedGroups =
+        groups.length > 1 && groups.includes(PROVIDER_GROUP.DEFAULT)
+          ? groups.filter((g) => g !== PROVIDER_GROUP.DEFAULT)
+          : groups;
+      form.setValue("providerGroup", normalizedGroups.join(","));
     },
     [form]
   );
@@ -262,6 +261,7 @@ export function EditKeyForm({ keyData, user, isAdmin = false, onSuccess }: EditK
             : t("providerGroup.description")
         }
         suggestions={providerGroupSuggestions}
+        // Provider groups intentionally allow shared parser semantics without extra format restrictions.
         validateTag={() => true}
         onInvalidTag={(_tag, reason) => {
           const messages: Record<string, string> = {

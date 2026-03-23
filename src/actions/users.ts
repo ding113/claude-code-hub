@@ -68,6 +68,12 @@ export interface GetUsersBatchParams {
 
 const USER_LIST_DEFAULT_LIMIT = 50;
 const USER_LIST_MAX_LIMIT = 200;
+const SEARCH_USERS_MAX_LIMIT = 5000;
+
+type UserActionSession = {
+  user: { id: number };
+  key: { canLoginWebUi: boolean };
+};
 
 function normalizeLegacySearchTerm(params?: GetUsersBatchParams): string | undefined {
   for (const candidate of [params?.searchTerm, params?.query, params?.keyword]) {
@@ -160,6 +166,20 @@ async function loadAllUsersForAdmin(baseParams?: GetUsersBatchParams): Promise<U
 
     cursor = page.nextCursor;
   }
+}
+
+function normalizeSearchUsersLimit(limit?: number): number | undefined {
+  if (limit === undefined) return undefined;
+  if (!Number.isFinite(limit)) return SEARCH_USERS_MAX_LIMIT;
+  return Math.min(Math.max(1, Math.trunc(limit)), SEARCH_USERS_MAX_LIMIT);
+}
+
+function canExposeFullKey(
+  session: UserActionSession,
+  targetUser: Pick<User, "id">,
+  isAdmin: boolean
+): boolean {
+  return session.key.canLoginWebUi && (isAdmin || session.user.id === targetUser.id);
 }
 
 /**
@@ -387,10 +407,7 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
           allowedModels: user.allowedModels ?? [],
           keys: keys.map((key) => {
             const stats = statisticsLookup.get(key.id);
-            // 仅允许具备 Web UI 登录权限的会话查看/复制完整密钥，避免只读 Key 通过
-            // allowReadOnlyAccess 进入 actions 后暴露 fullKey。
-            const canUserManageKey =
-              session.key.canLoginWebUi && (isAdmin || session.user.id === user.id);
+            const canUserManageKey = canExposeFullKey(session, user, isAdmin);
             return {
               id: key.id,
               name: key.name,
@@ -469,7 +486,8 @@ export async function getUsers(params?: GetUsersBatchParams): Promise<UserDispla
 }
 
 export async function searchUsersForFilter(
-  searchTerm?: string
+  searchTerm?: string,
+  limit?: number
 ): Promise<ActionResult<Array<{ id: number; name: string }>>> {
   try {
     const tError = await getTranslations("errors");
@@ -491,7 +509,10 @@ export async function searchUsersForFilter(
       };
     }
 
-    const users = await searchUsersForFilterRepository(searchTerm);
+    const users = await searchUsersForFilterRepository(
+      searchTerm,
+      normalizeSearchUsersLimit(limit)
+    );
     return { ok: true, data: users };
   } catch (error) {
     logger.error("Failed to search users for filter:", error);
@@ -501,9 +522,10 @@ export async function searchUsersForFilter(
 }
 
 export async function searchUsers(
-  searchTerm?: string
+  searchTerm?: string,
+  limit?: number
 ): Promise<ActionResult<Array<{ id: number; name: string }>>> {
-  return searchUsersForFilter(searchTerm);
+  return searchUsersForFilter(searchTerm, limit);
 }
 
 /**
@@ -628,6 +650,7 @@ export async function getUsersBatch(
         const keys = keysMap.get(user.id) || [];
         const usageRecords = usageMap.get(user.id) || [];
         const keyStatistics = statisticsMap.get(user.id) || [];
+        const canUserManageKey = canExposeFullKey(session, user, true);
 
         const usageLookup = new Map(
           usageRecords.map((item) => [
@@ -665,8 +688,8 @@ export async function getUsersBatch(
               id: key.id,
               name: key.name,
               maskedKey: maskKey(key.key),
-              fullKey: key.key,
-              canCopy: true,
+              fullKey: canUserManageKey ? key.key : undefined,
+              canCopy: canUserManageKey,
               expiresAt: key.expiresAt
                 ? key.expiresAt.toISOString().split("T")[0]
                 : t("neverExpires"),
@@ -781,6 +804,7 @@ export async function getUsersBatchCore(
 
     const userDisplays: UserDisplay[] = users.map((user) => {
       const keys = keysMap.get(user.id) || [];
+      const canUserManageKey = canExposeFullKey(session, user, true);
 
       return {
         id: user.id,
@@ -808,8 +832,8 @@ export async function getUsersBatchCore(
           id: key.id,
           name: key.name,
           maskedKey: maskKey(key.key),
-          fullKey: key.key,
-          canCopy: true,
+          fullKey: canUserManageKey ? key.key : undefined,
+          canCopy: canUserManageKey,
           expiresAt: key.expiresAt ? key.expiresAt.toISOString().split("T")[0] : t("neverExpires"),
           status: key.isEnabled ? "enabled" : ("disabled" as const),
           createdAt: key.createdAt,

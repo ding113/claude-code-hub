@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const getSessionMock = vi.fn();
 const findUsageLogsWithDetailsMock = vi.fn();
@@ -165,6 +165,10 @@ describe("Usage logs CSV export retryCount", () => {
     });
     findUsageLogsBatchMock.mockResolvedValue({ logs: [], nextCursor: null, hasMore: false });
     findUsageLogsStatsMock.mockResolvedValue(createSummary());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   test("exportUsageLogs: Retry Count 应对齐 getRetryCount（hedge race 为 0）", async () => {

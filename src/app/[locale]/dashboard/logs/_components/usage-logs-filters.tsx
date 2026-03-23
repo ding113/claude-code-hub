@@ -13,6 +13,7 @@ import {
 } from "@/actions/usage-logs";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { getErrorMessage } from "@/lib/utils/error-messages";
 import type { Key } from "@/types/key";
 import type { ProviderDisplay } from "@/types/provider";
 import { ActiveFiltersDisplay } from "./filters/active-filters-display";
@@ -73,6 +74,7 @@ export function UsageLogsFilters({
   serverTimeZone,
 }: UsageLogsFiltersProps) {
   const t = useTranslations("dashboard");
+  const tErrors = useTranslations("errors");
 
   const [localFilters, setLocalFilters] = useState<UsageLogFilters>(filters);
   const [isExporting, setIsExporting] = useState(false);
@@ -190,7 +192,7 @@ export function UsageLogsFilters({
     });
 
     try {
-      const exportFilters = sanitizeFilters(filters);
+      const exportFilters = sanitizeFilters(localFilters);
       const startResult = await startUsageLogsExport(exportFilters);
       if (exportRunIdRef.current !== runId) {
         return;
@@ -198,7 +200,8 @@ export function UsageLogsFilters({
 
       if (!startResult.ok) {
         setExportStatus(null);
-        toast.error(startResult.error || t("logs.filters.exportError"));
+        console.error("Failed to start usage logs export", startResult.error);
+        toast.error(t("logs.filters.exportError"));
         return;
       }
 
@@ -224,7 +227,7 @@ export function UsageLogsFilters({
 
         if (!statusResult.ok) {
           setExportStatus(null);
-          toast.error(statusResult.error || t("logs.filters.exportError"));
+          toast.error(t("logs.filters.exportError"));
           return;
         }
 
@@ -248,7 +251,11 @@ export function UsageLogsFilters({
       }
 
       if (!downloadResult.ok) {
-        toast.error(downloadResult.error || t("logs.filters.exportError"));
+        toast.error(
+          downloadResult.errorCode
+            ? getErrorMessage(tErrors, downloadResult.errorCode, downloadResult.errorParams)
+            : t("logs.filters.exportError")
+        );
         return;
       }
 

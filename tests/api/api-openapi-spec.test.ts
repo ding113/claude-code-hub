@@ -249,6 +249,7 @@ describe("OpenAPI 规范验证", () => {
       const limitSchema = schema?.properties?.limit;
 
       expect(pageSchema?.minimum).toBe(0);
+      expect(limitSchema).toBeDefined();
       expect(limitSchema?.maximum).toBeUndefined();
     }
   });

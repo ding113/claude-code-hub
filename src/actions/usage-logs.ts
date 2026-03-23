@@ -43,6 +43,7 @@ let filterOptionsCache: {
 const USAGE_LOGS_EXPORT_BATCH_SIZE = 500;
 const USAGE_LOGS_EXPORT_JOB_TTL_MS = 15 * 60 * 1000;
 const USAGE_LOGS_EXPORT_JOB_TTL_SECONDS = Math.floor(USAGE_LOGS_EXPORT_JOB_TTL_MS / 1000);
+const USAGE_LOGS_EXPORT_PROGRESS_UPDATE_INTERVAL_MS = 800;
 const CSV_HEADERS = [
   "Time",
   "User",
@@ -228,7 +229,17 @@ async function runUsageLogsExportJob(
   });
 
   try {
+    let lastProgressUpdateAt = 0;
     const csv = await buildUsageLogsExportCsv(filters, async (progress) => {
+      const now = Date.now();
+      if (
+        progress.progressPercent < 100 &&
+        now - lastProgressUpdateAt < USAGE_LOGS_EXPORT_PROGRESS_UPDATE_INTERVAL_MS
+      ) {
+        return;
+      }
+      lastProgressUpdateAt = now;
+
       const currentJob = await usageLogsExportStatusStore.get(jobId);
       if (!currentJob) {
         return;

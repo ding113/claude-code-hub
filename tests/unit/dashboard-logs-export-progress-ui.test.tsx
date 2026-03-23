@@ -6,9 +6,13 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { NextIntlClientProvider } from "next-intl";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { UsageLogsFilters } from "@/app/[locale]/dashboard/logs/_components/usage-logs-filters";
 import dashboardMessages from "../../messages/en/dashboard.json";
+
+const originalCreateObjectURL = globalThis.URL.createObjectURL;
+const originalRevokeObjectURL = globalThis.URL.revokeObjectURL;
+const originalAnchorClick = HTMLAnchorElement.prototype.click;
 
 const {
   downloadUsageLogsExportMock,
@@ -126,6 +130,15 @@ describe("UsageLogsFilters export progress UI", () => {
     HTMLAnchorElement.prototype.click = vi.fn();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    globalThis.URL.createObjectURL = originalCreateObjectURL;
+    globalThis.URL.revokeObjectURL = originalRevokeObjectURL;
+    HTMLAnchorElement.prototype.click = originalAnchorClick;
+    document.body.innerHTML = "";
+  });
+
   test("shows export progress while polling and downloads when completed", async () => {
     startUsageLogsExportMock.mockResolvedValue({ ok: true, data: { jobId: "job-1" } });
     getUsageLogsExportStatusMock
@@ -218,7 +231,7 @@ describe("UsageLogsFilters export progress UI", () => {
     await actClick(exportButton ?? null);
     await flushPromises();
 
-    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ sessionId: "applied-session" });
+    expect(startUsageLogsExportMock).toHaveBeenCalledWith({ sessionId: "draft-session" });
 
     unmount();
   });

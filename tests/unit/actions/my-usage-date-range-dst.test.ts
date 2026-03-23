@@ -98,4 +98,36 @@ describe("my-usage date range parsing", () => {
 
     expect(args.endTime - args.startTime).toBe(25 * 60 * 60 * 1000);
   });
+
+  it("computes DST-safe range for legacy page-based logs API", async () => {
+    const tz = "America/Los_Angeles";
+    mocks.resolveSystemTimezone.mockResolvedValue(tz);
+
+    mocks.getSession.mockResolvedValue({
+      key: { id: 1, key: "k" },
+      user: { id: 1 },
+    });
+
+    mocks.getSystemSettings.mockResolvedValue({
+      currencyDisplay: "USD",
+      billingModelSource: "original",
+    });
+
+    mocks.findUsageLogsForKeySlim.mockResolvedValue({
+      logs: [],
+      total: 0,
+    });
+
+    const { getMyUsageLogs } = await import("@/actions/my-usage");
+    const res = await getMyUsageLogs({ startDate: "2024-03-10", endDate: "2024-03-10" });
+
+    expect(res.ok).toBe(true);
+    expect(mocks.findUsageLogsForKeySlim).toHaveBeenCalledTimes(1);
+
+    const args = mocks.findUsageLogsForKeySlim.mock.calls[0]?.[0];
+    expect(args.startTime).toBe(fromZonedTime("2024-03-10T00:00:00", tz).getTime());
+    expect(args.endTime).toBe(fromZonedTime("2024-03-11T00:00:00", tz).getTime());
+    expect(args.page).toBe(1);
+    expect(args.pageSize).toBe(20);
+  });
 });

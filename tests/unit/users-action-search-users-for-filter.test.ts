@@ -65,7 +65,7 @@ describe("searchUsersForFilter (action)", () => {
 
     const result = await searchUsersForFilter("ali");
 
-    expect(searchUsersForFilterRepositoryMock).toHaveBeenCalledWith("ali");
+    expect(searchUsersForFilterRepositoryMock).toHaveBeenCalledWith("ali", undefined);
     expect(result).toEqual({ ok: true, data: [{ id: 1, name: "Alice" }] });
   });
 
@@ -77,7 +77,7 @@ describe("searchUsersForFilter (action)", () => {
 
     const result = await searchUsers("bob");
 
-    expect(searchUsersForFilterRepositoryMock).toHaveBeenCalledWith("bob");
+    expect(searchUsersForFilterRepositoryMock).toHaveBeenCalledWith("bob", undefined);
     expect(result).toEqual({ ok: true, data: [{ id: 9, name: "Bob" }] });
   });
 });

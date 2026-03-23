@@ -91,6 +91,7 @@ import { findLatestPriceByModel } from "@/repository/model-price";
 import { getSystemSettings } from "@/repository/system-config";
 
 beforeEach(() => {
+  vi.clearAllMocks();
   cloudPriceSyncRequests.splice(0, cloudPriceSyncRequests.length);
   invalidateSystemSettingsCache();
 });

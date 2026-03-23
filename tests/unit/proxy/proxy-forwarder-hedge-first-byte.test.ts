@@ -875,7 +875,9 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       withThinkingBlocks(session);
 
       mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
-      mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+      mocks.categorizeErrorAsync.mockResolvedValueOnce(
+        ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR
+      );
 
       const signatureError = new UpstreamProxyError(
         "Invalid `signature` in `thinking` block",
@@ -988,7 +990,9 @@ describe("ProxyForwarder - first-byte hedge scheduling", () => {
       };
 
       mocks.pickRandomProviderWithExclusion.mockResolvedValueOnce(provider2);
-      mocks.categorizeErrorAsync.mockResolvedValue(ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR);
+      mocks.categorizeErrorAsync.mockResolvedValueOnce(
+        ProxyErrorCategory.NON_RETRYABLE_CLIENT_ERROR
+      );
 
       const budgetError = new UpstreamProxyError(
         "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024",

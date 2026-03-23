@@ -17,6 +17,7 @@ import { EXCLUDE_WARMUP_CONDITION } from "@/repository/_shared/message-request-c
 import { getSystemSettings } from "@/repository/system-config";
 import {
   findUsageLogsForKeyBatch,
+  findUsageLogsForKeySlim,
   getDistinctEndpointsForKey,
   getDistinctModelsForKey,
   type UsageLogSlimBatchResult,
@@ -173,6 +174,28 @@ export interface MyUsageLogsBatchResult {
   logs: MyUsageLogEntry[];
   nextCursor: { createdAt: string; id: number } | null;
   hasMore: boolean;
+  currencyCode: CurrencyCode;
+  billingModelSource: BillingModelSource;
+}
+
+export interface MyUsageLogsFilters {
+  startDate?: string;
+  endDate?: string;
+  sessionId?: string;
+  model?: string;
+  statusCode?: number;
+  excludeStatusCode200?: boolean;
+  endpoint?: string;
+  minRetryCount?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface MyUsageLogsResult {
+  logs: MyUsageLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
   currencyCode: CurrencyCode;
   billingModelSource: BillingModelSource;
 }
@@ -516,6 +539,58 @@ function mapMyUsageLogEntries(
       cacheTtlApplied: log.cacheTtlApplied ?? null,
     };
   });
+}
+
+export async function getMyUsageLogs(
+  filters: MyUsageLogsFilters = {}
+): Promise<ActionResult<MyUsageLogsResult>> {
+  try {
+    const session = await getSession({ allowReadOnlyAccess: true });
+    if (!session) return { ok: false, error: "Unauthorized" };
+
+    const settings = await getSystemSettings();
+    const timezone = await resolveSystemTimezone();
+    const { startTime, endTime } = parseDateRangeInServerTimezone(
+      filters.startDate,
+      filters.endDate,
+      timezone
+    );
+    const parsedPageSize = Number(filters.pageSize);
+    const pageSize =
+      Number.isFinite(parsedPageSize) && parsedPageSize > 0
+        ? Math.min(Math.trunc(parsedPageSize), 100)
+        : 20;
+    const parsedPage = Number(filters.page);
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.trunc(parsedPage) : 1;
+    const result = await findUsageLogsForKeySlim({
+      keyString: session.key.key,
+      sessionId: filters.sessionId,
+      startTime,
+      endTime,
+      model: filters.model,
+      statusCode: filters.statusCode,
+      excludeStatusCode200: filters.excludeStatusCode200,
+      endpoint: filters.endpoint,
+      minRetryCount: filters.minRetryCount,
+      page,
+      pageSize,
+    });
+
+    return {
+      ok: true,
+      data: {
+        logs: mapMyUsageLogEntries(result, settings.billingModelSource),
+        total: result.total,
+        page,
+        pageSize,
+        currencyCode: settings.currencyDisplay,
+        billingModelSource: settings.billingModelSource,
+      },
+    };
+  } catch (error) {
+    logger.error("[my-usage] getMyUsageLogs failed", { error, filters });
+    return { ok: false, error: "Failed to get usage logs" };
+  }
 }
 
 export async function getMyUsageLogsBatch(

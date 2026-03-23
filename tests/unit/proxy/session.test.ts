@@ -267,7 +267,7 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     expect(findLatestPriceByModel).toHaveBeenNthCalledWith(2, "redirected-model");
   });
 
-  it("应在 getSystemSettings 失败且无缓存时跳过价格解析", async () => {
+  it("应在 getSystemSettings 失败且无缓存时回退到 redirected 并继续价格解析", async () => {
     const redirectedPriceData: ModelPriceData = {
       input_cost_per_token: 3,
       output_cost_per_token: 4,
@@ -284,9 +284,10 @@ describe("ProxySession.getCachedPriceDataByBillingSource", () => {
     });
 
     const result = await session.getCachedPriceDataByBillingSource();
-    expect(result).toBeNull();
+    expect(result).toEqual(redirectedPriceData);
     expect(getSystemSettings).toHaveBeenCalledTimes(1);
-    expect(findLatestPriceByModel).not.toHaveBeenCalled();
+    expect(findLatestPriceByModel).toHaveBeenCalledTimes(1);
+    expect(findLatestPriceByModel).toHaveBeenCalledWith("redirected-model");
 
     const internal = session as unknown as { cachedBillingModelSource?: unknown };
     expect(internal.cachedBillingModelSource).toBe("redirected");

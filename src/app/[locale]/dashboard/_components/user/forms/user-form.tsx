@@ -217,6 +217,7 @@ export function UserForm({ user, onSuccess, currentUser }: UserFormProps) {
         placeholder={tForm("providerGroup.placeholder")}
         description={tForm("providerGroup.description")}
         suggestions={providerGroupSuggestions}
+        // Provider groups intentionally accept shared parser output without extra format validation.
         validateTag={() => true}
         onInvalidTag={(_tag, reason) => {
           const messages: Record<string, string> = {

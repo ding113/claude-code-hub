@@ -3001,7 +3001,7 @@ export class ProxyForwarder {
       }
       attempts.delete(attempt);
       if (reason === "hedge_loser") {
-        attempt.session.addProviderToChain(attempt.provider, {
+        session.addProviderToChain(attempt.provider, {
           ...attempt.endpointAudit,
           reason: "hedge_loser_cancelled",
           attemptNumber: attempt.sequence,
@@ -3009,13 +3009,47 @@ export class ProxyForwarder {
       }
       try {
         attempt.responseController?.abort(new Error(reason));
-      } catch {
-        // ignore
+      } catch (abortError) {
+        logger.debug("ProxyForwarder: hedge attempt abort failed", {
+          error: abortError instanceof Error ? abortError.message : String(abortError),
+          reason,
+          sessionId: attempt.session.sessionId ?? null,
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+        });
       }
       const readerCancel = attempt.reader?.cancel();
-      readerCancel?.catch(() => {
-        // ignore
+      readerCancel?.catch((cancelError) => {
+        logger.debug("ProxyForwarder: hedge attempt reader cancel failed", {
+          error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+          reason,
+          sessionId: attempt.session.sessionId ?? null,
+          providerId: attempt.provider.id,
+          providerName: attempt.provider.name,
+        });
       });
+    };
+
+    const armAttemptThreshold = (attempt: StreamingHedgeAttempt) => {
+      if (attempt.thresholdTimer) {
+        clearTimeout(attempt.thresholdTimer);
+        attempt.thresholdTimer = null;
+      }
+      attempt.thresholdTriggered = false;
+
+      if (attempt.firstByteTimeoutMs <= 0) return;
+
+      attempt.thresholdTimer = setTimeout(() => {
+        if (settled || attempt.settled || attempt.thresholdTriggered) return;
+        attempt.thresholdTriggered = true;
+        session.addProviderToChain(attempt.provider, {
+          ...attempt.endpointAudit,
+          reason: "hedge_triggered",
+          attemptNumber: attempt.sequence,
+          circuitState: getCircuitState(attempt.provider.id),
+        });
+        void launchAlternative();
+      }, attempt.firstByteTimeoutMs);
     };
 
     const abortAllAttempts = (winner?: StreamingHedgeAttempt, reason: string = "hedge_loser") => {
@@ -3080,7 +3114,7 @@ export class ProxyForwarder {
 
     const runAttempt = (attempt: StreamingHedgeAttempt) => {
       const providerForRequest =
-        attempt.provider.firstByteTimeoutStreamingMs > 0
+        attempt.firstByteTimeoutMs > 0
           ? { ...attempt.provider, firstByteTimeoutStreamingMs: 0 }
           : attempt.provider;
 
@@ -3096,12 +3130,22 @@ export class ProxyForwarder {
             const attemptRuntime = attempt.session as ProxySessionWithAttemptRuntime;
             try {
               attemptRuntime.responseController?.abort(new Error("hedge_loser"));
-            } catch {
-              // ignore
+            } catch (abortError) {
+              logger.debug("ProxyForwarder: hedge loser abort failed", {
+                error: abortError instanceof Error ? abortError.message : String(abortError),
+                sessionId: attempt.session.sessionId ?? null,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+              });
             }
             const cancelPromise = response.body?.cancel("hedge_loser");
-            cancelPromise?.catch(() => {
-              // ignore
+            cancelPromise?.catch((cancelError) => {
+              logger.debug("ProxyForwarder: hedge loser body cancel failed", {
+                error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+                sessionId: attempt.session.sessionId ?? null,
+                providerId: attempt.provider.id,
+                providerName: attempt.provider.name,
+              });
             });
             return;
           }
@@ -3253,6 +3297,7 @@ export class ProxyForwarder {
             attempt.thresholdTimer = null;
           }
           attempt.requestAttemptCount += 1;
+          armAttemptThreshold(attempt);
           runAttempt(attempt);
           return;
         }
@@ -3448,19 +3493,7 @@ export class ProxyForwarder {
         });
       }
 
-      if (attempt.firstByteTimeoutMs > 0) {
-        attempt.thresholdTimer = setTimeout(() => {
-          if (settled || attempt.settled || attempt.thresholdTriggered) return;
-          attempt.thresholdTriggered = true;
-          attempt.session.addProviderToChain(attempt.provider, {
-            ...attempt.endpointAudit,
-            reason: "hedge_triggered",
-            attemptNumber: attempt.sequence,
-            circuitState: getCircuitState(attempt.provider.id),
-          });
-          void launchAlternative();
-        }, attempt.firstByteTimeoutMs);
-      }
+      armAttemptThreshold(attempt);
 
       runAttempt(attempt);
     };

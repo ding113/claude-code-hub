@@ -28,9 +28,11 @@ type SortDirection = "asc" | "desc";
  */
 export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
   const t = useTranslations("dashboard.rateLimits.topUsers");
+  const tRateLimits = useTranslations("dashboard.rateLimits");
   const locale = useLocale();
   const [users, setUsers] = React.useState<Array<{ id: number; name: string }>>([]);
   const [loading, setLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
   const [sortField, setSortField] = React.useState<SortField>("count");
   const [sortDirection, setSortDirection] = React.useState<SortDirection>("desc");
 
@@ -38,15 +40,18 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
   React.useEffect(() => {
     let cancelled = false;
 
-    void searchUsers()
+    void searchUsers(undefined, 5000)
       .then((result) => {
         if (!cancelled) {
           setUsers(result.ok ? result.data : []);
+          setLoadError(!result.ok);
         }
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("RateLimitTopUsers: failed to load users", error);
         if (!cancelled) {
           setUsers([]);
+          setLoadError(true);
         }
       })
       .finally(() => {
@@ -110,10 +115,13 @@ export function RateLimitTopUsers({ data }: RateLimitTopUsersProps) {
           </div>
         ) : tableData.length === 0 ? (
           <div className="flex h-[280px] items-center justify-center text-muted-foreground">
-            {t("noData")}
+            {loadError ? tRateLimits("error") : t("noData")}
           </div>
         ) : (
           <div className="relative max-h-[280px] overflow-auto">
+            {loadError ? (
+              <div className="mb-2 text-xs text-destructive">{tRateLimits("error")}</div>
+            ) : null}
             <Table>
               <TableHeader>
                 <TableRow>
