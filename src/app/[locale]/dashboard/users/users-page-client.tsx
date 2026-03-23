@@ -35,8 +35,7 @@ import { CreateUserDialog } from "../_components/user/create-user-dialog";
 import { UserManagementTable } from "../_components/user/user-management-table";
 
 /**
- * Split comma-separated tags into an array of trimmed, non-empty strings.
- * This matches the server-side providerGroup handling in provider-selector.ts
+ * Normalize provider-group tags with the shared parser to keep client/server behavior aligned.
  */
 function splitTags(value?: string | null): string[] {
   return parseProviderGroups(value);
