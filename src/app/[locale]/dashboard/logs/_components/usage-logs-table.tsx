@@ -196,6 +196,7 @@ export function UsageLogsTable({
                                   log.providerName ||
                                   tChain("circuit.unknown")
                                 }
+                                websiteUrl={log.providerWebsiteUrl}
                                 hasCostBadge={hasCostBadge}
                               />
                             </div>

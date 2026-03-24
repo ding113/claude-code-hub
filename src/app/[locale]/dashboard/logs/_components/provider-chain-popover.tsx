@@ -12,6 +12,8 @@ import type { ProviderChainItem } from "@/types/message";
 interface ProviderChainPopoverProps {
   chain: ProviderChainItem[];
   finalProvider: string;
+  /** 服务商首页地址，有值时名称可点击跳转 */
+  websiteUrl?: string | null;
   /** 是否会显示倍率 Badge，影响名称最大宽度 */
   hasCostBadge?: boolean;
 }
@@ -38,6 +40,7 @@ function isActualRequest(item: ProviderChainItem): boolean {
 export function ProviderChainPopover({
   chain,
   finalProvider,
+  websiteUrl,
   hasCostBadge = false,
 }: ProviderChainPopoverProps) {
   const t = useTranslations("dashboard");
@@ -59,9 +62,22 @@ export function ProviderChainPopover({
         <TooltipProvider>
           <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
-              <span className="truncate block cursor-help" dir="auto">
-                {displayName}
-              </span>
+              {websiteUrl ? (
+                <a
+                  href={websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="truncate block cursor-pointer hover:underline text-foreground"
+                  dir="auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {displayName}
+                </a>
+              ) : (
+                <span className="truncate block cursor-help" dir="auto">
+                  {displayName}
+                </span>
+              )}
             </TooltipTrigger>
             <TooltipContent side="bottom" align="start">
               <p className="text-xs">{displayName}</p>
@@ -86,9 +102,22 @@ export function ProviderChainPopover({
               <TooltipProvider>
                 <Tooltip delayDuration={300}>
                   <TooltipTrigger asChild>
-                    <span className="truncate block cursor-help" dir="auto">
-                      {displayName}
-                    </span>
+                    {websiteUrl ? (
+                      <a
+                        href={websiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate block cursor-pointer hover:underline text-foreground"
+                        dir="auto"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {displayName}
+                      </a>
+                    ) : (
+                      <span className="truncate block cursor-help" dir="auto">
+                        {displayName}
+                      </span>
+                    )}
                   </TooltipTrigger>
                   <TooltipContent side="bottom" align="start">
                     <p className="text-xs">{displayName}</p>

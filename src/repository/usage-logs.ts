@@ -59,6 +59,7 @@ export interface UsageLogRow {
   messagesCount: number | null; // Messages 数量
   context1mApplied: boolean | null; // 是否应用了1M上下文窗口
   specialSettings: SpecialSetting[] | null; // 特殊设置（审计/展示）
+  providerWebsiteUrl: string | null; // 服务商首页地址
 }
 
 export interface UsageLogSummary {
@@ -194,6 +195,7 @@ export async function findUsageLogsBatch(
       userName: users.name,
       keyName: keysTable.name,
       providerName: providers.name,
+      providerWebsiteUrl: providers.websiteUrl,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel,
       endpoint: messageRequest.endpoint,
@@ -422,6 +424,7 @@ export async function findUsageLogsWithDetails(filters: UsageLogFilters): Promis
       userName: users.name,
       keyName: keysTable.name,
       providerName: providers.name, // 被拦截的请求为 null
+      providerWebsiteUrl: providers.websiteUrl,
       model: messageRequest.model,
       originalModel: messageRequest.originalModel, // 原始模型（重定向前）
       endpoint: messageRequest.endpoint,
