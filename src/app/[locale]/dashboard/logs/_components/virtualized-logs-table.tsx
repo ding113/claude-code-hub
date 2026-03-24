@@ -371,6 +371,7 @@ export function VirtualizedLogsTable({
                                       log.providerName ||
                                       tChain("circuit.unknown")
                                     }
+                                    websiteUrl={log.providerWebsiteUrl}
                                     hasCostBadge={hasCostBadge}
                                   />
                                 </div>
